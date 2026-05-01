@@ -7,9 +7,18 @@ import type { Product } from "@/types";
 const day = 24 * 3600 * 1000;
 const now = Date.now();
 
-const placeholder = (label: string, w = 800, h = 1000) => ({
-  url: `https://placehold.co/${w}x${h}/F1ECE3/3B342D?text=${encodeURIComponent(label)}`,
-  alt: label,
+/**
+ * Real, hotlinkable Unsplash photos used as Phase 1 placeholders.
+ * Replaced by supplier feed images in Phase 4. Photos are CC0 / Unsplash license.
+ */
+const unsplash = (
+  photoId: string,
+  alt: string,
+  w = 1200,
+  h = 1500,
+) => ({
+  url: `https://images.unsplash.com/photo-${photoId}?auto=format&fit=crop&w=${w}&h=${h}&q=80`,
+  alt,
   width: w,
   height: h,
 });
@@ -47,7 +56,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 3, max: 5 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad", "Niš"],
-    media: { images: [placeholder("Polica Björn")] },
+    media: { images: [unsplash("1538688525198-9b88f6f53126", "Polica Björn")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -80,7 +89,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 5, max: 10 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad"],
-    media: { images: [placeholder("Ormar Tora")] },
+    media: { images: [unsplash("1595428774223-ef52624120d2", "Ormar Tora")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -107,7 +116,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 7, max: 14 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad", "Niš", "Kragujevac"],
-    media: { images: [placeholder("Sto Dora")] },
+    media: { images: [unsplash("1505693416388-ac5ce068fe85", "Trpezarijski sto Dora")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -135,7 +144,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 3, max: 5 },
     allowsAssembly: false,
     assemblyCities: [],
-    media: { images: [placeholder("Stolica Kira")] },
+    media: { images: [unsplash("1549497538-303791108f95", "Stolica Kira")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -169,7 +178,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 5, max: 10 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad"],
-    media: { images: [placeholder("Krevet Lina")] },
+    media: { images: [unsplash("1505693314120-0d443867891c", "Krevet Lina")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -203,7 +212,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 5, max: 7 },
     allowsAssembly: false,
     assemblyCities: [],
-    media: { images: [placeholder("Fotelja Sven")] },
+    media: { images: [unsplash("1567538096630-e0c55bd6374c", "Fotelja Sven")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -237,7 +246,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 5, max: 10 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad"],
-    media: { images: [placeholder("Komoda Mira")] },
+    media: { images: [unsplash("1556228720-195a672e8a03", "Komoda Mira")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -270,7 +279,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 3, max: 7 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad", "Niš"],
-    media: { images: [placeholder("TV komoda Talo")] },
+    media: { images: [unsplash("1558211583-d26f610c1eb1", "TV komoda Talo")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -304,7 +313,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 3, max: 5 },
     allowsAssembly: false,
     assemblyCities: [],
-    media: { images: [placeholder("Noćni stočić Pino")] },
+    media: { images: [unsplash("1505691938895-1758d7feb511", "Noćni stočić Pino")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },
@@ -338,7 +347,7 @@ export const mockProducts: Product[] = [
     deliveryDays: { min: 7, max: 14 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad"],
-    media: { images: [placeholder("Garnitura Vera")] },
+    media: { images: [unsplash("1555041469-a586c61ea9bc", "Garnitura Vera")] },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   },

@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       // Phase 1 mocks. Replaced by the supplier cloud base URL in Phase 4.
       { protocol: "https", hostname: "placehold.co" },
+      { protocol: "https", hostname: "images.unsplash.com" },
     ],
     // placehold.co serves image/svg+xml; required so the optimizer accepts it.
     // Replace with a raster CDN in Phase 4 and remove this flag.
