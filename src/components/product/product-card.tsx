@@ -1,0 +1,306 @@
+"use client";
+
+/**
+ * Product card — Phase 1C polish.
+ * Adds: hover preview (secondary image swap), explicit discount pill,
+ * qty-stepper morph from "Dodaj" button when item is in cart, blur placeholder,
+ * skeleton loading variant, reduced-motion friendly micro-interactions.
+ */
+import Image from "next/image";
+import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
+import type { Product } from "@/types";
+import { cn } from "@/lib/utils";
+import { formatRsd, formatDimensions, formatDate } from "@/lib/format";
+import { useWishlist } from "@/lib/hooks/use-wishlist";
+import { useCart } from "@/lib/hooks/use-cart";
+import { commitAddToCart } from "@/components/cart/add-to-cart-action";
+import {
+  deriveBadges,
+  effectiveUnitPrice,
+  type Badge,
+  type BadgeTone,
+} from "@/lib/pricing";
+
+interface ProductCardProps {
+  product: Product;
+  className?: string;
+  /** Used to size the next/image inside snap rails. */
+  priority?: boolean;
+}
+
+/** 8×10 warm-ivory blur placeholder; matches bg-muted. */
+const FALLBACK_BLUR =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2YxZWNlMyIvPjwvc3ZnPg==";
+
+const toneClasses: Record<BadgeTone, string> = {
+  action: "bg-action text-white",
+  gold: "bg-sand text-ink-900",
+  olive: "bg-olive text-white",
+  amber: "bg-warning text-ink-900",
+  red: "bg-action/10 text-action ring-1 ring-action/30",
+  ink: "bg-ink-900 text-canvas",
+};
+
+export function ProductCard({ product, className, priority }: ProductCardProps) {
+  const reduced = useReducedMotion();
+  const wished = useWishlist((s) => s.has(product.sku));
+  const toggleWish = useWishlist((s) => s.toggle);
+  const setQty = useCart((s) => s.setQty);
+  const lineQty = useCart(
+    (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
+  );
+
+  const cover = product.media.images[0];
+  const secondary = product.media.images[1];
+  const badges: Badge[] = deriveBadges(product);
+  const visible = badges.slice(0, 3);
+  const overflow = badges.length - visible.length;
+  const price = effectiveUnitPrice(product);
+  const onSale = price.onSale;
+
+  const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
+
+  function handleAdd() {
+    commitAddToCart(product);
+  }
+
+  return (
+    <motion.article
+      {...hoverProps}
+      transition={{ type: "spring", stiffness: 220, damping: 22 }}
+      className={cn(
+        "group bg-surface text-ink-900 ring-border/60 relative flex flex-col overflow-hidden rounded-2xl shadow-soft-2 ring-1 transition hover:shadow-soft-3",
+        className,
+      )}
+    >
+      <Link
+        href={`/p/${product.slug}`}
+        aria-label={`${product.name} — pregled proizvoda`}
+        className="focus-visible:ring-walnut/40 relative block aspect-[4/5] overflow-hidden bg-muted-bg focus-visible:ring-2 focus-visible:outline-none"
+      >
+        {/*
+         * `layoutId` bridges this image to the PDP hero image (Phase 1H.2).
+         * Framer Motion morphs between the two when navigating to /p/[slug],
+         * thanks to AnimatePresence in app/template.tsx.
+         */}
+        <motion.div
+          layoutId={`product-cover-${product.sku}`}
+          className="absolute inset-0"
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {cover ? (
+            <Image
+              src={cover.url}
+              alt={cover.alt ?? product.name}
+              fill
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 80vw"
+              priority={priority}
+              placeholder="blur"
+              blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
+              className={cn(
+                "object-cover transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                secondary
+                  ? "group-hover:scale-[1.02] group-hover:opacity-0"
+                  : "group-hover:scale-[1.04]",
+              )}
+            />
+          ) : null}
+        </motion.div>
+        {secondary ? (
+          <Image
+            src={secondary.url}
+            alt={secondary.alt ?? product.name}
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 80vw"
+            placeholder="blur"
+            blurDataURL={secondary.blurDataUrl ?? FALLBACK_BLUR}
+            aria-hidden
+            className="pointer-events-none object-cover opacity-0 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] group-hover:opacity-100"
+          />
+        ) : null}
+        {/* Soft floor gradient */}
+        <div
+          aria-hidden
+          className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
+        />
+      </Link>
+
+      {/* Badge stack */}
+      {visible.length ? (
+        <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+          {visible.map((b) => (
+            <span
+              key={b.key}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
+                toneClasses[b.tone],
+              )}
+            >
+              {b.label}
+            </span>
+          ))}
+          {overflow > 0 ? (
+            <span className="bg-ink-900/80 rounded-full px-2.5 py-1 text-[11px] leading-none font-medium text-canvas">
+              +{overflow}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Wishlist heart */}
+      <button
+        type="button"
+        aria-pressed={wished}
+        aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
+        onClick={() => toggleWish(product.sku)}
+        className="bg-surface/85 ring-border/60 hover:text-action focus-visible:ring-walnut/40 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full text-ink-700 ring-1 backdrop-blur transition focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <Heart
+          className={cn("size-4 transition", wished && "fill-action text-action")}
+          aria-hidden
+        />
+      </button>
+
+      {/* Body */}
+      <div className="flex flex-1 flex-col gap-2 px-4 pt-4 pb-3">
+        <h3 className="line-clamp-2 text-sm leading-snug font-medium text-ink-900">
+          <Link
+            href={`/p/${product.slug}`}
+            className="hover:text-walnut transition focus-visible:underline focus-visible:outline-none"
+          >
+            {product.name}
+          </Link>
+        </h3>
+        <p className="font-mono text-[11px] tracking-tight text-ink-500">
+          {formatDimensions(product.dimensionsCm)}
+        </p>
+
+        <div className="mt-auto pt-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            {onSale ? (
+              <>
+                <span className="text-action text-base font-semibold">
+                  {formatRsd(price.effective)}
+                </span>
+                <span className="text-xs text-ink-500 line-through">
+                  {formatRsd(price.full)}
+                </span>
+                {price.discountPct ? (
+                  <span className="bg-action/10 text-action ring-action/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1">
+                    −{price.discountPct}%
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-base font-semibold text-ink-900">
+                {formatRsd(price.full)}
+              </span>
+            )}
+          </div>
+          {onSale && product.action?.endsAt ? (
+            <p className="mt-1 text-[11px] text-ink-500">
+              Akcija do {formatDate(product.action.endsAt)} · Isporuka{" "}
+              {product.deliveryDays.min}–{product.deliveryDays.max} dana
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-ink-500">
+              Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} dana
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Footer row — add button morphs into qty stepper when in cart */}
+      <div className="border-border/60 flex items-center justify-between gap-2 border-t px-4 py-3">
+        <span className="font-mono text-[11px] tracking-tight text-ink-500">
+          {product.sku}
+        </span>
+        <AnimatePresence mode="wait" initial={false}>
+          {lineQty > 0 ? (
+            <motion.div
+              key="stepper"
+              layout
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="bg-ink-900 inline-flex items-center overflow-hidden rounded-full text-canvas"
+              role="group"
+              aria-label="Količina u korpi"
+            >
+              <button
+                type="button"
+                onClick={() => setQty(product.sku, lineQty - 1)}
+                aria-label="Smanji količinu"
+                className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <Minus className="size-3.5" aria-hidden />
+              </button>
+              <span
+                aria-live="polite"
+                className="min-w-6 text-center text-xs font-medium tabular-nums"
+              >
+                {lineQty}
+              </span>
+              <button
+                type="button"
+                onClick={() => setQty(product.sku, lineQty + 1)}
+                aria-label="Povećaj količinu"
+                className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <Plus className="size-3.5" aria-hidden />
+              </button>
+            </motion.div>
+          ) : (
+            <motion.button
+              key="add"
+              layout
+              type="button"
+              onClick={handleAdd}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.article>
+  );
+}
+
+/**
+ * Skeleton variant for loading states (suspense fallbacks, prefetching).
+ * Mirrors the card geometry to avoid layout shift.
+ */
+export function ProductCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "bg-surface ring-border/60 relative flex animate-pulse flex-col overflow-hidden rounded-2xl shadow-soft-1 ring-1",
+        className,
+      )}
+    >
+      <div className="aspect-[4/5] bg-muted-bg" />
+      <div className="flex flex-1 flex-col gap-2 px-4 pt-4 pb-3">
+        <div className="h-3.5 w-4/5 rounded-full bg-muted-bg" />
+        <div className="h-3.5 w-2/5 rounded-full bg-muted-bg" />
+        <div className="h-2.5 w-1/3 rounded-full bg-muted-bg/70" />
+        <div className="mt-auto flex items-baseline gap-2 pt-3">
+          <div className="h-4 w-20 rounded-full bg-muted-bg" />
+          <div className="h-3 w-12 rounded-full bg-muted-bg/70" />
+        </div>
+      </div>
+      <div className="border-border/60 flex items-center justify-between gap-2 border-t px-4 py-3">
+        <div className="h-2.5 w-16 rounded-full bg-muted-bg/70" />
+        <div className="h-7 w-16 rounded-full bg-muted-bg" />
+      </div>
+    </div>
+  );
+}

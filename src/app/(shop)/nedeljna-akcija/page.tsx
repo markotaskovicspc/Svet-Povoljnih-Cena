@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import { ListingShell } from "@/components/listing/listing-shell";
+import { weeklyAction } from "@/data/products";
+
+export const metadata: Metadata = {
+  title: "Nedeljna akcija — sedam dana posebnih ponuda",
+  description:
+    "Brze nedeljne ponude koje se menjaju svake nedelje. Iskoristi dok traju — popusti važe sedam dana.",
+};
+
+export default function NedeljnaAkcijaPage() {
+  const products = weeklyAction();
+  const period = products
+    .map((p) => p.action!)
+    .sort(
+      (a, b) =>
+        new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime(),
+    )[0];
+
+  return (
+    <ListingShell
+      kind="nedeljna-akcija"
+      title="Nedeljna akcija"
+      subtitle="Selekcija sedam dana — najatraktivnije ponude nedelje."
+      period={
+        period ? { endsAt: period.endsAt, label: "Nedeljna ponuda" } : undefined
+      }
+      trail={[{ label: "Nedeljna akcija" }]}
+      source={products}
+    />
+  );
+}

@@ -1,0 +1,283 @@
+﻿
+
+
+
+
+
+
+
+
+
+
+
+PROJEKAT IZRADE WEB SHOPA www.svetpovoljnihcena.rs
+
+
+
+
+Table of Contents
+1	Home page	3
+2	Podaci o proizvodima i akcijama	6
+2.1	Sekcija Akcija, Nedeljna akcija, Heroji akcije, Outlet...	6
+2.2	Sekcija Novo	7
+2.3	Detaljna stranica artikla	7
+2.3.1	I red	7
+2.3.2	II red	7
+2.3.3	III red - Fotografije	7
+2.3.4	IV red	8
+2.3.5	V red	8
+2.3.6	VI red	8
+2.3.7	VII red - Dimenzije	8
+2.3.8	VIII red	8
+2.3.9	IX red - Uslovi isporuke i montaže	8
+2.3.10	X red Često kupovano zajedno	9
+2.3.11	XI red Slični artikli	9
+2.3.12	XII red - dodaj u korpu	9
+2.4	Proces kupovine	13
+2.4.1	Pregled korpe	13
+2.4.2	Podaci za isporuku	13
+2.4.3	Potvrda kupovine	14
+2.4.4	Email potvrda kupovine	14
+3	Korisnički nalog	15
+4	Servis za kupce	16
+4.1	Reklamacije	16
+4.2	Uslovi kupovine	17
+4.3	Komentari i sugestije	17
+5	Elektronski fiskalni računi	18
+6	Filteri na stranici grupa artikala	18
+7	Viber poruke	18
+8	Praćenje kupovine	18
+9	Integracije	18
+9.1	Integracija sa kurirskom službom	18
+9.2	Integracija sa sistemom za kartično plaćanje	18
+9.3	Integracija sa dobavljačima	18
+9.4	Integracija sa Google i Meta oglašavanje	19
+
+
+1 Home page
+
+1. Traka sa ispisom o akciji i brojačem ili atraktivnim informacijama. Potrebno je da postoji mogućnost promene teksta i linka kroz admin panel. Brojač se prikazuje u poslednja 72h do isteka akcije. Treba predvideti opciju i da ne postoji traka.
+
+2. Logotip Svet Povoljnih Cena
+
+3. Polje search 
+- Osnovna funkcija ovog polja je klasična pretraga gde prilikom kucanja pojma u ovom polju, sistem odmah treba da vrši pretragu kroz sve artikle na web sajtu, prema redosledu. Prilikom kucanja pojma od minimum 3 karaktera, sistem odmah započinje pretragu, bez da neko mora da klikne na ikonicu , ili da stisne enter. Sortiranje artikala u okviru pretrage se radi po kriterijumu heroji meseca, najveći popust, pa zatim najniža cena. 
+
+4. Login - omogućiti login sa Google, Apple i FB nalozima
+5. Wish list - omogućiti samo za ulogovane korisnike
+
+
+6. Korpa - u daljem tekstu će biti definisano
+7. Baner
+Na početnoj strani se nalazi prikaz aktuelnih banera koji se strelicom ispod mogu listati. Baneri imaju punu rotaciju na levu i desnu stranu, odnosno kada se dođe do kraja svaki sledeći klik ili swipe obrne krug i pređe na prvi ili poslednji baner u zavisnosti od smera kretanja.
+Potrebno je omogućiti da se administriranje istih može raditi kroz admin panel.
+Broj banera ne treba da bude ograničen. Potrebno je predvideti i klikabilnost banera. 
+I desktop i mobilna opcija treba da imaju isti princip.
+
+
+8. "Hamburger" - samo za mobile verziju. Hamburger treba da se sastoji od dva ili tri nivoa. Dva nivoa su obavezna. Raspored naziva i broj nivoa treba da se određuje kroz admin panel. Ukoliko nije unet treći nivo ne treba ga prikazivati.
+Za desktop verziju prvi nivo tabova se nalazi ispod trake sa informacijama.
+
+9. Tabovi - u narednom redu i u desktop i mobile verziji se nalaze Tab akcija, Tab nedeljna akcija, tab Heroji meseca, Tab ograničena ponuda i sl. (ostaviti mogućnost izmena naziva i broja tabova - max 4 taba)
+Na mobilnoj verziji treba da budu u dva reda po dva taba
+
+10. Na home page-u nakon glavnog banera i tabova, potrebno je prikazati
+- Listu heroja meseca - vodi na stranicu mesečne akcije
+-  listu akcijskih artikala mesečne akcije
+- Listu nedeljnih akcija
+- Listu artikala sa ostalih prikazanih tabova
+
+Za svaki od ovih prikaza treba da se prikaže po tri lista sa artiklima(skrolovanjem u stranu) i da se pored imena taba nalazi info Prikaži sve artikle. I tab i link treba da vode na prikaz te strane
+11. Linkovi ka FB, IG i TikTok
+12. Newsletter 
+13. Footer
+  U footeru treba da se nalazi logotip sa klikabilnim tabovima:
+* Kontakt
+* O nama
+* Uslovi isporuke
+* Korisnički nalog
+* Potrebna vam je pomoć
+* Servis za kupce
+U poslednjoj liniji footer-a treba da se nalaze klikabilne ikonice za načine plaćanja 
+
+2 Podaci o proizvodima i akcijama
+2.1 Sekcija Akcija, Nedeljna akcija, Heroji akcije, Outlet...
+Na ove stranice se ulazi putem linka sa tabova sa početne stranice. 
+Na ovoj stranici su prikazani artikli za period važenja akcije.
+Podaci o artiklima, MPC i popustima se dobijaju iz XML-a. Potrebno da postoji mogućnost da se podaci o akcijama izmene u admin panelu.
+Sortiranje po defaultu treba da bude prva Heroji meseca, pa zatim ostali artikli prema procentu popusta. Ukoliko više artikala ima isti procenat popusta, sortiraju se prema nižoj ceni.
+U AP treba predvideti da se ručno menja redosled artikala.
+Takođe na strani se nalazi i dugme za sortiranje: sortiraj podrazumevano, sortiraj po ceni rastuće, sortiraj po ceni opadajuće, sortiraj po procentu popusta. 
+Prikaz artikala na strani: Fotografija, Naziv artikla, dimenzije ŠDV u cm, stara cena, akcijska cena, period važenja akcije, dugme korpa i period isporuke artikla. Podatak o periodu isporuke artikla se dobija iz sistema kroz XML.
+Klikom na bilo koji artikal prelazi se na detaljnu stranu artikla što će biti opisano u posebnom delu.
+Prikaz artikala na mesečnoj akciji je 300 artikala po strani nakon toga treba da postoji dugme Učitaj jos
+2.2 Sekcija Novo
+Na ovu stranicu se ulazi putem linka sa tabova sa početne stranice. 
+U headeru strane kao posebni tabovi koji vode na selekcije se nalaze kategorije iz hamburgera. Podatke za ove kategorije prostorija na ovoj stranici website dobija kroz XML file.
+Ispod headera su izlistani svi novi artikli. Logika prikazivanja artikala na samoj strani je prema najdaljem datumu trajanja statusa novo. Prvo su prikazani artikli koji imaju najduži period trajanja statusa novo. Te podatke website dobija iz sistema kroz XML.
+Takođe na strani se nalazi i dugme za sortiranje: sortiraj podrazumevano, sortiraj po ceni rastuće, sortiraj po ceni opadajuće, sortiraj po procentu popusta. 
+2.3 Detaljna stranica artikla
+Klikom na artikal otvara se detaljna stranica artikla. Artikli čiji je lager 0 i čiji je lager u dolasku 0 ili ih nema na lageru kod dobavljača treba automatski isključiti sa sajta.
+2.3.1 I red 
+Svaka detaljna stranica treba da sadrži naziv kategorije, svih nivoa podkategorija i naziv artikla. Nazivi kategorije i potkategorije moraju biti klikabilni i da vode na navedenu podkategoriju ili kategoriju. 
+Nameštaj / Police / Otvorene police / Otvorena polica BS-N2212
+2.3.2 II red
+Na desktop verziji se nalazi pored slike artikla. 
+Naziv artikla, opis, puna MPC, akcijska MPC i popust. Puna MPC treba da bude crna, a akcijska crvena.  
+2.3.3 III red - Fotografije
+Na detaljnoj strani artikla u zaglavlju fotografije prikazane su i markice artikla. Obavezna je markica procenta popusta (koja treba automatski da se generiše), dok su pored te moguće i sledeće markice:
+* Heroj akcije - podatak se dobija putem XML
+* Naziv akcije - podatak se dobija putem XML
+* Novo - podatak se dobija putem XML
+* Ograničena količina - podatak se dobija putem XML
+* Dok traju zalihe - Koristi se za DTZ artikle koji imaju status DTZ artikla i količinu < 15
+Ukoliko je akcijski, svaki artikal ima prikaz dve cene: puna maloprodajna cena i akcijska cena. Ispod akcijske cene se prikazuje rečenica za period važenja popusta.
+2.3.4 IV red
+Prikaz fotografija artikla uz manji prikaz ostalih klikabilnih fotografija artikla ukoliko su podignute na web sajt.
+Pored fotografija, predvideti mogućnost za dodavanje:
+- Video snimak
+- 3D video
+Ideja je da se fotografije automatski povlače sa određene cloud lokacije, gde bi bile mapirane preko šifre artikla u nazivu.
+2.3.5 V red
+U narednom redu se nalaze dodatni podaci o artikli u vidu fotografija i piktograma. Povlače se sa cloud lokacije. Svi piktogrami se nalaze na cloud lokaciji, a prikaz piktograma je određen kroz XML.
+2.3.6 VI red
+Artikal na detaljnoj strani sadrži opis koji treba da se povlači sa cloud lokacije.
+2.3.7 VII red - Dimenzije
+Dimenzije se dobijaju kroz XML
+2.3.8 VIII red
+Detaljan prikaz materijala - fotografije se nalaze na cloud lokaciji.
+2.3.9 IX red - Uslovi isporuke i montaže
+Prvo se definiše rok isporuke. Rok isporuke je isti za sve artikle i treba da se definiše kroz admin panel.
+Svaki artikal može isporuku putem kurirske službe ili u slučaju da postoji mogućnost montaže za taj artikl i kamionsku isporuku. Poseban je cenovnik za kamionsku isporuku, a poseban za montažu
+Mogućnost montaže se definiše na nivou grada (koji kupac unosi kroz adresu) i putem XML-a. Oba kriterijuma moraju biti zadovoljena. Svi podaci se dobijaju kroz XML
+
+2.3.10 X red Često kupovano zajedno 
+U ovom redu treba da se nalaze artikli koji imaju istu kolekciju (podatak se dobija kroz XML)
+2.3.11 XI red Slični artikli
+U ovom redu treba da se nalaze artikli koji se nalaze u istoj grupi.
+2.3.12 XII red - dodaj u korpu
+Nakon navedenog nalazi se klikabilno dugme dodajte u korpu (po uzoru na sajt videnov.bg), koje je uvek prikazano, kao i dugme za pregled korpe.
+
+
+
+Videnov - primer podataka o artiklu			Videnov.bg - primer druge linije gde su										    dodatni podaci
+ Otto.de - primer predloga sličnih artikala                                 Otto.de - primer search, wish list, account i korpa
+     Otto.de - primer predloga za kupovinu dekstop verzija
+Otto.de - primer predloga za kupovinu mobilna verzija.          Otto.de - primer pozocije filtera
+
+
+
+
+
+2.4 Proces kupovine
+Svi artikli koji na detaljnoj strani artikla ili na strani kategorije nameštaja imaju korpicu i ispis "dodajte u korpu" dostupni su za kupovinu u webshopu. 
+Klikom na dugme DODAJ U KORPU menja se dugme dodaj u korpu u dugmad za količinu i nakon izbora količine artikal se dodaje u korpu. U tom trenutku potrebno je da se prikaže predlog kupovina (kao na sajtu otto.de). Artikli koji se prikazuju kao predlog treba da budu definisani kroz admin panel na nivou grupe artikala.
+Nakon toga otvara se detaljna strana korpe, na kojoj se prikazuje nekoliko koraka za obavljanje kupovine.
+2.4.1 Pregled korpe
+U ovom delu se vide fotografije artikala, kao i redovna i akcijska cena i količina (koja treba da bude editabilna). Ispod liste artikala nalazi se ukupna cena i ukupna ušteda.
+Nakon toga se nalazi polje za prelazak na sledeću stranicu sa ispisom PODACI ZA ISPORUKU
+2.4.2 Podaci za isporuku
+Nakon toga prelazi se na drugi korak gde kupac bira da li će se registrovati da bi obavio kupovinu ili će nastaviti kao gost. U slučaju da želi da se registruje, a nema napravljen nalog ponuđena je opcija da se napravi korisnički nalog. Za prvu kupovinu kupcima treba omogućiti 5% popusta na ceo račun.  
+Jedina razlika u procesu kupovine nakon odabira prethodne opcije, jeste da se za logovanog kupca, već vuku određeni predefinisani podaci sa njegovog profila, dok gost mora sve sam da ih unese.
+Nakon odabira i opcionog logovanja, otvara se sledeći formular za ispunjavanje podataka za isporuku. Zvezdicom su navedena obavezna polja. Prvo treba da se bira da li je pravno ili fizičko lice. Polje mobilni telefon je formatirano unapred, kako bi se unosili definisani brojevi telefona prema određenom formatu. 
+Ukoliko kupac ima opciju isporuke na drugu adresu od upisane ima opciju da čekira dugme "isporuka na drugu adresu?" 
+U tom slučaju otvara se dodatni formular u koji kupac unosi željenu adresu za isporuku.
+Ukoliko je kupac pravno lice, ispod podataka o adresi, treba da postoji dugme Kupovina kao pravno lice. Ukoliko je polje čekirano, otvaraju se nova dva polja Ime kompanije, i PIB.
+Sledeći korak je izbor načina isporuke. Opcije su Kurirska služba i Kamionska isporuka. Kada su u pitanju isporuka putem kurirske službe i Kamionska isporuka, ovde treba da stoji podatak i o ceni isporuke. Ovo bi se takođe administriralo na samom sajtu.
+Ukoliko je kupac odabrao kamionsku isporuku, onda može vršiti dodavanje usluge montaže za pojedinačne artikle, kako je već opisano u delu dodavanja artikla u korpu. Ukoliko je kupac iz gradove gde nije moguća isporuka montaže, ne treba prikazivati mogućnost kamionske isporuke.
+Nakon što kupac odabere montažu za jedan ili više artikala, potrebno je prikazati ukupnu cenu proizvoda i cenu montaže. 
+U ovom delu treba da postoji opcija za unos vaučera.
+Ako je kupac izabrao isporuku putem kurirske službe, ili isporuku kamionskim putem, otvara se forma za odabir načina plaćanja. 
+Opcije su:
+- IPS plaćanje
+- Plaćanje platnom karticom
+- Google i Apple plaćanje
+- Uplata na račun
+- Plaćanje pouzećem 
+- Plaćanje pouzećem karticom
+Vrste plaćanja je potrebno da mogu da budu kontrolisane kroz admin panel. 
+
+Nakon odabira plaćanja prelazi se na sledeći deo u kome se unose napomene za isporuku ukoliko ih kupac ima, kao i obavezno polje uslovi kupovine koji su linkovani.
+Kada kupac čekira da je upoznat sa uslovima kupovine prelazi na naredni korak.
+2.4.3 Potvrda kupovine
+U ovom koraku kupac dobije potvrdu da je njegova kupovina uspešna, iznos koji treba da uplati i do kog termina u slučaju plaćanja uplatnicom, broj kupovine radi lakšeg praćenja i popunjenu uplatnicu u slučaju plaćanja uplatnicom ili QR kod za IPS plaćanje.
+U slučaju da kupac izabere opciju plaćanja platnom karticom, ukoliko je popunio formular sa podacima, sledeći korak ga vodi na WS pay.
+Nakon potvrđene kupovine, kupac dobija obaveštenje o uspešnoj kupovini.
+2.4.4 Email potvrda kupovine
+Po obavljenoj kupovini, kupac na mail dobija potvrdu sa detaljima porudžbine. Mail treba da se automatski šalje od strane web shop-a, sa predefinisanom mail adresom u cc. U prilogu maila potrebno je da se pošalje račun, obrazac za odustajanje od kupovine. 
+Nakon što je proces kupovine završen, od strane sajta treba da se porudžbina pošalje ka bazi web sajta. Pri tom, treba predvideti mogućnost da u admin panelu postoji pregled porudžbina.
+ 
+
+
+3 Korisnički nalog 
+Na web sajtu potrebno je obezbediti mogućnost vođenja korisničkih naloga kupaca, i pratećih podataka. Potrebno je omogućiti da korisnik može imati svoj profil na sajtu koji može da uređuje. Prilikom registracije, potrebno je prvo da korisnik može kreirati nalog i logovanjem sa Google, Apple nalogom, FB nalogom ili brojem mobilnog telefona. Potrebno je obezbediti mogućnost da korisnik može da uređuje svoje prethodno sačuvane podatke. Takođe, treba predvideti mogućnost da kupac može da sačuva svoje platne kartice u sistemu. Za čuvanje kartice treba omoguciti 5% popusta. 
+Prilikom pregleda proizvoda na sajtu, kupac treba da ima mogućnost da doda proizvod u listu želja, i da može da pristupi i uređuje listu za svog profila. Potrebno je predvideti mogućnost, da ukoliko određenih artikala nema na stanju, kupac može da dobije obaveštenje kada postanu raspoloživi. Kupac treba da ima mogućnost da na svom profilu vidi istoriju svih kupovina.
+Prilikom logovanja kao registrovan korisnik, kupac treba da ima opciju Zapamti me, pri čemu je onda "trajno" ulogovan. 
+Potrebno je omogućiti da kupac može dodati artikal u listu želja, kao i da može označiti da prima obaveštenja kada artikal bude na akciji.
+Na osnovu podataka kupca i istorija kupovine potrebno je slati personalizovane ponude.
+4 Servis za kupce
+Klikom na Servis za kupce prikazuju:
+- Uslove kupovine
+- Reklamacije
+- Komentari i sugestije
+Svi tekstovi na navedenim stranicama se unose ručno. Potrebno je obezbediti mogućnost da se tekstualni deo na ovim stranicama može ažurirati kroz admin panel.
+4.1 Reklamacije
+Strana sadrži tekstualni deo o načinu prijave reklamacije. Nakon tekstualnog dela, prikazuje se izjava - saglasnost koja se klikom otvara detaljnije, a dalje čekiranjem polja saglasnosti, otvara se formular za popunjavanje reklamacije.
+Formular u prvom koraku sadrži polja za popunjavanje broja fiskalnog računa ili broj porudžbine. 
+Podaci o brojevima računa/ugovora, datumima, i stavkama na računu/ugovoru, dobijaju se iz baze kupovina.
+Unošenjem validnih podataka, otvara se detaljna strana formulara gde kupac ima još jednom prikaz broja fiskalnog računa i datuma kupovine, napomenu i preporuku za popunjavanje reklamacije kao i izlistane artikle na računu kupovine.
+Pored svakog artikla postoji opcija  reklamirajte ovaj artikal koja klikom otvara  polja za unos.
+Potrebno je prikazati polja i automatski ih popuniti:
+- Ime i prezime
+- Adresa za vršenje uviđaja
+- Grad
+- Poštanski broj
+- E-mail
+- Mobilni telefon ( u definisanom formatu unosa +3816XXXXXXX(X))
+Ova polja treba da budu editabilna tako da kupac može da promeni bilo koji od ovih podataka. Pored tih polja treba da stoji i obaveštenje da je moguće promeniti podatke.
+Polja koje je potrebno da kupac sam popuni:
+- Opis problema ( polje je ograničeno i ima mogućnost za unos 250 karaktera)
+- Fotografije ( maksimalan broj je 5 fotografija , maksimalna veličina  5mb)
+- Način obaveštenja sa ček poljem - e-mail, telefon  - ( kupac ima mogućnost čekiranja samo jednog polja od ponuđenih)
+Nakon unosa svih obaveznih polja, postoji polje prijavite reklamaciju koje klikom šalje formular na reklamaciju.
+Ukoliko određeno polje nije uneto ili je greška,  automatski scroll treba da bude vraćen do tog polja.
+Nakon validne prijave, pojavljuje se zelena rečenica ,, Vaša reklamacija je evidentirana" . Zelena rečenica ostaje vidljiva dok kupac ne izađe iz prijave reklamacije ili ne pređe na drugi artikal za reklamiranje. 
+Podaci o prijavljenoj reklamaciji se zatim prosleđuju na email reklamacije@svetpovoljnihcena.rs i čuvaju se u bazi koja treba da bude vidljiva kroz admin panel.
+Kupac dobija mail da je reklamacija evidentirana sa brojem reklamacije. Broj reklamacije je broj porudžbine sa prefiksom R-1. Broj u prefiksu označava koji put je prijavljena reklamacija na taj artikl.
+Kupci treba u svom korisničko nalogu da vide prijavljen je reklamacije i status. Kada se reklamacija reši, treba da nestane iz korisničkog naloga kupca nakon 10 dana. 
+4.2 Uslovi kupovine
+Ova strana treba da se uređuje kroz admin panel. Na strani je potrebno sam da se nalazi ispis o uslovina kupovine.
+Stranica koja sadrži informacije o obradi ličnih podataka. Pravni deo koji je u skladu sa GDPR regulativom. 
+4.3 Komentari i sugestije
+Strana koja ima tekstualni deo. Tekstualni deo je informacija o načinu prijave komentara ili sugestije sa aktivnim linkom maila.
+Potrebno je predvideti da ovde postoji i kontakt forma, preko koje kupce mogu direktno da upute komentar ili pitanje i preko web stranice.
+Mail na koji se šalju komentari je komentar@svetpovoljnihcena.rs 
+5 Elektronski fiskalni računi
+Za svaku obavljenu kupovinu potrebno je dostaviti fiskalni račun kupcu. Fiskalni račun se kupcu dostavlja nakon preuzimanja artikla iz magacina.
+6 Filteri na stranici grupa artikala
+Filteri na stranici grupe artikala treba da budu delom fiskni delom definisani za grupu artikla. 
+7 Viber poruke
+Potrebno je da postoji mogućnost da se na bazu odabranih brojeva telefona pošalju Viber poruke. Odabir brojeva telefona treba da bude prema gradovima i datumu poslednje kupovine. 
+8 Praćenje kupovine
+Kupac treba da prima mail obaveštenja prilikom svake promene statusa porudžbine.
+9 Integracije
+9.1 Integracija sa kurirskom službom
+Potrebno je napraviti integraciju sa kurirskom službom tako da se ceo proces automatizuje i da na osnovu njega kupac dobija fiskalni račun i obaveštenja o promenama statusa.
+Takođe treba predvideti mogućnosti da se prodaju artikli sa lagera drugih dobavljača. 
+Postojaće dve kurirske službe - jedna za manje pakete, druga za kabaste pakete. 
+9.2 Integracija sa sistemom za kartično plaćanje
+Novi web sajt treba da bude integrisan sa sistemom za kartično plaćanje WS pay. Kada je kupac odabrao kao način plaćanja platnu karticu, bez obzira od koje banke je kartica, potrebno je izvršiti preusmeravanje na portal banke, sa iznosom za plaćanje. Nakon toga dalja obrada se vrši direktno od strane banke. Nakon uspešne transakcije, podatak se vraća nazad ka WEB sajtu.
+9.3 Integracija sa dobavljačima
+Sa određenim dobavljačima treba da postoji razmena podataka o lageru i dostupnosti lagera.
+Podaci o stanju lagera dobavljača je potrebno da se importuju na 15 minuta. Sa dobavljačima je potrebno napraviti povratnu informaciju o rezervacijama (porudžbinama kupaca).
+Na bazi podataka o lageru, definisane su granice za sigurnosne zalihe, odnosno ispod kojih količina treba automatski isključiti artikl sa prikaza na sajtu. 
+Potrebno je predvideti mogućnost da se u admin panelu vidi pregled importovanih lagera dobavljača, kao i prikaz importovanog stanja za svaki artikal pojedinačno i u skladu sa definisanim parametrima informaciju da li je dostupan za web prodaju.
+9.4 Integracija sa Google i Meta oglašavanjem
+Sa Google i Meta treba da postoji automatizam za objavljivanje oglasa, odnosno u admin panelu bi se čekirali artikli koji treba da se prikažu na ovim platformama kao plaćeni oglasi. Iz admin panela treba kontrolisati i budžet.
+
+
+
+
+2
+
+
