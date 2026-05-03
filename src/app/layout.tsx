@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { PromoBar } from "@/components/layout/promo-bar";
@@ -26,6 +26,18 @@ const fontMono = JetBrains_Mono({
   display: "swap",
 });
 
+/**
+ * Logo font — closest free Google equivalent to "Ahkio" (a tall, condensed
+ * geometric sans). Bebas Neue gives the same poster-display feel for the
+ * "Svet povoljnih cena" wordmark across header + footer.
+ */
+const fontLogo = Bebas_Neue({
+  variable: "--font-logo",
+  subsets: ["latin", "latin-ext"],
+  weight: "400",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: {
     default: "Svet povoljnih cena — premium nameštaj",
@@ -45,11 +57,11 @@ export default function RootLayout({
     <html
       lang="sr-Latn"
       suppressHydrationWarning
-      className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable} h-full antialiased`}
+      className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable} ${fontLogo.variable} h-full antialiased`}
     >
       <body
         suppressHydrationWarning
-        className="bg-canvas text-ink-900 min-h-full flex flex-col font-sans"
+        className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
         <Providers>
           <PromoBar bar={promoBar} />

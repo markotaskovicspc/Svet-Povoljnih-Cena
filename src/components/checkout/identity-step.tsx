@@ -73,7 +73,7 @@ export function IdentityStep({
             }}
             aria-pressed={active}
             className={cn(
-              "bg-surface ring-border/60 group flex h-full flex-col items-start gap-3 rounded-2xl p-5 text-left ring-1 transition focus-visible:outline-none",
+              "bg-surface ring-border/60 group flex h-full min-h-[112px] flex-row items-center gap-3 rounded-2xl p-4 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:flex-col md:items-start md:gap-3 md:p-5",
               "hover:ring-walnut/40 hover:shadow-soft-2",
               "focus-visible:ring-walnut/40 focus-visible:ring-2",
               active && "ring-walnut shadow-soft-3 ring-2",
@@ -81,18 +81,18 @@ export function IdentityStep({
           >
             <span
               className={cn(
-                "inline-flex size-10 items-center justify-center rounded-xl",
-                active ? "bg-walnut text-canvas" : "bg-muted-bg text-ink-700",
+                "inline-flex size-11 shrink-0 items-center justify-center rounded-xl md:size-10",
+                active ? "bg-brand-blue text-white" : "bg-muted-bg text-ink-700",
               )}
               aria-hidden
             >
               <Icon className="size-5" />
             </span>
-            <div className="flex flex-col gap-1">
-              <span className="font-display text-lg text-ink-900">
+            <div className="flex flex-1 flex-col gap-0.5 md:gap-1">
+              <span className="font-display text-base text-ink-900 md:text-lg">
                 {c.title}
               </span>
-              <span className="text-sm text-ink-500">{c.desc}</span>
+              <span className="text-xs text-ink-500 md:text-sm">{c.desc}</span>
               {c.accent ? (
                 <span className="bg-olive/10 text-olive mt-1 inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium">
                   {c.accent}

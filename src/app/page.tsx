@@ -32,6 +32,7 @@ export default function Home() {
         description="Komadi koje preporučujemo — najbolji odnos cene i kvaliteta u tekućem mesecu."
         href="/heroji-meseca"
         products={heroes}
+        mobileMinimal
       />
 
       <SectionRail

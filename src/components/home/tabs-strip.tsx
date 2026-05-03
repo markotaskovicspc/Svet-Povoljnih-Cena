@@ -30,7 +30,7 @@ export function TabsStrip({ tabs }: TabsStripProps) {
   return (
     <section
       aria-label="Aktuelne ponude"
-      className="mx-auto w-full max-w-[var(--container-page)] px-6 py-10 md:py-14"
+      className="mx-auto w-full max-w-[var(--container-page)] px-6 py-4 md:py-14"
     >
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {tabs.slice(0, 4).map((t, i) => {

@@ -47,23 +47,25 @@ export function MobileNav() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           aria-label="Otvori navigaciju"
-          className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 hover:bg-muted-bg"
+          className="inline-flex size-10 items-center justify-center rounded-full text-white/90 hover:bg-white/10 hover:text-white"
         >
           <Menu className="size-5" aria-hidden />
         </SheetTrigger>
-        <SheetContent side="left" className="w-[88vw] max-w-sm gap-0 p-0">
-          <SheetHeader className="border-b border-border px-4 py-3">
+        <SheetContent side="left" className="w-[88vw] max-w-sm gap-0 bg-surface p-0">
+          <SheetHeader className="border-b border-border bg-brand-blue px-4 py-3 text-white">
             <div className="flex items-center gap-2">
               {stack.length > 1 ? (
                 <button
                   onClick={back}
                   aria-label="Nazad"
-                  className="inline-flex size-8 items-center justify-center rounded-full hover:bg-muted-bg"
+                  className="inline-flex size-8 items-center justify-center rounded-full text-white/90 hover:bg-white/10 hover:text-white"
                 >
                   <ChevronLeft className="size-4" aria-hidden />
                 </button>
               ) : null}
-              <SheetTitle className="font-display text-base">{current.label}</SheetTitle>
+              <SheetTitle className="font-logo text-lg tracking-wider text-white">
+                {stack.length === 1 ? "MENI" : current.label.toUpperCase()}
+              </SheetTitle>
             </div>
           </SheetHeader>
           <div className="relative flex-1 overflow-hidden">
@@ -138,15 +140,25 @@ export function MobileNav() {
       <Sheet open={searchOpen} onOpenChange={setSearchOpen}>
         <SheetTrigger
           aria-label="Pretraži"
-          className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 hover:bg-muted-bg"
+          className="inline-flex size-10 items-center justify-center rounded-full text-white/90 hover:bg-white/10 hover:text-white"
         >
           <Search className="size-5" aria-hidden />
         </SheetTrigger>
-        <SheetContent side="top" className="gap-0 p-0">
-          <SheetHeader className="border-b border-border px-4 py-3">
-            <SheetTitle className="font-display text-base">Pretraga</SheetTitle>
+        {/*
+         * Fullscreen mobile search overlay (per spec: search must take the
+         * whole screen). The Sheet is forced to 100vh + full width via
+         * `w-screen h-[100dvh]` and side="top".
+         */}
+        <SheetContent
+          side="top"
+          className="h-[100dvh] w-screen max-w-none gap-0 overflow-y-auto rounded-none border-0 p-0"
+        >
+          <SheetHeader className="border-b border-border bg-surface px-4 py-3">
+            <SheetTitle className="font-display text-base text-ink-900">
+              Pretraga
+            </SheetTitle>
           </SheetHeader>
-          <div className="p-4">
+          <div className="bg-surface p-4">
             <InstantSearch />
           </div>
         </SheetContent>

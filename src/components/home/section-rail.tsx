@@ -11,6 +11,7 @@ import { ArrowRight } from "lucide-react";
 import type { Product } from "@/types";
 import { ProductCard } from "@/components/product/product-card";
 import { DragHint } from "@/components/motion/drag-hint";
+import { cn } from "@/lib/utils";
 
 interface SectionRailProps {
   eyebrow?: string;
@@ -19,6 +20,12 @@ interface SectionRailProps {
   href: string;
   ctaLabel?: string;
   products: Product[];
+  /**
+   * On mobile we deliberately strip eyebrow + description for some sections
+   * (e.g. Heroji meseca) to keep the layout dense and uncluttered. The
+   * desktop layout still shows them.
+   */
+  mobileMinimal?: boolean;
 }
 
 export function SectionRail({
@@ -28,13 +35,14 @@ export function SectionRail({
   href,
   ctaLabel = "Prikaži sve",
   products,
+  mobileMinimal,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
   if (!products.length) return null;
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-6 py-12 md:py-20">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <section className="mx-auto w-full max-w-[var(--container-page)] px-6 py-6 md:py-20">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -43,15 +51,27 @@ export function SectionRail({
           className="max-w-2xl"
         >
           {eyebrow ? (
-            <p className="font-mono text-xs tracking-[0.2em] text-walnut uppercase">
+            <p
+              className={cn(
+                "font-mono text-xs tracking-[0.2em] text-walnut uppercase",
+                mobileMinimal && "hidden md:block",
+              )}
+            >
               {eyebrow}
             </p>
           ) : null}
-          <h2 className="font-display mt-2 text-3xl text-ink-900 md:text-4xl">
+          <h2 className="font-display mt-1 text-2xl text-ink-900 md:mt-2 md:text-4xl">
             {title}
           </h2>
           {description ? (
-            <p className="mt-3 max-w-prose text-base text-ink-700">{description}</p>
+            <p
+              className={cn(
+                "mt-2 max-w-prose text-base text-ink-700 md:mt-3",
+                mobileMinimal && "hidden md:block",
+              )}
+            >
+              {description}
+            </p>
           ) : null}
         </motion.div>
         <Link
@@ -65,7 +85,7 @@ export function SectionRail({
 
       <div
         ref={railRef}
-        className="relative -mx-6 mt-8 overflow-x-auto px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative -mx-6 mt-4 overflow-x-auto px-6 [scrollbar-width:none] md:mt-8 [&::-webkit-scrollbar]:hidden"
       >
         <DragHint scopeRef={railRef} />
         <motion.ul

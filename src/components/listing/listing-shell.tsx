@@ -156,21 +156,22 @@ export function ListingShell({
       <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6 pb-20 md:pt-10">
         <Breadcrumbs trail={trail} className="mb-6" />
 
-        <header className="border-border/60 mb-8 flex flex-col gap-4 border-b pb-8">
+        <header className="border-border/60 mb-6 flex flex-col gap-3 border-b pb-6 md:mb-8 md:pb-8">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <p className="font-mono text-xs tracking-[0.2em] text-walnut uppercase">
+            <p className="font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:text-xs">
               {kindEyebrow(kind)}
             </p>
-            <h1 className="font-display mt-2 text-4xl text-ink-900 md:text-5xl">
+            <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
               {title}
             </h1>
             {subtitle ? (
-              <p className="mt-3 text-base text-ink-700">{subtitle}</p>
+              /* Hide marketing copy on mobile per spec — keep title + period only. */
+              <p className="mt-3 hidden text-base text-ink-700 md:block">{subtitle}</p>
             ) : null}
           </motion.div>
           {period ? (
@@ -330,7 +331,7 @@ export function ListingShell({
             {shown.length ? (
               <div
                 className={cn(
-                  "grid gap-x-5 gap-y-8 sm:grid-cols-2",
+                  "grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-5 sm:gap-y-8",
                   view === 4
                     ? "lg:grid-cols-3 xl:grid-cols-4"
                     : "lg:grid-cols-2 xl:grid-cols-3",
@@ -387,7 +388,7 @@ export function ListingSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
   return (
     <div
       className={cn(
-        "mx-auto grid w-full max-w-[var(--container-page)] gap-x-5 gap-y-8 px-6 py-10 sm:grid-cols-2",
+        "mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-x-3 gap-y-6 px-6 py-10 sm:gap-x-5 sm:gap-y-8",
         columns === 4 ? "lg:grid-cols-3 xl:grid-cols-4" : "lg:grid-cols-2 xl:grid-cols-3",
       )}
     >

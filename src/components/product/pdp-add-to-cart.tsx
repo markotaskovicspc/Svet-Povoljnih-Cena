@@ -99,7 +99,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
 
   if (variant === "desktop") {
     return (
-      <div className="bg-surface ring-border/60 sticky top-28 hidden flex-col gap-4 rounded-2xl p-5 shadow-soft-2 ring-1 md:flex">
+      <div className="bg-surface ring-border/60 flex flex-col gap-3 rounded-2xl p-4 shadow-soft-2 ring-1 md:sticky md:top-28 md:gap-4 md:p-5">
         <div className="flex items-baseline gap-2">
           {onSale ? (
             <>

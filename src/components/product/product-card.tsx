@@ -55,8 +55,10 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   const cover = product.media.images[0];
   const secondary = product.media.images[1];
   const badges: Badge[] = deriveBadges(product);
-  const visible = badges.slice(0, 3);
-  const overflow = badges.length - visible.length;
+  // Spec: show every badge — no overflow "+N" pill. The structure is kept
+  // ready so future banner artwork (Heroj akcije, Mesečna akcija, Nedeljna
+  // akcija …) can swap in by extending `toneClasses`/`deriveBadges`.
+  const visible = badges;
   const price = effectiveUnitPrice(product);
   const onSale = price.onSale;
 
@@ -127,25 +129,20 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         />
       </Link>
 
-      {/* Badge stack */}
+      {/* Badge stack — every badge is shown (no "+N" rollup). */}
       {visible.length ? (
-        <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+        <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
           {visible.map((b) => (
             <span
               key={b.key}
               className={cn(
-                "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
+                "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
                 toneClasses[b.tone],
               )}
             >
               {b.label}
             </span>
           ))}
-          {overflow > 0 ? (
-            <span className="bg-ink-900/80 rounded-full px-2.5 py-1 text-[11px] leading-none font-medium text-canvas">
-              +{overflow}
-            </span>
-          ) : null}
         </div>
       ) : null}
 
@@ -164,8 +161,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </button>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-2 px-4 pt-4 pb-3">
-        <h3 className="line-clamp-2 text-sm leading-snug font-medium text-ink-900">
+      <div className="flex flex-1 flex-col gap-1.5 px-3 pt-3 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
+        <h3 className="line-clamp-2 text-xs leading-snug font-medium text-ink-900 md:text-sm">
           <Link
             href={`/p/${product.slug}`}
             className="hover:text-walnut transition focus-visible:underline focus-visible:outline-none"
@@ -173,18 +170,18 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             {product.name}
           </Link>
         </h3>
-        <p className="font-mono text-[11px] tracking-tight text-ink-500">
+        <p className="font-mono text-[10px] tracking-tight text-ink-500 md:text-[11px]">
           {formatDimensions(product.dimensionsCm)}
         </p>
 
-        <div className="mt-auto pt-2">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <div className="mt-auto pt-1.5 md:pt-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             {onSale ? (
               <>
-                <span className="text-action text-base font-semibold">
+                <span className="text-action text-sm font-bold md:text-base">
                   {formatRsd(price.effective)}
                 </span>
-                <span className="text-xs text-ink-500 line-through">
+                <span className="text-[11px] text-ink-500 line-through md:text-xs">
                   {formatRsd(price.full)}
                 </span>
                 {price.discountPct ? (
@@ -194,18 +191,18 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                 ) : null}
               </>
             ) : (
-              <span className="text-base font-semibold text-ink-900">
+              <span className="text-sm font-semibold text-ink-900 md:text-base">
                 {formatRsd(price.full)}
               </span>
             )}
           </div>
           {onSale && product.action?.endsAt ? (
-            <p className="mt-1 text-[11px] text-ink-500">
+            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
               Akcija do {formatDate(product.action.endsAt)} · Isporuka{" "}
               {product.deliveryDays.min}–{product.deliveryDays.max} dana
             </p>
           ) : (
-            <p className="mt-1 text-[11px] text-ink-500">
+            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
               Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} dana
             </p>
           )}
@@ -213,8 +210,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </div>
 
       {/* Footer row — add button morphs into qty stepper when in cart */}
-      <div className="border-border/60 flex items-center justify-between gap-2 border-t px-4 py-3">
-        <span className="font-mono text-[11px] tracking-tight text-ink-500">
+      <div className="border-border/60 flex items-center justify-between gap-2 border-t px-3 py-2 md:px-4 md:py-3">
+        <span className="hidden font-mono text-[11px] tracking-tight text-ink-500 md:inline">
           {product.sku}
         </span>
         <AnimatePresence mode="wait" initial={false}>

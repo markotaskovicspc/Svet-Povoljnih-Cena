@@ -141,30 +141,37 @@ export default async function ProductPage({ params }: RouteProps) {
         />
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 md:gap-6">
           <header>
-            <p className="font-mono text-[11px] tracking-[0.18em] text-walnut uppercase">
+            <p className="font-mono text-[10px] tracking-[0.18em] text-walnut uppercase md:text-[11px]">
               {product.categoryPath.join(" / ")}
             </p>
-            <h1 className="font-display mt-2 text-3xl text-ink-900 md:text-4xl">
+            <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-4xl">
               {product.name}
             </h1>
-            <p className="mt-1 font-mono text-xs text-ink-500">SKU {product.sku}</p>
+            {/*
+             * Spec (mobile): hide the internal SKU/code line ("BS-n2212").
+             * Kept in the DOM for desktop only so support reps can still see it.
+             */}
+            <p className="mt-1 hidden font-mono text-xs text-ink-500 md:block">
+              SKU {product.sku}
+            </p>
             {product.shortDescription ? (
-              <p className="mt-4 max-w-prose text-base text-ink-700">
+              <p className="mt-3 max-w-prose text-sm text-ink-700 md:mt-4 md:text-base">
                 {product.shortDescription}
               </p>
             ) : null}
           </header>
 
+          {/* Price block — only the active (sale) price is emphasised. */}
           <div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               {onSale ? (
                 <>
-                  <span className="text-action text-3xl font-semibold">
+                  <span className="text-action text-3xl font-bold md:text-4xl">
                     {formatRsd(sale)}
                   </span>
-                  <span className="text-base text-ink-500 line-through">
+                  <span className="text-sm text-ink-500 line-through md:text-base">
                     {formatRsd(product.fullPrice)}
                   </span>
                   {product.discountPct ? (
@@ -174,19 +181,20 @@ export default async function ProductPage({ params }: RouteProps) {
                   ) : null}
                 </>
               ) : (
-                <span className="text-3xl font-semibold text-ink-900">
+                <span className="text-2xl font-semibold text-ink-900 md:text-3xl">
                   {formatRsd(product.fullPrice)}
                 </span>
               )}
             </div>
             {onSale && product.action?.startsAt && product.action.endsAt ? (
-              <p className="mt-2 text-sm text-ink-500">
+              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
                 Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
                 {formatDate(product.action.endsAt)}.
               </p>
             ) : null}
           </div>
 
+          {/* Add-to-cart with quantity stepper, moved up directly under price. */}
           <PdpAddToCart product={product} variant="desktop" />
 
           <ul className="border-border/60 grid grid-cols-2 gap-3 border-t pt-4 text-xs text-ink-700">
@@ -216,7 +224,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
       {/* Row V — Pictogram strip */}
       <Reveal>
-        <section className="mx-auto mt-16 w-full max-w-[var(--container-page)] px-6">
+        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="sr-only">Karakteristike</h2>
           <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
             {pictograms.map((pg) => (
@@ -234,7 +242,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
       {/* Row VI — Description */}
       <Reveal>
-        <section className="mx-auto mt-16 w-full max-w-[var(--container-page)] px-6">
+        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
             Opis proizvoda
           </h2>
@@ -249,7 +257,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
       {/* Row VII — Dimensions */}
       <Reveal>
-        <section className="mx-auto mt-16 w-full max-w-[var(--container-page)] px-6">
+        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
             Dimenzije
           </h2>
@@ -263,7 +271,7 @@ export default async function ProductPage({ params }: RouteProps) {
       {/* Row VIII — Materials */}
       {materials.length ? (
         <Reveal>
-          <section className="mx-auto mt-16 w-full max-w-[var(--container-page)] px-6">
+          <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
             <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
               Materijali
             </h2>
@@ -298,7 +306,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
       {/* Row IX — Delivery & assembly */}
       <Reveal>
-        <section className="mx-auto mt-16 w-full max-w-[var(--container-page)] px-6">
+        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
             Isporuka i montaža
           </h2>

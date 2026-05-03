@@ -4,24 +4,7 @@ import { useFormContext } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { CheckoutFormData } from "./checkout-flow";
-
-const ASSEMBLY_CITIES = [
-  "Beograd",
-  "Novi Sad",
-  "Niš",
-  "Kragujevac",
-  "Subotica",
-  "Pančevo",
-  "Zrenjanin",
-  "Čačak",
-  "Kraljevo",
-  "Leskovac",
-  "Smederevo",
-  "Sombor",
-  "Šabac",
-  "Užice",
-  "Valjevo",
-];
+import { CityAutocomplete } from "@/components/forms/city-autocomplete";
 
 /**
  * Step 2 — Shipping data.
@@ -72,6 +55,8 @@ export function ShippingForm() {
         liceType={liceType}
         showSubmitErrors={isSubmitted}
         register={register}
+        setValue={setValue}
+        watch={watch}
         errors={errors}
       />
 
@@ -103,6 +88,8 @@ export function ShippingForm() {
                 liceType={billingLice ?? "fizicko"}
                 showSubmitErrors={isSubmitted}
                 register={register}
+                setValue={setValue}
+                watch={watch}
                 errors={errors}
               />
             </div>
@@ -118,6 +105,8 @@ interface AddressFieldsetProps {
   liceType: "fizicko" | "pravno" | undefined;
   showSubmitErrors: boolean;
   register: ReturnType<typeof useFormContext<CheckoutFormData>>["register"];
+  setValue: ReturnType<typeof useFormContext<CheckoutFormData>>["setValue"];
+  watch: ReturnType<typeof useFormContext<CheckoutFormData>>["watch"];
   errors: ReturnType<typeof useFormContext<CheckoutFormData>>["formState"]["errors"];
 }
 
@@ -126,6 +115,8 @@ function AddressFieldset({
   liceType,
   showSubmitErrors,
   register,
+  setValue,
+  watch,
   errors,
 }: AddressFieldsetProps) {
   const errAt = (path: string): string | undefined => {
@@ -195,12 +186,39 @@ function AddressFieldset({
           minLength: { value: 3, message: "Adresa je prekratka" },
         })}
       />
-      <FieldWithDatalist
-        label="Grad"
+      {/*
+       * City + postal-code linked autocomplete (spec §32–35):
+       * after ≥3 chars the user sees a list of Serbian places + postal
+       * codes; selecting one auto-fills the postal-code field.
+       *
+       * `register` still attaches validation rules to the city field; we
+       * just override the input via `setValue` on selection.
+       */}
+      <CityAutocomplete
         required
-        listId={`${prefix}-cities`}
-        options={ASSEMBLY_CITIES}
+        value={watch(`${prefix}.city` as const) ?? ""}
         error={showError("city")}
+        onValueChange={(v) =>
+          setValue(`${prefix}.city` as const, v, {
+            shouldDirty: true,
+            shouldValidate: showSubmitErrors,
+          })
+        }
+        onSelect={(place) => {
+          setValue(`${prefix}.city` as const, place.name, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          setValue(`${prefix}.postalCode` as const, place.postalCode, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        }}
+      />
+      {/* Hidden `register` keeps the city field in the form schema so
+          required/validation rules still fire on submit. */}
+      <input
+        type="hidden"
         {...register(`${prefix}.city` as const, {
           required: "Obavezno polje",
         })}
@@ -282,38 +300,5 @@ const Field = ({
         </span>
       ) : null}
     </label>
-  );
-};
-
-const FieldWithDatalist = ({
-  label,
-  required,
-  error,
-  listId,
-  options,
-  ...props
-}: {
-  label: string;
-  required?: boolean;
-  error?: string;
-  listId: string;
-  options: string[];
-} & React.ComponentProps<"input">) => {
-  return (
-    <>
-      <Field
-        label={label}
-        required={required}
-        error={error}
-        list={listId}
-        autoComplete="off"
-        {...props}
-      />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-    </>
   );
 };

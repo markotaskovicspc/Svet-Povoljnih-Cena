@@ -17,6 +17,14 @@
   --color-surface: var(--surface);
   --color-muted-bg: var(--muted-bg);
 
+  /* Brand blue (header / footer) */
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-700: var(--brand-blue-700);
+  --color-brand-blue-50: var(--brand-blue-50);
+
+  /* Logo font (Ahkio-style) */
+  --font-logo: var(--font-logo);
+
   /* Brand ink scale */
   --color-ink-900: var(--ink-900);
   --color-ink-700: var(--ink-700);
@@ -92,9 +100,14 @@
 
 :root {
   /* Brand palette (per design system) */
-  --canvas: #faf7f2;
+  --canvas: #ffffff;
   --surface: #ffffff;
-  --muted-bg: #f1ece3;
+  --muted-bg: #f4f1ec;
+
+  /* Brand blue — used for top header and footer dark band */
+  --brand-blue: #043478;
+  --brand-blue-700: #032a64;
+  --brand-blue-50: #eaf0fb;
 
   --ink-900: #1a1714;
   --ink-700: #3b342d;
@@ -195,12 +208,20 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "cv11";
+    /* Use only safe Inter features. cv11 was producing an awkward "j" that
+       looked broken in Serbian copy ("ja", "kupcima", "izaberi"). cv11 swaps
+       the single-storey "a"; cv05 swaps "j" to a flatter, more legible form. */
+    font-feature-settings: "cv05", "cv11", "ss03";
   }
   h1, h2, h3, h4, h5, .font-display {
     font-family: var(--font-display), Georgia, "Times New Roman", serif;
     letter-spacing: -0.02em;
     line-height: 1.15;
+  }
+  .font-logo {
+    font-family: var(--font-logo), "Bebas Neue", "Impact", system-ui, sans-serif;
+    letter-spacing: 0.01em;
+    font-weight: 400;
   }
   .font-mono, code, kbd, samp, pre {
     font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
