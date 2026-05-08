@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { validateVoucher } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
+import { notifySuppliersOfReservation } from "@/lib/xml";
+import { loadOrderForEmail, sendOrderConfirmation } from "@/lib/email";
 import {
   computeOrderPricing,
   type PricingLine,
@@ -303,6 +305,35 @@ export async function createOrder(
   });
 
   if (userId) await clearServerCart(userId).catch(() => undefined);
+
+  // Phase 4A: notify each supplier that owns one of the ordered SKUs so
+  // they can hold the units against their warehouse stock. Fire-and-
+  // forget — checkout has already committed and supplier divergences are
+  // reconciled by the next feed snapshot.
+  void notifySuppliersOfReservation({
+    orderNumber: created.number,
+    lines: input.lines.map((line) => ({
+      productId: bySku.get(line.sku)!.id,
+      qty: line.qty,
+    })),
+  });
+
+  // Phase 4D: send the customer + admin BCC the order confirmation with
+  // the predračun + odustajanje PDFs attached. Fire-and-forget — the
+  // order is committed and we don't want a transient SMTP error to mask
+  // a successful checkout.
+  void (async () => {
+    try {
+      const loaded = await loadOrderForEmail(created.id);
+      if (!loaded?.recipient) return;
+      await sendOrderConfirmation({
+        order: loaded.order,
+        to: loaded.recipient,
+      });
+    } catch (err) {
+      console.error("[email] order-confirmation failed", err);
+    }
+  })();
 
   return {
     ok: true,

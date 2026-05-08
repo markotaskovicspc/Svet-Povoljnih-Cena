@@ -155,15 +155,15 @@ function PaymentMethodView({
   }
 
   if (method === "kartica" || method === "google_pay" || method === "apple_pay") {
+    const startUrl = `/api/payment/wspay/start/${encodeURIComponent(order.id)}`;
     return (
       <div className="bg-canvas ring-border/60 flex flex-col gap-3 rounded-xl p-5 ring-1">
         <p className="text-ink-900 text-sm font-medium">
           Preusmeravanje na sigurno plaćanje
         </p>
         <p className="text-sm text-ink-700">
-          U sledećem koraku otvoriće se WSPay strana za potvrdu plaćanja
-          karticom ili digitalnim novčanikom. (U Fazi 4 se aktivira pravi
-          redirect; ovo je placeholder.)
+          U sledećem koraku otvoriće se WSPay strana sa 3-D Secure
+          validacijom. Po završetku se vraćate ovde sa potvrdom uplate.
         </p>
         <div className="bg-muted-bg/60 flex items-center justify-between rounded-lg px-3 py-2">
           <span className="text-xs text-ink-500">Iznos</span>
@@ -171,12 +171,12 @@ function PaymentMethodView({
             {formatRsd(order.total)}
           </span>
         </div>
-        <button
-          type="button"
+        <a
+          href={startUrl}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
-          Nastavi na WSPay (placeholder)
-        </button>
+          Nastavi na WSPay
+        </a>
       </div>
     );
   }

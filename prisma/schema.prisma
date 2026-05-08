@@ -533,6 +533,10 @@ model Supplier {
   authPass  String?
   enabled   Boolean  @default(true)
   notes     String?  @db.Text
+  /// Phase 4A — per-supplier `SupplierFeedMapping` JSON. Defines the XML
+  /// path expressions used by the importer to project vendor XML into the
+  /// canonical `FeedItem` shape. Null = supplier not yet configured.
+  mapping   Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1098,3 +1102,15 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([createdAt])
 }
+
+/// Per-method toggle for the storefront checkout. Seeded with all
+/// `PaymentMethod` enum values; admin flips `enabled` to hide a method from
+/// the customer payment step without code changes.
+model PaymentMethodConfig {
+  method  PaymentMethod @id
+  enabled Boolean       @default(true)
+  label   String?
+  note    String?
+  updatedAt DateTime    @updatedAt
+}
+

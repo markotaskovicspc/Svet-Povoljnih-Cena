@@ -6,6 +6,7 @@
  */
 export { OrderConfirmation } from "./order-confirmation";
 export { OrderStatusChanged } from "./order-status-changed";
+export { FiscalReceiptEmail } from "./fiscal-receipt";
 export { ReclamationReceipt } from "./reclamation-receipt";
 export { PasswordReset } from "./password-reset";
 export { OtpEmail } from "./otp";

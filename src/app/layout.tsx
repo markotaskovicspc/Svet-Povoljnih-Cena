@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Fraunces, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -48,11 +49,14 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.svetpovoljnihcena.rs"),
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Suppress storefront chrome on /admin — admin owns its own shell.
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isAdmin = pathname.startsWith("/admin");
   return (
     <html
       lang="sr-Latn"
@@ -64,11 +68,17 @@ export default function RootLayout({
         className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
         <Providers>
-          <PromoBar bar={promoBar} />
-          <Header />
-          <main className="flex-1">{children}</main>
-          <NewsletterBand />
-          <Footer />
+          {isAdmin ? (
+            <main className="flex-1">{children}</main>
+          ) : (
+            <>
+              <PromoBar bar={promoBar} />
+              <Header />
+              <main className="flex-1">{children}</main>
+              <NewsletterBand />
+              <Footer />
+            </>
+          )}
         </Providers>
       </body>
     </html>

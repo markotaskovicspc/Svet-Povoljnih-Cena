@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { loadReclamationForEmail, sendReclamationReceipt } from "@/lib/email";
 
 /**
  * Reclamation flow (Phase 3C — item 5; spec §4.1).
@@ -113,6 +114,24 @@ export async function createReclamation(
 
     return reclamation;
   });
+
+  // Phase 4D: confirm receipt to the customer (only when they opted into
+  // the email channel). BCC to the admin inbox is added by the sender.
+  if (input.notifyVia === "EMAIL" && input.customerEmail) {
+    void (async () => {
+      try {
+        const loaded = await loadReclamationForEmail(result.id);
+        if (loaded?.recipient) {
+          await sendReclamationReceipt({
+            reclamation: loaded.reclamation,
+            to: loaded.recipient,
+          });
+        }
+      } catch (err) {
+        console.error("[email] reclamation-receipt failed", err);
+      }
+    })();
+  }
 
   return { ok: true, id: result.id, number: result.number };
 }
