@@ -30,7 +30,7 @@ export async function sendOrderConfirmation(args: {
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     OrderConfirmation({ order: args.order, baseUrl: cfg.baseUrl }),
   );
 
@@ -69,7 +69,7 @@ export async function sendOrderStatusChanged(args: {
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     OrderStatusChanged({
       order: args.order,
       status: args.status,
@@ -107,7 +107,7 @@ export async function sendFiscalReceipt(args: {
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     FiscalReceiptEmail({
       order: args.order,
       receiptNumber: args.receiptNumber,
@@ -139,7 +139,7 @@ export async function sendReclamationReceipt(args: {
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     ReclamationReceipt({ reclamation: args.reclamation, baseUrl: cfg.baseUrl }),
   );
   return dispatch({
@@ -160,7 +160,7 @@ export async function sendPasswordReset(args: {
 }): Promise<DispatchResult> {
   const cfg = getEmailConfig();
   const resetUrl = `${cfg.baseUrl}/nalog/lozinka/nova?token=${encodeURIComponent(args.token)}`;
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     PasswordReset({ resetUrl, expiresInMinutes: args.expiresInMinutes }),
   );
   return dispatch({
@@ -177,7 +177,7 @@ export async function sendOtpEmail(args: {
   code: string;
   expiresInMinutes?: number;
 }): Promise<DispatchResult> {
-  const { html, text } = renderEmail(
+  const { html, text } = await renderEmail(
     OtpEmail({ code: args.code, expiresInMinutes: args.expiresInMinutes }),
   );
   return dispatch({

@@ -355,7 +355,7 @@ async function ensureCategory(
       parentId = existing.id;
       lastId = existing.id;
     } else {
-      const created = await tx.category.create({
+      const created: { id: string } = await tx.category.create({
         data: {
           slug,
           name: segment,
@@ -363,6 +363,7 @@ async function ensureCategory(
           level,
           parentId,
         },
+        select: { id: true },
       });
       parentId = created.id;
       lastId = created.id;

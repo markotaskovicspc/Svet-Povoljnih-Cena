@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { ReactElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 
 /**
  * Phase 4D — turn one of the React Email-style templates in
@@ -11,6 +10,9 @@ import { renderToStaticMarkup } from "react-dom/server";
  * We use `react-dom/server`'s `renderToStaticMarkup` rather than pulling in
  * `@react-email/render` to avoid an extra dependency; the templates already
  * use only inline-style HTML primitives so static markup is sufficient.
+ *
+ * The import is deferred via `await import(...)` because Next.js 15 /
+ * Turbopack flags static `react-dom/server` imports from app code.
  */
 
 export interface RenderedEmail {
@@ -18,7 +20,8 @@ export interface RenderedEmail {
   text: string;
 }
 
-export function renderEmail(node: ReactElement): RenderedEmail {
+export async function renderEmail(node: ReactElement): Promise<RenderedEmail> {
+  const { renderToStaticMarkup } = await import("react-dom/server");
   const inner = renderToStaticMarkup(node);
   const html = wrap(inner);
   return { html, text: htmlToText(inner) };
