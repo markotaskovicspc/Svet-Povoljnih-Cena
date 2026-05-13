@@ -191,15 +191,18 @@ export function MobileNav() {
          */}
         <SheetContent
           side="top"
-          className="h-[100dvh] w-screen max-w-none gap-0 overflow-y-auto rounded-none border-0 p-0"
+          className="!inset-0 !h-[100dvh] !w-screen !max-w-none gap-0 overflow-hidden rounded-none border-0 p-0"
         >
-          <SheetHeader className="border-b border-border bg-surface px-4 py-3">
+          <SheetHeader className="shrink-0 border-b border-border bg-surface px-4 py-3">
             <SheetTitle className="font-display text-base text-ink-900">
               Pretraga
             </SheetTitle>
           </SheetHeader>
-          <div className="bg-surface p-4">
-            <InstantSearch />
+          <div className="min-h-0 flex-1 overflow-y-auto bg-surface p-4">
+            <InstantSearch
+              presentation="inline"
+              onNavigate={() => setSearchOpen(false)}
+            />
           </div>
         </SheetContent>
       </Sheet>

@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import type { SearchHit } from "@/types/search";
 
 /**
  * Search layer (Phase 3C — item 8).
@@ -13,18 +14,6 @@ import { num } from "@/lib/api/_helpers";
  *
  * Meilisearch is a future drop-in (Phase 4 if FTS proves insufficient).
  */
-
-export interface SuggestHit {
-  sku: string;
-  slug: string;
-  name: string;
-  breadcrumb: string;
-  thumbnailUrl: string;
-  fullPrice: number;
-  salePrice: number;
-  discountPct: number;
-  isHero: boolean;
-}
 
 interface SuggestRow {
   sku: string;
@@ -40,7 +29,7 @@ interface SuggestRow {
 
 const MIN_QUERY_LEN = 3;
 
-export async function suggest(query: string, limit = 8): Promise<SuggestHit[]> {
+export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 20);

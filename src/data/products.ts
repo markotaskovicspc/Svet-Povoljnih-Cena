@@ -3,6 +3,7 @@
  * Replaced by XML feed ingestion in Phase 4.
  */
 import type { Product } from "@/types";
+import type { SearchHit } from "@/types/search";
 
 const day = 24 * 3600 * 1000;
 const now = Date.now();
@@ -859,18 +860,6 @@ export const productsForTab = (tabId: string) => {
       return [];
   }
 };
-
-export interface SearchHit {
-  sku: string;
-  slug: string;
-  name: string;
-  breadcrumb: string;
-  thumbnailUrl: string;
-  fullPrice: number;
-  salePrice: number;
-  discountPct: number;
-  isHero: boolean;
-}
 
 /** Lightweight client-side search used by the header instant-search. */
 export function searchProducts(query: string, limit = 6): SearchHit[] {
