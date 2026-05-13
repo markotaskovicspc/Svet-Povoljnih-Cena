@@ -59,62 +59,58 @@ export interface NavNode {
   children?: NavNode[];
 }
 
+const categoryHref = (...segments: string[]) => `/k/${segments.join("/")}`;
+
 export const primaryNav: NavNode[] = [
   {
     label: "Nameštaj",
-    href: "/nameštaj",
+    href: categoryHref("namestaj"),
     children: [
-      {
-        label: "Police",
-        href: "/nameštaj/police",
-        children: [
-          { label: "Otvorene police", href: "/nameštaj/police/otvorene" },
-          { label: "Zatvorene police", href: "/nameštaj/police/zatvorene" },
-        ],
-      },
-      {
-        label: "Ormari",
-        href: "/nameštaj/ormari",
-        children: [
-          { label: "Garderobni ormari", href: "/nameštaj/ormari/garderobni" },
-          { label: "Komode", href: "/nameštaj/ormari/komode" },
-        ],
-      },
-      { label: "Kreveti", href: "/nameštaj/kreveti" },
-      { label: "Stolovi", href: "/nameštaj/stolovi" },
-      { label: "Stolice", href: "/nameštaj/stolice" },
+      { label: "Baštenski nameštaj", href: categoryHref("namestaj", "bastenski-namestaj") },
+      { label: "Kancelarija", href: categoryHref("namestaj", "kancelarija") },
+      { label: "Trpezarija", href: categoryHref("namestaj", "trpezarija") },
+      { label: "Dnevna soba", href: categoryHref("namestaj", "dnevna-soba") },
+      { label: "Predsoblje", href: categoryHref("namestaj", "predsoblje") },
+      { label: "Gejming", href: categoryHref("namestaj", "gejming") },
+      { label: "Spavaća soba", href: categoryHref("namestaj", "spavaca-soba") },
     ],
   },
   {
-    label: "Trpezarije",
-    href: "/trpezarije",
-  },
-  {
-    label: "Spavaće sobe",
-    href: "/spavace-sobe",
-  },
-  {
-    label: "Dnevne sobe",
-    href: "/dnevne-sobe",
-  },
-  {
-    label: "Outlet",
-    href: "/outlet",
-  },
-  {
-    label: "Novo",
-    href: "/novo",
-  },
-  {
-    label: "Akcije i posebne ponude",
-    href: "/akcija",
+    label: "Sve za kuću",
+    href: categoryHref("sve-za-kucu"),
     children: [
-      { label: "Mesečna akcija", href: "/akcija" },
-      { label: "Nedeljna akcija", href: "/nedeljna-akcija" },
-      { label: "Heroji meseca", href: "/heroji-meseca" },
-      { label: "Ograničena količina", href: "/ogranicena-ponuda" },
-      { label: "Sve do 999", href: "/sve-do-999" },
-      { label: "Specijalne ponude", href: "/specijalne-ponude" },
+      { label: "Bazeni", href: categoryHref("sve-za-kucu", "bazeni") },
+      { label: "Alat", href: categoryHref("sve-za-kucu", "alat") },
+      { label: "Rasveta", href: categoryHref("sve-za-kucu", "rasveta") },
+      { label: "Čišćenje i održavanje", href: categoryHref("sve-za-kucu", "ciscenje-i-odrzavanje") },
+      { label: "Dekoracija", href: categoryHref("sve-za-kucu", "dekoracija") },
+      { label: "Kupatilo", href: categoryHref("sve-za-kucu", "kupatilo") },
+      { label: "Tepisi", href: categoryHref("sve-za-kucu", "tepisi") },
+    ],
+  },
+  {
+    label: "Kućni aparati",
+    href: categoryHref("kucni-aparati"),
+    children: [
+      { label: "Kafe aparati", href: categoryHref("kucni-aparati", "kafe-aparati") },
+      { label: "Lepota i nega", href: categoryHref("kucni-aparati", "lepota-i-nega") },
+      { label: "Hlađenje i grejanje", href: categoryHref("kucni-aparati", "hladjenje-i-grejanje") },
+      { label: "Priprema hrane", href: categoryHref("kucni-aparati", "priprema-hrane") },
+      { label: "Kuvanje i pečenje", href: categoryHref("kucni-aparati", "kuvanje-i-pecenje") },
+      { label: "Pegle", href: categoryHref("kucni-aparati", "pegle") },
+      { label: "Usisivači", href: categoryHref("kucni-aparati", "usisivaci") },
+      { label: "Prečišćivači vazduha", href: categoryHref("kucni-aparati", "preciscivaci-vazduha") },
+      { label: "Aparati za vodu", href: categoryHref("kucni-aparati", "aparati-za-vodu") },
+    ],
+  },
+  {
+    label: "Moda i putovanja",
+    href: categoryHref("moda-i-putovanja"),
+    children: [
+      { label: "Ženske torbe", href: categoryHref("moda-i-putovanja", "zenske-torbe") },
+      { label: "Ženske čarape", href: categoryHref("moda-i-putovanja", "zenske-carape") },
+      { label: "Aksesoari", href: categoryHref("moda-i-putovanja", "aksesoari") },
+      { label: "Koferi", href: categoryHref("moda-i-putovanja", "koferi") },
     ],
   },
 ];
