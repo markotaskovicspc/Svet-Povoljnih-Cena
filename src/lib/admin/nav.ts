@@ -57,6 +57,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Operativa",
     items: [
+      { href: "/admin/erp", label: "ERP sistem", allowed: ALL },
       { href: "/admin/narudzbine", label: "Narudžbine", allowed: O },
       { href: "/admin/reklamacije", label: "Reklamacije", allowed: O },
       { href: "/admin/komentari", label: "Komentari", allowed: CO },
