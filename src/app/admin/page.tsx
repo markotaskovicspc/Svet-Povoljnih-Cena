@@ -14,18 +14,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AdminDashboard({
-  searchParams,
-}: {
-  searchParams: Promise<{ forbidden?: string }>;
-}) {
-  await requireAdminAction();
-  const sp = await searchParams;
-
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
-
+async function getDashboardData(dayStart: Date, monthStart: Date) {
   const [
     todayAgg,
     todayCount,
@@ -81,6 +70,60 @@ export default async function AdminDashboard({
     }),
   ]);
 
+  return {
+    todayAgg,
+    todayCount,
+    monthAgg,
+    openOrders,
+    openReclamations,
+    pendingComments,
+    lowStock,
+    lastImports,
+    topProducts,
+  };
+}
+
+function getEmptyDashboardData() {
+  return {
+    todayAgg: { _sum: { total: null } },
+    todayCount: 0,
+    monthAgg: { _sum: { total: null }, _count: 0 },
+    openOrders: 0,
+    openReclamations: 0,
+    pendingComments: 0,
+    lowStock: [],
+    lastImports: [],
+    topProducts: [],
+  };
+}
+
+export default async function AdminDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ forbidden?: string }>;
+}) {
+  await requireAdminAction();
+  const sp = await searchParams;
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
+
+  const isPreviewMode = !process.env.DATABASE_URL;
+  const {
+    todayAgg,
+    todayCount,
+    monthAgg,
+    openOrders,
+    openReclamations,
+    pendingComments,
+    lowStock,
+    lastImports,
+    topProducts,
+  } = isPreviewMode
+    ? getEmptyDashboardData()
+    : await getDashboardData(dayStart, monthStart);
+
   return (
     <>
       <PageHeader
@@ -91,6 +134,12 @@ export default async function AdminDashboard({
         {sp.forbidden ? (
           <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-ink-700">
             Nemate ovlašćenja za tu sekciju.
+          </div>
+        ) : null}
+        {isPreviewMode ? (
+          <div className="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-sm text-ink-700">
+            Admin panel radi u preview režimu jer DATABASE_URL nije podešen.
+            Povežite bazu za realne podatke.
           </div>
         ) : null}
 
