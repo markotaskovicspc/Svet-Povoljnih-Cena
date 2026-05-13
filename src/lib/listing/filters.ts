@@ -252,6 +252,7 @@ export type ListingKind =
   | "akcija"
   | "nedeljna-akcija"
   | "heroji-meseca"
+  | "niske-cene-pod-zastitom"
   | "outlet"
   | "novo"
   | "kategorija";
@@ -274,6 +275,7 @@ function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
   switch (kind) {
     case "akcija":
     case "nedeljna-akcija":
+    case "niske-cene-pod-zastitom":
       return list.sort(
         (a, b) => cmpHero(a, b) || cmpDiscount(a, b) || cmpPriceAsc(a, b),
       );

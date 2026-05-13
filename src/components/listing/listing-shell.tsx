@@ -407,6 +407,8 @@ function kindEyebrow(kind: ListingKind): string {
       return "Sedam dana";
     case "heroji-meseca":
       return "Selekcija meseca";
+    case "niske-cene-pod-zastitom":
+      return "Trajno zaštićene cene";
     case "outlet":
       return "Outlet";
     case "novo":

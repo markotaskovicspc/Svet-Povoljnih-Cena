@@ -30,7 +30,7 @@ const fontMono = JetBrains_Mono({
 /**
  * Logo font — closest free Google equivalent to "Ahkio" (a tall, condensed
  * geometric sans). Bebas Neue gives the same poster-display feel for the
- * "Svet povoljnih cena" wordmark across header + footer.
+ * Fallback logo font kept for admin and legacy text marks.
  */
 const fontLogo = Bebas_Neue({
   variable: "--font-logo",
@@ -41,11 +41,11 @@ const fontLogo = Bebas_Neue({
 
 export const metadata: Metadata = {
   title: {
-    default: "Svet povoljnih cena — premium nameštaj",
-    template: "%s · Svet povoljnih cena",
+    default: "Svet Akcija — nameštaj na akciji",
+    template: "%s · Svet Akcija",
   },
   description:
-    "Premium nameštaj po povoljnim cenama. Brza isporuka, montaža u glavnim gradovima, kuratirana selekcija kolekcija.",
+    "Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.",
   metadataBase: new URL("https://www.svetpovoljnihcena.rs"),
 };
 

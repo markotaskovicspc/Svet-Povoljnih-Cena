@@ -24,6 +24,7 @@ export interface PricingAction {
   name?: string;
   startsAt: string | Date;
   endsAt: string | Date;
+  isPermanent?: boolean | null;
 }
 
 export interface PricingProduct {

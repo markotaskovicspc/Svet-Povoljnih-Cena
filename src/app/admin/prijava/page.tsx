@@ -51,7 +51,7 @@ export default async function AdminLoginPage({
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-md rounded-2xl border border-border/60 bg-surface p-8 shadow-sm">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-500">
-          Svet povoljnih cena
+          Svet Akcija
         </p>
         <h1 className="mt-1 font-display text-2xl tracking-tight">
           Admin prijava

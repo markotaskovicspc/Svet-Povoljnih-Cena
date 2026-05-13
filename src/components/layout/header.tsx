@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { User2 } from "lucide-react";
 import { headerTabs } from "@/data/site";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "./brand-logo";
 import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
@@ -29,20 +30,20 @@ export function Header() {
       initial={false}
       animate={{
         boxShadow: scrolled
-          ? "0 8px 20px rgba(4, 52, 120, 0.18), 0 2px 6px rgba(4, 52, 120, 0.10)"
+          ? "0 8px 20px rgba(26, 23, 20, 0.08), 0 2px 6px rgba(26, 23, 20, 0.06)"
           : "0 0 0 rgba(0,0,0,0)",
       }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="sticky top-0 z-40 bg-brand-blue text-white"
+      className="border-border/70 sticky top-0 z-40 border-b bg-surface text-ink-900"
     >
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-8 px-6 py-3 md:flex md:py-4">
         <Link
           href="/"
-          aria-label="Svet povoljnih cena — početna"
-          className="font-logo text-2xl leading-none tracking-wider text-white"
+          aria-label="Svet Akcija — početna"
+          className="w-[178px] shrink-0"
         >
-          SVET <span className="text-sand">POVOLJNIH</span> CENA
+          <BrandLogo />
         </Link>
         <div className="mx-auto w-full max-w-[640px]">
           <InstantSearch />
@@ -50,19 +51,19 @@ export function Header() {
         <div className="flex items-center gap-1">
           <Link
             href="/nalog"
-            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-white/90 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none"
+            className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-ink-700 transition hover:text-ink-900 focus-visible:ring-2 focus-visible:outline-none"
           >
             <User2 className="size-4" aria-hidden /> Prijava
           </Link>
-          <WishlistButton />
-          <CartButton />
+          <WishlistButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
+          <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
         </div>
       </div>
 
       {/* Row 2 — primary tabs (desktop) */}
       <nav
         aria-label="Glavna navigacija"
-        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 border-t border-white/10 px-6 py-2 md:flex"
+        className="border-border/70 mx-auto hidden max-w-[var(--container-page)] items-center gap-1 border-t px-6 py-2 md:flex"
       >
         {headerTabs.slice(0, 4).map((t) => {
           const active = pathname === t.href;
@@ -73,15 +74,15 @@ export function Header() {
               className={cn(
                 "relative rounded-full px-3 py-1.5 text-sm transition",
                 active
-                  ? "bg-white/10 text-white"
-                  : "text-white/85 hover:bg-white/10 hover:text-white",
+                  ? "bg-brand-blue-50 text-brand-blue"
+                  : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
               )}
             >
               {t.label}
               {active ? (
                 <motion.span
                   layoutId="header-tab-underline"
-                  className="absolute right-3 -bottom-0.5 left-3 h-0.5 rounded-full bg-sand"
+                  className="absolute right-3 -bottom-0.5 left-3 h-0.5 rounded-full bg-action"
                   transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 />
               ) : null}
@@ -95,12 +96,12 @@ export function Header() {
         <MobileNav />
         <Link
           href="/"
-          aria-label="Svet povoljnih cena — početna"
-          className="font-logo text-xl leading-none tracking-wider text-white"
+          aria-label="Svet Akcija — početna"
+          className="w-[136px] shrink-0"
         >
-          SVET POVOLJNIH CENA
+          <BrandLogo />
         </Link>
-        <CartButton />
+        <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
       </div>
     </motion.header>
   );

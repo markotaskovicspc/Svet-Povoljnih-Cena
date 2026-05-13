@@ -11,7 +11,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 export const metadata: Metadata = {
   title: "Kontakt",
   description:
-    "Kontaktirajte tim Sveta povoljnih cena — telefon, e-pošta, radno vreme, Viber i adresa skladišta.",
+    "Kontaktirajte Svet Akcija tim — telefon, e-pošta, radno vreme, Viber i adresa skladišta.",
 };
 
 const channels = [
@@ -86,7 +86,7 @@ export default function KontaktPage() {
 
         <ContentSection id="firma" title="Podaci o firmi">
           <p>
-            <strong>Svet povoljnih cena d.o.o.</strong> — Vojvođanska 401, 11000
+            <strong>Svet Akcija d.o.o.</strong> — Vojvođanska 401, 11000
             Beograd, Republika Srbija. PIB 100000000, matični broj 20000000.
             Tekući račun 160-000000-00 (Banca Intesa).
           </p>

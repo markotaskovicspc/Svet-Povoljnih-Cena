@@ -69,9 +69,9 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      className="relative isolate overflow-hidden bg-ink-900"
+      className="relative isolate bg-canvas px-2 pt-4 sm:px-3 md:px-4 md:pt-5"
     >
-      <div className="relative h-[50vh] max-h-[480px] w-full md:h-auto md:aspect-[16/9]">
+      <div className="relative mx-auto h-[58vh] min-h-[380px] w-full overflow-hidden rounded-[1.75rem] bg-ink-900 shadow-soft-3 md:h-auto md:aspect-[24/10] md:min-h-0 md:rounded-[2rem] lg:rounded-[2.25rem]">
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
@@ -94,7 +94,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
                 src={slide.imageDesktop.url}
                 alt={slide.imageDesktop.alt ?? slide.title}
                 fill
-                sizes="100vw"
+                sizes="calc(100vw - 32px)"
                 priority
                 className={cn(
                   "object-cover",
@@ -121,7 +121,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
 
         {/* Caption */}
         <div className="pointer-events-none absolute inset-0 flex items-end md:items-center">
-          <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pb-6 md:pb-0">
+          <div className="w-full px-6 pb-6 md:px-16 md:pb-0 lg:px-24 xl:px-32">
             <motion.div
               key={slide.id + "-copy"}
               initial={{ opacity: 0, y: 12 }}

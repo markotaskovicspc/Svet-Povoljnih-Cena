@@ -51,7 +51,7 @@ export function EmailLayout({
                   color: "#1A1714",
                 }}
               >
-                Svet Povoljnih Cena
+                Svet Akcija
               </span>
             </td>
           </tr>
@@ -79,7 +79,7 @@ export function EmailLayout({
               {footerNote ??
                 "Dobili ste ovu poruku jer ste izvršili akciju na svetpovoljnihcena.rs."}
               <br />
-              Svet Povoljnih Cena d.o.o. · Beograd, Srbija ·{" "}
+              Svet Akcija d.o.o. · Beograd, Srbija ·{" "}
               <a
                 href="https://www.svetpovoljnihcena.rs"
                 style={{ color: "#6B4423" }}

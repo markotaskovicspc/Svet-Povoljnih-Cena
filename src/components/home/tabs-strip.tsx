@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Crown,
   Hourglass,
+  ShieldCheck,
   ArrowUpRight,
   type LucideIcon,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const ICONS: Record<string, LucideIcon> = {
   CalendarDays,
   Crown,
   Hourglass,
+  ShieldCheck,
 };
 
 interface TabsStripProps {

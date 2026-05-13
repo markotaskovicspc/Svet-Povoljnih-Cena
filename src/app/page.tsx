@@ -2,6 +2,7 @@ import { HeroCarousel } from "@/components/home/hero-carousel";
 import { TabsStrip } from "@/components/home/tabs-strip";
 import { SectionRail } from "@/components/home/section-rail";
 import { EditorialBanner } from "@/components/home/editorial-banner";
+import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import { UspStrip } from "@/components/home/usp-strip";
 import { headerTabs } from "@/data/site";
 import { heroBanners, editorialBanner } from "@/data/banners";
@@ -25,6 +26,7 @@ export default function Home() {
     <>
       <HeroCarousel banners={heroBanners} />
       <TabsStrip tabs={headerTabs} />
+      <ProtectedPricesBand />
 
       <SectionRail
         eyebrow="Selekcija meseca"

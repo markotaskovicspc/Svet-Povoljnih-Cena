@@ -6,6 +6,13 @@ import type { Product } from "@/types";
 
 const day = 24 * 3600 * 1000;
 const now = Date.now();
+const protectedPriceAction = {
+  id: "act-nctz",
+  name: "NISKE CENE POD TRAJNOM ZAŠTITOM",
+  startsAt: "2026-05-01T00:00:00.000+02:00",
+  endsAt: "2099-12-31T23:59:59.999+01:00",
+  isPermanent: true,
+};
 
 /**
  * Real, hotlinkable Unsplash photos used as Phase 1 placeholders.
@@ -113,6 +120,7 @@ export const mockProducts: Product[] = [
     fullPrice: 119990,
     salePrice: 99990,
     discountPct: 17,
+    action: protectedPriceAction,
     deliveryDays: { min: 7, max: 14 },
     allowsAssembly: true,
     assemblyCities: ["Beograd", "Novi Sad", "Niš", "Kragujevac"],
@@ -141,6 +149,7 @@ export const mockProducts: Product[] = [
     fullPrice: 14990,
     salePrice: 11990,
     discountPct: 20,
+    action: protectedPriceAction,
     deliveryDays: { min: 3, max: 5 },
     allowsAssembly: false,
     assemblyCities: [],
@@ -364,6 +373,9 @@ export const monthlyAction = () => byActionName("Mesečna akcija");
 
 export const weeklyAction = () => byActionName("Nedeljna akcija");
 
+export const protectedPrices = () =>
+  mockProducts.filter((p) => p.action?.isPermanent);
+
 /** Per-tab grouping for "Ostali tabovi" section. */
 export const productsForTab = (tabId: string) => {
   switch (tabId) {
@@ -373,6 +385,8 @@ export const productsForTab = (tabId: string) => {
       return weeklyAction();
     case "heroji-meseca":
       return heroesOfTheMonth();
+    case "niske-cene-pod-zastitom":
+      return protectedPrices();
     case "ogranicena-ponuda":
       return mockProducts.filter((p) => p.isLimited);
     default:

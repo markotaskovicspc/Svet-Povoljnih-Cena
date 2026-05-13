@@ -186,7 +186,11 @@ export default async function ProductPage({ params }: RouteProps) {
                 </span>
               )}
             </div>
-            {onSale && product.action?.startsAt && product.action.endsAt ? (
+            {onSale && product.action?.isPermanent ? (
+              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
+                Niska cena pod trajnom zaštitom od 01.05.2026.
+              </p>
+            ) : onSale && product.action?.startsAt && product.action.endsAt ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
                 Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
                 {formatDate(product.action.endsAt)}.
@@ -361,7 +365,12 @@ function buildOverlayBadges(p: Product): BadgeOverlay[] {
     out.push({ label: `-${p.discountPct}%`, cls: "bg-action text-white" });
   }
   if (p.isHero) out.push({ label: "Heroj akcije", cls: "bg-sand text-ink-900" });
-  if (p.action?.name) out.push({ label: p.action.name, cls: "bg-ink-900 text-canvas" });
+  if (p.action?.name) {
+    out.push({
+      label: p.action.isPermanent ? "Niske cene" : p.action.name,
+      cls: "bg-ink-900 text-canvas",
+    });
+  }
   if (p.isNew) out.push({ label: "Novo", cls: "bg-olive text-white" });
   if (p.isLimited)
     out.push({ label: "Ograničena količina", cls: "bg-warning text-ink-900" });
@@ -535,4 +544,3 @@ function PictogramIcon({ code }: { code: string }) {
       return <Box className={cls} aria-hidden />;
   }
 }
-

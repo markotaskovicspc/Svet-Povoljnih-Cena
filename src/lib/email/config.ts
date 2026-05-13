@@ -44,7 +44,7 @@ export function getEmailConfig(): EmailConfig {
           : null,
     from:
       process.env.EMAIL_FROM ??
-      "Svet Povoljnih Cena <no-reply@svetpovoljnihcena.rs>",
+      "Svet Akcija <no-reply@svetpovoljnihcena.rs>",
     replyTo: process.env.EMAIL_REPLY_TO ?? null,
     orderBcc: process.env.EMAIL_ORDER_BCC ?? null,
     reclamationsInbox:

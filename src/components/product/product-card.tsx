@@ -196,7 +196,12 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               </span>
             )}
           </div>
-          {onSale && product.action?.endsAt ? (
+          {onSale && product.action?.isPermanent ? (
+            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
+              Cena pod trajnom zaštitom · Isporuka {product.deliveryDays.min}–
+              {product.deliveryDays.max} dana
+            </p>
+          ) : onSale && product.action?.endsAt ? (
             <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
               Akcija do {formatDate(product.action.endsAt)} · Isporuka{" "}
               {product.deliveryDays.min}–{product.deliveryDays.max} dana

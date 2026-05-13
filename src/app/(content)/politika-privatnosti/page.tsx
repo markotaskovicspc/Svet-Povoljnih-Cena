@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 export const metadata: Metadata = {
   title: "Politika privatnosti",
   description:
-    "Kako prikupljamo, koristimo i čuvamo vaše lične podatke — Svet povoljnih cena.",
+    "Kako prikupljamo, koristimo i čuvamo vaše lične podatke — Svet Akcija.",
 };
 
 export default function PrivatnostPage() {
@@ -28,7 +28,7 @@ export default function PrivatnostPage() {
       <ContentBody>
         <ContentSection id="rukovalac" title="Rukovalac podacima">
           <p>
-            <strong>Svet povoljnih cena d.o.o.</strong>, Vojvođanska 401, 11000
+            <strong>Svet Akcija d.o.o.</strong>, Vojvođanska 401, 11000
             Beograd. Kontakt za zaštitu podataka:{" "}
             <Link href="mailto:dpo@svetpovoljnihcena.rs">
               dpo@svetpovoljnihcena.rs

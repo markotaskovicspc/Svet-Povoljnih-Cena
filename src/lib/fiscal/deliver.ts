@@ -50,7 +50,7 @@ export async function issueAndDeliverFiscalReceipt(
     receiptNumber: outcome.receipt.receiptNumber,
     fiscalizedAt: outcome.receipt.fiscalizedAt,
     merchant: {
-      name: "Svet Povoljnih Cena d.o.o.",
+      name: "Svet Akcija d.o.o.",
       tin: cfg.tin,
       locationId: cfg.locationId,
     },

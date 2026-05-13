@@ -7,11 +7,9 @@ import type { PromoBar, Tab } from "@/types";
 export const promoBar: PromoBar = {
   id: "promo-1",
   enabled: true,
-  text: "Besplatna isporuka za porudžbine preko 30.000 RSD",
-  href: "/uslovi-isporuke",
-  // 72h countdown demo: ends in ~48h from build time. In real life this is admin-driven.
-  startsAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-  endsAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+  text: "NISKE CENE POD TRAJNOM ZAŠTITOM",
+  href: "/niske-cene-pod-zastitom",
+  startsAt: "2026-05-01T00:00:00.000+02:00",
 };
 
 /** Max 4 tabs per spec. Order field controls left-to-right placement. */
@@ -32,11 +30,11 @@ export const headerTabs: Tab[] = [
     icon: "Crown",
   },
   {
-    id: "ogranicena-ponuda",
-    label: "Ograničena ponuda",
-    href: "/ogranicena-ponuda",
+    id: "niske-cene-pod-zastitom",
+    label: "Niske cene",
+    href: "/niske-cene-pod-zastitom",
     order: 4,
-    icon: "Hourglass",
+    icon: "ShieldCheck",
   },
 ];
 
@@ -102,6 +100,7 @@ export const footerColumns: { title: string; links: { label: string; href: strin
       { label: "Akcija", href: "/akcija" },
       { label: "Nedeljna akcija", href: "/nedeljna-akcija" },
       { label: "Heroji meseca", href: "/heroji-meseca" },
+      { label: "Niske cene pod trajnom zaštitom", href: "/niske-cene-pod-zastitom" },
       { label: "Outlet", href: "/outlet" },
       { label: "Novo", href: "/novo" },
     ],
@@ -146,7 +145,7 @@ export const paymentMethods = [
 ] as const;
 
 export const socials = [
-  { id: "fb", label: "Facebook", href: "https://facebook.com/svetpovoljnihcena" },
-  { id: "ig", label: "Instagram", href: "https://instagram.com/svetpovoljnihcena" },
-  { id: "tt", label: "TikTok", href: "https://tiktok.com/@svetpovoljnihcena" },
+  { id: "fb", label: "Facebook", href: "https://facebook.com/svetakcija" },
+  { id: "ig", label: "Instagram", href: "https://instagram.com/svetakcija" },
+  { id: "tt", label: "TikTok", href: "https://tiktok.com/@svetakcija" },
 ] as const;

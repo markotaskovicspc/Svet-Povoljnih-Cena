@@ -114,7 +114,7 @@ function PaymentMethodView({
   method: PaymentMethod;
 }) {
   if (method === "ips") {
-    const payload = `K:PR|V:01|C:1|R:265100000000000000|N:Svet Povoljnih Cena|I:RSD${order.total}|P:${order.shippingAddress.firstName} ${order.shippingAddress.lastName}|SF:189|S:Porudžbina ${order.id}|RO:${order.id}`;
+    const payload = `K:PR|V:01|C:1|R:265100000000000000|N:Svet Akcija|I:RSD${order.total}|P:${order.shippingAddress.firstName} ${order.shippingAddress.lastName}|SF:189|S:Porudžbina ${order.id}|RO:${order.id}`;
     return (
       <div className="grid gap-5 sm:grid-cols-[220px_1fr]">
         <FauxQrCode payload={payload} />
@@ -243,7 +243,7 @@ function Uplatnica({ order }: { order: Order }) {
         <span className="text-ink-900">Porudžbina {order.id}</span>
         <span className="mt-2 text-ink-500">PRIMALAC</span>
         <span className="text-ink-900">
-          Svet Povoljnih Cena d.o.o.
+          Svet Akcija d.o.o.
           <br />
           Beograd, Srbija
         </span>

@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 export const metadata: Metadata = {
   title: "Uslovi kupovine",
   description:
-    "Pravila kupovine, načini plaćanja, povraćaj i odustanak od ugovora — Svet povoljnih cena.",
+    "Pravila kupovine, načini plaćanja, povraćaj i odustanak od ugovora — Svet Akcija.",
 };
 
 export default function UsloviKupovinePage() {
@@ -27,7 +27,7 @@ export default function UsloviKupovinePage() {
       <ContentBody>
         <ContentSection id="prodavac" title="Prodavac">
           <p>
-            Prodavac je <strong>Svet povoljnih cena d.o.o.</strong>, Vojvođanska
+            Prodavac je <strong>Svet Akcija d.o.o.</strong>, Vojvođanska
             401, 11000 Beograd, PIB 100000000, MB 20000000. Svi ugovori
             zaključuju se na srpskom jeziku.
           </p>

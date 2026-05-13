@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 export const metadata: Metadata = {
   title: "Pomoć",
   description:
-    "Često postavljana pitanja o porudžbinama, dostavi, plaćanju i nalogu — Svet povoljnih cena.",
+    "Često postavljana pitanja o porudžbinama, dostavi, plaćanju i nalogu — Svet Akcija.",
 };
 
 const faqs = [

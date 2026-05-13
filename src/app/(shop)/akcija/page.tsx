@@ -13,6 +13,7 @@ export default function AkcijaPage() {
   // Pick the action that ends latest (umbrella period banner).
   const period = products
     .map((p) => p.action!)
+    .filter((action) => !action.isPermanent)
     .sort(
       (a, b) =>
         new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime(),

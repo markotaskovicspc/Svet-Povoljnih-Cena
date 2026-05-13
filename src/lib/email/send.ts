@@ -165,7 +165,7 @@ export async function sendPasswordReset(args: {
   );
   return dispatch({
     to: args.to,
-    subject: "Resetovanje lozinke — Svet Povoljnih Cena",
+    subject: "Resetovanje lozinke — Svet Akcija",
     html,
     text,
     tags: { kind: "password_reset" },
@@ -200,7 +200,7 @@ export async function sendMagicLink(args: {
   const html = `<!doctype html><html><body style="font-family:Inter,sans-serif;background:#FAF7F2;padding:32px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;"><h1 style="font-family:Fraunces,Georgia,serif;font-size:22px;margin:0 0 12px;">Prijava na nalog</h1><p style="margin:0 0 20px;color:#3B342D;">Klikom na dugme ispod prijavićete se na svoj nalog. Link važi 15 minuta.</p><a href="${escapeAttr(args.url)}" style="display:inline-block;background:#1A1714;color:#FAF7F2;padding:12px 22px;border-radius:999px;text-decoration:none;">Prijavi me</a><p style="margin:20px 0 0;color:#6B6259;font-size:12px;">Ako niste tražili prijavu, ignorišite ovaj mejl.</p></div></body></html>`;
   return dispatch({
     to: args.to,
-    subject: "Prijava na Svet Povoljnih Cena",
+    subject: "Prijava na Svet Akcija",
     html,
     text: `Prijavi se: ${args.url}`,
     tags: { kind: "magic_link" },

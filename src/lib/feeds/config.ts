@@ -41,14 +41,14 @@ export function getFeedsConfig(): FeedsConfig {
       process.env.NEXTAUTH_URL ??
       "https://www.svetpovoljnihcena.rs"
     ).replace(/\/$/, ""),
-    shopTitle: process.env.FEEDS_SHOP_TITLE ?? "Svet Povoljnih Cena",
+    shopTitle: process.env.FEEDS_SHOP_TITLE ?? "Svet Akcija",
     shopDescription:
       process.env.FEEDS_SHOP_DESCRIPTION ??
       "Nameštaj, beli tehnika i kućni asortiman po povoljnim cenama.",
     currency: process.env.FEEDS_CURRENCY ?? "RSD",
     defaultGoogleCategory:
       process.env.FEEDS_GOOGLE_CATEGORY ?? "Furniture",
-    defaultBrand: process.env.FEEDS_DEFAULT_BRAND ?? "Svet Povoljnih Cena",
+    defaultBrand: process.env.FEEDS_DEFAULT_BRAND ?? "Svet Akcija",
     contentLanguage: process.env.FEEDS_LANGUAGE ?? "sr",
     targetCountry: process.env.FEEDS_COUNTRY ?? "RS",
     maxItems: Number(process.env.FEEDS_MAX_ITEMS ?? 50_000),

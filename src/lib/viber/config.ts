@@ -41,7 +41,7 @@ export function getViberConfig(): ViberConfig {
   cached = {
     provider,
     apiKey: provider === "viber" ? process.env.VIBER_API_TOKEN ?? null : null,
-    sender: process.env.VIBER_SENDER_NAME ?? "Svet povoljnih cena",
+    sender: process.env.VIBER_SENDER_NAME ?? "Svet Akcija",
     senderAvatar: process.env.VIBER_SENDER_AVATAR ?? null,
     endpoint:
       process.env.VIBER_ENDPOINT ?? "https://chatapi.viber.com/pa/send_message",

@@ -62,7 +62,11 @@ export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
     out.push({ key: "hero", label: "Heroj akcije", tone: "gold" });
   }
   if (price.onSale && p.action?.name) {
-    out.push({ key: "action", label: p.action.name, tone: "ink" });
+    out.push({
+      key: "action",
+      label: p.action.isPermanent ? "Niske cene" : p.action.name,
+      tone: "ink",
+    });
   }
   if (isNewActive(p, now)) {
     out.push({ key: "new", label: "Novo", tone: "olive" });

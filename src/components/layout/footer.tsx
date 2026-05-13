@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { footerColumns, paymentMethods, socials } from "@/data/site";
 import { Marquee } from "@/components/motion/marquee";
+import { BrandLogo } from "./brand-logo";
 
 /**
  * Inline-SVG brand glyphs. We don't pull these from lucide-react because
@@ -69,14 +70,14 @@ export function Footer() {
           <div className="md:col-span-4">
             <Link
               href="/"
-              className="font-logo text-3xl leading-none tracking-wider md:text-4xl"
-              aria-label="Svet povoljnih cena — početna"
+              className="inline-flex w-[220px] rounded-md bg-white p-3"
+              aria-label="Svet Akcija — početna"
             >
-              SVET <span className="text-sand">POVOLJNIH</span> CENA
+              <BrandLogo />
             </Link>
             <p className="mt-4 max-w-xs text-sm text-white/75">
-              Premium nameštaj po povoljnim cenama. Brza isporuka, montaža u glavnim gradovima,
-              kuratirane kolekcije.
+              Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.
+              Brza isporuka i montaža u glavnim gradovima.
             </p>
 
             <div className="mt-6">
@@ -159,7 +160,7 @@ export function Footer() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-[var(--container-page)] flex-col gap-4 px-6 py-6 text-xs text-white/60 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span>© {year} Svet povoljnih cena</span>
+            <span>© {year} Svet Akcija</span>
             <Link href="/uslovi-kupovine" className="hover:text-white">
               Uslovi kupovine
             </Link>

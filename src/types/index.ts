@@ -39,6 +39,8 @@ export interface PromoAction {
   endsAt: ISODate;
   /** Marks the action itself as a hero (header tab candidate). */
   isHero?: boolean;
+  /** Permanent protected-price campaign, introduced after the 01.05 trade-law change. */
+  isPermanent?: boolean;
 }
 
 export interface Pictogram {
