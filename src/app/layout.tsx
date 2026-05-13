@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Fraunces, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
+import { Playfair_Display, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { PromoBar } from "@/components/layout/promo-bar";
@@ -9,7 +9,7 @@ import { Footer } from "@/components/layout/footer";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
 import { promoBar } from "@/data/site";
 
-const fontDisplay = Fraunces({
+const fontDisplay = Playfair_Display({
   variable: "--font-display",
   subsets: ["latin", "latin-ext"],
   display: "swap",
@@ -41,12 +41,12 @@ const fontLogo = Bebas_Neue({
 
 export const metadata: Metadata = {
   title: {
-    default: "Svet Akcija — nameštaj na akciji",
+    default: "Svet Akcija — premium nameštaj",
     template: "%s · Svet Akcija",
   },
   description:
-    "Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.",
-  metadataBase: new URL("https://www.svetpovoljnihcena.rs"),
+    "Premium nameštaj po povoljnim cenama. Brza isporuka, montaža u glavnim gradovima, kuratirana selekcija kolekcija.",
+  metadataBase: new URL("https://www.svetakcija.rs"),
 };
 
 export default async function RootLayout({

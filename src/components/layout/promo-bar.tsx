@@ -68,7 +68,7 @@ export function PromoBar({ bar }: PromoBarProps) {
       <span>{bar.text}</span>
       {showCountdown && endsAt !== null && now !== null ? (
         <span
-          className="ml-1 inline-flex items-center gap-1 rounded-full bg-action/15 px-2 py-0.5 text-[11px] font-mono text-action"
+          className="ml-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-mono text-white"
           aria-live="polite"
         >
           <Clock3 className="size-3" aria-hidden />
@@ -87,7 +87,7 @@ export function PromoBar({ bar }: PromoBarProps) {
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="relative isolate overflow-hidden border-b border-walnut/20 bg-gradient-to-r from-walnut via-walnut to-ink-900 text-canvas"
+          className="relative isolate overflow-hidden border-b border-white/10 bg-brand-blue text-white"
         >
           <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-center gap-3 px-6 py-2 text-center text-xs sm:text-sm">
             {bar.href ? (
@@ -104,7 +104,7 @@ export function PromoBar({ bar }: PromoBarProps) {
               type="button"
               onClick={handleDismiss}
               aria-label="Zatvori traku sa obaveštenjem"
-              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-canvas/80 transition hover:bg-canvas/10 hover:text-canvas focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-canvas"
+              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               <X className="size-3.5" aria-hidden />
             </button>

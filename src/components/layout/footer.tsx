@@ -1,7 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import { footerColumns, paymentMethods, socials } from "@/data/site";
 import { Marquee } from "@/components/motion/marquee";
-import { BrandLogo } from "./brand-logo";
 
 /**
  * Inline-SVG brand glyphs. We don't pull these from lucide-react because
@@ -68,12 +68,16 @@ export function Footer() {
       <div className="mx-auto max-w-[var(--container-page)] px-6 py-12 md:py-16">
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
-            <Link
-              href="/"
-              className="inline-flex w-[220px] rounded-md bg-white p-3"
-              aria-label="Svet Akcija — početna"
-            >
-              <BrandLogo />
+            <Link href="/" aria-label="Svet Akcija — početna" className="inline-block">
+              <div className="rounded-lg bg-white px-3 py-1.5">
+                <Image
+                  src="/logo.jpeg"
+                  alt="Svet Akcija"
+                  width={200}
+                  height={58}
+                  className="object-contain"
+                />
+              </div>
             </Link>
             <p className="mt-4 max-w-xs text-sm text-white/75">
               Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.

@@ -45,7 +45,7 @@ export function WishlistButton({ className }: { className?: string }) {
         openWishlist();
       }}
       className={cn(
-        "relative inline-flex size-10 items-center justify-center rounded-full text-white/90 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none",
+        "relative inline-flex size-10 items-center justify-center rounded-full text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none",
         className,
       )}
     >
@@ -79,7 +79,7 @@ export function CartButton({ className }: { className?: string }) {
         openDrawer();
       }}
       className={cn(
-        "relative inline-flex size-10 items-center justify-center rounded-full text-white/90 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none",
+        "relative inline-flex size-10 items-center justify-center rounded-full text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none",
         className,
       )}
     >

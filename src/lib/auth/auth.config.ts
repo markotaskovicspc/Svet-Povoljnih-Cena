@@ -46,7 +46,15 @@ declare module "next-auth/jwt" {
   }
 }
 
+const authSecret =
+  process.env.AUTH_SECRET ??
+  process.env.NEXTAUTH_SECRET ??
+  (process.env.NODE_ENV === "development"
+    ? "development-only-auth-secret"
+    : undefined);
+
 export const authConfig = {
+  secret: authSecret,
   trustHost: true,
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 30 },
   pages: {

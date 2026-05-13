@@ -4,6 +4,8 @@ import { PrismaClient } from "@prisma/client";
 /**
  * Prisma client singleton — avoids exhausting connections during HMR in dev.
  * Prisma 7 requires a driver adapter; we use `@prisma/adapter-pg` for Postgres.
+ * When using Supabase, `DATABASE_URL` must be the Supabase Postgres connection
+ * string, not the Supabase project API URL.
  * Import as: `import { db } from "@/lib/db"`.
  */
 const globalForPrisma = globalThis as unknown as {

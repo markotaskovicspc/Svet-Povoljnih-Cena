@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { User2 } from "lucide-react";
 import { headerTabs } from "@/data/site";
 import { cn } from "@/lib/utils";
-import { BrandLogo } from "./brand-logo";
 import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
@@ -34,16 +34,21 @@ export function Header() {
           : "0 0 0 rgba(0,0,0,0)",
       }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="border-border/70 sticky top-0 z-40 border-b bg-surface text-ink-900"
+      className="sticky top-0 z-40 bg-white text-brand-blue"
     >
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-8 px-6 py-3 md:flex md:py-4">
-        <Link
-          href="/"
-          aria-label="Svet Akcija — početna"
-          className="w-[178px] shrink-0"
-        >
-          <BrandLogo />
+        <Link href="/" aria-label="Svet Akcija — početna">
+          <div className="shrink-0 rounded-lg px-2 py-1">
+            <Image
+              src="/logo.jpeg"
+              alt="Svet Akcija"
+              width={180}
+              height={52}
+              priority
+              className="object-contain"
+            />
+          </div>
         </Link>
         <div className="mx-auto w-full max-w-[640px]">
           <InstantSearch />
@@ -51,7 +56,7 @@ export function Header() {
         <div className="flex items-center gap-1">
           <Link
             href="/nalog"
-            className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-ink-700 transition hover:text-ink-900 focus-visible:ring-2 focus-visible:outline-none"
+            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
           >
             <User2 className="size-4" aria-hidden /> Prijava
           </Link>
@@ -63,7 +68,7 @@ export function Header() {
       {/* Row 2 — primary tabs (desktop) */}
       <nav
         aria-label="Glavna navigacija"
-        className="border-border/70 mx-auto hidden max-w-[var(--container-page)] items-center gap-1 border-t px-6 py-2 md:flex"
+        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 border-t border-brand-blue/10 px-6 py-2 md:flex"
       >
         {headerTabs.slice(0, 4).map((t) => {
           const active = pathname === t.href;
@@ -74,8 +79,8 @@ export function Header() {
               className={cn(
                 "relative rounded-full px-3 py-1.5 text-sm transition",
                 active
-                  ? "bg-brand-blue-50 text-brand-blue"
-                  : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
+                  ? "bg-brand-blue/10 text-brand-blue"
+                  : "text-brand-blue/80 hover:bg-brand-blue/10",
               )}
             >
               {t.label}
@@ -94,12 +99,17 @@ export function Header() {
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-2 px-3 py-2.5 md:hidden">
         <MobileNav />
-        <Link
-          href="/"
-          aria-label="Svet Akcija — početna"
-          className="w-[136px] shrink-0"
-        >
-          <BrandLogo />
+        <Link href="/" aria-label="Svet Akcija — početna">
+          <div className="rounded-md px-1.5 py-0.5">
+            <Image
+              src="/logo.jpeg"
+              alt="Svet Akcija"
+              width={120}
+              height={34}
+              priority
+              className="object-contain"
+            />
+          </div>
         </Link>
         <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
       </div>

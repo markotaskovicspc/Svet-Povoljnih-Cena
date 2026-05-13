@@ -13,7 +13,7 @@ import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDimensions, formatDate } from "@/lib/format";
-import { useWishlist } from "@/lib/hooks/use-wishlist";
+import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 import {
@@ -45,7 +45,7 @@ const toneClasses: Record<BadgeTone, string> = {
 
 export function ProductCard({ product, className, priority }: ProductCardProps) {
   const reduced = useReducedMotion();
-  const wished = useWishlist((s) => s.has(product.sku));
+  const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggle);
   const setQty = useCart((s) => s.setQty);
   const lineQty = useCart(

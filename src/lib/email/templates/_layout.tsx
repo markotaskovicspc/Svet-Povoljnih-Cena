@@ -45,7 +45,7 @@ export function EmailLayout({
             <td style={{ padding: "0 0 24px" }}>
               <span
                 style={{
-                  fontFamily: "Fraunces, Georgia, serif",
+                  fontFamily: "Playfair Display, Georgia, serif",
                   fontSize: 22,
                   letterSpacing: "-0.01em",
                   color: "#1A1714",
@@ -98,7 +98,7 @@ export function EmailHeading({ children }: { children: ReactNode }) {
   return (
     <h1
       style={{
-        fontFamily: "Fraunces, Georgia, serif",
+        fontFamily: "Playfair Display, Georgia, serif",
         fontSize: 26,
         margin: "0 0 8px",
         letterSpacing: "-0.01em",
