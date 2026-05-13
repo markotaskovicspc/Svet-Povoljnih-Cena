@@ -164,7 +164,7 @@ export function CheckoutFlow() {
     const el = document.querySelector<HTMLElement>(
       '[aria-invalid="true"]',
     );
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    el?.scrollIntoView({ behavior: "auto", block: "center" });
     el?.focus({ preventScroll: true });
   };
 
