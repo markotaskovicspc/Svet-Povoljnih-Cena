@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { searchProducts } from "@/data/products";
 import type { SearchHit } from "@/types/search";
 
 /**
@@ -34,31 +35,42 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 20);
 
-  // pg_trgm-based fuzzy match on name + sku, with category breadcrumb joined.
-  const rows = await db.$queryRaw<SuggestRow[]>`
-    SELECT p.sku,
-           p.slug,
-           p.name,
-           p."fullPrice"   AS full_price,
-           p."salePrice"   AS sale_price,
-           p."discountPct" AS discount_pct,
-           p."isHero"      AS is_hero,
-           (SELECT pm.url FROM "ProductMedia" pm
-              WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
-              ORDER BY pm."order" ASC LIMIT 1) AS thumbnail,
-           (SELECT string_agg(c.name, ' / ' ORDER BY c.level ASC)
-              FROM "ProductCategory" pc
-              JOIN "Category" c ON c.id = pc."categoryId"
-             WHERE pc."productId" = p.id) AS breadcrumb
-      FROM "Product" p
-     WHERE p."isActive" = true
-       AND (p.name ILIKE ${'%' + q + '%'} OR p.sku ILIKE ${'%' + q + '%'}
-            OR similarity(p.name, ${q}) > 0.25)
-     ORDER BY p."isHero" DESC,
-              COALESCE(p."discountPct", 0) DESC,
-              COALESCE(p."salePrice", p."fullPrice") ASC
-     LIMIT ${safeLimit}
-  `;
+  let rows: SuggestRow[] = [];
+  try {
+    // pg_trgm-based fuzzy match on name + sku, with category breadcrumb joined.
+    rows = await db.$queryRaw<SuggestRow[]>`
+      SELECT p.sku,
+             p.slug,
+             p.name,
+             p."fullPrice"   AS full_price,
+             p."salePrice"   AS sale_price,
+             p."discountPct" AS discount_pct,
+             p."isHero"      AS is_hero,
+             (SELECT pm.url FROM "ProductMedia" pm
+                WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
+                ORDER BY pm."order" ASC LIMIT 1) AS thumbnail,
+             (SELECT string_agg(c.name, ' / ' ORDER BY c.level ASC)
+                FROM "ProductCategory" pc
+                JOIN "Category" c ON c.id = pc."categoryId"
+               WHERE pc."productId" = p.id) AS breadcrumb
+        FROM "Product" p
+       WHERE p."isActive" = true
+         AND (p.name ILIKE ${'%' + q + '%'} OR p.sku ILIKE ${'%' + q + '%'}
+              OR similarity(p.name, ${q}) > 0.25)
+       ORDER BY p."isHero" DESC,
+                COALESCE(p."discountPct", 0) DESC,
+                COALESCE(p."salePrice", p."fullPrice") ASC
+       LIMIT ${safeLimit}
+    `;
+  } catch (err) {
+    console.warn("[search] Falling back to mock products while real catalog is unavailable.", err);
+    return searchProducts(q, safeLimit);
+  }
+
+  if (!rows.length) {
+    const activeProducts = await db.product.count({ where: { isActive: true } });
+    if (activeProducts === 0) return searchProducts(q, safeLimit);
+  }
 
   return rows.map((r) => ({
     sku: r.sku,
