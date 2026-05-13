@@ -12,9 +12,9 @@ export const promoBar: PromoBar = {
   startsAt: "2026-05-01T00:00:00.000+02:00",
 };
 
-/** Max 4 tabs per spec. Order field controls left-to-right placement. */
+/** Commercial tabs below search. Order field controls left-to-right placement. */
 export const headerTabs: Tab[] = [
-  { id: "akcija", label: "Akcija", href: "/akcija", order: 1, icon: "Tag" },
+  { id: "mesecna-akcija", label: "Mesečna akcija", href: "/akcija", order: 1, icon: "Tag" },
   {
     id: "nedeljna-akcija",
     label: "Nedeljna akcija",
@@ -30,11 +30,25 @@ export const headerTabs: Tab[] = [
     icon: "Crown",
   },
   {
-    id: "niske-cene-pod-zastitom",
-    label: "Niske cene",
-    href: "/niske-cene-pod-zastitom",
+    id: "ogranicena-ponuda",
+    label: "Ograničena količina",
+    href: "/ogranicena-ponuda",
     order: 4,
+    icon: "Hourglass",
+  },
+  {
+    id: "sve-do-999",
+    label: "Sve do 999",
+    href: "/sve-do-999",
+    order: 5,
     icon: "ShieldCheck",
+  },
+  {
+    id: "specijalne-ponude",
+    label: "Specijalne ponude",
+    href: "/specijalne-ponude",
+    order: 6,
+    icon: "Sparkles",
   },
 ];
 
@@ -90,6 +104,18 @@ export const primaryNav: NavNode[] = [
   {
     label: "Novo",
     href: "/novo",
+  },
+  {
+    label: "Akcije i posebne ponude",
+    href: "/akcija",
+    children: [
+      { label: "Mesečna akcija", href: "/akcija" },
+      { label: "Nedeljna akcija", href: "/nedeljna-akcija" },
+      { label: "Heroji meseca", href: "/heroji-meseca" },
+      { label: "Ograničena količina", href: "/ogranicena-ponuda" },
+      { label: "Sve do 999", href: "/sve-do-999" },
+      { label: "Specijalne ponude", href: "/specijalne-ponude" },
+    ],
   },
 ];
 

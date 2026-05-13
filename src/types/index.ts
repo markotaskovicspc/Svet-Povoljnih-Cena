@@ -128,7 +128,7 @@ export interface PromoBar {
   endsAt?: ISODate;
 }
 
-/** One of the ≤4 header tabs (Akcija / Nedeljna / Heroji / Ograničena…) */
+/** Primary commercial tabs shown below search. Kept editable from admin. */
 export interface Tab {
   id: string;
   label: string;

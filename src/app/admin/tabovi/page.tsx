@@ -32,13 +32,13 @@ const upsert = withAdmin(
       enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
     });
     if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    // Spec: max 4 enabled tabs at once.
+    // Client navigation now exposes six commercial shortcuts below search.
     if (parsed.data.enabled) {
       const enabledCount = await db.tab.count({
         where: { enabled: true, NOT: parsed.data.id ? { id: parsed.data.id } : undefined },
       });
-      if (enabledCount >= 4) {
-        return { ok: false as const, error: "Maksimalno 4 aktivna taba — isključite jedan pre dodavanja." };
+      if (enabledCount >= 6) {
+        return { ok: false as const, error: "Maksimalno 6 aktivnih tabova — isključite jedan pre dodavanja." };
       }
     }
     const { id, ...rest } = parsed.data;
@@ -72,7 +72,7 @@ export default async function TabsPage() {
     <>
       <PageHeader
         title="Tabovi"
-        description="Glavna navigacija — maksimalno 4 aktivna taba istovremeno (po specifikaciji)."
+        description="Glavna navigacija ispod pretrage — maksimalno 6 aktivnih tabova istovremeno."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Tabovi" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_360px]">

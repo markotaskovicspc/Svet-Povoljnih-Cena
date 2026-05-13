@@ -47,6 +47,8 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
+
 interface RouteProps {
   params: Promise<{ slug: string }>;
 }
@@ -127,17 +129,33 @@ export default async function ProductPage({ params }: RouteProps) {
         {/* Gallery (Row III + IV combined into one stage) */}
         <PdpGallery
           product={product}
-          badges={overlayBadges.map((b) => (
-            <span
-              key={b.label}
-              className={cn(
-                "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
-                b.cls,
-              )}
-            >
-              {b.label}
-            </span>
-          ))}
+          badges={overlayBadges.map((b) =>
+            b.kind === "hero" ? (
+              <span
+                key={b.label}
+                aria-label={b.label}
+                className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
+              >
+                <Image
+                  src={HEROJI_MESECA_MARK_SRC}
+                  alt={b.label}
+                  width={48}
+                  height={40}
+                  className="h-8 w-10 object-contain"
+                />
+              </span>
+            ) : (
+              <span
+                key={b.label}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
+                  b.cls,
+                )}
+              >
+                {b.label}
+              </span>
+            ),
+          )}
         />
 
         {/* Right column: identity + price + sticky CTA */}
@@ -357,6 +375,7 @@ export default async function ProductPage({ params }: RouteProps) {
 interface BadgeOverlay {
   label: string;
   cls: string;
+  kind?: "hero";
 }
 
 function buildOverlayBadges(p: Product): BadgeOverlay[] {
@@ -364,7 +383,12 @@ function buildOverlayBadges(p: Product): BadgeOverlay[] {
   if (p.discountPct && p.salePrice) {
     out.push({ label: `-${p.discountPct}%`, cls: "bg-action text-white" });
   }
-  if (p.isHero) out.push({ label: "Heroj akcije", cls: "bg-sand text-ink-900" });
+  if (p.isHero)
+    out.push({
+      label: "Heroj meseca",
+      cls: "bg-sand text-ink-900",
+      kind: "hero",
+    });
   if (p.action?.name) {
     out.push({
       label: p.action.isPermanent ? "Niske cene" : p.action.name,

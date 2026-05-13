@@ -73,9 +73,9 @@ export function Footer() {
                 <Image
                   src="/logo.jpeg"
                   alt="Svet Akcija"
-                  width={200}
-                  height={58}
-                  className="object-contain"
+                  width={1600}
+                  height={382}
+                  className="h-auto w-[200px] object-contain"
                 />
               </div>
             </Link>

@@ -1,5 +1,4 @@
 import { HeroCarousel } from "@/components/home/hero-carousel";
-import { TabsStrip } from "@/components/home/tabs-strip";
 import { SectionRail } from "@/components/home/section-rail";
 import { EditorialBanner } from "@/components/home/editorial-banner";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
@@ -19,14 +18,12 @@ export default function Home() {
   const weekly = weeklyAction();
 
   // "Ostali tabovi" — tabs not already covered by the dedicated rails above.
-  const coveredIds = new Set(["heroji-meseca", "nedeljna-akcija"]);
+  const coveredIds = new Set(["mesecna-akcija", "heroji-meseca", "nedeljna-akcija"]);
   const otherTabs = headerTabs.filter((t) => !coveredIds.has(t.id));
 
   return (
     <>
       <HeroCarousel banners={heroBanners} />
-      <TabsStrip tabs={headerTabs} />
-      <ProtectedPricesBand />
 
       <SectionRail
         eyebrow="Selekcija meseca"
@@ -36,6 +33,8 @@ export default function Home() {
         products={heroes}
         mobileMinimal
       />
+
+      <ProtectedPricesBand />
 
       <SectionRail
         eyebrow="Aktivna akcija"

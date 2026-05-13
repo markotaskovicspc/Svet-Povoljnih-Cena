@@ -43,6 +43,8 @@ const toneClasses: Record<BadgeTone, string> = {
   ink: "bg-ink-900 text-canvas",
 };
 
+const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
+
 export function ProductCard({ product, className, priority }: ProductCardProps) {
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
@@ -56,7 +58,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   const secondary = product.media.images[1];
   const badges: Badge[] = deriveBadges(product);
   // Spec: show every badge — no overflow "+N" pill. The structure is kept
-  // ready so future banner artwork (Heroj akcije, Mesečna akcija, Nedeljna
+  // ready so future banner artwork (Heroj meseca, Mesečna akcija, Nedeljna
   // akcija …) can swap in by extending `toneClasses`/`deriveBadges`.
   const visible = badges;
   const price = effectiveUnitPrice(product);
@@ -132,17 +134,33 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       {/* Badge stack — every badge is shown (no "+N" rollup). */}
       {visible.length ? (
         <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
-          {visible.map((b) => (
-            <span
-              key={b.key}
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
-                toneClasses[b.tone],
-              )}
-            >
-              {b.label}
-            </span>
-          ))}
+          {visible.map((b) =>
+            b.key === "hero" ? (
+              <span
+                key={b.key}
+                aria-label={b.label}
+                className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
+              >
+                <Image
+                  src={HEROJI_MESECA_MARK_SRC}
+                  alt={b.label}
+                  width={44}
+                  height={37}
+                  className="h-7 w-8 object-contain md:h-8 md:w-10"
+                />
+              </span>
+            ) : (
+              <span
+                key={b.key}
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
+                  toneClasses[b.tone],
+                )}
+              >
+                {b.label}
+              </span>
+            ),
+          )}
         </div>
       ) : null}
 

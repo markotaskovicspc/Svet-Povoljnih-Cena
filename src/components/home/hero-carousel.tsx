@@ -69,9 +69,9 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      className="relative isolate bg-canvas px-2 pt-4 sm:px-3 md:px-4 md:pt-5"
+      className="relative isolate bg-canvas px-2 pt-3 sm:px-3 md:px-4 md:pt-5"
     >
-      <div className="relative mx-auto h-[58vh] min-h-[380px] w-full overflow-hidden rounded-[1.75rem] bg-ink-900 shadow-soft-3 md:h-auto md:aspect-[24/10] md:min-h-0 md:rounded-[2rem] lg:rounded-[2.25rem]">
+      <div className="relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:h-auto md:aspect-[24/10] md:min-h-0 lg:rounded-xl">
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
@@ -85,23 +85,28 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
             dragElastic={0.1}
             onDragEnd={onDragEnd}
           >
-            {/* Hidden mobile/desktop image swap. Use mobile if provided. */}
-            <picture>
-              {slide.imageMobile ? (
-                <source media="(max-width: 767px)" srcSet={slide.imageMobile.url} />
-              ) : null}
-              <Image
-                src={slide.imageDesktop.url}
-                alt={slide.imageDesktop.alt ?? slide.title}
-                fill
-                sizes="calc(100vw - 32px)"
-                priority
-                className={cn(
-                  "object-cover",
-                  !reduce && "will-change-transform",
-                )}
-              />
-            </picture>
+            <Image
+              src={(slide.imageMobile ?? slide.imageDesktop).url}
+              alt={(slide.imageMobile ?? slide.imageDesktop).alt ?? slide.title}
+              fill
+              sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
+              priority
+              className={cn(
+                "object-cover md:hidden",
+                !reduce && "will-change-transform",
+              )}
+            />
+            <Image
+              src={slide.imageDesktop.url}
+              alt={slide.imageDesktop.alt ?? slide.title}
+              fill
+              sizes="(max-width: 1440px) calc(100vw - 32px), 1440px"
+              priority
+              className={cn(
+                "hidden object-cover md:block",
+                !reduce && "will-change-transform",
+              )}
+            />
             {/* Ken-Burns zoom layer */}
             {!reduce ? (
               <motion.div

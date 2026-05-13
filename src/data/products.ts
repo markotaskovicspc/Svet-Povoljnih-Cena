@@ -158,6 +158,41 @@ export const mockProducts: Product[] = [
     frequentlyBoughtSkus: [],
   },
   {
+    sku: "AC-F0999",
+    slug: "filc-podloske-za-namestaj-f0999",
+    name: "Filc podloške za nameštaj F0999",
+    group: "dodaci",
+    collection: "kucni-dodaci",
+    categoryPath: ["Nameštaj", "Dodaci", "Zaštita poda"],
+    description: "Set samolepljivih filc podloški za nogare stolica, stolova i komoda.",
+    shortDescription: "Set zaštitnih podloški za nogare nameštaja.",
+    dimensionsCm: { w: 12, d: 12, h: 2 },
+    materials: [],
+    pictograms: [],
+    stock: 120,
+    incomingStock: 0,
+    isHero: false,
+    isNew: true,
+    newUntil: new Date(now + 20 * day).toISOString(),
+    isLimited: false,
+    isDtz: false,
+    fullPrice: 999,
+    salePrice: 799,
+    discountPct: 20,
+    action: {
+      id: "act-4",
+      name: "Sve do 999",
+      startsAt: new Date(now - 2 * day).toISOString(),
+      endsAt: new Date(now + 30 * day).toISOString(),
+    },
+    deliveryDays: { min: 2, max: 4 },
+    allowsAssembly: false,
+    assemblyCities: [],
+    media: { images: [unsplash("1600585154340-be6161a56a0c", "Filc podloške za nameštaj")] },
+    recommendedSkus: [],
+    frequentlyBoughtSkus: [],
+  },
+  {
     sku: "KR-L1801",
     slug: "krevet-lina-l1801",
     name: "Krevet Lina L1801 160×200",
@@ -376,11 +411,27 @@ export const weeklyAction = () => byActionName("Nedeljna akcija");
 export const protectedPrices = () =>
   mockProducts.filter((p) => p.action?.isPermanent);
 
+export const limitedOffer = () => mockProducts.filter((p) => p.isLimited);
+
+export const upTo999 = () =>
+  mockProducts.filter((p) => (p.salePrice ?? p.fullPrice) <= 999);
+
+export const specialOffers = () =>
+  mockProducts.filter(
+    (p) =>
+      !!p.action &&
+      !["Mesečna akcija", "Nedeljna akcija", "Sve do 999"].includes(
+        p.action.name,
+      ) &&
+      !p.action.isPermanent,
+  );
+
 /** Per-tab grouping for "Ostali tabovi" section. */
 export const productsForTab = (tabId: string) => {
   switch (tabId) {
+    case "mesecna-akcija":
     case "akcija":
-      return mockProducts.filter((p) => !!p.action);
+      return monthlyAction();
     case "nedeljna-akcija":
       return weeklyAction();
     case "heroji-meseca":
@@ -388,7 +439,11 @@ export const productsForTab = (tabId: string) => {
     case "niske-cene-pod-zastitom":
       return protectedPrices();
     case "ogranicena-ponuda":
-      return mockProducts.filter((p) => p.isLimited);
+      return limitedOffer();
+    case "sve-do-999":
+      return upTo999();
+    case "specijalne-ponude":
+      return specialOffers();
     default:
       return [];
   }

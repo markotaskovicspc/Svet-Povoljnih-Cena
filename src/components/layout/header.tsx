@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
+import { DesktopMenu } from "./desktop-menu";
 
 const SCROLL_THRESHOLD = 16;
 
@@ -37,16 +38,17 @@ export function Header() {
       className="sticky top-0 z-40 bg-white text-brand-blue"
     >
       {/* Row 1 — desktop */}
-      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-8 px-6 py-3 md:flex md:py-4">
+      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-5 px-6 py-3 md:flex md:py-4">
+        <DesktopMenu />
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="shrink-0 rounded-lg px-2 py-1">
             <Image
               src="/logo.jpeg"
               alt="Svet Akcija"
-              width={180}
-              height={52}
+              width={1600}
+              height={382}
               priority
-              className="object-contain"
+              className="h-auto w-[180px] object-contain"
             />
           </div>
         </Link>
@@ -68,16 +70,16 @@ export function Header() {
       {/* Row 2 — primary tabs (desktop) */}
       <nav
         aria-label="Glavna navigacija"
-        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 border-t border-brand-blue/10 px-6 py-2 md:flex"
+        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 overflow-x-auto border-t border-brand-blue/10 px-6 py-2 md:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {headerTabs.slice(0, 4).map((t) => {
+        {headerTabs.map((t) => {
           const active = pathname === t.href;
           return (
             <Link
               key={t.id}
               href={t.href}
               className={cn(
-                "relative rounded-full px-3 py-1.5 text-sm transition",
+                "relative shrink-0 rounded-full px-3 py-1.5 text-sm transition",
                 active
                   ? "bg-brand-blue/10 text-brand-blue"
                   : "text-brand-blue/80 hover:bg-brand-blue/10",
@@ -104,10 +106,10 @@ export function Header() {
             <Image
               src="/logo.jpeg"
               alt="Svet Akcija"
-              width={120}
-              height={34}
+              width={1600}
+              height={382}
               priority
-              className="object-contain"
+              className="h-auto w-[120px] object-contain"
             />
           </div>
         </Link>

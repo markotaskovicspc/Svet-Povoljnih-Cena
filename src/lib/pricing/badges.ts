@@ -45,7 +45,7 @@ function isNewActive(p: BadgeProduct, now: Date): boolean {
 /**
  * Returns the ordered badge list for a product. The rules:
  *   1. Discount pill (only when sale is currently live — uses the engine).
- *   2. Heroj akcije.
+ *   2. Heroj meseca.
  *   3. Action name (e.g. "Nedeljna akcija") if its window is live.
  *   4. Novo (respects `newUntil`).
  *   5. Ograničena količina.
@@ -59,7 +59,7 @@ export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
     out.push({ key: "discount", label: `-${price.discountPct}%`, tone: "action" });
   }
   if (p.isHero) {
-    out.push({ key: "hero", label: "Heroj akcije", tone: "gold" });
+    out.push({ key: "hero", label: "Heroj meseca", tone: "gold" });
   }
   if (price.onSale && p.action?.name) {
     out.push({
