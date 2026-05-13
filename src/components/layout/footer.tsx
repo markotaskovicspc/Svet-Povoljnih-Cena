@@ -64,12 +64,12 @@ const SOCIAL_ICONS: Record<string, React.FC<{ className?: string }>> = {
 export function Footer() {
   const year = new Date().getFullYear();
   return (
-    <footer className="bg-brand-blue text-white">
+    <footer className="bg-white text-ink-900">
       <div className="mx-auto max-w-[var(--container-page)] px-6 py-12 md:py-16">
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
             <Link href="/" aria-label="Svet Akcija — početna" className="inline-block">
-              <div className="rounded-lg bg-white px-3 py-1.5">
+              <div className="rounded-lg bg-white px-3 py-1.5 ring-1 ring-border">
                 <Image
                   src="/logo.jpeg"
                   alt="Svet Akcija"
@@ -79,13 +79,13 @@ export function Footer() {
                 />
               </div>
             </Link>
-            <p className="mt-4 max-w-xs text-sm text-white/75">
+            <p className="mt-4 max-w-xs text-sm text-ink-500">
               Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.
               Brza isporuka i montaža u glavnim gradovima.
             </p>
 
             <div className="mt-6">
-              <p className="font-mono text-[11px] tracking-[0.2em] text-white/60 uppercase">
+              <p className="font-mono text-[11px] tracking-[0.2em] text-ink-500 uppercase">
                 Pratite nas
               </p>
               <ul className="mt-3 flex items-center gap-2">
@@ -98,7 +98,7 @@ export function Footer() {
                         target="_blank"
                         rel="noreferrer"
                         aria-label={s.label}
-                        className="inline-flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                        className="inline-flex size-10 items-center justify-center rounded-full bg-muted-bg text-ink-700 transition hover:bg-brand-blue hover:text-white"
                       >
                         <Icon className="size-4" />
                       </Link>
@@ -120,13 +120,13 @@ export function Footer() {
           >
             {footerColumns.map((col) => (
               <div key={col.title}>
-                <h3 className="font-display text-sm tracking-wide text-sand">{col.title}</h3>
-                <ul className="mt-3 space-y-1.5 text-sm text-white/85 md:mt-4 md:space-y-2">
+                <h3 className="font-display text-sm tracking-wide text-ink-900">{col.title}</h3>
+                <ul className="mt-3 space-y-1.5 text-sm text-ink-500 md:mt-4 md:space-y-2">
                   {col.links.map((l) => (
                     <li key={l.href}>
                       <Link
                         href={l.href}
-                        className="transition hover:text-white"
+                        className="transition hover:text-brand-blue"
                       >
                         {l.label}
                       </Link>
@@ -139,10 +139,10 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/10">
+      <div className="border-t border-border">
         <div className="mx-auto max-w-[var(--container-page)] px-6 py-5">
           <div className="flex items-center gap-4">
-            <span className="font-mono text-[10px] tracking-[0.2em] text-white/55 shrink-0 uppercase">
+            <span className="font-mono text-[10px] tracking-[0.2em] text-ink-500 shrink-0 uppercase">
               Načini plaćanja
             </span>
             <Marquee durationSec={36} className="flex-1">
@@ -151,7 +151,7 @@ export function Footer() {
                   key={p.id}
                   href={p.href}
                   aria-label={p.label}
-                  className="inline-flex h-8 items-center rounded-md border border-white/20 bg-white/5 px-3 font-mono text-[11px] tracking-wide text-white/80 transition hover:border-white/40 hover:text-white"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-muted-bg px-3 font-mono text-[11px] tracking-wide text-ink-700 transition hover:border-brand-blue hover:text-brand-blue"
                 >
                   {p.label}
                 </Link>
@@ -161,17 +161,17 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-[var(--container-page)] flex-col gap-4 px-6 py-6 text-xs text-white/60 md:flex-row md:items-center md:justify-between">
+      <div className="border-t border-border">
+        <div className="mx-auto flex max-w-[var(--container-page)] flex-col gap-4 px-6 py-6 text-xs text-ink-500 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span>© {year} Svet Akcija</span>
-            <Link href="/uslovi-kupovine" className="hover:text-white">
+            <Link href="/uslovi-kupovine" className="hover:text-brand-blue">
               Uslovi kupovine
             </Link>
-            <Link href="/politika-privatnosti" className="hover:text-white">
+            <Link href="/politika-privatnosti" className="hover:text-brand-blue">
               Privatnost
             </Link>
-            <Link href="/kontakt" className="hover:text-white">
+            <Link href="/kontakt" className="hover:text-brand-blue">
               Kontakt
             </Link>
           </div>
