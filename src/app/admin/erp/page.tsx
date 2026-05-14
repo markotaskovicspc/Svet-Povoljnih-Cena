@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Boxes, ChevronRight, FileSpreadsheet, Package, Truck } from "lucide-react";
-import { requireAdminAction } from "@/lib/admin";
 import { erpModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
@@ -15,7 +14,6 @@ export const metadata = {
 const ICONS = [Package, Truck, FileSpreadsheet, Boxes, FileSpreadsheet, FileSpreadsheet];
 
 export default async function ErpDashboardPage() {
-  await requireAdminAction();
   const ready = erpModules.filter((m) => m.status === "ready");
   const scaffold = erpModules.filter((m) => m.status === "scaffold");
 

@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { requireAdminAction } from "@/lib/admin";
 import { erpModules, getErpModule } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { ErpGrid } from "@/components/admin/erp-grid";
@@ -29,7 +28,6 @@ export default async function ErpModulePage({
 }: {
   params: Promise<{ module: string }>;
 }) {
-  await requireAdminAction();
   const { module: slug } = await params;
   const erpModule = getErpModule(slug);
   if (!erpModule) notFound();

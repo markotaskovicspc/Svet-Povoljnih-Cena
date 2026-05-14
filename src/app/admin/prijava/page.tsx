@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AdminError, AdminLoginForm } from "./form";
 import { signIn } from "@/lib/auth/auth";
 import { AuthError } from "next-auth";
-import { getCurrentUser } from "@/lib/auth/session";
 
 export const metadata = {
   title: "Admin prijava",
@@ -14,9 +13,9 @@ export const dynamic = "force-dynamic";
 
 async function loginAction(formData: FormData) {
   "use server";
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const callbackUrl = String(formData.get("callbackUrl") ?? "/admin") || "/admin";
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "").trim();
+  const callbackUrl = String(formData.get("callbackUrl") ?? "/admin/erp") || "/admin/erp";
   try {
     await signIn("admin-credentials", {
       email,
@@ -41,11 +40,7 @@ export default async function AdminLoginPage({
   searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
   const sp = await searchParams;
-  const user = await getCurrentUser();
-  if (user?.userType === "admin") {
-    redirect(sp.callbackUrl?.startsWith("/admin") ? sp.callbackUrl : "/admin");
-  }
-  const callbackUrl = sp.callbackUrl ?? "/admin";
+  const callbackUrl = sp.callbackUrl ?? "/admin/erp";
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">

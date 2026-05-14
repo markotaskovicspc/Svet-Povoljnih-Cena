@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
+import type { AdminRoleName } from "@prisma/client";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -21,13 +22,56 @@ const credentialsSchema = z.object({
 });
 
 const DAY = 60 * 60 * 24;
-const HARDCODED_ADMIN_EMAIL = "admin@spc.local";
-const HARDCODED_ADMIN_PASSWORD = "PanelPass!4827";
 const CREDENTIAL_PROVIDER_IDS = new Set([
   "credentials",
   "phone-otp",
   "admin-credentials",
 ]);
+const ADMIN_ROLES = new Set<AdminRoleName>(["SUPER", "CONTENT", "OPS", "ADS"]);
+
+function maskEmail(email: string) {
+  const [name, domain] = email.split("@");
+  if (!domain) return "***";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function bootstrapAdminRole(): AdminRoleName {
+  const raw = process.env.ADMIN_ROLE?.trim().toUpperCase();
+  return raw && ADMIN_ROLES.has(raw as AdminRoleName)
+    ? (raw as AdminRoleName)
+    : "SUPER";
+}
+
+async function authorizeBootstrapAdmin(email: string, password: string) {
+  const bootstrapEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const bootstrapPassword = process.env.ADMIN_PASSWORD?.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedPassword = password.trim();
+
+  if (!bootstrapEmail || !bootstrapPassword) return null;
+  const emailMatches = normalizedEmail === bootstrapEmail;
+  const passwordMatches = normalizedPassword === bootstrapPassword;
+  console.info("[admin-credentials] bootstrap check", {
+    email: maskEmail(normalizedEmail),
+    hasBootstrapEmail: Boolean(bootstrapEmail),
+    hasBootstrapPassword: Boolean(bootstrapPassword),
+    bootstrapPasswordLength: bootstrapPassword.length,
+    submittedPasswordLength: normalizedPassword.length,
+    emailMatches,
+    passwordMatches,
+  });
+  if (!emailMatches || !passwordMatches) {
+    return null;
+  }
+
+  return {
+    id: "env-admin",
+    email: bootstrapEmail,
+    name: bootstrapEmail,
+    userType: "admin" as const,
+    role: bootstrapAdminRole(),
+  };
+}
 
 const oauthProviders = (() => {
   const providers: NextAuthConfig["providers"] = [];
@@ -166,37 +210,63 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-        const { email, password } = parsed.data;
-        if (
-          email.toLowerCase() === HARDCODED_ADMIN_EMAIL &&
-          password === HARDCODED_ADMIN_PASSWORD
-        ) {
-          return {
-            id: "hardcoded-admin",
-            email: HARDCODED_ADMIN_EMAIL,
-            name: "Hardcoded Admin",
-            userType: "admin",
-            role: "SUPER",
-          };
+        if (!parsed.success) {
+          console.warn("[admin-credentials] invalid credentials payload", {
+            issues: parsed.error.issues.map((issue) => issue.path.join(".")),
+          });
+          return null;
         }
-        const admin = await db.adminUser.findUnique({
-          where: { email: email.toLowerCase() },
-        });
-        if (!admin || !admin.enabled) return null;
-        const ok = await bcrypt.compare(password, admin.passwordHash);
-        if (!ok) return null;
-        await db.adminUser.update({
-          where: { id: admin.id },
-          data: { lastLoginAt: new Date() },
-        });
-        return {
-          id: admin.id,
-          email: admin.email,
-          name: [admin.firstName, admin.lastName].filter(Boolean).join(" ") || admin.email,
-          userType: "admin",
-          role: admin.role,
-        };
+        const { email } = parsed.data;
+        const password = parsed.data.password.trim();
+        const normalizedEmail = email.trim().toLowerCase();
+        try {
+          const bootstrappedAdmin = await authorizeBootstrapAdmin(email, password);
+          if (bootstrappedAdmin) return bootstrappedAdmin;
+
+          const admin = await db.adminUser.findUnique({
+            where: { email: normalizedEmail },
+          });
+          console.info("[admin-credentials] admin lookup", {
+            email: maskEmail(normalizedEmail),
+            found: Boolean(admin),
+            enabled: admin?.enabled ?? null,
+            submittedPasswordLength: password.length,
+            hasBootstrapEmail: Boolean(process.env.ADMIN_EMAIL?.trim()),
+            hasBootstrapPassword: Boolean(process.env.ADMIN_PASSWORD?.trim()),
+            bootstrapPasswordLength: process.env.ADMIN_PASSWORD?.trim().length ?? 0,
+          });
+          if (!admin) {
+            return authorizeBootstrapAdmin(email, password);
+          }
+          if (!admin.enabled) {
+            return authorizeBootstrapAdmin(email, password);
+          }
+          const ok = await bcrypt.compare(password, admin.passwordHash);
+          console.info("[admin-credentials] stored password check", {
+            email: maskEmail(normalizedEmail),
+            ok,
+          });
+          if (!ok) {
+            return authorizeBootstrapAdmin(email, password);
+          }
+          await db.adminUser.update({
+            where: { id: admin.id },
+            data: { lastLoginAt: new Date() },
+          });
+          return {
+            id: admin.id,
+            email: admin.email,
+            name: [admin.firstName, admin.lastName].filter(Boolean).join(" ") || admin.email,
+            userType: "admin",
+            role: admin.role,
+          };
+        } catch (err) {
+          console.error("[admin-credentials] authorize failed", {
+            message: err instanceof Error ? err.message : String(err),
+            name: err instanceof Error ? err.name : undefined,
+          });
+          return null;
+        }
       },
     }),
   ],

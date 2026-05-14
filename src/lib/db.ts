@@ -12,12 +12,34 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function createClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set");
+function withSslNoVerify(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    if (["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+      return connectionString;
+    }
+    url.searchParams.set("sslmode", "no-verify");
+    url.searchParams.delete("uselibpqcompat");
+    return url.toString();
+  } catch {
+    const separator = connectionString.includes("?") ? "&" : "?";
+    return `${connectionString}${separator}sslmode=no-verify`;
   }
-  const adapter = new PrismaPg({ connectionString });
+}
+
+function createClient(): PrismaClient {
+  const connectionString = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
+  ].find((value) => value?.trim());
+  if (!connectionString) {
+    throw new Error(
+      "Database connection string is not set. Expected DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING.",
+    );
+  }
+  const adapter = new PrismaPg(withSslNoVerify(connectionString));
   return new PrismaClient({
     adapter,
     log:

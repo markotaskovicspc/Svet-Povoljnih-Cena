@@ -4,6 +4,7 @@ export type ErpColumn = {
   key: string;
   label: string;
   type?: "text" | "number" | "money" | "date" | "status" | "boolean";
+  options?: string[];
   defaultVisible?: boolean;
   align?: "left" | "right" | "center";
 };
@@ -32,11 +33,11 @@ export type ErpModule = {
 
 const articleColumns: ErpColumn[] = [
   { key: "photo", label: "Foto", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["SP", "DTZ", "IT", "ARH"], defaultVisible: true },
   { key: "sku", label: "Šifra", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", defaultVisible: true },
-  { key: "category", label: "Kategorija", defaultVisible: true },
-  { key: "group", label: "Grupa", defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "category", label: "Kategorija", options: ["Nameštaj", "Trpezarije", "Spavaće sobe"], defaultVisible: true },
+  { key: "group", label: "Grupa", options: ["Police", "Stolovi", "Ormari"], defaultVisible: true },
   { key: "subgroup", label: "Podgrupa" },
   { key: "collection", label: "Kolekcija", defaultVisible: true },
   { key: "shortDescription", label: "Kratki opis", defaultVisible: true },
@@ -86,7 +87,7 @@ const articleColumns: ErpColumn[] = [
   { key: "wholesaleCheck", label: "VP check", type: "boolean", align: "center" },
   { key: "exportAuto", label: "INO auto", type: "boolean", align: "center" },
   { key: "exportCheck", label: "INO check", type: "boolean", align: "center" },
-  { key: "parity", label: "Paritet" },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"] },
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right" },
   { key: "moq", label: "MOQ", type: "number", align: "right" },
 ];
@@ -262,8 +263,8 @@ const supplierColumns: ErpColumn[] = [
   { key: "country", label: "Država", defaultVisible: true },
   { key: "email", label: "Kontakt mail", defaultVisible: true },
   { key: "phone", label: "Telefon", defaultVisible: true },
-  { key: "currency", label: "Valuta", defaultVisible: true },
-  { key: "parity", label: "Paritet", defaultVisible: true },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
   { key: "paymentTerms", label: "Uslovi plaćanja" },
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right", defaultVisible: true },
   { key: "transitDays", label: "Tranzit", type: "number", align: "right" },
@@ -317,13 +318,13 @@ const supplierRows: ErpRow[] = [
 
 const purchasePriceColumns: ErpColumn[] = [
   { key: "sku", label: "Šifra artikla", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
   { key: "name", label: "Naziv artikla", defaultVisible: true },
   { key: "attributes", label: "Atributi", defaultVisible: true },
   { key: "pattern", label: "Dezen", defaultVisible: true },
   { key: "purchasePrice", label: "Nabavna cena", type: "money", align: "right", defaultVisible: true },
-  { key: "currency", label: "Valuta", defaultVisible: true },
-  { key: "parity", label: "Paritet", defaultVisible: true },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
   { key: "validFrom", label: "Važi od", type: "date", defaultVisible: true },
   { key: "validTo", label: "Važi do", type: "date", defaultVisible: true },
 ];
@@ -378,8 +379,8 @@ const purchasePriceRows: ErpRow[] = [
 
 const purchaseOrderColumns: ErpColumn[] = [
   { key: "number", label: "Broj porudžbenice", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["U obradi", "Poslata", "Potvrđena", "Primljena"], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
   { key: "createdAt", label: "Datum kreiranja", type: "date", defaultVisible: true },
   { key: "orderDate", label: "Datum porudžbine", type: "date", defaultVisible: true },
   { key: "loadingDate", label: "Datum utovara", type: "date", defaultVisible: true },
@@ -387,9 +388,9 @@ const purchaseOrderColumns: ErpColumn[] = [
   { key: "totalVolume", label: "Ukupna zapremina", type: "number", align: "right", defaultVisible: true },
   { key: "totalWeight", label: "Ukupna težina", type: "number", align: "right", defaultVisible: true },
   { key: "totalPrice", label: "Ukupna cena", type: "money", align: "right", defaultVisible: true },
-  { key: "currency", label: "Valuta", defaultVisible: true },
-  { key: "transportType", label: "Tip transporta", defaultVisible: true },
-  { key: "parity", label: "Paritet", defaultVisible: true },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
+  { key: "transportType", label: "Tip transporta", options: ["Šleper 90m3 / 24t", "Solo kamion 45m3 / 12t", "Kombi", "Kontejner 40HC"], defaultVisible: true },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
   { key: "bmPct", label: "Ukupna BM%", type: "number", align: "right", defaultVisible: true },
 ];
 
@@ -438,13 +439,13 @@ const purchaseOrderItemColumns: ErpColumn[] = [
   { key: "poNumber", label: "Porudžbenica", defaultVisible: true },
   { key: "sku", label: "Šifra artikla", defaultVisible: true },
   { key: "photo", label: "Foto", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
   { key: "name", label: "Naziv", defaultVisible: true },
   { key: "attributes", label: "Atributi", defaultVisible: true },
   { key: "pattern", label: "Dezen", defaultVisible: true },
   { key: "purchasePrice", label: "Nabavna cena", type: "money", align: "right", defaultVisible: true },
-  { key: "currency", label: "Valuta", defaultVisible: true },
-  { key: "parity", label: "Paritet" },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"] },
   { key: "validFrom", label: "Važi od", type: "date" },
   { key: "moq", label: "MOQ", type: "number", align: "right" },
   { key: "packQty", label: "Kom/pak", type: "number", align: "right" },
@@ -512,13 +513,13 @@ const purchaseOrderItemRows: ErpRow[] = [
 
 const inboundInvoiceColumns: ErpColumn[] = [
   { key: "number", label: "Broj fakture", defaultVisible: true },
-  { key: "type", label: "Tip", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", defaultVisible: true },
+  { key: "type", label: "Tip", options: ["DOM", "INO", "COGS"], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Proknjižena", "Storno"], defaultVisible: true },
   { key: "invoiceDate", label: "Datum fakture", type: "date", defaultVisible: true },
-  { key: "currency", label: "Valuta", defaultVisible: true },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
   { key: "value", label: "Vrednost", type: "money", align: "right", defaultVisible: true },
-  { key: "cogsStatus", label: "COGS", type: "status", defaultVisible: true },
+  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"], defaultVisible: true },
 ];
 
 const inboundInvoiceRows: ErpRow[] = [
@@ -544,7 +545,7 @@ const retailPriceColumns: ErpColumn[] = [
   { key: "calcMpc", label: "Kalkulativna MPC", type: "money", align: "right", defaultVisible: true },
   { key: "bmPct", label: "BM%", type: "number", align: "right", defaultVisible: true },
   { key: "validFrom", label: "Važi od", type: "date", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["Predlog", "Objavljeno", "Arhiva"], defaultVisible: true },
 ];
 
 const retailPriceRows: ErpRow[] = [

@@ -1,12 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Eye, Plus, Save, Settings2, Trash2 } from "lucide-react";
+import {
+  Download,
+  Eye,
+  GripVertical,
+  Lock,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { ErpColumn, ErpCommand, ErpModule, ErpValue } from "@/lib/admin/erp";
+import type { ErpColumn, ErpCommand, ErpModule, ErpRow, ErpValue } from "@/lib/admin/erp";
 
 type FilterCriterion = {
   id: string;
@@ -17,9 +28,15 @@ type FilterCriterion = {
 type SavedView = {
   name: string;
   visibleColumns: string[];
+  columnOrder: string[];
   filters: FilterCriterion[];
   query: string;
 };
+
+type EditingCell = {
+  rowId: string;
+  columnKey: string;
+} | null;
 
 function textValue(value: ErpValue) {
   if (value === null || value === undefined) return "";
@@ -68,6 +85,14 @@ function storageKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:views`;
 }
 
+function rowEditsKey(moduleSlug: string) {
+  return `svet-akcija:erp:${moduleSlug}:row-edits`;
+}
+
+function columnOrderKey(moduleSlug: string) {
+  return `svet-akcija:erp:${moduleSlug}:column-order`;
+}
+
 function readViews(moduleSlug: string): SavedView[] {
   if (typeof window === "undefined") return [];
   try {
@@ -83,6 +108,57 @@ function writeViews(moduleSlug: string, views: SavedView[]) {
   window.localStorage.setItem(storageKey(moduleSlug), JSON.stringify(views));
 }
 
+function readRowEdits(moduleSlug: string): Record<string, Record<string, ErpValue>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(rowEditsKey(moduleSlug));
+    return raw ? (JSON.parse(raw) as Record<string, Record<string, ErpValue>>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRowEdits(moduleSlug: string, edits: Record<string, Record<string, ErpValue>>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(rowEditsKey(moduleSlug), JSON.stringify(edits));
+}
+
+function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
+  const defaultOrder = columns.map((column) => column.key);
+  if (typeof window === "undefined") return defaultOrder;
+  try {
+    const raw = window.localStorage.getItem(columnOrderKey(moduleSlug));
+    const stored = raw ? (JSON.parse(raw) as string[]) : [];
+    const known = new Set(defaultOrder);
+    const validStored = stored.filter((key) => known.has(key));
+    const missing = defaultOrder.filter((key) => !validStored.includes(key));
+    return [...validStored, ...missing];
+  } catch {
+    return defaultOrder;
+  }
+}
+
+function writeColumnOrder(moduleSlug: string, order: string[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(order));
+}
+
+function parseCellValue(value: string, column: ErpColumn, fallback: ErpValue): ErpValue {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (column.type === "number" || column.type === "money") {
+    const parsed = Number(trimmed.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return value;
+}
+
+function inputType(column: ErpColumn) {
+  if (column.type === "date") return "date";
+  if (column.type === "money" || column.type === "number") return "number";
+  return "text";
+}
+
 export function ErpGrid({ module }: { module: ErpModule }) {
   const defaultColumns = useMemo(
     () =>
@@ -94,17 +170,72 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<FilterCriterion[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
+  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
+    readColumnOrder(module.slug, module.columns),
+  );
+  const [rowEdits, setRowEdits] = useState<Record<string, Record<string, ErpValue>>>(() =>
+    readRowEdits(module.slug),
+  );
   const [views, setViews] = useState<SavedView[]>(() => readViews(module.slug));
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingCell, setEditingCell] = useState<EditingCell>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
 
   const visible = useMemo(
-    () => module.columns.filter((c) => visibleColumns.includes(c.key)),
-    [module.columns, visibleColumns],
+    () => {
+      const byKey = new Map(module.columns.map((column) => [column.key, column]));
+      return columnOrder
+        .map((key) => byKey.get(key))
+        .filter((column): column is ErpColumn => Boolean(column))
+        .filter((column) => visibleColumns.includes(column.key));
+    },
+    [columnOrder, module.columns, visibleColumns],
   );
+
+  const rows = useMemo<ErpRow[]>(
+    () =>
+      module.rows.map((row) => ({
+        ...row,
+        values: {
+          ...row.values,
+          ...(rowEdits[row.id] ?? {}),
+        },
+      })),
+    [module.rows, rowEdits],
+  );
+
+  const editedCellCount = useMemo(
+    () =>
+      Object.values(rowEdits).reduce(
+        (count, values) => count + Object.keys(values).length,
+        0,
+      ),
+    [rowEdits],
+  );
+
+  const getSelectOptions = (column: ErpColumn, currentValue: ErpValue) => {
+    const configuredOptions =
+      column.options ??
+      (column.type === "status"
+        ? Array.from(
+            new Set(
+              rows
+                .map((row) => textValue(row.values[column.key]))
+                .filter(Boolean),
+            ),
+          )
+        : []);
+    const current = textValue(currentValue);
+    if (current && !configuredOptions.includes(current)) {
+      return [current, ...configuredOptions];
+    }
+    return configuredOptions;
+  };
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return module.rows.filter((row) => {
+    return rows.filter((row) => {
       if (q) {
         const hay = visible
           .map((c) => textValue(row.values[c.key]))
@@ -118,7 +249,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         return textValue(row.values[filter.columnKey]).toLowerCase().includes(needle);
       });
     });
-  }, [filters, module.rows, query, visible]);
+  }, [filters, query, rows, visible]);
 
   const addFilter = () => {
     if (!newFilterColumn) return;
@@ -141,7 +272,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     if (!name?.trim()) return;
     const next = [
       ...views.filter((v) => v.name !== name.trim()),
-      { name: name.trim(), visibleColumns, filters, query },
+      { name: name.trim(), visibleColumns, columnOrder, filters, query },
     ];
     setViews(next);
     writeViews(module.slug, next);
@@ -149,8 +280,60 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   const applyView = (view: SavedView) => {
     setVisibleColumns(view.visibleColumns);
+    if (view.columnOrder?.length) {
+      setColumnOrder(view.columnOrder);
+      writeColumnOrder(module.slug, view.columnOrder);
+    }
     setFilters(view.filters);
     setQuery(view.query);
+  };
+
+  const commitCell = (row: ErpRow, column: ErpColumn, value: ErpValue) => {
+    if (!isEditMode) return;
+    const next = {
+      ...rowEdits,
+      [row.id]: {
+        ...(rowEdits[row.id] ?? {}),
+        [column.key]: value,
+      },
+    };
+    setRowEdits(next);
+    writeRowEdits(module.slug, next);
+    setEditingCell(null);
+  };
+
+  const resetEdits = () => {
+    const confirmed = window.confirm("Poništiti sve lokalne izmene u ovoj ERP tabeli?");
+    if (!confirmed) return;
+    setRowEdits({});
+    writeRowEdits(module.slug, {});
+    setEditingCell(null);
+  };
+
+  const resetColumns = () => {
+    const defaultOrder = module.columns.map((column) => column.key);
+    setVisibleColumns(defaultColumns);
+    setColumnOrder(defaultOrder);
+    writeColumnOrder(module.slug, defaultOrder);
+  };
+
+  const moveColumn = (sourceKey: string, targetKey: string) => {
+    if (sourceKey === targetKey) return;
+    setColumnOrder((current) => {
+      const next = [...current];
+      const sourceIndex = next.indexOf(sourceKey);
+      const targetIndex = next.indexOf(targetKey);
+      if (sourceIndex === -1 || targetIndex === -1) return current;
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      writeColumnOrder(module.slug, next);
+      return next;
+    });
+  };
+
+  const toggleEditMode = () => {
+    setEditingCell(null);
+    setIsEditMode((current) => !current);
   };
 
   const exportCsv = () => {
@@ -260,10 +443,29 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 {command.label}
               </Button>
             ))}
+            <Button
+              type="button"
+              variant={isEditMode ? "default" : "outline"}
+              onClick={toggleEditMode}
+              className={isEditMode ? "bg-ink-900 text-canvas hover:bg-walnut" : ""}
+            >
+              {isEditMode ? (
+                <Lock className="size-4" aria-hidden />
+              ) : (
+                <Pencil className="size-4" aria-hidden />
+              )}
+              {isEditMode ? "Završi uređivanje" : "Uredi"}
+            </Button>
             <Button type="button" variant="outline" onClick={exportCsv}>
               <Download className="size-4" aria-hidden />
               Excel
             </Button>
+            {editedCellCount ? (
+              <Button type="button" variant="outline" onClick={resetEdits}>
+                <RotateCcw className="size-4" aria-hidden />
+                Poništi izmene
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -273,13 +475,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <p className="text-sm text-ink-500">
               {filteredRows.length} redova · {visible.length} vidljivih kolona
+              {editedCellCount ? ` · ${editedCellCount} lokalnih izmena` : ""}
+              {isEditMode ? " · uređivanje uključeno" : ""}
             </p>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" onClick={saveView}>
                 <Save className="size-4" aria-hidden />
                 Snimi pogled
               </Button>
-              <Button type="button" variant="outline" onClick={() => setVisibleColumns(defaultColumns)}>
+              <Button type="button" variant="outline" onClick={resetColumns}>
                 Reset kolona
               </Button>
             </div>
@@ -292,13 +496,35 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                   {visible.map((column) => (
                     <th
                       key={column.key}
+                      draggable
+                      onDragStart={() => setDraggedColumn(column.key)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (draggedColumn) moveColumn(draggedColumn, column.key);
+                        setDraggedColumn(null);
+                      }}
+                      onDragEnd={() => setDraggedColumn(null)}
                       className={cn(
-                        "whitespace-nowrap px-4 py-3 text-left font-medium",
+                        "group whitespace-nowrap px-3 py-3 text-left font-medium transition",
+                        draggedColumn === column.key && "opacity-40",
                         column.align === "right" && "text-right",
                         column.align === "center" && "text-center",
                       )}
                     >
-                      {column.label}
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-2",
+                          column.align === "right" && "justify-end",
+                          column.align === "center" && "justify-center",
+                        )}
+                      >
+                        <GripVertical
+                          className="size-3.5 cursor-grab text-ink-300 opacity-0 transition group-hover:opacity-100"
+                          aria-hidden
+                        />
+                        {column.label}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -308,41 +534,159 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                   <tr key={row.id} className="hover:bg-muted-bg/30">
                     {visible.map((column) => {
                       const value = row.values[column.key];
+                      const selectOptions = getSelectOptions(column, value);
+                      const isEditing =
+                        editingCell?.rowId === row.id && editingCell.columnKey === column.key;
+                      const originalValue = module.rows.find((item) => item.id === row.id)?.values[
+                        column.key
+                      ] ?? null;
+                      const isEdited = rowEdits[row.id]?.[column.key] !== undefined;
                       return (
                         <td
                           key={column.key}
                           className={cn(
-                            "whitespace-nowrap px-4 py-3 text-ink-700",
+                            "whitespace-nowrap px-3 py-2 text-ink-700",
+                            isEdited && "bg-warning/5",
                             column.align === "right" && "text-right tabular-nums",
                             column.align === "center" && "text-center",
                           )}
                         >
-                          {column.type === "status" ? (
+                          {column.type === "boolean" ? (
+                            <label className="inline-flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(value)}
+                                disabled={!isEditMode}
+                                onChange={(event) =>
+                                  commitCell(row, column, event.target.checked)
+                                }
+                                className="size-4 rounded border-input accent-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-label={`${column.label} ${row.id}`}
+                              />
+                            </label>
+                          ) : isEditing && selectOptions.length ? (
+                            <select
+                              autoFocus
+                              value={textValue(value)}
+                              onChange={(event) =>
+                                commitCell(row, column, event.target.value || null)
+                              }
+                              onBlur={() => setEditingCell(null)}
+                              className={cn(
+                                "h-8 min-w-36 rounded-md border border-ring bg-surface px-2 text-sm outline-none ring-2 ring-ring/15",
+                                column.align === "right" && "text-right tabular-nums",
+                                column.align === "center" && "text-center",
+                              )}
+                              aria-label={`Izmeni ${column.label}`}
+                            >
+                              <option value="">—</option>
+                              {selectOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          ) : isEditing ? (
+                            <input
+                              autoFocus
+                              type={inputType(column)}
+                              step={column.type === "number" || column.type === "money" ? "any" : undefined}
+                              defaultValue={textValue(value)}
+                              onBlur={(event) =>
+                                commitCell(
+                                  row,
+                                  column,
+                                  parseCellValue(event.target.value, column, value),
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  commitCell(
+                                    row,
+                                    column,
+                                    parseCellValue(event.currentTarget.value, column, value),
+                                  );
+                                }
+                                if (event.key === "Escape") setEditingCell(null);
+                              }}
+                              className={cn(
+                                "h-8 min-w-32 rounded-md border border-ring bg-surface px-2 text-sm outline-none ring-2 ring-ring/15",
+                                column.align === "right" && "text-right tabular-nums",
+                                column.align === "center" && "text-center",
+                              )}
+                              aria-label={`Izmeni ${column.label}`}
+                            />
+                          ) : column.type === "status" ? (
                             <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={() =>
+                                isEditMode &&
+                                setEditingCell({ rowId: row.id, columnKey: column.key })
+                              }
+                              onKeyDown={(event) => {
+                                if (isEditMode && (event.key === "Enter" || event.key === " ")) {
+                                  setEditingCell({ rowId: row.id, columnKey: column.key });
+                                }
+                              }}
                               className={cn(
                                 "inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1",
+                                isEditMode && "cursor-text",
                                 statusClass(value),
                               )}
-                            >
-                              {formatValue(value, column)}
-                            </span>
-                          ) : column.type === "boolean" ? (
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2 py-0.5 text-xs ring-1",
-                                value
-                                  ? "bg-success/10 text-success ring-success/20"
-                                  : "bg-danger/10 text-danger ring-danger/20",
-                              )}
+                              title={
+                                isEditMode
+                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
+                                  : "Kliknite Uredi da biste menjali podatke"
+                              }
                             >
                               {formatValue(value, column)}
                             </span>
                           ) : column.key === "photo" ? (
-                            <span className="inline-flex size-8 items-center justify-center rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                isEditMode &&
+                                setEditingCell({ rowId: row.id, columnKey: column.key })
+                              }
+                              disabled={!isEditMode}
+                              className="inline-flex size-8 items-center justify-center rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:bg-surface hover:text-ink-900 disabled:cursor-default disabled:hover:bg-muted-bg disabled:hover:text-ink-500"
+                              title={
+                                isEditMode
+                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
+                                  : "Kliknite Uredi da biste menjali podatke"
+                              }
+                            >
                               IMG
-                            </span>
+                            </button>
                           ) : (
-                            formatValue(value, column)
+                            <button
+                              type="button"
+                              onClick={() =>
+                                isEditMode &&
+                                setEditingCell({ rowId: row.id, columnKey: column.key })
+                              }
+                              disabled={!isEditMode}
+                              className={cn(
+                                "group inline-flex min-h-8 max-w-[360px] items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-muted-bg",
+                                !isEditMode && "cursor-default hover:bg-transparent",
+                                column.align === "right" && "justify-end text-right tabular-nums",
+                                column.align === "center" && "justify-center text-center",
+                              )}
+                              title={
+                                isEditMode
+                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
+                                  : "Kliknite Uredi da biste menjali podatke"
+                              }
+                            >
+                              <span className="truncate">{formatValue(value, column)}</span>
+                              {isEditMode ? (
+                                <Pencil
+                                  className="size-3 text-ink-300 opacity-0 transition group-hover:opacity-100"
+                                  aria-hidden
+                                />
+                              ) : null}
+                            </button>
                           )}
                         </td>
                       );
@@ -361,15 +705,34 @@ export function ErpGrid({ module }: { module: ErpModule }) {
               <h2 className="text-sm font-medium text-ink-900">Kolone</h2>
             </div>
             <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
-              {module.columns.map((column) => (
-                <label key={column.key} className="flex items-center gap-2 text-sm text-ink-700">
-                  <Checkbox
-                    checked={visibleColumns.includes(column.key)}
-                    onCheckedChange={() => toggleColumn(column.key)}
-                  />
-                  <span>{column.label}</span>
-                </label>
-              ))}
+              {columnOrder
+                .map((key) => module.columns.find((column) => column.key === key))
+                .filter((column): column is ErpColumn => Boolean(column))
+                .map((column) => (
+                  <label
+                    key={column.key}
+                    draggable
+                    onDragStart={() => setDraggedColumn(column.key)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (draggedColumn) moveColumn(draggedColumn, column.key);
+                      setDraggedColumn(null);
+                    }}
+                    onDragEnd={() => setDraggedColumn(null)}
+                    className={cn(
+                      "flex cursor-grab items-center gap-2 rounded-lg px-1 py-1 text-sm text-ink-700 transition hover:bg-muted-bg",
+                      draggedColumn === column.key && "opacity-40",
+                    )}
+                  >
+                    <GripVertical className="size-3.5 text-ink-300" aria-hidden />
+                    <Checkbox
+                      checked={visibleColumns.includes(column.key)}
+                      onCheckedChange={() => toggleColumn(column.key)}
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
             </div>
           </div>
 
