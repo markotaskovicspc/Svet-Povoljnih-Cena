@@ -7,7 +7,7 @@ import { PromoBar } from "@/components/layout/promo-bar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
-import { promoBar } from "@/data/site";
+import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -57,6 +57,9 @@ export default async function RootLayout({
   // Suppress storefront chrome on /admin — admin owns its own shell.
   const pathname = (await headers()).get("x-pathname") ?? "";
   const isAdmin = pathname.startsWith("/admin");
+  const [activePromoBar, activeTabs] = isAdmin
+    ? [null, []]
+    : await Promise.all([getActivePromoBar(), getActiveTabs()]);
   return (
     <html
       lang="sr-Latn"
@@ -72,8 +75,8 @@ export default async function RootLayout({
             <main className="flex-1">{children}</main>
           ) : (
             <>
-              <PromoBar bar={promoBar} />
-              <Header />
+              {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
+              <Header tabs={activeTabs} />
               <main className="flex-1">{children}</main>
               <NewsletterBand />
               <Footer />

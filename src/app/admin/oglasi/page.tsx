@@ -20,28 +20,32 @@ const CHANNEL_LABEL: Record<AdChannel, string> = {
   TIKTOK: "TikTok katalog",
 };
 
-const saveFlag = withAdmin(
-  { allowed: ["ADS"], action: "ad.flagSave", entity: "AdFlag" },
-  async (_a, formData: FormData) => {
-    const channel = String(formData.get("channel") ?? "") as AdChannel;
-    if (!Object.values(AdChannel).includes(channel)) {
-      return { ok: false as const, error: "Nepoznat kanal." };
-    }
-    const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
-    const budgetRaw = String(formData.get("budgetRsd") ?? "").trim();
-    const budget = budgetRaw === "" ? null : Number(budgetRaw);
-    if (budget !== null && !Number.isFinite(budget)) {
-      return { ok: false as const, error: "Budžet mora biti broj." };
-    }
-    await db.adFlag.upsert({
-      where: { channel },
-      create: { channel, enabled, budgetRsd: budget },
-      update: { enabled, budgetRsd: budget },
-    });
-    revalidatePath("/admin/oglasi");
-    return { ok: true as const, entityId: channel, diff: { enabled, budget } };
-  },
-);
+async function saveFlag(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["ADS"], action: "ad.flagSave", entity: "AdFlag" },
+    async (_a, formData: FormData) => {
+        const channel = String(formData.get("channel") ?? "") as AdChannel;
+        if (!Object.values(AdChannel).includes(channel)) {
+          return { ok: false as const, error: "Nepoznat kanal." };
+        }
+        const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
+        const budgetRaw = String(formData.get("budgetRsd") ?? "").trim();
+        const budget = budgetRaw === "" ? null : Number(budgetRaw);
+        if (budget !== null && !Number.isFinite(budget)) {
+          return { ok: false as const, error: "Budžet mora biti broj." };
+        }
+        await db.adFlag.upsert({
+          where: { channel },
+          create: { channel, enabled, budgetRsd: budget },
+          update: { enabled, budgetRsd: budget },
+        });
+        revalidatePath("/admin/oglasi");
+        return { ok: true as const, entityId: channel, diff: { enabled, budget } };
+      },
+  )(formData);
+}
 
 const FIELD_BY_CHANNEL: Record<AdChannel, "inGoogleMerchant" | "inMetaCatalog" | "inTiktokCatalog"> = {
   GOOGLE_MERCHANT: "inGoogleMerchant",
@@ -49,23 +53,27 @@ const FIELD_BY_CHANNEL: Record<AdChannel, "inGoogleMerchant" | "inMetaCatalog" |
   TIKTOK: "inTiktokCatalog",
 };
 
-const toggleProductCatalog = withAdmin(
-  { allowed: ["ADS"], action: "ad.productToggle", entity: "Product" },
-  async (_a, formData: FormData) => {
-    const productId = String(formData.get("productId") ?? "");
-    const channel = String(formData.get("channel") ?? "") as AdChannel;
-    const next = formData.get("next") === "true";
-    if (!productId || !FIELD_BY_CHANNEL[channel]) {
-      return { ok: false as const, error: "Pogrešni parametri." };
-    }
-    await db.product.update({
-      where: { id: productId },
-      data: { [FIELD_BY_CHANNEL[channel]]: next },
-    });
-    revalidatePath("/admin/oglasi");
-    return { ok: true as const, entityId: productId, diff: { [channel]: next } };
-  },
-);
+async function toggleProductCatalog(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["ADS"], action: "ad.productToggle", entity: "Product" },
+    async (_a, formData: FormData) => {
+        const productId = String(formData.get("productId") ?? "");
+        const channel = String(formData.get("channel") ?? "") as AdChannel;
+        const next = formData.get("next") === "true";
+        if (!productId || !FIELD_BY_CHANNEL[channel]) {
+          return { ok: false as const, error: "Pogrešni parametri." };
+        }
+        await db.product.update({
+          where: { id: productId },
+          data: { [FIELD_BY_CHANNEL[channel]]: next },
+        });
+        revalidatePath("/admin/oglasi");
+        return { ok: true as const, entityId: productId, diff: { [channel]: next } };
+      },
+  )(formData);
+}
 
 export default async function AdsPage({
   searchParams,

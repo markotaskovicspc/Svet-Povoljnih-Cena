@@ -12,30 +12,38 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const unsubscribe = withAdmin(
-  { allowed: ["ADS", "OPS"], action: "newsletter.unsubscribe", entity: "NewsletterSubscriber" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.newsletterSubscriber.update({
-      where: { id },
-      data: { unsubscribedAt: new Date(), consent: false },
-    });
-    revalidatePath("/admin/newsletter");
-    return { ok: true as const, entityId: id };
-  },
-);
+async function unsubscribe(formData: FormData) {
+  "use server";
 
-const removeSub = withAdmin(
-  { allowed: ["ADS", "OPS"], action: "newsletter.delete", entity: "NewsletterSubscriber" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.newsletterSubscriber.delete({ where: { id } });
-    revalidatePath("/admin/newsletter");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["ADS", "OPS"], action: "newsletter.unsubscribe", entity: "NewsletterSubscriber" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.newsletterSubscriber.update({
+          where: { id },
+          data: { unsubscribedAt: new Date(), consent: false },
+        });
+        revalidatePath("/admin/newsletter");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
+
+async function removeSub(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["ADS", "OPS"], action: "newsletter.delete", entity: "NewsletterSubscriber" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.newsletterSubscriber.delete({ where: { id } });
+        revalidatePath("/admin/newsletter");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function NewsletterPage({
   searchParams,

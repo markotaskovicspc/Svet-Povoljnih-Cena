@@ -11,8 +11,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { headerTabs, primaryNav, type NavNode } from "@/data/site";
+import { primaryNav, type NavNode } from "@/data/site";
 import { cn } from "@/lib/utils";
+import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
 
 interface Crumb {
@@ -21,7 +22,7 @@ interface Crumb {
   nodes: NavNode[];
 }
 
-export function DesktopMenu() {
+export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([
@@ -137,7 +138,7 @@ export function DesktopMenu() {
 
           {stack.length === 1 ? (
             <ul className="mt-3 border-t border-border">
-              {headerTabs.map((tab) => {
+              {tabs.map((tab) => {
                 const isActive = pathname === tab.href;
                 return (
                   <li key={tab.id} className="border-b border-border">

@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { SKU } from "@/types";
@@ -23,10 +22,9 @@ interface WishlistState {
 }
 
 export function useIsWished(sku: SKU): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const hydrated = useWishlist((s) => s.hydrated);
   const inWishlist = useWishlist((s) => s.has(sku));
-  return mounted ? inWishlist : false;
+  return hydrated ? inWishlist : false;
 }
 
 export const useWishlist = create<WishlistState>()(

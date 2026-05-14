@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -31,50 +33,58 @@ const upsertSchema = z.object({
   enabled: z.coerce.boolean().default(true),
 });
 
-const upsertBanner = withAdmin(
-  { allowed: ["CONTENT"], action: "banner.upsert", entity: "Banner" },
-  async (_actorId, formData: FormData) => {
-    const raw = Object.fromEntries(formData.entries());
-    const parsed = upsertSchema.safeParse({
-      ...raw,
-      enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
-    });
-    if (!parsed.success) {
-      return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Neispravan unos." };
-    }
-    const data = parsed.data;
-    const payload = {
-      title: data.title,
-      subtitle: data.subtitle || null,
-      ctaLabel: data.ctaLabel || null,
-      ctaHref: data.ctaHref || null,
-      imageDesktop: data.imageDesktop,
-      imageMobile: data.imageMobile || null,
-      startsAt: data.startsAt ? new Date(data.startsAt) : null,
-      endsAt: data.endsAt ? new Date(data.endsAt) : null,
-      order: data.order,
-      enabled: data.enabled,
-    };
-    const saved = data.id
-      ? await db.banner.update({ where: { id: data.id }, data: payload })
-      : await db.banner.create({ data: payload });
-    revalidatePath("/admin/baneri");
-    revalidatePath("/");
-    return { ok: true as const, entityId: saved.id, diff: payload };
-  },
-);
+async function upsertBanner(_state: AdminActionState, formData: FormData) {
+  "use server";
 
-const deleteBanner = withAdmin(
-  { allowed: ["CONTENT"], action: "banner.delete", entity: "Banner" },
-  async (_actorId, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.banner.delete({ where: { id } });
-    revalidatePath("/admin/baneri");
-    revalidatePath("/");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdminState(
+    { allowed: ["CONTENT"], action: "banner.upsert", entity: "Banner" },
+    async (_actorId, formData: FormData) => {
+        const raw = Object.fromEntries(formData.entries());
+        const parsed = upsertSchema.safeParse({
+          ...raw,
+          enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
+        });
+        if (!parsed.success) {
+          return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Neispravan unos." };
+        }
+        const data = parsed.data;
+        const payload = {
+          title: data.title,
+          subtitle: data.subtitle || null,
+          ctaLabel: data.ctaLabel || null,
+          ctaHref: data.ctaHref || null,
+          imageDesktop: data.imageDesktop,
+          imageMobile: data.imageMobile || null,
+          startsAt: data.startsAt ? new Date(data.startsAt) : null,
+          endsAt: data.endsAt ? new Date(data.endsAt) : null,
+          order: data.order,
+          enabled: data.enabled,
+        };
+        const saved = data.id
+          ? await db.banner.update({ where: { id: data.id }, data: payload })
+          : await db.banner.create({ data: payload });
+        revalidatePath("/admin/baneri");
+        revalidatePath("/");
+        return { ok: true as const, entityId: saved.id, diff: payload };
+      },
+  )(formData);
+}
+
+async function deleteBanner(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "banner.delete", entity: "Banner" },
+    async (_actorId, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.banner.delete({ where: { id } });
+        revalidatePath("/admin/baneri");
+        revalidatePath("/");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 function dtLocal(value?: Date | null) {
   if (!value) return "";
@@ -191,11 +201,14 @@ function BannerForm({
   action,
   values,
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (
+    state: AdminActionState,
+    formData: FormData,
+  ) => Promise<AdminActionState>;
   values?: BannerFormValues;
 }) {
   return (
-    <form action={action} className="space-y-4">
+    <AdminActionForm action={action} className="space-y-4">
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <Field label="Naslov">
         <Input name="title" required defaultValue={values?.title ?? ""} />
@@ -279,6 +292,6 @@ function BannerForm({
         ) : null}
         <SubmitButton>{values?.id ? "Sačuvaj" : "Dodaj baner"}</SubmitButton>
       </div>
-    </form>
+    </AdminActionForm>
   );
 }

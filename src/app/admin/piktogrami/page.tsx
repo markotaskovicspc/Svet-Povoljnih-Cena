@@ -22,30 +22,38 @@ const schema = z.object({
   iconUrl: z.string().url().max(500),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "pictogram.upsert", entity: "Pictogram" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const { id, ...data } = parsed.data;
-    const saved = id
-      ? await db.pictogram.update({ where: { id }, data })
-      : await db.pictogram.create({ data });
-    revalidatePath("/admin/piktogrami");
-    return { ok: true as const, entityId: saved.id, diff: data };
-  },
-);
+async function upsert(formData: FormData) {
+  "use server";
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "pictogram.delete", entity: "Pictogram" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.pictogram.delete({ where: { id } });
-    revalidatePath("/admin/piktogrami");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "pictogram.upsert", entity: "Pictogram" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse(Object.fromEntries(formData));
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const { id, ...data } = parsed.data;
+        const saved = id
+          ? await db.pictogram.update({ where: { id }, data })
+          : await db.pictogram.create({ data });
+        revalidatePath("/admin/piktogrami");
+        return { ok: true as const, entityId: saved.id, diff: data };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "pictogram.delete", entity: "Pictogram" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.pictogram.delete({ where: { id } });
+        revalidatePath("/admin/piktogrami");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function PictogramsPage() {
   await requireAdminAction(["CONTENT"]);

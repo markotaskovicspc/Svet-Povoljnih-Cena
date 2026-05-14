@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -24,42 +26,50 @@ const schema = z.object({
   enabled: z.coerce.boolean().default(true),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "promobar.upsert", entity: "PromoBar" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse({
-      ...Object.fromEntries(formData),
-      enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
-    });
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const { id, ...payload } = parsed.data;
-    const data = {
-      text: payload.text,
-      href: payload.href || null,
-      startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
-      endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
-      enabled: payload.enabled,
-    };
-    const saved = id
-      ? await db.promoBar.update({ where: { id }, data })
-      : await db.promoBar.create({ data });
-    revalidatePath("/admin/promo-traka");
-    revalidatePath("/");
-    return { ok: true as const, entityId: saved.id, diff: data };
-  },
-);
+async function upsert(_state: AdminActionState, formData: FormData) {
+  "use server";
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "promobar.delete", entity: "PromoBar" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.promoBar.delete({ where: { id } });
-    revalidatePath("/admin/promo-traka");
-    revalidatePath("/");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdminState(
+    { allowed: ["CONTENT"], action: "promobar.upsert", entity: "PromoBar" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse({
+          ...Object.fromEntries(formData),
+          enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
+        });
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const { id, ...payload } = parsed.data;
+        const data = {
+          text: payload.text,
+          href: payload.href || null,
+          startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
+          endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
+          enabled: payload.enabled,
+        };
+        const saved = id
+          ? await db.promoBar.update({ where: { id }, data })
+          : await db.promoBar.create({ data });
+        revalidatePath("/admin/promo-traka");
+        revalidatePath("/");
+        return { ok: true as const, entityId: saved.id, diff: data };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "promobar.delete", entity: "PromoBar" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.promoBar.delete({ where: { id } });
+        revalidatePath("/admin/promo-traka");
+        revalidatePath("/");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 const dt = (d?: Date | null) => {
   if (!d) return "";
@@ -120,11 +130,14 @@ function Form({
   action,
   values,
 }: {
-  action: (fd: FormData) => Promise<void>;
+  action: (
+    state: AdminActionState,
+    formData: FormData,
+  ) => Promise<AdminActionState>;
   values?: V;
 }) {
   return (
-    <form action={action} className="space-y-3">
+    <AdminActionForm action={action} className="space-y-3">
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <Field label="Tekst">
         <Textarea name="text" required rows={2} defaultValue={values?.text ?? ""} />
@@ -154,6 +167,6 @@ function Form({
       <div className="flex justify-end">
         <SubmitButton>{values?.id ? "Sačuvaj" : "Dodaj"}</SubmitButton>
       </div>
-    </form>
+    </AdminActionForm>
   );
 }

@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, hasDatabaseConnection } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
@@ -109,7 +109,7 @@ export default async function AdminDashboard({
   dayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(dayStart.getFullYear(), dayStart.getMonth(), 1);
 
-  const isPreviewMode = !process.env.DATABASE_URL;
+  const isPreviewMode = !hasDatabaseConnection();
   const {
     todayAgg,
     todayCount,
@@ -138,8 +138,8 @@ export default async function AdminDashboard({
         ) : null}
         {isPreviewMode ? (
           <div className="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-sm text-ink-700">
-            Admin panel radi u preview režimu jer DATABASE_URL nije podešen.
-            Povežite bazu za realne podatke.
+            Admin panel radi u preview režimu jer veza ka bazi nije podešena.
+            Podesite DATABASE_URL ili Supabase Postgres varijable za realne podatke.
           </div>
         ) : null}
 

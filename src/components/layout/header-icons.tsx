@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, ShoppingBag } from "lucide-react";
-import { useEffect, useRef } from "react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
@@ -60,14 +59,6 @@ export function CartButton({ className }: { className?: string }) {
   const hydrated = useCart((s) => s.hydrated);
   const count = hydrated ? lines.reduce((n, l) => n + l.qty, 0) : 0;
 
-  // Animate "wiggle" whenever count increases
-  const prev = useRef(count);
-  const wiggleKey = useRef(0);
-  if (count > prev.current) wiggleKey.current += 1;
-  useEffect(() => {
-    prev.current = count;
-  }, [count]);
-
   const openDrawer = useCartUi((s) => s.openDrawer);
 
   return (
@@ -84,9 +75,9 @@ export function CartButton({ className }: { className?: string }) {
       )}
     >
       <motion.span
-        key={wiggleKey.current}
+        key={count}
         animate={
-          wiggleKey.current
+          count
             ? { rotate: [0, -12, 10, -6, 0], scale: [1, 1.08, 1] }
             : undefined
         }

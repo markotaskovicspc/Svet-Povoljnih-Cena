@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { User2 } from "lucide-react";
-import { headerTabs } from "@/data/site";
+import type { Tab } from "@/types";
 import { cn } from "@/lib/utils";
 import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
@@ -15,7 +15,7 @@ import { DesktopMenu } from "./desktop-menu";
 
 const SCROLL_THRESHOLD = 16;
 
-export function Header() {
+export function Header({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
 
@@ -39,7 +39,7 @@ export function Header() {
     >
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-5 px-6 py-3 md:flex md:py-4">
-        <DesktopMenu />
+        <DesktopMenu tabs={tabs} />
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="shrink-0 rounded-lg px-2 py-1">
             <Image
@@ -72,7 +72,7 @@ export function Header() {
         aria-label="Glavna navigacija"
         className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 overflow-x-auto border-t border-brand-blue/10 px-6 py-2 md:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {headerTabs.map((t) => {
+        {tabs.map((t) => {
           const active = pathname === t.href;
           return (
             <Link
@@ -100,7 +100,7 @@ export function Header() {
 
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-2 px-3 py-2.5 md:hidden">
-        <MobileNav />
+        <MobileNav tabs={tabs} />
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="rounded-md px-1.5 py-0.5">
             <Image

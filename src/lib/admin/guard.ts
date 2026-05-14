@@ -2,6 +2,12 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { AdminRoleName } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/session";
+import {
+  adminActionError,
+  adminActionSuccess,
+  type AdminActionFieldErrors,
+  type AdminActionState,
+} from "./action-state";
 
 export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
   SUPER: "Super admin",
@@ -39,18 +45,35 @@ export async function requireAdminAction(allowed?: readonly AdminRoleName[]) {
   return user as typeof user & { role: AdminRoleName };
 }
 
-/**
- * Wrap a Server Action so it (a) requires an admin session with the given
- * role, (b) executes the inner function, (c) audits success / failure. The
- * inner function returns a generic shape that callers can spread into UI.
- */
-export function withAdmin<TArgs extends unknown[], TOut>(
-  meta: { allowed?: readonly AdminRoleName[]; action: string; entity: string },
-  fn: (
-    actorId: string,
-    ...args: TArgs
-  ) => Promise<{ ok: true; entityId?: string | null; diff?: unknown; result?: TOut } | { ok: false; error: string }>,
-): (...args: TArgs) => Promise<void> {
+type AdminActionMeta = {
+  allowed?: readonly AdminRoleName[];
+  action: string;
+  entity: string;
+};
+
+type AdminActionHandler<TArgs extends unknown[], TOut> = (
+  actorId: string,
+  ...args: TArgs
+) => Promise<
+  | {
+      ok: true;
+      entityId?: string | null;
+      diff?: unknown;
+      message?: string;
+      result?: TOut;
+    }
+  | {
+      ok: false;
+      error?: string;
+      message?: string;
+      fieldErrors?: AdminActionFieldErrors;
+    }
+>;
+
+export function withAdminState<TArgs extends unknown[], TOut>(
+  meta: AdminActionMeta,
+  fn: AdminActionHandler<TArgs, TOut>,
+): (...args: TArgs) => Promise<AdminActionState<TOut>> {
   return async (...args: TArgs) => {
     const admin = await requireAdminAction(meta.allowed);
     const { logAudit } = await import("./audit");
@@ -64,7 +87,16 @@ export function withAdmin<TArgs extends unknown[], TOut>(
           entityId: out.entityId ?? null,
           diff: out.diff,
         });
+        return adminActionSuccess<TOut>(out.message, out.result);
       }
+      const message = out.message ?? out.error ?? "Neispravan unos.";
+      await logAudit({
+        actorId: admin.id,
+        action: `${meta.action}.error`,
+        entity: meta.entity,
+        diff: { error: message },
+      });
+      return adminActionError<TOut>(message, out.fieldErrors);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Nepoznata greška.";
@@ -74,6 +106,22 @@ export function withAdmin<TArgs extends unknown[], TOut>(
         entity: meta.entity,
         diff: { error: message },
       });
+      return adminActionError<TOut>(message);
     }
+  };
+}
+
+/**
+ * Wrap a Server Action so it (a) requires an admin session with the given
+ * role, (b) executes the inner function, (c) audits success / failure.
+ * Use `withAdminState` for forms that render `useActionState` feedback.
+ */
+export function withAdmin<TArgs extends unknown[], TOut>(
+  meta: AdminActionMeta,
+  fn: AdminActionHandler<TArgs, TOut>,
+): (...args: TArgs) => Promise<void> {
+  const action = withAdminState(meta, fn);
+  return async (...args: TArgs) => {
+    await action(...args);
   };
 }

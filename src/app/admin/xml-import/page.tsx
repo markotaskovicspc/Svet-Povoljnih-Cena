@@ -17,53 +17,61 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const saveSupplier = withAdmin(
-  { allowed: ["OPS"], action: "supplier.save", entity: "Supplier" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "") || null;
-    const name = String(formData.get("name") ?? "").trim();
-    const feedUrl = String(formData.get("feedUrl") ?? "").trim() || null;
-    const authUser = String(formData.get("authUser") ?? "").trim() || null;
-    const authPass = String(formData.get("authPass") ?? "").trim() || null;
-    const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
-    const notes = String(formData.get("notes") ?? "").trim() || null;
-    const mappingRaw = String(formData.get("mapping") ?? "").trim();
-    if (!name) return { ok: false as const, error: "Naziv je obavezan." };
-    let mapping: object | null = null;
-    if (mappingRaw) {
-      try {
-        mapping = JSON.parse(mappingRaw);
-      } catch {
-        return { ok: false as const, error: "Mapping mora biti validan JSON." };
-      }
-    }
-    const data = {
-      name,
-      feedUrl,
-      authUser,
-      authPass,
-      enabled,
-      notes,
-      mapping: (mapping ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-    };
-    const res = id
-      ? await db.supplier.update({ where: { id }, data })
-      : await db.supplier.create({ data });
-    revalidatePath("/admin/xml-import");
-    return { ok: true as const, entityId: res.id, diff: { name, enabled } };
-  },
-);
+async function saveSupplier(formData: FormData) {
+  "use server";
 
-const triggerImport = withAdmin(
-  { allowed: ["OPS"], action: "supplier.import", entity: "Supplier" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID dobavljača." };
-    const summary = await importSupplier(id);
-    revalidatePath("/admin/xml-import");
-    return { ok: true as const, entityId: id, diff: summary as unknown as Record<string, unknown> };
-  },
-);
+  return withAdmin(
+    { allowed: ["OPS"], action: "supplier.save", entity: "Supplier" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "") || null;
+        const name = String(formData.get("name") ?? "").trim();
+        const feedUrl = String(formData.get("feedUrl") ?? "").trim() || null;
+        const authUser = String(formData.get("authUser") ?? "").trim() || null;
+        const authPass = String(formData.get("authPass") ?? "").trim() || null;
+        const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
+        const notes = String(formData.get("notes") ?? "").trim() || null;
+        const mappingRaw = String(formData.get("mapping") ?? "").trim();
+        if (!name) return { ok: false as const, error: "Naziv je obavezan." };
+        let mapping: object | null = null;
+        if (mappingRaw) {
+          try {
+            mapping = JSON.parse(mappingRaw);
+          } catch {
+            return { ok: false as const, error: "Mapping mora biti validan JSON." };
+          }
+        }
+        const data = {
+          name,
+          feedUrl,
+          authUser,
+          authPass,
+          enabled,
+          notes,
+          mapping: (mapping ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        };
+        const res = id
+          ? await db.supplier.update({ where: { id }, data })
+          : await db.supplier.create({ data });
+        revalidatePath("/admin/xml-import");
+        return { ok: true as const, entityId: res.id, diff: { name, enabled } };
+      },
+  )(formData);
+}
+
+async function triggerImport(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "supplier.import", entity: "Supplier" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID dobavljača." };
+        const summary = await importSupplier(id);
+        revalidatePath("/admin/xml-import");
+        return { ok: true as const, entityId: id, diff: summary as unknown as Record<string, unknown> };
+      },
+  )(formData);
+}
 
 export default async function XmlImportPage({
   searchParams,

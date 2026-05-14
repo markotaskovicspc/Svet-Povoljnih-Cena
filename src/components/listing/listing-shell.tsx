@@ -81,18 +81,18 @@ export function ListingShell({
 }: ListingShellProps) {
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
-  const [view, setView] = useState<3 | 4>(4);
-  const [visible, setVisible] = useState(LISTING_PAGE_SIZE);
+  const [view, setView] = useState<3 | 4>(() => {
+    if (typeof window === "undefined") return 4;
+    const v = window.localStorage.getItem(VIEW_KEY);
+    return v === "3" || v === "4" ? (Number(v) as 3 | 4) : 4;
+  });
+  const [visibleWindow, setVisibleWindow] = useState({
+    key: "",
+    count: LISTING_PAGE_SIZE,
+  });
   const [activeSub, setActiveSub] = useState<string | undefined>(initialSubTab);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
-
-  // Restore preferred view on mount.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const v = window.localStorage.getItem(VIEW_KEY);
-    if (v === "3" || v === "4") setView(Number(v) as 3 | 4);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -133,11 +133,14 @@ export function ListingShell({
     [subFiltered, state, sort, kind],
   );
 
-  // Reset visible window when the underlying result count shrinks.
-  useEffect(() => {
-    setVisible(LISTING_PAGE_SIZE);
-  }, [state, sort, activeSub]);
-
+  const visibleKey = useMemo(
+    () => JSON.stringify({ state, sort, activeSub }),
+    [state, sort, activeSub],
+  );
+  const visible =
+    visibleWindow.key === visibleKey
+      ? visibleWindow.count
+      : LISTING_PAGE_SIZE;
   const chips = useMemo(() => activeChips(state, extents), [state, extents]);
   const shown = filtered.slice(0, visible);
   const hasMore = filtered.length > shown.length;
@@ -352,7 +355,12 @@ export function ListingShell({
                   variant="outline"
                   size="lg"
                   className="rounded-full px-8"
-                  onClick={() => setVisible((n) => n + LISTING_PAGE_SIZE)}
+                  onClick={() =>
+                    setVisibleWindow({
+                      key: visibleKey,
+                      count: visible + LISTING_PAGE_SIZE,
+                    })
+                  }
                 >
                   Učitaj još
                 </Button>

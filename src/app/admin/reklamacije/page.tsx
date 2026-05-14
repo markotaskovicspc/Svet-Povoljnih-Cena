@@ -16,29 +16,33 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const updateStatus = withAdmin(
-  { allowed: ["OPS"], action: "reclamation.statusUpdate", entity: "Reclamation" },
-  async (actorId, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    const status = String(formData.get("status") ?? "") as ReclamationStatus;
-    const note = String(formData.get("note") ?? "").trim() || null;
-    if (!id || !Object.values(ReclamationStatus).includes(status)) {
-      return { ok: false as const, error: "Nedostaje ID ili status." };
-    }
-    const resolved = status === "RESENO" || status === "ODBIJENO";
-    await db.$transaction([
-      db.reclamation.update({
-        where: { id },
-        data: { status, resolvedAt: resolved ? new Date() : null },
-      }),
-      db.reclamationStatusEvent.create({
-        data: { reclamationId: id, status, note, actorId },
-      }),
-    ]);
-    revalidatePath("/admin/reklamacije");
-    return { ok: true as const, entityId: id, diff: { status, note } };
-  },
-);
+async function updateStatus(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "reclamation.statusUpdate", entity: "Reclamation" },
+    async (actorId, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        const status = String(formData.get("status") ?? "") as ReclamationStatus;
+        const note = String(formData.get("note") ?? "").trim() || null;
+        if (!id || !Object.values(ReclamationStatus).includes(status)) {
+          return { ok: false as const, error: "Nedostaje ID ili status." };
+        }
+        const resolved = status === "RESENO" || status === "ODBIJENO";
+        await db.$transaction([
+          db.reclamation.update({
+            where: { id },
+            data: { status, resolvedAt: resolved ? new Date() : null },
+          }),
+          db.reclamationStatusEvent.create({
+            data: { reclamationId: id, status, note, actorId },
+          }),
+        ]);
+        revalidatePath("/admin/reklamacije");
+        return { ok: true as const, entityId: id, diff: { status, note } };
+      },
+  )(formData);
+}
 
 export default async function ReclamationsPage({
   searchParams,

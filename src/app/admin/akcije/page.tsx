@@ -37,70 +37,78 @@ const schema = z.object({
   productSkus: z.string().optional(),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "action.upsert", entity: "Action" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse({
-      ...Object.fromEntries(formData),
-      isHero: formData.get("isHero") === "on" || formData.get("isHero") === "true",
-    });
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const { id, productSkus, ...rest } = parsed.data;
-    const slug = rest.slug?.trim() || slugify(rest.name);
+async function upsert(formData: FormData) {
+  "use server";
 
-    const skus = (productSkus ?? "")
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const products = skus.length
-      ? await db.product.findMany({
-          where: { sku: { in: skus } },
-          select: { id: true },
-        })
-      : [];
-
-    const data = {
-      slug,
-      name: rest.name,
-      kind: rest.kind,
-      startsAt: new Date(rest.startsAt),
-      endsAt: new Date(rest.endsAt),
-      isHero: rest.isHero,
-      sortOrder: rest.sortOrder,
-    };
-
-    const saved = id
-      ? await db.action.update({
-          where: { id },
-          data: {
-            ...data,
-            products: { set: products.map((p) => ({ id: p.id })) },
-          },
-        })
-      : await db.action.create({
-          data: {
-            ...data,
-            products: { connect: products.map((p) => ({ id: p.id })) },
-          },
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "action.upsert", entity: "Action" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse({
+          ...Object.fromEntries(formData),
+          isHero: formData.get("isHero") === "on" || formData.get("isHero") === "true",
         });
-    revalidatePath("/admin/akcije");
-    revalidatePath("/akcija");
-    return { ok: true as const, entityId: saved.id, diff: { ...data, productCount: products.length } };
-  },
-);
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const { id, productSkus, ...rest } = parsed.data;
+        const slug = rest.slug?.trim() || slugify(rest.name);
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "action.delete", entity: "Action" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.action.delete({ where: { id } });
-    revalidatePath("/admin/akcije");
-    revalidatePath("/akcija");
-    return { ok: true as const, entityId: id };
-  },
-);
+        const skus = (productSkus ?? "")
+          .split(/[\s,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const products = skus.length
+          ? await db.product.findMany({
+              where: { sku: { in: skus } },
+              select: { id: true },
+            })
+          : [];
+
+        const data = {
+          slug,
+          name: rest.name,
+          kind: rest.kind,
+          startsAt: new Date(rest.startsAt),
+          endsAt: new Date(rest.endsAt),
+          isHero: rest.isHero,
+          sortOrder: rest.sortOrder,
+        };
+
+        const saved = id
+          ? await db.action.update({
+              where: { id },
+              data: {
+                ...data,
+                products: { set: products.map((p) => ({ id: p.id })) },
+              },
+            })
+          : await db.action.create({
+              data: {
+                ...data,
+                products: { connect: products.map((p) => ({ id: p.id })) },
+              },
+            });
+        revalidatePath("/admin/akcije");
+        revalidatePath("/akcija");
+        return { ok: true as const, entityId: saved.id, diff: { ...data, productCount: products.length } };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "action.delete", entity: "Action" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.action.delete({ where: { id } });
+        revalidatePath("/admin/akcije");
+        revalidatePath("/akcija");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 const dt = (d?: Date | null) => {
   if (!d) return "";

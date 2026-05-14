@@ -18,44 +18,52 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const updateStatus = withAdmin(
-  { allowed: ["OPS"], action: "order.statusUpdate", entity: "Order" },
-  async (actorId, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    const status = String(formData.get("status") ?? "") as OrderStatus;
-    const note = String(formData.get("note") ?? "").trim() || null;
-    if (!id || !Object.values(OrderStatus).includes(status)) {
-      return { ok: false as const, error: "Nedostaje ID ili status." };
-    }
-    await db.$transaction([
-      db.order.update({ where: { id }, data: { status } }),
-      db.orderStatusEvent.create({
-        data: { orderId: id, status, note, actorId },
-      }),
-    ]);
-    revalidatePath(`/admin/narudzbine/${id}`);
-    revalidatePath("/admin/narudzbine");
-    return { ok: true as const, entityId: id, diff: { status, note } };
-  },
-);
+async function updateStatus(formData: FormData) {
+  "use server";
 
-const markFiscalized = withAdmin(
-  { allowed: ["OPS"], action: "order.markFiscalized", entity: "Order" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    const receiptNumber = String(formData.get("receiptNumber") ?? "").trim();
-    if (!id || !receiptNumber) {
-      return { ok: false as const, error: "Nedostaje broj fiskalnog računa." };
-    }
-    await db.fiscalReceipt.upsert({
-      where: { orderId: id },
-      create: { orderId: id, receiptNumber },
-      update: { receiptNumber },
-    });
-    revalidatePath(`/admin/narudzbine/${id}`);
-    return { ok: true as const, entityId: id, diff: { receiptNumber } };
-  },
-);
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.statusUpdate", entity: "Order" },
+    async (actorId, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        const status = String(formData.get("status") ?? "") as OrderStatus;
+        const note = String(formData.get("note") ?? "").trim() || null;
+        if (!id || !Object.values(OrderStatus).includes(status)) {
+          return { ok: false as const, error: "Nedostaje ID ili status." };
+        }
+        await db.$transaction([
+          db.order.update({ where: { id }, data: { status } }),
+          db.orderStatusEvent.create({
+            data: { orderId: id, status, note, actorId },
+          }),
+        ]);
+        revalidatePath(`/admin/narudzbine/${id}`);
+        revalidatePath("/admin/narudzbine");
+        return { ok: true as const, entityId: id, diff: { status, note } };
+      },
+  )(formData);
+}
+
+async function markFiscalized(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.markFiscalized", entity: "Order" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        const receiptNumber = String(formData.get("receiptNumber") ?? "").trim();
+        if (!id || !receiptNumber) {
+          return { ok: false as const, error: "Nedostaje broj fiskalnog računa." };
+        }
+        await db.fiscalReceipt.upsert({
+          where: { orderId: id },
+          create: { orderId: id, receiptNumber },
+          update: { receiptNumber },
+        });
+        revalidatePath(`/admin/narudzbine/${id}`);
+        return { ok: true as const, entityId: id, diff: { receiptNumber } };
+      },
+  )(formData);
+}
 
 export default async function OrderDetail({
   params,

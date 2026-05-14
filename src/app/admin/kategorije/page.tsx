@@ -34,52 +34,60 @@ const schema = z.object({
   description: z.string().max(2000).optional().nullable(),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const data = parsed.data;
-    const slug = data.slug?.trim() || slugify(data.name);
-    const parent = data.parentId
-      ? await db.category.findUnique({ where: { id: data.parentId } })
-      : null;
-    const level = parent ? parent.level + 1 : 0;
-    const path = parent ? `${parent.path}/${slug}` : `/${slug}`;
+async function upsert(formData: FormData) {
+  "use server";
 
-    const payload = {
-      name: data.name,
-      slug,
-      parentId: parent?.id ?? null,
-      order: data.order,
-      imageUrl: data.imageUrl || null,
-      description: data.description || null,
-      level,
-      path,
-    };
-    const saved = data.id
-      ? await db.category.update({ where: { id: data.id }, data: payload })
-      : await db.category.create({ data: payload });
-    revalidatePath("/admin/kategorije");
-    revalidatePath("/");
-    return { ok: true as const, entityId: saved.id, diff: payload };
-  },
-);
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse(Object.fromEntries(formData));
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const data = parsed.data;
+        const slug = data.slug?.trim() || slugify(data.name);
+        const parent = data.parentId
+          ? await db.category.findUnique({ where: { id: data.parentId } })
+          : null;
+        const level = parent ? parent.level + 1 : 0;
+        const path = parent ? `${parent.path}/${slug}` : `/${slug}`;
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "category.delete", entity: "Category" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    const childCount = await db.category.count({ where: { parentId: id } });
-    if (childCount > 0) {
-      return { ok: false as const, error: "Premestite ili obrišite podkategorije pre brisanja." };
-    }
-    await db.category.delete({ where: { id } });
-    revalidatePath("/admin/kategorije");
-    return { ok: true as const, entityId: id };
-  },
-);
+        const payload = {
+          name: data.name,
+          slug,
+          parentId: parent?.id ?? null,
+          order: data.order,
+          imageUrl: data.imageUrl || null,
+          description: data.description || null,
+          level,
+          path,
+        };
+        const saved = data.id
+          ? await db.category.update({ where: { id: data.id }, data: payload })
+          : await db.category.create({ data: payload });
+        revalidatePath("/admin/kategorije");
+        revalidatePath("/");
+        return { ok: true as const, entityId: saved.id, diff: payload };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "category.delete", entity: "Category" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        const childCount = await db.category.count({ where: { parentId: id } });
+        if (childCount > 0) {
+          return { ok: false as const, error: "Premestite ili obrišite podkategorije pre brisanja." };
+        }
+        await db.category.delete({ where: { id } });
+        revalidatePath("/admin/kategorije");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function CategoriesPage() {
   await requireAdminAction(["CONTENT"]);

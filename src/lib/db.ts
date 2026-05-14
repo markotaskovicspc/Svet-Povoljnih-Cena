@@ -27,13 +27,21 @@ function withSslNoVerify(connectionString: string) {
   }
 }
 
-function createClient(): PrismaClient {
-  const connectionString = [
+export function getDatabaseConnectionString() {
+  return [
     process.env.DATABASE_URL,
     process.env.POSTGRES_PRISMA_URL,
     process.env.POSTGRES_URL,
     process.env.POSTGRES_URL_NON_POOLING,
   ].find((value) => value?.trim());
+}
+
+export function hasDatabaseConnection() {
+  return Boolean(getDatabaseConnectionString());
+}
+
+function createClient(): PrismaClient {
+  const connectionString = getDatabaseConnectionString();
   if (!connectionString) {
     throw new Error(
       "Database connection string is not set. Expected DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING.",

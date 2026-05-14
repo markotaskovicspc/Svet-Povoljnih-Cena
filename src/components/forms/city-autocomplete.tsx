@@ -67,10 +67,6 @@ export function CityAutocomplete({
     return searchSerbianPlaces(value, 8);
   }, [value, minChars]);
 
-  useEffect(() => {
-    setActive(0);
-  }, [value]);
-
   // Close on outside click.
   useEffect(() => {
     if (!open) return;
@@ -100,7 +96,7 @@ export function CityAutocomplete({
       e.preventDefault();
       setActive((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
-      const hit = suggestions[active];
+      const hit = suggestions[boundedActive];
       if (hit) {
         e.preventDefault();
         pick(hit);
@@ -110,6 +106,9 @@ export function CityAutocomplete({
     }
   };
 
+  const boundedActive = suggestions.length
+    ? Math.min(active, suggestions.length - 1)
+    : 0;
   const showPanel = open && value.trim().length >= minChars && suggestions.length > 0;
 
   return (
@@ -142,7 +141,7 @@ export function CityAutocomplete({
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={
-            showPanel ? `${listboxId}-opt-${active}` : undefined
+            showPanel ? `${listboxId}-opt-${boundedActive}` : undefined
           }
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={error ? `${inputId}-err` : undefined}
@@ -165,7 +164,7 @@ export function CityAutocomplete({
                 key={`${place.postalCode}-${place.name}`}
                 id={`${listboxId}-opt-${i}`}
                 role="option"
-                aria-selected={i === active}
+                aria-selected={i === boundedActive}
               >
                 <button
                   type="button"
@@ -177,7 +176,7 @@ export function CityAutocomplete({
                   }}
                   className={cn(
                     "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition",
-                    i === active
+                    i === boundedActive
                       ? "bg-muted-bg text-ink-900"
                       : "text-ink-700 hover:bg-muted-bg/60",
                   )}

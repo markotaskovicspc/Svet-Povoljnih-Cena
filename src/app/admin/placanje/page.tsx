@@ -24,26 +24,30 @@ const LABEL: Record<PaymentMethod, string> = {
   POUZECE_KARTICA: "Pouzeće — kartica",
 };
 
-const updateMethod = withAdmin(
-  { allowed: ["OPS"], action: "payment.update", entity: "PaymentMethodConfig" },
-  async (_a, formData: FormData) => {
-    const method = String(formData.get("method") ?? "") as PaymentMethod;
-    if (!Object.values(PaymentMethod).includes(method)) {
-      return { ok: false as const, error: "Nepoznat metod." };
-    }
-    const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
-    const label = String(formData.get("label") ?? "").trim() || null;
-    const note = String(formData.get("note") ?? "").trim() || null;
-    await db.paymentMethodConfig.upsert({
-      where: { method },
-      create: { method, enabled, label, note },
-      update: { enabled, label, note },
-    });
-    revalidatePath("/admin/placanje");
-    revalidatePath("/checkout");
-    return { ok: true as const, entityId: method, diff: { enabled, label, note } };
-  },
-);
+async function updateMethod(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "payment.update", entity: "PaymentMethodConfig" },
+    async (_a, formData: FormData) => {
+        const method = String(formData.get("method") ?? "") as PaymentMethod;
+        if (!Object.values(PaymentMethod).includes(method)) {
+          return { ok: false as const, error: "Nepoznat metod." };
+        }
+        const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
+        const label = String(formData.get("label") ?? "").trim() || null;
+        const note = String(formData.get("note") ?? "").trim() || null;
+        await db.paymentMethodConfig.upsert({
+          where: { method },
+          create: { method, enabled, label, note },
+          update: { enabled, label, note },
+        });
+        revalidatePath("/admin/placanje");
+        revalidatePath("/checkout");
+        return { ok: true as const, entityId: method, diff: { enabled, label, note } };
+      },
+  )(formData);
+}
 
 export default async function PaymentsPage() {
   await requireAdminAction(["OPS"]);

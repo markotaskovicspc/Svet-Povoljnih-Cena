@@ -28,46 +28,54 @@ const schema = z.object({
   actionId: z.string().optional().nullable(),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "hero.upsert", entity: "HeroOfMonth" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const data = {
-      ...parsed.data,
-      actionId: parsed.data.actionId || null,
-    };
-    const product = await db.product.findUnique({ where: { sku: data.productSku } });
-    if (!product) return { ok: false as const, error: "SKU nije pronađen u katalogu." };
+async function upsert(formData: FormData) {
+  "use server";
 
-    const saved = await db.heroOfMonth.upsert({
-      where: {
-        productSku_month_year: {
-          productSku: data.productSku,
-          month: data.month,
-          year: data.year,
-        },
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "hero.upsert", entity: "HeroOfMonth" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse(Object.fromEntries(formData));
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const data = {
+          ...parsed.data,
+          actionId: parsed.data.actionId || null,
+        };
+        const product = await db.product.findUnique({ where: { sku: data.productSku } });
+        if (!product) return { ok: false as const, error: "SKU nije pronađen u katalogu." };
+
+        const saved = await db.heroOfMonth.upsert({
+          where: {
+            productSku_month_year: {
+              productSku: data.productSku,
+              month: data.month,
+              year: data.year,
+            },
+          },
+          create: data,
+          update: data,
+        });
+        revalidatePath("/admin/heroji");
+        revalidatePath("/heroji-meseca");
+        return { ok: true as const, entityId: saved.id, diff: data };
       },
-      create: data,
-      update: data,
-    });
-    revalidatePath("/admin/heroji");
-    revalidatePath("/heroji-meseca");
-    return { ok: true as const, entityId: saved.id, diff: data };
-  },
-);
+  )(formData);
+}
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "hero.delete", entity: "HeroOfMonth" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.heroOfMonth.delete({ where: { id } });
-    revalidatePath("/admin/heroji");
-    revalidatePath("/heroji-meseca");
-    return { ok: true as const, entityId: id };
-  },
-);
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "hero.delete", entity: "HeroOfMonth" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.heroOfMonth.delete({ where: { id } });
+        revalidatePath("/admin/heroji");
+        revalidatePath("/heroji-meseca");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function HeroesPage() {
   await requireAdminAction(["CONTENT"]);

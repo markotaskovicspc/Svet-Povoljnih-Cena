@@ -38,50 +38,62 @@ const ruleSchema = z.object({
     .optional(),
 });
 
-const upsertRule = withAdmin(
-  { allowed: ["OPS"], action: "delivery.upsert", entity: "DeliveryPriceRule" },
-  async (_a, formData: FormData) => {
-    const parsed = ruleSchema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const d = parsed.data;
-    const data = {
-      scope: d.scope,
-      categoryId: d.scope === "CATEGORY" ? (d.categoryId || null) : null,
-      productId: d.scope === "PRODUCT" ? (d.productId || null) : null,
-      cityId: d.cityId || null,
-      courierPrice: d.courierPrice ?? null,
-      truckPrice: d.truckPrice ?? null,
-      assemblyPrice: d.assemblyPrice ?? null,
-    };
-    const saved = d.id
-      ? await db.deliveryPriceRule.update({ where: { id: d.id }, data })
-      : await db.deliveryPriceRule.create({ data });
-    revalidatePath("/admin/dostava");
-    return { ok: true as const, entityId: saved.id, diff: data };
-  },
-);
+async function upsertRule(formData: FormData) {
+  "use server";
 
-const removeRule = withAdmin(
-  { allowed: ["OPS"], action: "delivery.delete", entity: "DeliveryPriceRule" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.deliveryPriceRule.delete({ where: { id } });
-    revalidatePath("/admin/dostava");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["OPS"], action: "delivery.upsert", entity: "DeliveryPriceRule" },
+    async (_a, formData: FormData) => {
+        const parsed = ruleSchema.safeParse(Object.fromEntries(formData));
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const d = parsed.data;
+        const data = {
+          scope: d.scope,
+          categoryId: d.scope === "CATEGORY" ? (d.categoryId || null) : null,
+          productId: d.scope === "PRODUCT" ? (d.productId || null) : null,
+          cityId: d.cityId || null,
+          courierPrice: d.courierPrice ?? null,
+          truckPrice: d.truckPrice ?? null,
+          assemblyPrice: d.assemblyPrice ?? null,
+        };
+        const saved = d.id
+          ? await db.deliveryPriceRule.update({ where: { id: d.id }, data })
+          : await db.deliveryPriceRule.create({ data });
+        revalidatePath("/admin/dostava");
+        return { ok: true as const, entityId: saved.id, diff: data };
+      },
+  )(formData);
+}
 
-const toggleTruck = withAdmin(
-  { allowed: ["OPS"], action: "city.toggleTruck", entity: "DeliveryCity" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    const enabled = formData.get("enabled") === "1";
-    await db.deliveryCity.update({ where: { id }, data: { truckEnabled: enabled } });
-    revalidatePath("/admin/dostava");
-    return { ok: true as const, entityId: id, diff: { truckEnabled: enabled } };
-  },
-);
+async function removeRule(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "delivery.delete", entity: "DeliveryPriceRule" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.deliveryPriceRule.delete({ where: { id } });
+        revalidatePath("/admin/dostava");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
+
+async function toggleTruck(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "city.toggleTruck", entity: "DeliveryCity" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        const enabled = formData.get("enabled") === "1";
+        await db.deliveryCity.update({ where: { id }, data: { truckEnabled: enabled } });
+        revalidatePath("/admin/dostava");
+        return { ok: true as const, entityId: id, diff: { truckEnabled: enabled } };
+      },
+  )(formData);
+}
 
 export default async function DeliveryPage() {
   await requireAdminAction(["OPS"]);

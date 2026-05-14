@@ -41,60 +41,64 @@ const overrideSchema = z.object({
   inMetaCatalog: z.coerce.boolean().default(false),
 });
 
-const updateProduct = withAdmin(
-  { allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
-  async (_a, formData: FormData) => {
-    const raw = Object.fromEntries(formData);
-    const bool = (k: string) =>
-      formData.get(k) === "on" || formData.get(k) === "true";
-    const parsed = overrideSchema.safeParse({
-      ...raw,
-      allowsAssembly: bool("allowsAssembly"),
-      isActive: bool("isActive"),
-      isHero: bool("isHero"),
-      isNew: bool("isNew"),
-      isLimited: bool("isLimited"),
-      isDtz: bool("isDtz"),
-      inGoogleMerchant: bool("inGoogleMerchant"),
-      inMetaCatalog: bool("inMetaCatalog"),
-    });
-    if (!parsed.success) {
-      return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    }
-    const d = parsed.data;
-    if (d.deliveryDaysMin > d.deliveryDaysMax) {
-      return { ok: false as const, error: "Min. dani isporuke ne mogu biti veći od max." };
-    }
-    const data = {
-      name: d.name,
-      shortDescription: d.shortDescription || null,
-      description: d.description,
-      fullPrice: d.fullPrice,
-      salePrice: d.salePrice ?? null,
-      discountPct:
-        d.salePrice && d.salePrice < d.fullPrice
-          ? Math.round(((d.fullPrice - d.salePrice) / d.fullPrice) * 100)
-          : null,
-      stock: d.stock,
-      incomingStock: d.incomingStock,
-      deliveryDaysMin: d.deliveryDaysMin,
-      deliveryDaysMax: d.deliveryDaysMax,
-      allowsAssembly: d.allowsAssembly,
-      isActive: d.isActive,
-      isHero: d.isHero,
-      isNew: d.isNew,
-      isLimited: d.isLimited,
-      isDtz: d.isDtz,
-      inGoogleMerchant: d.inGoogleMerchant,
-      inMetaCatalog: d.inMetaCatalog,
-    };
-    await db.product.update({ where: { id: d.id }, data });
-    revalidatePath("/admin/proizvodi");
-    revalidatePath(`/admin/proizvodi/${d.id}`);
-    revalidatePath("/");
-    return { ok: true as const, entityId: d.id, diff: data };
-  },
-);
+async function updateProduct(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
+    async (_a, formData: FormData) => {
+        const raw = Object.fromEntries(formData);
+        const bool = (k: string) =>
+          formData.get(k) === "on" || formData.get(k) === "true";
+        const parsed = overrideSchema.safeParse({
+          ...raw,
+          allowsAssembly: bool("allowsAssembly"),
+          isActive: bool("isActive"),
+          isHero: bool("isHero"),
+          isNew: bool("isNew"),
+          isLimited: bool("isLimited"),
+          isDtz: bool("isDtz"),
+          inGoogleMerchant: bool("inGoogleMerchant"),
+          inMetaCatalog: bool("inMetaCatalog"),
+        });
+        if (!parsed.success) {
+          return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        }
+        const d = parsed.data;
+        if (d.deliveryDaysMin > d.deliveryDaysMax) {
+          return { ok: false as const, error: "Min. dani isporuke ne mogu biti veći od max." };
+        }
+        const data = {
+          name: d.name,
+          shortDescription: d.shortDescription || null,
+          description: d.description,
+          fullPrice: d.fullPrice,
+          salePrice: d.salePrice ?? null,
+          discountPct:
+            d.salePrice && d.salePrice < d.fullPrice
+              ? Math.round(((d.fullPrice - d.salePrice) / d.fullPrice) * 100)
+              : null,
+          stock: d.stock,
+          incomingStock: d.incomingStock,
+          deliveryDaysMin: d.deliveryDaysMin,
+          deliveryDaysMax: d.deliveryDaysMax,
+          allowsAssembly: d.allowsAssembly,
+          isActive: d.isActive,
+          isHero: d.isHero,
+          isNew: d.isNew,
+          isLimited: d.isLimited,
+          isDtz: d.isDtz,
+          inGoogleMerchant: d.inGoogleMerchant,
+          inMetaCatalog: d.inMetaCatalog,
+        };
+        await db.product.update({ where: { id: d.id }, data });
+        revalidatePath("/admin/proizvodi");
+        revalidatePath(`/admin/proizvodi/${d.id}`);
+        revalidatePath("/");
+        return { ok: true as const, entityId: d.id, diff: data };
+      },
+  )(formData);
+}
 
 export default async function ProductDetail({
   params,

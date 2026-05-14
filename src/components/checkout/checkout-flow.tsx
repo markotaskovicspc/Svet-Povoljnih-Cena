@@ -7,6 +7,7 @@ import {
   FormProvider,
   useForm,
   useFormContext,
+  useWatch,
   type SubmitHandler,
   type SubmitErrorHandler,
 } from "react-hook-form";
@@ -127,10 +128,19 @@ export function CheckoutFlow() {
     },
   });
 
-  const { handleSubmit, watch, trigger, formState } = methods;
-  const shippingMethod = watch("shippingMethod");
-  const paymentMethod = watch("paymentMethod");
-  const perItemAssembly = watch("perItemAssembly");
+  const { handleSubmit, trigger, formState } = methods;
+  const shippingMethod = useWatch({
+    control: methods.control,
+    name: "shippingMethod",
+  });
+  const paymentMethod = useWatch({
+    control: methods.control,
+    name: "paymentMethod",
+  });
+  const perItemAssembly = useWatch({
+    control: methods.control,
+    name: "perItemAssembly",
+  });
 
   // Keep identity in store + form synced.
   useEffect(() => {

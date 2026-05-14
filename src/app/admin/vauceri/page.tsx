@@ -39,46 +39,54 @@ const schema = z.object({
   active: z.coerce.boolean().default(true),
 });
 
-const upsert = withAdmin(
-  { allowed: ["OPS"], action: "voucher.upsert", entity: "Voucher" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse({
-      ...Object.fromEntries(formData),
-      active: formData.get("active") === "on" || formData.get("active") === "true",
-    });
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const d = parsed.data;
-    const code = d.code.toUpperCase();
-    const data = {
-      kind: d.kind,
-      amount: d.amount,
-      minSubtotal: d.minSubtotal ?? null,
-      startsAt: d.startsAt ? new Date(d.startsAt) : null,
-      endsAt: d.endsAt ? new Date(d.endsAt) : null,
-      usageLimit: d.usageLimit ?? null,
-      perUserLimit: d.perUserLimit ?? null,
-      active: d.active,
-    };
-    const saved = await db.voucher.upsert({
-      where: { code },
-      create: { code, ...data },
-      update: data,
-    });
-    revalidatePath("/admin/vauceri");
-    return { ok: true as const, entityId: saved.code, diff: data };
-  },
-);
+async function upsert(formData: FormData) {
+  "use server";
 
-const remove = withAdmin(
-  { allowed: ["OPS"], action: "voucher.delete", entity: "Voucher" },
-  async (_a, formData: FormData) => {
-    const code = String(formData.get("code") ?? "");
-    if (!code) return { ok: false as const, error: "Nedostaje kod." };
-    await db.voucher.delete({ where: { code } });
-    revalidatePath("/admin/vauceri");
-    return { ok: true as const, entityId: code };
-  },
-);
+  return withAdmin(
+    { allowed: ["OPS"], action: "voucher.upsert", entity: "Voucher" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse({
+          ...Object.fromEntries(formData),
+          active: formData.get("active") === "on" || formData.get("active") === "true",
+        });
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const d = parsed.data;
+        const code = d.code.toUpperCase();
+        const data = {
+          kind: d.kind,
+          amount: d.amount,
+          minSubtotal: d.minSubtotal ?? null,
+          startsAt: d.startsAt ? new Date(d.startsAt) : null,
+          endsAt: d.endsAt ? new Date(d.endsAt) : null,
+          usageLimit: d.usageLimit ?? null,
+          perUserLimit: d.perUserLimit ?? null,
+          active: d.active,
+        };
+        const saved = await db.voucher.upsert({
+          where: { code },
+          create: { code, ...data },
+          update: data,
+        });
+        revalidatePath("/admin/vauceri");
+        return { ok: true as const, entityId: saved.code, diff: data };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "voucher.delete", entity: "Voucher" },
+    async (_a, formData: FormData) => {
+        const code = String(formData.get("code") ?? "");
+        if (!code) return { ok: false as const, error: "Nedostaje kod." };
+        await db.voucher.delete({ where: { code } });
+        revalidatePath("/admin/vauceri");
+        return { ok: true as const, entityId: code };
+      },
+  )(formData);
+}
 
 const dt = (d?: Date | null) => {
   if (!d) return "";

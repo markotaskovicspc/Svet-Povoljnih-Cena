@@ -27,8 +27,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { motion, AnimatePresence } from "framer-motion";
-import { primaryNav, headerTabs, type NavNode } from "@/data/site";
+import { primaryNav, type NavNode } from "@/data/site";
 import { cn } from "@/lib/utils";
+import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
 import { InstantSearch } from "./instant-search";
 
@@ -92,7 +93,7 @@ const tabIcons = {
   "specijalne-ponude": Sparkles,
 } as const;
 
-export function MobileNav() {
+export function MobileNav({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: primaryNav }]);
@@ -229,7 +230,7 @@ export function MobileNav() {
 
                     <div className="border-y border-brand-blue/10 bg-brand-blue px-4 py-5">
                       <ul className="grid grid-cols-2 gap-3">
-                        {headerTabs.map((t) => {
+                        {tabs.map((t) => {
                           const isActive = pathname === t.href;
                           const Icon = tabIcons[t.id as keyof typeof tabIcons] ?? Sparkles;
                           return (
@@ -321,7 +322,7 @@ export function MobileNav() {
 
                 {stack.length !== 1 ? (
                   <ul className="mt-3 border-t border-border">
-                    {headerTabs.map((t) => {
+                    {tabs.map((t) => {
                       const isActive = pathname === t.href;
                       return (
                         <li key={t.id} className="border-b border-border">

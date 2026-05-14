@@ -12,28 +12,36 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const toggleReviewed = withAdmin(
-  { allowed: ["CONTENT", "OPS"], action: "comment.toggleReviewed", entity: "Comment" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    const reviewed = formData.get("reviewed") === "true";
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.comment.update({ where: { id }, data: { reviewed: !reviewed } });
-    revalidatePath("/admin/komentari");
-    return { ok: true as const, entityId: id, diff: { reviewed: !reviewed } };
-  },
-);
+async function toggleReviewed(formData: FormData) {
+  "use server";
 
-const removeComment = withAdmin(
-  { allowed: ["CONTENT", "OPS"], action: "comment.delete", entity: "Comment" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.comment.delete({ where: { id } });
-    revalidatePath("/admin/komentari");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "comment.toggleReviewed", entity: "Comment" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        const reviewed = formData.get("reviewed") === "true";
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.comment.update({ where: { id }, data: { reviewed: !reviewed } });
+        revalidatePath("/admin/komentari");
+        return { ok: true as const, entityId: id, diff: { reviewed: !reviewed } };
+      },
+  )(formData);
+}
+
+async function removeComment(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "comment.delete", entity: "Comment" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.comment.delete({ where: { id } });
+        revalidatePath("/admin/komentari");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function CommentsPage() {
   await requireAdminAction(["CONTENT", "OPS"]);

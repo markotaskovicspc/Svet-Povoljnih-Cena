@@ -36,7 +36,7 @@ export default function UsloviIsporukePage() {
           <p>
             Standardni rok je <strong>3–5 radnih dana</strong> za artikle sa
             stanja, odnosno <strong>10–20 radnih dana</strong> kada se artikal
-            dovozi po porudžbini (oznaka „dostupno za isporuku za …" na
+            dovozi po porudžbini (oznaka „dostupno za isporuku za …&quot; na
             stranici proizvoda).
           </p>
           <p>

@@ -19,83 +19,99 @@ export const metadata = {
 const dt = (d: Date | null | undefined) =>
   d ? new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : "";
 
-const saveAudience = withAdmin(
-  { allowed: ["ADS"], action: "viber.audienceSave", entity: "ViberAudienceQuery" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "") || null;
-    const name = String(formData.get("name") ?? "").trim();
-    const filterRaw = String(formData.get("filter") ?? "{}").trim();
-    if (!name) return { ok: false as const, error: "Naziv je obavezan." };
-    let filter: unknown;
-    try {
-      filter = JSON.parse(filterRaw);
-    } catch {
-      return { ok: false as const, error: "Filter mora biti validan JSON." };
-    }
-    const data = { name, filter: filter as Prisma.InputJsonValue };
-    const res = id
-      ? await db.viberAudienceQuery.update({ where: { id }, data })
-      : await db.viberAudienceQuery.create({ data });
-    revalidatePath("/admin/viber");
-    return { ok: true as const, entityId: res.id, diff: { name } };
-  },
-);
+async function saveAudience(formData: FormData) {
+  "use server";
 
-const deleteAudience = withAdmin(
-  { allowed: ["ADS"], action: "viber.audienceDelete", entity: "ViberAudienceQuery" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.viberAudienceQuery.delete({ where: { id } });
-    revalidatePath("/admin/viber");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["ADS"], action: "viber.audienceSave", entity: "ViberAudienceQuery" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "") || null;
+        const name = String(formData.get("name") ?? "").trim();
+        const filterRaw = String(formData.get("filter") ?? "{}").trim();
+        if (!name) return { ok: false as const, error: "Naziv je obavezan." };
+        let filter: unknown;
+        try {
+          filter = JSON.parse(filterRaw);
+        } catch {
+          return { ok: false as const, error: "Filter mora biti validan JSON." };
+        }
+        const data = { name, filter: filter as Prisma.InputJsonValue };
+        const res = id
+          ? await db.viberAudienceQuery.update({ where: { id }, data })
+          : await db.viberAudienceQuery.create({ data });
+        revalidatePath("/admin/viber");
+        return { ok: true as const, entityId: res.id, diff: { name } };
+      },
+  )(formData);
+}
 
-const saveCampaign = withAdmin(
-  { allowed: ["ADS"], action: "viber.campaignSave", entity: "ViberCampaign" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "") || null;
-    const audienceId = String(formData.get("audienceId") ?? "");
-    const title = String(formData.get("title") ?? "").trim();
-    const body = String(formData.get("body") ?? "").trim();
-    const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null;
-    const ctaLabel = String(formData.get("ctaLabel") ?? "").trim() || null;
-    const ctaUrl = String(formData.get("ctaUrl") ?? "").trim() || null;
-    const status = String(formData.get("status") ?? "DRAFT") as CampaignStatus;
-    const scheduledRaw = String(formData.get("scheduledAt") ?? "").trim();
-    const scheduledAt = scheduledRaw ? new Date(scheduledRaw) : null;
-    if (!audienceId || !title || !body) {
-      return { ok: false as const, error: "Audience, naslov i tekst su obavezni." };
-    }
-    const data = {
-      audienceId,
-      title,
-      body,
-      imageUrl,
-      ctaLabel,
-      ctaUrl,
-      status,
-      scheduledAt,
-    };
-    const res = id
-      ? await db.viberCampaign.update({ where: { id }, data })
-      : await db.viberCampaign.create({ data });
-    revalidatePath("/admin/viber");
-    return { ok: true as const, entityId: res.id, diff: { title, status } };
-  },
-);
+async function deleteAudience(formData: FormData) {
+  "use server";
 
-const deleteCampaign = withAdmin(
-  { allowed: ["ADS"], action: "viber.campaignDelete", entity: "ViberCampaign" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.viberCampaign.delete({ where: { id } });
-    revalidatePath("/admin/viber");
-    return { ok: true as const, entityId: id };
-  },
-);
+  return withAdmin(
+    { allowed: ["ADS"], action: "viber.audienceDelete", entity: "ViberAudienceQuery" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.viberAudienceQuery.delete({ where: { id } });
+        revalidatePath("/admin/viber");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
+
+async function saveCampaign(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["ADS"], action: "viber.campaignSave", entity: "ViberCampaign" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "") || null;
+        const audienceId = String(formData.get("audienceId") ?? "");
+        const title = String(formData.get("title") ?? "").trim();
+        const body = String(formData.get("body") ?? "").trim();
+        const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null;
+        const ctaLabel = String(formData.get("ctaLabel") ?? "").trim() || null;
+        const ctaUrl = String(formData.get("ctaUrl") ?? "").trim() || null;
+        const status = String(formData.get("status") ?? "DRAFT") as CampaignStatus;
+        const scheduledRaw = String(formData.get("scheduledAt") ?? "").trim();
+        const scheduledAt = scheduledRaw ? new Date(scheduledRaw) : null;
+        if (!audienceId || !title || !body) {
+          return { ok: false as const, error: "Audience, naslov i tekst su obavezni." };
+        }
+        const data = {
+          audienceId,
+          title,
+          body,
+          imageUrl,
+          ctaLabel,
+          ctaUrl,
+          status,
+          scheduledAt,
+        };
+        const res = id
+          ? await db.viberCampaign.update({ where: { id }, data })
+          : await db.viberCampaign.create({ data });
+        revalidatePath("/admin/viber");
+        return { ok: true as const, entityId: res.id, diff: { title, status } };
+      },
+  )(formData);
+}
+
+async function deleteCampaign(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["ADS"], action: "viber.campaignDelete", entity: "ViberCampaign" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.viberCampaign.delete({ where: { id } });
+        revalidatePath("/admin/viber");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function ViberPage({
   searchParams,

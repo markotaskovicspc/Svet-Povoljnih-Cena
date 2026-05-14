@@ -22,55 +22,63 @@ const schema = z.object({
   enabled: z.coerce.boolean().default(true),
 });
 
-const upsert = withAdmin(
-  { allowed: ["CONTENT"], action: "rec.upsert", entity: "RecommendationRule" },
-  async (_a, formData: FormData) => {
-    const parsed = schema.safeParse({
-      ...Object.fromEntries(formData),
-      enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
-    });
-    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-    const skus = parsed.data.productSkus
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const products = await db.product.findMany({
-      where: { sku: { in: skus } },
-      select: { id: true },
-    });
+async function upsert(formData: FormData) {
+  "use server";
 
-    const data = {
-      groupId: parsed.data.groupId,
-      order: parsed.data.order,
-      enabled: parsed.data.enabled,
-      products: { set: products.map((p) => ({ id: p.id })) },
-    };
-
-    const saved = parsed.data.id
-      ? await db.recommendationRule.update({ where: { id: parsed.data.id }, data })
-      : await db.recommendationRule.create({
-          data: {
-            groupId: parsed.data.groupId,
-            order: parsed.data.order,
-            enabled: parsed.data.enabled,
-            products: { connect: products.map((p) => ({ id: p.id })) },
-          },
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "rec.upsert", entity: "RecommendationRule" },
+    async (_a, formData: FormData) => {
+        const parsed = schema.safeParse({
+          ...Object.fromEntries(formData),
+          enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
         });
-    revalidatePath("/admin/preporuke");
-    return { ok: true as const, entityId: saved.id, diff: { groupId: data.groupId, count: products.length } };
-  },
-);
+        if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+        const skus = parsed.data.productSkus
+          .split(/[\s,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const products = await db.product.findMany({
+          where: { sku: { in: skus } },
+          select: { id: true },
+        });
 
-const remove = withAdmin(
-  { allowed: ["CONTENT"], action: "rec.delete", entity: "RecommendationRule" },
-  async (_a, formData: FormData) => {
-    const id = String(formData.get("id") ?? "");
-    if (!id) return { ok: false as const, error: "Nedostaje ID." };
-    await db.recommendationRule.delete({ where: { id } });
-    revalidatePath("/admin/preporuke");
-    return { ok: true as const, entityId: id };
-  },
-);
+        const data = {
+          groupId: parsed.data.groupId,
+          order: parsed.data.order,
+          enabled: parsed.data.enabled,
+          products: { set: products.map((p) => ({ id: p.id })) },
+        };
+
+        const saved = parsed.data.id
+          ? await db.recommendationRule.update({ where: { id: parsed.data.id }, data })
+          : await db.recommendationRule.create({
+              data: {
+                groupId: parsed.data.groupId,
+                order: parsed.data.order,
+                enabled: parsed.data.enabled,
+                products: { connect: products.map((p) => ({ id: p.id })) },
+              },
+            });
+        revalidatePath("/admin/preporuke");
+        return { ok: true as const, entityId: saved.id, diff: { groupId: data.groupId, count: products.length } };
+      },
+  )(formData);
+}
+
+async function remove(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT"], action: "rec.delete", entity: "RecommendationRule" },
+    async (_a, formData: FormData) => {
+        const id = String(formData.get("id") ?? "");
+        if (!id) return { ok: false as const, error: "Nedostaje ID." };
+        await db.recommendationRule.delete({ where: { id } });
+        revalidatePath("/admin/preporuke");
+        return { ok: true as const, entityId: id };
+      },
+  )(formData);
+}
 
 export default async function RecsPage() {
   await requireAdminAction(["CONTENT"]);

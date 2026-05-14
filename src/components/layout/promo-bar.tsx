@@ -1,13 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, X, Clock3 } from "lucide-react";
 import type { PromoBar as PromoBarData } from "@/types";
 
 const STORAGE_KEY = "spc-promobar-dismissed";
+const STORAGE_EVENT = "spc-promobar-dismissed-change";
 const COUNTDOWN_THRESHOLD_MS = 72 * 60 * 60 * 1000;
+
+function subscribeDismissed(onStoreChange: () => void) {
+  window.addEventListener(STORAGE_EVENT, onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    window.removeEventListener(STORAGE_EVENT, onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function getDismissedSnapshot() {
+  try {
+    return sessionStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function pad(n: number) {
   return n.toString().padStart(2, "0");
@@ -26,19 +44,12 @@ interface PromoBarProps {
 }
 
 export function PromoBar({ bar }: PromoBarProps) {
-  const [dismissed, setDismissed] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const dismissed = useSyncExternalStore(
+    subscribeDismissed,
+    getDismissedSnapshot,
+    () => false,
+  );
   const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-    try {
-      // Per spec: dismissible, "reappears on next session" — so use sessionStorage.
-      setDismissed(sessionStorage.getItem(STORAGE_KEY) === "1");
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const endsAt = bar.endsAt ? new Date(bar.endsAt).getTime() : undefined;
   const showCountdown =
@@ -46,20 +57,19 @@ export function PromoBar({ bar }: PromoBarProps) {
 
   useEffect(() => {
     if (!endsAt) return;
-    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [endsAt]);
 
-  if (!bar.enabled || !mounted) return null;
+  if (!bar.enabled) return null;
 
   const handleDismiss = () => {
     try {
       sessionStorage.setItem(STORAGE_KEY, "1");
+      window.dispatchEvent(new Event(STORAGE_EVENT));
     } catch {
       // ignore
     }
-    setDismissed(true);
   };
 
   const Inner = (
