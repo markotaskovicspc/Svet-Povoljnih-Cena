@@ -50,6 +50,13 @@ export const headerTabs: Tab[] = [
     order: 6,
     icon: "Sparkles",
   },
+  {
+    id: "svet-akcija-katalog",
+    label: "Katalog",
+    href: "/svet-akcija",
+    order: 7,
+    icon: "Rows3",
+  },
 ];
 
 /** Hamburger nav (mobile, also used as Hover mega-nav source later). 2–3 levels. */
