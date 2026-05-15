@@ -7,23 +7,22 @@ import {
   getActiveBanners,
   getActiveTabs,
   getEditorialBanner,
+  getProtectedPricesBanner,
 } from "@/lib/storefront/content";
-import {
-  heroesOfTheMonth,
-  monthlyAction,
-  weeklyAction,
-  productsForTab,
-} from "@/data/products";
+import { listProducts } from "@/lib/api/catalog";
 
 export default async function Home() {
-  const [banners, tabs, editorial] = await Promise.all([
+  const [banners, tabs, editorial, protectedBanner] = await Promise.all([
     getActiveBanners(),
     getActiveTabs(),
     getEditorialBanner(),
+    getProtectedPricesBanner(),
   ]);
-  const heroes = heroesOfTheMonth();
-  const monthly = monthlyAction();
-  const weekly = weeklyAction();
+  const [heroes, monthly, weekly] = await Promise.all([
+    listProducts({ heroOnly: true, limit: 12 }),
+    listProducts({ actionSlug: "akcija", limit: 12 }),
+    listProducts({ actionSlug: "nedeljna-akcija", limit: 12 }),
+  ]);
 
   // "Ostali tabovi" — tabs not already covered by the dedicated rails above.
   const coveredIds = new Set(["mesecna-akcija", "heroji-meseca", "nedeljna-akcija"]);
@@ -38,32 +37,40 @@ export default async function Home() {
         title="Heroji meseca"
         description="Komadi koje preporučujemo — najbolji odnos cene i kvaliteta u tekućem mesecu."
         href="/heroji-meseca"
-        products={heroes}
+        products={heroes.items}
         mobileMinimal
       />
 
-      <ProtectedPricesBand />
+      <ProtectedPricesBand banner={protectedBanner} />
 
       <SectionRail
         eyebrow="Aktivna akcija"
         title="Mesečna akcija"
         description="Kuratirana selekcija sa popustima do 30%. Akcija traje do kraja meseca."
         href="/akcija"
-        products={monthly}
+        products={monthly.items}
+        mobileMinimal
       />
 
       <EditorialBanner banner={editorial} />
 
       <SectionRail
         eyebrow="Sedam dana"
-        title="Nedeljne akcije"
+        title="Nedeljna akcija"
         description="Brze ponude koje se menjaju svake nedelje. Iskoristi dok traju."
         href="/nedeljna-akcija"
-        products={weekly}
+        products={weekly.items}
+        mobileMinimal
       />
 
-      {otherTabs.map((tab) => {
-        const list = productsForTab(tab.id);
+      {(
+        await Promise.all(
+          otherTabs.map(async (tab) => ({
+            tab,
+            list: await productsForTab(tab.href),
+          })),
+        )
+      ).map(({ tab, list }) => {
         if (!list.length) return null;
         return (
           <SectionRail
@@ -72,6 +79,7 @@ export default async function Home() {
             title={tab.label}
             href={tab.href}
             products={list}
+            mobileMinimal
           />
         );
       })}
@@ -79,4 +87,21 @@ export default async function Home() {
       <UspStrip />
     </>
   );
+}
+
+async function productsForTab(href: string) {
+  if (href === "/novo") return (await listProducts({ newOnly: true, limit: 12 })).items;
+  if (href === "/outlet") return (await listProducts({ outletOnly: true, limit: 12 })).items;
+  if (href === "/nedeljna-akcija") {
+    return (await listProducts({ actionSlug: "nedeljna-akcija", limit: 12 })).items;
+  }
+  if (href === "/heroji-meseca") return (await listProducts({ heroOnly: true, limit: 12 })).items;
+  if (href === "/sve-do-999") return (await listProducts({ maxPrice: 999, limit: 12 })).items;
+  if (href === "/ogranicena-ponuda") {
+    return (await listProducts({ limitedOnly: true, limit: 12 })).items;
+  }
+  if (href.startsWith("/k/")) {
+    return (await listProducts({ categoryPath: href.slice(2), limit: 12 })).items;
+  }
+  return [];
 }

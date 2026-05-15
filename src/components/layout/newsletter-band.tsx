@@ -38,7 +38,7 @@ export function NewsletterBand({ className }: { className?: string }) {
           </h2>
           <p className="mt-3 max-w-prose text-ink-700">
             Najavljujemo nedeljne akcije, nove kolekcije i Heroje meseca direktno u sandučetu.
-            Bez spama — možete odjaviti pretplatu jednim klikom.
+            Možete se odjaviti jednim klikom.
           </p>
         </div>
         <form onSubmit={onSubmit} className="md:justify-self-end md:max-w-md md:w-full">
@@ -54,7 +54,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                 <span className="inline-flex size-8 items-center justify-center rounded-full bg-success/20 text-success">
                   <Check className="size-4" aria-hidden />
                 </span>
-                Hvala! Potvrdite pretplatu na vašoj email adresi.
+                Hvala! Potvrdite prijavu na vašoj email adresi.
               </motion.div>
             ) : (
               <motion.div
@@ -87,7 +87,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                     disabled={state === "submitting"}
                     className="absolute top-1 right-1 inline-flex h-10 items-center gap-2 rounded-full bg-ink-900 px-4 text-sm text-canvas transition hover:bg-walnut disabled:opacity-60"
                   >
-                    {state === "submitting" ? "Slanje…" : "Pretplati se"}
+                    {state === "submitting" ? "Slanje…" : "Prijavi se"}
                     <ArrowRight className="size-4" aria-hidden />
                   </button>
                 </div>
@@ -97,7 +97,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                   </p>
                 ) : (
                   <p className="mt-2 pl-4 text-xs text-ink-500">
-                    Pretplatom prihvatate{" "}
+                    Prijavom prihvatate{" "}
                     <a href="/politika-privatnosti" className="underline underline-offset-4">
                       politiku privatnosti
                     </a>

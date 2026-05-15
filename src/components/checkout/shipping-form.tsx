@@ -53,7 +53,7 @@ export function ShippingForm() {
       <AddressFieldset
         prefix="shipping"
         liceType={liceType}
-        showSubmitErrors={isSubmitted}
+        showSubmitErrors={isSubmitted || Boolean(errors.shipping)}
         register={register}
         setValue={setValue}
         watch={watch}
@@ -86,7 +86,7 @@ export function ShippingForm() {
               <AddressFieldset
                 prefix="billing"
                 liceType={billingLice ?? "fizicko"}
-                showSubmitErrors={isSubmitted}
+                showSubmitErrors={isSubmitted || Boolean(errors.billing)}
                 register={register}
                 setValue={setValue}
                 watch={watch}
@@ -131,6 +131,32 @@ function AddressFieldset({
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {liceType === "pravno" ? (
+        <>
+          <Field
+            label="Naziv kompanije"
+            required
+            className="sm:col-span-2"
+            error={showError("companyName")}
+            {...register(`${prefix}.companyName` as const, {
+              required: "Obavezno za pravno lice",
+              minLength: { value: 2, message: "Najmanje 2 karaktera" },
+            })}
+          />
+          <Field
+            label="PIB"
+            required
+            placeholder="123456789"
+            inputMode="numeric"
+            maxLength={9}
+            error={showError("pib")}
+            {...register(`${prefix}.pib` as const, {
+              required: "Obavezno za pravno lice",
+              pattern: { value: /^\d{9}$/, message: "PIB ima 9 cifara" },
+            })}
+          />
+        </>
+      ) : null}
       <Field
         label="Ime"
         required
@@ -166,13 +192,15 @@ function AddressFieldset({
         label="Telefon"
         type="tel"
         required
-        placeholder="+381 6X XXX XXXX"
+        placeholder="060123456"
+        inputMode="numeric"
+        maxLength={10}
         error={showError("phone")}
         {...register(`${prefix}.phone` as const, {
           required: "Obavezno polje",
           pattern: {
-            value: /^\+381\s?6\d(\s?\d{2,3}){2,3}$/,
-            message: "Format: +381 6X XXX XXXX",
+            value: /^06\d{7,8}$/,
+            message: "Unesite 9 ili 10 cifara, broj mora početi sa 06",
           },
         })}
       />
@@ -234,32 +262,6 @@ function AddressFieldset({
           pattern: { value: /^\d{5}$/, message: "5 cifara" },
         })}
       />
-
-      {liceType === "pravno" ? (
-        <>
-          <Field
-            label="Naziv kompanije"
-            required
-            className="sm:col-span-2"
-            error={showError("companyName")}
-            {...register(`${prefix}.companyName` as const, {
-              required: "Obavezno za pravno lice",
-              minLength: { value: 2, message: "Najmanje 2 karaktera" },
-            })}
-          />
-          <Field
-            label="PIB"
-            required
-            placeholder="123456789"
-            inputMode="numeric"
-            error={showError("pib")}
-            {...register(`${prefix}.pib` as const, {
-              required: "Obavezno za pravno lice",
-              pattern: { value: /^\d{9}$/, message: "PIB ima 9 cifara" },
-            })}
-          />
-        </>
-      ) : null}
     </div>
   );
 }

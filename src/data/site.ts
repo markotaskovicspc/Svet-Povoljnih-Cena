@@ -117,6 +117,17 @@ export const primaryNav: NavNode[] = [
 
 export const footerColumns: { title: string; links: { label: string; href: string }[] }[] = [
   {
+    title: "Svet Akcija",
+    links: [
+      { label: "O nama", href: "/o-nama" },
+      { label: "Kontakt", href: "/kontakt" },
+      { label: "Pomoć", href: "/pomoc" },
+      { label: "Servis za kupce", href: "/servis" },
+      { label: "Reklamacije", href: "/reklamacije" },
+      { label: "Komentari i sugestije", href: "/komentari" },
+    ],
+  },
+  {
     title: "Kupovina",
     links: [
       { label: "Akcija", href: "/akcija" },
@@ -128,22 +139,11 @@ export const footerColumns: { title: string; links: { label: string; href: strin
     ],
   },
   {
-    title: "Pomoć",
-    links: [
-      { label: "Kontakt", href: "/kontakt" },
-      { label: "Pomoć", href: "/pomoc" },
-      { label: "Servis za kupce", href: "/servis" },
-      { label: "Reklamacije", href: "/reklamacije" },
-      { label: "Komentari i sugestije", href: "/komentari" },
-    ],
-  },
-  {
     title: "Uslovi",
     links: [
       { label: "Uslovi isporuke", href: "/uslovi-isporuke" },
       { label: "Uslovi kupovine", href: "/uslovi-kupovine" },
       { label: "Politika privatnosti", href: "/politika-privatnosti" },
-      { label: "O nama", href: "/o-nama" },
     ],
   },
   {

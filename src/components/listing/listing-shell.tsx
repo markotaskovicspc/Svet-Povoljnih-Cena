@@ -14,7 +14,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutGrid, ListFilter, RotateCcw, Rows3 } from "lucide-react";
 import type { Product } from "@/types";
+import type { Banner } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
+import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import {
   ProductCard,
   ProductCardSkeleton,
@@ -64,6 +66,7 @@ interface ListingShellProps {
    */
   subTabs?: { id: string; label: string; matchKeyword: string }[];
   initialSubTab?: string;
+  featureBanner?: Banner;
 }
 
 const VIEW_KEY = "spc:listing:view";
@@ -78,6 +81,7 @@ export function ListingShell({
   source,
   subTabs,
   initialSubTab,
+  featureBanner,
 }: ListingShellProps) {
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
@@ -166,7 +170,7 @@ export function ListingShell({
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <p className="font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:text-xs">
+            <p className="hidden font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:block md:text-xs">
               {kindEyebrow(kind)}
             </p>
             <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
@@ -184,6 +188,12 @@ export function ListingShell({
             </div>
           ) : null}
         </header>
+
+        {featureBanner ? (
+          <div className="-mx-6 mb-6 md:mx-0 md:mb-8">
+            <ProtectedPricesBand banner={featureBanner} />
+          </div>
+        ) : null}
 
         {subTabs?.length ? (
           <div className="-mx-6 mb-6 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden">

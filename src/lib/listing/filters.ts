@@ -1,9 +1,8 @@
 /**
  * Listing-page filter & sort helpers.
  *
- * All operations are pure and run on the in-memory mock catalog for Phase 1.
- * In Phase 4 (XML feed → DB), these will be reused by server-side query builders
- * — keep them dependency-free and total-fn (no throws).
+ * All operations are pure and run on product DTOs returned by the catalog
+ * read layer. Keep them dependency-free and total-fn (no throws).
  */
 import type { Product } from "@/types";
 
@@ -159,7 +158,7 @@ export function computeFacetValues(products: Product[]): FacetValues {
 
   for (const p of products) {
     for (const m of p.materials) materials.add(m.label);
-    // Color is not in the mock schema — derive from material label hint if present.
+    // Color is not yet a first-class facet — derive from material label hint if present.
     for (const m of p.materials) {
       if (/hrast|orah|jasen|bor/i.test(m.label)) colors.add(m.label);
     }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { mockProducts } from "@/data/products";
+import { getCategoryByPath, listProducts } from "@/lib/api/catalog";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 
 /**
@@ -11,57 +11,28 @@ import type { Crumb } from "@/components/layout/breadcrumbs";
  *   /k/namestaj/police/otvorene
  *   matches a product whose categoryPath, slugified, starts with the URL segments.
  *
- * In Phase 4 this resolves against the categories table; for now it filters the
- * mock catalog by slugified path equality.
+ * Resolves against the imported category table.
  */
 
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/š/g, "s")
-    .replace(/đ/g, "dj")
-    .replace(/č/g, "c")
-    .replace(/ć/g, "c")
-    .replace(/ž/g, "z")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
-function matchProductsByPath(slugSegments: string[]) {
-  const wanted = slugSegments.map((s) => decodeURIComponent(s).toLowerCase());
-  return mockProducts.filter((p) => {
-    const segs = p.categoryPath.map(slugify);
-    if (segs.length < wanted.length) return false;
-    return wanted.every((w, i) => segs[i] === w);
-  });
-}
-
-function resolveTrailAndTitle(slugSegments: string[]): {
+async function resolveTrailAndTitle(slugSegments: string[]): Promise<{
   trail: Crumb[];
   title: string;
   subtitle?: string;
-} | null {
-  // Find the first product whose categoryPath matches; use it to derive labels.
-  const wanted = slugSegments.map((s) => decodeURIComponent(s).toLowerCase());
-  const sample = mockProducts.find((p) => {
-    const segs = p.categoryPath.map(slugify);
-    return wanted.every((w, i) => segs[i] === w);
-  });
-  if (!sample) return null;
+} | null> {
+  const path = `/${slugSegments.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
+  const category = await getCategoryByPath(path);
+  if (!category) return null;
 
-  const labels = sample.categoryPath.slice(0, slugSegments.length);
-  const trail: Crumb[] = labels.map((label, i) => ({
-    label,
-    href:
-      i < labels.length - 1
-        ? `/k/${labels.slice(0, i + 1).map(slugify).join("/")}`
-        : undefined,
+  const parts = category.path.split("/").filter(Boolean);
+  const labels = category.name.split(" / ");
+  const trail: Crumb[] = parts.map((part, i) => ({
+    label: labels[i] ?? part,
+    href: i < parts.length - 1 ? `/k/${parts.slice(0, i + 1).join("/")}` : undefined,
   }));
   return {
     trail,
-    title: labels[labels.length - 1],
-    subtitle: `${labels.join(" / ")} — kuratirana selekcija.`,
+    title: category.name,
+    subtitle: category.description ?? undefined,
   };
 }
 
@@ -71,7 +42,7 @@ interface RouteProps {
 
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
-  const resolved = resolveTrailAndTitle(slug);
+  const resolved = await resolveTrailAndTitle(slug);
   if (!resolved) return { title: "Kategorija" };
   return {
     title: resolved.title,
@@ -82,9 +53,12 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 export default async function CategoryPage({ params }: RouteProps) {
   const { slug } = await params;
   if (!slug?.length) notFound();
-  const products = matchProductsByPath(slug);
-  const resolved = resolveTrailAndTitle(slug);
-  if (!resolved || !products.length) notFound();
+  const categoryPath = `/${slug.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
+  const [resolved, { items: products }] = await Promise.all([
+    resolveTrailAndTitle(slug),
+    listProducts({ categoryPath, limit: 300 }),
+  ]);
+  if (!resolved) notFound();
 
   return (
     <ListingShell

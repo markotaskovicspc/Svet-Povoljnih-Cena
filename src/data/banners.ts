@@ -65,3 +65,19 @@ export const editorialBanner: Banner = {
   imageDesktop: heroImage("1583847268964-b28dc8f51f92", "Skandinavska dnevna soba", 2400, 1000),
   order: 1,
 };
+
+export const protectedPricesBanner: Banner = {
+  id: "protected-prices",
+  title: "Niske cene pod trajnom zaštitom",
+  subtitle:
+    "Posebno označeni artikli ostaju u stalnoj zaštićenoj ponudi, bez odbrojavanja i kratkih rokova.",
+  ctaLabel: "Pogledaj ponudu",
+  ctaHref: "/niske-cene-pod-zastitom",
+  imageDesktop: {
+    url: "/brand/nctz.svg",
+    alt: "Niske cene pod trajnom zaštitom",
+    width: 1191,
+    height: 895,
+  },
+  order: 0,
+};

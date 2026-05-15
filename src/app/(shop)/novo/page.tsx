@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { mockProducts } from "@/data/products";
+import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
   title: "Novo u ponudi — najsvežiji komadi",
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Najnovije pristigli komadi nameštaja. Sortirano po preostalom trajanju oznake „Novo“.",
 };
 
-/** Sub-tabs sourced from primary nav rooms (Phase 1 mock). */
+/** Sub-tabs sourced from primary nav rooms. */
 const ROOM_TABS = [
   { id: "trpezarije", label: "Trpezarije", matchKeyword: "trpezar" },
   { id: "spavace", label: "Spavaće sobe", matchKeyword: "spavać" },
@@ -18,8 +18,8 @@ const ROOM_TABS = [
   { id: "ormari", label: "Ormari", matchKeyword: "ormari" },
 ];
 
-export default function NovoPage() {
-  const products = mockProducts.filter((p) => p.isNew);
+export default async function NovoPage() {
+  const { items: products } = await listProducts({ newOnly: true, limit: 300 });
   return (
     <ListingShell
       kind="novo"

@@ -21,6 +21,7 @@ export function CartDrawer() {
   const open = useCartUi((s) => s.drawerOpen);
   const setOpen = useCartUi((s) => s.setDrawer);
   const close = useCartUi((s) => s.closeDrawer);
+  const openCrossSell = useCartUi((s) => s.openCrossSell);
 
   const lines = useCart((s) => s.lines);
   const subtotal = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
@@ -29,6 +30,11 @@ export function CartDrawer() {
     0,
   );
   const count = lines.reduce((n, l) => n + l.qty, 0);
+  const showSuggestionThenClose = () => {
+    const sku = lines[0]?.sku;
+    close();
+    if (sku) openCrossSell(sku);
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -94,14 +100,14 @@ export function CartDrawer() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <Link
                 href="/korpa"
-                onClick={close}
+                onClick={showSuggestionThenClose}
                 className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center rounded-full px-4 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
               >
                 Pregled korpe
               </Link>
               <Link
                 href="/checkout"
-                onClick={close}
+                onClick={showSuggestionThenClose}
                 className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
               >
                 Plati

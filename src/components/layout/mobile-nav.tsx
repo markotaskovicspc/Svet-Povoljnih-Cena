@@ -40,6 +40,10 @@ interface Crumb {
 }
 
 const categoryTileImages: Record<string, string> = {
+  Nameštaj: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=320&h=210&q=80",
+  "Sve za kuću": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=320&h=210&q=80",
+  "Kućni aparati": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=320&h=210&q=80",
+  "Moda i putovanja": "https://images.unsplash.com/photo-1553531384-411a247ccd73?auto=format&fit=crop&w=320&h=210&q=80",
   "Baštenski nameštaj": "https://images.unsplash.com/photo-1600210491892-03d54c0aaf87?auto=format&fit=crop&w=320&h=210&q=80",
   Kancelarija: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=320&h=210&q=80",
   Trpezarija: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=320&h=210&q=80",
@@ -72,17 +76,10 @@ const categoryTileImages: Record<string, string> = {
 const fallbackCategoryImage =
   "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=320&h=210&q=80";
 
-const categoryTiles = primaryNav.flatMap((node) =>
-  node.children?.map((child) => ({
-    ...child,
-    imageUrl: categoryTileImages[child.label] ?? fallbackCategoryImage,
-  })) ?? [
-    {
-      ...node,
-      imageUrl: categoryTileImages[node.label] ?? fallbackCategoryImage,
-    },
-  ],
-);
+const categoryTiles = primaryNav.map((node) => ({
+  ...node,
+  imageUrl: categoryTileImages[node.label] ?? fallbackCategoryImage,
+}));
 
 const tabIcons = {
   "mesecna-akcija": Percent,
@@ -144,7 +141,10 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 onClick={close}
                 className="justify-self-center"
               >
-                <BrandLogo className="w-[142px]" imageClassName="brightness-0 invert" />
+                <BrandLogo
+                  className="w-[160px] min-[390px]:w-[180px]"
+                  imageClassName="brightness-0 invert"
+                />
               </Link>
               <div className="flex items-center justify-end gap-1">
                 <Link
@@ -266,11 +266,6 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                       </ul>
                     </div>
 
-                    <div className="px-4 py-4">
-                      <div className="mb-2 text-xs font-semibold tracking-[0.08em] text-ink-500 uppercase">
-                        Sve kategorije
-                      </div>
-                    </div>
                   </>
                 ) : current.href ? (
                   <Link
@@ -282,43 +277,45 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   </Link>
                 ) : null}
 
-                <ul className="divide-y divide-border">
-                  {current.nodes.map((node) => {
-                    const isActive = pathname === node.href;
-                    const hasChildren = !!node.children?.length;
-                    return (
-                      <li key={node.href} className="flex min-h-14 items-stretch transition hover:bg-muted-bg">
-                        <Link
-                          href={node.href}
-                          onClick={close}
-                          className={cn(
-                            "flex min-w-0 flex-1 items-center px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                            isActive && "font-semibold text-brand-blue",
+                {stack.length !== 1 ? (
+                  <ul className="divide-y divide-border">
+                    {current.nodes.map((node) => {
+                      const isActive = pathname === node.href;
+                      const hasChildren = !!node.children?.length;
+                      return (
+                        <li key={node.href} className="flex min-h-14 items-stretch transition hover:bg-muted-bg">
+                          <Link
+                            href={node.href}
+                            onClick={close}
+                            className={cn(
+                              "flex min-w-0 flex-1 items-center px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                              isActive && "font-semibold text-brand-blue",
+                            )}
+                          >
+                            {node.label}
+                          </Link>
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={() => enter(node)}
+                              aria-label={`Otvori ${node.label}`}
+                              className="flex w-13 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                            >
+                              <ChevronRight className="size-4" aria-hidden />
+                            </button>
+                          ) : (
+                            <span
+                              className="flex w-13 shrink-0 items-center justify-center text-ink-300"
+                              aria-hidden
+                            >
+                              <ChevronRight className="size-4" />
+                            </span>
                           )}
-                        >
-                          {node.label}
-                        </Link>
-                        {hasChildren ? (
-                          <button
-                            type="button"
-                            onClick={() => enter(node)}
-                            aria-label={`Otvori ${node.label}`}
-                            className="flex w-13 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                          >
-                            <ChevronRight className="size-4" aria-hidden />
-                          </button>
-                        ) : (
-                          <span
-                            className="flex w-13 shrink-0 items-center justify-center text-ink-300"
-                            aria-hidden
-                          >
-                            <ChevronRight className="size-4" />
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
 
                 {stack.length !== 1 ? (
                   <ul className="mt-3 border-t border-border">

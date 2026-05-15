@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { weeklyAction } from "@/data/products";
+import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
   title: "Nedeljna akcija — sedam dana posebnih ponuda",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
     "Brze nedeljne ponude koje se menjaju svake nedelje. Iskoristi dok traju — popusti važe sedam dana.",
 };
 
-export default function NedeljnaAkcijaPage() {
-  const products = weeklyAction();
+export default async function NedeljnaAkcijaPage() {
+  const { items: products } = await listProducts({ actionSlug: "nedeljna-akcija", limit: 300 });
   const period = products
     .map((p) => p.action!)
     .sort(

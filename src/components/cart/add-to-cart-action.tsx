@@ -5,8 +5,6 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { Product } from "@/types";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
-import { useCartUi } from "@/lib/hooks/use-cart-ui";
-import { mockProducts } from "@/data/products";
 import { formatRsd } from "@/lib/format";
 
 /**
@@ -14,8 +12,8 @@ import { formatRsd } from "@/lib/format";
  *
  *  - persists the line in the cart store
  *  - fires a toast with thumbnail + "Pogledaj korpu" CTA (per spec 1F.1)
- *  - opens the mini-cart drawer (spec 1F.2)
- *  - opens the cross-sell "Predlog kupovine" modal when matching items exist
+ *  - does not open cart/cross-sell overlays; those are user-triggered from
+ *    "Pregled korpe" / "Plati"
  *
  * Returns the resolved sale unit price for callers that need it.
  */
@@ -30,11 +28,6 @@ export function commitAddToCart(product: Product, qty = 1): number {
     thumbnailUrl: product.media.images[0]?.url,
   };
   useCart.getState().add(line, qty);
-  useCartUi.getState().openDrawer();
-
-  if (hasCrossSell(product)) {
-    useCartUi.getState().openCrossSell(product.sku);
-  }
 
   toast.custom((id) => <AddToast id={String(id)} line={line} qty={qty} />, {
     duration: 4500,
@@ -42,30 +35,10 @@ export function commitAddToCart(product: Product, qty = 1): number {
   return sale;
 }
 
-function hasCrossSell(product: Product) {
-  return getCrossSell(product).length > 0;
-}
-
-/** Mock cross-sell selector. In Phase 4 this comes from admin per group. */
 export function getCrossSell(product: Product, limit = 6): Product[] {
-  const sameGroup = mockProducts.filter(
-    (p) => p.sku !== product.sku && p.group === product.group,
-  );
-  const sameCollection = mockProducts.filter(
-    (p) =>
-      p.sku !== product.sku &&
-      product.collection &&
-      p.collection === product.collection,
-  );
-  const seen = new Set<string>();
-  const merged: Product[] = [];
-  for (const p of [...sameGroup, ...sameCollection]) {
-    if (seen.has(p.sku)) continue;
-    seen.add(p.sku);
-    merged.push(p);
-    if (merged.length >= limit) break;
-  }
-  return merged;
+  void product;
+  void limit;
+  return [];
 }
 
 function AddToast({

@@ -99,7 +99,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               src={cover.url}
               alt={cover.alt ?? product.name}
               fill
-              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 80vw"
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
               priority={priority}
               placeholder="blur"
               blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
@@ -117,7 +117,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             src={secondary.url}
             alt={secondary.alt ?? product.name}
             fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 80vw"
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
             placeholder="blur"
             blurDataURL={secondary.blurDataUrl ?? FALLBACK_BLUR}
             aria-hidden
@@ -179,7 +179,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </button>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-1.5 px-3 pt-3 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
+      <div className="flex flex-1 flex-col gap-1 px-2.5 pt-2.5 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
         <h3 className="line-clamp-2 text-xs leading-snug font-medium text-ink-900 md:text-sm">
           <Link
             href={`/p/${product.slug}`}
@@ -192,27 +192,35 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
           {formatDimensions(product.dimensionsCm)}
         </p>
 
-        <div className="mt-auto pt-1.5 md:pt-2">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            {onSale ? (
-              <>
-                <span className="text-action text-sm font-bold md:text-base">
-                  {formatRsd(price.effective)}
-                </span>
-                <span className="text-[11px] text-ink-500 line-through md:text-xs">
+        <div className="pt-0.5 md:mt-auto md:pt-2">
+          <div className="flex items-end justify-between gap-2">
+            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 md:gap-x-2">
+              {onSale ? (
+                <>
+                  <span className="text-action text-sm font-bold md:text-base">
+                    {formatRsd(price.effective)}
+                  </span>
+                  <span className="text-[10px] text-ink-500 line-through md:text-xs">
+                    {formatRsd(price.full)}
+                  </span>
+                  {price.discountPct ? (
+                    <span className="bg-action/10 text-action ring-action/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1">
+                      −{price.discountPct}%
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-sm font-semibold text-ink-900 md:text-base">
                   {formatRsd(price.full)}
                 </span>
-                {price.discountPct ? (
-                  <span className="bg-action/10 text-action ring-action/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1">
-                    −{price.discountPct}%
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              <span className="text-sm font-semibold text-ink-900 md:text-base">
-                {formatRsd(price.full)}
-              </span>
-            )}
+              )}
+            </div>
+            <MobileCartControl
+              lineQty={lineQty}
+              onAdd={handleAdd}
+              onDecrease={() => setQty(product.sku, lineQty - 1)}
+              onIncrease={() => setQty(product.sku, lineQty + 1)}
+            />
           </div>
           {onSale && product.action?.isPermanent ? (
             <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
@@ -233,7 +241,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </div>
 
       {/* Footer row — add button morphs into qty stepper when in cart */}
-      <div className="border-border/60 flex items-center justify-between gap-2 border-t px-3 py-2 md:px-4 md:py-3">
+      <div className="border-border/60 hidden items-center justify-between gap-2 border-t px-3 py-2 md:flex md:px-4 md:py-3">
         <span className="hidden font-mono text-[11px] tracking-tight text-ink-500 md:inline">
           {product.sku}
         </span>
@@ -291,6 +299,61 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         </AnimatePresence>
       </div>
     </motion.article>
+  );
+}
+
+function MobileCartControl({
+  lineQty,
+  onAdd,
+  onDecrease,
+  onIncrease,
+}: {
+  lineQty: number;
+  onAdd: () => void;
+  onDecrease: () => void;
+  onIncrease: () => void;
+}) {
+  return (
+    <div className="shrink-0 md:hidden">
+      {lineQty > 0 ? (
+        <div
+          className="bg-ink-900 inline-flex items-center overflow-hidden rounded-full text-canvas"
+          role="group"
+          aria-label="Količina u korpi"
+        >
+          <button
+            type="button"
+            onClick={onDecrease}
+            aria-label="Smanji količinu"
+            className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <Minus className="size-3.5" aria-hidden />
+          </button>
+          <span
+            aria-live="polite"
+            className="min-w-5 text-center text-xs font-medium tabular-nums"
+          >
+            {lineQty}
+          </span>
+          <button
+            type="button"
+            onClick={onIncrease}
+            aria-label="Povećaj količinu"
+            className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <Plus className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
+        </button>
+      )}
+    </div>
   );
 }
 

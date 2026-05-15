@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, hasDatabaseConnection } from "@/lib/db";
 import type {
   Category as CategoryDTO,
   Product as ProductDTO,
@@ -10,10 +10,8 @@ import { num, numOrNull } from "@/lib/api/_helpers";
 /**
  * Catalog read layer (Phase 3C).
  *
- * Mirrors the in-memory mock helpers from `src/data/products.ts` so the home
- * page, listings and PDP can swap to DB-backed data once the XML feed populates
- * the schema (Phase 4A). Conversion sits in `mapProduct` — Prisma `Decimal`s
- * become plain numbers, M:N relations become flat arrays.
+ * Catalog read layer for imported products. Conversion sits in `mapProduct`:
+ * Prisma `Decimal`s become plain numbers, and M:N relations become flat arrays.
  */
 
 const productInclude = {
@@ -110,6 +108,7 @@ export interface CategoryNode extends CategoryDTO {
 }
 
 export async function getCategoryTree(): Promise<CategoryNode[]> {
+  if (!hasDatabaseConnection()) return [];
   const rows = await db.category.findMany({ orderBy: [{ level: "asc" }, { order: "asc" }] });
   const byId = new Map<string, CategoryNode>();
   const roots: CategoryNode[] = [];
@@ -136,10 +135,12 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
 }
 
 export async function getCategoryBySlug(slug: string) {
+  if (!hasDatabaseConnection()) return null;
   return db.category.findUnique({ where: { slug } });
 }
 
 export async function getCategoryByPath(path: string) {
+  if (!hasDatabaseConnection()) return null;
   return db.category.findUnique({ where: { path } });
 }
 
@@ -162,6 +163,11 @@ export interface ListProductsInput {
   limitedOnly?: boolean;
   /** Restrict to outlet (significant discount). */
   outletOnly?: boolean;
+  groupSlug?: string;
+  collectionSlug?: string;
+  excludeSku?: string;
+  /** Restrict to products at or below this effective price. */
+  maxPrice?: number;
   priceRange?: [number, number];
   /** Width/depth/height ranges, all in cm. */
   widthRange?: [number, number];
@@ -185,6 +191,10 @@ export interface ListProductsResult {
 export async function listProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
+  if (!hasDatabaseConnection()) {
+    return { items: [], nextCursor: null, total: 0 };
+  }
+
   const where: Prisma.ProductWhereInput = { isActive: true };
 
   if (input.categoryPath) {
@@ -200,7 +210,16 @@ export async function listProducts(
   if (input.limitedOnly) where.isLimited = true;
   if (input.newOnly) where.AND = [{ isNew: true }, { OR: [{ newUntil: null }, { newUntil: { gt: new Date() } }] }];
   if (input.outletOnly) where.discountPct = { gte: 30 };
+  if (input.groupSlug) where.group = { slug: input.groupSlug };
+  if (input.collectionSlug) where.collection = { slug: input.collectionSlug };
+  if (input.excludeSku) where.sku = { not: input.excludeSku };
   if (input.inStockOnly) where.stock = { gt: 0 };
+  if (input.maxPrice != null) {
+    where.OR = [
+      { salePrice: { lte: input.maxPrice } },
+      { AND: [{ salePrice: null }, { fullPrice: { lte: input.maxPrice } }] },
+    ];
+  }
   if (input.priceRange) {
     where.OR = [
       { salePrice: { gte: input.priceRange[0], lte: input.priceRange[1] } },
@@ -250,13 +269,21 @@ export async function listProducts(
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDTO | null> {
-  const row = await db.product.findUnique({ where: { slug }, include: productInclude });
+  if (!hasDatabaseConnection()) return null;
+  const row = await db.product.findFirst({
+    where: { slug, isActive: true },
+    include: productInclude,
+  });
   if (!row) return null;
   return mapProduct(row);
 }
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
-  const row = await db.product.findUnique({ where: { sku }, include: productInclude });
+  if (!hasDatabaseConnection()) return null;
+  const row = await db.product.findFirst({
+    where: { sku, isActive: true },
+    include: productInclude,
+  });
   if (!row) return null;
   return mapProduct(row);
 }

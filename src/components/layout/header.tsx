@@ -35,7 +35,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
           : "0 0 0 rgba(0,0,0,0)",
       }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="sticky top-0 z-40 bg-white text-brand-blue"
+      className="bg-white text-brand-blue md:sticky md:top-0 md:z-40"
     >
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-5 px-6 py-3 md:flex md:py-4">
@@ -99,7 +99,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
       </nav>
 
       {/* Mobile bar */}
-      <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-2 px-3 py-2.5 md:hidden">
+      <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
         <MobileNav tabs={tabs} />
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="rounded-md px-1.5 py-0.5">
@@ -109,11 +109,17 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[120px] object-contain"
+              className="h-auto w-[150px] object-contain min-[390px]:w-[180px]"
             />
           </div>
         </Link>
-        <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
+        <div className="flex items-center gap-0.5">
+          <WishlistButton
+            openDrawerOnClick={false}
+            className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40"
+          />
+          <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
+        </div>
       </div>
     </motion.header>
   );

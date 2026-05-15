@@ -22,7 +22,7 @@ export function Breadcrumbs({
   return (
     <nav
       aria-label="Putanja"
-      className={cn("text-xs text-ink-500", className)}
+      className={cn("hidden text-xs text-ink-500 md:block", className)}
     >
       <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         {items.map((c, i) => {

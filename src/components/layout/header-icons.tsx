@@ -28,7 +28,13 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
-export function WishlistButton({ className }: { className?: string }) {
+export function WishlistButton({
+  className,
+  openDrawerOnClick = true,
+}: {
+  className?: string;
+  openDrawerOnClick?: boolean;
+}) {
   const items = useWishlist((s) => s.items);
   const hydrated = useWishlist((s) => s.hydrated);
   const count = hydrated ? items.length : 0;
@@ -38,6 +44,7 @@ export function WishlistButton({ className }: { className?: string }) {
       href="/nalog/lista-zelja"
       aria-label={`Lista želja${count ? ` (${count})` : ""}`}
       onClick={(e) => {
+        if (!openDrawerOnClick) return;
         // On client: open the drawer instead of navigating. The href remains
         // for no-JS users / right-click "open in new tab".
         e.preventDefault();

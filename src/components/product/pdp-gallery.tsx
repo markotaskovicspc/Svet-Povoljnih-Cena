@@ -5,8 +5,8 @@
  * vertical thumb strip on the right, plus virtual "video" and "3D" thumbs
  * that swap the main view to a video player or a 3D viewer placeholder.
  *
- * Phase 1: media is sourced from the product mock; in Phase 4 the cloud
- * service supplies images / video / 3D bundles by SKU pattern.
+ * Media is sourced from the product catalog import; the cloud service can
+ * supply images / video / 3D bundles by SKU pattern.
  */
 import Image from "next/image";
 import { useCallback, useMemo, useRef, useState } from "react";

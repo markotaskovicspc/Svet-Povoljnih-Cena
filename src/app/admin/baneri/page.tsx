@@ -65,6 +65,7 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
           : await db.banner.create({ data: payload });
         revalidatePath("/admin/baneri");
         revalidatePath("/");
+        revalidatePath("/niske-cene-pod-zastitom");
         return { ok: true as const, entityId: saved.id, diff: payload };
       },
   )(formData);
@@ -81,6 +82,7 @@ async function deleteBanner(formData: FormData) {
         await db.banner.delete({ where: { id } });
         revalidatePath("/admin/baneri");
         revalidatePath("/");
+        revalidatePath("/niske-cene-pod-zastitom");
         return { ok: true as const, entityId: id };
       },
   )(formData);

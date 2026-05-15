@@ -1,8 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, hasDatabaseConnection } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
-import { searchProducts } from "@/data/products";
 import type { SearchHit } from "@/types/search";
 
 /**
@@ -34,6 +33,7 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 20);
+  if (!hasDatabaseConnection()) return [];
 
   let rows: SuggestRow[] = [];
   try {
@@ -63,13 +63,8 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
        LIMIT ${safeLimit}
     `;
   } catch (err) {
-    console.warn("[search] Falling back to mock products while real catalog is unavailable.", err);
-    return searchProducts(q, safeLimit);
-  }
-
-  if (!rows.length) {
-    const activeProducts = await db.product.count({ where: { isActive: true } });
-    if (activeProducts === 0) return searchProducts(q, safeLimit);
+    console.warn("[search] Real catalog search is unavailable.", err);
+    return [];
   }
 
   return rows.map((r) => ({

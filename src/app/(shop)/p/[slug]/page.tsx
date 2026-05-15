@@ -12,7 +12,6 @@ import {
   Sparkles,
   Truck,
 } from "lucide-react";
-import { mockProducts } from "@/data/products";
 import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
@@ -20,6 +19,7 @@ import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
 import { PdpDelivery } from "@/components/product/pdp-delivery";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
+import { getProductBySlug, listProducts } from "@/lib/api/catalog";
 import { formatDate, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -27,11 +27,9 @@ import { cn } from "@/lib/utils";
  * Product Detail Page — Phase 1E (12 rows from spec).
  *
  * Server component (SEO-critical). Interactive bits (gallery, add-to-cart,
- * delivery picker) are client islands. If the product is fully unavailable
- * (stock=0 && incomingStock=0) the page is hidden — the spec asks for HTTP
- * 410 here; App Router pages can only signal 404 via notFound(), so we use
- * that for now and revisit when middleware / route handlers wire in real
- * inventory in Phase 4.
+ * delivery picker) are client islands. Missing or inactive products resolve
+ * through getProductBySlug() as null. Stock changes should not turn an existing
+ * active PDP into an accidental 404; the buy controls handle out-of-stock UI.
  */
 
 const slugify = (s: string) =>
@@ -53,17 +51,13 @@ interface RouteProps {
   params: Promise<{ slug: string }>;
 }
 
-function getProduct(slug: string): Product | undefined {
-  return mockProducts.find((p) => p.slug === slug);
-}
-
 export async function generateStaticParams() {
-  return mockProducts.map((p) => ({ slug: p.slug }));
+  return [];
 }
 
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProductBySlug(slug);
   if (!product) return { title: "Proizvod nije pronađen" };
   const price = product.salePrice ?? product.fullPrice;
   return {
@@ -74,11 +68,8 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 
 export default async function ProductPage({ params }: RouteProps) {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProductBySlug(slug);
   if (!product) notFound();
-
-  // Spec: hide product when fully unavailable (return 410). See header note.
-  if (product.stock === 0 && product.incomingStock === 0) notFound();
 
   const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
   const sale = product.salePrice ?? product.fullPrice;
@@ -96,15 +87,20 @@ export default async function ProductPage({ params }: RouteProps) {
   ];
 
   // Related sets
-  const frequentlyBought = mockProducts.filter(
-    (p) =>
-      p.sku !== product.sku &&
-      product.collection &&
-      p.collection === product.collection,
-  );
-  const similar = mockProducts.filter(
-    (p) => p.sku !== product.sku && p.group === product.group,
-  );
+  const [frequentlyBought, similar] = await Promise.all([
+    product.collection
+      ? listProducts({
+          collectionSlug: product.collection,
+          excludeSku: product.sku,
+          limit: 8,
+        }).then((r) => r.items)
+      : Promise.resolve([]),
+    product.group
+      ? listProducts({ groupSlug: product.group, excludeSku: product.sku, limit: 8 }).then(
+          (r) => r.items,
+        )
+      : Promise.resolve([]),
+  ]);
 
   // Badges (mirror product-card logic, simplified — rendered as overlay)
   const overlayBadges = buildOverlayBadges(product);

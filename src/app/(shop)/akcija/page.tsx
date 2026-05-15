@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { mockProducts } from "@/data/products";
+import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
   title: "Akcija — kuratirana selekcija po sniženim cenama",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
     "Aktuelna akcijska ponuda nameštaja. Heroji meseca, najveći popusti i najpovoljnije cene na jednom mestu.",
 };
 
-export default function AkcijaPage() {
-  const products = mockProducts.filter((p) => !!p.action);
+export default async function AkcijaPage() {
+  const { items: products } = await listProducts({ onSaleOnly: true, limit: 300 });
   // Pick the action that ends latest (umbrella period banner).
   const period = products
     .map((p) => p.action!)

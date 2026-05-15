@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { Bell, BellOff, Heart, ShoppingBag, Trash2 } from "lucide-react";
+import { Bell, BellOff, Heart, Trash2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -12,9 +11,6 @@ import {
 } from "@/components/ui/sheet";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
-import { mockProducts } from "@/data/products";
-import { formatRsd } from "@/lib/format";
-import { commitAddToCart } from "./add-to-cart-action";
 import { cn } from "@/lib/utils";
 
 /**
@@ -70,51 +66,13 @@ export function WishlistDrawer() {
         ) : (
           <div className="divide-border/60 flex-1 divide-y overflow-y-auto px-4">
             {items.map((entry) => {
-              const product = mockProducts.find((p) => p.sku === entry.sku);
-              if (!product) return null;
-              const sale = product.salePrice ?? product.fullPrice;
-              const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
-              const outOfStock = product.stock === 0;
               return (
                 <div key={entry.sku} className="flex gap-3 py-3">
-                  <Link
-                    href={`/p/${product.slug}`}
-                    onClick={close}
-                    className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-muted-bg"
-                  >
-                    {product.media.images[0] ? (
-                      <Image
-                        src={product.media.images[0].url}
-                        alt={product.name}
-                        fill
-                        sizes="64px"
-                        className="object-cover"
-                      />
-                    ) : null}
-                  </Link>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <Link
-                      href={`/p/${product.slug}`}
-                      onClick={close}
-                      className="hover:text-walnut line-clamp-2 text-sm font-medium text-ink-900 transition focus-visible:underline focus-visible:outline-none"
-                    >
-                      {product.name}
-                    </Link>
-                    <div className="flex items-baseline gap-1.5">
-                      <span
-                        className={cn(
-                          "text-sm font-semibold",
-                          onSale ? "text-action" : "text-ink-900",
-                        )}
-                      >
-                        {formatRsd(sale)}
-                      </span>
-                      {onSale ? (
-                        <span className="text-[11px] text-ink-500 line-through">
-                          {formatRsd(product.fullPrice)}
-                        </span>
-                      ) : null}
-                    </div>
+                    <p className="text-sm font-medium text-ink-900">
+                      Sačuvan proizvod
+                    </p>
+                    <p className="font-mono text-xs text-ink-500">SKU {entry.sku}</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <NotifyToggle
                         label="Akcija"
@@ -144,17 +102,6 @@ export function WishlistDrawer() {
                       className="hover:text-action focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center rounded-full text-ink-500 transition focus-visible:ring-2 focus-visible:outline-none"
                     >
                       <Trash2 className="size-3.5" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={outOfStock}
-                      onClick={() => {
-                        commitAddToCart(product);
-                        close();
-                      }}
-                      className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-                    >
-                      <ShoppingBag className="size-3" aria-hidden /> Dodaj
                     </button>
                   </div>
                 </div>

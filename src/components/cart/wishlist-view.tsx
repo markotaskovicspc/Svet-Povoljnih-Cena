@@ -1,12 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { Bell, BellOff, Heart, Loader2, ShoppingBag, Trash2 } from "lucide-react";
+import { Bell, BellOff, Heart, Loader2, Trash2 } from "lucide-react";
 import { useWishlist } from "@/lib/hooks/use-wishlist";
-import { mockProducts } from "@/data/products";
-import { formatRsd } from "@/lib/format";
-import { commitAddToCart } from "./add-to-cart-action";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,52 +50,14 @@ export function WishlistView() {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((entry) => {
-        const product = mockProducts.find((p) => p.sku === entry.sku);
-        if (!product) return null;
-        const sale = product.salePrice ?? product.fullPrice;
-        const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
-        const outOfStock = product.stock === 0;
         return (
           <li
             key={entry.sku}
             className="bg-surface ring-border/60 flex flex-col overflow-hidden rounded-2xl shadow-soft-1 ring-1"
           >
-            <Link
-              href={`/p/${product.slug}`}
-              className="relative block aspect-[4/5] overflow-hidden bg-muted-bg"
-            >
-              {product.media.images[0] ? (
-                <Image
-                  src={product.media.images[0].url}
-                  alt={product.name}
-                  fill
-                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                  className="object-cover transition duration-700 hover:scale-[1.03]"
-                />
-              ) : null}
-            </Link>
             <div className="flex flex-1 flex-col gap-2 p-4">
-              <Link
-                href={`/p/${product.slug}`}
-                className="hover:text-walnut line-clamp-2 text-sm font-medium text-ink-900 transition focus-visible:underline focus-visible:outline-none"
-              >
-                {product.name}
-              </Link>
-              <div className="flex items-baseline gap-2">
-                <span
-                  className={cn(
-                    "text-base font-semibold",
-                    onSale ? "text-action" : "text-ink-900",
-                  )}
-                >
-                  {formatRsd(sale)}
-                </span>
-                {onSale ? (
-                  <span className="text-xs text-ink-500 line-through">
-                    {formatRsd(product.fullPrice)}
-                  </span>
-                ) : null}
-              </div>
+              <p className="text-sm font-medium text-ink-900">Sačuvan proizvod</p>
+              <p className="font-mono text-xs text-ink-500">SKU {entry.sku}</p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <NotifyToggle
                   label="Obavesti me kad bude na akciji"
@@ -128,15 +86,6 @@ export function WishlistView() {
                 >
                   <Trash2 className="size-3.5" aria-hidden />
                   Ukloni
-                </button>
-                <button
-                  type="button"
-                  disabled={outOfStock}
-                  onClick={() => commitAddToCart(product)}
-                  className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-                >
-                  <ShoppingBag className="size-3.5" aria-hidden />
-                  Dodaj u korpu
                 </button>
               </div>
             </div>

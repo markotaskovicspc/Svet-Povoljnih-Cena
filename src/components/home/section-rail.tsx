@@ -41,7 +41,7 @@ export function SectionRail({
   if (!products.length) return null;
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-6 py-6 md:py-20">
+    <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-20">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -85,7 +85,7 @@ export function SectionRail({
 
       <div
         ref={railRef}
-        className="relative -mx-6 mt-4 overflow-x-auto px-6 [scrollbar-width:none] md:mt-8 [&::-webkit-scrollbar]:hidden"
+        className="relative -mx-4 mt-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:mt-8 md:px-6 [&::-webkit-scrollbar]:hidden"
       >
         <DragHint scopeRef={railRef} />
         <motion.ul
@@ -96,7 +96,7 @@ export function SectionRail({
             hidden: {},
             show: { transition: { staggerChildren: 0.05 } },
           }}
-          className="flex snap-x snap-mandatory gap-4 pb-2 md:gap-6"
+          className="flex snap-x snap-mandatory gap-3 pb-2 md:gap-6"
         >
           {products.map((p) => (
             <motion.li
@@ -109,7 +109,7 @@ export function SectionRail({
                   transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
                 },
               }}
-              className="w-[72vw] shrink-0 snap-start sm:w-[44vw] md:w-[300px] lg:w-[280px]"
+              className="w-[46vw] shrink-0 snap-start sm:w-[34vw] md:w-[300px] lg:w-[280px]"
             >
               <ProductCard product={p} className="h-full" />
             </motion.li>

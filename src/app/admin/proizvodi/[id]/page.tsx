@@ -20,6 +20,10 @@ export const metadata = {
 const overrideSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(200),
+  barcode: z.string().max(80).optional().nullable(),
+  sizeLabel: z.string().max(80).optional().nullable(),
+  colorPrimary: z.string().max(120).optional().nullable(),
+  colorSecondary: z.string().max(120).optional().nullable(),
   shortDescription: z.string().max(500).optional().nullable(),
   description: z.string().max(20000),
   fullPrice: z.coerce.number().nonnegative(),
@@ -39,6 +43,22 @@ const overrideSchema = z.object({
   isDtz: z.coerce.boolean().default(false),
   inGoogleMerchant: z.coerce.boolean().default(false),
   inMetaCatalog: z.coerce.boolean().default(false),
+});
+
+const categorySchema = z.object({
+  productId: z.string(),
+  categoryId: z.string().min(1),
+});
+
+const mediaSchema = z.object({
+  productId: z.string(),
+  url: z.string().url().max(2000),
+  alt: z.string().max(200).optional().nullable(),
+});
+
+const mediaDeleteSchema = z.object({
+  productId: z.string(),
+  mediaId: z.string(),
 });
 
 async function updateProduct(formData: FormData) {
@@ -70,6 +90,10 @@ async function updateProduct(formData: FormData) {
         }
         const data = {
           name: d.name,
+          barcode: d.barcode?.trim() || null,
+          sizeLabel: d.sizeLabel?.trim() || null,
+          colorPrimary: d.colorPrimary?.trim() || null,
+          colorSecondary: d.colorSecondary?.trim() || null,
           shortDescription: d.shortDescription || null,
           description: d.description,
           fullPrice: d.fullPrice,
@@ -100,6 +124,81 @@ async function updateProduct(formData: FormData) {
   )(formData);
 }
 
+async function updateProductCategory(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.category.update", entity: "Product" },
+    async (_a, formData: FormData) => {
+      const parsed = categorySchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+      }
+      const { productId, categoryId } = parsed.data;
+      await db.$transaction(async (tx) => {
+        await tx.productCategory.deleteMany({ where: { productId } });
+        await tx.productCategory.create({ data: { productId, categoryId } });
+      });
+      revalidatePath("/admin/proizvodi");
+      revalidatePath(`/admin/proizvodi/${productId}`);
+      revalidatePath("/");
+      return { ok: true as const, entityId: productId, diff: { categoryId } };
+    },
+  )(formData);
+}
+
+async function addProductImage(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.media.create", entity: "ProductMedia" },
+    async (_a, formData: FormData) => {
+      const parsed = mediaSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+      }
+      const { productId, url, alt } = parsed.data;
+      const last = await db.productMedia.aggregate({
+        where: { productId },
+        _max: { order: true },
+      });
+      const media = await db.productMedia.create({
+        data: {
+          productId,
+          url,
+          alt: alt?.trim() || null,
+          order: (last._max.order ?? -1) + 1,
+        },
+        select: { id: true },
+      });
+      revalidatePath("/admin/proizvodi");
+      revalidatePath(`/admin/proizvodi/${productId}`);
+      revalidatePath("/");
+      return { ok: true as const, entityId: media.id, diff: { productId, url } };
+    },
+  )(formData);
+}
+
+async function deleteProductMedia(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.media.delete", entity: "ProductMedia" },
+    async (_a, formData: FormData) => {
+      const parsed = mediaDeleteSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+      }
+      const { productId, mediaId } = parsed.data;
+      await db.productMedia.deleteMany({ where: { id: mediaId, productId } });
+      revalidatePath("/admin/proizvodi");
+      revalidatePath(`/admin/proizvodi/${productId}`);
+      revalidatePath("/");
+      return { ok: true as const, entityId: mediaId, diff: { productId } };
+    },
+  )(formData);
+}
+
 export default async function ProductDetail({
   params,
 }: {
@@ -117,6 +216,10 @@ export default async function ProductDetail({
     },
   });
   if (!product) notFound();
+  const categories = await db.category.findMany({
+    orderBy: [{ level: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, path: true },
+  });
 
   return (
     <>
@@ -139,6 +242,20 @@ export default async function ProductDetail({
             <Field label="Naziv">
               <Input name="name" required defaultValue={product.name} />
             </Field>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <Field label="Bar kod">
+                <Input name="barcode" defaultValue={product.barcode ?? ""} />
+              </Field>
+              <Field label="Veličina">
+                <Input name="sizeLabel" defaultValue={product.sizeLabel ?? ""} />
+              </Field>
+              <Field label="Boja 1">
+                <Input name="colorPrimary" defaultValue={product.colorPrimary ?? ""} />
+              </Field>
+              <Field label="Boja 2">
+                <Input name="colorSecondary" defaultValue={product.colorSecondary ?? ""} />
+              </Field>
+            </div>
             <Field label="Kratak opis">
               <Textarea
                 name="shortDescription"
@@ -256,6 +373,27 @@ export default async function ProductDetail({
                 <li className="text-sm text-ink-500">Bez kategorija.</li>
               ) : null}
             </ul>
+            <form action={updateProductCategory} className="mt-4 space-y-3">
+              <input type="hidden" name="productId" value={product.id} />
+              <Field label="Promeni kategoriju">
+                <select
+                  name="categoryId"
+                  defaultValue={product.categories[0]?.categoryId ?? ""}
+                  className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                  required
+                >
+                  <option value="" disabled>
+                    Izaberi kategoriju
+                  </option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.path}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <SubmitButton>Sačuvaj kategoriju</SubmitButton>
+            </form>
           </Card>
 
           <Card>
@@ -286,13 +424,35 @@ export default async function ProductDetail({
 
           <Card>
             <CardTitle>Mediji ({product.media.length})</CardTitle>
-            <ul className="space-y-1 text-xs">
-              {product.media.slice(0, 6).map((m) => (
-                <li key={m.id} className="truncate font-mono text-ink-500">
-                  {m.kind} · {m.url}
+            <ul className="space-y-2 text-xs">
+              {product.media.map((m) => (
+                <li key={m.id} className="rounded-lg border border-border/60 p-2">
+                  <div className="truncate font-mono text-ink-500">
+                    {m.kind} · {m.url}
+                  </div>
+                  <form action={deleteProductMedia} className="mt-2">
+                    <input type="hidden" name="productId" value={product.id} />
+                    <input type="hidden" name="mediaId" value={m.id} />
+                    <button type="submit" className="text-danger hover:underline">
+                      Obriši
+                    </button>
+                  </form>
                 </li>
               ))}
+              {product.media.length === 0 ? (
+                <li className="text-sm text-ink-500">Nema fotografija.</li>
+              ) : null}
             </ul>
+            <form action={addProductImage} className="mt-4 space-y-3">
+              <input type="hidden" name="productId" value={product.id} />
+              <Field label="URL fotografije">
+                <Input name="url" type="url" placeholder="https://..." required />
+              </Field>
+              <Field label="Alt tekst">
+                <Input name="alt" defaultValue={product.name} />
+              </Field>
+              <SubmitButton>Dodaj fotografiju</SubmitButton>
+            </form>
           </Card>
         </div>
       </div>

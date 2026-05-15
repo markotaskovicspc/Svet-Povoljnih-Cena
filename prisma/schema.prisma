@@ -199,10 +199,14 @@ model Collection {
 model Product {
   id               String  @id @default(cuid())
   sku              String  @unique
+  barcode          String? @unique
   slug             String  @unique
   name             String
   description      String  @db.Text
   shortDescription String? @db.Text
+  sizeLabel        String?
+  colorPrimary     String?
+  colorSecondary   String?
 
   groupId      String?
   group        Group?      @relation(fields: [groupId], references: [id])
@@ -1113,4 +1117,3 @@ model PaymentMethodConfig {
   note    String?
   updatedAt DateTime    @updatedAt
 }
-

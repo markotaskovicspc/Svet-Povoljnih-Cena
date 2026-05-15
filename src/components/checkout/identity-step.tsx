@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   LogIn,
@@ -63,22 +64,14 @@ export function IdentityStep({
       {choices.map((c) => {
         const Icon = c.icon;
         const active = value === c.id;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => {
-              onPick(c.id);
-              setShowSocial(c.id === "guest" ? null : (c.id as "login" | "register"));
-            }}
-            aria-pressed={active}
-            className={cn(
-              "bg-surface ring-border/60 group flex h-full min-h-[112px] flex-row items-center gap-3 rounded-2xl p-4 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:flex-col md:items-start md:gap-3 md:p-5",
-              "hover:ring-walnut/40 hover:shadow-soft-2",
-              "focus-visible:ring-walnut/40 focus-visible:ring-2",
-              active && "ring-walnut shadow-soft-3 ring-2",
-            )}
-          >
+        const cardClassName = cn(
+          "bg-surface ring-border/60 group flex h-full min-h-[112px] flex-row items-center gap-3 rounded-2xl p-4 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:flex-col md:items-start md:gap-3 md:p-5",
+          "hover:ring-walnut/40 hover:shadow-soft-2",
+          "focus-visible:ring-walnut/40 focus-visible:ring-2",
+          active && "ring-walnut shadow-soft-3 ring-2",
+        );
+        const content = (
+          <>
             <span
               className={cn(
                 "inline-flex size-11 shrink-0 items-center justify-center rounded-xl md:size-10",
@@ -99,7 +92,34 @@ export function IdentityStep({
                 </span>
               ) : null}
             </div>
+          </>
+        );
+        return c.id === "guest" ? (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => {
+              onPick(c.id);
+              setShowSocial(null);
+            }}
+            aria-pressed={active}
+            className={cardClassName}
+          >
+            {content}
           </button>
+        ) : (
+          <Link
+            key={c.id}
+            href={`/nalog/${c.id === "login" ? "prijava" : "registracija"}?callbackUrl=${encodeURIComponent("/checkout/podaci")}`}
+            onClick={() => {
+              onPick(c.id);
+              setShowSocial(c.id as "login" | "register");
+            }}
+            aria-pressed={active}
+            className={cardClassName}
+          >
+            {content}
+          </Link>
         );
       })}
 

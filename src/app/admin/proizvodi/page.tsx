@@ -34,12 +34,16 @@ export default async function ProductsPage({
       ? {
           OR: [
             { sku: { contains: q, mode: "insensitive" as const } },
+            { barcode: { contains: q, mode: "insensitive" as const } },
             { name: { contains: q, mode: "insensitive" as const } },
             { slug: { contains: q, mode: "insensitive" as const } },
           ],
         }
       : {}),
     ...(status === "inactive" ? { isActive: false } : {}),
+    ...(status === "needsqa"
+      ? { isActive: false, fullPrice: 1, media: { none: {} } }
+      : {}),
     ...(status === "hero" ? { isHero: true } : {}),
     ...(status === "lowstock" ? { stock: { lte: 2 } } : {}),
   };
@@ -53,6 +57,7 @@ export default async function ProductsPage({
       select: {
         id: true,
         sku: true,
+        barcode: true,
         name: true,
         slug: true,
         fullPrice: true,
@@ -62,6 +67,7 @@ export default async function ProductsPage({
         isActive: true,
         isHero: true,
         isNew: true,
+        _count: { select: { media: true } },
       },
     }),
     db.product.count({ where }),
@@ -104,6 +110,7 @@ export default async function ProductsPage({
               >
                 <option value="">Svi</option>
                 <option value="inactive">Neaktivni</option>
+                <option value="needsqa">Uvoz QA</option>
                 <option value="hero">Hero meseca</option>
                 <option value="lowstock">Niske zalihe</option>
               </select>
@@ -134,6 +141,9 @@ export default async function ProductsPage({
                 <div>
                   <p className="font-medium text-ink-900">{p.name}</p>
                   <p className="text-xs text-ink-500">/p/{p.slug}</p>
+                  {p.barcode ? (
+                    <p className="text-xs text-ink-500">Bar kod: {p.barcode}</p>
+                  ) : null}
                 </div>
               ),
               price: (
@@ -172,6 +182,11 @@ export default async function ProductsPage({
                   ) : null}
                   {p.isNew ? (
                     <span className="rounded bg-info/15 px-1.5 py-0.5 text-info">Novo</span>
+                  ) : null}
+                  {!p.isActive && num(p.fullPrice) === 1 && p._count.media === 0 ? (
+                    <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">
+                      Uvoz QA
+                    </span>
                   ) : null}
                 </div>
               ),

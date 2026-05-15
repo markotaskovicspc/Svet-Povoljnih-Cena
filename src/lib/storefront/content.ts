@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { db, hasDatabaseConnection } from "@/lib/db";
-import { heroBanners, editorialBanner } from "@/data/banners";
+import { heroBanners, editorialBanner, protectedPricesBanner } from "@/data/banners";
 import { headerTabs, promoBar } from "@/data/site";
 import type { Banner, PromoBar, Tab } from "@/types";
 
@@ -54,6 +54,41 @@ export async function getEditorialBanner(): Promise<Banner> {
   const banners = await getActiveBanners();
   return banners[1] ?? banners[0] ?? editorialBanner;
 }
+
+export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
+  if (!hasDatabaseConnection()) return protectedPricesBanner;
+
+  try {
+    const row = await db.banner.findFirst({
+      where: {
+        enabled: true,
+        ctaHref: "/niske-cene-pod-zastitom",
+        ...activeWindow(new Date()),
+      },
+      orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
+    });
+
+    if (!row) return protectedPricesBanner;
+
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle ?? undefined,
+      ctaLabel: row.ctaLabel ?? protectedPricesBanner.ctaLabel,
+      ctaHref: row.ctaHref ?? protectedPricesBanner.ctaHref,
+      imageDesktop: bannerAsset(row.imageDesktop, row.title),
+      imageMobile: row.imageMobile
+        ? bannerAsset(row.imageMobile, row.title)
+        : undefined,
+      startsAt: row.startsAt?.toISOString(),
+      endsAt: row.endsAt?.toISOString(),
+      order: row.order,
+    };
+  } catch (error) {
+    console.error("Failed to load protected prices banner", error);
+    return protectedPricesBanner;
+  }
+});
 
 export const getActivePromoBar = cache(async (): Promise<PromoBar | null> => {
   if (!hasDatabaseConnection()) return promoBar;

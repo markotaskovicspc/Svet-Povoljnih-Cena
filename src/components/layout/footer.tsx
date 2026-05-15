@@ -62,14 +62,13 @@ const SOCIAL_ICONS: Record<string, React.FC<{ className?: string }>> = {
 };
 
 export function Footer() {
-  const year = new Date().getFullYear();
   return (
     <footer className="bg-white text-ink-900">
       <div className="mx-auto max-w-[var(--container-page)] px-6 py-12 md:py-16">
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
-            <Link href="/" aria-label="Svet Akcija — početna" className="inline-block">
-              <div className="rounded-lg bg-white px-3 py-1.5 ring-1 ring-border">
+            <div className="flex items-center gap-3 sm:gap-4 md:block">
+              <Link href="/" aria-label="Svet Akcija — početna" className="inline-block shrink-0">
                 <Image
                   src="/logo.jpeg"
                   alt="Svet Akcija"
@@ -77,35 +76,31 @@ export function Footer() {
                   height={382}
                   className="h-auto w-[200px] object-contain"
                 />
-              </div>
-            </Link>
-            <p className="mt-4 max-w-xs text-sm text-ink-500">
-              Akcijske cene, trajno zaštićene ponude i izbor nameštaja za ceo dom.
-              Brza isporuka i montaža u glavnim gradovima.
-            </p>
+              </Link>
 
-            <div className="mt-6">
-              <p className="font-mono text-[11px] tracking-[0.2em] text-ink-500 uppercase">
+              <div className="md:mt-6">
+                <p className="hidden font-mono text-[11px] tracking-[0.2em] text-ink-500 uppercase md:block">
                 Pratite nas
-              </p>
-              <ul className="mt-3 flex items-center gap-2">
-                {socials.map((s) => {
-                  const Icon = SOCIAL_ICONS[s.id] ?? FacebookIcon;
-                  return (
-                    <li key={s.id}>
-                      <Link
-                        href={s.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={s.label}
-                        className="inline-flex size-10 items-center justify-center rounded-full bg-muted-bg text-ink-700 transition hover:bg-brand-blue hover:text-white"
-                      >
-                        <Icon className="size-4" />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+                </p>
+                <ul className="flex items-center gap-2 md:mt-3">
+                  {socials.map((s) => {
+                    const Icon = SOCIAL_ICONS[s.id] ?? FacebookIcon;
+                    return (
+                      <li key={s.id}>
+                        <Link
+                          href={s.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={s.label}
+                          className="inline-flex size-10 items-center justify-center rounded-full bg-muted-bg text-ink-700 transition hover:bg-brand-blue hover:text-white"
+                        >
+                          <Icon className="size-4" />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -161,10 +156,10 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-border">
+      <div className="hidden border-t border-border md:block">
         <div className="mx-auto flex max-w-[var(--container-page)] flex-col gap-4 px-6 py-6 text-xs text-ink-500 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span>© {year} Svet Akcija</span>
+            <span>© {new Date().getFullYear()} Svet Akcija</span>
             <Link href="/uslovi-kupovine" className="hover:text-brand-blue">
               Uslovi kupovine
             </Link>

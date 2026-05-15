@@ -5,8 +5,8 @@
  */
 import { z } from "zod";
 
-/** Strict-ish RS phone in international format `+381 6X XXX XXXX` (mask-friendly). */
-const phoneRegex = /^\+381\s?6\d(\s?\d{2,3}){2,3}$/;
+/** Serbian mobile number: digits only, 9-10 chars, must start with 06. */
+const phoneRegex = /^06\d{7,8}$/;
 
 const baseAddress = z.object({
   firstName: z
@@ -24,7 +24,7 @@ const baseAddress = z.object({
   phone: z
     .string({ message: "Obavezno polje" })
     .trim()
-    .regex(phoneRegex, "Format: +381 6X XXX XXXX"),
+    .regex(phoneRegex, "Unesite 9 ili 10 cifara, broj mora početi sa 06"),
   street: z
     .string({ message: "Obavezno polje" })
     .trim()

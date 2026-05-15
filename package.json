@@ -13,6 +13,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "import:book12": "node scripts/import-book12-products.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "postinstall": "prisma generate"
   },

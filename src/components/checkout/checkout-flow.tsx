@@ -128,7 +128,7 @@ export function CheckoutFlow() {
     },
   });
 
-  const { handleSubmit, trigger, formState } = methods;
+  const { handleSubmit, trigger, getValues, formState } = methods;
   const shippingMethod = useWatch({
     control: methods.control,
     name: "shippingMethod",
@@ -150,7 +150,7 @@ export function CheckoutFlow() {
   const stepIndex = STEP_ORDER.indexOf(step);
 
   const next = async () => {
-    const ok = await validateStep(step, trigger, identity);
+    const ok = await validateStep(step, trigger, getValues, identity);
     if (!ok) return;
     const i = STEP_ORDER.indexOf(step);
     if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1]!);
@@ -404,13 +404,14 @@ function EmptyCartCard({ onReset }: { onReset: () => void }) {
 async function validateStep(
   step: CheckoutStep,
   trigger: ReturnType<typeof useForm<CheckoutFormData>>["trigger"],
+  getValues: ReturnType<typeof useForm<CheckoutFormData>>["getValues"],
   identity: IdentityChoice | null,
 ): Promise<boolean> {
   switch (step) {
     case "identity":
       return identity !== null;
     case "shipping":
-      return trigger(["shipping"]);
+      return trigger(addressFieldNames("shipping", getValues("shipping.liceType")));
     case "method":
       return trigger(["shippingMethod"]);
     case "payment":
@@ -418,6 +419,25 @@ async function validateStep(
     default:
       return true;
   }
+}
+
+function addressFieldNames(
+  prefix: "shipping" | "billing",
+  liceType: CheckoutAddress["liceType"] | undefined,
+) {
+  const fields: Array<`shipping.${keyof CheckoutAddress}` | `billing.${keyof CheckoutAddress}`> = [
+    `${prefix}.firstName`,
+    `${prefix}.lastName`,
+    `${prefix}.email`,
+    `${prefix}.phone`,
+    `${prefix}.street`,
+    `${prefix}.city`,
+    `${prefix}.postalCode`,
+  ];
+  if (liceType === "pravno") {
+    fields.unshift(`${prefix}.companyName`, `${prefix}.pib`);
+  }
+  return fields;
 }
 
 function buildOrder({
