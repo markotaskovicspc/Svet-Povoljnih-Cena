@@ -51,10 +51,6 @@ interface RouteProps {
   params: Promise<{ slug: string }>;
 }
 
-export async function generateStaticParams() {
-  return [];
-}
-
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
