@@ -28,10 +28,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <Breadcrumbs trail={[{ label: "Pretraga" }]} className="mb-6" />
 
         <header className="border-border/60 border-b pb-6 md:pb-8">
-          <p className="font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:text-xs">
-            Pretraga proizvoda
-          </p>
-          <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
+          <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
             {query ? `Rezultati za "${query}"` : "Pretraga"}
           </h1>
           <p className="mt-3 text-sm text-ink-500" aria-live="polite">

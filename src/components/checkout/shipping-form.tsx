@@ -134,7 +134,7 @@ function AddressFieldset({
       {liceType === "pravno" ? (
         <>
           <Field
-            label="Naziv kompanije"
+            label="Naziv"
             required
             className="sm:col-span-2"
             error={showError("companyName")}
@@ -194,10 +194,11 @@ function AddressFieldset({
         required
         placeholder="060123456"
         inputMode="numeric"
-        maxLength={10}
+        maxLength={12}
         error={showError("phone")}
         {...register(`${prefix}.phone` as const, {
           required: "Obavezno polje",
+          setValueAs: normalizePhone,
           pattern: {
             value: /^06\d{7,8}$/,
             message: "Unesite 9 ili 10 cifara, broj mora početi sa 06",
@@ -304,3 +305,7 @@ const Field = ({
     </label>
   );
 };
+
+function normalizePhone(value: unknown) {
+  return String(value ?? "").replace(/[\s-]/g, "");
+}

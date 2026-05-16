@@ -142,7 +142,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 className="justify-self-center"
               >
                 <BrandLogo
-                  className="w-[160px] min-[390px]:w-[180px]"
+                  className="w-[190px] min-[390px]:w-[220px]"
                   imageClassName="brightness-0 invert"
                 />
               </Link>

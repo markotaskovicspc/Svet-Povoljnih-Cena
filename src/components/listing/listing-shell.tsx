@@ -170,10 +170,7 @@ export function ListingShell({
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <p className="hidden font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:block md:text-xs">
-              {kindEyebrow(kind)}
-            </p>
-            <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
+            <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
               {title}
             </h1>
             {subtitle ? (
@@ -415,23 +412,4 @@ export function ListingSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
       ))}
     </div>
   );
-}
-
-function kindEyebrow(kind: ListingKind): string {
-  switch (kind) {
-    case "akcija":
-      return "Akcija";
-    case "nedeljna-akcija":
-      return "Sedam dana";
-    case "heroji-meseca":
-      return "Selekcija meseca";
-    case "niske-cene-pod-zastitom":
-      return "Trajno zaštićene cene";
-    case "outlet":
-      return "Outlet";
-    case "novo":
-      return "Novo u ponudi";
-    default:
-      return "Kategorija";
-  }
 }

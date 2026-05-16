@@ -122,10 +122,7 @@ export default async function CustomerRegistrationPage({
   return (
     <div className="mx-auto grid w-full max-w-[var(--container-page)] gap-10 px-4 py-12 md:grid-cols-[minmax(0,1fr)_minmax(380px,460px)] md:px-6 md:py-20">
       <section className="flex flex-col justify-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-walnut">
-          Novi nalog
-        </p>
-        <h1 className="font-display mt-3 max-w-xl text-4xl text-ink-900 md:text-6xl">
+        <h1 className="font-display max-w-xl text-4xl text-ink-900 md:text-6xl">
           Registracija za lakšu svaku sledeću kupovinu
         </h1>
         <p className="mt-5 max-w-[58ch] text-base leading-relaxed text-ink-600 md:text-lg">

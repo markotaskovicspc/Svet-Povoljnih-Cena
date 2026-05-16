@@ -117,10 +117,7 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
       <div className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-10">
         <div className="mb-5 flex flex-col gap-4 border-b border-border pb-5 md:mb-7 md:flex-row md:items-end md:justify-between md:pb-7">
           <div className="max-w-3xl">
-            <p className="font-mono text-xs tracking-[0.18em] text-brand-blue uppercase">
-              Svet akcija katalog
-            </p>
-            <h1 className="font-display mt-2 text-3xl text-ink-900 md:text-5xl">
+            <h1 className="font-display text-3xl text-ink-900 md:text-5xl">
               Proizvodi iz uvoznog fajla
             </h1>
             <p className="mt-3 text-sm leading-6 text-ink-700 md:text-base">

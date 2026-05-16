@@ -67,7 +67,7 @@ export function Footer() {
       <div className="mx-auto max-w-[var(--container-page)] px-6 py-12 md:py-16">
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
-            <div className="flex items-center gap-3 sm:gap-4 md:block">
+            <div className="flex items-center gap-3 sm:gap-4">
               <Link href="/" aria-label="Svet Akcija — početna" className="inline-block shrink-0">
                 <Image
                   src="/logo.jpeg"
@@ -78,11 +78,8 @@ export function Footer() {
                 />
               </Link>
 
-              <div className="md:mt-6">
-                <p className="hidden font-mono text-[11px] tracking-[0.2em] text-ink-500 uppercase md:block">
-                Pratite nas
-                </p>
-                <ul className="flex items-center gap-2 md:mt-3">
+              <div>
+                <ul className="flex items-center gap-2">
                   {socials.map((s) => {
                     const Icon = SOCIAL_ICONS[s.id] ?? FacebookIcon;
                     return (
@@ -156,22 +153,6 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="hidden border-t border-border md:block">
-        <div className="mx-auto flex max-w-[var(--container-page)] flex-col gap-4 px-6 py-6 text-xs text-ink-500 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span>© {new Date().getFullYear()} Svet Akcija</span>
-            <Link href="/uslovi-kupovine" className="hover:text-brand-blue">
-              Uslovi kupovine
-            </Link>
-            <Link href="/politika-privatnosti" className="hover:text-brand-blue">
-              Privatnost
-            </Link>
-            <Link href="/kontakt" className="hover:text-brand-blue">
-              Kontakt
-            </Link>
-          </div>
-        </div>
-      </div>
     </footer>
   );
 }

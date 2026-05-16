@@ -157,10 +157,7 @@ export default async function ProductPage({ params }: RouteProps) {
         {/* Right column: identity + price + sticky CTA */}
         <div className="flex flex-col gap-4 md:gap-6">
           <header>
-            <p className="font-mono text-[10px] tracking-[0.18em] text-walnut uppercase md:text-[11px]">
-              {product.categoryPath.join(" / ")}
-            </p>
-            <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-4xl">
+            <h1 className="font-display text-2xl text-ink-900 md:text-4xl">
               {product.name}
             </h1>
             {/*

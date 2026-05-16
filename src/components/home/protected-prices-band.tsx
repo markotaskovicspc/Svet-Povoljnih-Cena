@@ -5,25 +5,29 @@ import type { Banner } from "@/types";
 
 export function ProtectedPricesBand({ banner }: { banner: Banner }) {
   const href = banner.ctaHref ?? "/niske-cene-pod-zastitom";
+  const image = banner.imageMobile ?? banner.imageDesktop;
   return (
     <section className="bg-brand-blue text-white">
       <Link
         href={href}
-        className="group mx-auto grid w-full max-w-[var(--container-page)] gap-5 px-4 py-6 outline-none md:grid-cols-[220px_1fr_auto] md:items-center md:px-6 md:py-10"
+        className="group mx-auto grid w-full max-w-[var(--container-page)] gap-4 px-4 py-6 outline-none focus-visible:ring-2 focus-visible:ring-white/60 md:grid-cols-[220px_1fr_auto] md:items-center md:gap-5 md:px-6 md:py-10"
       >
         <div className="flex items-center justify-center md:justify-start">
           <Image
-            src={(banner.imageMobile ?? banner.imageDesktop).url}
-            alt={(banner.imageMobile ?? banner.imageDesktop).alt ?? banner.title}
-            width={(banner.imageMobile ?? banner.imageDesktop).width ?? 1191}
-            height={(banner.imageMobile ?? banner.imageDesktop).height ?? 895}
+            src={image.url}
+            alt={image.alt ?? banner.title}
+            width={image.width ?? 1191}
+            height={image.height ?? 895}
             unoptimized
             className="h-auto w-36 rounded-2xl bg-white p-3 shadow-soft-2 md:w-44 md:rounded-md md:p-2"
           />
         </div>
-        <div className="max-w-3xl">
+        <div className="min-w-0 max-w-3xl">
+          <h2 className="font-display text-3xl leading-tight text-white md:text-5xl">
+            {banner.title}
+          </h2>
           {banner.subtitle ? (
-            <p className="text-sm leading-relaxed text-white/82 md:text-base">
+            <p className="mt-2 text-sm leading-relaxed text-white/82 md:mt-3 md:text-base">
               {banner.subtitle}
             </p>
           ) : null}
@@ -35,9 +39,6 @@ export function ProtectedPricesBand({ banner }: { banner: Banner }) {
           {banner.ctaLabel ?? "Pogledaj ponudu"}
           <ArrowRight className="size-4" aria-hidden />
         </span>
-        <h2 className="font-display text-3xl leading-tight text-white md:col-span-3 md:text-5xl">
-          {banner.title}
-        </h2>
       </Link>
     </section>
   );

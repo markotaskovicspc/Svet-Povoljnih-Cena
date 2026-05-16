@@ -57,7 +57,6 @@ export default async function Home() {
       <SectionRail
         eyebrow="Sedam dana"
         title="Nedeljna akcija"
-        description="Brze ponude koje se menjaju svake nedelje. Iskoristi dok traju."
         href="/nedeljna-akcija"
         products={weekly.items}
         mobileMinimal
@@ -75,7 +74,6 @@ export default async function Home() {
         return (
           <SectionRail
             key={tab.id}
-            eyebrow="Tabovi"
             title={tab.label}
             href={tab.href}
             products={list}

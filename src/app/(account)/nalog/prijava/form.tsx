@@ -6,11 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginError({ hasError }: { hasError: boolean }) {
-  if (!hasError) return null;
+export type LoginErrorCode = "invalid" | "generic";
+
+const loginErrorMessages: Record<LoginErrorCode, string> = {
+  invalid: "Pogrešna e-pošta ili lozinka.",
+  generic: "Prijava trenutno nije uspela. Pokušajte ponovo.",
+};
+
+export function LoginError({ error }: { error?: LoginErrorCode }) {
+  if (!error) return null;
   return (
     <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-      Pogrešna e-pošta ili lozinka.
+      {loginErrorMessages[error] ?? loginErrorMessages.generic}
     </p>
   );
 }
