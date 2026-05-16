@@ -7,6 +7,12 @@ import type {
 } from "@/types";
 import { num, numOrNull } from "@/lib/api/_helpers";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import {
+  parseSourcePrice,
+  sourceValue,
+  svetAkcijaProducts,
+  type SvetAkcijaProduct,
+} from "@/lib/svet-akcija/catalog";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -27,6 +33,20 @@ const productInclude = {
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+
+const slugify = (input: string) =>
+  input
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[čć]/g, "c")
+    .replace(/[š]/g, "s")
+    .replace(/[ž]/g, "z")
+    .replace(/[đ]/g, "d")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
 
 function mapProduct(p: ProductRow): ProductDTO {
   const sortedCats = [...p.categories].sort(
@@ -100,6 +120,81 @@ function mapProduct(p: ProductRow): ProductDTO {
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   };
+}
+
+function sourceDateToIso(value: string) {
+  const date = new Date(value.replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
+  const sku = sourceValue(product, "Šifra");
+  const name = sourceValue(product, "Kratki naziv") || sku;
+  const category = sourceValue(product, "Kategorija");
+  const group = sourceValue(product, "Grupa");
+  const fullPrice = parseSourcePrice(sourceValue(product, "MPC redovna")) ?? 0;
+  const salePrice = parseSourcePrice(sourceValue(product, "Akcijska MPC")) ?? undefined;
+  const discountPct =
+    salePrice && fullPrice > salePrice
+      ? Math.round(((fullPrice - salePrice) / fullPrice) * 100)
+      : undefined;
+
+  return {
+    sku,
+    slug: slugify(`${name}-${sku}`),
+    name,
+    group: slugify(group),
+    collection: slugify(sourceValue(product, "Kolekcija (brend)")),
+    categoryPath: [category, group].filter(Boolean),
+    description: product.longDescription ?? sourceValue(product, "Opis"),
+    shortDescription: sourceValue(product, "Opis") || undefined,
+    dimensionsCm: { w: 0, d: 0, h: 0 },
+    materials: [],
+    pictograms: [],
+    stock: 1,
+    incomingStock: 0,
+    isHero: false,
+    isNew: false,
+    isLimited: false,
+    isDtz: false,
+    fullPrice,
+    salePrice,
+    discountPct,
+    action: salePrice
+      ? {
+          id: "svet-akcija",
+          name: "Svet akcija - maj 2026",
+          startsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene od")),
+          endsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene do")),
+          isHero: false,
+        }
+      : undefined,
+    deliveryDays: { min: 3, max: 5 },
+    allowsAssembly: false,
+    assemblyCities: [],
+    media: {
+      images:
+        product.media?.images.map((image) => ({
+          url: resolveSupabaseStorageUrl(image.url),
+          alt: image.alt ?? name,
+          width: image.width ?? undefined,
+          height: image.height ?? undefined,
+          blurDataUrl: image.blurDataUrl ?? undefined,
+        })) ?? [],
+    },
+    recommendedSkus: [],
+    frequentlyBoughtSkus: [],
+  };
+}
+
+function getSvetAkcijaFallbackBySlug(slug: string): ProductDTO | null {
+  const decoded = decodeURIComponent(slug);
+  const product = svetAkcijaProducts.find((item) => {
+    const sku = sourceValue(item, "Šifra");
+    const name = sourceValue(item, "Kratki naziv") || sku;
+    return slugify(`${name}-${sku}`) === decoded;
+  });
+  return product ? mapSvetAkcijaFallback(product) : null;
 }
 
 // ── Categories ────────────────────────────────────────────────────────
@@ -270,13 +365,18 @@ export async function listProducts(
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductDTO | null> {
-  if (!hasDatabaseConnection()) return null;
-  const row = await db.product.findFirst({
-    where: { slug, isActive: true },
-    include: productInclude,
-  });
-  if (!row) return null;
-  return mapProduct(row);
+  if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
+  try {
+    const row = await db.product.findFirst({
+      where: { slug, isActive: true },
+      include: productInclude,
+    });
+    if (!row) return getSvetAkcijaFallbackBySlug(slug);
+    return mapProduct(row);
+  } catch (error) {
+    console.error(`[catalog] Failed to load product by slug "${slug}".`, error);
+    return getSvetAkcijaFallbackBySlug(slug);
+  }
 }
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {

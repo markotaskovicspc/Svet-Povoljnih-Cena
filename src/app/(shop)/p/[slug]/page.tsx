@@ -93,12 +93,12 @@ export default async function ProductPage({ params }: RouteProps) {
           collectionSlug: product.collection,
           excludeSku: product.sku,
           limit: 8,
-        }).then((r) => r.items)
+        }).then((r) => r.items).catch(() => [])
       : Promise.resolve([]),
     product.group
-      ? listProducts({ groupSlug: product.group, excludeSku: product.sku, limit: 8 }).then(
-          (r) => r.items,
-        )
+      ? listProducts({ groupSlug: product.group, excludeSku: product.sku, limit: 8 })
+          .then((r) => r.items)
+          .catch(() => [])
       : Promise.resolve([]),
   ]);
 

@@ -29,6 +29,11 @@ const nextConfig: NextConfig = {
       // Phase 1 mocks. Replaced by the supplier cloud base URL in Phase 4.
       { protocol: "https", hostname: "placehold.co" },
       { protocol: "https", hostname: "images.unsplash.com" },
+      {
+        protocol: "https",
+        hostname: "**.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
       ...(supabaseImagePattern ? [supabaseImagePattern] : []),
     ],
     // placehold.co serves image/svg+xml; required so the optimizer accepts it.
