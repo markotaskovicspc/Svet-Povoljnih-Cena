@@ -6,6 +6,7 @@ import type {
   Product as ProductDTO,
 } from "@/types";
 import { num, numOrNull } from "@/lib/api/_helpers";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -83,7 +84,7 @@ function mapProduct(p: ProductRow): ProductDTO {
       images: p.media
         .filter((m) => m.kind === "IMAGE")
         .map((m) => ({
-          url: m.url,
+          url: resolveSupabaseStorageUrl(m.url),
           alt: m.alt ?? undefined,
           width: m.width ?? undefined,
           height: m.height ?? undefined,

@@ -11,6 +11,7 @@ import {
   computeOrderPricing,
   type PricingLine,
 } from "@/lib/pricing";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -209,7 +210,7 @@ export async function createOrder(
       unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
       withAssembly: assemblyPrice != null,
       assemblyPrice: assemblyPrice ? new Prisma.Decimal(assemblyPrice) : null,
-      thumbnailUrl: p.media[0]?.url ?? null,
+      thumbnailUrl: resolveSupabaseStorageUrl(p.media[0]?.url) || null,
     };
   });
 

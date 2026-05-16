@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import type { SearchHit } from "@/types/search";
 
 /**
@@ -72,7 +73,7 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
     slug: r.slug,
     name: r.name,
     breadcrumb: r.breadcrumb ?? "",
-    thumbnailUrl: r.thumbnail ?? "",
+    thumbnailUrl: resolveSupabaseStorageUrl(r.thumbnail),
     fullPrice: num(r.full_price),
     salePrice: r.sale_price ? num(r.sale_price) : num(r.full_price),
     discountPct: r.discount_pct ?? 0,

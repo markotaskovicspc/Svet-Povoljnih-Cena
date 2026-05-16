@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 /**
  * Wishlist + per-product alert toggles (Phase 3C — items 4 & 6).
@@ -49,7 +50,7 @@ export async function listWishlist(userId: string) {
     inStock: w.product.stock > 0,
     incoming: w.product.incomingStock > 0,
     isActive: w.product.isActive,
-    thumbnailUrl: w.product.media[0]?.url ?? null,
+    thumbnailUrl: resolveSupabaseStorageUrl(w.product.media[0]?.url) || null,
     notifyOnSale: w.notifyOnSale,
     notifyOnRestock: w.notifyOnRestock,
     addedAt: w.addedAt.toISOString(),

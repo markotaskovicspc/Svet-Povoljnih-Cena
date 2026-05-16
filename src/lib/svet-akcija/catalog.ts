@@ -37,6 +37,16 @@ export interface SvetAkcijaProduct {
     sku: string | null;
   };
   flags: string[];
+  longDescription?: string | null;
+  media?: {
+    images: {
+      url: string;
+      alt?: string | null;
+      width?: number | null;
+      height?: number | null;
+      blurDataUrl?: string | null;
+    }[];
+  };
 }
 
 const PLACEHOLDER_VALUES = new Set(["9", "0", "/", "-", "N/A", "n/a", "NA", "na"]);
@@ -77,4 +87,8 @@ export function uniqueMeaningfulValues(
 
 export function productHref(product: SvetAkcijaProduct): string {
   return `/svet-akcija/${encodeURIComponent(sourceValue(product, "Šifra"))}`;
+}
+
+export function primaryImage(product: SvetAkcijaProduct) {
+  return product.media?.images[0] ?? null;
 }

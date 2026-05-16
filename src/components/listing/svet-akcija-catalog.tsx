@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -11,6 +12,7 @@ import {
 import {
   isMeaningfulSourceValue,
   parseSourcePrice,
+  primaryImage,
   productHref,
   sourceValue,
   type SvetAkcijaProduct,
@@ -240,16 +242,29 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
   const brand = sourceValue(product, "Kolekcija (brend)");
   const primaryColor = sourceValue(product, "Boja 1");
   const secondaryColor = sourceValue(product, "Boja 2");
+  const image = primaryImage(product);
 
   return (
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">
       <Link
         href={productHref(product)}
-        className="relative flex aspect-[4/3] items-center justify-center bg-muted-bg text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted-bg text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         aria-label={`${sourceValue(product, "Kratki naziv")} detalji`}
       >
-        <PackageSearch className="size-12" aria-hidden />
-        <span className="sr-only">Slika nije uneta u izvorni katalog</span>
+        {image ? (
+          <Image
+            src={image.url}
+            alt={image.alt ?? sourceValue(product, "Kratki naziv")}
+            fill
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-contain p-3 transition duration-300 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <>
+            <PackageSearch className="size-12" aria-hidden />
+            <span className="sr-only">Slika nije uneta u izvorni katalog</span>
+          </>
+        )}
       </Link>
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex flex-wrap gap-1.5">

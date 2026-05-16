@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import type { FeedProduct } from "./types";
 import { getFeedsConfig } from "./config";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 export type FeedChannel = "google" | "meta" | "tiktok";
 
@@ -112,14 +113,14 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
     if (!primaryImage) continue; // GMC + Meta both require an image
 
     const link = `${cfg.baseUrl}/p/${row.slug}`;
-    const imageLink = primaryImage.startsWith("http")
-      ? primaryImage
-      : `${cfg.baseUrl}${primaryImage.startsWith("/") ? "" : "/"}${primaryImage}`;
+    const resolvedPrimaryImage = resolveSupabaseStorageUrl(primaryImage);
+    const imageLink = resolvedPrimaryImage.startsWith("http")
+      ? resolvedPrimaryImage
+      : `${cfg.baseUrl}${resolvedPrimaryImage.startsWith("/") ? "" : "/"}${resolvedPrimaryImage}`;
     const extras = row.media
       .slice(1, 11)
-      .map((m) =>
-        m.url.startsWith("http") ? m.url : `${cfg.baseUrl}${m.url.startsWith("/") ? "" : "/"}${m.url}`,
-      );
+      .map((m) => resolveSupabaseStorageUrl(m.url))
+      .map((url) => (url.startsWith("http") ? url : `${cfg.baseUrl}${url.startsWith("/") ? "" : "/"}${url}`));
 
     const productType =
       row.categories

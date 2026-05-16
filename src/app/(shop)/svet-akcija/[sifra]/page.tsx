@@ -1,28 +1,28 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { ArrowLeft, PackageSearch } from "lucide-react";
 import {
   isMeaningfulSourceValue,
+  primaryImage,
   productHref,
   sourceValue,
   svetAkcijaProducts,
-  type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
+import {
+  getRelatedSvetAkcijaProducts,
+  getSvetAkcijaProductBySku,
+} from "@/lib/svet-akcija/db";
 
 interface RouteProps {
   params: Promise<{ sifra: string }>;
 }
 
-export async function generateStaticParams() {
-  return svetAkcijaProducts.map((product) => ({
-    sifra: sourceValue(product, "Šifra"),
-  }));
-}
-
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { sifra } = await params;
-  const product = findProduct(sifra);
+  const product = findStaticProduct(sifra);
   if (!product) return { title: "Proizvod" };
   return {
     title: `${sourceValue(product, "Kratki naziv")} — ${sourceValue(product, "Šifra")}`,
@@ -32,17 +32,13 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 
 export default async function SvetAkcijaProductPage({ params }: RouteProps) {
   const { sifra } = await params;
-  const product = findProduct(sifra);
+  await connection();
+  const product = await getSvetAkcijaProductBySku(sifra);
   if (!product) notFound();
 
-  const related = svetAkcijaProducts
-    .filter(
-      (item) =>
-        sourceValue(item, "Šifra") !== sourceValue(product, "Šifra") &&
-        sourceValue(item, "Kategorija") === sourceValue(product, "Kategorija") &&
-        sourceValue(item, "Grupa") === sourceValue(product, "Grupa"),
-    )
-    .slice(0, 4);
+  const image = primaryImage(product);
+  const gallery = product.media?.images ?? [];
+  const related = await getRelatedSvetAkcijaProducts(product);
 
   return (
     <main className="bg-canvas">
@@ -58,10 +54,43 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <section
             aria-label="Galerija proizvoda"
-            className="flex aspect-[4/3] items-center justify-center rounded-md border border-border bg-muted-bg text-ink-300"
+            className="overflow-hidden rounded-md border border-border bg-white"
           >
-            <PackageSearch className="size-20" aria-hidden />
-            <span className="sr-only">Slika nije uneta u izvorni katalog</span>
+            <div className="relative flex aspect-[4/3] items-center justify-center bg-muted-bg text-ink-300">
+              {image ? (
+                <Image
+                  src={image.url}
+                  alt={image.alt ?? sourceValue(product, "Kratki naziv")}
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 48vw, 100vw"
+                  className="object-contain p-4"
+                />
+              ) : (
+                <>
+                  <PackageSearch className="size-20" aria-hidden />
+                  <span className="sr-only">Slika nije uneta u izvorni katalog</span>
+                </>
+              )}
+            </div>
+            {gallery.length > 1 ? (
+              <div className="grid grid-cols-4 gap-2 p-2 sm:grid-cols-5">
+                {gallery.slice(0, 10).map((item, index) => (
+                  <div
+                    key={`${item.url}-${index}`}
+                    className="relative aspect-square overflow-hidden rounded-md border border-border bg-muted-bg"
+                  >
+                    <Image
+                      src={item.url}
+                      alt={item.alt ?? `${sourceValue(product, "Kratki naziv")} ${index + 1}`}
+                      fill
+                      sizes="96px"
+                      className="object-contain p-1.5"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section>
@@ -112,10 +141,15 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
 
             <div className="mt-6 rounded-md border border-dashed border-border bg-muted-bg/60 p-4">
               <p className="text-sm font-semibold text-ink-900">Dugi opis</p>
-              <p className="mt-1 text-sm text-ink-500">
-                Biće mapiran kasnije iz posebnog dokumenta klijenta preko tačne šifre{" "}
-                {sourceValue(product, "Šifra")}.
-              </p>
+              {product.longDescription ? (
+                <div className="mt-3 whitespace-pre-line text-sm leading-6 text-ink-700">
+                  {product.longDescription}
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-ink-500">
+                  Dugi opis nije unet za šifru {sourceValue(product, "Šifra")}.
+                </p>
+              )}
             </div>
           </section>
         </div>
@@ -148,7 +182,8 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
     </main>
   );
 }
-function findProduct(sifra: string): SvetAkcijaProduct | undefined {
+
+function findStaticProduct(sifra: string) {
   const decoded = decodeURIComponent(sifra);
   return svetAkcijaProducts.find((product) => sourceValue(product, "Šifra") === decoded);
 }
