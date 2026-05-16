@@ -24,6 +24,7 @@ function getSupabaseImagePattern() {
 const supabaseImagePattern = getSupabaseImagePattern();
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
   images: {
     remotePatterns: [
       // Phase 1 mocks. Replaced by the supplier cloud base URL in Phase 4.

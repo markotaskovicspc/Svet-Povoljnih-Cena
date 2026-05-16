@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
+import { cache } from "react";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import type {
   Category as CategoryDTO,
@@ -27,6 +28,38 @@ const productInclude = {
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+
+const productListSelect = {
+  id: true,
+  sku: true,
+  slug: true,
+  name: true,
+  widthCm: true,
+  depthCm: true,
+  heightCm: true,
+  stock: true,
+  incomingStock: true,
+  supplierStock: true,
+  isHero: true,
+  isNew: true,
+  newUntil: true,
+  isLimited: true,
+  isDtz: true,
+  fullPrice: true,
+  salePrice: true,
+  discountPct: true,
+  deliveryDaysMin: true,
+  deliveryDaysMax: true,
+  allowsAssembly: true,
+  group: true,
+  collection: true,
+  action: true,
+  categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
+  media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" }, take: 2 },
+  materials: { include: { material: true } },
+} satisfies Prisma.ProductSelect;
+
+type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
 
 function mapProduct(p: ProductRow): ProductDTO {
   const sortedCats = [...p.categories].sort(
@@ -96,6 +129,67 @@ function mapProduct(p: ProductRow): ProductDTO {
       video3d: p.media.find((m) => m.kind === "VIDEO_3D")
         ? { url: p.media.find((m) => m.kind === "VIDEO_3D")!.url }
         : undefined,
+    },
+    recommendedSkus: [],
+    frequentlyBoughtSkus: [],
+  };
+}
+
+function mapProductListItem(p: ProductListRow): ProductDTO {
+  const sortedCats = [...p.categories].sort(
+    (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
+  );
+  return {
+    sku: p.sku,
+    slug: p.slug,
+    name: p.name,
+    group: p.group?.slug ?? "",
+    collection: p.collection?.slug,
+    categoryPath: sortedCats.map((c) => c.category.name),
+    description: "",
+    shortDescription: undefined,
+    dimensionsCm: {
+      w: num(p.widthCm) || 0,
+      d: num(p.depthCm) || 0,
+      h: num(p.heightCm) || 0,
+    },
+    materials: p.materials.map((m) => ({
+      id: m.material.id,
+      label: m.material.label,
+      imageUrl: m.material.imageUrl ?? undefined,
+    })),
+    pictograms: [],
+    stock: p.stock,
+    incomingStock: p.incomingStock,
+    supplierStock: p.supplierStock ?? undefined,
+    isHero: p.isHero,
+    isNew: p.isNew,
+    newUntil: p.newUntil?.toISOString(),
+    isLimited: p.isLimited,
+    isDtz: p.isDtz,
+    fullPrice: num(p.fullPrice),
+    salePrice: numOrNull(p.salePrice) ?? undefined,
+    discountPct: p.discountPct ?? undefined,
+    action: p.action
+      ? {
+          id: p.action.id,
+          name: p.action.name,
+          startsAt: p.action.startsAt.toISOString(),
+          endsAt: p.action.endsAt.toISOString(),
+          isHero: p.action.isHero,
+        }
+      : undefined,
+    deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
+    allowsAssembly: p.allowsAssembly,
+    assemblyCities: [],
+    media: {
+      images: p.media.map((m) => ({
+        url: resolveSupabaseStorageUrl(m.url),
+        alt: m.alt ?? undefined,
+        width: m.width ?? undefined,
+        height: m.height ?? undefined,
+        blurDataUrl: m.blurDataUrl ?? undefined,
+      })),
     },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
@@ -252,7 +346,7 @@ export async function listProducts(
   const [rows, total] = await Promise.all([
     db.product.findMany({
       where,
-      include: productInclude,
+      select: productListSelect,
       orderBy,
       take: limit + 1,
       ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -263,13 +357,15 @@ export async function listProducts(
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   return {
-    items: slice.map(mapProduct),
+    items: slice.map(mapProductListItem),
     nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
     total,
   };
 }
 
-export async function getProductBySlug(slug: string): Promise<ProductDTO | null> {
+export const getProductBySlug = cache(async function getProductBySlug(
+  slug: string,
+): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
   const row = await db.product.findFirst({
     where: { slug, isActive: true },
@@ -277,7 +373,7 @@ export async function getProductBySlug(slug: string): Promise<ProductDTO | null>
   });
   if (!row) return null;
   return mapProduct(row);
-}
+});
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
