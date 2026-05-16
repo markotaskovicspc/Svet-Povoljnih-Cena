@@ -1,0 +1,116 @@
+[
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Aparati za vodu",
+    "productCount": 13,
+    "percentageOfCatalog": 0.0622
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Hlađenje i grejanje",
+    "productCount": 10,
+    "percentageOfCatalog": 0.0478
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Kuvanje i pečenje",
+    "productCount": 5,
+    "percentageOfCatalog": 0.0239
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Lepota i nega",
+    "productCount": 12,
+    "percentageOfCatalog": 0.0574
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Pegle",
+    "productCount": 11,
+    "percentageOfCatalog": 0.0526
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Priprema hrane",
+    "productCount": 29,
+    "percentageOfCatalog": 0.1388
+  },
+  {
+    "Kategorija": "Kućni aparati i beauty oprema",
+    "Grupa": "Usisivači",
+    "productCount": 5,
+    "percentageOfCatalog": 0.0239
+  },
+  {
+    "Kategorija": "Moda i putovanja",
+    "Grupa": "Koferi",
+    "productCount": 20,
+    "percentageOfCatalog": 0.0957
+  },
+  {
+    "Kategorija": "Moda i putovanja",
+    "Grupa": "Ženske čarape",
+    "productCount": 11,
+    "percentageOfCatalog": 0.0526
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Baštenski nameštaj",
+    "productCount": 7,
+    "percentageOfCatalog": 0.0335
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Dnevna soba",
+    "productCount": 23,
+    "percentageOfCatalog": 0.11
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Gejming",
+    "productCount": 2,
+    "percentageOfCatalog": 0.0096
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Kancelarija",
+    "productCount": 6,
+    "percentageOfCatalog": 0.0287
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Predsoblje",
+    "productCount": 2,
+    "percentageOfCatalog": 0.0096
+  },
+  {
+    "Kategorija": "Nameštaj",
+    "Grupa": "Trpezarija",
+    "productCount": 11,
+    "percentageOfCatalog": 0.0526
+  },
+  {
+    "Kategorija": "Sve za kuću",
+    "Grupa": "Alat",
+    "productCount": 11,
+    "percentageOfCatalog": 0.0526
+  },
+  {
+    "Kategorija": "Sve za kuću",
+    "Grupa": "Bazeni",
+    "productCount": 9,
+    "percentageOfCatalog": 0.0431
+  },
+  {
+    "Kategorija": "Sve za kuću",
+    "Grupa": "Priprema hrane",
+    "productCount": 1,
+    "percentageOfCatalog": 0.0048
+  },
+  {
+    "Kategorija": "Sve za kuću",
+    "Grupa": "Čišćenje i održavanje",
+    "productCount": 21,
+    "percentageOfCatalog": 0.1005
+  }
+]
