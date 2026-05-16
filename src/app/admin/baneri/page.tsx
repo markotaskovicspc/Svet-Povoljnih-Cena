@@ -19,14 +19,22 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+const assetPathSchema = z
+  .string()
+  .max(500)
+  .refine(
+    (value) => value.startsWith("/") || z.string().url().safeParse(value).success,
+    "Unesite pun URL ili putanju koja počinje sa /.",
+  );
+
 const upsertSchema = z.object({
   id: z.string().optional().nullable(),
   title: z.string().min(1).max(120),
   subtitle: z.string().max(240).optional().nullable(),
   ctaLabel: z.string().max(40).optional().nullable(),
   ctaHref: z.string().max(500).optional().nullable(),
-  imageDesktop: z.string().url().max(500),
-  imageMobile: z.string().url().max(500).optional().nullable(),
+  imageDesktop: assetPathSchema,
+  imageMobile: assetPathSchema.optional().nullable(),
   startsAt: z.string().optional().nullable(),
   endsAt: z.string().optional().nullable(),
   order: z.coerce.number().int().min(0).max(9999).default(0),
@@ -237,7 +245,7 @@ function BannerForm({
       <Field label="Slika (desktop URL)">
         <Input
           name="imageDesktop"
-          type="url"
+          type="text"
           required
           defaultValue={values?.imageDesktop ?? ""}
         />
@@ -245,7 +253,7 @@ function BannerForm({
       <Field label="Slika (mobilna URL)">
         <Input
           name="imageMobile"
-          type="url"
+          type="text"
           defaultValue={values?.imageMobile ?? ""}
         />
       </Field>

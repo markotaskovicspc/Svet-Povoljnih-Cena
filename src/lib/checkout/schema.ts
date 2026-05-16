@@ -7,6 +7,10 @@ import { z } from "zod";
 
 /** Serbian mobile number: digits only, 9-10 chars, must start with 06. */
 const phoneRegex = /^06\d{7,8}$/;
+const phoneSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.replace(/[\s-]/g, "") : value),
+  z.string().regex(phoneRegex, "Unesite 9 ili 10 cifara, broj mora početi sa 06"),
+);
 
 const baseAddress = z.object({
   firstName: z
@@ -21,10 +25,7 @@ const baseAddress = z.object({
     .string({ message: "Obavezno polje" })
     .trim()
     .email("Unesite ispravnu e-poštu"),
-  phone: z
-    .string({ message: "Obavezno polje" })
-    .trim()
-    .regex(phoneRegex, "Unesite 9 ili 10 cifara, broj mora početi sa 06"),
+  phone: phoneSchema,
   street: z
     .string({ message: "Obavezno polje" })
     .trim()
@@ -51,7 +52,7 @@ export const businessAddressSchema = baseAddress.extend({
   companyName: z
     .string({ message: "Obavezno polje" })
     .trim()
-    .min(2, "Naziv kompanije je obavezan"),
+    .min(2, "Naziv je obavezan"),
   pib: z
     .string({ message: "Obavezno polje" })
     .trim()

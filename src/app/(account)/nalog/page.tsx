@@ -55,10 +55,7 @@ export default async function AccountPage() {
     <div className="mx-auto w-full max-w-[var(--container-page)] px-4 py-10 md:px-6 md:py-14">
       <div className="flex flex-col gap-6 border-b border-border/70 pb-8 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-walnut">
-            Moj nalog
-          </p>
-          <h1 className="font-display mt-3 text-4xl text-ink-900 md:text-5xl">
+          <h1 className="font-display text-4xl text-ink-900 md:text-5xl">
             Dobro došli, {displayName}
           </h1>
           <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-ink-600">

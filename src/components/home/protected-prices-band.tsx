@@ -6,7 +6,6 @@ import type { Banner } from "@/types";
 export function ProtectedPricesBand({ banner }: { banner: Banner }) {
   const href = banner.ctaHref ?? "/niske-cene-pod-zastitom";
   const image = banner.imageMobile ?? banner.imageDesktop;
-
   return (
     <section className="bg-brand-blue text-white">
       <Link

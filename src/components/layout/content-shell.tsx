@@ -13,7 +13,6 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function ContentHero({
-  eyebrow,
   title,
   lead,
   meta,
@@ -26,12 +25,7 @@ export function ContentHero({
   return (
     <header className="bg-muted-bg/60 border-border/60 border-b">
       <div className="mx-auto w-full max-w-[var(--container-content)] px-6 py-16 md:py-24">
-        {eyebrow ? (
-          <p className="font-mono text-[11px] tracking-[0.22em] text-walnut uppercase">
-            {eyebrow}
-          </p>
-        ) : null}
-        <h1 className="font-display mt-3 text-4xl text-ink-900 md:text-6xl">
+        <h1 className="font-display text-4xl text-ink-900 md:text-6xl">
           {title}
         </h1>
         {lead ? (
