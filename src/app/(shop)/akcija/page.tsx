@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { listProducts } from "@/lib/api/catalog";
+import { getSectionBanner } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Akcija — kuratirana selekcija po sniženim cenama",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 };
 
 export default async function AkcijaPage() {
-  const { items: products } = await listProducts({ onSaleOnly: true, limit: 300 });
+  const [{ items: products }, banner] = await Promise.all([
+    listProducts({ onSaleOnly: true, limit: 300 }),
+    getSectionBanner("mesecna-akcija"),
+  ]);
   // Pick the action that ends latest (umbrella period banner).
   const period = products
     .map((p) => p.action!)
@@ -27,6 +31,8 @@ export default async function AkcijaPage() {
       period={period ? { endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}
       trail={[{ label: "Akcija" }]}
       source={products}
+      featureBanner={banner ?? undefined}
+      featureBannerMobileOnly
     />
   );
 }

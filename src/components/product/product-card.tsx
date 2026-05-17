@@ -63,6 +63,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   const visible = badges;
   const price = effectiveUnitPrice(product);
   const onSale = price.onSale;
+  const showMobileCartInline = onSale && Boolean(price.discountPct);
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
@@ -179,7 +180,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </button>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-1 px-2.5 pt-2.5 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
+      <div className="flex flex-1 flex-col gap-0.5 px-2.5 pt-2.5 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
         <h3 className="line-clamp-2 text-xs leading-snug font-medium text-ink-900 md:text-sm">
           <Link
             href={`/p/${product.slug}`}
@@ -188,13 +189,13 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             {product.name}
           </Link>
         </h3>
-        <p className="font-mono text-[10px] tracking-tight text-ink-500 md:text-[11px]">
+        <p className="font-mono text-[10px] leading-none tracking-tight text-ink-500 md:text-[11px] md:leading-normal">
           {formatDimensions(product.dimensionsCm)}
         </p>
 
-        <div className="pt-0.5 md:mt-auto md:pt-2">
+        <div className="pt-0 md:mt-auto md:pt-2">
           <div className="flex items-end justify-between gap-2">
-            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 md:gap-x-2">
+            <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 md:items-baseline md:gap-x-2 md:gap-y-0.5">
               {onSale ? (
                 <>
                   <span className="text-action text-sm font-bold md:text-base">
@@ -208,6 +209,14 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                       −{price.discountPct}%
                     </span>
                   ) : null}
+                  {showMobileCartInline ? (
+                    <MobileCartControl
+                      lineQty={lineQty}
+                      onAdd={handleAdd}
+                      onDecrease={() => setQty(product.sku, lineQty - 1)}
+                      onIncrease={() => setQty(product.sku, lineQty + 1)}
+                    />
+                  ) : null}
                 </>
               ) : (
                 <span className="text-sm font-semibold text-ink-900 md:text-base">
@@ -215,12 +224,14 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                 </span>
               )}
             </div>
-            <MobileCartControl
-              lineQty={lineQty}
-              onAdd={handleAdd}
-              onDecrease={() => setQty(product.sku, lineQty - 1)}
-              onIncrease={() => setQty(product.sku, lineQty + 1)}
-            />
+            {!showMobileCartInline ? (
+              <MobileCartControl
+                lineQty={lineQty}
+                onAdd={handleAdd}
+                onDecrease={() => setQty(product.sku, lineQty - 1)}
+                onIncrease={() => setQty(product.sku, lineQty + 1)}
+              />
+            ) : null}
           </div>
           {onSale && product.action?.isPermanent ? (
             <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">

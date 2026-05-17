@@ -18,6 +18,7 @@ const SCROLL_THRESHOLD = 16;
 export function Header({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const isHome = pathname === "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > SCROLL_THRESHOLD);
@@ -109,7 +110,12 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[150px] object-contain min-[390px]:w-[180px]"
+              className={cn(
+                "h-auto object-contain",
+                isHome
+                  ? "w-[210px] min-[390px]:w-[240px]"
+                  : "w-[150px] min-[390px]:w-[180px]",
+              )}
             />
           </div>
         </Link>

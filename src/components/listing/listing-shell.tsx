@@ -67,6 +67,7 @@ interface ListingShellProps {
   subTabs?: { id: string; label: string; matchKeyword: string }[];
   initialSubTab?: string;
   featureBanner?: Banner;
+  featureBannerMobileOnly?: boolean;
 }
 
 const VIEW_KEY = "spc:listing:view";
@@ -82,6 +83,7 @@ export function ListingShell({
   subTabs,
   initialSubTab,
   featureBanner,
+  featureBannerMobileOnly = false,
 }: ListingShellProps) {
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
@@ -190,7 +192,12 @@ export function ListingShell({
         </header>
 
         {featureBanner ? (
-          <div className="-mx-6 mb-6 md:mx-0 md:mb-8">
+          <div
+            className={cn(
+              "-mx-6 mb-6 md:mx-0 md:mb-8",
+              featureBannerMobileOnly && "md:hidden",
+            )}
+          >
             <ProtectedPricesBand banner={featureBanner} />
           </div>
         ) : null}

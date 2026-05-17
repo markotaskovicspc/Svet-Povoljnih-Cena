@@ -60,11 +60,14 @@ export default async function CustomerLoginPage({
 
   if (user?.userType === "customer") redirect(callbackUrl);
 
-  const socialProviders = getConfiguredSocialAuthProviders({
-    google: googleAction,
-    facebook: facebookAction,
-    apple: appleAction,
-  });
+  const socialProviders = getConfiguredSocialAuthProviders(
+    {
+      google: googleAction,
+      facebook: facebookAction,
+      apple: appleAction,
+    },
+    { includeUnavailable: true },
+  );
   const registrationHref = `/nalog/registracija?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 
   return (

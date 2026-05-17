@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { listProducts } from "@/lib/api/catalog";
+import { getSectionBanner } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Ograničena količina",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 };
 
 export default async function OgranicenaPonudaPage() {
-  const { items: products } = await listProducts({ limitedOnly: true, limit: 300 });
+  const [{ items: products }, banner] = await Promise.all([
+    listProducts({ limitedOnly: true, limit: 300 }),
+    getSectionBanner("ogranicena-ponuda"),
+  ]);
   return (
     <ListingShell
       kind="akcija"
@@ -17,6 +21,8 @@ export default async function OgranicenaPonudaPage() {
       subtitle="Ponude sa malim stanjem na lageru i jasno označenim dostupnim količinama."
       trail={[{ label: "Ograničena količina" }]}
       source={products}
+      featureBanner={banner ?? undefined}
+      featureBannerMobileOnly
     />
   );
 }
