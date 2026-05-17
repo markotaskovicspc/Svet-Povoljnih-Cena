@@ -18,11 +18,9 @@ export default async function OgranicenaPonudaPage() {
     <ListingShell
       kind="akcija"
       title="Ograničena količina"
-      subtitle="Ponude sa malim stanjem na lageru i jasno označenim dostupnim količinama."
       trail={[{ label: "Ograničena količina" }]}
       source={products}
       featureBanner={banner ?? undefined}
-      featureBannerMobileOnly
     />
   );
 }

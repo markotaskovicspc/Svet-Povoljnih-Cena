@@ -4,7 +4,7 @@
  * Listing shell — orchestrates filter state, sort, view-toggle (3/4 col),
  * "Učitaj još" cursor pagination, scroll-restore on back, and empty state.
  *
- * Visual chrome: page header (title/subtitle/period banner), breadcrumbs,
+ * Visual chrome: page header, breadcrumbs,
  * sticky desktop sidebar, mobile sheet trigger, active filter chip strip.
  *
  * Phase 1: pure client filtering over a pre-built product list. In Phase 4
@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
 import {
   LISTING_PAGE_SIZE,
   type FilterState,
@@ -55,8 +54,6 @@ interface ListingShellProps {
   kind: ListingKind;
   title: string;
   subtitle?: string;
-  /** Optional period banner (e.g. action validity). */
-  period?: { startsAt?: string; endsAt: string; label?: string };
   trail: Crumb[];
   source: Product[];
   /**
@@ -76,8 +73,6 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
-  subtitle,
-  period,
   trail,
   source,
   subTabs,
@@ -165,30 +160,17 @@ export function ListingShell({
       <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6 pb-20 md:pt-10">
         <Breadcrumbs trail={trail} className="mb-6" />
 
-        <header className="border-border/60 mb-6 flex flex-col gap-3 border-b pb-6 md:mb-8 md:pb-8">
+        <header className="mb-4 md:mb-5">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-3xl"
           >
-            <p className="hidden font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:block md:text-xs">
-              {kindEyebrow(kind)}
-            </p>
-            <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
+            <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
               {title}
             </h1>
-            {subtitle ? (
-              /* Hide marketing copy on mobile per spec — keep title + period only. */
-              <p className="mt-3 hidden text-base text-ink-700 md:block">{subtitle}</p>
-            ) : null}
           </motion.div>
-          {period ? (
-            <div className="bg-action/8 text-action ring-action/15 inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1">
-              <span aria-hidden className="size-1.5 rounded-full bg-action" />
-              {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
-            </div>
-          ) : null}
         </header>
 
         {featureBanner ? (
@@ -424,21 +406,3 @@ export function ListingSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
   );
 }
 
-function kindEyebrow(kind: ListingKind): string {
-  switch (kind) {
-    case "akcija":
-      return "Akcija";
-    case "nedeljna-akcija":
-      return "Sedam dana";
-    case "heroji-meseca":
-      return "Selekcija meseca";
-    case "niske-cene-pod-zastitom":
-      return "Trajno zaštićene cene";
-    case "outlet":
-      return "Outlet";
-    case "novo":
-      return "Novo u ponudi";
-    default:
-      return "Kategorija";
-  }
-}

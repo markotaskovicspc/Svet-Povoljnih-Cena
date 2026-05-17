@@ -18,11 +18,9 @@ export default async function SveDo999Page() {
     <ListingShell
       kind="akcija"
       title="Sve do 999"
-      subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."
       trail={[{ label: "Sve do 999" }]}
       source={products}
       featureBanner={banner ?? undefined}
-      featureBannerMobileOnly
     />
   );
 }

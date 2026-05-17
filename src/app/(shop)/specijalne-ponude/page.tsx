@@ -18,11 +18,9 @@ export default async function SpecijalnePonudePage() {
     <ListingShell
       kind="akcija"
       title="Specijalne ponude"
-      subtitle="Izdvojene kampanje i posebni popusti koji se menjaju po sezoni."
       trail={[{ label: "Specijalne ponude" }]}
       source={products}
       featureBanner={banner ?? undefined}
-      featureBannerMobileOnly
     />
   );
 }

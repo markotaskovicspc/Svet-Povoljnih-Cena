@@ -30,7 +30,6 @@ export default async function HerojiMesecaPage() {
     <ListingShell
       kind="heroji-meseca"
       title="Heroji meseca"
-      subtitle="Naša ekipa bira komade kojima verujemo — ovo su pobednici tekućeg meseca."
       trail={[{ label: "Heroji meseca" }]}
       source={products}
       featureBanner={banner}
