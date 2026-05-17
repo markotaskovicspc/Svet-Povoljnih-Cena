@@ -81,7 +81,6 @@ export default async function Home() {
         return (
           <SectionRail
             key={tab.id}
-            eyebrow="Tabovi"
             title={tab.label}
             href={tab.href}
             products={list}

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -51,19 +52,25 @@ export function getConfiguredSocialAuthProviders(
 }
 
 function ProviderMark({ id }: { id: SocialAuthProvider["id"] }) {
-  const mark = id === "facebook" ? "f" : id === "apple" ? "A" : "G";
+  if (id === "google" || id === "apple") {
+    return (
+      <Image
+        src={`/icons/${id}.svg`}
+        alt=""
+        aria-hidden="true"
+        width={20}
+        height={20}
+        className="size-5 shrink-0"
+      />
+    );
+  }
 
   return (
     <span
       aria-hidden
-      className={cn(
-        "inline-flex size-5 items-center justify-center rounded-full text-xs font-bold",
-        id === "google" && "bg-white text-ink-900 ring-1 ring-border",
-        id === "apple" && "bg-ink-900 text-white",
-        id === "facebook" && "bg-[#1877f2] text-white",
-      )}
+      className="inline-flex size-5 items-center justify-center rounded-full bg-[#1877f2] text-xs font-bold text-white"
     >
-      {mark}
+      f
     </span>
   );
 }

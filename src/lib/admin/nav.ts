@@ -32,7 +32,7 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/baneri", label: "Baneri", allowed: C },
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
-      { href: "/admin/tabovi", label: "Tabovi", allowed: C },
+      { href: "/admin/tabovi", label: "Navigacija", allowed: C },
       { href: "/admin/kategorije", label: "Kategorije", allowed: C },
       { href: "/admin/piktogrami", label: "Piktogrami", allowed: C },
     ],

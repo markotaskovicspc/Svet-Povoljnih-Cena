@@ -13,7 +13,7 @@ import { DataTable } from "@/components/admin/data-table";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Tabovi navigacije",
+  title: "Navigacija",
   robots: { index: false, follow: false },
 };
 
@@ -81,9 +81,9 @@ export default async function TabsPage() {
   return (
     <>
       <PageHeader
-        title="Tabovi"
+        title="Navigacija"
         description="Glavna navigacija ispod pretrage — maksimalno 6 aktivnih tabova istovremeno."
-        crumbs={[{ href: "/admin", label: "Admin" }, { label: "Tabovi" }]}
+        crumbs={[{ href: "/admin", label: "Admin" }, { label: "Navigacija" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_360px]">
         <Card className="p-0">

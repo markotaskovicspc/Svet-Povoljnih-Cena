@@ -78,7 +78,7 @@ I desktop i mobilna opcija treba da imaju isti princip.
 8. "Hamburger" - samo za mobile verziju. Hamburger treba da se sastoji od dva ili tri nivoa. Dva nivoa su obavezna. Raspored naziva i broj nivoa treba da se određuje kroz admin panel. Ukoliko nije unet treći nivo ne treba ga prikazivati.
 Za desktop verziju prvi nivo tabova se nalazi ispod trake sa informacijama.
 
-9. Tabovi - u narednom redu i u desktop i mobile verziji se nalaze Tab akcija, Tab nedeljna akcija, tab Heroji meseca, Tab ograničena ponuda i sl. (ostaviti mogućnost izmena naziva i broja tabova - max 4 taba)
+9. Navigacione kartice - u narednom redu i u desktop i mobile verziji se nalaze Tab akcija, Tab nedeljna akcija, tab Heroji meseca, Tab ograničena ponuda i sl. (ostaviti mogućnost izmena naziva i broja tabova - max 4 taba)
 Na mobilnoj verziji treba da budu u dva reda po dva taba
 
 10. Na home page-u nakon glavnog banera i tabova, potrebno je prikazati
