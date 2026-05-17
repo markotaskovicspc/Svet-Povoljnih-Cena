@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { db, hasDatabaseConnection } from "@/lib/db";
-import { heroBanners, editorialBanner, protectedPricesBanner } from "@/data/banners";
+import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } from "@/data/banners";
 import { headerTabs, promoBar } from "@/data/site";
 import type { Banner, PromoBar, Tab } from "@/types";
 
@@ -34,6 +34,7 @@ export const getActiveBanners = cache(async (): Promise<Banner[]> => {
       id: row.id,
       title: row.title,
       subtitle: row.subtitle ?? undefined,
+      badgeLabel: row.ctaLabel ?? undefined,
       ctaLabel: row.ctaLabel ?? undefined,
       ctaHref: row.ctaHref ?? undefined,
       imageDesktop: bannerAsset(row.imageDesktop, row.title),
@@ -55,6 +56,43 @@ export async function getEditorialBanner(): Promise<Banner> {
   return banners[1] ?? banners[0] ?? editorialBanner;
 }
 
+export async function getSectionBanner(sectionId: string): Promise<Banner | null> {
+  const fallback = sectionBanners[sectionId] ?? null;
+  if (!hasDatabaseConnection()) return fallback;
+
+  try {
+    const row = await db.banner.findFirst({
+      where: {
+        enabled: true,
+        ctaHref: fallback?.ctaHref,
+        ...activeWindow(new Date()),
+      },
+      orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
+    });
+
+    if (!row) return fallback;
+
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle ?? undefined,
+      badgeLabel: fallback?.badgeLabel ?? row.ctaLabel ?? undefined,
+      ctaLabel: row.ctaLabel ?? fallback?.ctaLabel,
+      ctaHref: row.ctaHref ?? fallback?.ctaHref,
+      imageDesktop: bannerAsset(row.imageDesktop, row.title),
+      imageMobile: row.imageMobile
+        ? bannerAsset(row.imageMobile, row.title)
+        : fallback?.imageMobile,
+      startsAt: row.startsAt?.toISOString(),
+      endsAt: row.endsAt?.toISOString(),
+      order: row.order,
+    };
+  } catch (error) {
+    console.error(`Failed to load section banner "${sectionId}"`, error);
+    return fallback;
+  }
+}
+
 export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
   if (!hasDatabaseConnection()) return protectedPricesBanner;
 
@@ -74,6 +112,7 @@ export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
       id: row.id,
       title: row.title,
       subtitle: row.subtitle ?? undefined,
+      badgeLabel: protectedPricesBanner.badgeLabel,
       ctaLabel: row.ctaLabel ?? protectedPricesBanner.ctaLabel,
       ctaHref: row.ctaHref ?? protectedPricesBanner.ctaHref,
       imageDesktop: bannerAsset(row.imageDesktop, row.title),

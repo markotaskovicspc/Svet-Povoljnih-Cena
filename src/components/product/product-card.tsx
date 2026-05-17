@@ -241,10 +241,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       </div>
 
       {/* Footer row — add button morphs into qty stepper when in cart */}
-      <div className="border-border/60 hidden items-center justify-between gap-2 border-t px-3 py-2 md:flex md:px-4 md:py-3">
-        <span className="hidden font-mono text-[11px] tracking-tight text-ink-500 md:inline">
-          {product.sku}
-        </span>
+      <div className="border-border/60 hidden items-center border-t px-3 py-2 md:flex md:px-4 md:py-3">
         <AnimatePresence mode="wait" initial={false}>
           {lineQty > 0 ? (
             <motion.div
@@ -254,7 +251,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-ink-900 inline-flex items-center overflow-hidden rounded-full text-canvas"
+              className="bg-ink-900 flex w-full items-center justify-between overflow-hidden rounded-full text-canvas"
               role="group"
               aria-label="Količina u korpi"
             >
@@ -291,7 +288,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+              className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
             >
               <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
             </motion.button>

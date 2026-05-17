@@ -8,15 +8,19 @@ import {
   getActiveTabs,
   getEditorialBanner,
   getProtectedPricesBanner,
+  getSectionBanner,
 } from "@/lib/storefront/content";
 import { listProducts } from "@/lib/api/catalog";
 
 export default async function Home() {
-  const [banners, tabs, editorial, protectedBanner] = await Promise.all([
+  const [banners, tabs, editorial, protectedBanner, heroSectionBanner, monthlyBanner, weeklyBanner] = await Promise.all([
     getActiveBanners(),
     getActiveTabs(),
     getEditorialBanner(),
     getProtectedPricesBanner(),
+    getSectionBanner("heroji-meseca"),
+    getSectionBanner("mesecna-akcija"),
+    getSectionBanner("nedeljna-akcija"),
   ]);
   const [heroes, monthly, weekly] = await Promise.all([
     listProducts({ heroOnly: true, limit: 12 }),
@@ -33,11 +37,10 @@ export default async function Home() {
       <HeroCarousel banners={banners} />
 
       <SectionRail
-        eyebrow="Selekcija meseca"
         title="Heroji meseca"
-        description="Komadi koje preporučujemo — najbolji odnos cene i kvaliteta u tekućem mesecu."
         href="/heroji-meseca"
         products={heroes.items}
+        banner={heroSectionBanner}
         mobileMinimal
       />
 
@@ -49,6 +52,7 @@ export default async function Home() {
         description="Kuratirana selekcija sa popustima do 30%. Akcija traje do kraja meseca."
         href="/akcija"
         products={monthly.items}
+        banner={monthlyBanner}
         mobileMinimal
       />
 
@@ -60,6 +64,7 @@ export default async function Home() {
         description="Brze ponude koje se menjaju svake nedelje. Iskoristi dok traju."
         href="/nedeljna-akcija"
         products={weekly.items}
+        banner={weeklyBanner}
         mobileMinimal
       />
 
@@ -68,9 +73,10 @@ export default async function Home() {
           otherTabs.map(async (tab) => ({
             tab,
             list: await productsForTab(tab.href),
+            banner: await getSectionBanner(tab.id),
           })),
         )
-      ).map(({ tab, list }) => {
+      ).map(({ tab, list, banner }) => {
         if (!list.length) return null;
         return (
           <SectionRail
@@ -79,6 +85,7 @@ export default async function Home() {
             title={tab.label}
             href={tab.href}
             products={list}
+            banner={banner}
             mobileMinimal
           />
         );

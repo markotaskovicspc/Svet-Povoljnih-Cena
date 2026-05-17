@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
-import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CartLineRow } from "./cart-line-row";
+import { PurchaseSuggestion } from "./purchase-suggestion";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -101,8 +101,6 @@ function CartSummary({
   const [applied, setApplied] = useState<{ code: string; valid: boolean } | null>(
     null,
   );
-  const lines = useCart((s) => s.lines);
-  const openCrossSell = useCartUi((s) => s.openCrossSell);
 
   function applyVoucher(e: React.FormEvent) {
     e.preventDefault();
@@ -189,12 +187,10 @@ function CartSummary({
           </span>
         </div>
 
+        <PurchaseSuggestion />
+
         <Link
           href="/checkout"
-          onClick={() => {
-            const sku = lines[0]?.sku;
-            if (sku) openCrossSell(sku);
-          }}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
           Nastavi ka podacima za isporuku

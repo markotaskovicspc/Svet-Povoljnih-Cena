@@ -411,11 +411,13 @@ async function validateStep(
     case "identity":
       return identity !== null;
     case "shipping":
-      return trigger(addressFieldNames("shipping", getValues("shipping.liceType")));
+      return trigger(addressFieldNames("shipping", getValues("shipping.liceType")), {
+        shouldFocus: true,
+      });
     case "method":
-      return trigger(["shippingMethod"]);
+      return trigger(["shippingMethod"], { shouldFocus: true });
     case "payment":
-      return trigger(["paymentMethod"]);
+      return trigger(["paymentMethod"], { shouldFocus: true });
     default:
       return true;
   }

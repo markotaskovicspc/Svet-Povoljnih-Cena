@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Award,
   Box,
@@ -16,15 +17,15 @@ import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
-import { PdpDelivery } from "@/components/product/pdp-delivery";
+import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
 import { getProductBySlug, listProducts } from "@/lib/api/catalog";
-import { formatDate, formatRsd } from "@/lib/format";
+import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Product Detail Page — Phase 1E (12 rows from spec).
+ * Product Detail Page â€” Phase 1E (12 rows from spec).
  *
  * Server component (SEO-critical). Interactive bits (gallery, add-to-cart,
  * delivery picker) are client islands. Missing or inactive products resolve
@@ -37,11 +38,11 @@ const slugify = (s: string) =>
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/š/g, "s")
-    .replace(/đ/g, "dj")
-    .replace(/č/g, "c")
-    .replace(/ć/g, "c")
-    .replace(/ž/g, "z")
+    .replace(/Å¡/g, "s")
+    .replace(/Ä‘/g, "dj")
+    .replace(/Ä/g, "c")
+    .replace(/Ä‡/g, "c")
+    .replace(/Å¾/g, "z")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
@@ -54,10 +55,10 @@ interface RouteProps {
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  if (!product) return { title: "Proizvod nije pronađen" };
+  if (!product) return { title: "Proizvod nije pronaÄ‘en" };
   const price = product.salePrice ?? product.fullPrice;
   return {
-    title: `${product.name} — ${formatRsd(price)}`,
+    title: `${product.name} â€” ${formatRsd(price)}`,
     description: product.shortDescription ?? product.description.slice(0, 160),
   };
 }
@@ -70,7 +71,7 @@ export default async function ProductPage({ params }: RouteProps) {
   const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
   const sale = product.salePrice ?? product.fullPrice;
 
-  // Row I — Breadcrumbs
+  // Row I â€” Breadcrumbs
   const trail: Crumb[] = [
     ...product.categoryPath.map((label, i, arr) => ({
       label,
@@ -98,25 +99,25 @@ export default async function ProductPage({ params }: RouteProps) {
       : Promise.resolve([]),
   ]);
 
-  // Badges (mirror product-card logic, simplified — rendered as overlay)
+  // Badges (mirror product-card logic, simplified â€” rendered as overlay)
   const overlayBadges = buildOverlayBadges(product);
 
-  // Pictograms — fall back to synthesized set if XML hasn't supplied any yet
+  // Pictograms â€” fall back to synthesized set if XML hasn't supplied any yet
   const pictograms = product.pictograms.length
-    ? product.pictograms.map((p) => ({ label: p.label, code: p.code }))
+    ? product.pictograms
+        .map((p) => ({ label: p.label, code: p.code }))
+        .filter((p) => !["assembly", "montaza", "montaža"].includes(p.code.toLowerCase()))
     : synthesizedPictograms(product);
-
-  // Materials — show only when present (Phase 4 fills these from XML)
   const materials = product.materials;
 
   return (
     <article className="bg-canvas pb-24 md:pb-16">
-      {/* Row I — Breadcrumbs */}
+      {/* Row I â€” Breadcrumbs */}
       <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6">
         <Breadcrumbs trail={trail} />
       </div>
 
-      {/* Row II/III — Hero info pair */}
+      {/* Row II/III â€” Hero info pair */}
       <section className="mx-auto mt-6 grid w-full max-w-[var(--container-page)] gap-10 px-6 md:grid-cols-[1.1fr_1fr] md:gap-12">
         {/* Gallery (Row III + IV combined into one stage) */}
         <PdpGallery
@@ -159,21 +160,12 @@ export default async function ProductPage({ params }: RouteProps) {
             <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-4xl">
               {product.name}
             </h1>
-            {/*
-             * Spec (mobile): hide the internal SKU/code line ("BS-n2212").
-             * Kept in the DOM for desktop only so support reps can still see it.
-             */}
-            <p className="mt-1 hidden font-mono text-xs text-ink-500 md:block">
-              SKU {product.sku}
+            <p className="mt-2 font-mono text-xs tracking-tight text-ink-500 md:text-sm">
+              {formatDimensions(product.dimensionsCm)}
             </p>
-            {product.shortDescription ? (
-              <p className="mt-3 max-w-prose text-sm text-ink-700 md:mt-4 md:text-base">
-                {product.shortDescription}
-              </p>
-            ) : null}
           </header>
 
-          {/* Price block — only the active (sale) price is emphasised. */}
+          {/* Price block â€” only the active (sale) price is emphasised. */}
           <div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               {onSale ? (
@@ -186,7 +178,7 @@ export default async function ProductPage({ params }: RouteProps) {
                   </span>
                   {product.discountPct ? (
                     <span className="bg-action/10 text-action ring-action/20 rounded-full px-2 py-0.5 text-xs font-semibold ring-1">
-                      −{product.discountPct}%
+                      âˆ’{product.discountPct}%
                     </span>
                   ) : null}
                 </>
@@ -198,11 +190,11 @@ export default async function ProductPage({ params }: RouteProps) {
             </div>
             {onSale && product.action?.isPermanent ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Niska cena pod trajnom zaštitom od 01.05.2026.
+                Niska cena pod trajnom zaÅ¡titom od 01.05.2026.
               </p>
             ) : onSale && product.action?.startsAt && product.action.endsAt ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
+                Akcijska cena vaÅ¾i od {formatDate(product.action.startsAt)} do{" "}
                 {formatDate(product.action.endsAt)}.
               </p>
             ) : null}
@@ -214,29 +206,23 @@ export default async function ProductPage({ params }: RouteProps) {
           <ul className="border-border/60 grid grid-cols-2 gap-3 border-t pt-4 text-xs text-ink-700">
             <FeatureChip
               icon={<Truck className="size-3.5" aria-hidden />}
-              label={`Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} dana`}
+              label={`Isporuka ${product.deliveryDays.min}â€“${product.deliveryDays.max} dana`}
             />
             <FeatureChip
               icon={<ShieldCheck className="size-3.5" aria-hidden />}
               label="2 god. garancije"
             />
-            {product.allowsAssembly ? (
-              <FeatureChip
-                icon={<Hammer className="size-3.5" aria-hidden />}
-                label="Montaža dostupna"
-              />
-            ) : null}
             {product.isLimited ? (
               <FeatureChip
                 icon={<Sparkles className="size-3.5" aria-hidden />}
-                label="Ograničena količina"
+                label="OgraniÄena koliÄina"
               />
             ) : null}
           </ul>
         </div>
       </section>
 
-      {/* Row V — Pictogram strip */}
+      {/* Row V â€” Pictogram strip */}
       <Reveal>
         <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="sr-only">Karakteristike</h2>
@@ -254,7 +240,7 @@ export default async function ProductPage({ params }: RouteProps) {
         </section>
       </Reveal>
 
-      {/* Row VI — Description */}
+      {/* Row VI â€” Description */}
       <Reveal>
         <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
@@ -269,20 +255,6 @@ export default async function ProductPage({ params }: RouteProps) {
         </section>
       </Reveal>
 
-      {/* Row VII — Dimensions */}
-      <Reveal>
-        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-          <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-            Dimenzije
-          </h2>
-          <div className="mt-6 grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-center">
-            <DimensionsTable dims={product.dimensionsCm} />
-            <DimensionsDiagram dims={product.dimensionsCm} />
-          </div>
-        </section>
-      </Reveal>
-
-      {/* Row VIII — Materials */}
       {materials.length ? (
         <Reveal>
           <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
@@ -317,23 +289,19 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
+      <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
+        <Link
+          href="/uslovi-isporuke"
+          className="text-walnut underline underline-offset-4 transition hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"
+        >
+          Uslovi isporuke i montaže
+        </Link>
+      </section>
 
-      {/* Row IX — Delivery & assembly */}
-      <Reveal>
-        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-          <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-            Isporuka i montaža
-          </h2>
-          <div className="mt-6">
-            <PdpDelivery product={product} />
-          </div>
-        </section>
-      </Reveal>
-
-      {/* Row X — Frequently bought together (same collection) */}
+      {/* Row X â€” Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
-          eyebrow="Često kupovano zajedno"
+          eyebrow="ÄŒesto kupovano zajedno"
           title="Upotpunite kolekciju"
           href={
             product.collection
@@ -345,18 +313,20 @@ export default async function ProductPage({ params }: RouteProps) {
         />
       ) : null}
 
-      {/* Row XI — Similar products (same group) */}
+      {/* Row XI â€” Similar products (same group) */}
       {similar.length ? (
         <SectionRail
-          eyebrow="Slični artikli"
-          title="Možda će vam se svideti"
+          eyebrow="SliÄni artikli"
+          title="MoÅ¾da Ä‡e vam se svideti"
           href={`/k/${product.categoryPath.map(slugify).join("/")}`}
           ctaLabel="Sve iz kategorije"
           products={similar}
         />
       ) : null}
 
-      {/* Row XII — Sticky add-to-cart (mobile) */}
+      <RecentlyViewedProducts product={product} />
+
+      {/* Sticky add-to-cart (mobile) */}
       <PdpAddToCart product={product} variant="mobile" />
     </article>
   );
@@ -389,7 +359,7 @@ function buildOverlayBadges(p: Product): BadgeOverlay[] {
   }
   if (p.isNew) out.push({ label: "Novo", cls: "bg-olive text-white" });
   if (p.isLimited)
-    out.push({ label: "Ograničena količina", cls: "bg-warning text-ink-900" });
+    out.push({ label: "OgraniÄena koliÄina", cls: "bg-warning text-ink-900" });
   if (p.isDtz && p.stock < 15)
     out.push({
       label: "Dok traju zalihe",
@@ -413,113 +383,6 @@ function FeatureChip({
   );
 }
 
-function DimensionsTable({ dims }: { dims: Product["dimensionsCm"] }) {
-  return (
-    <table className="bg-surface ring-border/60 w-full overflow-hidden rounded-2xl text-sm ring-1">
-      <tbody>
-        <DimRow label="Širina (Š)" value={`${dims.w} cm`} />
-        <DimRow label="Dubina (D)" value={`${dims.d} cm`} />
-        <DimRow label="Visina (V)" value={`${dims.h} cm`} />
-      </tbody>
-    </table>
-  );
-}
-
-function DimRow({ label, value }: { label: string; value: string }) {
-  return (
-    <tr className="border-border/60 border-b last:border-0">
-      <th
-        scope="row"
-        className="text-left text-xs font-medium tracking-wide text-ink-500 uppercase px-4 py-3"
-      >
-        {label}
-      </th>
-      <td className="px-4 py-3 text-right font-mono text-ink-900">{value}</td>
-    </tr>
-  );
-}
-
-function DimensionsDiagram({ dims }: { dims: Product["dimensionsCm"] }) {
-  // Simple isometric box outline. Width/height of the SVG are unitless;
-  // ratios reflect the proportions of the product so the sketch looks "right".
-  const max = Math.max(dims.w, dims.d, dims.h, 1);
-  const w = (dims.w / max) * 160;
-  const d = (dims.d / max) * 90;
-  const h = (dims.h / max) * 200;
-
-  const ox = 40; // origin x for front face bottom-left
-  const oy = 240; // origin y for front face bottom-left
-  // Front rectangle
-  const frontPts = `${ox},${oy} ${ox + w},${oy} ${ox + w},${oy - h} ${ox},${oy - h}`;
-  // Top rhombus
-  const topPts = `${ox},${oy - h} ${ox + w},${oy - h} ${ox + w + d * 0.6},${oy - h - d * 0.5} ${ox + d * 0.6},${oy - h - d * 0.5}`;
-  // Right rhombus
-  const rightPts = `${ox + w},${oy} ${ox + w + d * 0.6},${oy - d * 0.5} ${ox + w + d * 0.6},${oy - h - d * 0.5} ${ox + w},${oy - h}`;
-
-  return (
-    <div className="bg-muted-bg/40 ring-border/60 flex items-center justify-center rounded-2xl p-6 ring-1">
-      <svg
-        viewBox="0 0 320 280"
-        className="w-full max-w-sm text-ink-700"
-        role="img"
-        aria-label={`Dijagram dimenzija ${dims.w} × ${dims.d} × ${dims.h} cm`}
-      >
-        <polygon
-          points={frontPts}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.25"
-        />
-        <polygon
-          points={topPts}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.25"
-        />
-        <polygon
-          points={rightPts}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.25"
-        />
-        {/* Width label */}
-        <text
-          x={ox + w / 2}
-          y={oy + 20}
-          fontSize="11"
-          textAnchor="middle"
-          fill="currentColor"
-          fontFamily="ui-monospace, monospace"
-        >
-          Š {dims.w} cm
-        </text>
-        {/* Height label */}
-        <text
-          x={ox - 10}
-          y={oy - h / 2}
-          fontSize="11"
-          textAnchor="end"
-          fill="currentColor"
-          fontFamily="ui-monospace, monospace"
-        >
-          V {dims.h} cm
-        </text>
-        {/* Depth label */}
-        <text
-          x={ox + w + d * 0.6 + 6}
-          y={oy - h - d * 0.25}
-          fontSize="11"
-          textAnchor="start"
-          fill="currentColor"
-          fontFamily="ui-monospace, monospace"
-        >
-          D {dims.d} cm
-        </text>
-      </svg>
-    </div>
-  );
-}
-
 interface FallbackPictogram {
   code: string;
   label: string;
@@ -527,14 +390,11 @@ interface FallbackPictogram {
 
 function synthesizedPictograms(p: Product): FallbackPictogram[] {
   const out: FallbackPictogram[] = [
-    { code: "delivery", label: `Isporuka ${p.deliveryDays.min}–${p.deliveryDays.max} dana` },
+    { code: "delivery", label: `Isporuka ${p.deliveryDays.min}â€“${p.deliveryDays.max} dana` },
     { code: "warranty", label: "Garancija 2 godine" },
     { code: "quality", label: "Kontrola kvaliteta" },
     { code: "ruler", label: "Precizne dimenzije" },
   ];
-  if (p.allowsAssembly) {
-    out.push({ code: "assembly", label: "Mogućnost montaže" });
-  }
   if (p.isHero) {
     out.push({ code: "hero", label: "Heroj meseca" });
   }

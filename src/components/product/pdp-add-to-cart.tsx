@@ -8,14 +8,12 @@
  * Auto-hides if the product is fully out of stock (stock=0 && incomingStock=0);
  * the route itself returns notFound in that case, so this is just a guard.
  */
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd } from "@/lib/format";
-import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 
 interface PdpAddToCartProps {
@@ -26,10 +24,6 @@ interface PdpAddToCartProps {
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const reduced = useReducedMotion();
-  const setQty = useCart((s) => s.setQty);
-  const lineQty = useCart(
-    (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
-  );
 
   const [pickQty, setPickQty] = useState(1);
   const [showMobile, setShowMobile] = useState(false);
@@ -99,72 +93,14 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
 
   if (variant === "desktop") {
     return (
-      <div className="bg-surface ring-border/60 flex flex-col gap-3 rounded-2xl p-4 shadow-soft-2 ring-1 md:sticky md:top-28 md:gap-4 md:p-5">
-        <div className="flex items-baseline gap-2">
-          {onSale ? (
-            <>
-              <span className="text-action text-2xl font-semibold">
-                {formatRsd(sale)}
-              </span>
-              <span className="text-sm text-ink-500 line-through">
-                {formatRsd(product.fullPrice)}
-              </span>
-            </>
-          ) : (
-            <span className="text-2xl font-semibold text-ink-900">
-              {formatRsd(product.fullPrice)}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-ink-500">
-          Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} radnih dana
-        </p>
+      <div className="flex flex-col gap-2">
         {ctas}
-        <div className="flex items-center justify-between text-xs">
-          {lineQty > 0 ? (
-            <span className="text-success" aria-live="polite">
-              U korpi: {lineQty} kom
-            </span>
-          ) : (
-            <span className="text-ink-500">Nije u korpi</span>
-          )}
-          <Link
-            href="/korpa"
-            className="text-walnut hover:underline focus-visible:underline focus-visible:outline-none"
-          >
-            Pregled korpe
-          </Link>
-        </div>
-        {lineQty > 0 ? (
-          <div className="border-border/60 flex items-center justify-between border-t pt-3">
-            <span className="text-xs text-ink-500">Promeni količinu u korpi</span>
-            <div className="bg-canvas ring-border/60 inline-flex items-center overflow-hidden rounded-full ring-1">
-              <button
-                type="button"
-                onClick={() => setQty(product.sku, lineQty - 1)}
-                aria-label="Smanji u korpi"
-                className="hover:bg-muted-bg inline-flex size-7 items-center justify-center text-ink-700"
-              >
-                <Minus className="size-3.5" aria-hidden />
-              </button>
-              <span className="min-w-6 text-center text-xs font-medium tabular-nums">
-                {lineQty}
-              </span>
-              <button
-                type="button"
-                onClick={() => setQty(product.sku, lineQty + 1)}
-                aria-label="Povećaj u korpi"
-                className="hover:bg-muted-bg inline-flex size-7 items-center justify-center text-ink-700"
-              >
-                <Plus className="size-3.5" aria-hidden />
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <p className="text-xs text-ink-500">
+          Isporuka {product.deliveryDays.min}-{product.deliveryDays.max} radnih dana
+        </p>
       </div>
     );
   }
-
   // Mobile sticky bar
   return (
     <motion.div

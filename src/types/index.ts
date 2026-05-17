@@ -110,6 +110,7 @@ export interface Banner {
   id: string;
   title: string;
   subtitle?: string;
+  badgeLabel?: string;
   ctaLabel?: string;
   ctaHref?: string;
   imageDesktop: MediaAsset;

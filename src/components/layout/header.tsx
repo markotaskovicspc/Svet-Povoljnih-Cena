@@ -35,10 +35,10 @@ export function Header({ tabs }: { tabs: Tab[] }) {
           : "0 0 0 rgba(0,0,0,0)",
       }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="bg-white text-brand-blue md:sticky md:top-0 md:z-40"
+      className="bg-white text-brand-blue"
     >
       {/* Row 1 — desktop */}
-      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-5 px-6 py-3 md:flex md:py-4">
+      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-3 md:flex md:py-4">
         <DesktopMenu tabs={tabs} />
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="shrink-0 rounded-lg px-2 py-1">
@@ -48,7 +48,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[180px] object-contain"
+              className="h-auto w-[234px] max-w-[22vw] object-contain"
             />
           </div>
         </Link>
@@ -58,7 +58,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
         <div className="flex items-center gap-1">
           <Link
             href="/nalog"
-            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
+          className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
           >
             <User2 className="size-4" aria-hidden /> Prijava
           </Link>
@@ -79,7 +79,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               key={t.id}
               href={t.href}
               className={cn(
-                "relative shrink-0 rounded-full px-3 py-1.5 text-sm transition",
+                "relative shrink-0 rounded-full px-3 py-1.5 text-[15px] font-semibold transition",
                 active
                   ? "bg-brand-blue/10 text-brand-blue"
                   : "text-brand-blue/80 hover:bg-brand-blue/10",

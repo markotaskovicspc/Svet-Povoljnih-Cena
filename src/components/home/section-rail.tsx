@@ -5,10 +5,11 @@
  * Used for Heroji meseca, Mesečna akcija, Nedeljne akcije, and Ostali tabovi.
  */
 import Link from "next/link";
+import Image from "next/image";
 import { useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
-import type { Product } from "@/types";
+import type { Banner, Product } from "@/types";
 import { ProductCard } from "@/components/product/product-card";
 import { DragHint } from "@/components/motion/drag-hint";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ interface SectionRailProps {
   href: string;
   ctaLabel?: string;
   products: Product[];
+  banner?: Banner | null;
   /**
    * On mobile we deliberately strip eyebrow + description for some sections
    * (e.g. Heroji meseca) to keep the layout dense and uncluttered. The
@@ -35,6 +37,7 @@ export function SectionRail({
   href,
   ctaLabel = "Prikaži sve",
   products,
+  banner,
   mobileMinimal,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -42,7 +45,9 @@ export function SectionRail({
 
   return (
     <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-20">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      {banner ? <SectionBanner banner={banner} href={href} /> : null}
+
+      <header className={cn("flex flex-wrap items-end justify-between gap-3", banner && "mt-4 md:mt-6")}>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -60,9 +65,14 @@ export function SectionRail({
               {eyebrow}
             </p>
           ) : null}
-          <h2 className="font-display mt-1 text-2xl text-ink-900 md:mt-2 md:text-4xl">
-            {title}
-          </h2>
+          <Link
+            href={href}
+            className="group/title inline-block rounded-md focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+          >
+            <h2 className="font-display mt-1 text-2xl text-ink-900 transition group-hover/title:text-walnut md:mt-2 md:text-4xl">
+              {title}
+            </h2>
+          </Link>
           {description ? (
             <p
               className={cn(
@@ -117,5 +127,47 @@ export function SectionRail({
         </motion.ul>
       </div>
     </section>
+  );
+}
+
+function SectionBanner({ banner, href }: { banner: Banner; href: string }) {
+  const target = banner.ctaHref ?? href;
+
+  return (
+    <Link
+      href={target}
+      className="group/banner block overflow-hidden rounded-2xl bg-ink-900 text-canvas shadow-soft-2 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none md:rounded-3xl"
+    >
+      <div className="relative aspect-[16/7] min-h-[160px] md:aspect-[24/7]">
+        <Image
+          src={banner.imageDesktop.url}
+          alt={banner.imageDesktop.alt ?? banner.title}
+          fill
+          sizes="(min-width: 1440px) 1392px, 100vw"
+          className="object-cover opacity-[0.82] transition duration-700 group-hover/banner:scale-[1.02]"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-gradient-to-r from-ink-900/82 via-ink-900/34 to-ink-900/5"
+        />
+        <div className="absolute inset-0 flex items-center p-5 md:p-8">
+          <div className="max-w-xl">
+            {banner.badgeLabel ? (
+              <span className="inline-flex rounded-full bg-canvas/92 px-3 py-1 text-[11px] font-semibold text-ink-900 shadow-soft-1">
+                {banner.badgeLabel}
+              </span>
+            ) : null}
+            <p className="font-display mt-3 text-2xl leading-tight md:text-4xl">
+              {banner.title}
+            </p>
+            {banner.subtitle ? (
+              <p className="mt-2 hidden max-w-md text-sm text-canvas/82 md:block">
+                {banner.subtitle}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }

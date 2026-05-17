@@ -34,7 +34,17 @@ export function ShippingForm() {
             <button
               key={lt}
               type="button"
-              onClick={() => setValue("shipping.liceType", lt, { shouldDirty: true })}
+              onClick={() => {
+                setValue("shipping.liceType", lt, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                });
+                if (lt === "pravno" && liceType !== "pravno") {
+                  setValue("shipping.companyName", "", { shouldDirty: false });
+                  setValue("shipping.pib", "", { shouldDirty: false });
+                }
+              }}
               aria-pressed={liceType === lt}
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-medium transition focus-visible:outline-none",

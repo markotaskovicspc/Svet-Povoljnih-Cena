@@ -53,7 +53,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger
         aria-label="Otvori kategorije"
-        className="hidden items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-brand-blue transition hover:bg-brand-blue/10 focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none md:inline-flex"
+        className="hidden items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold text-brand-blue transition hover:bg-brand-blue/10 focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none md:inline-flex"
       >
         <Menu className="size-4" aria-hidden />
         Meni
