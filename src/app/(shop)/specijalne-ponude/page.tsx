@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
-import { getSectionBanner } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Specijalne ponude",
@@ -11,10 +10,10 @@ export const metadata: Metadata = {
 };
 
 export default async function SpecijalnePonudePage() {
-  const [{ items: products }, banner] = await Promise.all([
-    listProducts({ actionSlug: "specijalne-ponude", limit: 300 }),
-    getSectionBanner("specijalne-ponude"),
-  ]);
+  const { items: products } = await listProducts({
+    actionSlug: "specijalne-ponude",
+    limit: 300,
+  });
   return (
     <ListingShell
       kind="akcija"
@@ -24,7 +23,6 @@ export default async function SpecijalnePonudePage() {
       subtitle="Izdvojene kampanje i posebni popusti koji se menjaju po sezoni."
       trail={[{ label: "Specijalne ponude" }]}
       source={products}
-      featureBanner={banner ?? undefined}
     />
   );
 }
