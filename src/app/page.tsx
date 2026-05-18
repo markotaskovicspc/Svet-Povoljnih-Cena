@@ -8,19 +8,16 @@ import {
   getActiveTabs,
   getEditorialBanner,
   getProtectedPricesBanner,
-  getSectionBanner,
 } from "@/lib/storefront/content";
 import { listProducts } from "@/lib/api/catalog";
+import { akcijaIcon, herojiMesecaIcon } from "@/data/campaign-icons";
 
 export default async function Home() {
-  const [banners, tabs, editorial, protectedBanner, heroSectionBanner, monthlyBanner, weeklyBanner] = await Promise.all([
+  const [banners, tabs, editorial, protectedBanner] = await Promise.all([
     getActiveBanners(),
     getActiveTabs(),
     getEditorialBanner(),
     getProtectedPricesBanner(),
-    getSectionBanner("heroji-meseca"),
-    getSectionBanner("mesecna-akcija"),
-    getSectionBanner("nedeljna-akcija"),
   ]);
   const [heroes, monthly, weekly] = await Promise.all([
     listProducts({ heroOnly: true, limit: 12 }),
@@ -38,34 +35,30 @@ export default async function Home() {
 
       <SectionRail
         title="Heroji meseca"
+        icon={herojiMesecaIcon}
         href="/heroji-meseca"
         products={heroes.items}
-        banner={heroSectionBanner}
-        mobileMinimal
+        minimalHeader
       />
 
       <ProtectedPricesBand banner={protectedBanner} />
 
       <SectionRail
-        eyebrow="Aktivna akcija"
         title="Mesečna akcija"
-        description="Kuratirana selekcija sa popustima do 30%. Akcija traje do kraja meseca."
+        icon={akcijaIcon}
         href="/akcija"
         products={monthly.items}
-        banner={monthlyBanner}
-        mobileMinimal
+        minimalHeader
       />
 
       <EditorialBanner banner={editorial} />
 
       <SectionRail
-        eyebrow="Sedam dana"
         title="Nedeljna akcija"
-        description="Brze ponude koje se menjaju svake nedelje. Iskoristi dok traju."
+        icon={akcijaIcon}
         href="/nedeljna-akcija"
         products={weekly.items}
-        banner={weeklyBanner}
-        mobileMinimal
+        minimalHeader
       />
 
       {(
@@ -73,19 +66,18 @@ export default async function Home() {
           otherTabs.map(async (tab) => ({
             tab,
             list: await productsForTab(tab.href),
-            banner: await getSectionBanner(tab.id),
           })),
         )
-      ).map(({ tab, list, banner }) => {
+      ).map(({ tab, list }) => {
         if (!list.length) return null;
         return (
           <SectionRail
             key={tab.id}
             title={tab.label}
+            iconName={sectionIconName(tab.icon, tab.href)}
             href={tab.href}
             products={list}
-            banner={banner}
-            mobileMinimal
+            minimalHeader
           />
         );
       })}
@@ -93,6 +85,31 @@ export default async function Home() {
       <UspStrip />
     </>
   );
+}
+
+const sectionIconByHref: Record<string, string> = {
+  "/akcija": "Tag",
+  "/nedeljna-akcija": "CalendarDays",
+  "/heroji-meseca": "Crown",
+  "/ogranicena-ponuda": "Hourglass",
+  "/sve-do-999": "ShieldCheck",
+  "/specijalne-ponude": "Sparkles",
+  "/svet-akcija": "Rows3",
+};
+
+const supportedSectionIcons = new Set([
+  "CalendarDays",
+  "Crown",
+  "Hourglass",
+  "Rows3",
+  "ShieldCheck",
+  "Sparkles",
+  "Tag",
+]);
+
+function sectionIconName(icon: string | undefined, href: string) {
+  if (icon && supportedSectionIcons.has(icon)) return icon;
+  return sectionIconByHref[href];
 }
 
 async function productsForTab(href: string) {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
+import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { getSectionBanner } from "@/lib/storefront/content";
 
@@ -18,6 +19,9 @@ export default async function SveDo999Page() {
     <ListingShell
       kind="akcija"
       title="Sve do 999"
+      titleIcon={akcijaIcon}
+      headerVariant="promo"
+      subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."
       trail={[{ label: "Sve do 999" }]}
       source={products}
       featureBanner={banner ?? undefined}

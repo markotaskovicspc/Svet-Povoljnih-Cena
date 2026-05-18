@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
+import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { getSectionBanner } from "@/lib/storefront/content";
 
@@ -18,6 +19,9 @@ export default async function OgranicenaPonudaPage() {
     <ListingShell
       kind="akcija"
       title="Ograničena količina"
+      titleIcon={akcijaIcon}
+      headerVariant="promo"
+      subtitle="Ponude sa malim stanjem na lageru i jasno označenim dostupnim količinama."
       trail={[{ label: "Ograničena količina" }]}
       source={products}
       featureBanner={banner ?? undefined}

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
+import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { getSectionBanner } from "@/lib/storefront/content";
 
@@ -14,12 +15,23 @@ export default async function AkcijaPage() {
     listProducts({ onSaleOnly: true, limit: 300 }),
     getSectionBanner("mesecna-akcija"),
   ]);
+  // Pick the action that ends latest (umbrella period banner).
+  const period = products
+    .flatMap((p) => (p.action && !p.action.isPermanent ? [p.action] : []))
+    .sort(
+      (a, b) =>
+        new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime(),
+    )[0];
 
   return (
     <ListingShell
       kind="akcija"
-      title="Mesečna akcija"
-      trail={[{ label: "Mesečna akcija" }]}
+      title="Akcija"
+      titleIcon={akcijaIcon}
+      headerVariant="promo"
+      subtitle="Sve aktivne ponude na jednom mestu — kuratirano, ne agregirano."
+      period={period ? { endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}
+      trail={[{ label: "Akcija" }]}
       source={products}
       featureBanner={banner ?? undefined}
     />

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
+import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
@@ -14,6 +15,8 @@ export default async function OutletPage() {
     <ListingShell
       kind="outlet"
       title="Outlet"
+      titleIcon={akcijaIcon}
+      headerVariant="promo"
       subtitle="Ograničene količine i poslednji komadi — dok traju zalihe."
       trail={[{ label: "Outlet" }]}
       source={products}

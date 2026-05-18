@@ -13,8 +13,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutGrid, ListFilter, RotateCcw, Rows3 } from "lucide-react";
-import type { Product } from "@/types";
-import type { Banner } from "@/types";
+import Image from "next/image";
+import type { Banner, MediaAsset, Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import {
@@ -54,6 +54,10 @@ interface ListingShellProps {
   kind: ListingKind;
   title: string;
   subtitle?: string;
+  titleIcon?: MediaAsset;
+  headerVariant?: "default" | "promo";
+  /** Optional period banner (e.g. action validity). */
+  period?: { startsAt?: string; endsAt: string; label?: string };
   trail: Crumb[];
   source: Product[];
   /**
@@ -73,6 +77,7 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
+  titleIcon,
   trail,
   source,
   subTabs,
@@ -165,11 +170,25 @@ export function ListingShell({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-3xl"
+            className="max-w-4xl"
           >
-            <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
-              {title}
-            </h1>
+            <div className="flex min-w-0 items-center gap-3 md:gap-5">
+              {titleIcon ? (
+                <span className="bg-surface ring-border/60 flex size-14 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-2 md:size-20">
+                  <Image
+                    src={titleIcon.url}
+                    alt={titleIcon.alt ?? ""}
+                    width={titleIcon.width ?? 96}
+                    height={titleIcon.height ?? 96}
+                    className="max-h-[76%] max-w-[76%] object-contain"
+                    priority
+                  />
+                </span>
+              ) : null}
+              <h1 className="font-display min-w-0 text-2xl leading-tight text-ink-900 md:text-5xl">
+                {title}
+              </h1>
+            </div>
           </motion.div>
         </header>
 
@@ -405,4 +424,3 @@ export function ListingSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
     </div>
   );
 }
-

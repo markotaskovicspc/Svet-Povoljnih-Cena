@@ -1,15 +1,24 @@
 "use client";
 
 /**
- * Section rail — title + "Prikaži sve →" + horizontal snap rail of product cards.
+ * Section rail — title + "Pogledaj sve →" + horizontal snap rail of product cards.
  * Used for Heroji meseca, Mesečna akcija, Nedeljne akcije, and Ostali tabovi.
  */
 import Link from "next/link";
 import Image from "next/image";
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
-import type { Banner, Product } from "@/types";
+import {
+  ArrowRight,
+  CalendarDays,
+  Crown,
+  Hourglass,
+  Rows3,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+} from "lucide-react";
+import type { Banner, MediaAsset, Product } from "@/types";
 import { ProductCard } from "@/components/product/product-card";
 import { DragHint } from "@/components/motion/drag-hint";
 import { cn } from "@/lib/utils";
@@ -17,9 +26,12 @@ import { cn } from "@/lib/utils";
 interface SectionRailProps {
   eyebrow?: string;
   title: string;
+  icon?: MediaAsset;
+  iconName?: string;
   description?: string;
   href: string;
   ctaLabel?: string;
+  minimalHeader?: boolean;
   products: Product[];
   banner?: Banner | null;
   /**
@@ -33,29 +45,40 @@ interface SectionRailProps {
 export function SectionRail({
   eyebrow,
   title,
+  icon,
+  iconName,
   description,
   href,
-  ctaLabel = "Prikaži sve",
+  ctaLabel = "Pogledaj sve",
   products,
+  minimalHeader,
   banner,
   mobileMinimal,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
   if (!products.length) return null;
 
+  const LucideIcon = iconName ? sectionIconMap[iconName as keyof typeof sectionIconMap] : null;
+  const showBanner = Boolean(banner && !minimalHeader);
+
   return (
     <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-20">
-      {banner ? <SectionBanner banner={banner} href={href} /> : null}
+      {showBanner && banner ? <SectionBanner banner={banner} href={href} /> : null}
 
-      <header className={cn("flex flex-wrap items-end justify-between gap-3", banner && "mt-4 md:mt-6")}>
+      <header
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3",
+          showBanner && "mt-4 md:mt-6",
+        )}
+      >
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-2xl"
+          className={cn("min-w-0", minimalHeader ? "flex-1" : "max-w-2xl")}
         >
-          {eyebrow ? (
+          {!minimalHeader && eyebrow ? (
             <p
               className={cn(
                 "font-mono text-xs tracking-[0.2em] text-walnut uppercase",
@@ -65,15 +88,32 @@ export function SectionRail({
               {eyebrow}
             </p>
           ) : null}
-          <Link
-            href={href}
-            className="group/title inline-block rounded-md focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-3 md:gap-4",
+              !minimalHeader && "mt-1 md:mt-2",
+            )}
           >
-            <h2 className="font-display mt-1 text-2xl text-ink-900 transition group-hover/title:text-walnut md:mt-2 md:text-4xl">
+            {icon ? (
+              <span className="bg-surface ring-border/60 flex size-12 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-1 md:size-16">
+                <Image
+                  src={icon.url}
+                  alt={icon.alt ?? ""}
+                  width={icon.width ?? 80}
+                  height={icon.height ?? 80}
+                  className="max-h-[76%] max-w-[76%] object-contain"
+                />
+              </span>
+            ) : LucideIcon ? (
+              <span className="bg-surface ring-border/60 flex size-12 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-1 md:size-16">
+                <LucideIcon className="size-6 text-walnut md:size-8" aria-hidden />
+              </span>
+            ) : null}
+            <h2 className="font-display min-w-0 text-2xl leading-tight text-ink-900 md:text-4xl">
               {title}
             </h2>
-          </Link>
-          {description ? (
+          </div>
+          {!minimalHeader && description ? (
             <p
               className={cn(
                 "mt-2 max-w-prose text-base text-ink-700 md:mt-3",
@@ -171,3 +211,13 @@ function SectionBanner({ banner, href }: { banner: Banner; href: string }) {
     </Link>
   );
 }
+
+const sectionIconMap = {
+  CalendarDays,
+  Crown,
+  Hourglass,
+  Rows3,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+};
