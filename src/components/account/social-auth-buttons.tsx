@@ -52,26 +52,15 @@ export function getConfiguredSocialAuthProviders(
 }
 
 function ProviderMark({ id }: { id: SocialAuthProvider["id"] }) {
-  if (id === "google" || id === "apple") {
-    return (
-      <Image
-        src={`/icons/${id}.svg`}
-        alt=""
-        aria-hidden="true"
-        width={20}
-        height={20}
-        className="size-5 shrink-0"
-      />
-    );
-  }
-
   return (
-    <span
-      aria-hidden
-      className="inline-flex size-5 items-center justify-center rounded-full bg-[#1877f2] text-xs font-bold text-white"
-    >
-      f
-    </span>
+    <Image
+      src={`/icons/${id}.svg`}
+      alt=""
+      aria-hidden="true"
+      width={20}
+      height={20}
+      className="size-5 shrink-0"
+    />
   );
 }
 
@@ -94,10 +83,12 @@ export function SocialAuthButtons({
   callbackUrl,
   intent,
   providers,
+  showDivider = true,
 }: {
   callbackUrl: string;
   intent: "login" | "register";
   providers: SocialAuthProvider[];
+  showDivider?: boolean;
 }) {
   if (!providers.length) return null;
 
@@ -105,11 +96,13 @@ export function SocialAuthButtons({
 
   return (
     <div className="mt-6 space-y-3">
-      <div className="flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
-        <span className="h-px flex-1 bg-border" />
-        ili
-        <span className="h-px flex-1 bg-border" />
-      </div>
+      {showDivider ? (
+        <div className="flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
+          <span className="h-px flex-1 bg-border" />
+          ili
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      ) : null}
       <div className="grid gap-2">
         {providers.map((provider) =>
           provider.action ? (

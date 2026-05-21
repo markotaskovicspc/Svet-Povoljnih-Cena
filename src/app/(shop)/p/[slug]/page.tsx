@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,15 +17,17 @@ import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
+import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
 import { getProductBySlug, listProducts } from "@/lib/api/catalog";
 import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
 
 /**
- * Product Detail Page â€” Phase 1E (12 rows from spec).
+ * Product Detail Page — Phase 1E (12 rows from spec).
  *
  * Server component (SEO-critical). Interactive bits (gallery, add-to-cart,
  * delivery picker) are client islands. Missing or inactive products resolve
@@ -38,11 +40,6 @@ const slugify = (s: string) =>
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/Å¡/g, "s")
-    .replace(/Ä‘/g, "dj")
-    .replace(/Ä/g, "c")
-    .replace(/Ä‡/g, "c")
-    .replace(/Å¾/g, "z")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
@@ -55,10 +52,10 @@ interface RouteProps {
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
-  if (!product) return { title: "Proizvod nije pronaÄ‘en" };
-  const price = product.salePrice ?? product.fullPrice;
+  if (!product) return { title: "Proizvod nije pronađen" };
+  const price = effectiveUnitPrice(product);
   return {
-    title: `${product.name} â€” ${formatRsd(price)}`,
+    title: `${product.name} — ${formatRsd(price.effective)}`,
     description: product.shortDescription ?? product.description.slice(0, 160),
   };
 }
@@ -68,10 +65,10 @@ export default async function ProductPage({ params }: RouteProps) {
   const product = await getProductBySlug(slug);
   if (!product) notFound();
 
-  const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
-  const sale = product.salePrice ?? product.fullPrice;
+  const price = effectiveUnitPrice(product);
+  const hasReducedPrice = price.effective < price.full;
 
-  // Row I â€” Breadcrumbs
+  // Row I — Breadcrumbs
   const trail: Crumb[] = [
     ...product.categoryPath.map((label, i, arr) => ({
       label,
@@ -99,10 +96,10 @@ export default async function ProductPage({ params }: RouteProps) {
       : Promise.resolve([]),
   ]);
 
-  // Badges (mirror product-card logic, simplified â€” rendered as overlay)
-  const overlayBadges = buildOverlayBadges(product);
+  const overlayBadges = deriveImageBadges(product);
+  const summaryDescription = firstSentences(stripHtml(product.description), 3);
 
-  // Pictograms â€” fall back to synthesized set if XML hasn't supplied any yet
+  // Pictograms — fall back to synthesized set if XML hasn't supplied any yet
   const pictograms = product.pictograms.length
     ? product.pictograms
         .map((p) => ({ label: p.label, code: p.code }))
@@ -112,43 +109,26 @@ export default async function ProductPage({ params }: RouteProps) {
 
   return (
     <article className="bg-canvas pb-24 md:pb-16">
-      {/* Row I â€” Breadcrumbs */}
+      {/* Row I — Breadcrumbs */}
       <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6">
         <Breadcrumbs trail={trail} />
       </div>
 
-      {/* Row II/III â€” Hero info pair */}
+      {/* Row II/III — Hero info pair */}
       <section className="mx-auto mt-6 grid w-full max-w-[var(--container-page)] gap-10 px-6 md:grid-cols-[1.1fr_1fr] md:gap-12">
         {/* Gallery (Row III + IV combined into one stage) */}
         <PdpGallery
           product={product}
-          badges={overlayBadges.map((b) =>
-            b.kind === "hero" ? (
-              <span
-                key={b.label}
-                aria-label={b.label}
-                className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
-              >
-                <Image
-                  src={HEROJI_MESECA_MARK_SRC}
-                  alt={b.label}
-                  width={48}
-                  height={40}
-                  className="h-8 w-10 object-contain"
-                />
-              </span>
-            ) : (
-              <span
-                key={b.label}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
-                  b.cls,
-                )}
-              >
-                {b.label}
-              </span>
-            ),
-          )}
+          badges={
+            <>
+              {overlayBadges.topLeft.map((b) => (
+                <PdpBadge key={b.key} badge={b} />
+              ))}
+              {overlayBadges.bottomLeft.map((b) => (
+                <PdpBadge key={b.key} badge={b} />
+              ))}
+            </>
+          }
         />
 
         {/* Right column: identity + price + sticky CTA */}
@@ -165,37 +145,36 @@ export default async function ProductPage({ params }: RouteProps) {
             </p>
           </header>
 
-          {/* Price block â€” only the active (sale) price is emphasised. */}
+          {/* Price block — only the effective price is emphasised. */}
           <div>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              {onSale ? (
+              {hasReducedPrice ? (
                 <>
                   <span className="text-action text-3xl font-bold md:text-4xl">
-                    {formatRsd(sale)}
+                    {formatRsd(price.effective)}
                   </span>
                   <span className="text-sm text-ink-500 line-through md:text-base">
-                    {formatRsd(product.fullPrice)}
+                    {formatRsd(price.full)}
                   </span>
-                  {product.discountPct ? (
-                    <span className="bg-action/10 text-action ring-action/20 rounded-full px-2 py-0.5 text-xs font-semibold ring-1">
-                      âˆ’{product.discountPct}%
-                    </span>
-                  ) : null}
                 </>
               ) : (
                 <span className="text-2xl font-semibold text-ink-900 md:text-3xl">
-                  {formatRsd(product.fullPrice)}
+                  {formatRsd(price.full)}
                 </span>
               )}
             </div>
-            {onSale && product.action?.isPermanent ? (
+            {price.kind === "sale" && product.action?.isPermanent ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Niska cena pod trajnom zaÅ¡titom od 01.05.2026.
+                Trajno niska cena od 01.05.2026.
               </p>
-            ) : onSale && product.action?.startsAt && product.action.endsAt ? (
+            ) : price.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Akcijska cena vaÅ¾i od {formatDate(product.action.startsAt)} do{" "}
+                Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
                 {formatDate(product.action.endsAt)}.
+              </p>
+            ) : price.kind === "loyalty" ? (
+              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
+                Loyalty cena za kupce sa nalogom.
               </p>
             ) : null}
           </div>
@@ -206,7 +185,7 @@ export default async function ProductPage({ params }: RouteProps) {
           <ul className="border-border/60 grid grid-cols-2 gap-3 border-t pt-4 text-xs text-ink-700">
             <FeatureChip
               icon={<Truck className="size-3.5" aria-hidden />}
-              label={`Isporuka ${product.deliveryDays.min}â€“${product.deliveryDays.max} dana`}
+              label={`Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} dana`}
             />
             <FeatureChip
               icon={<ShieldCheck className="size-3.5" aria-hidden />}
@@ -215,14 +194,14 @@ export default async function ProductPage({ params }: RouteProps) {
             {product.isLimited ? (
               <FeatureChip
                 icon={<Sparkles className="size-3.5" aria-hidden />}
-                label="OgraniÄena koliÄina"
+                label="Dok traju zalihe"
               />
             ) : null}
           </ul>
         </div>
       </section>
 
-      {/* Row V â€” Pictogram strip */}
+      {/* Row V — Pictogram strip */}
       <Reveal>
         <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="sr-only">Karakteristike</h2>
@@ -240,17 +219,22 @@ export default async function ProductPage({ params }: RouteProps) {
         </section>
       </Reveal>
 
-      {/* Row VI â€” Description */}
+      {/* Row VI — Description */}
       <Reveal>
         <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
           <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
             Opis proizvoda
           </h2>
-          <div
-            className="mt-4 max-w-prose text-base leading-relaxed text-ink-700"
-            // Description is product-supplied; in Phase 4 it comes through the
-            // sanitizer that ships with the XML ingest pipeline.
-            dangerouslySetInnerHTML={{ __html: product.description }}
+          <p className="mt-4 max-w-prose text-base leading-relaxed text-ink-700">
+            {summaryDescription}
+          </p>
+          <PdpInfoLinks
+            sections={{
+              deliveryTerms: product.pdpInfo?.deliveryTerms,
+              declaration: product.pdpInfo?.declaration,
+              assemblyInstructions: product.pdpInfo?.assemblyInstructions,
+              maintenance: product.pdpInfo?.maintenance,
+            }}
           />
         </section>
       </Reveal>
@@ -298,10 +282,10 @@ export default async function ProductPage({ params }: RouteProps) {
         </Link>
       </section>
 
-      {/* Row X â€” Frequently bought together (same collection) */}
+      {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
-          eyebrow="ÄŒesto kupovano zajedno"
+          eyebrow="Često kupovano zajedno"
           title="Upotpunite kolekciju"
           href={
             product.collection
@@ -313,11 +297,11 @@ export default async function ProductPage({ params }: RouteProps) {
         />
       ) : null}
 
-      {/* Row XI â€” Similar products (same group) */}
+      {/* Row XI — Similar products (same group) */}
       {similar.length ? (
         <SectionRail
-          eyebrow="SliÄni artikli"
-          title="MoÅ¾da Ä‡e vam se svideti"
+          eyebrow="Slični artikli"
+          title="Možda će vam se svideti"
           href={`/k/${product.categoryPath.map(slugify).join("/")}`}
           ctaLabel="Sve iz kategorije"
           products={similar}
@@ -334,38 +318,52 @@ export default async function ProductPage({ params }: RouteProps) {
 
 /* ---------- helpers ---------- */
 
-interface BadgeOverlay {
-  label: string;
-  cls: string;
-  kind?: "hero";
+const toneClasses = {
+  action: "bg-action text-white",
+  gold: "bg-sand text-ink-900",
+  olive: "bg-olive text-white",
+  amber: "bg-warning text-ink-900",
+  red: "bg-action/10 text-action ring-1 ring-action/30",
+  ink: "bg-ink-900 text-canvas",
+  protected: "bg-brand-blue text-white",
+};
+
+function PdpBadge({ badge }: { badge: Badge }) {
+  if (badge.key === "hero") {
+    return (
+      <span
+        aria-label={badge.label}
+        className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
+      >
+        <Image
+          src={HEROJI_MESECA_MARK_SRC}
+          alt={badge.label}
+          width={48}
+          height={40}
+          className="h-8 w-10 object-contain"
+        />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
+        toneClasses[badge.tone],
+      )}
+    >
+      {badge.label}
+    </span>
+  );
 }
 
-function buildOverlayBadges(p: Product): BadgeOverlay[] {
-  const out: BadgeOverlay[] = [];
-  if (p.discountPct && p.salePrice) {
-    out.push({ label: `-${p.discountPct}%`, cls: "bg-action text-white" });
-  }
-  if (p.isHero)
-    out.push({
-      label: "Heroj meseca",
-      cls: "bg-sand text-ink-900",
-      kind: "hero",
-    });
-  if (p.action?.name) {
-    out.push({
-      label: p.action.isPermanent ? "Niske cene" : p.action.name,
-      cls: "bg-ink-900 text-canvas",
-    });
-  }
-  if (p.isNew) out.push({ label: "Novo", cls: "bg-olive text-white" });
-  if (p.isLimited)
-    out.push({ label: "OgraniÄena koliÄina", cls: "bg-warning text-ink-900" });
-  if (p.isDtz && p.stock < 15)
-    out.push({
-      label: "Dok traju zalihe",
-      cls: "bg-action/10 text-action ring-1 ring-action/30",
-    });
-  return out.slice(0, 4);
+function stripHtml(value: string) {
+  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function firstSentences(value: string, count: number) {
+  const sentences = value.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [value];
+  return sentences.slice(0, count).join(" ").trim();
 }
 
 function FeatureChip({
@@ -390,7 +388,7 @@ interface FallbackPictogram {
 
 function synthesizedPictograms(p: Product): FallbackPictogram[] {
   const out: FallbackPictogram[] = [
-    { code: "delivery", label: `Isporuka ${p.deliveryDays.min}â€“${p.deliveryDays.max} dana` },
+    { code: "delivery", label: `Isporuka ${p.deliveryDays.min}–${p.deliveryDays.max} dana` },
     { code: "warranty", label: "Garancija 2 godine" },
     { code: "quality", label: "Kontrola kvaliteta" },
     { code: "ruler", label: "Precizne dimenzije" },

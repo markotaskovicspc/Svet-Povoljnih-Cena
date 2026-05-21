@@ -28,16 +28,16 @@ export function computeTotals({
   itemsSale,
   shippingMethod,
   assemblyTotal,
-  voucherFraction,
+  voucherDiscountRsd,
 }: {
   itemsFull: number;
   itemsSale: number;
   shippingMethod: ShippingMethod;
   assemblyTotal: number;
-  voucherFraction: number;
+  voucherDiscountRsd: number;
 }): SummaryTotals {
   const shipping = SHIPPING_PRICES[shippingMethod];
-  const voucherDiscount = Math.round(itemsSale * voucherFraction);
+  const voucherDiscount = Math.min(Math.max(0, voucherDiscountRsd), itemsSale);
   const total = itemsSale + shipping + assemblyTotal - voucherDiscount;
   return {
     itemsFull,
@@ -87,7 +87,7 @@ export function OrderSummary({
     itemsSale,
     shippingMethod,
     assemblyTotal,
-    voucherFraction: voucher?.amount ?? 0,
+    voucherDiscountRsd: voucher?.discountRsd ?? 0,
   });
 
   return (

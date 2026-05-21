@@ -142,7 +142,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 className="justify-self-center"
               >
                 <BrandLogo
-                  className="w-[160px] min-[390px]:w-[180px]"
+                  className="w-[190px] min-[390px]:w-[215px]"
                   imageClassName="brightness-0 invert"
                 />
               </Link>
@@ -202,27 +202,27 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 {stack.length === 1 ? (
                   <>
                     <div className="px-4 pt-5 pb-4">
-                      <ul className="grid grid-cols-3 gap-x-3 gap-y-4 min-[390px]:grid-cols-4">
+                      <ul className="grid grid-cols-2 gap-x-3 gap-y-4">
                         {categoryTiles.map((tile) => (
                           <li key={tile.href}>
-                            <Link
-                              href={tile.href}
-                              onClick={close}
-                              className="group block rounded-md focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                            <button
+                              type="button"
+                              onClick={() => enter(tile)}
+                              className="group block w-full rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
                               <span className="relative block aspect-[1.42] overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
                                   fill
-                                  sizes="(max-width: 389px) 28vw, 22vw"
+                                  sizes="45vw"
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
                               <span className="mt-2 block min-h-8 text-center text-[10px] leading-tight font-bold tracking-[0.02em] text-ink-700 uppercase">
                                 {tile.label}
                               </span>
-                            </Link>
+                            </button>
                           </li>
                         ))}
                       </ul>

@@ -1,0 +1,10 @@
+ALTER TABLE "Product"
+  ADD COLUMN IF NOT EXISTS "loyaltyPrice" DECIMAL(12,2),
+  ADD COLUMN IF NOT EXISTS "loyaltyDiscountPct" INTEGER,
+  ADD COLUMN IF NOT EXISTS "pdpDeliveryTerms" TEXT,
+  ADD COLUMN IF NOT EXISTS "declaration" TEXT,
+  ADD COLUMN IF NOT EXISTS "assemblyInstructions" TEXT,
+  ADD COLUMN IF NOT EXISTS "maintenance" TEXT;
+
+ALTER TABLE "Action"
+  ADD COLUMN IF NOT EXISTS "isPermanent" BOOLEAN NOT NULL DEFAULT false;

@@ -11,13 +11,21 @@ import { effectiveUnitPrice, type PricingProduct } from "./engine";
 
 export type BadgeKey =
   | "discount"
+  | "permanent"
   | "hero"
   | "action"
   | "new"
   | "limited"
   | "dtz";
 
-export type BadgeTone = "action" | "gold" | "olive" | "amber" | "red" | "ink";
+export type BadgeTone =
+  | "action"
+  | "gold"
+  | "olive"
+  | "amber"
+  | "red"
+  | "ink"
+  | "protected";
 
 export interface Badge {
   key: BadgeKey;
@@ -43,28 +51,31 @@ function isNewActive(p: BadgeProduct, now: Date): boolean {
 }
 
 /**
- * Returns the ordered badge list for a product. The rules:
- *   1. Discount pill (only when sale is currently live — uses the engine).
- *   2. Heroj meseca.
- *   3. Action name (e.g. "Nedeljna akcija") if its window is live.
- *   4. Novo (respects `newUntil`).
- *   5. Ograničena količina.
- *   6. Dok traju zalihe — only when stock is below the threshold.
+ * Returns all commercial badges. Product images should use
+ * `deriveImageBadges`, while section/action labels can use
+ * `deriveActionBadges` for the non-image campaign chips.
  */
 export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
   const out: Badge[] = [];
   const price = effectiveUnitPrice(p, now);
 
-  if (price.onSale && price.discountPct > 0) {
-    out.push({ key: "discount", label: `-${price.discountPct}%`, tone: "action" });
+  if (p.action?.isPermanent) {
+    out.push({
+      key: "permanent",
+      label: "Trajno niska cena",
+      tone: "protected",
+    });
   }
   if (p.isHero) {
     out.push({ key: "hero", label: "Heroj meseca", tone: "gold" });
   }
+  if (price.discountPct > 0 && (price.kind === "sale" || price.kind === "loyalty")) {
+    out.push({ key: "discount", label: `-${price.discountPct}%`, tone: "action" });
+  }
   if (price.onSale && p.action?.name) {
     out.push({
       key: "action",
-      label: p.action.isPermanent ? "Niske cene" : p.action.name,
+      label: p.action.isPermanent ? "Trajno niska cena" : p.action.name,
       tone: "ink",
     });
   }
@@ -72,12 +83,34 @@ export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
     out.push({ key: "new", label: "Novo", tone: "olive" });
   }
   if (p.isLimited) {
-    out.push({ key: "limited", label: "Ograničena količina", tone: "amber" });
+    out.push({ key: "limited", label: "Dok traju zalihe", tone: "amber" });
   }
   if (p.isDtz && (p.stock ?? Infinity) < DTZ_LOW_STOCK_THRESHOLD) {
     out.push({ key: "dtz", label: "Dok traju zalihe", tone: "red" });
   }
   return out;
+}
+
+export function deriveImageBadges(
+  p: BadgeProduct,
+  now: Date = new Date(),
+): { topLeft: Badge[]; bottomLeft: Badge[] } {
+  const badges = deriveBadges(p, now);
+  const first = (key: BadgeKey) => badges.find((b) => b.key === key);
+  const topLeft = [
+    first("permanent"),
+    first("hero"),
+    first("discount"),
+  ].filter(Boolean).slice(0, 2) as Badge[];
+  const bottomLeft = [
+    first("limited") ?? first("dtz"),
+    first("new"),
+  ].filter(Boolean).slice(0, 1) as Badge[];
+  return { topLeft, bottomLeft };
+}
+
+export function deriveActionBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
+  return deriveBadges(p, now).filter((b) => b.key === "action");
 }
 
 /**

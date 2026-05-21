@@ -6,7 +6,7 @@ import { listProducts } from "@/lib/api/catalog";
 export const metadata: Metadata = {
   title: "Outlet — komadi po najnižim cenama",
   description:
-    "Outlet ponuda: ograničene količine, dok traju zalihe i najveći popusti u ponudi.",
+    "Outlet ponuda: poslednji komadi, dok traju zalihe i najveći popusti u ponudi.",
 };
 
 export default async function OutletPage() {
@@ -17,7 +17,7 @@ export default async function OutletPage() {
       title="Outlet"
       titleIcon={akcijaIcon}
       headerVariant="promo"
-      subtitle="Ograničene količine i poslednji komadi — dok traju zalihe."
+      subtitle="Poslednji komadi — dok traju zalihe."
       trail={[{ label: "Outlet" }]}
       source={products}
     />

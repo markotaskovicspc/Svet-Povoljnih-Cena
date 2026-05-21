@@ -112,11 +112,14 @@ export default async function CustomerRegistrationPage({
 
   if (user?.userType === "customer") redirect(callbackUrl);
 
-  const socialProviders = getConfiguredSocialAuthProviders({
-    google: googleAction,
-    facebook: facebookAction,
-    apple: appleAction,
-  });
+  const socialProviders = getConfiguredSocialAuthProviders(
+    {
+      google: googleAction,
+      facebook: facebookAction,
+      apple: appleAction,
+    },
+    { includeUnavailable: true },
+  );
   const loginHref = `/nalog/prijava?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 
   return (
@@ -160,16 +163,23 @@ export default async function CustomerRegistrationPage({
           <RegistrationError error={sp.error} />
         </div>
 
-        <form action={registerAction} className="mt-5">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <CustomerRegistrationFields />
-        </form>
-
         <SocialAuthButtons
           callbackUrl={callbackUrl}
           intent="register"
           providers={socialProviders}
+          showDivider={false}
         />
+
+        <div className="mt-6 flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
+          <span className="h-px flex-1 bg-border" />
+          ili e-poštom
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form action={registerAction} className="mt-5">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+          <CustomerRegistrationFields />
+        </form>
 
         <p className="mt-6 text-center text-sm text-ink-500">
           Već imate nalog?{" "}

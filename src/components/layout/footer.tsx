@@ -74,7 +74,7 @@ export function Footer() {
                   alt="Svet Akcija"
                   width={1600}
                   height={382}
-                  className="h-auto w-[200px] object-contain"
+                  className="h-auto w-[215px] object-contain"
                 />
               </Link>
 

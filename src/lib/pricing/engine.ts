@@ -31,6 +31,8 @@ export interface PricingProduct {
   fullPrice: number;
   salePrice?: number | null;
   discountPct?: number | null;
+  loyaltyPrice?: number | null;
+  loyaltyDiscountPct?: number | null;
   action?: PricingAction | null;
 }
 
@@ -41,6 +43,8 @@ export interface EffectivePrice {
   full: number;
   /** Was a valid sale price applied? */
   onSale: boolean;
+  /** Which reduced-price source won. */
+  kind: "full" | "sale" | "loyalty";
   /** Integer percent discount, 0 if none. */
   discountPct: number;
   /** True when product carried a salePrice but the action window expired. */
@@ -71,14 +75,52 @@ export function effectiveUnitPrice(
   const full = product.fullPrice;
   const sale = product.salePrice ?? null;
   if (sale == null || sale >= full) {
-    return { effective: full, full, onSale: false, discountPct: 0, actionExpired: false };
+    const loyalty =
+      product.loyaltyPrice ??
+      (product.loyaltyDiscountPct
+        ? Math.round(full * (1 - product.loyaltyDiscountPct / 100))
+        : null);
+    if (loyalty != null && loyalty > 0 && loyalty < full) {
+      const pct =
+        product.loyaltyDiscountPct ?? Math.round(((full - loyalty) / full) * 100);
+      return {
+        effective: loyalty,
+        full,
+        onSale: false,
+        kind: "loyalty",
+        discountPct: pct,
+        actionExpired: false,
+      };
+    }
+    return {
+      effective: full,
+      full,
+      onSale: false,
+      kind: "full",
+      discountPct: 0,
+      actionExpired: false,
+    };
   }
   const live = isActionLive(product.action, now);
   if (!live) {
-    return { effective: full, full, onSale: false, discountPct: 0, actionExpired: true };
+    return {
+      effective: full,
+      full,
+      onSale: false,
+      kind: "full",
+      discountPct: 0,
+      actionExpired: true,
+    };
   }
   const pct = product.discountPct ?? Math.round(((full - sale) / full) * 100);
-  return { effective: sale, full, onSale: true, discountPct: pct, actionExpired: false };
+  return {
+    effective: sale,
+    full,
+    onSale: true,
+    kind: "sale",
+    discountPct: pct,
+    actionExpired: false,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

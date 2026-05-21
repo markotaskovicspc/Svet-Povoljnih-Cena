@@ -33,6 +33,7 @@ const schema = z.object({
   startsAt: z.string().min(1),
   endsAt: z.string().min(1),
   isHero: z.coerce.boolean().default(false),
+  isPermanent: z.coerce.boolean().default(false),
   sortOrder: z.coerce.number().int().min(0).default(0),
   productSkus: z.string().optional(),
 });
@@ -46,6 +47,9 @@ async function upsert(formData: FormData) {
         const parsed = schema.safeParse({
           ...Object.fromEntries(formData),
           isHero: formData.get("isHero") === "on" || formData.get("isHero") === "true",
+          isPermanent:
+            formData.get("isPermanent") === "on" ||
+            formData.get("isPermanent") === "true",
         });
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         const { id, productSkus, ...rest } = parsed.data;
@@ -70,6 +74,7 @@ async function upsert(formData: FormData) {
           startsAt: new Date(rest.startsAt),
           endsAt: new Date(rest.endsAt),
           isHero: rest.isHero,
+          isPermanent: rest.isPermanent,
           sortOrder: rest.sortOrder,
         };
 
@@ -203,6 +208,7 @@ type V = {
   startsAt?: string;
   endsAt?: string;
   isHero?: boolean;
+  isPermanent?: boolean;
   sortOrder?: number;
   productSkus?: string;
 };
@@ -265,16 +271,27 @@ function ActionForm({
             defaultValue={values?.sortOrder ?? 0}
           />
         </Field>
-        <Field label="Hero">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="isHero"
-              defaultChecked={values?.isHero ?? false}
-              className="size-4 accent-walnut"
-            />
-            Označi kao glavnu akciju
-          </label>
+        <Field label="Oznake">
+          <div className="space-y-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="isHero"
+                defaultChecked={values?.isHero ?? false}
+                className="size-4 accent-walnut"
+              />
+              Označi kao glavnu akciju
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="isPermanent"
+                defaultChecked={values?.isPermanent ?? false}
+                className="size-4 accent-walnut"
+              />
+              Trajno niska cena
+            </label>
+          </div>
         </Field>
       </div>
       <Field

@@ -11,7 +11,7 @@
 import Image from "next/image";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Box, Play, X, ZoomIn } from "lucide-react";
+import { Box, ChevronLeft, ChevronRight, Play, X, ZoomIn } from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +46,27 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [zoom, setZoom] = useState({ on: false, x: 50, y: 50 });
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const mobileTrackRef = useRef<HTMLDivElement | null>(null);
 
   const slide = slides[active] ?? slides[0];
+
+  const goTo = useCallback(
+    (index: number) => {
+      const bounded = Math.max(0, Math.min(index, slides.length - 1));
+      setActive(bounded);
+      mobileTrackRef.current
+        ?.querySelector<HTMLElement>(`[data-slide-index="${bounded}"]`)
+        ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    },
+    [slides.length],
+  );
+
+  const syncMobileActive = useCallback(() => {
+    const track = mobileTrackRef.current;
+    if (!track) return;
+    const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    setActive(Math.max(0, Math.min(index, slides.length - 1)));
+  }, [slides.length]);
 
   const handleMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -66,13 +85,96 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     <div className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
       {/* Main stage */}
       <div className="relative flex-1">
+        <div className="relative md:hidden">
+          <div
+            ref={mobileTrackRef}
+            onScroll={syncMobileActive}
+            className="flex snap-x snap-mandatory overflow-x-auto rounded-2xl bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            aria-label="Galerija proizvoda"
+          >
+            {slides.map((s, index) => (
+              <div
+                key={`${s.kind}-mobile-${index}`}
+                data-slide-index={index}
+                className="relative aspect-[4/5] min-w-full snap-center"
+              >
+                {s.kind === "image" ? (
+                  <Image
+                    src={s.asset.url}
+                    alt={s.asset.alt ?? product.name}
+                    fill
+                    priority={index === 0}
+                    sizes="100vw"
+                    placeholder="blur"
+                    blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
+                    className="object-contain p-3"
+                  />
+                ) : s.kind === "video" ? (
+                  <video
+                    src={s.asset.url}
+                    controls
+                    playsInline
+                    className="h-full w-full object-cover"
+                    poster={product.media.images[0]?.url}
+                  />
+                ) : (
+                  <iframe
+                    title={`3D pregled — ${product.name}`}
+                    src={s.asset.url}
+                    className="h-full w-full border-0"
+                    allow="accelerometer; gyroscope; xr-spatial-tracking"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          {badges ? (
+            <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+              {badges}
+            </div>
+          ) : null}
+          {slides.length > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => goTo(active - 1)}
+                aria-label="Prethodna slika"
+                className="absolute top-1/2 left-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo(active + 1)}
+                aria-label="Sledeća slika"
+                className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur"
+              >
+                <ChevronRight className="size-4" aria-hidden />
+              </button>
+              <div className="mt-3 flex justify-center gap-1.5">
+                {slides.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => goTo(index)}
+                    aria-label={`Prikaži sliku ${index + 1}`}
+                    className={cn(
+                      "size-2 rounded-full transition",
+                      index === active ? "bg-ink-900" : "bg-ink-200",
+                    )}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
         <div
           ref={stageRef}
           onMouseMove={handleMove}
           onMouseLeave={() => setZoom((z) => ({ ...z, on: false }))}
           onClick={() => slide.kind === "image" && setLightboxOpen(true)}
           className={cn(
-            "bg-muted-bg ring-border/60 relative aspect-[4/5] w-full overflow-hidden rounded-2xl ring-1",
+            "bg-white ring-border/60 relative hidden aspect-[4/5] w-full overflow-hidden rounded-2xl ring-1 md:block",
             slide.kind === "image" ? "cursor-zoom-in" : "cursor-default",
           )}
           role={slide.kind === "image" ? "button" : undefined}
@@ -97,7 +199,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   sizes="(min-width: 1024px) 50vw, 100vw"
                   placeholder="blur"
                   blurDataURL={slide.asset.blurDataUrl ?? FALLBACK_BLUR}
-                  className="object-cover"
+                  className="object-contain p-4"
                   style={
                     zoom.on && !reduced
                       ? {
@@ -152,7 +254,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
 
       {/* Thumb strip */}
       <ul
-        className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible"
+        className="hidden gap-2 overflow-x-auto md:flex md:flex-col md:overflow-visible"
         role="tablist"
         aria-label="Galerija proizvoda"
       >

@@ -66,6 +66,8 @@ function mapProduct(p: ProductRow): ProductDTO {
       d: num(p.depthCm) || 0,
       h: num(p.heightCm) || 0,
     },
+    colorPrimary: p.colorPrimary ?? undefined,
+    colorSecondary: p.colorSecondary ?? undefined,
     materials: p.materials.map((m) => ({
       id: m.material.id,
       label: m.material.label,
@@ -88,6 +90,8 @@ function mapProduct(p: ProductRow): ProductDTO {
     fullPrice: num(p.fullPrice),
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
+    loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
+    loyaltyDiscountPct: p.loyaltyDiscountPct ?? undefined,
     action: p.action
       ? {
           id: p.action.id,
@@ -95,8 +99,15 @@ function mapProduct(p: ProductRow): ProductDTO {
           startsAt: p.action.startsAt.toISOString(),
           endsAt: p.action.endsAt.toISOString(),
           isHero: p.action.isHero,
+          isPermanent: p.action.isPermanent,
         }
       : undefined,
+    pdpInfo: {
+      deliveryTerms: p.pdpDeliveryTerms ?? undefined,
+      declaration: p.declaration ?? undefined,
+      assemblyInstructions: p.assemblyInstructions ?? undefined,
+      maintenance: p.maintenance ?? undefined,
+    },
     deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
     allowsAssembly: p.allowsAssembly,
     assemblyCities: p.assemblyCities.map((a) => a.city.name),
@@ -149,6 +160,8 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     description: product.longDescription ?? sourceValue(product, "Opis"),
     shortDescription: sourceValue(product, "Opis") || undefined,
     dimensionsCm: { w: 0, d: 0, h: 0 },
+    colorPrimary: sourceValue(product, "Boja 1") || undefined,
+    colorSecondary: sourceValue(product, "Boja 2") || undefined,
     materials: [],
     pictograms: [],
     stock: 1,

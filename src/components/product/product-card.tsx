@@ -12,12 +12,12 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatRsd, formatDimensions, formatDate } from "@/lib/format";
+import { formatRsd, formatDate } from "@/lib/format";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 import {
-  deriveBadges,
+  deriveImageBadges,
   effectiveUnitPrice,
   type Badge,
   type BadgeTone,
@@ -41,6 +41,7 @@ const toneClasses: Record<BadgeTone, string> = {
   amber: "bg-warning text-ink-900",
   red: "bg-action/10 text-action ring-1 ring-action/30",
   ink: "bg-ink-900 text-canvas",
+  protected: "bg-brand-blue text-white",
 };
 
 const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
@@ -54,16 +55,12 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
 
-  const cover = product.media.images[0];
-  const secondary = product.media.images[1];
-  const badges: Badge[] = deriveBadges(product);
-  // Spec: show every badge — no overflow "+N" pill. The structure is kept
-  // ready so future banner artwork (Heroj meseca, Mesečna akcija, Nedeljna
-  // akcija …) can swap in by extending `toneClasses`/`deriveBadges`.
-  const visible = badges;
+  const images = product.media.images;
+  const cover = images[0];
+  const secondary = images[1];
+  const imageBadges = deriveImageBadges(product);
   const price = effectiveUnitPrice(product);
-  const onSale = price.onSale;
-  const showMobileCartInline = onSale && Boolean(price.discountPct);
+  const hasReducedPrice = price.effective < price.full;
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
@@ -83,8 +80,29 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       <Link
         href={`/p/${product.slug}`}
         aria-label={`${product.name} — pregled proizvoda`}
-        className="focus-visible:ring-walnut/40 relative block aspect-[4/5] overflow-hidden bg-muted-bg focus-visible:ring-2 focus-visible:outline-none"
+        className="focus-visible:ring-walnut/40 relative block aspect-[4/5] overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
       >
+        {images.length > 1 ? (
+          <div className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {images.map((image, index) => (
+              <span
+                key={`${image.url}-${index}`}
+                className="relative block h-full min-w-full snap-center"
+              >
+                <Image
+                  src={image.url}
+                  alt={image.alt ?? product.name}
+                  fill
+                  sizes="48vw"
+                  priority={priority && index === 0}
+                  placeholder="blur"
+                  blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                  className="object-contain p-2"
+                />
+              </span>
+            ))}
+          </div>
+        ) : null}
         {/*
          * `layoutId` bridges this image to the PDP hero image (Phase 1H.2).
          * Framer Motion morphs between the two when navigating to /p/[slug],
@@ -92,7 +110,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
          */}
         <motion.div
           layoutId={`product-cover-${product.sku}`}
-          className="absolute inset-0"
+          className={cn("absolute inset-0", images.length > 1 && "hidden md:block")}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           {cover ? (
@@ -105,7 +123,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               placeholder="blur"
               blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
               className={cn(
-                "object-cover transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                "object-contain p-2 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
                 secondary
                   ? "group-hover:scale-[1.02] group-hover:opacity-0"
                   : "group-hover:scale-[1.04]",
@@ -122,7 +140,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             placeholder="blur"
             blurDataURL={secondary.blurDataUrl ?? FALLBACK_BLUR}
             aria-hidden
-            className="pointer-events-none object-cover opacity-0 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] group-hover:opacity-100"
+            className="pointer-events-none hidden object-contain p-2 opacity-0 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] group-hover:opacity-100 md:block"
           />
         ) : null}
         {/* Soft floor gradient */}
@@ -130,40 +148,21 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
           aria-hidden
           className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
         />
+        {imageBadges.topLeft.length ? (
+          <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
+            {imageBadges.topLeft.map((b) => (
+              <ProductBadge key={b.key} badge={b} />
+            ))}
+          </div>
+        ) : null}
+        {imageBadges.bottomLeft.length ? (
+          <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:bottom-3 md:left-3">
+            {imageBadges.bottomLeft.map((b) => (
+              <ProductBadge key={b.key} badge={b} />
+            ))}
+          </div>
+        ) : null}
       </Link>
-
-      {/* Badge stack — every badge is shown (no "+N" rollup). */}
-      {visible.length ? (
-        <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
-          {visible.map((b) =>
-            b.key === "hero" ? (
-              <span
-                key={b.key}
-                aria-label={b.label}
-                className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
-              >
-                <Image
-                  src={HEROJI_MESECA_MARK_SRC}
-                  alt={b.label}
-                  width={44}
-                  height={37}
-                  className="h-7 w-8 object-contain md:h-8 md:w-10"
-                />
-              </span>
-            ) : (
-              <span
-                key={b.key}
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
-                  toneClasses[b.tone],
-                )}
-              >
-                {b.label}
-              </span>
-            ),
-          )}
-        </div>
-      ) : null}
 
       {/* Wishlist heart */}
       <button
@@ -189,14 +188,12 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             {product.name}
           </Link>
         </h3>
-        <p className="font-mono text-[10px] leading-none tracking-tight text-ink-500 md:text-[11px] md:leading-normal">
-          {formatDimensions(product.dimensionsCm)}
-        </p>
+        <ColorOptions product={product} />
 
-        <div className="pt-0 md:mt-auto md:pt-2">
+        <div className="pt-0 md:mt-auto md:pt-1">
           <div className="flex items-end justify-between gap-2">
             <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 md:items-baseline md:gap-x-2 md:gap-y-0.5">
-              {onSale ? (
+              {hasReducedPrice ? (
                 <>
                   <span className="text-action text-sm font-bold md:text-base">
                     {formatRsd(price.effective)}
@@ -204,19 +201,6 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                   <span className="text-[10px] text-ink-500 line-through md:text-xs">
                     {formatRsd(price.full)}
                   </span>
-                  {price.discountPct ? (
-                    <span className="bg-action/10 text-action ring-action/20 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1">
-                      −{price.discountPct}%
-                    </span>
-                  ) : null}
-                  {showMobileCartInline ? (
-                    <MobileCartControl
-                      lineQty={lineQty}
-                      onAdd={handleAdd}
-                      onDecrease={() => setQty(product.sku, lineQty - 1)}
-                      onIncrease={() => setQty(product.sku, lineQty + 1)}
-                    />
-                  ) : null}
                 </>
               ) : (
                 <span className="text-sm font-semibold text-ink-900 md:text-base">
@@ -224,21 +208,19 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                 </span>
               )}
             </div>
-            {!showMobileCartInline ? (
-              <MobileCartControl
-                lineQty={lineQty}
-                onAdd={handleAdd}
-                onDecrease={() => setQty(product.sku, lineQty - 1)}
-                onIncrease={() => setQty(product.sku, lineQty + 1)}
-              />
-            ) : null}
+            <MobileCartControl
+              lineQty={lineQty}
+              onAdd={handleAdd}
+              onDecrease={() => setQty(product.sku, lineQty - 1)}
+              onIncrease={() => setQty(product.sku, lineQty + 1)}
+            />
           </div>
-          {onSale && product.action?.isPermanent ? (
+          {price.kind === "sale" && product.action?.isPermanent ? (
             <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
               Cena pod trajnom zaštitom · Isporuka {product.deliveryDays.min}–
               {product.deliveryDays.max} dana
             </p>
-          ) : onSale && product.action?.endsAt ? (
+          ) : price.kind === "sale" && product.action?.endsAt ? (
             <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
               Akcija do {formatDate(product.action.endsAt)} · Isporuka{" "}
               {product.deliveryDays.min}–{product.deliveryDays.max} dana
@@ -310,6 +292,75 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   );
 }
 
+function ProductBadge({ badge }: { badge: Badge }) {
+  if (badge.key === "hero") {
+    return (
+      <span
+        aria-label={badge.label}
+        className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
+      >
+        <Image
+          src={HEROJI_MESECA_MARK_SRC}
+          alt={badge.label}
+          width={44}
+          height={37}
+          className="h-7 w-8 object-contain md:h-8 md:w-10"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
+        toneClasses[badge.tone],
+      )}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
+const COLOR_HEX: Record<string, string> = {
+  bela: "#f8f7f2",
+  crna: "#181716",
+  siva: "#9ca3af",
+  plava: "#2f6fcb",
+  "svetlo plava": "#8fc6e8",
+  zelena: "#4f8b57",
+  crvena: "#c83a31",
+  braon: "#8a5a3c",
+  krem: "#e7dac5",
+  roze: "#e8a6b6",
+  zuta: "#f4c542",
+  žuta: "#f4c542",
+  ljubičasta: "#7c4d9f",
+  ljubicasta: "#7c4d9f",
+};
+
+function ColorOptions({ product }: { product: Product }) {
+  const colors = [product.colorPrimary, product.colorSecondary]
+    .filter((c): c is string => Boolean(c?.trim()))
+    .map((label) => ({
+      label,
+      hex: COLOR_HEX[label.trim().toLowerCase()] ?? "#d8d4c8",
+    }));
+
+  return (
+    <div className="flex h-5 items-center gap-1 pt-0.5" aria-label="Opcije boja">
+      {colors.slice(0, 4).map((color) => (
+        <span
+          key={color.label}
+          title={color.label}
+          className="ring-border inline-flex size-3.5 rounded-full ring-1"
+          style={{ backgroundColor: color.hex }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MobileCartControl({
   lineQty,
   onAdd,
@@ -325,7 +376,7 @@ function MobileCartControl({
     <div className="shrink-0 md:hidden">
       {lineQty > 0 ? (
         <div
-          className="bg-ink-900 inline-flex items-center overflow-hidden rounded-full text-canvas"
+          className="bg-ink-900 inline-flex min-w-24 items-center justify-between overflow-hidden rounded-full text-canvas"
           role="group"
           aria-label="Količina u korpi"
         >
@@ -356,7 +407,7 @@ function MobileCartControl({
         <button
           type="button"
           onClick={onAdd}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-8 min-w-20 items-center justify-center gap-1 rounded-full px-3 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
           <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
         </button>
