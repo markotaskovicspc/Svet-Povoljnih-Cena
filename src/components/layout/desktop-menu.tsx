@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import {
@@ -12,6 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { primaryNav, type NavNode } from "@/data/site";
+import { promoTabIcons } from "@/data/campaign-icons";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
@@ -140,6 +142,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
             <ul className="mt-3 border-t border-border">
               {tabs.map((tab) => {
                 const isActive = pathname === tab.href;
+                const iconAsset = promoTabIcons[tab.id as keyof typeof promoTabIcons];
                 return (
                   <li key={tab.id} className="border-b border-border">
                     <Link
@@ -150,7 +153,21 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                         isActive && "font-semibold text-brand-blue",
                       )}
                     >
-                      <span className="min-w-0 break-words">{tab.label}</span>
+                      <span className="flex min-w-0 items-center gap-3">
+                        {iconAsset ? (
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue-50 ring-1 ring-brand-blue/10">
+                            <Image
+                              src={iconAsset.url}
+                              alt=""
+                              width={iconAsset.width ?? 80}
+                              height={iconAsset.height ?? 80}
+                              unoptimized={iconAsset.url.endsWith(".svg")}
+                              className="h-6 w-6 object-contain"
+                            />
+                          </span>
+                        ) : null}
+                        <span className="min-w-0 break-words">{tab.label}</span>
+                      </span>
                       <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
                     </Link>
                   </li>

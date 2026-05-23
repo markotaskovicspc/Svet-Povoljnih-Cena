@@ -1,6 +1,13 @@
 import type { MediaAsset } from "@/types";
 
 export type CampaignStickerKey = "action" | "new" | "under999" | "limited";
+export type PromoTabIconKey =
+  | "mesecna-akcija"
+  | "nedeljna-akcija"
+  | "heroji-meseca"
+  | "ogranicena-ponuda"
+  | "sve-do-999"
+  | "specijalne-ponude";
 
 export const actionCampaignSticker: MediaAsset = {
   url: "/brand/promo-stickers/heroj-akcije.svg",
@@ -51,4 +58,13 @@ export const protectedPricesIcon: MediaAsset = {
   alt: "Niske cene pod trajnom zaštitom",
   width: 1191,
   height: 895,
+};
+
+export const promoTabIcons: Partial<Record<PromoTabIconKey, MediaAsset>> = {
+  "mesecna-akcija": akcijaIcon,
+  "nedeljna-akcija": akcijaIcon,
+  "heroji-meseca": herojiMesecaIcon,
+  "ogranicena-ponuda": limitedCampaignSticker,
+  "sve-do-999": under999CampaignSticker,
+  "specijalne-ponude": akcijaIcon,
 };

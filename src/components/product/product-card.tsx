@@ -191,8 +191,8 @@ export function ProductCard({
         <ProductColorOptions product={product} className="h-5 pt-0.5" />
 
         <div className="pt-0 md:mt-auto md:pt-1">
-          <div className="flex items-end justify-between gap-2 md:flex-col md:items-stretch">
-            <div className="min-w-0 flex flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
+          <div className="flex flex-col items-stretch gap-2">
+            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
               {hasReducedPrice ? (
                 <>
                   <span className="text-action text-sm font-bold md:text-base">
@@ -210,7 +210,7 @@ export function ProductCard({
             </div>
             <MobileCartControl
               lineQty={lineQty}
-              className="w-[92px] shrink-0 min-[390px]:w-[104px] md:w-full"
+              className="w-full"
               onAdd={handleAdd}
               onDecrease={() => setQty(product.sku, lineQty - 1)}
               onIncrease={() => setQty(product.sku, lineQty + 1)}
@@ -361,8 +361,7 @@ function MobileCartControl({
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-3"
         >
           <ShoppingBag className="size-3.5 shrink-0" aria-hidden />
-          <span className="md:hidden">Dodaj</span>
-          <span className="hidden md:inline">Dodaj u korpu</span>
+          <span>Dodaj u korpu</span>
         </button>
       )}
     </div>

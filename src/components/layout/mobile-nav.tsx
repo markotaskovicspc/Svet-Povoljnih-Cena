@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { motion, AnimatePresence } from "framer-motion";
 import { primaryNav, type NavNode } from "@/data/site";
+import { promoTabIcons } from "@/data/campaign-icons";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
@@ -236,6 +237,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                         {tabs.map((t) => {
                           const isActive = pathname === t.href;
                           const Icon = tabIcons[t.id as keyof typeof tabIcons] ?? Sparkles;
+                          const iconAsset = promoTabIcons[t.id as keyof typeof promoTabIcons];
                           return (
                             <li key={t.id}>
                               <Link
@@ -247,7 +249,18 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                 )}
                               >
                                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue-50 text-brand-blue">
-                                  <Icon className="size-4" aria-hidden />
+                                  {iconAsset ? (
+                                    <Image
+                                      src={iconAsset.url}
+                                      alt=""
+                                      width={iconAsset.width ?? 80}
+                                      height={iconAsset.height ?? 80}
+                                      unoptimized={iconAsset.url.endsWith(".svg")}
+                                      className="h-6 w-6 object-contain"
+                                    />
+                                  ) : (
+                                    <Icon className="size-4" aria-hidden />
+                                  )}
                                 </span>
                                 <span className="min-w-0 leading-tight break-words">{t.label}</span>
                               </Link>
