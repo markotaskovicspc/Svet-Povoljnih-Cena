@@ -115,10 +115,8 @@ export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
       badgeLabel: protectedPricesBanner.badgeLabel,
       ctaLabel: row.ctaLabel ?? protectedPricesBanner.ctaLabel,
       ctaHref: row.ctaHref ?? protectedPricesBanner.ctaHref,
-      imageDesktop: bannerAsset(row.imageDesktop, row.title),
-      imageMobile: row.imageMobile
-        ? bannerAsset(row.imageMobile, row.title)
-        : undefined,
+      imageDesktop: protectedPricesBanner.imageDesktop,
+      imageMobile: protectedPricesBanner.imageMobile,
       startsAt: row.startsAt?.toISOString(),
       endsAt: row.endsAt?.toISOString(),
       order: row.order,

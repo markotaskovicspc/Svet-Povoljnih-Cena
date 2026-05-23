@@ -79,7 +79,7 @@ export const protectedPricesBanner: Banner = {
   ctaLabel: "Pogledaj ponudu",
   ctaHref: "/niske-cene-pod-zastitom",
   imageDesktop: {
-    url: "/brand/nctz.svg",
+    url: "/brand/tnc-black.svg",
     alt: "Niske cene pod trajnom zaštitom",
     width: 1191,
     height: 895,

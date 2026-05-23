@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { protectedPricesIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
-import { getProtectedPricesBanner } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Niske cene pod trajnom zaštitom",
@@ -11,10 +10,11 @@ export const metadata: Metadata = {
 };
 
 export default async function NiskeCenePodZastitomPage() {
-  const [banner, { items: products }] = await Promise.all([
-    getProtectedPricesBanner(),
-    listProducts({ actionSlug: "niske-cene-pod-zastitom", limit: 300 }),
-  ]);
+  const { items: products } = await listProducts({
+    actionSlug: "niske-cene-pod-zastitom",
+    limit: 300,
+  });
+
   return (
     <ListingShell
       kind="niske-cene-pod-zastitom"
@@ -24,7 +24,6 @@ export default async function NiskeCenePodZastitomPage() {
       subtitle="Stalna akcija za proizvode čije su cene zaštićene i jasno označene od 01.05.2026."
       trail={[{ label: "Niske cene pod trajnom zaštitom" }]}
       source={products}
-      featureBanner={banner}
     />
   );
 }

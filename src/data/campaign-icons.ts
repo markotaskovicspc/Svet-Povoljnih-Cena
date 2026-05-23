@@ -47,7 +47,7 @@ export const herojiMesecaIcon: MediaAsset = {
 export const akcijaIcon = actionCampaignSticker;
 
 export const protectedPricesIcon: MediaAsset = {
-  url: "/brand/nctz.svg",
+  url: "/brand/tnc-black.svg",
   alt: "Niske cene pod trajnom zaštitom",
   width: 1191,
   height: 895,
