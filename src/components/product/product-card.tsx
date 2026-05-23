@@ -173,8 +173,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         <ColorOptions product={product} />
 
         <div className="pt-0 md:mt-auto md:pt-1">
-          <div className="flex flex-col gap-2">
-            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
+          <div className="flex items-end justify-between gap-2 md:flex-col md:items-stretch">
+            <div className="min-w-0 flex flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
               {hasReducedPrice ? (
                 <>
                   <span className="text-action text-sm font-bold md:text-base">
@@ -192,6 +192,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             </div>
             <MobileCartControl
               lineQty={lineQty}
+              className="w-[92px] shrink-0 min-[390px]:w-[104px] md:w-full"
               onAdd={handleAdd}
               onDecrease={() => setQty(product.sku, lineQty - 1)}
               onIncrease={() => setQty(product.sku, lineQty + 1)}
@@ -290,17 +291,19 @@ function ColorOptions({ product }: { product: Product }) {
 
 function MobileCartControl({
   lineQty,
+  className,
   onAdd,
   onDecrease,
   onIncrease,
 }: {
   lineQty: number;
+  className?: string;
   onAdd: () => void;
   onDecrease: () => void;
   onIncrease: () => void;
 }) {
   return (
-    <div className="w-full">
+    <div className={cn("w-full", className)}>
       {lineQty > 0 ? (
         <div
           className="bg-ink-900 inline-flex h-10 w-full items-center justify-between overflow-hidden rounded-full text-canvas"
@@ -334,9 +337,11 @@ function MobileCartControl({
         <button
           type="button"
           onClick={onAdd}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-3"
         >
-          <ShoppingBag className="size-3.5" aria-hidden /> Dodaj u korpu
+          <ShoppingBag className="size-3.5 shrink-0" aria-hidden />
+          <span className="md:hidden">Dodaj</span>
+          <span className="hidden md:inline">Dodaj u korpu</span>
         </button>
       )}
     </div>

@@ -286,33 +286,31 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                       const isActive = pathname === node.href;
                       const hasChildren = !!node.children?.length;
                       return (
-                        <li key={node.href} className="flex min-h-14 items-stretch transition hover:bg-muted-bg">
-                          <Link
-                            href={node.href}
-                            onClick={close}
-                            className={cn(
-                              "flex min-w-0 flex-1 items-center px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                              isActive && "font-semibold text-brand-blue",
-                            )}
-                          >
-                            {node.label}
-                          </Link>
+                        <li key={node.href} className="min-h-14 transition hover:bg-muted-bg">
                           {hasChildren ? (
                             <button
                               type="button"
                               onClick={() => enter(node)}
-                              aria-label={`Otvori ${node.label}`}
-                              className="flex w-13 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              className={cn(
+                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                isActive && "font-semibold text-brand-blue",
+                              )}
                             >
-                              <ChevronRight className="size-4" aria-hidden />
+                              <span className="min-w-0 break-words">{node.label}</span>
+                              <ChevronRight className="size-4 shrink-0 text-ink-500" aria-hidden />
                             </button>
                           ) : (
-                            <span
-                              className="flex w-13 shrink-0 items-center justify-center text-ink-300"
-                              aria-hidden
+                            <Link
+                              href={node.href}
+                              onClick={close}
+                              className={cn(
+                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                isActive && "font-semibold text-brand-blue",
+                              )}
                             >
-                              <ChevronRight className="size-4" />
-                            </span>
+                              <span className="min-w-0 break-words">{node.label}</span>
+                              <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                            </Link>
                           )}
                         </li>
                       );

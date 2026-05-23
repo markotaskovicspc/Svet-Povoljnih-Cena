@@ -169,11 +169,11 @@ export default async function ProductPage({ params }: RouteProps) {
             ) : price.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
                 Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
-                {formatDate(product.action.endsAt)}.
+                {formatDate(product.action.endsAt)}
               </p>
             ) : price.kind === "loyalty" ? (
               <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Loyalty cena za kupce sa nalogom.
+                Cena za kupce sa nalogom.
               </p>
             ) : null}
           </div>

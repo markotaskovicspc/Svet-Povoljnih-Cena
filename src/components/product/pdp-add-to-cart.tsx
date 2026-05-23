@@ -96,7 +96,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
       <div className="flex flex-col gap-2">
         {ctas}
         <p className="text-xs text-ink-500">
-          Isporuka {product.deliveryDays.min}-{product.deliveryDays.max} radnih dana
+          Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} radnih dana
         </p>
       </div>
     );

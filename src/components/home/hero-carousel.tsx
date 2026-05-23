@@ -137,7 +137,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
                 {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
               </p>
-              <h2 className="font-display mt-2 text-2xl leading-[1.1] md:mt-3 md:text-6xl">
+              <h2 className="font-display mt-2 max-w-[13ch] text-2xl leading-[1.1] md:mt-3 md:max-w-none md:text-6xl">
                 {slide.title}
               </h2>
               {slide.subtitle ? (

@@ -77,7 +77,9 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
+  subtitle,
   titleIcon,
+  period,
   trail,
   source,
   subTabs,

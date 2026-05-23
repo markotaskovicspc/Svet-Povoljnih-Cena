@@ -21,7 +21,7 @@ export function EditorialBanner({ banner }: EditorialBannerProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative isolate overflow-hidden rounded-lg bg-ink-900 text-canvas shadow-soft-4 lg:rounded-xl"
       >
-        <div className="relative aspect-[16/11] w-full md:aspect-[24/9]">
+        <div className="relative aspect-[16/7] min-h-[160px] w-full md:aspect-[24/7] md:min-h-0">
           <Image
             src={banner.imageDesktop.url}
             alt={banner.imageDesktop.alt ?? banner.title}

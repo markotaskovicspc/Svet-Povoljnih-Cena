@@ -183,7 +183,7 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
               onChange={(event) => setSort(event.target.value as SortKey)}
               className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm text-ink-900 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15"
             >
-              <option value="source">Redosled iz fajla</option>
+              <option value="source">Podrazumevano</option>
               <option value="price-asc">Cena rastuće</option>
               <option value="price-desc">Cena opadajuće</option>
               <option value="category">Kategorija</option>
