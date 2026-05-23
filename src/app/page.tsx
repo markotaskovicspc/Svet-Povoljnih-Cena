@@ -2,6 +2,7 @@ import { HeroCarousel } from "@/components/home/hero-carousel";
 import { SectionRail } from "@/components/home/section-rail";
 import { EditorialBanner } from "@/components/home/editorial-banner";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
+import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { UspStrip } from "@/components/home/usp-strip";
 import {
   getActiveBanners,
@@ -32,6 +33,7 @@ export default async function Home() {
   return (
     <>
       <HeroCarousel banners={banners} />
+      <ShortcutStrip tabs={tabs} />
 
       <SectionRail
         title="Heroji meseca"

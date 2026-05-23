@@ -31,7 +31,7 @@ export const headerTabs: Tab[] = [
   },
   {
     id: "ogranicena-ponuda",
-    label: "Ograničena količina",
+    label: "Dok traju zalihe",
     href: "/ogranicena-ponuda",
     order: 4,
     icon: "Hourglass",

@@ -45,9 +45,9 @@ export const heroBanners: Banner[] = [
   },
   {
     id: "hero-3",
-    title: "Black Friday — ograničena ponuda",
+    title: "Black Friday — dok traju zalihe",
     subtitle: "Kratko traje, brzo nestaje. Dok traju zalihe.",
-    badgeLabel: "Ograničena količina",
+    badgeLabel: "Dok traju zalihe",
     ctaLabel: "Pogledaj ponudu",
     ctaHref: "/ogranicena-ponuda",
     imageDesktop: heroImage("1567016432779-094069958ea5", "Black Friday", 2400, 1350),
@@ -116,8 +116,8 @@ export const sectionBanners: Record<string, Banner> = {
   "ogranicena-ponuda": {
     ...heroBanners[2],
     id: "section-ogranicena-ponuda",
-    title: "Ograničena količina",
-    badgeLabel: "Ograničena količina",
+    title: "Dok traju zalihe",
+    badgeLabel: "Dok traju zalihe",
     ctaHref: "/ogranicena-ponuda",
   },
   "sve-do-999": {

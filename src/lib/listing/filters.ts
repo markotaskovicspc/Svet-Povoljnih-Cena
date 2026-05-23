@@ -158,10 +158,9 @@ export function computeFacetValues(products: Product[]): FacetValues {
 
   for (const p of products) {
     for (const m of p.materials) materials.add(m.label);
-    // Color is not yet a first-class facet — derive from material label hint if present.
-    for (const m of p.materials) {
-      if (/hrast|orah|jasen|bor/i.test(m.label)) colors.add(m.label);
-    }
+    [p.colorPrimary, p.colorSecondary]
+      .filter((c): c is string => Boolean(c?.trim()))
+      .forEach((c) => colors.add(c));
     for (const f of dynFacets) {
       const v = f.getValue(p);
       if (!v) continue;
@@ -206,7 +205,9 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
       if (!state.materials.some((m) => labels.has(m))) return false;
     }
     if (state.colors.length) {
-      const labels = new Set(p.materials.map((m) => m.label));
+      const labels = new Set(
+        [p.colorPrimary, p.colorSecondary].filter((c): c is string => Boolean(c?.trim())),
+      );
       if (!state.colors.some((c) => labels.has(c))) return false;
     }
     if (state.availability.length) {

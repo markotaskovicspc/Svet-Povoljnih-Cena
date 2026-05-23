@@ -7,7 +7,7 @@ import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CartLineRow } from "./cart-line-row";
-import { PurchaseSuggestion } from "./purchase-suggestion";
+import { useCartUi } from "@/lib/hooks/use-cart-ui";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -97,6 +97,7 @@ function CartSummary({
   savings: number;
   fullTotal: number;
 }) {
+  const openSuggestion = useCartUi((s) => s.openSuggestion);
   const [code, setCode] = useState("");
   const [applied, setApplied] = useState<{ code: string; valid: boolean } | null>(
     null,
@@ -187,10 +188,12 @@ function CartSummary({
           </span>
         </div>
 
-        <PurchaseSuggestion />
-
         <Link
           href="/checkout"
+          onClick={(e) => {
+            e.preventDefault();
+            openSuggestion("/checkout");
+          }}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
           Nastavi ka podacima za isporuku

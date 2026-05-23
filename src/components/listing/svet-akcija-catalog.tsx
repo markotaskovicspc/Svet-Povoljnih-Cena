@@ -117,10 +117,7 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
       <div className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-10">
         <div className="mb-5 flex flex-col gap-4 border-b border-border pb-5 md:mb-7 md:flex-row md:items-end md:justify-between md:pb-7">
           <div className="max-w-3xl">
-            <p className="font-mono text-xs tracking-[0.18em] text-brand-blue uppercase">
-              Svet akcija katalog
-            </p>
-            <h1 className="font-display mt-2 text-3xl text-ink-900 md:text-5xl">
+            <h1 className="font-display text-3xl text-ink-900 md:text-5xl">
               Proizvodi iz uvoznog fajla
             </h1>
             <p className="mt-3 text-sm leading-6 text-ink-700 md:text-base">
@@ -186,7 +183,7 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
               onChange={(event) => setSort(event.target.value as SortKey)}
               className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm text-ink-900 outline-none transition focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15"
             >
-              <option value="source">Redosled iz fajla</option>
+              <option value="source">Podrazumevano</option>
               <option value="price-asc">Cena rastuće</option>
               <option value="price-desc">Cena opadajuće</option>
               <option value="category">Kategorija</option>
@@ -248,7 +245,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">
       <Link
         href={productHref(product)}
-        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted-bg text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         aria-label={`${sourceValue(product, "Kratki naziv")} detalji`}
       >
         {image ? (
@@ -257,7 +254,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
             alt={image.alt ?? sourceValue(product, "Kratki naziv")}
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-contain p-3 transition duration-300 group-hover:scale-[1.03]"
+            className="object-contain p-4 transition duration-300"
           />
         ) : (
           <>

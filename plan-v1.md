@@ -121,7 +121,7 @@ Build www.svetpovoljnihcena.rs as a premium-feeling furniture web shop covering 
    - "Heroj akcije" (gold)
    - Action name (e.g., "Black Friday")
    - "Novo" (olive)
-   - "Ograničena količina" (amber)
+   - "Dok traju zalihe" (amber)
    - "Dok traju zalihe" (red, when isDtz && stock < 15)
 4. Wishlist heart top-right
 5. Body: name (2-line clamp), dimensions ŠxDxV cm (mono, muted)

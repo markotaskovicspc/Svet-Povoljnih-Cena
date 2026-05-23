@@ -31,6 +31,18 @@ const overrideSchema = z.object({
     .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
     .nullable()
     .optional(),
+  loyaltyPrice: z
+    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
+    .nullable()
+    .optional(),
+  loyaltyDiscountPct: z
+    .union([z.coerce.number().int().min(0).max(99), z.literal("").transform(() => null)])
+    .nullable()
+    .optional(),
+  pdpDeliveryTerms: z.string().max(10000).optional().nullable(),
+  declaration: z.string().max(10000).optional().nullable(),
+  assemblyInstructions: z.string().max(10000).optional().nullable(),
+  maintenance: z.string().max(10000).optional().nullable(),
   stock: z.coerce.number().int().min(0),
   incomingStock: z.coerce.number().int().min(0),
   deliveryDaysMin: z.coerce.number().int().min(0).max(60),
@@ -98,10 +110,20 @@ async function updateProduct(formData: FormData) {
           description: d.description,
           fullPrice: d.fullPrice,
           salePrice: d.salePrice ?? null,
+          loyaltyPrice: d.loyaltyPrice ?? null,
+          loyaltyDiscountPct: d.loyaltyDiscountPct ?? null,
           discountPct:
             d.salePrice && d.salePrice < d.fullPrice
               ? Math.round(((d.fullPrice - d.salePrice) / d.fullPrice) * 100)
+              : d.loyaltyPrice && d.loyaltyPrice < d.fullPrice
+                ? Math.round(((d.fullPrice - d.loyaltyPrice) / d.fullPrice) * 100)
+                : d.loyaltyDiscountPct
+                  ? d.loyaltyDiscountPct
               : null,
+          pdpDeliveryTerms: d.pdpDeliveryTerms?.trim() || null,
+          declaration: d.declaration?.trim() || null,
+          assemblyInstructions: d.assemblyInstructions?.trim() || null,
+          maintenance: d.maintenance?.trim() || null,
           stock: d.stock,
           incomingStock: d.incomingStock,
           deliveryDaysMin: d.deliveryDaysMin,
@@ -271,6 +293,39 @@ export default async function ProductDetail({
                 defaultValue={product.description}
               />
             </Field>
+            <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
+              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
+                PDP info sekcije
+              </legend>
+              <Field label="Uslovi isporuke">
+                <Textarea
+                  name="pdpDeliveryTerms"
+                  rows={3}
+                  defaultValue={product.pdpDeliveryTerms ?? ""}
+                />
+              </Field>
+              <Field label="Deklaracija">
+                <Textarea
+                  name="declaration"
+                  rows={3}
+                  defaultValue={product.declaration ?? ""}
+                />
+              </Field>
+              <Field label="Uputstvo za sastavljanje">
+                <Textarea
+                  name="assemblyInstructions"
+                  rows={3}
+                  defaultValue={product.assemblyInstructions ?? ""}
+                />
+              </Field>
+              <Field label="Kako održavati">
+                <Textarea
+                  name="maintenance"
+                  rows={3}
+                  defaultValue={product.maintenance ?? ""}
+                />
+              </Field>
+            </fieldset>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Puna cena (RSD)">
                 <Input
@@ -300,6 +355,29 @@ export default async function ProductDetail({
                   min={0}
                   required
                   defaultValue={product.stock}
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="Loyalty cena (RSD)">
+                <Input
+                  name="loyaltyPrice"
+                  type="number"
+                  step="1"
+                  min={0}
+                  defaultValue={
+                    product.loyaltyPrice ? num(product.loyaltyPrice) : ""
+                  }
+                />
+              </Field>
+              <Field label="Loyalty popust (%)">
+                <Input
+                  name="loyaltyDiscountPct"
+                  type="number"
+                  step="1"
+                  min={0}
+                  max={99}
+                  defaultValue={product.loyaltyDiscountPct ?? ""}
                 />
               </Field>
             </div>
@@ -338,7 +416,7 @@ export default async function ProductDetail({
                 <Toggle name="isActive" defaultChecked={product.isActive} label="Aktivan" />
                 <Toggle name="isHero" defaultChecked={product.isHero} label="Hero meseca" />
                 <Toggle name="isNew" defaultChecked={product.isNew} label="Novo" />
-                <Toggle name="isLimited" defaultChecked={product.isLimited} label="Ograničena količina" />
+                <Toggle name="isLimited" defaultChecked={product.isLimited} label="Dok traju zalihe" />
                 <Toggle name="isDtz" defaultChecked={product.isDtz} label="Dok traju zalihe" />
                 <Toggle name="allowsAssembly" defaultChecked={product.allowsAssembly} label="Dozvoljena montaža" />
                 <Toggle

@@ -219,11 +219,20 @@ model Product {
   heightCm Decimal? @db.Decimal(8, 2)
 
   // Pricing in RSD
-  fullPrice   Decimal  @db.Decimal(12, 2)
-  salePrice   Decimal? @db.Decimal(12, 2)
-  discountPct Int?
-  actionId    String?
-  action      Action?  @relation(fields: [actionId], references: [id])
+  fullPrice          Decimal  @db.Decimal(12, 2)
+  salePrice          Decimal? @db.Decimal(12, 2)
+  discountPct        Int?
+  /// Admin-managed loyalty price for products without an active sale.
+  loyaltyPrice       Decimal? @db.Decimal(12, 2)
+  loyaltyDiscountPct Int?
+  actionId           String?
+  action             Action?  @relation(fields: [actionId], references: [id])
+
+  // PDP expandable information sections
+  pdpDeliveryTerms     String? @db.Text
+  declaration          String? @db.Text
+  assemblyInstructions String? @db.Text
+  maintenance          String? @db.Text
 
   // Flags
   isHero    Boolean   @default(false)
@@ -436,6 +445,8 @@ model Action {
   startsAt  DateTime
   endsAt    DateTime
   isHero    Boolean    @default(false)
+  /// Permanent protected-price campaign ("Trajno niska cena").
+  isPermanent Boolean  @default(false)
   /// Admin-controlled sort order override
   sortOrder Int        @default(0)
   createdAt DateTime   @default(now())

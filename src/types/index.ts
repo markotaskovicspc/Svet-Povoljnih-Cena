@@ -67,6 +67,8 @@ export interface Product {
   shortDescription?: string;
 
   dimensionsCm: Dimensions;
+  colorPrimary?: string;
+  colorSecondary?: string;
   materials: Material[];
   pictograms: Pictogram[];
 
@@ -84,7 +86,15 @@ export interface Product {
   fullPrice: number; // MPC (RSD)
   salePrice?: number; // akcijska MPC (RSD)
   discountPct?: number;
+  loyaltyPrice?: number;
+  loyaltyDiscountPct?: number;
   action?: PromoAction;
+  pdpInfo?: {
+    deliveryTerms?: string;
+    declaration?: string;
+    assemblyInstructions?: string;
+    maintenance?: string;
+  };
 
   deliveryDays: { min: number; max: number };
   allowsAssembly: boolean;

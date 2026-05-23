@@ -5,7 +5,7 @@ import { useFormContext } from "react-hook-form";
 import { ChevronDown, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/lib/hooks/use-cart";
-import { useCheckout, validateVoucher } from "@/lib/checkout/store";
+import { useCheckout } from "@/lib/checkout/store";
 import { cn } from "@/lib/utils";
 import type { CheckoutFormData } from "./checkout-flow";
 
@@ -24,18 +24,36 @@ export function VoucherSection() {
   const applied = useCheckout((s) => s.voucher);
   const apply = useCheckout((s) => s.applyVoucher);
 
-  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const code = String(fd.get("code") ?? "");
-    const result = validateVoucher(code, subtotal);
-    if (result.ok) {
-      apply(result.voucher);
-      setValue("voucherCode", result.voucher.code, { shouldDirty: true });
+    const code = String(fd.get("code") ?? "").trim();
+    if (!code) {
+      apply(null);
+      setError("Unesite kod");
+      return;
+    }
+    const response = await fetch("/api/voucher/validate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code, subtotal }),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { ok: true; code: string; label: string; discountRsd: number }
+      | { ok: false; reason: string }
+      | null;
+
+    if (result?.ok) {
+      apply({
+        code: result.code,
+        label: result.label,
+        discountRsd: result.discountRsd,
+      });
+      setValue("voucherCode", result.code, { shouldDirty: true });
       setError(null);
     } else {
       apply(null);
-      setError(result.reason);
+      setError(result?.reason ?? "Vaučer trenutno nije moguće proveriti");
     }
   };
 
@@ -98,9 +116,7 @@ export function VoucherSection() {
                 </p>
               ) : null}
               <p className="text-[11px] text-ink-500">
-                Demo kodovi: <span className="font-mono">SPRING-10</span>,{" "}
-                <span className="font-mono">WELCOME-5</span>,{" "}
-                <span className="font-mono">SPC-1500</span>.
+                Popust se proverava na serveru i odmah ulazi u sažetak porudžbine.
               </p>
             </form>
           </motion.div>

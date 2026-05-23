@@ -23,8 +23,8 @@ export type IdentityChoice = "login" | "register" | "guest";
 
 export interface AppliedVoucher {
   code: string;
-  /** Fraction (0–1) discount on subtotal, applied after sale prices. */
-  amount: number;
+  /** Validated discount in RSD, already clamped by server pricing rules. */
+  discountRsd: number;
   /** Display label (e.g. "−10%" or "−1.500 RSD"). */
   label: string;
 }
@@ -59,39 +59,6 @@ export const useCheckout = create<CheckoutState>()((set) => ({
       lastOrder: null,
     }),
 }));
-
-/**
- * Mocked voucher table — replaced by `POST /api/voucher/validate` in Phase 3.
- * Keys are uppercased; lookups happen via `validateVoucher` below.
- */
-const MOCK_VOUCHERS: Record<string, AppliedVoucher> = {
-  "SPRING-10": { code: "SPRING-10", amount: 0.1, label: "−10%" },
-  "WELCOME-5": { code: "WELCOME-5", amount: 0.05, label: "−5%" },
-  "SPC-1500": { code: "SPC-1500", amount: 0, label: "−1.500 RSD" },
-};
-
-export function validateVoucher(
-  raw: string,
-  subtotal: number,
-): { ok: true; voucher: AppliedVoucher } | { ok: false; reason: string } {
-  const code = raw.trim().toUpperCase();
-  if (!code) return { ok: false, reason: "Unesite kod" };
-  const hit = MOCK_VOUCHERS[code];
-  if (!hit) return { ok: false, reason: "Kod nije pronađen ili je istekao" };
-  // Special-case fixed-amount vouchers stored as RSD in label
-  if (code === "SPC-1500") {
-    if (subtotal < 10000)
-      return {
-        ok: false,
-        reason: "Vaučer važi samo za porudžbine preko 10.000 RSD",
-      };
-    return {
-      ok: true,
-      voucher: { ...hit, amount: 1500 / subtotal },
-    };
-  }
-  return { ok: true, voucher: hit };
-}
 
 /**
  * Pricing constants. Real prices come from delivery rules in Phase 3 (admin-driven).

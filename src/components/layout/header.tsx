@@ -18,7 +18,6 @@ const SCROLL_THRESHOLD = 16;
 export function Header({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  const isHome = pathname === "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > SCROLL_THRESHOLD);
@@ -49,7 +48,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[234px] max-w-[22vw] object-contain"
+              className="h-auto w-[328px] max-w-[30vw] object-contain"
             />
           </div>
         </Link>
@@ -102,7 +101,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
         <MobileNav tabs={tabs} />
-        <Link href="/" aria-label="Svet Akcija — početna">
+        <Link href="/" aria-label="Svet Akcija — početna" className="shrink-0">
           <div className="rounded-md px-1.5 py-0.5">
             <Image
               src="/logo.jpeg"
@@ -110,16 +109,18 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className={cn(
-                "h-auto object-contain",
-                isHome
-                  ? "w-[210px] min-[390px]:w-[240px]"
-                  : "w-[150px] min-[390px]:w-[180px]",
-              )}
+              className="h-auto w-[160px] object-contain min-[390px]:w-[180px]"
             />
           </div>
         </Link>
         <div className="flex items-center gap-0.5">
+          <Link
+            href="/nalog"
+            aria-label="Moj nalog"
+            className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+          >
+            <User2 className="size-5" aria-hidden />
+          </Link>
           <WishlistButton
             openDrawerOnClick={false}
             className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40"

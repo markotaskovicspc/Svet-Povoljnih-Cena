@@ -31,6 +31,8 @@ export interface PricingProduct {
   fullPrice: number;
   salePrice?: number | null;
   discountPct?: number | null;
+  loyaltyPrice?: number | null;
+  loyaltyDiscountPct?: number | null;
   action?: PricingAction | null;
 }
 
@@ -41,6 +43,8 @@ export interface EffectivePrice {
   full: number;
   /** Was a valid sale price applied? */
   onSale: boolean;
+  /** Which reduced-price source won. */
+  kind: "full" | "sale" | "loyalty";
   /** Integer percent discount, 0 if none. */
   discountPct: number;
   /** True when product carried a salePrice but the action window expired. */
@@ -59,10 +63,29 @@ function isActionLive(action: PricingAction | null | undefined, now: Date): bool
   return t >= start && t <= end;
 }
 
+function resolveLoyaltyPrice(
+  product: PricingProduct,
+  full: number,
+): Pick<EffectivePrice, "effective" | "discountPct"> | null {
+  const loyalty =
+    product.loyaltyPrice ??
+    (product.loyaltyDiscountPct
+      ? Math.round(full * (1 - product.loyaltyDiscountPct / 100))
+      : null);
+
+  if (loyalty == null || loyalty <= 0 || loyalty >= full) return null;
+
+  return {
+    effective: loyalty,
+    discountPct:
+      product.loyaltyDiscountPct ?? Math.round(((full - loyalty) / full) * 100),
+  };
+}
+
 /**
  * Resolves the effective unit price for a product. If the product carries a
- * `salePrice` but its `action` window has lapsed, the price reverts to
- * `fullPrice` (per plan 3D — item 3).
+ * `salePrice` but its `action` window has lapsed, the price falls back to
+ * loyalty pricing when available, then to `fullPrice`.
  */
 export function effectiveUnitPrice(
   product: PricingProduct,
@@ -70,15 +93,57 @@ export function effectiveUnitPrice(
 ): EffectivePrice {
   const full = product.fullPrice;
   const sale = product.salePrice ?? null;
+  const loyalty = resolveLoyaltyPrice(product, full);
   if (sale == null || sale >= full) {
-    return { effective: full, full, onSale: false, discountPct: 0, actionExpired: false };
+    if (loyalty) {
+      return {
+        effective: loyalty.effective,
+        full,
+        onSale: false,
+        kind: "loyalty",
+        discountPct: loyalty.discountPct,
+        actionExpired: false,
+      };
+    }
+    return {
+      effective: full,
+      full,
+      onSale: false,
+      kind: "full",
+      discountPct: 0,
+      actionExpired: false,
+    };
   }
   const live = isActionLive(product.action, now);
   if (!live) {
-    return { effective: full, full, onSale: false, discountPct: 0, actionExpired: true };
+    if (loyalty) {
+      return {
+        effective: loyalty.effective,
+        full,
+        onSale: false,
+        kind: "loyalty",
+        discountPct: loyalty.discountPct,
+        actionExpired: true,
+      };
+    }
+    return {
+      effective: full,
+      full,
+      onSale: false,
+      kind: "full",
+      discountPct: 0,
+      actionExpired: true,
+    };
   }
   const pct = product.discountPct ?? Math.round(((full - sale) / full) * 100);
-  return { effective: sale, full, onSale: true, discountPct: pct, actionExpired: false };
+  return {
+    effective: sale,
+    full,
+    onSale: true,
+    kind: "sale",
+    discountPct: pct,
+    actionExpired: false,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

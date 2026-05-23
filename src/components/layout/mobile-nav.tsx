@@ -30,7 +30,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { primaryNav, type NavNode } from "@/data/site";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
-import { BrandLogo } from "./brand-logo";
 import { InstantSearch } from "./instant-search";
 
 interface Crumb {
@@ -125,13 +124,13 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
           showCloseButton={false}
           className="!inset-0 !h-[100dvh] !w-screen !max-w-none gap-0 overflow-hidden border-0 bg-white p-0 sm:!max-w-none"
         >
-          <SheetHeader className="shrink-0 bg-brand-blue px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 text-white">
+          <SheetHeader className="shrink-0 bg-white px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 text-brand-blue">
             <div className="grid min-h-11 grid-cols-[2.5rem_1fr_auto] items-center gap-3">
               <button
                 type="button"
                 onClick={close}
                 aria-label="Zatvori meni"
-                className="inline-flex size-10 items-center justify-center rounded-full text-white/85 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
               >
                 <X className="size-5" aria-hidden />
               </button>
@@ -141,9 +140,13 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 onClick={close}
                 className="justify-self-center"
               >
-                <BrandLogo
-                  className="w-[160px] min-[390px]:w-[180px]"
-                  imageClassName="brightness-0 invert"
+                <Image
+                  src="/logo.jpeg"
+                  alt="Svet Akcija"
+                  width={1600}
+                  height={382}
+                  priority
+                  className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
                 />
               </Link>
               <div className="flex items-center justify-end gap-1">
@@ -151,7 +154,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   href="/"
                   onClick={close}
                   aria-label="Početna"
-                  className="inline-flex size-10 items-center justify-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                  className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <Home className="size-5" aria-hidden />
                 </Link>
@@ -159,7 +162,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   href="/nalog"
                   onClick={close}
                   aria-label="Moj nalog"
-                  className="inline-flex size-10 items-center justify-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                  className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <User2 className="size-5" aria-hidden />
                 </Link>
@@ -202,27 +205,27 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 {stack.length === 1 ? (
                   <>
                     <div className="px-4 pt-5 pb-4">
-                      <ul className="grid grid-cols-3 gap-x-3 gap-y-4 min-[390px]:grid-cols-4">
+                      <ul className="grid grid-cols-2 gap-x-3 gap-y-4">
                         {categoryTiles.map((tile) => (
                           <li key={tile.href}>
-                            <Link
-                              href={tile.href}
-                              onClick={close}
-                              className="group block rounded-md focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                            <button
+                              type="button"
+                              onClick={() => enter(tile)}
+                              className="group block w-full rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
                               <span className="relative block aspect-[1.42] overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
                                   fill
-                                  sizes="(max-width: 389px) 28vw, 22vw"
+                                  sizes="45vw"
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
                               <span className="mt-2 block min-h-8 text-center text-[10px] leading-tight font-bold tracking-[0.02em] text-ink-700 uppercase">
                                 {tile.label}
                               </span>
-                            </Link>
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -283,33 +286,31 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                       const isActive = pathname === node.href;
                       const hasChildren = !!node.children?.length;
                       return (
-                        <li key={node.href} className="flex min-h-14 items-stretch transition hover:bg-muted-bg">
-                          <Link
-                            href={node.href}
-                            onClick={close}
-                            className={cn(
-                              "flex min-w-0 flex-1 items-center px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                              isActive && "font-semibold text-brand-blue",
-                            )}
-                          >
-                            {node.label}
-                          </Link>
+                        <li key={node.href} className="min-h-14 transition hover:bg-muted-bg">
                           {hasChildren ? (
                             <button
                               type="button"
                               onClick={() => enter(node)}
-                              aria-label={`Otvori ${node.label}`}
-                              className="flex w-13 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              className={cn(
+                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                isActive && "font-semibold text-brand-blue",
+                              )}
                             >
-                              <ChevronRight className="size-4" aria-hidden />
+                              <span className="min-w-0 break-words">{node.label}</span>
+                              <ChevronRight className="size-4 shrink-0 text-ink-500" aria-hidden />
                             </button>
                           ) : (
-                            <span
-                              className="flex w-13 shrink-0 items-center justify-center text-ink-300"
-                              aria-hidden
+                            <Link
+                              href={node.href}
+                              onClick={close}
+                              className={cn(
+                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                isActive && "font-semibold text-brand-blue",
+                              )}
                             >
-                              <ChevronRight className="size-4" />
-                            </span>
+                              <span className="min-w-0 break-words">{node.label}</span>
+                              <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                            </Link>
                           )}
                         </li>
                       );

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { ShieldCheck } from "lucide-react";
-import { CustomerLoginFields, LoginError } from "./form";
+import { CustomerLoginFields, LoginError, type LoginErrorCode } from "./form";
 import {
   getConfiguredSocialAuthProviders,
   SocialAuthButtons,
@@ -41,8 +41,12 @@ async function loginAction(formData: FormData) {
     });
   } catch (err) {
     if (err instanceof AuthError) {
+      const error: LoginErrorCode =
+        err.type === "CredentialsSignin" || err.type === "CallbackRouteError"
+          ? "invalid"
+          : "generic";
       redirect(
-        `/nalog/prijava?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`,
+        `/nalog/prijava?error=${error}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
       );
     }
     throw err;
@@ -52,7 +56,7 @@ async function loginAction(formData: FormData) {
 export default async function CustomerLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+  searchParams: Promise<{ error?: LoginErrorCode; callbackUrl?: string }>;
 }) {
   const sp = await searchParams;
   const callbackUrl = customerCallback(sp.callbackUrl);
@@ -73,10 +77,7 @@ export default async function CustomerLoginPage({
   return (
     <div className="mx-auto grid w-full max-w-[var(--container-page)] gap-10 px-4 py-12 md:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] md:px-6 md:py-20">
       <section className="flex flex-col justify-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-walnut">
-          Moj nalog
-        </p>
-        <h1 className="font-display mt-3 max-w-xl text-4xl text-ink-900 md:text-6xl">
+        <h1 className="font-display max-w-xl text-4xl text-ink-900 md:text-6xl">
           Prijava za bržu kupovinu
         </h1>
         <p className="mt-5 max-w-[58ch] text-base leading-relaxed text-ink-600 md:text-lg">
@@ -105,7 +106,7 @@ export default async function CustomerLoginPage({
         </p>
 
         <div className="mt-5">
-          <LoginError hasError={!!sp.error} />
+          <LoginError error={sp.error} />
         </div>
 
         <form action={loginAction} className="mt-5">

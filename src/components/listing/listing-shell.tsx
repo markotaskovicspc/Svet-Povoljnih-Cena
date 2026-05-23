@@ -77,7 +77,9 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
+  subtitle,
   titleIcon,
+  period,
   trail,
   source,
   subTabs,
@@ -189,6 +191,15 @@ export function ListingShell({
                 {title}
               </h1>
             </div>
+            {subtitle ? (
+              <p className="mt-3 hidden text-base text-ink-700 md:block">{subtitle}</p>
+            ) : null}
+            {period ? (
+              <div className="bg-action/8 text-action ring-action/15 mt-3 inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1">
+                <span aria-hidden className="size-1.5 rounded-full bg-action" />
+                {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
+              </div>
+            ) : null}
           </motion.div>
         </header>
 
@@ -407,6 +418,14 @@ function EmptyState({ onReset }: { onReset: () => void }) {
       </div>
     </div>
   );
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("sr-RS", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 /** Skeleton grid for suspense fallbacks. */

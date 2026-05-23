@@ -112,20 +112,20 @@ export default async function CustomerRegistrationPage({
 
   if (user?.userType === "customer") redirect(callbackUrl);
 
-  const socialProviders = getConfiguredSocialAuthProviders({
-    google: googleAction,
-    facebook: facebookAction,
-    apple: appleAction,
-  });
+  const socialProviders = getConfiguredSocialAuthProviders(
+    {
+      google: googleAction,
+      facebook: facebookAction,
+      apple: appleAction,
+    },
+    { includeUnavailable: true },
+  );
   const loginHref = `/nalog/prijava?callbackUrl=${encodeURIComponent(callbackUrl)}`;
 
   return (
     <div className="mx-auto grid w-full max-w-[var(--container-page)] gap-10 px-4 py-12 md:grid-cols-[minmax(0,1fr)_minmax(380px,460px)] md:px-6 md:py-20">
       <section className="flex flex-col justify-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-walnut">
-          Novi nalog
-        </p>
-        <h1 className="font-display mt-3 max-w-xl text-4xl text-ink-900 md:text-6xl">
+        <h1 className="font-display max-w-xl text-4xl text-ink-900 md:text-6xl">
           Registracija za lakšu svaku sledeću kupovinu
         </h1>
         <p className="mt-5 max-w-[58ch] text-base leading-relaxed text-ink-600 md:text-lg">
@@ -153,23 +153,30 @@ export default async function CustomerRegistrationPage({
       <section className="rounded-2xl border border-border/70 bg-surface p-6 shadow-sm md:p-8">
         <h2 className="font-display text-2xl text-ink-900">Kreirajte nalog</h2>
         <p className="mt-1 text-sm text-ink-500">
-          Unesite e-poštu i lozinku koju ćete koristiti za prijavu.
+          Najbrže je preko Google, Apple ili Facebook naloga.
         </p>
 
         <div className="mt-5">
           <RegistrationError error={sp.error} />
         </div>
 
-        <form action={registerAction} className="mt-5">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <CustomerRegistrationFields />
-        </form>
-
         <SocialAuthButtons
           callbackUrl={callbackUrl}
           intent="register"
           providers={socialProviders}
+          showDivider={false}
         />
+
+        <div className="mt-6 flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
+          <span className="h-px flex-1 bg-border" />
+          ili nastavite e-poštom
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form action={registerAction} className="mt-5">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+          <CustomerRegistrationFields />
+        </form>
 
         <p className="mt-6 text-center text-sm text-ink-500">
           Već imate nalog?{" "}

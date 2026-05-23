@@ -28,10 +28,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <Breadcrumbs trail={[{ label: "Pretraga" }]} className="mb-6" />
 
         <header className="border-border/60 border-b pb-6 md:pb-8">
-          <p className="font-mono text-[11px] tracking-[0.2em] text-walnut uppercase md:text-xs">
-            Pretraga proizvoda
-          </p>
-          <h1 className="font-display mt-1.5 text-2xl text-ink-900 md:mt-2 md:text-5xl">
+          <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
             {query ? `Rezultati za "${query}"` : "Pretraga"}
           </h1>
           <p className="mt-3 text-sm text-ink-500" aria-live="polite">
@@ -72,16 +69,16 @@ function SearchResultCard({ hit }: { hit: SearchHit }) {
   return (
     <Link
       href={`/p/${hit.slug}`}
-      className="group overflow-hidden rounded-lg bg-surface ring-1 ring-border transition hover:-translate-y-0.5 hover:shadow-soft-3 hover:ring-walnut/30 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+      className="group overflow-hidden rounded-lg bg-white ring-1 ring-border transition hover:-translate-y-0.5 hover:shadow-soft-3 hover:ring-walnut/30 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
     >
-      <div className="relative aspect-[4/3] bg-muted-bg">
+      <div className="relative aspect-[4/3] bg-white">
         {hit.thumbnailUrl ? (
           <Image
             src={hit.thumbnailUrl}
             alt={hit.name}
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover transition duration-300 group-hover:scale-[1.03]"
+            className="object-contain p-3 transition duration-300"
           />
         ) : null}
       </div>
@@ -97,9 +94,6 @@ function SearchResultCard({ hit }: { hit: SearchHit }) {
             <p className="text-base font-semibold text-action">
               {formatRsd(hit.salePrice)}
             </p>
-            {hit.discountPct ? (
-              <p className="text-xs text-ink-500">Popust {hit.discountPct}%</p>
-            ) : null}
           </div>
           <ArrowRight className="size-4 shrink-0 text-walnut transition group-hover:translate-x-0.5" />
         </div>

@@ -182,14 +182,14 @@ export function InstantSearch({
                   activeIndex === i ? "bg-muted-bg" : "hover:bg-muted-bg/60",
                 )}
               >
-                <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-muted-bg">
+                <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-border/60">
                   {hit.thumbnailUrl ? (
                     <Image
                       src={hit.thumbnailUrl}
                       alt=""
                       fill
                       sizes="48px"
-                      className="object-cover"
+                      className="object-contain p-1"
                     />
                   ) : null}
                 </div>
@@ -203,9 +203,6 @@ export function InstantSearch({
                   <div className="text-sm font-semibold text-action">
                     {formatRsd(hit.salePrice)}
                   </div>
-                  {hit.discountPct ? (
-                    <div className="text-[11px] text-ink-500">-{hit.discountPct}%</div>
-                  ) : null}
                 </div>
               </button>
             </li>

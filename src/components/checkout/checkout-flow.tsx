@@ -161,7 +161,12 @@ export function CheckoutFlow() {
   };
 
   const onSubmit: SubmitHandler<CheckoutFormData> = (data) => {
-    const order = buildOrder({ data, lines, voucherFraction: voucher?.amount ?? 0, voucherCode: voucher?.code });
+    const order = buildOrder({
+      data,
+      lines,
+      voucherDiscountRsd: voucher?.discountRsd ?? 0,
+      voucherCode: voucher?.code,
+    });
     setLastOrder(order);
     clearCart();
     setStep("identity"); // ready for next purchase
@@ -313,7 +318,7 @@ function ReviewStep() {
                 0,
               )
             : 0,
-        voucherFraction: voucher?.amount ?? 0,
+        voucherDiscountRsd: voucher?.discountRsd ?? 0,
       }),
     [lines, data.shippingMethod, data.perItemAssembly, voucher],
   );
@@ -445,12 +450,12 @@ function addressFieldNames(
 function buildOrder({
   data,
   lines,
-  voucherFraction,
+  voucherDiscountRsd,
   voucherCode,
 }: {
   data: CheckoutFormData;
   lines: ReturnType<typeof useCart.getState>["lines"];
-  voucherFraction: number;
+  voucherDiscountRsd: number;
   voucherCode?: string;
 }): Order {
   const itemsFull = lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0);
@@ -471,7 +476,7 @@ function buildOrder({
     itemsSale,
     shippingMethod: data.shippingMethod,
     assemblyTotal,
-    voucherFraction,
+    voucherDiscountRsd,
   });
 
   const orderNumber = `SPC-${new Date().getFullYear()}-${String(
