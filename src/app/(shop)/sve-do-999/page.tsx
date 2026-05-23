@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { akcijaIcon } from "@/data/campaign-icons";
+import { under999CampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
@@ -15,7 +15,8 @@ export default async function SveDo999Page() {
     <ListingShell
       kind="akcija"
       title="Sve do 999"
-      titleIcon={akcijaIcon}
+      titleIcon={under999CampaignSticker}
+      campaignSticker="under999"
       headerVariant="promo"
       subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."
       trail={[{ label: "Sve do 999" }]}

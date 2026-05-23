@@ -22,12 +22,17 @@ import type { Banner, MediaAsset, Product } from "@/types";
 import { ProductCard } from "@/components/product/product-card";
 import { DragHint } from "@/components/motion/drag-hint";
 import { cn } from "@/lib/utils";
+import {
+  campaignStickers,
+  type CampaignStickerKey,
+} from "@/data/campaign-icons";
 
 interface SectionRailProps {
   eyebrow?: string;
   title: string;
   icon?: MediaAsset;
   iconName?: string;
+  campaignSticker?: CampaignStickerKey;
   description?: string;
   href: string;
   ctaLabel?: string;
@@ -47,6 +52,7 @@ export function SectionRail({
   title,
   icon,
   iconName,
+  campaignSticker,
   description,
   href,
   ctaLabel = "Pogledaj sve",
@@ -59,6 +65,7 @@ export function SectionRail({
   if (!products.length) return null;
 
   const LucideIcon = iconName ? sectionIconMap[iconName as keyof typeof sectionIconMap] : null;
+  const titleIcon = icon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
   const showBanner = Boolean(banner && !minimalHeader);
 
   return (
@@ -94,13 +101,14 @@ export function SectionRail({
               !minimalHeader && "mt-1 md:mt-2",
             )}
           >
-            {icon ? (
+            {titleIcon ? (
               <span className="bg-surface ring-border/60 flex size-12 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-1 md:size-16">
                 <Image
-                  src={icon.url}
-                  alt={icon.alt ?? ""}
-                  width={icon.width ?? 80}
-                  height={icon.height ?? 80}
+                  src={titleIcon.url}
+                  alt={titleIcon.alt ?? ""}
+                  width={titleIcon.width ?? 80}
+                  height={titleIcon.height ?? 80}
+                  unoptimized={titleIcon.url.endsWith(".svg")}
                   className="max-h-[76%] max-w-[76%] object-contain"
                 />
               </span>
@@ -161,7 +169,11 @@ export function SectionRail({
               }}
               className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_96px)/5)] md:min-w-[190px] lg:w-[calc((100%_-_96px)/5)]"
             >
-              <ProductCard product={p} className="h-full" />
+              <ProductCard
+                product={p}
+                campaignSticker={campaignSticker}
+                className="h-full"
+              />
             </motion.li>
           ))}
         </motion.ul>

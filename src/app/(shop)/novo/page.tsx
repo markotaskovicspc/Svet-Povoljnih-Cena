@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
+import { newCampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 
 export const metadata: Metadata = {
@@ -24,6 +25,8 @@ export default async function NovoPage() {
     <ListingShell
       kind="novo"
       title="Novo u ponudi"
+      titleIcon={newCampaignSticker}
+      campaignSticker="new"
       subtitle="Pristiglo u poslednjih 30 dana — najsvežiji komadi prvi."
       trail={[{ label: "Novo" }]}
       source={products}

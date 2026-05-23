@@ -11,7 +11,12 @@ import {
   getProtectedPricesBanner,
 } from "@/lib/storefront/content";
 import { listProducts } from "@/lib/api/catalog";
-import { akcijaIcon, herojiMesecaIcon } from "@/data/campaign-icons";
+import {
+  akcijaIcon,
+  campaignStickers,
+  herojiMesecaIcon,
+  type CampaignStickerKey,
+} from "@/data/campaign-icons";
 
 export default async function Home() {
   const [banners, tabs, editorial, protectedBanner] = await Promise.all([
@@ -48,6 +53,7 @@ export default async function Home() {
       <SectionRail
         title="Mesečna akcija"
         icon={akcijaIcon}
+        campaignSticker="action"
         href="/akcija"
         products={monthly.items}
         minimalHeader
@@ -58,6 +64,7 @@ export default async function Home() {
       <SectionRail
         title="Nedeljna akcija"
         icon={akcijaIcon}
+        campaignSticker="action"
         href="/nedeljna-akcija"
         products={weekly.items}
         minimalHeader
@@ -76,7 +83,9 @@ export default async function Home() {
           <SectionRail
             key={tab.id}
             title={tab.label}
+            icon={sectionIconAsset(tab.href)}
             iconName={sectionIconName(tab.icon, tab.href)}
+            campaignSticker={sectionCampaignSticker(tab.href)}
             href={tab.href}
             products={list}
             minimalHeader
@@ -99,6 +108,14 @@ const sectionIconByHref: Record<string, string> = {
   "/svet-akcija": "Rows3",
 };
 
+const sectionStickerByHref: Partial<Record<string, CampaignStickerKey>> = {
+  "/akcija": "action",
+  "/nedeljna-akcija": "action",
+  "/novo": "new",
+  "/ogranicena-ponuda": "limited",
+  "/sve-do-999": "under999",
+};
+
 const supportedSectionIcons = new Set([
   "CalendarDays",
   "Crown",
@@ -112,6 +129,15 @@ const supportedSectionIcons = new Set([
 function sectionIconName(icon: string | undefined, href: string) {
   if (icon && supportedSectionIcons.has(icon)) return icon;
   return sectionIconByHref[href];
+}
+
+function sectionCampaignSticker(href: string) {
+  return sectionStickerByHref[href];
+}
+
+function sectionIconAsset(href: string) {
+  const sticker = sectionCampaignSticker(href);
+  return sticker ? campaignStickers[sticker] : undefined;
 }
 
 async function productsForTab(href: string) {

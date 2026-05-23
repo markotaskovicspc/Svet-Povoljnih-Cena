@@ -26,6 +26,7 @@ export default async function NedeljnaAkcijaPage() {
       kind="nedeljna-akcija"
       title="Nedeljna akcija"
       titleIcon={akcijaIcon}
+      campaignSticker="action"
       headerVariant="promo"
       subtitle="Selekcija sedam dana — najatraktivnije ponude nedelje."
       period={

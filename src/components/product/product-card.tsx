@@ -21,14 +21,21 @@ import {
   deriveImageBadges,
   effectiveUnitPrice,
   type Badge,
+  type BadgeKey,
   type BadgeTone,
 } from "@/lib/pricing";
+import {
+  campaignStickers,
+  type CampaignStickerKey,
+} from "@/data/campaign-icons";
 
 interface ProductCardProps {
   product: Product;
   className?: string;
   /** Used to size the next/image inside snap rails. */
   priority?: boolean;
+  /** Contextual promo sticker inherited from the current rail/listing. */
+  campaignSticker?: CampaignStickerKey;
 }
 
 /** 8×10 warm-ivory blur placeholder; matches bg-muted. */
@@ -47,7 +54,12 @@ const toneClasses: Record<BadgeTone, string> = {
 
 const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
 
-export function ProductCard({ product, className, priority }: ProductCardProps) {
+export function ProductCard({
+  product,
+  className,
+  priority,
+  campaignSticker,
+}: ProductCardProps) {
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggle);
@@ -59,6 +71,10 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   const images = product.media.images;
   const cover = images[0];
   const imageBadges = deriveImageBadges(product);
+  const hiddenKeys = hiddenBadgeKeys(campaignSticker);
+  const topLeftBadges = imageBadges.topLeft.filter((b) => !hiddenKeys.has(b.key));
+  const bottomLeftBadges = imageBadges.bottomLeft.filter((b) => !hiddenKeys.has(b.key));
+  const campaignAsset = campaignSticker ? campaignStickers[campaignSticker] : null;
   const price = effectiveUnitPrice(product);
   const hasReducedPrice = price.effective < price.full;
 
@@ -131,16 +147,17 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
           aria-hidden
           className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
         />
-        {imageBadges.topLeft.length ? (
+        {campaignAsset || topLeftBadges.length ? (
           <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
-            {imageBadges.topLeft.map((b) => (
+            {campaignAsset ? <ProductStickerBadge sticker={campaignAsset} /> : null}
+            {topLeftBadges.slice(0, campaignAsset ? 1 : 2).map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
           </div>
         ) : null}
-        {imageBadges.bottomLeft.length ? (
+        {bottomLeftBadges.length ? (
           <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:bottom-3 md:left-3">
-            {imageBadges.bottomLeft.map((b) => (
+            {bottomLeftBadges.map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
           </div>
@@ -222,6 +239,14 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
 }
 
 function ProductBadge({ badge }: { badge: Badge }) {
+  if (badge.key === "new") {
+    return <ProductStickerBadge sticker={campaignStickers.new} label={badge.label} />;
+  }
+
+  if (badge.key === "limited" || badge.key === "dtz") {
+    return <ProductStickerBadge sticker={campaignStickers.limited} label={badge.label} />;
+  }
+
   if (badge.key === "hero") {
     return (
       <span
@@ -249,6 +274,40 @@ function ProductBadge({ badge }: { badge: Badge }) {
       {badge.label}
     </span>
   );
+}
+
+function ProductStickerBadge({
+  sticker,
+  label,
+}: {
+  sticker: { url: string; alt?: string; width?: number; height?: number };
+  label?: string;
+}) {
+  return (
+    <span
+      aria-label={label ?? sticker.alt}
+      className="bg-surface/95 ring-border/70 flex h-9 w-11 items-center justify-center rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur md:h-10 md:w-12"
+    >
+      <Image
+        src={sticker.url}
+        alt={label ?? sticker.alt ?? ""}
+        width={sticker.width ?? 80}
+        height={sticker.height ?? 80}
+        unoptimized
+        className="h-full w-full object-contain"
+      />
+    </span>
+  );
+}
+
+function hiddenBadgeKeys(campaignSticker: CampaignStickerKey | undefined) {
+  const hidden = new Set<BadgeKey>();
+  if (campaignSticker === "new") hidden.add("new");
+  if (campaignSticker === "limited") {
+    hidden.add("limited");
+    hidden.add("dtz");
+  }
+  return hidden;
 }
 
 function MobileCartControl({

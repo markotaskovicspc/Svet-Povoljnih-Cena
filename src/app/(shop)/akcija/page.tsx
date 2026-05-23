@@ -24,6 +24,7 @@ export default async function AkcijaPage() {
       kind="akcija"
       title="Akcija"
       titleIcon={akcijaIcon}
+      campaignSticker="action"
       headerVariant="promo"
       subtitle="Sve aktivne ponude na jednom mestu — kuratirano, ne agregirano."
       period={period ? { endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}

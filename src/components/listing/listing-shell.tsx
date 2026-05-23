@@ -39,6 +39,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  campaignStickers,
+  type CampaignStickerKey,
+} from "@/data/campaign-icons";
+import {
   LISTING_PAGE_SIZE,
   type FilterState,
   type ListingKind,
@@ -55,6 +59,7 @@ interface ListingShellProps {
   title: string;
   subtitle?: string;
   titleIcon?: MediaAsset;
+  campaignSticker?: CampaignStickerKey;
   headerVariant?: "default" | "promo";
   /** Optional period banner (e.g. action validity). */
   period?: { startsAt?: string; endsAt: string; label?: string };
@@ -79,6 +84,7 @@ export function ListingShell({
   title,
   subtitle,
   titleIcon,
+  campaignSticker,
   period,
   trail,
   source,
@@ -102,6 +108,8 @@ export function ListingShell({
   const [activeSub, setActiveSub] = useState<string | undefined>(initialSubTab);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const displayTitleIcon =
+    titleIcon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -176,13 +184,14 @@ export function ListingShell({
             className="max-w-4xl"
           >
             <div className="flex min-w-0 items-center gap-3 md:gap-5">
-              {titleIcon ? (
+              {displayTitleIcon ? (
                 <span className="bg-surface ring-border/60 flex size-14 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-2 md:size-20">
                   <Image
-                    src={titleIcon.url}
-                    alt={titleIcon.alt ?? ""}
-                    width={titleIcon.width ?? 96}
-                    height={titleIcon.height ?? 96}
+                    src={displayTitleIcon.url}
+                    alt={displayTitleIcon.alt ?? ""}
+                    width={displayTitleIcon.width ?? 96}
+                    height={displayTitleIcon.height ?? 96}
+                    unoptimized={displayTitleIcon.url.endsWith(".svg")}
                     className="max-h-[76%] max-w-[76%] object-contain"
                     priority
                   />
@@ -371,7 +380,11 @@ export function ListingShell({
                 )}
               >
                 {shown.map((p) => (
-                  <ProductCard key={p.sku} product={p} />
+                  <ProductCard
+                    key={p.sku}
+                    product={p}
+                    campaignSticker={campaignSticker}
+                  />
                 ))}
               </div>
             ) : (
