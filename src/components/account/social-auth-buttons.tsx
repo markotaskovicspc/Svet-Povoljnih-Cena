@@ -127,16 +127,20 @@ export function SocialAuthButtons({
               key={provider.id}
               type="button"
               aria-disabled="true"
-              aria-label={`${actionLabel} preko ${provider.label}`}
+              aria-label={`${actionLabel} preko ${provider.label} nije dostupno`}
+              title={`${provider.label} prijava nije konfigurisana`}
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "h-11 w-full cursor-default gap-2 bg-white",
+                "h-11 w-full cursor-not-allowed gap-2 bg-white opacity-60",
               )}
             >
               <SocialButtonContent
                 actionLabel={actionLabel}
                 provider={provider}
               />
+              <span className="ml-auto text-[11px] text-ink-500">
+                Nije dostupno
+              </span>
             </button>
           ),
         )}

@@ -141,7 +141,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 className="justify-self-center"
               >
                 <Image
-                  src="/logo.jpeg"
+                  src="/logo.webp"
                   alt="Svet Akcija"
                   width={1600}
                   height={382}

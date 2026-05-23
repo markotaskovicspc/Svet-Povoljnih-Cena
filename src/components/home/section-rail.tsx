@@ -159,7 +159,7 @@ export function SectionRail({
                   transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
                 },
               }}
-              className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[230px] lg:w-[220px]"
+              className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_96px)/5)] md:min-w-[190px] lg:w-[calc((100%_-_96px)/5)]"
             >
               <ProductCard product={p} className="h-full" />
             </motion.li>

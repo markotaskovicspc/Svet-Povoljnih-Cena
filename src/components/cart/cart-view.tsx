@@ -5,9 +5,9 @@ import Link from "next/link";
 import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { CartLineRow } from "./cart-line-row";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
+import { useCheckout } from "@/lib/checkout/store";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -98,17 +98,45 @@ function CartSummary({
   fullTotal: number;
 }) {
   const openSuggestion = useCartUi((s) => s.openSuggestion);
+  const voucher = useCheckout((s) => s.voucher);
+  const applyVoucher = useCheckout((s) => s.applyVoucher);
   const [code, setCode] = useState("");
-  const [applied, setApplied] = useState<{ code: string; valid: boolean } | null>(
-    null,
-  );
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [checkingVoucher, setCheckingVoucher] = useState(false);
+  const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
+  const total = Math.max(0, subtotal - voucherDiscount);
 
-  function applyVoucher(e: React.FormEvent) {
+  async function applyCartVoucher(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = code.trim();
-    if (!trimmed) return;
-    // Real validation lands in Phase 2 (POST /api/voucher/validate).
-    setApplied({ code: trimmed, valid: false });
+    if (!trimmed) {
+      applyVoucher(null);
+      setVoucherError("Unesite kod");
+      return;
+    }
+    setCheckingVoucher(true);
+    setVoucherError(null);
+    const response = await fetch("/api/voucher/validate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: trimmed, subtotal }),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | { ok: true; code: string; label: string; discountRsd: number }
+      | { ok: false; reason: string }
+      | null;
+    setCheckingVoucher(false);
+    if (result?.ok) {
+      applyVoucher({
+        code: result.code,
+        label: result.label,
+        discountRsd: result.discountRsd,
+      });
+      setCode(result.code);
+    } else {
+      applyVoucher(null);
+      setVoucherError(result?.reason ?? "Vaučer trenutno nije moguće proveriti");
+    }
   }
 
   return (
@@ -143,7 +171,7 @@ function CartSummary({
         </dl>
 
         <form
-          onSubmit={applyVoucher}
+          onSubmit={applyCartVoucher}
           className="border-border/60 flex flex-col gap-2 border-t pt-3"
           aria-label="Voucher kod"
         >
@@ -161,30 +189,43 @@ function CartSummary({
             />
             <button
               type="submit"
+              disabled={checkingVoucher}
               className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center rounded-full px-3 py-2 text-xs font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
             >
-              Primeni
+              {checkingVoucher ? "Provera..." : "Primeni"}
             </button>
           </div>
-          {applied ? (
-            <p
-              className={cn(
-                "text-[11px]",
-                applied.valid ? "text-success" : "text-ink-500",
-              )}
-              aria-live="polite"
-            >
-              {applied.valid
-                ? `Kod „${applied.code}" je primenjen.`
-                : `Kod „${applied.code}" će biti proveren u sledećem koraku.`}
+          {voucher ? (
+            <div className="flex items-center justify-between gap-2 text-[11px] text-success">
+              <p aria-live="polite">
+                Kod „{voucher.code}” je primenjen ({voucher.label}).
+              </p>
+              <button
+                type="button"
+                className="font-medium text-ink-500 hover:text-action"
+                onClick={() => applyVoucher(null)}
+              >
+                Ukloni
+              </button>
+            </div>
+          ) : voucherError ? (
+            <p className="text-action text-[11px]" aria-live="polite">
+              {voucherError}
             </p>
           ) : null}
         </form>
 
+        {voucherDiscount > 0 ? (
+          <div className="text-action flex items-baseline justify-between text-sm">
+            <span>Vaučer „{voucher?.code}”</span>
+            <span className="font-semibold">−{formatRsd(voucherDiscount)}</span>
+          </div>
+        ) : null}
+
         <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">Ukupno za plaćanje</span>
           <span className="font-display text-2xl text-ink-900">
-            {formatRsd(subtotal)}
+            {formatRsd(total)}
           </span>
         </div>
 

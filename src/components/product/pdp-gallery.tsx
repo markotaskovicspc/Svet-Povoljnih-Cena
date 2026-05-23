@@ -9,9 +9,18 @@
  * supply images / video / 3D bundles by SKU pattern.
  */
 import Image from "next/image";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Box, ChevronLeft, ChevronRight, Play, X, ZoomIn } from "lucide-react";
+import {
+  Box,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Play,
+  X,
+  ZoomIn,
+} from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +56,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const [zoom, setZoom] = useState({ on: false, x: 50, y: 50 });
   const mobileTrackRef = useRef<HTMLDivElement | null>(null);
   const desktopTrackRef = useRef<HTMLDivElement | null>(null);
+  const thumbTrackRef = useRef<HTMLUListElement | null>(null);
+  const [thumbOverflow, setThumbOverflow] = useState({ up: false, down: false });
 
   const slide = slides[active] ?? slides[0];
 
@@ -67,6 +78,29 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     },
     [slides.length],
   );
+
+  const updateThumbOverflow = useCallback(() => {
+    const el = thumbTrackRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    setThumbOverflow({
+      up: el.scrollTop > 2,
+      down: maxScroll > 2 && el.scrollTop < maxScroll - 2,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateThumbOverflow();
+    window.addEventListener("resize", updateThumbOverflow);
+    return () => window.removeEventListener("resize", updateThumbOverflow);
+  }, [slides.length, updateThumbOverflow]);
+
+  function scrollThumbs(direction: 1 | -1) {
+    thumbTrackRef.current?.scrollBy({
+      top: direction * 96,
+      behavior: "smooth",
+    });
+  }
 
   const syncTrackActive = useCallback((track: HTMLDivElement | null) => {
     if (!track) return;
@@ -162,7 +196,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           <div
             ref={desktopTrackRef}
             onScroll={() => syncTrackActive(desktopTrackRef.current)}
-            className="bg-white ring-border/60 flex aspect-[4/5] w-full snap-x snap-mandatory overflow-x-auto rounded-2xl ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="bg-white ring-border/60 flex h-[min(72vh,680px)] min-h-[420px] w-full snap-x snap-mandatory overflow-x-auto rounded-2xl ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -292,50 +326,76 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
       </div>
 
       {/* Thumb strip */}
-      <ul
-        className="hidden gap-2 overflow-x-auto md:flex md:flex-col md:overflow-visible"
-        role="tablist"
-        aria-label="Galerija proizvoda"
-      >
-        {slides.map((s, i) => {
-          const isActive = i === active;
-          const label =
-            s.kind === "image"
-              ? `Slika ${i + 1}`
-              : s.kind === "video"
-                ? "Video"
-                : "3D pregled";
-          return (
-            <li key={`${s.kind}-${i}`} className="shrink-0">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                aria-label={label}
-                onClick={() => goTo(i)}
-                className={cn(
-                  "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-16 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:size-20",
-                  isActive && "ring-walnut ring-2",
-                )}
-              >
-                {s.kind === "image" ? (
-                  <Image
-                    src={s.asset.url}
-                    alt=""
-                    fill
-                    sizes="80px"
-                    className="object-contain p-1"
-                  />
-                ) : s.kind === "video" ? (
-                  <Play className="size-5 text-ink-700" aria-hidden />
-                ) : (
-                  <Box className="size-5 text-ink-700" aria-hidden />
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="relative hidden md:block">
+        {thumbOverflow.up ? (
+          <button
+            type="button"
+            onClick={() => scrollThumbs(-1)}
+            aria-label="Pomeri sličice nagore"
+            className="absolute inset-x-0 -top-3 z-10 mx-auto inline-flex size-8 items-center justify-center rounded-full bg-white text-ink-700 shadow-soft-2 ring-1 ring-border/60 transition hover:text-walnut"
+          >
+            <ChevronUp className="size-4" aria-hidden />
+          </button>
+        ) : null}
+        <ul
+          ref={thumbTrackRef}
+          onScroll={updateThumbOverflow}
+          className="flex max-h-[min(72vh,680px)] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+          aria-label="Galerija proizvoda"
+        >
+          {slides.map((s, i) => {
+            const isActive = i === active;
+            const label =
+              s.kind === "image"
+                ? `Slika ${i + 1}`
+                : s.kind === "video"
+                  ? "Video"
+                  : "3D pregled";
+            return (
+              <li key={`${s.kind}-${i}`} className="shrink-0">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-label={label}
+                  onMouseEnter={() => goTo(i)}
+                  onFocus={() => goTo(i)}
+                  onClick={() => goTo(i)}
+                  className={cn(
+                    "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-16 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:size-20",
+                    isActive && "ring-walnut ring-2",
+                  )}
+                >
+                  {s.kind === "image" ? (
+                    <Image
+                      src={s.asset.url}
+                      alt=""
+                      fill
+                      sizes="80px"
+                      className="object-contain p-1"
+                    />
+                  ) : s.kind === "video" ? (
+                    <Play className="size-5 text-ink-700" aria-hidden />
+                  ) : (
+                    <Box className="size-5 text-ink-700" aria-hidden />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {thumbOverflow.down ? (
+          <button
+            type="button"
+            onClick={() => scrollThumbs(1)}
+            aria-label="Pomeri sličice nadole"
+            className="absolute inset-x-0 -bottom-3 z-10 mx-auto inline-flex size-8 items-center justify-center rounded-full bg-white text-ink-700 shadow-soft-2 ring-1 ring-border/60 transition hover:text-walnut"
+          >
+            <ChevronDown className="size-4" aria-hidden />
+          </button>
+        ) : null}
+      </div>
 
       {/* Lightbox */}
       <AnimatePresence>

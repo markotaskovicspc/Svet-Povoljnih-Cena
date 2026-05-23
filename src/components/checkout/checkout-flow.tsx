@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -67,6 +67,12 @@ export interface CheckoutFormData {
   consent: boolean;
 }
 
+export interface CheckoutInitialCustomer {
+  name?: string;
+  email?: string | null;
+  address?: Partial<CheckoutAddress>;
+}
+
 const STEP_ORDER: CheckoutStep[] = [
   "identity",
   "shipping",
@@ -89,8 +95,13 @@ const STEP_TITLES: Record<CheckoutStep, string> = {
  * a mocked Order, persists it in checkout store, clears the cart and routes to
  * `/checkout/potvrda`. Real `POST /api/orders` lands in Phase 3.
  */
-export function CheckoutFlow() {
+export function CheckoutFlow({
+  initialCustomer,
+}: {
+  initialCustomer?: CheckoutInitialCustomer;
+}) {
   const router = useRouter();
+  const [isAdvancing, setIsAdvancing] = useState(false);
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const clearCart = useCart((s) => s.clear);
@@ -128,7 +139,7 @@ export function CheckoutFlow() {
     },
   });
 
-  const { handleSubmit, trigger, getValues, formState } = methods;
+  const { handleSubmit, trigger, getValues, setValue, formState } = methods;
   const shippingMethod = useWatch({
     control: methods.control,
     name: "shippingMethod",
@@ -147,13 +158,50 @@ export function CheckoutFlow() {
     if (identity) methods.setValue("identity", identity, { shouldDirty: false });
   }, [identity, methods]);
 
+  useEffect(() => {
+    const remembered = readRememberedCheckout();
+    const parsedName = splitFullName(initialCustomer?.name);
+    const source: Partial<CheckoutAddress> = {
+      ...remembered?.shipping,
+      ...initialCustomer?.address,
+      email: initialCustomer?.email ?? initialCustomer?.address?.email ?? remembered?.shipping?.email,
+      firstName:
+        initialCustomer?.address?.firstName ??
+        remembered?.shipping?.firstName ??
+        parsedName.firstName,
+      lastName:
+        initialCustomer?.address?.lastName ??
+        remembered?.shipping?.lastName ??
+        parsedName.lastName,
+    };
+
+    (Object.entries(source) as Array<[keyof CheckoutAddress, unknown]>).forEach(
+      ([key, value]) => {
+        if (value == null || value === "") return;
+        const field = `shipping.${key}` as const;
+        const current = getValues(field);
+        const dirty = formState.dirtyFields.shipping?.[key];
+        if (!dirty && !current) {
+          setValue(field, value as never, { shouldDirty: false, shouldTouch: false });
+        }
+      },
+    );
+  }, [formState.dirtyFields.shipping, getValues, initialCustomer, setValue]);
+
   const stepIndex = STEP_ORDER.indexOf(step);
 
   const next = async () => {
-    const ok = await validateStep(step, trigger, getValues, identity);
-    if (!ok) return;
-    const i = STEP_ORDER.indexOf(step);
-    if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1]!);
+    if (isAdvancing) return;
+    setIsAdvancing(true);
+    try {
+      const ok = await validateStep(step, trigger, getValues, identity);
+      if (!ok) return;
+      if (step === "shipping") rememberCheckoutFields(getValues());
+      const i = STEP_ORDER.indexOf(step);
+      if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1]!);
+    } finally {
+      setIsAdvancing(false);
+    }
   };
   const prev = () => {
     const i = STEP_ORDER.indexOf(step);
@@ -161,6 +209,7 @@ export function CheckoutFlow() {
   };
 
   const onSubmit: SubmitHandler<CheckoutFormData> = (data) => {
+    rememberCheckoutFields(data);
     const order = buildOrder({
       data,
       lines,
@@ -254,10 +303,14 @@ export function CheckoutFlow() {
               <button
                 type="button"
                 onClick={next}
+                disabled={isAdvancing}
                 className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
               >
+                {isAdvancing ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : null}
                 Nastavi
-                <ArrowRight className="size-4" aria-hidden />
+                {!isAdvancing ? <ArrowRight className="size-4" aria-hidden /> : null}
               </button>
             ) : (
               <button
@@ -416,15 +469,72 @@ async function validateStep(
     case "identity":
       return identity !== null;
     case "shipping":
-      return trigger(addressFieldNames("shipping", getValues("shipping.liceType")), {
-        shouldFocus: true,
-      });
+      return trigger(
+        [
+          ...addressFieldNames("shipping", getValues("shipping.liceType")),
+          ...(getValues("shipToDifferent")
+            ? addressFieldNames("billing", getValues("billing.liceType"))
+            : []),
+        ],
+        { shouldFocus: true },
+      );
     case "method":
       return trigger(["shippingMethod"], { shouldFocus: true });
     case "payment":
       return trigger(["paymentMethod"], { shouldFocus: true });
     default:
       return true;
+  }
+}
+
+const REMEMBERED_CHECKOUT_KEY = "spc-checkout-fields";
+
+function splitFullName(value: string | null | undefined) {
+  const parts = String(value ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0]!, lastName: "" };
+  return {
+    firstName: parts[0]!,
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function readRememberedCheckout():
+  | { shipping?: Partial<CheckoutAddress> }
+  | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.localStorage.getItem(REMEMBERED_CHECKOUT_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+function rememberCheckoutFields(data: CheckoutFormData) {
+  if (typeof window === "undefined") return;
+  const safeShipping: Partial<CheckoutAddress> = {
+    liceType: data.shipping.liceType,
+    firstName: data.shipping.firstName,
+    lastName: data.shipping.lastName,
+    email: data.shipping.email,
+    phone: data.shipping.phone,
+    street: data.shipping.street,
+    city: data.shipping.city,
+    postalCode: data.shipping.postalCode,
+    country: data.shipping.country || "RS",
+    companyName: data.shipping.companyName,
+    pib: data.shipping.pib,
+  };
+  try {
+    window.localStorage.setItem(
+      REMEMBERED_CHECKOUT_KEY,
+      JSON.stringify({ shipping: safeShipping }),
+    );
+  } catch {
+    // Ignore storage failures; checkout must keep working without persistence.
   }
 }
 

@@ -89,10 +89,11 @@ export function ListingShell({
 }: ListingShellProps) {
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
-  const [view, setView] = useState<3 | 4>(() => {
-    if (typeof window === "undefined") return 4;
+  const [view, setView] = useState<3 | 5>(() => {
+    if (typeof window === "undefined") return 5;
     const v = window.localStorage.getItem(VIEW_KEY);
-    return v === "3" || v === "4" ? (Number(v) as 3 | 4) : 4;
+    if (v === "4") return 5;
+    return v === "3" || v === "5" ? (Number(v) as 3 | 5) : 5;
   });
   const [visibleWindow, setVisibleWindow] = useState({
     key: "",
@@ -302,12 +303,12 @@ export function ListingShell({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setView(4)}
-                    aria-pressed={view === 4}
-                    aria-label="Četiri kolone"
+                    onClick={() => setView(5)}
+                    aria-pressed={view === 5}
+                    aria-label="Pet kolona"
                     className={cn(
                       "inline-flex size-8 items-center justify-center rounded-full transition",
-                      view === 4
+                      view === 5
                         ? "bg-ink-900 text-canvas"
                         : "text-ink-500 hover:text-ink-900",
                     )}
@@ -364,9 +365,9 @@ export function ListingShell({
               <div
                 className={cn(
                   "grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-5 sm:gap-y-8",
-                  view === 4
-                    ? "lg:grid-cols-3 xl:grid-cols-4"
-                    : "lg:grid-cols-2 xl:grid-cols-3",
+                  view === 5
+                    ? "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                    : "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
                 )}
               >
                 {shown.map((p) => (
@@ -429,12 +430,14 @@ function formatDate(value: string) {
 }
 
 /** Skeleton grid for suspense fallbacks. */
-export function ListingSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
+export function ListingSkeleton({ columns = 5 }: { columns?: 3 | 5 }) {
   return (
     <div
       className={cn(
         "mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-x-3 gap-y-6 px-6 py-10 sm:gap-x-5 sm:gap-y-8",
-        columns === 4 ? "lg:grid-cols-3 xl:grid-cols-4" : "lg:grid-cols-2 xl:grid-cols-3",
+        columns === 5
+          ? "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          : "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
       )}
     >
       {Array.from({ length: 8 }, (_, i) => (

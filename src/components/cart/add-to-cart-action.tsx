@@ -7,6 +7,7 @@ import type { Product } from "@/types";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
+import { effectiveUnitPrice } from "@/lib/pricing";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -19,12 +20,13 @@ import { formatRsd } from "@/lib/format";
  * Returns the resolved sale unit price for callers that need it.
  */
 export function commitAddToCart(product: Product, qty = 1): number {
-  const sale = product.salePrice ?? product.fullPrice;
+  const price = effectiveUnitPrice(product);
+  const sale = price.effective;
   const line: Omit<CartLine, "qty"> = {
     sku: product.sku,
     slug: product.slug,
     name: product.name,
-    unitPriceFull: product.fullPrice,
+    unitPriceFull: price.full,
     unitPriceSale: sale,
     thumbnailUrl: product.media.images[0]?.url,
   };

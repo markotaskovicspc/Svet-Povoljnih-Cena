@@ -70,7 +70,7 @@ export function Footer() {
             <div className="flex items-center gap-3 sm:gap-4">
               <Link href="/" aria-label="Svet Akcija — početna" className="inline-block shrink-0">
                 <Image
-                  src="/logo.jpeg"
+                  src="/logo.webp"
                   alt="Svet Akcija"
                   width={1600}
                   height={382}

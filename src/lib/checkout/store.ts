@@ -44,7 +44,7 @@ interface CheckoutState {
 
 export const useCheckout = create<CheckoutState>()((set) => ({
   step: "identity",
-  identity: null,
+  identity: "guest",
   voucher: null,
   lastOrder: null,
   setStep: (step) => set({ step }),
@@ -54,7 +54,7 @@ export const useCheckout = create<CheckoutState>()((set) => ({
   reset: () =>
     set({
       step: "identity",
-      identity: null,
+      identity: "guest",
       voucher: null,
       lastOrder: null,
     }),

@@ -16,6 +16,7 @@ import { formatRsd, formatDate } from "@/lib/format";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
+import { ProductColorOptions } from "@/components/product/color-options";
 import {
   deriveImageBadges,
   effectiveUnitPrice,
@@ -170,7 +171,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
             {product.name}
           </Link>
         </h3>
-        <ColorOptions product={product} />
+        <ProductColorOptions product={product} className="h-5 pt-0.5" />
 
         <div className="pt-0 md:mt-auto md:pt-1">
           <div className="flex items-end justify-between gap-2 md:flex-col md:items-stretch">
@@ -247,45 +248,6 @@ function ProductBadge({ badge }: { badge: Badge }) {
     >
       {badge.label}
     </span>
-  );
-}
-
-const COLOR_HEX: Record<string, string> = {
-  bela: "#f8f7f2",
-  crna: "#181716",
-  siva: "#9ca3af",
-  plava: "#2f6fcb",
-  "svetlo plava": "#8fc6e8",
-  zelena: "#4f8b57",
-  crvena: "#c83a31",
-  braon: "#8a5a3c",
-  krem: "#e7dac5",
-  roze: "#e8a6b6",
-  zuta: "#f4c542",
-  žuta: "#f4c542",
-  ljubičasta: "#7c4d9f",
-  ljubicasta: "#7c4d9f",
-};
-
-function ColorOptions({ product }: { product: Product }) {
-  const colors = [product.colorPrimary, product.colorSecondary]
-    .filter((c): c is string => Boolean(c?.trim()))
-    .map((label) => ({
-      label,
-      hex: COLOR_HEX[label.trim().toLowerCase()] ?? "#d8d4c8",
-    }));
-
-  return (
-    <div className="flex h-5 items-center gap-1 pt-0.5" aria-label="Opcije boja">
-      {colors.slice(0, 4).map((color) => (
-        <span
-          key={color.label}
-          title={color.label}
-          className="ring-border inline-flex size-3.5 rounded-full ring-1"
-          style={{ backgroundColor: color.hex }}
-        />
-      ))}
-    </div>
   );
 }
 

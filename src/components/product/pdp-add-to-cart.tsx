@@ -5,8 +5,8 @@
  * Desktop: renders as a sticky right-column card.
  * Mobile: renders as a sticky bottom bar (fixed) once scrolled past the hero.
  *
- * Auto-hides if the product is fully out of stock (stock=0 && incomingStock=0);
- * the route itself returns notFound in that case, so this is just a guard.
+ * Keeps the purchase control visible on desktop and mobile; stock messaging can
+ * be layered into the same control when backend availability rules are final.
  */
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -15,6 +15,7 @@ import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd } from "@/lib/format";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
+import { effectiveUnitPrice } from "@/lib/pricing";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -36,11 +37,9 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, [variant]);
 
-  const outOfStock = product.stock === 0 && product.incomingStock === 0;
-  if (outOfStock) return null;
-
-  const sale = product.salePrice ?? product.fullPrice;
-  const onSale = !!product.salePrice && product.salePrice < product.fullPrice;
+  const price = effectiveUnitPrice(product);
+  const sale = price.effective;
+  const onSale = price.effective < price.full;
 
   function handleAdd() {
     commitAddToCart(product, pickQty);

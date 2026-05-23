@@ -13,7 +13,7 @@ interface EditorialBannerProps {
 
 export function EditorialBanner({ banner }: EditorialBannerProps) {
   return (
-    <section className="w-full px-2 py-12 sm:px-3 md:px-4 md:py-20">
+    <section className="mx-auto w-full max-w-[var(--container-page)] px-2 py-12 sm:px-3 md:px-4 md:py-20">
       <motion.article
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}

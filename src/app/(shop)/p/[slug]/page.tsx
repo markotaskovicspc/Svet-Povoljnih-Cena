@@ -16,7 +16,9 @@ import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
+import { PdpDescription } from "@/components/product/pdp-description";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
+import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
@@ -96,7 +98,7 @@ export default async function ProductPage({ params }: RouteProps) {
   ]);
 
   const overlayBadges = deriveImageBadges(product);
-  const summaryDescription = firstSentences(stripHtml(product.description), 3);
+  const cleanDescription = stripHtml(product.description);
 
   // Pictograms — fall back to synthesized set if XML hasn't supplied any yet
   const pictograms = product.pictograms.length
@@ -142,6 +144,12 @@ export default async function ProductPage({ params }: RouteProps) {
             <p className="mt-2 font-mono text-xs tracking-tight text-ink-500 md:text-sm">
               {formatDimensions(product.dimensionsCm)}
             </p>
+            <ProductColorOptions
+              product={product}
+              selectable
+              className="mt-4"
+              label="Dostupne boje"
+            />
           </header>
 
           {/* Price block — only the effective price is emphasised. */}
@@ -181,7 +189,7 @@ export default async function ProductPage({ params }: RouteProps) {
           {/* Add-to-cart with quantity stepper, moved up directly under price. */}
           <PdpAddToCart product={product} variant="desktop" />
 
-          <ul className="border-border/60 flex flex-wrap gap-2 border-t pt-4 text-xs text-ink-700">
+          <ul className="border-border/60 grid grid-cols-1 gap-2 border-t pt-4 text-xs text-ink-700 sm:grid-cols-2 lg:grid-cols-3">
             {benefitChips.map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
@@ -201,9 +209,7 @@ export default async function ProductPage({ params }: RouteProps) {
               <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
                 Opis proizvoda
               </h2>
-              <p className="mt-4 max-w-prose text-base leading-relaxed text-ink-700">
-                {summaryDescription}
-              </p>
+              <PdpDescription description={cleanDescription} />
             </div>
             <PdpInfoLinks
               sections={{
@@ -328,11 +334,6 @@ function PdpBadge({ badge }: { badge: Badge }) {
 
 function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function firstSentences(value: string, count: number) {
-  const sentences = value.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [value];
-  return sentences.slice(0, count).join(" ").trim();
 }
 
 function FeatureChip({

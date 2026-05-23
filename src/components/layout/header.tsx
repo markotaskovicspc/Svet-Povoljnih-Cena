@@ -43,7 +43,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
         <Link href="/" aria-label="Svet Akcija — početna">
           <div className="shrink-0 rounded-lg px-2 py-1">
             <Image
-              src="/logo.jpeg"
+              src="/logo.webp"
               alt="Svet Akcija"
               width={1600}
               height={382}
@@ -104,7 +104,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
         <Link href="/" aria-label="Svet Akcija — početna" className="shrink-0">
           <div className="rounded-md px-1.5 py-0.5">
             <Image
-              src="/logo.jpeg"
+              src="/logo.webp"
               alt="Svet Akcija"
               width={1600}
               height={382}

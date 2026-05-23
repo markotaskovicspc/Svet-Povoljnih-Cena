@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
   LogIn,
@@ -30,6 +31,44 @@ export function IdentityStep({
   const [showSocial, setShowSocial] = useState<"login" | "register" | null>(
     value === "login" || value === "register" ? value : null,
   );
+  const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
+  const [socialError, setSocialError] = useState<string | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/providers")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setProviders(data ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setProviders({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleSocial(providerId: string) {
+    setSocialError(null);
+    onPick(showSocial ?? "login");
+    if (providers && !providers[providerId]) {
+      setSocialError(`${providerLabel(providerId)} prijava nije konfigurisana.`);
+      return;
+    }
+    setPendingProvider(providerId);
+    startTransition(() => {
+      void signIn(providerId, { callbackUrl: "/checkout/podaci" })
+        .catch(() => {
+          setSocialError(
+            `${providerLabel(providerId)} prijava trenutno nije dostupna. Pokušajte drugim načinom prijave.`,
+          );
+        })
+        .finally(() => setPendingProvider(null));
+    });
+  }
 
   const choices: {
     id: IdentityChoice;
@@ -146,12 +185,12 @@ export function IdentityStep({
                 <button
                   key={id}
                   type="button"
+                  disabled={isPending && pendingProvider === id}
                   className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
-                  // Real handler in Phase 3.
-                  onClick={() => onPick(showSocial)}
+                  onClick={() => handleSocial(id)}
                 >
                   <Icon className="size-4" aria-hidden />
-                  {label}
+                  {pendingProvider === id ? "Otvaranje..." : label}
                 </button>
               ))}
             </div>
@@ -173,12 +212,21 @@ export function IdentityStep({
                 SMS kod (OTP)
               </button>
             </div>
-            <p className="mt-3 text-[11px] text-ink-500">
-              Pravi tok prijave biće aktiviran u sledećoj fazi (NextAuth).
-            </p>
+            {socialError ? (
+              <p className="mt-3 text-[11px] text-action" aria-live="polite">
+                {socialError}
+              </p>
+            ) : null}
           </div>
         </motion.div>
       ) : null}
     </div>
   );
+}
+
+function providerLabel(providerId: string) {
+  if (providerId === "google") return "Google";
+  if (providerId === "apple") return "Apple";
+  if (providerId === "facebook") return "Facebook";
+  return "Društvena";
 }

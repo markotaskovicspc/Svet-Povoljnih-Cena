@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { CheckoutFlow } from "@/components/checkout/checkout-flow";
+import { listAddresses } from "@/lib/api/addresses";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: "Naplata — podaci za isporuku",
@@ -9,7 +11,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function CheckoutPodaciPage() {
+export default async function CheckoutPodaciPage() {
+  const user = await getCurrentUser();
+  const addresses =
+    user?.userType === "customer"
+      ? await listAddresses(user.id).catch(() => [])
+      : [];
+  const defaultAddress = addresses[0];
+
   return (
     <div className="mx-auto max-w-[var(--container-page)] px-4 pt-6 pb-24 md:px-6">
       <Breadcrumbs
@@ -26,7 +35,29 @@ export default function CheckoutPodaciPage() {
         stranice.
       </p>
       <div className="mt-8">
-        <CheckoutFlow />
+        <CheckoutFlow
+          initialCustomer={
+            user?.userType === "customer"
+              ? {
+                  name: user.name ?? undefined,
+                  email: user.email ?? undefined,
+                  address: defaultAddress
+                    ? {
+                        firstName: defaultAddress.firstName,
+                        lastName: defaultAddress.lastName,
+                        phone: defaultAddress.phone,
+                        street: defaultAddress.street,
+                        city: defaultAddress.city,
+                        postalCode: defaultAddress.postalCode,
+                        country: defaultAddress.country,
+                        companyName: defaultAddress.companyName ?? undefined,
+                        pib: defaultAddress.pib ?? undefined,
+                      }
+                    : undefined,
+                }
+              : undefined
+          }
+        />
       </div>
     </div>
   );
