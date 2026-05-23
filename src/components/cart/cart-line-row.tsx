@@ -35,7 +35,7 @@ export function CartLineRow({
         href={`/p/${line.slug}`}
         onClick={onNavigate}
         className={cn(
-          "relative shrink-0 overflow-hidden rounded-xl bg-muted-bg",
+          "relative shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-border/60",
           variant === "page" ? "size-24 sm:size-28" : "size-16",
         )}
       >
@@ -45,7 +45,7 @@ export function CartLineRow({
             alt={line.name}
             fill
             sizes={variant === "page" ? "112px" : "64px"}
-            className="object-cover"
+            className="object-contain p-1"
           />
         ) : null}
       </Link>

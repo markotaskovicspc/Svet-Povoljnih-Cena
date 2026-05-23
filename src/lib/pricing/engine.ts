@@ -63,10 +63,29 @@ function isActionLive(action: PricingAction | null | undefined, now: Date): bool
   return t >= start && t <= end;
 }
 
+function resolveLoyaltyPrice(
+  product: PricingProduct,
+  full: number,
+): Pick<EffectivePrice, "effective" | "discountPct"> | null {
+  const loyalty =
+    product.loyaltyPrice ??
+    (product.loyaltyDiscountPct
+      ? Math.round(full * (1 - product.loyaltyDiscountPct / 100))
+      : null);
+
+  if (loyalty == null || loyalty <= 0 || loyalty >= full) return null;
+
+  return {
+    effective: loyalty,
+    discountPct:
+      product.loyaltyDiscountPct ?? Math.round(((full - loyalty) / full) * 100),
+  };
+}
+
 /**
  * Resolves the effective unit price for a product. If the product carries a
- * `salePrice` but its `action` window has lapsed, the price reverts to
- * `fullPrice` (per plan 3D — item 3).
+ * `salePrice` but its `action` window has lapsed, the price falls back to
+ * loyalty pricing when available, then to `fullPrice`.
  */
 export function effectiveUnitPrice(
   product: PricingProduct,
@@ -74,21 +93,15 @@ export function effectiveUnitPrice(
 ): EffectivePrice {
   const full = product.fullPrice;
   const sale = product.salePrice ?? null;
+  const loyalty = resolveLoyaltyPrice(product, full);
   if (sale == null || sale >= full) {
-    const loyalty =
-      product.loyaltyPrice ??
-      (product.loyaltyDiscountPct
-        ? Math.round(full * (1 - product.loyaltyDiscountPct / 100))
-        : null);
-    if (loyalty != null && loyalty > 0 && loyalty < full) {
-      const pct =
-        product.loyaltyDiscountPct ?? Math.round(((full - loyalty) / full) * 100);
+    if (loyalty) {
       return {
-        effective: loyalty,
+        effective: loyalty.effective,
         full,
         onSale: false,
         kind: "loyalty",
-        discountPct: pct,
+        discountPct: loyalty.discountPct,
         actionExpired: false,
       };
     }
@@ -103,6 +116,16 @@ export function effectiveUnitPrice(
   }
   const live = isActionLive(product.action, now);
   if (!live) {
+    if (loyalty) {
+      return {
+        effective: loyalty.effective,
+        full,
+        onSale: false,
+        kind: "loyalty",
+        discountPct: loyalty.discountPct,
+        actionExpired: true,
+      };
+    }
     return {
       effective: full,
       full,

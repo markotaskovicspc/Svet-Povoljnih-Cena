@@ -156,7 +156,7 @@ export default async function CustomerRegistrationPage({
       <section className="rounded-2xl border border-border/70 bg-surface p-6 shadow-sm md:p-8">
         <h2 className="font-display text-2xl text-ink-900">Kreirajte nalog</h2>
         <p className="mt-1 text-sm text-ink-500">
-          Unesite e-poštu i lozinku koju ćete koristiti za prijavu.
+          Najbrže je preko Google, Apple ili Facebook naloga.
         </p>
 
         <div className="mt-5">
@@ -172,7 +172,7 @@ export default async function CustomerRegistrationPage({
 
         <div className="mt-6 flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
           <span className="h-px flex-1 bg-border" />
-          ili e-poštom
+          ili nastavite e-poštom
           <span className="h-px flex-1 bg-border" />
         </div>
 

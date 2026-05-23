@@ -248,7 +248,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">
       <Link
         href={productHref(product)}
-        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted-bg text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         aria-label={`${sourceValue(product, "Kratki naziv")} detalji`}
       >
         {image ? (
@@ -257,7 +257,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
             alt={image.alt ?? sourceValue(product, "Kratki naziv")}
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-contain p-3 transition duration-300 group-hover:scale-[1.03]"
+            className="object-contain p-4 transition duration-300"
           />
         ) : (
           <>

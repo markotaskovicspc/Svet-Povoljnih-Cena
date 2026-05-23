@@ -48,7 +48,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[234px] max-w-[22vw] object-contain"
+              className="h-auto w-[328px] max-w-[30vw] object-contain"
             />
           </div>
         </Link>
@@ -101,7 +101,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
         <MobileNav tabs={tabs} />
-        <Link href="/" aria-label="Svet Akcija — početna">
+        <Link href="/" aria-label="Svet Akcija — početna" className="shrink-0">
           <div className="rounded-md px-1.5 py-0.5">
             <Image
               src="/logo.jpeg"
@@ -109,7 +109,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
+              className="h-auto w-[160px] object-contain min-[390px]:w-[180px]"
             />
           </div>
         </Link>

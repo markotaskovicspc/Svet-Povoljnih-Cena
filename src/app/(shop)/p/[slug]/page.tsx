@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 import {
   Award,
   Box,
@@ -105,6 +104,9 @@ export default async function ProductPage({ params }: RouteProps) {
         .map((p) => ({ label: p.label, code: p.code }))
         .filter((p) => !["assembly", "montaza", "montaža"].includes(p.code.toLowerCase()))
     : synthesizedPictograms(product);
+  const benefitChips = product.isLimited
+    ? [...pictograms, { code: "limited", label: "Dok traju zalihe" }]
+    : pictograms;
   const materials = product.materials;
 
   return (
@@ -182,60 +184,39 @@ export default async function ProductPage({ params }: RouteProps) {
           {/* Add-to-cart with quantity stepper, moved up directly under price. */}
           <PdpAddToCart product={product} variant="desktop" />
 
-          <ul className="border-border/60 grid grid-cols-2 gap-3 border-t pt-4 text-xs text-ink-700">
-            <FeatureChip
-              icon={<Truck className="size-3.5" aria-hidden />}
-              label={`Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} dana`}
-            />
-            <FeatureChip
-              icon={<ShieldCheck className="size-3.5" aria-hidden />}
-              label="2 god. garancije"
-            />
-            {product.isLimited ? (
+          <ul className="border-border/60 flex flex-wrap gap-2 border-t pt-4 text-xs text-ink-700">
+            {benefitChips.map((benefit) => (
               <FeatureChip
-                icon={<Sparkles className="size-3.5" aria-hidden />}
-                label="Dok traju zalihe"
+                key={`${benefit.code}-${benefit.label}`}
+                icon={<PictogramIcon code={benefit.code} className="size-3.5 text-walnut" />}
+                label={benefit.label}
               />
-            ) : null}
+            ))}
           </ul>
         </div>
       </section>
 
-      {/* Row V — Pictogram strip */}
-      <Reveal>
-        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-          <h2 className="sr-only">Karakteristike</h2>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
-            {pictograms.map((pg) => (
-              <li
-                key={pg.code}
-                className="bg-surface ring-border/60 flex flex-col items-center gap-2 rounded-2xl px-3 py-4 text-center text-xs text-ink-700 shadow-soft-1 ring-1"
-              >
-                <PictogramIcon code={pg.code} />
-                <span className="leading-tight">{pg.label}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </Reveal>
-
       {/* Row VI — Description */}
       <Reveal>
         <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-          <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-            Opis proizvoda
-          </h2>
-          <p className="mt-4 max-w-prose text-base leading-relaxed text-ink-700">
-            {summaryDescription}
-          </p>
-          <PdpInfoLinks
-            sections={{
-              deliveryTerms: product.pdpInfo?.deliveryTerms,
-              declaration: product.pdpInfo?.declaration,
-              assemblyInstructions: product.pdpInfo?.assemblyInstructions,
-              maintenance: product.pdpInfo?.maintenance,
-            }}
-          />
+          <div className="grid gap-8 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] md:items-start md:gap-12">
+            <div>
+              <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
+                Opis proizvoda
+              </h2>
+              <p className="mt-4 max-w-prose text-base leading-relaxed text-ink-700">
+                {summaryDescription}
+              </p>
+            </div>
+            <PdpInfoLinks
+              sections={{
+                deliveryTerms: product.pdpInfo?.deliveryTerms,
+                declaration: product.pdpInfo?.declaration,
+                assemblyInstructions: product.pdpInfo?.assemblyInstructions,
+                maintenance: product.pdpInfo?.maintenance,
+              }}
+            />
+          </div>
         </section>
       </Reveal>
 
@@ -273,15 +254,6 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
-      <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-        <Link
-          href="/uslovi-isporuke"
-          className="text-walnut underline underline-offset-4 transition hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"
-        >
-          Uslovi isporuke i montaže
-        </Link>
-      </section>
-
       {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
@@ -374,9 +346,9 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1">
+    <li className="bg-surface ring-border/60 inline-flex min-h-8 items-center gap-2 rounded-full px-3 py-1.5 leading-tight ring-1 shadow-soft-1">
       {icon}
-      {label}
+      <span>{label}</span>
     </li>
   );
 }
@@ -399,8 +371,14 @@ function synthesizedPictograms(p: Product): FallbackPictogram[] {
   return out;
 }
 
-function PictogramIcon({ code }: { code: string }) {
-  const cls = "size-7 text-walnut";
+function PictogramIcon({
+  code,
+  className = "size-7 text-walnut",
+}: {
+  code: string;
+  className?: string;
+}) {
+  const cls = className;
   switch (code) {
     case "delivery":
       return <Truck className={cls} aria-hidden />;
@@ -414,6 +392,8 @@ function PictogramIcon({ code }: { code: string }) {
       return <Award className={cls} aria-hidden />;
     case "quality":
       return <Check className={cls} aria-hidden />;
+    case "limited":
+      return <Sparkles className={cls} aria-hidden />;
     default:
       return <Box className={cls} aria-hidden />;
   }

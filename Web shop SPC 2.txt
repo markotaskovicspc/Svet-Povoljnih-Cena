@@ -129,7 +129,7 @@ Na detaljnoj strani artikla u zaglavlju fotografije prikazane su i markice artik
 * Heroj akcije - podatak se dobija putem XML
 * Naziv akcije - podatak se dobija putem XML
 * Novo - podatak se dobija putem XML
-* Ograničena količina - podatak se dobija putem XML
+* Dok traju zalihe - podatak se dobija putem XML
 * Dok traju zalihe - Koristi se za DTZ artikle koji imaju status DTZ artikla i količinu < 15
 Ukoliko je akcijski, svaki artikal ima prikaz dve cene: puna maloprodajna cena i akcijska cena. Ispod akcijske cene se prikazuje rečenica za period važenja popusta.
 2.3.4 IV red

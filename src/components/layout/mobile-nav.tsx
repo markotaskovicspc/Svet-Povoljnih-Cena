@@ -30,7 +30,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { primaryNav, type NavNode } from "@/data/site";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
-import { BrandLogo } from "./brand-logo";
 import { InstantSearch } from "./instant-search";
 
 interface Crumb {
@@ -125,13 +124,13 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
           showCloseButton={false}
           className="!inset-0 !h-[100dvh] !w-screen !max-w-none gap-0 overflow-hidden border-0 bg-white p-0 sm:!max-w-none"
         >
-          <SheetHeader className="shrink-0 bg-brand-blue px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 text-white">
+          <SheetHeader className="shrink-0 bg-white px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 text-brand-blue">
             <div className="grid min-h-11 grid-cols-[2.5rem_1fr_auto] items-center gap-3">
               <button
                 type="button"
                 onClick={close}
                 aria-label="Zatvori meni"
-                className="inline-flex size-10 items-center justify-center rounded-full text-white/85 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
               >
                 <X className="size-5" aria-hidden />
               </button>
@@ -141,9 +140,13 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 onClick={close}
                 className="justify-self-center"
               >
-                <BrandLogo
-                  className="w-[190px] min-[390px]:w-[215px]"
-                  imageClassName="brightness-0 invert"
+                <Image
+                  src="/logo.jpeg"
+                  alt="Svet Akcija"
+                  width={1600}
+                  height={382}
+                  priority
+                  className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
                 />
               </Link>
               <div className="flex items-center justify-end gap-1">
@@ -151,7 +154,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   href="/"
                   onClick={close}
                   aria-label="Početna"
-                  className="inline-flex size-10 items-center justify-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                  className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <Home className="size-5" aria-hidden />
                 </Link>
@@ -159,7 +162,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   href="/nalog"
                   onClick={close}
                   aria-label="Moj nalog"
-                  className="inline-flex size-10 items-center justify-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+                  className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <User2 className="size-5" aria-hidden />
                 </Link>

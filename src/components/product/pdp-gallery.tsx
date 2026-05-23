@@ -45,24 +45,30 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const [active, setActive] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [zoom, setZoom] = useState({ on: false, x: 50, y: 50 });
-  const stageRef = useRef<HTMLDivElement | null>(null);
   const mobileTrackRef = useRef<HTMLDivElement | null>(null);
+  const desktopTrackRef = useRef<HTMLDivElement | null>(null);
 
   const slide = slides[active] ?? slides[0];
 
   const goTo = useCallback(
     (index: number) => {
-      const bounded = Math.max(0, Math.min(index, slides.length - 1));
-      setActive(bounded);
-      mobileTrackRef.current
-        ?.querySelector<HTMLElement>(`[data-slide-index="${bounded}"]`)
-        ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      if (!slides.length) return;
+      const nextIndex = ((index % slides.length) + slides.length) % slides.length;
+      setActive(nextIndex);
+      [mobileTrackRef.current, desktopTrackRef.current].forEach((track) => {
+        track
+          ?.querySelector<HTMLElement>(`[data-slide-index="${nextIndex}"]`)
+          ?.scrollIntoView({
+            behavior: "smooth",
+            inline: "center",
+            block: "nearest",
+          });
+      });
     },
     [slides.length],
   );
 
-  const syncMobileActive = useCallback(() => {
-    const track = mobileTrackRef.current;
+  const syncTrackActive = useCallback((track: HTMLDivElement | null) => {
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
     setActive(Math.max(0, Math.min(index, slides.length - 1)));
@@ -88,9 +94,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
         <div className="relative md:hidden">
           <div
             ref={mobileTrackRef}
-            onScroll={syncMobileActive}
-            className="flex snap-x snap-mandatory overflow-x-auto rounded-2xl bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onScroll={() => syncTrackActive(mobileTrackRef.current)}
+            className="flex touch-pan-x snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-2xl bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
+            aria-roledescription="carousel"
           >
             {slides.map((s, index) => (
               <div
@@ -134,120 +141,152 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           {slides.length > 1 ? (
+            <div className="mt-3 flex justify-center gap-1.5">
+              {slides.map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => goTo(index)}
+                  aria-label={`Prikaži sliku ${index + 1}`}
+                  aria-current={index === active ? "true" : undefined}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    index === active ? "w-8 bg-ink-900" : "w-3 bg-ink-200",
+                  )}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="relative hidden md:block">
+          <div
+            ref={desktopTrackRef}
+            onScroll={() => syncTrackActive(desktopTrackRef.current)}
+            className="bg-white ring-border/60 flex aspect-[4/5] w-full snap-x snap-mandatory overflow-x-auto rounded-2xl ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            aria-label="Galerija proizvoda"
+            aria-roledescription="carousel"
+          >
+            {slides.map((s, index) => (
+              <div
+                key={`${s.kind}-desktop-${index}`}
+                data-slide-index={index}
+                onMouseMove={index === active ? handleMove : undefined}
+                onMouseLeave={() => setZoom((z) => ({ ...z, on: false }))}
+                onClick={() => {
+                  setActive(index);
+                  if (s.kind === "image") setLightboxOpen(true);
+                }}
+                className={cn(
+                  "relative min-w-full snap-center",
+                  s.kind === "image" ? "cursor-zoom-in" : "cursor-default",
+                )}
+                role={s.kind === "image" ? "button" : undefined}
+                aria-label={s.kind === "image" ? "Uvećaj sliku" : undefined}
+              >
+                {s.kind === "image" ? (
+                  <>
+                    <motion.div
+                      layoutId={
+                        index === 0 && active === 0
+                          ? `product-cover-${product.sku}`
+                          : undefined
+                      }
+                      className="absolute inset-0"
+                      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <Image
+                        src={s.asset.url}
+                        alt={s.asset.alt ?? product.name}
+                        fill
+                        priority={index === 0}
+                        sizes="(min-width: 1024px) 50vw, 100vw"
+                        placeholder="blur"
+                        blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
+                        className="object-contain p-4"
+                        style={
+                          index === active && zoom.on && !reduced
+                            ? {
+                                transformOrigin: `${zoom.x}% ${zoom.y}%`,
+                                transform: "scale(1.6)",
+                                transition: "transform 120ms ease-out",
+                              }
+                            : { transition: "transform 200ms ease-out" }
+                        }
+                      />
+                    </motion.div>
+                    <div
+                      aria-hidden
+                      className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
+                    />
+                    <span className="bg-surface/85 text-ink-700 ring-border/60 absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] ring-1 backdrop-blur">
+                      <ZoomIn className="size-3.5" aria-hidden /> Uvećaj
+                    </span>
+                  </>
+                ) : s.kind === "video" ? (
+                  <div className="grid h-full w-full place-items-center">
+                    <video
+                      src={s.asset.url}
+                      controls
+                      playsInline
+                      className="h-full w-full object-cover"
+                      poster={product.media.images[0]?.url}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-canvas grid h-full w-full place-items-center">
+                    <iframe
+                      title={`3D pregled — ${product.name}`}
+                      src={s.asset.url}
+                      className="h-full w-full border-0"
+                      allow="accelerometer; gyroscope; xr-spatial-tracking"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {badges ? (
+            <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+              {badges}
+            </div>
+          ) : null}
+          {slides.length > 1 ? (
             <>
               <button
                 type="button"
                 onClick={() => goTo(active - 1)}
                 aria-label="Prethodna slika"
-                className="absolute top-1/2 left-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur"
+                className="absolute top-1/2 left-3 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur transition hover:bg-white"
               >
-                <ChevronLeft className="size-4" aria-hidden />
+                <ChevronLeft className="size-5" aria-hidden />
               </button>
               <button
                 type="button"
                 onClick={() => goTo(active + 1)}
                 aria-label="Sledeća slika"
-                className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur"
+                className="absolute top-1/2 right-3 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur transition hover:bg-white"
               >
-                <ChevronRight className="size-4" aria-hidden />
+                <ChevronRight className="size-5" aria-hidden />
               </button>
-              <div className="mt-3 flex justify-center gap-1.5">
+              <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
                 {slides.map((_, index) => (
                   <button
                     key={index}
                     type="button"
                     onClick={() => goTo(index)}
                     aria-label={`Prikaži sliku ${index + 1}`}
+                    aria-current={index === active ? "true" : undefined}
                     className={cn(
-                      "size-2 rounded-full transition",
-                      index === active ? "bg-ink-900" : "bg-ink-200",
+                      "h-1.5 rounded-full transition-all",
+                      index === active
+                        ? "w-8 bg-ink-900"
+                        : "w-3 bg-white/80 ring-1 ring-border/60",
                     )}
                   />
                 ))}
               </div>
             </>
-          ) : null}
-        </div>
-        <div
-          ref={stageRef}
-          onMouseMove={handleMove}
-          onMouseLeave={() => setZoom((z) => ({ ...z, on: false }))}
-          onClick={() => slide.kind === "image" && setLightboxOpen(true)}
-          className={cn(
-            "bg-white ring-border/60 relative hidden aspect-[4/5] w-full overflow-hidden rounded-2xl ring-1 md:block",
-            slide.kind === "image" ? "cursor-zoom-in" : "cursor-default",
-          )}
-          role={slide.kind === "image" ? "button" : undefined}
-          aria-label={slide.kind === "image" ? "Uvećaj sliku" : undefined}
-        >
-          {slide.kind === "image" ? (
-            <>
-              <motion.div
-                layoutId={
-                  active === 0
-                    ? `product-cover-${product.sku}`
-                    : undefined
-                }
-                className="absolute inset-0"
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <Image
-                  src={slide.asset.url}
-                  alt={slide.asset.alt ?? product.name}
-                  fill
-                  priority
-                  sizes="(min-width: 1024px) 50vw, 100vw"
-                  placeholder="blur"
-                  blurDataURL={slide.asset.blurDataUrl ?? FALLBACK_BLUR}
-                  className="object-contain p-4"
-                  style={
-                    zoom.on && !reduced
-                      ? {
-                          transformOrigin: `${zoom.x}% ${zoom.y}%`,
-                          transform: "scale(1.6)",
-                          transition: "transform 120ms ease-out",
-                        }
-                      : { transition: "transform 200ms ease-out" }
-                  }
-                />
-              </motion.div>
-              <span className="bg-surface/85 text-ink-700 ring-border/60 absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] ring-1 backdrop-blur">
-                <ZoomIn className="size-3.5" aria-hidden /> Uvećaj
-              </span>
-            </>
-          ) : slide.kind === "video" ? (
-            <div className="grid h-full w-full place-items-center">
-              <video
-                src={slide.asset.url}
-                controls
-                playsInline
-                className="h-full w-full object-cover"
-                poster={product.media.images[0]?.url}
-              />
-            </div>
-          ) : (
-            <div className="bg-canvas grid h-full w-full place-items-center">
-              <iframe
-                title={`3D pregled — ${product.name}`}
-                src={slide.asset.url}
-                className="h-full w-full border-0"
-                allow="accelerometer; gyroscope; xr-spatial-tracking"
-              />
-            </div>
-          )}
-
-          {/* Soft floor gradient (matches card aesthetic) */}
-          {slide.kind === "image" ? (
-            <div
-              aria-hidden
-              className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
-            />
-          ) : null}
-
-          {badges ? (
-            <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
-              {badges}
-            </div>
           ) : null}
         </div>
       </div>
@@ -273,9 +312,9 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                 role="tab"
                 aria-selected={isActive}
                 aria-label={label}
-                onClick={() => setActive(i)}
+                onClick={() => goTo(i)}
                 className={cn(
-                  "bg-muted-bg ring-border/60 focus-visible:ring-walnut/40 relative grid size-16 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:size-20",
+                  "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-16 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:size-20",
                   isActive && "ring-walnut ring-2",
                 )}
               >
@@ -285,7 +324,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     alt=""
                     fill
                     sizes="80px"
-                    className="object-cover"
+                    className="object-contain p-1"
                   />
                 ) : s.kind === "video" ? (
                   <Play className="size-5 text-ink-700" aria-hidden />

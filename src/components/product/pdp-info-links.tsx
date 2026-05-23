@@ -39,21 +39,25 @@ export function PdpInfoLinks({
 
   return (
     <>
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="border-border/70 divide-border/70 divide-y border-y">
         {items.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => show(item.key)}
-            className="ring-border/60 hover:text-walnut focus-visible:ring-walnut/40 rounded-full px-3 py-1.5 text-xs font-medium text-ink-800 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
+            className="group flex min-h-13 w-full items-center justify-between gap-4 py-3 text-left text-sm font-semibold text-ink-900 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
           >
-            {item.label}
+            <span>{item.label}</span>
+            <ChevronDown
+              className="size-4 -rotate-90 text-ink-500 transition group-hover:text-brand-blue"
+              aria-hidden
+            />
           </button>
         ))}
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl bg-surface p-0">
+        <DialogContent className="max-w-2xl bg-white p-0">
           <DialogHeader className="border-border/60 border-b px-5 pt-5 pb-4">
             <DialogTitle className="font-display text-xl text-ink-900">
               Informacije o proizvodu

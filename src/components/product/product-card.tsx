@@ -2,13 +2,13 @@
 
 /**
  * Product card — Phase 1C polish.
- * Adds: hover preview (secondary image swap), explicit discount pill,
- * qty-stepper morph from "Dodaj" button when item is in cart, blur placeholder,
+ * Adds: horizontal image rail, image badges,
+ * qty-stepper morph from "Dodaj u korpu" button when item is in cart, blur placeholder,
  * skeleton loading variant, reduced-motion friendly micro-interactions.
  */
 import Image from "next/image";
 import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,6 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
 
   const images = product.media.images;
   const cover = images[0];
-  const secondary = images[1];
   const imageBadges = deriveImageBadges(product);
   const price = effectiveUnitPrice(product);
   const hasReducedPrice = price.effective < price.full;
@@ -73,7 +72,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
       {...hoverProps}
       transition={{ type: "spring", stiffness: 220, damping: 22 }}
       className={cn(
-        "group bg-surface text-ink-900 ring-border/60 relative flex flex-col overflow-hidden rounded-2xl shadow-soft-2 ring-1 transition hover:shadow-soft-3",
+        "group bg-white text-ink-900 ring-border/60 relative flex flex-col overflow-hidden rounded-2xl shadow-soft-2 ring-1 transition hover:shadow-soft-3",
         className,
       )}
     >
@@ -83,7 +82,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         className="focus-visible:ring-walnut/40 relative block aspect-[4/5] overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
       >
         {images.length > 1 ? (
-          <div className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {images.map((image, index) => (
               <span
                 key={`${image.url}-${index}`}
@@ -93,11 +92,11 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
                   src={image.url}
                   alt={image.alt ?? product.name}
                   fill
-                  sizes="48vw"
+                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
                   priority={priority && index === 0}
                   placeholder="blur"
                   blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
-                  className="object-contain p-2"
+                  className="object-contain p-3"
                 />
               </span>
             ))}
@@ -110,7 +109,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
          */}
         <motion.div
           layoutId={`product-cover-${product.sku}`}
-          className={cn("absolute inset-0", images.length > 1 && "hidden md:block")}
+          className={cn("absolute inset-0", images.length > 1 && "hidden")}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           {cover ? (
@@ -122,27 +121,10 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               priority={priority}
               placeholder="blur"
               blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
-              className={cn(
-                "object-contain p-2 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                secondary
-                  ? "group-hover:scale-[1.02] group-hover:opacity-0"
-                  : "group-hover:scale-[1.04]",
-              )}
+              className="object-contain p-3 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
             />
           ) : null}
         </motion.div>
-        {secondary ? (
-          <Image
-            src={secondary.url}
-            alt={secondary.alt ?? product.name}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
-            placeholder="blur"
-            blurDataURL={secondary.blurDataUrl ?? FALLBACK_BLUR}
-            aria-hidden
-            className="pointer-events-none hidden object-contain p-2 opacity-0 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] group-hover:opacity-100 md:block"
-          />
-        ) : null}
         {/* Soft floor gradient */}
         <div
           aria-hidden
@@ -191,8 +173,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         <ColorOptions product={product} />
 
         <div className="pt-0 md:mt-auto md:pt-1">
-          <div className="flex items-end justify-between gap-2">
-            <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 md:items-baseline md:gap-x-2 md:gap-y-0.5">
+          <div className="flex flex-col gap-2">
+            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
               {hasReducedPrice ? (
                 <>
                   <span className="text-action text-sm font-bold md:text-base">
@@ -233,61 +215,6 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
         </div>
       </div>
 
-      {/* Footer row — add button morphs into qty stepper when in cart */}
-      <div className="border-border/60 hidden items-center border-t px-3 py-2 md:flex md:px-4 md:py-3">
-        <AnimatePresence mode="wait" initial={false}>
-          {lineQty > 0 ? (
-            <motion.div
-              key="stepper"
-              layout
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-ink-900 flex w-full items-center justify-between overflow-hidden rounded-full text-canvas"
-              role="group"
-              aria-label="Količina u korpi"
-            >
-              <button
-                type="button"
-                onClick={() => setQty(product.sku, lineQty - 1)}
-                aria-label="Smanji količinu"
-                className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <Minus className="size-3.5" aria-hidden />
-              </button>
-              <span
-                aria-live="polite"
-                className="min-w-6 text-center text-xs font-medium tabular-nums"
-              >
-                {lineQty}
-              </span>
-              <button
-                type="button"
-                onClick={() => setQty(product.sku, lineQty + 1)}
-                aria-label="Povećaj količinu"
-                className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <Plus className="size-3.5" aria-hidden />
-              </button>
-            </motion.div>
-          ) : (
-            <motion.button
-              key="add"
-              layout
-              type="button"
-              onClick={handleAdd}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
-            </motion.button>
-          )}
-        </AnimatePresence>
-      </div>
     </motion.article>
   );
 }
@@ -373,10 +300,10 @@ function MobileCartControl({
   onIncrease: () => void;
 }) {
   return (
-    <div className="shrink-0 md:hidden">
+    <div className="w-full">
       {lineQty > 0 ? (
         <div
-          className="bg-ink-900 inline-flex min-w-24 items-center justify-between overflow-hidden rounded-full text-canvas"
+          className="bg-ink-900 inline-flex h-10 w-full items-center justify-between overflow-hidden rounded-full text-canvas"
           role="group"
           aria-label="Količina u korpi"
         >
@@ -407,9 +334,9 @@ function MobileCartControl({
         <button
           type="button"
           onClick={onAdd}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-8 min-w-20 items-center justify-center gap-1 rounded-full px-3 text-xs text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
-          <ShoppingBag className="size-3.5" aria-hidden /> Dodaj
+          <ShoppingBag className="size-3.5" aria-hidden /> Dodaj u korpu
         </button>
       )}
     </div>
@@ -425,7 +352,7 @@ export function ProductCardSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "bg-surface ring-border/60 relative flex animate-pulse flex-col overflow-hidden rounded-2xl shadow-soft-1 ring-1",
+        "bg-white ring-border/60 relative flex animate-pulse flex-col overflow-hidden rounded-2xl shadow-soft-1 ring-1",
         className,
       )}
     >

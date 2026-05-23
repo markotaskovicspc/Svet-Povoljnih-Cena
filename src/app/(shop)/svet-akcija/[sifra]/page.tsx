@@ -56,7 +56,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
             aria-label="Galerija proizvoda"
             className="overflow-hidden rounded-md border border-border bg-white"
           >
-            <div className="relative flex aspect-[4/3] items-center justify-center bg-muted-bg text-ink-300">
+            <div className="relative flex aspect-[4/3] items-center justify-center bg-white text-ink-300">
               {image ? (
                 <Image
                   src={image.url}
@@ -78,7 +78,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
                 {gallery.slice(0, 10).map((item, index) => (
                   <div
                     key={`${item.url}-${index}`}
-                    className="relative aspect-square overflow-hidden rounded-md border border-border bg-muted-bg"
+                    className="relative aspect-square overflow-hidden rounded-md border border-border bg-white"
                   >
                     <Image
                       src={item.url}

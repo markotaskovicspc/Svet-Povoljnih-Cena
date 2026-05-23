@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { Product } from "@/types";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
+import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
 
 /**
@@ -52,14 +53,14 @@ function AddToast({
 }) {
   return (
     <div className="bg-surface ring-border/60 flex w-[320px] items-center gap-3 rounded-2xl p-3 shadow-soft-3 ring-1">
-      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted-bg">
+      <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-border/60">
         {line.thumbnailUrl ? (
           <Image
             src={line.thumbnailUrl}
             alt={line.name}
             fill
             sizes="56px"
-            className="object-cover"
+            className="object-contain p-1"
           />
         ) : null}
       </div>
@@ -73,7 +74,11 @@ function AddToast({
       </div>
       <Link
         href="/korpa"
-        onClick={() => toast.dismiss(id)}
+        onClick={(event) => {
+          event.preventDefault();
+          toast.dismiss(id);
+          useCartUi.getState().openSuggestion("/korpa");
+        }}
         className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
       >
         Pogledaj korpu

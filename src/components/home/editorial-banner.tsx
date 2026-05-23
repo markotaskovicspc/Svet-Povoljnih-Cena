@@ -13,20 +13,20 @@ interface EditorialBannerProps {
 
 export function EditorialBanner({ banner }: EditorialBannerProps) {
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-6 py-12 md:py-20">
+    <section className="w-full px-2 py-12 sm:px-3 md:px-4 md:py-20">
       <motion.article
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="relative isolate overflow-hidden rounded-2xl bg-ink-900 text-canvas shadow-soft-4 md:rounded-3xl"
+        className="relative isolate overflow-hidden rounded-lg bg-ink-900 text-canvas shadow-soft-4 lg:rounded-xl"
       >
         <div className="relative aspect-[16/11] w-full md:aspect-[24/9]">
           <Image
             src={banner.imageDesktop.url}
             alt={banner.imageDesktop.alt ?? banner.title}
             fill
-            sizes="(min-width: 1280px) 1280px, 100vw"
+            sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
             className="object-cover opacity-80"
           />
           <div

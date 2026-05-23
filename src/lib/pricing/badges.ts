@@ -98,9 +98,10 @@ export function deriveImageBadges(
   const badges = deriveBadges(p, now);
   const first = (key: BadgeKey) => badges.find((b) => b.key === key);
   const topLeft = [
+    first("discount"),
+    first("action"),
     first("permanent"),
     first("hero"),
-    first("discount"),
   ].filter(Boolean).slice(0, 2) as Badge[];
   const bottomLeft = [
     first("limited") ?? first("dtz"),

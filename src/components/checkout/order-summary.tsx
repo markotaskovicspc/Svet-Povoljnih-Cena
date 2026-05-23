@@ -109,14 +109,14 @@ export function OrderSummary({
                 key={l.sku}
                 className="grid grid-cols-[44px_1fr_auto] items-center gap-3 py-3"
               >
-                <span className="bg-muted-bg ring-border/60 relative block size-11 overflow-hidden rounded-lg ring-1">
+                <span className="bg-white ring-border/60 relative block size-11 overflow-hidden rounded-lg ring-1">
                   {l.thumbnailUrl ? (
                     <Image
                       src={l.thumbnailUrl}
                       alt=""
                       fill
                       sizes="44px"
-                      className="object-cover"
+                      className="object-contain p-1"
                     />
                   ) : null}
                 </span>
