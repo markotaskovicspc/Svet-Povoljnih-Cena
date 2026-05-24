@@ -82,7 +82,6 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
-  subtitle,
   titleIcon,
   campaignSticker,
   period,
@@ -185,14 +184,14 @@ export function ListingShell({
           >
             <div className="flex min-w-0 items-center gap-3 md:gap-5">
               {displayTitleIcon ? (
-                <span className="bg-surface ring-border/60 flex size-14 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-2 md:size-20">
+                <span className="flex size-14 shrink-0 items-center justify-center md:size-20">
                   <Image
                     src={displayTitleIcon.url}
                     alt={displayTitleIcon.alt ?? ""}
                     width={displayTitleIcon.width ?? 96}
                     height={displayTitleIcon.height ?? 96}
                     unoptimized={displayTitleIcon.url.endsWith(".svg")}
-                    className="max-h-[76%] max-w-[76%] object-contain"
+                    className="max-h-full max-w-full object-contain"
                     priority
                   />
                 </span>
@@ -201,9 +200,6 @@ export function ListingShell({
                 {title}
               </h1>
             </div>
-            {subtitle ? (
-              <p className="mt-3 hidden text-base text-ink-700 md:block">{subtitle}</p>
-            ) : null}
             {period ? (
               <div className="bg-action/8 text-action ring-action/15 mt-3 inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1">
                 <span aria-hidden className="size-1.5 rounded-full bg-action" />
@@ -373,9 +369,9 @@ export function ListingShell({
             {shown.length ? (
               <div
                 className={cn(
-                  "grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-5 sm:gap-y-8",
+                  "grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4 sm:gap-y-6",
                   view === 5
-                    ? "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                    ? "lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
                     : "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
                 )}
               >
@@ -449,7 +445,7 @@ export function ListingSkeleton({ columns = 5 }: { columns?: 3 | 5 }) {
       className={cn(
         "mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-x-3 gap-y-6 px-6 py-10 sm:gap-x-5 sm:gap-y-8",
         columns === 5
-          ? "lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          ? "lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
           : "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
       )}
     >

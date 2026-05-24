@@ -85,6 +85,7 @@ const tabIcons = {
   "mesecna-akcija": Percent,
   "nedeljna-akcija": CalendarDays,
   "heroji-meseca": Crown,
+  "niske-cene-pod-zastitom": ShieldCheck,
   "ogranicena-ponuda": Hourglass,
   "sve-do-999": ShieldCheck,
   "specijalne-ponude": Sparkles,
@@ -248,7 +249,12 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                   isActive && "ring-2 ring-white/80",
                                 )}
                               >
-                                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue-50 text-brand-blue">
+                                <span
+                                  className={cn(
+                                    "flex size-8 shrink-0 items-center justify-center text-brand-blue",
+                                    !iconAsset && "rounded-md bg-brand-blue-50",
+                                  )}
+                                >
                                   {iconAsset ? (
                                     <Image
                                       src={iconAsset.url}
@@ -256,7 +262,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                       width={iconAsset.width ?? 80}
                                       height={iconAsset.height ?? 80}
                                       unoptimized={iconAsset.url.endsWith(".svg")}
-                                      className="h-6 w-6 object-contain"
+                                      className="h-8 w-8 object-contain"
                                     />
                                   ) : (
                                     <Icon className="size-4" aria-hidden />

@@ -8,6 +8,7 @@
  */
 import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
@@ -21,11 +22,11 @@ import {
   deriveImageBadges,
   effectiveUnitPrice,
   type Badge,
-  type BadgeKey,
   type BadgeTone,
 } from "@/lib/pricing";
 import {
-  campaignStickers,
+  herojiMesecaIcon,
+  protectedPricesIcon,
   type CampaignStickerKey,
 } from "@/data/campaign-icons";
 
@@ -52,18 +53,17 @@ const toneClasses: Record<BadgeTone, string> = {
   protected: "bg-brand-blue text-white",
 };
 
-const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
-
 export function ProductCard({
   product,
   className,
   priority,
-  campaignSticker,
 }: ProductCardProps) {
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggle);
   const setQty = useCart((s) => s.setQty);
+  const [activeImage, setActiveImage] = useState(0);
+  const imageTrackRef = useRef<HTMLDivElement | null>(null);
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
@@ -71,12 +71,19 @@ export function ProductCard({
   const images = product.media.images;
   const cover = images[0];
   const imageBadges = deriveImageBadges(product);
-  const hiddenKeys = hiddenBadgeKeys(campaignSticker);
-  const topLeftBadges = imageBadges.topLeft.filter((b) => !hiddenKeys.has(b.key));
-  const bottomLeftBadges = imageBadges.bottomLeft.filter((b) => !hiddenKeys.has(b.key));
-  const campaignAsset = campaignSticker ? campaignStickers[campaignSticker] : null;
+  const topLeftBadges = imageBadges.topLeft;
+  const bottomLeftBadges = imageBadges.bottomLeft;
   const price = effectiveUnitPrice(product);
   const hasReducedPrice = price.effective < price.full;
+  const shortDescription =
+    product.shortDescription?.trim() ||
+    product.categoryPath.at(-1) ||
+    product.group;
+  const promoLine = product.action?.isPermanent
+    ? "Trajno niska cena"
+    : price.kind === "sale" && product.action?.endsAt
+      ? `Akcija do ${formatDate(product.action.endsAt)}`
+      : "";
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
@@ -84,36 +91,48 @@ export function ProductCard({
     commitAddToCart(product);
   }
 
+  const syncActiveImage = useCallback(() => {
+    const track = imageTrackRef.current;
+    if (!track) return;
+    const next = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    setActiveImage(Math.max(0, Math.min(next, images.length - 1)));
+  }, [images.length]);
+
   return (
     <motion.article
       {...hoverProps}
       transition={{ type: "spring", stiffness: 220, damping: 22 }}
       className={cn(
-        "group bg-white text-ink-900 ring-border/60 relative flex flex-col overflow-hidden rounded-2xl shadow-soft-2 ring-1 transition hover:shadow-soft-3",
+        "group bg-white text-ink-900 ring-border/60 relative flex flex-col overflow-hidden rounded-lg shadow-soft-1 ring-1 transition hover:shadow-soft-3",
         className,
       )}
     >
       <Link
         href={`/p/${product.slug}`}
         aria-label={`${product.name} — pregled proizvoda`}
-        className="focus-visible:ring-walnut/40 relative block aspect-[4/5] overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
+        className="focus-visible:ring-walnut/40 relative block aspect-square overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
       >
         {images.length > 1 ? (
-          <div className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div
+            ref={imageTrackRef}
+            onScroll={syncActiveImage}
+            className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {images.map((image, index) => (
               <span
                 key={`${image.url}-${index}`}
+                data-card-image={index}
                 className="relative block h-full min-w-full snap-center"
               >
                 <Image
                   src={image.url}
                   alt={image.alt ?? product.name}
                   fill
-                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
+                  sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
                   priority={priority && index === 0}
                   placeholder="blur"
                   blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
-                  className="object-contain p-3"
+                  className="object-contain p-2.5"
                 />
               </span>
             ))}
@@ -134,33 +153,33 @@ export function ProductCard({
               src={cover.url}
               alt={cover.alt ?? product.name}
               fill
-              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 48vw"
+              sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
               priority={priority}
               placeholder="blur"
               blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
-              className="object-contain p-3 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
             />
           ) : null}
         </motion.div>
-        {/* Soft floor gradient */}
-        <div
-          aria-hidden
-          className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
-        />
-        {campaignAsset || topLeftBadges.length ? (
-          <div className="pointer-events-none absolute top-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:top-3 md:left-3">
-            {campaignAsset ? <ProductStickerBadge sticker={campaignAsset} /> : null}
-            {topLeftBadges.slice(0, campaignAsset ? 1 : 2).map((b) => (
+        {topLeftBadges.length ? (
+          <div className="pointer-events-none absolute top-0 left-0 flex max-w-[78%] flex-col items-start gap-1">
+            {topLeftBadges.slice(0, 2).map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
           </div>
         ) : null}
         {bottomLeftBadges.length ? (
-          <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[80%] flex-col items-start gap-1 md:bottom-3 md:left-3">
-            {bottomLeftBadges.map((b) => (
+          <div className="pointer-events-none absolute bottom-1 left-0 flex max-w-[78%] flex-col items-start gap-1">
+            {bottomLeftBadges.slice(0, 1).map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
           </div>
+        ) : null}
+        {images.length > 1 ? (
+          <ProductImageIndicators
+            count={images.length}
+            active={activeImage}
+          />
         ) : null}
       </Link>
 
@@ -179,8 +198,8 @@ export function ProductCard({
       </button>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-0.5 px-2.5 pt-2.5 pb-2 md:gap-2 md:px-4 md:pt-4 md:pb-3">
-        <h3 className="line-clamp-2 text-xs leading-snug font-medium text-ink-900 md:text-sm">
+      <div className="flex flex-1 flex-col gap-1.5 px-2.5 pt-2 pb-2 md:px-3 md:pt-2.5 md:pb-3">
+        <h3 className="truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]">
           <Link
             href={`/p/${product.slug}`}
             className="hover:text-walnut transition focus-visible:underline focus-visible:outline-none"
@@ -188,22 +207,25 @@ export function ProductCard({
             {product.name}
           </Link>
         </h3>
-        <ProductColorOptions product={product} className="h-5 pt-0.5" />
+        <p className="truncate text-[10px] leading-tight text-ink-500 md:text-[11px]">
+          {shortDescription}
+        </p>
+        <ProductColorOptions product={product} className="h-4 pt-0" />
 
-        <div className="pt-0 md:mt-auto md:pt-1">
-          <div className="flex flex-col items-stretch gap-2">
-            <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-0.5">
+        <div className="mt-auto pt-0">
+          <div className="flex flex-col items-stretch gap-1.5">
+            <div className="min-w-0">
               {hasReducedPrice ? (
-                <>
-                  <span className="text-action text-sm font-bold md:text-base">
-                    {formatRsd(price.effective)}
-                  </span>
-                  <span className="text-[10px] text-ink-500 line-through md:text-xs">
+                <div className="flex min-w-0 items-end justify-between gap-1.5">
+                  <span className="min-w-0 truncate text-[10px] text-ink-500 line-through md:text-[11px]">
                     {formatRsd(price.full)}
                   </span>
-                </>
+                  <span className="text-action shrink-0 text-sm leading-none font-bold md:text-[15px]">
+                    {formatRsd(price.effective)}
+                  </span>
+                </div>
               ) : (
-                <span className="text-sm font-semibold text-ink-900 md:text-base">
+                <span className="block truncate text-sm leading-none font-bold text-ink-900 md:text-[15px]">
                   {formatRsd(price.full)}
                 </span>
               )}
@@ -216,21 +238,9 @@ export function ProductCard({
               onIncrease={() => setQty(product.sku, lineQty + 1)}
             />
           </div>
-          {price.kind === "sale" && product.action?.isPermanent ? (
-            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
-              Cena pod trajnom zaštitom · Isporuka {product.deliveryDays.min}–
-              {product.deliveryDays.max} dana
-            </p>
-          ) : price.kind === "sale" && product.action?.endsAt ? (
-            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
-              Akcija do {formatDate(product.action.endsAt)} · Isporuka{" "}
-              {product.deliveryDays.min}–{product.deliveryDays.max} dana
-            </p>
-          ) : (
-            <p className="mt-0.5 hidden text-[11px] text-ink-500 md:block">
-              Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} dana
-            </p>
-          )}
+          <p className="mt-1 min-h-3.5 truncate text-[10px] leading-none text-ink-500 md:text-[11px]">
+            {promoLine}
+          </p>
         </div>
       </div>
 
@@ -240,35 +250,50 @@ export function ProductCard({
 
 function ProductBadge({ badge }: { badge: Badge }) {
   if (badge.key === "new") {
-    return <ProductStickerBadge sticker={campaignStickers.new} label={badge.label} />;
+    return (
+      <ProductStickerBadge
+        sticker={{ url: "/brand/promo-stickers/novo.svg", alt: "Novo", width: 600, height: 600 }}
+        label={badge.label}
+        className="h-9 w-9 md:h-10 md:w-10"
+      />
+    );
   }
 
   if (badge.key === "limited" || badge.key === "dtz") {
-    return <ProductStickerBadge sticker={campaignStickers.limited} label={badge.label} />;
+    return (
+      <ProductStickerBadge
+        sticker={{ url: "/brand/promo-stickers/dtz2.svg", alt: "Dok traju zalihe", width: 1536, height: 1024 }}
+        label={badge.label}
+        className="h-8 w-12 md:h-9 md:w-14"
+      />
+    );
   }
 
   if (badge.key === "hero") {
     return (
-      <span
-        aria-label={badge.label}
-        className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
-      >
-        <Image
-          src={HEROJI_MESECA_MARK_SRC}
-          alt={badge.label}
-          width={44}
-          height={37}
-          className="h-7 w-8 object-contain md:h-8 md:w-10"
-        />
-      </span>
+      <ProductStickerBadge
+        sticker={herojiMesecaIcon}
+        label={badge.label}
+        className="h-9 w-10 md:h-10 md:w-12"
+      />
+    );
+  }
+
+  if (badge.key === "permanent") {
+    return (
+      <ProductStickerBadge
+        sticker={protectedPricesIcon}
+        label={badge.label}
+        className="h-9 w-11 md:h-10 md:w-12"
+      />
     );
   }
 
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-0.5 text-[10px] leading-none font-medium tracking-tight shadow-soft-1 md:px-2.5 md:py-1 md:text-[11px]",
-        toneClasses[badge.tone],
+        "grid size-9 place-items-center rounded-full text-[11px] leading-none font-black text-white shadow-soft-1 md:size-10 md:text-xs",
+        badge.key === "discount" ? "bg-action" : toneClasses[badge.tone],
       )}
     >
       {badge.label}
@@ -279,14 +304,16 @@ function ProductBadge({ badge }: { badge: Badge }) {
 function ProductStickerBadge({
   sticker,
   label,
+  className,
 }: {
   sticker: { url: string; alt?: string; width?: number; height?: number };
   label?: string;
+  className?: string;
 }) {
   return (
     <span
       aria-label={label ?? sticker.alt}
-      className="bg-surface/95 ring-border/70 flex h-9 w-11 items-center justify-center rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur md:h-10 md:w-12"
+      className={cn("flex items-center justify-center", className ?? "h-9 w-10 md:h-10 md:w-12")}
     >
       <Image
         src={sticker.url}
@@ -298,16 +325,6 @@ function ProductStickerBadge({
       />
     </span>
   );
-}
-
-function hiddenBadgeKeys(campaignSticker: CampaignStickerKey | undefined) {
-  const hidden = new Set<BadgeKey>();
-  if (campaignSticker === "new") hidden.add("new");
-  if (campaignSticker === "limited") {
-    hidden.add("limited");
-    hidden.add("dtz");
-  }
-  return hidden;
 }
 
 function MobileCartControl({
@@ -327,7 +344,7 @@ function MobileCartControl({
     <div className={cn("w-full", className)}>
       {lineQty > 0 ? (
         <div
-          className="bg-ink-900 inline-flex h-10 w-full items-center justify-between overflow-hidden rounded-full text-canvas"
+          className="bg-ink-900 inline-flex h-9 w-full items-center justify-between overflow-hidden rounded-full text-canvas md:h-10"
           role="group"
           aria-label="Količina u korpi"
         >
@@ -358,12 +375,35 @@ function MobileCartControl({
         <button
           type="button"
           onClick={onAdd}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-3"
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:h-10 md:px-3"
         >
           <ShoppingBag className="size-3.5 shrink-0" aria-hidden />
-          <span>Dodaj u korpu</span>
+          <span className="whitespace-nowrap">Dodaj u korpu</span>
         </button>
       )}
+    </div>
+  );
+}
+
+function ProductImageIndicators({
+  count,
+  active,
+}: {
+  count: number;
+  active: number;
+}) {
+  return (
+    <div className="pointer-events-none absolute right-2 bottom-2 flex items-center gap-1">
+      {Array.from({ length: count }, (_, index) => (
+        <span
+          key={index}
+          aria-hidden
+          className={cn(
+            "h-1.5 rounded-full bg-ink-300/70 transition-all",
+            index === active ? "w-6 bg-ink-900" : "w-1.5",
+          )}
+        />
+      ))}
     </div>
   );
 }
@@ -377,12 +417,12 @@ export function ProductCardSkeleton({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "bg-white ring-border/60 relative flex animate-pulse flex-col overflow-hidden rounded-2xl shadow-soft-1 ring-1",
+        "bg-white ring-border/60 relative flex animate-pulse flex-col overflow-hidden rounded-lg shadow-soft-1 ring-1",
         className,
       )}
     >
-      <div className="aspect-[4/5] bg-muted-bg" />
-      <div className="flex flex-1 flex-col gap-2 px-4 pt-4 pb-3">
+      <div className="aspect-square bg-muted-bg" />
+      <div className="flex flex-1 flex-col gap-1.5 px-3 pt-2.5 pb-3">
         <div className="h-3.5 w-4/5 rounded-full bg-muted-bg" />
         <div className="h-3.5 w-2/5 rounded-full bg-muted-bg" />
         <div className="h-2.5 w-1/3 rounded-full bg-muted-bg/70" />

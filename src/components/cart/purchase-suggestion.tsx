@@ -1,40 +1,74 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+import type { Product } from "@/types";
+import { ProductCard } from "@/components/product/product-card";
+import { useCart } from "@/lib/hooks/use-cart";
 
-export function PurchaseSuggestion({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="rounded-2xl bg-muted-bg/70 p-4 ring-1 ring-border/60">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-walnut ring-1 ring-border/60">
-          <Sparkles className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink-900">Predlog kupovine</p>
-          <p className="mt-1 text-xs leading-relaxed text-ink-500">
-            Pogledajte artikle koji se često biraju uz aktuelne akcije.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <SuggestionLink href="/heroji-meseca" label="Heroji meseca" />
-            {!compact ? (
-              <SuggestionLink href="/specijalne-ponude" label="Specijalne ponude" />
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+interface RecommendationsResponse {
+  products?: Product[];
 }
 
-function SuggestionLink({ href, label }: { href: string; label: string }) {
+export function PurchaseSuggestion() {
+  const lines = useCart((s) => s.lines);
+  const skus = useMemo(() => lines.map((line) => line.sku), [lines]);
+  const requestKey = skus.join("|");
+  const [result, setResult] = useState<{ key: string; products: Product[] } | null>(null);
+
+  useEffect(() => {
+    if (!skus.length) return;
+
+    const controller = new AbortController();
+    fetch("/api/cart/recommendations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skus, limit: 6 }),
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Recommendations unavailable");
+        return response.json() as Promise<RecommendationsResponse>;
+      })
+      .then((data) =>
+        setResult({
+          key: requestKey,
+          products: Array.isArray(data.products) ? data.products : [],
+        }),
+      )
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setResult({ key: requestKey, products: [] });
+      });
+
+    return () => controller.abort();
+  }, [requestKey, skus]);
+
+  const products = result?.key === requestKey ? result.products : [];
+  const pending = skus.length > 0 && result?.key !== requestKey;
+
+  if (pending) {
+    return (
+      <div className="flex min-h-32 items-center justify-center gap-2 rounded-lg bg-muted-bg/70 text-sm text-ink-500 ring-1 ring-border/60">
+        <Loader2 className="size-4 animate-spin" aria-hidden />
+        Učitavam predloge...
+      </div>
+    );
+  }
+
+  if (!products.length) {
+    return (
+      <div className="rounded-lg bg-muted-bg/70 p-4 text-sm leading-relaxed text-ink-700 ring-1 ring-border/60">
+        Trenutno nema dodatnih predloga za artikle iz korpe.
+      </div>
+    );
+  }
+
   return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-ink-900 ring-1 ring-border/60 transition hover:text-walnut focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"
-    >
-      {label}
-      <ArrowRight className="size-3" aria-hidden />
-    </Link>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {products.map((product) => (
+        <ProductCard key={product.sku} product={product} className="h-full" />
+      ))}
+    </div>
   );
 }

@@ -14,9 +14,8 @@ import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { PurchaseSuggestion } from "./purchase-suggestion";
 
 /**
- * "Predlog kupovine" modal (1F.1). Mounted globally; opens whenever
- * `useCartUi.crossSellSku` becomes non-null. Real suggestions will be supplied
- * by the catalog API once admin per-group rules are connected to the drawer.
+ * "Predlog kupovine" modal. Mounted globally; opens from "Pregled korpe"
+ * and "Plati" actions, with products loaded from admin recommendation rules.
  */
 export function CrossSellModal() {
   const router = useRouter();
@@ -33,13 +32,13 @@ export function CrossSellModal() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogContent className="max-w-md bg-surface">
+      <DialogContent className="max-h-[90dvh] max-w-4xl overflow-y-auto bg-surface">
         <DialogHeader>
           <DialogTitle className="font-display text-xl text-ink-900">
             Predlog kupovine
           </DialogTitle>
           <DialogDescription className="text-ink-500">
-            Pre nastavka možete brzo pogledati artikle koji se često biraju uz kupovinu.
+            Pre nastavka možete brzo pogledati artikle koje je admin povezao sa proizvodima iz korpe.
           </DialogDescription>
         </DialogHeader>
         <PurchaseSuggestion />

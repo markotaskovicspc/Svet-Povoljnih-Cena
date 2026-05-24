@@ -38,7 +38,8 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
 
   let rows: SuggestRow[] = [];
   try {
-    // pg_trgm-based fuzzy match on name + sku, with category breadcrumb joined.
+    // pg_trgm-based fuzzy match on name + sku, with category/group matching
+    // so "peg" and "pegle" find products filed under the Pegle category.
     rows = await db.$queryRaw<SuggestRow[]>`
       SELECT p.sku,
              p.slug,
@@ -57,8 +58,33 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
         FROM "Product" p
        WHERE p."isActive" = true
          AND (p.name ILIKE ${'%' + q + '%'} OR p.sku ILIKE ${'%' + q + '%'}
-              OR similarity(p.name, ${q}) > 0.25)
-       ORDER BY p."isHero" DESC,
+              OR p.barcode ILIKE ${'%' + q + '%'}
+              OR similarity(p.name, ${q}) > 0.2
+              OR EXISTS (
+                SELECT 1
+                  FROM "ProductCategory" pc2
+                  JOIN "Category" c2 ON c2.id = pc2."categoryId"
+                 WHERE pc2."productId" = p.id
+                   AND c2.name ILIKE ${'%' + q + '%'}
+              )
+              OR EXISTS (
+                SELECT 1
+                  FROM "Group" g
+                 WHERE g.id = p."groupId"
+                   AND g.name ILIKE ${'%' + q + '%'}
+              ))
+       ORDER BY CASE
+                  WHEN p.name ILIKE ${q + '%'} THEN 0
+                  WHEN EXISTS (
+                    SELECT 1
+                      FROM "ProductCategory" pc3
+                      JOIN "Category" c3 ON c3.id = pc3."categoryId"
+                     WHERE pc3."productId" = p.id
+                       AND c3.name ILIKE ${'%' + q + '%'}
+                  ) THEN 1
+                  ELSE 2
+                END ASC,
+                p."isHero" DESC,
                 COALESCE(p."discountPct", 0) DESC,
                 COALESCE(p."salePrice", p."fullPrice") ASC
        LIMIT ${safeLimit}

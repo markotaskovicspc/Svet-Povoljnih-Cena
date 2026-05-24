@@ -54,6 +54,7 @@ const productListSelect = {
   sku: true,
   slug: true,
   name: true,
+  shortDescription: true,
   colorPrimary: true,
   colorSecondary: true,
   widthCm: true,
@@ -249,7 +250,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     collection: p.collection?.slug,
     categoryPath: sortedCats.map((c) => c.category.name),
     description: "",
-    shortDescription: undefined,
+    shortDescription: p.shortDescription ?? undefined,
     dimensionsCm: {
       w: num(p.widthCm) || 0,
       d: num(p.depthCm) || 0,
@@ -548,4 +549,40 @@ export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
   });
   if (!rule) return [];
   return rule.products.slice(0, limit).map(mapProduct);
+}
+
+export async function getCartRecommendationsForSkus(
+  skus: string[],
+  limit = 6,
+): Promise<ProductDTO[]> {
+  if (!hasDatabaseConnection()) return [];
+  const uniqueSkus = Array.from(new Set(skus.map((sku) => sku.trim()).filter(Boolean)));
+  if (!uniqueSkus.length) return [];
+
+  const cartProducts = await db.product.findMany({
+    where: { sku: { in: uniqueSkus }, isActive: true },
+    select: { groupId: true },
+  });
+  const groupIds = Array.from(
+    new Set(cartProducts.map((product) => product.groupId).filter((id): id is string => Boolean(id))),
+  );
+  if (!groupIds.length) return [];
+
+  const rules = await db.recommendationRule.findMany({
+    where: { enabled: true, groupId: { in: groupIds } },
+    include: { products: { include: productInclude } },
+    orderBy: [{ order: "asc" }],
+  });
+
+  const seen = new Set(uniqueSkus);
+  const out: ProductDTO[] = [];
+  for (const rule of rules) {
+    for (const product of rule.products) {
+      if (seen.has(product.sku) || !product.isActive) continue;
+      seen.add(product.sku);
+      out.push(mapProduct(product));
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
 }

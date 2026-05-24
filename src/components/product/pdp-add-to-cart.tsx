@@ -3,13 +3,12 @@
 /**
  * Sticky add-to-cart for the PDP.
  * Desktop: renders as a sticky right-column card.
- * Mobile: renders as a sticky bottom bar (fixed) once scrolled past the hero.
+ * Mobile: renders as a fixed bottom bar so the primary action is never duplicated.
  *
  * Keeps the purchase control visible on desktop and mobile; stock messaging can
  * be layered into the same control when backend availability rules are final.
  */
-import { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useState } from "react";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
@@ -24,18 +23,7 @@ interface PdpAddToCartProps {
 }
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
-  const reduced = useReducedMotion();
-
   const [pickQty, setPickQty] = useState(1);
-  const [showMobile, setShowMobile] = useState(false);
-
-  useEffect(() => {
-    if (variant !== "mobile") return;
-    const onScroll = () => setShowMobile(window.scrollY > 320);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [variant]);
 
   const price = effectiveUnitPrice(product);
   const sale = price.effective;
@@ -85,14 +73,14 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
         className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
       >
         <ShoppingBag className="size-4" aria-hidden />
-        Dodaj u korpu
+        <span className="whitespace-nowrap">Dodaj u korpu</span>
       </button>
     </div>
   );
 
   if (variant === "desktop") {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="hidden flex-col gap-2 md:flex">
         {ctas}
         <p className="text-xs text-ink-500">
           Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} radnih dana
@@ -102,19 +90,8 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   }
   // Mobile sticky bar
   return (
-    <motion.div
-      initial={false}
-      animate={
-        reduced
-          ? { opacity: showMobile ? 1 : 0 }
-          : { y: showMobile ? 0 : 80, opacity: showMobile ? 1 : 0 }
-      }
-      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "bg-surface/95 ring-border/60 fixed inset-x-3 bottom-3 z-40 rounded-2xl px-3 py-2.5 shadow-soft-3 ring-1 backdrop-blur md:hidden",
-        !showMobile && "pointer-events-none",
-      )}
-      aria-hidden={!showMobile}
+    <div
+      className="bg-surface/95 ring-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 rounded-lg px-3 py-2.5 shadow-soft-3 ring-1 backdrop-blur md:hidden"
     >
       <div className="flex items-center gap-3">
         <div className="flex flex-col">
@@ -134,6 +111,6 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
         </div>
         {ctas}
       </div>
-    </motion.div>
+    </div>
   );
 }

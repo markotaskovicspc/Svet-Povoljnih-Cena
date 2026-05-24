@@ -26,6 +26,7 @@ import { getProductBySlug, listProducts } from "@/lib/api/catalog";
 import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
+import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -43,8 +44,6 @@ const slugify = (s: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-
-const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
 
 interface RouteProps {
   params: Promise<{ slug: string }>;
@@ -119,7 +118,7 @@ export default async function ProductPage({ params }: RouteProps) {
       </div>
 
       {/* Row II/III — Hero info pair */}
-      <section className="mx-auto mt-6 grid w-full max-w-[var(--container-page)] gap-10 px-6 md:grid-cols-[1.1fr_1fr] md:gap-12">
+      <section className="mx-auto mt-4 grid w-full max-w-[var(--container-page)] gap-5 px-4 md:mt-6 md:grid-cols-[minmax(0,1fr)_minmax(360px,0.86fr)] md:gap-8 md:px-6">
         {/* Gallery (Row III + IV combined into one stage) */}
         <PdpGallery
           product={product}
@@ -136,9 +135,9 @@ export default async function ProductPage({ params }: RouteProps) {
         />
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="flex flex-col gap-4 md:gap-6">
+        <div className="flex flex-col gap-3 md:self-start">
           <header>
-            <h1 className="font-display text-2xl text-ink-900 md:text-4xl">
+            <h1 className="font-display text-2xl font-bold text-ink-900 md:text-4xl">
               {product.name}
             </h1>
             <p className="mt-2 font-mono text-xs tracking-tight text-ink-500 md:text-sm">
@@ -154,6 +153,13 @@ export default async function ProductPage({ params }: RouteProps) {
 
           {/* Price block — only the effective price is emphasised. */}
           <div>
+            <p className="mb-1 text-xs font-semibold text-ink-500">
+              {price.kind === "loyalty"
+                ? "MP cena"
+                : price.kind === "sale"
+                  ? "Akcijska cena"
+                  : "Cena"}
+            </p>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               {hasReducedPrice ? (
                 <>
@@ -189,43 +195,39 @@ export default async function ProductPage({ params }: RouteProps) {
           {/* Add-to-cart with quantity stepper, moved up directly under price. */}
           <PdpAddToCart product={product} variant="desktop" />
 
-          <ul className="border-border/60 grid grid-cols-1 gap-2 border-t pt-4 text-xs text-ink-700 sm:grid-cols-2 lg:grid-cols-3">
-            {benefitChips.map((benefit) => (
+          <ul className="border-border/60 grid grid-cols-3 gap-2 border-t pt-3 text-xs text-ink-700">
+            {benefitChips.slice(0, 6).map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
-                icon={<PictogramIcon code={benefit.code} className="size-3.5 text-walnut" />}
+                icon={<PictogramIcon code={benefit.code} className="size-4 text-walnut" />}
                 label={benefit.label}
               />
             ))}
           </ul>
+
+          <div className="border-border/60 border-t pt-3">
+            <h2 className="font-display text-xl font-bold text-ink-900 md:text-2xl">
+              Opis proizvoda
+            </h2>
+            <PdpDescription description={cleanDescription} />
+            <div className="mt-3">
+              <PdpInfoLinks
+                sections={{
+                  description: product.description,
+                  deliveryTerms: product.pdpInfo?.deliveryTerms,
+                  declaration: product.pdpInfo?.declaration,
+                  assemblyInstructions: product.pdpInfo?.assemblyInstructions,
+                  maintenance: product.pdpInfo?.maintenance,
+                }}
+              />
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Row VI — Description */}
-      <Reveal>
-        <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
-          <div className="grid gap-8 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] md:items-start md:gap-12">
-            <div>
-              <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-                Opis proizvoda
-              </h2>
-              <PdpDescription description={cleanDescription} />
-            </div>
-            <PdpInfoLinks
-              sections={{
-                deliveryTerms: product.pdpInfo?.deliveryTerms,
-                declaration: product.pdpInfo?.declaration,
-                assemblyInstructions: product.pdpInfo?.assemblyInstructions,
-                maintenance: product.pdpInfo?.maintenance,
-              }}
-            />
-          </div>
-        </section>
-      </Reveal>
-
       {materials.length ? (
         <Reveal>
-          <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-6 md:mt-16">
+          <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-4 md:px-6">
             <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
               Materijali
             </h2>
@@ -306,28 +308,71 @@ const toneClasses = {
 function PdpBadge({ badge }: { badge: Badge }) {
   if (badge.key === "hero") {
     return (
-      <span
-        aria-label={badge.label}
-        className="bg-surface/95 ring-border/70 rounded-full px-1.5 py-1 shadow-soft-1 ring-1 backdrop-blur"
-      >
-        <Image
-          src={HEROJI_MESECA_MARK_SRC}
-          alt={badge.label}
-          width={48}
-          height={40}
-          className="h-8 w-10 object-contain"
-        />
-      </span>
+      <PdpStickerBadge
+        sticker={herojiMesecaIcon}
+        label={badge.label}
+        className="h-11 w-14"
+      />
+    );
+  }
+  if (badge.key === "permanent") {
+    return (
+      <PdpStickerBadge
+        sticker={protectedPricesIcon}
+        label={badge.label}
+        className="h-11 w-14"
+      />
+    );
+  }
+  if (badge.key === "new") {
+    return (
+      <PdpStickerBadge
+        sticker={{ url: "/brand/promo-stickers/novo.svg", alt: "Novo", width: 600, height: 600 }}
+        label={badge.label}
+        className="size-11"
+      />
+    );
+  }
+  if (badge.key === "limited" || badge.key === "dtz") {
+    return (
+      <PdpStickerBadge
+        sticker={{ url: "/brand/promo-stickers/dtz2.svg", alt: "Dok traju zalihe", width: 1536, height: 1024 }}
+        label={badge.label}
+        className="h-10 w-16"
+      />
     );
   }
   return (
     <span
       className={cn(
-        "rounded-full px-2.5 py-1 text-[11px] leading-none font-medium tracking-tight shadow-soft-1",
-        toneClasses[badge.tone],
+        "grid size-11 place-items-center rounded-full text-xs leading-none font-black text-white shadow-soft-1",
+        badge.key === "discount" ? "bg-action" : toneClasses[badge.tone],
       )}
     >
       {badge.label}
+    </span>
+  );
+}
+
+function PdpStickerBadge({
+  sticker,
+  label,
+  className,
+}: {
+  sticker: { url: string; alt?: string; width?: number; height?: number };
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span aria-label={label ?? sticker.alt} className={cn("flex items-center justify-center", className)}>
+      <Image
+        src={sticker.url}
+        alt={label ?? sticker.alt ?? ""}
+        width={sticker.width ?? 96}
+        height={sticker.height ?? 96}
+        unoptimized
+        className="h-full w-full object-contain"
+      />
     </span>
   );
 }
@@ -344,9 +389,9 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 inline-flex min-h-8 items-center gap-2 rounded-full px-3 py-1.5 leading-tight ring-1 shadow-soft-1">
+    <li className="bg-surface ring-border/60 flex aspect-square min-h-0 flex-col items-center justify-center gap-1 rounded-lg p-2 text-center leading-tight ring-1 shadow-soft-1">
       {icon}
-      <span>{label}</span>
+      <span className="line-clamp-2 text-[11px]">{label}</span>
     </li>
   );
 }

@@ -109,23 +109,23 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[160px] object-contain min-[390px]:w-[180px]"
+              className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
             />
           </div>
         </Link>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0">
           <Link
             href="/nalog"
             aria-label="Moj nalog"
-            className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+            className="inline-flex size-9 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
           >
-            <User2 className="size-5" aria-hidden />
+            <User2 className="size-4" aria-hidden />
           </Link>
           <WishlistButton
             openDrawerOnClick={false}
-            className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40"
+            className="size-9 text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40 [&_svg]:size-4"
           />
-          <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
+          <CartButton className="size-9 text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40 [&_svg]:size-4" />
         </div>
       </div>
     </motion.header>

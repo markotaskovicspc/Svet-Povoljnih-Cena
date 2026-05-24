@@ -25,11 +25,11 @@ export function ContentHero({
   return (
     <header className="bg-muted-bg/60 border-border/60 border-b">
       <div className="mx-auto w-full max-w-[var(--container-content)] px-6 py-16 md:py-24">
-        <h1 className="font-display text-4xl text-ink-900 md:text-6xl">
+        <h1 className="font-display text-4xl font-bold text-ink-900 md:text-6xl">
           {title}
         </h1>
         {lead ? (
-          <p className="mt-5 max-w-[60ch] text-lg leading-relaxed text-ink-700 md:text-xl">
+          <p className="mt-5 max-w-[60ch] text-justify text-lg leading-relaxed text-ink-700 md:text-xl">
             {lead}
           </p>
         ) : null}
@@ -55,7 +55,7 @@ export function ContentBody({
       className={cn(
         "mx-auto w-full max-w-[72ch] px-6 py-16 text-ink-700 md:py-24",
         // Local prose-like rules — we don't ship @tailwindcss/typography yet.
-        "[&_p]:mt-4 [&_p]:leading-relaxed",
+        "[&_p]:mt-4 [&_p]:text-justify [&_p]:leading-relaxed",
         "[&_ul]:mt-4 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-5",
         "[&_ol]:mt-4 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-5",
         "[&_a]:text-walnut [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:opacity-80",
@@ -79,7 +79,7 @@ export function ContentSection({
 }) {
   return (
     <section id={id} className="scroll-mt-28 pt-10 first:pt-0">
-      <h2 className="font-display text-2xl text-ink-900 md:text-3xl">{title}</h2>
+      <h2 className="font-display text-2xl font-bold text-brand-blue md:text-3xl">{title}</h2>
       <div className="mt-2">{children}</div>
     </section>
   );

@@ -69,7 +69,7 @@ export function SectionRail({
   const showBanner = Boolean(banner && !minimalHeader);
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-6 md:px-6 md:py-20">
+    <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-5 md:px-6 md:py-10">
       {showBanner && banner ? <SectionBanner banner={banner} href={href} /> : null}
 
       <header
@@ -102,14 +102,14 @@ export function SectionRail({
             )}
           >
             {titleIcon ? (
-              <span className="bg-surface ring-border/60 flex size-12 shrink-0 items-center justify-center rounded-lg ring-1 shadow-soft-1 md:size-16">
+              <span className="flex size-11 shrink-0 items-center justify-center md:size-14">
                 <Image
                   src={titleIcon.url}
                   alt={titleIcon.alt ?? ""}
                   width={titleIcon.width ?? 80}
                   height={titleIcon.height ?? 80}
                   unoptimized={titleIcon.url.endsWith(".svg")}
-                  className="max-h-[76%] max-w-[76%] object-contain"
+                  className="max-h-full max-w-full object-contain"
                 />
               </span>
             ) : LucideIcon ? (
@@ -134,7 +134,7 @@ export function SectionRail({
         </motion.div>
         <Link
           href={href}
-          className="hover:text-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-1 text-sm font-medium text-ink-900 transition focus-visible:rounded-full focus-visible:ring-2 focus-visible:outline-none"
+          className="hover:text-walnut focus-visible:ring-walnut/40 ml-auto inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-ink-900 transition focus-visible:rounded-full focus-visible:ring-2 focus-visible:outline-none"
         >
           {ctaLabel}
           <ArrowRight className="size-4" aria-hidden />
@@ -143,7 +143,7 @@ export function SectionRail({
 
       <div
         ref={railRef}
-        className="relative -mx-4 mt-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:mt-8 md:px-6 [&::-webkit-scrollbar]:hidden"
+        className="relative -mx-4 mt-3 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:mt-5 md:px-6 [&::-webkit-scrollbar]:hidden"
       >
         <DragHint scopeRef={railRef} />
         <motion.ul
@@ -154,7 +154,7 @@ export function SectionRail({
             hidden: {},
             show: { transition: { staggerChildren: 0.05 } },
           }}
-          className="flex snap-x snap-mandatory gap-3 pb-2 md:gap-6"
+          className="flex snap-x snap-mandatory gap-3 pb-2 md:gap-4"
         >
           {products.map((p) => (
             <motion.li
@@ -167,7 +167,7 @@ export function SectionRail({
                   transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
                 },
               }}
-              className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_96px)/5)] md:min-w-[190px] lg:w-[calc((100%_-_96px)/5)]"
+              className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_80px)/5)] md:min-w-[180px] 2xl:w-[calc((100%_-_80px)/6)]"
             >
               <ProductCard
                 product={p}

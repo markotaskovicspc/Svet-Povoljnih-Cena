@@ -162,18 +162,17 @@ export const getActiveTabs = cache(async (): Promise<Tab[]> => {
     const rows = await db.tab.findMany({
       where: { enabled: true },
       orderBy: [{ order: "asc" }, { label: "asc" }],
-      take: 6,
     });
 
     if (!rows.length) return headerTabs;
 
-    return rows.map((row) => ({
-      id: row.id,
-      label: row.label,
-      href: row.href,
-      order: row.order,
-      icon: row.icon ?? undefined,
-    }));
+    return headerTabs.map((tab) => {
+      const row = rows.find((candidate) => candidate.id === tab.id || candidate.href === tab.href);
+      return {
+        ...tab,
+        icon: row?.icon ?? tab.icon,
+      };
+    });
   } catch (error) {
     console.error("Failed to load active tabs", error);
     return headerTabs;

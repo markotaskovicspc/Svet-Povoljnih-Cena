@@ -215,7 +215,7 @@
   }
   h1, h2, h3, h4, h5, .font-display {
     font-family: var(--font-display), Georgia, "Times New Roman", serif;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     line-height: 1.15;
   }
   .font-logo {

@@ -1,44 +1,41 @@
 import { HeroCarousel } from "@/components/home/hero-carousel";
 import { SectionRail } from "@/components/home/section-rail";
-import { EditorialBanner } from "@/components/home/editorial-banner";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
-import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { UspStrip } from "@/components/home/usp-strip";
 import {
   getActiveBanners,
-  getActiveTabs,
-  getEditorialBanner,
   getProtectedPricesBanner,
 } from "@/lib/storefront/content";
 import { listProducts } from "@/lib/api/catalog";
 import {
   akcijaIcon,
-  campaignStickers,
   herojiMesecaIcon,
-  type CampaignStickerKey,
+  under999CampaignSticker,
 } from "@/data/campaign-icons";
 
 export default async function Home() {
-  const [banners, tabs, editorial, protectedBanner] = await Promise.all([
+  const [banners, protectedBanner] = await Promise.all([
     getActiveBanners(),
-    getActiveTabs(),
-    getEditorialBanner(),
     getProtectedPricesBanner(),
   ]);
-  const [heroes, monthly, weekly] = await Promise.all([
-    listProducts({ heroOnly: true, limit: 12 }),
+  const [monthly, heroes, under999] = await Promise.all([
     listProducts({ actionSlug: "akcija", limit: 12 }),
-    listProducts({ actionSlug: "nedeljna-akcija", limit: 12 }),
+    listProducts({ heroOnly: true, limit: 12 }),
+    listProducts({ maxPrice: 999, limit: 12 }),
   ]);
-
-  // "Ostali tabovi" — tabs not already covered by the dedicated rails above.
-  const coveredIds = new Set(["mesecna-akcija", "heroji-meseca", "nedeljna-akcija"]);
-  const otherTabs = tabs.filter((t) => !coveredIds.has(t.id));
 
   return (
     <>
       <HeroCarousel banners={banners} />
-      <ShortcutStrip tabs={tabs} />
+
+      <SectionRail
+        title="Mesečna akcija"
+        icon={akcijaIcon}
+        campaignSticker="action"
+        href="/akcija"
+        products={monthly.items}
+        minimalHeader
+      />
 
       <SectionRail
         title="Heroji meseca"
@@ -51,108 +48,15 @@ export default async function Home() {
       <ProtectedPricesBand banner={protectedBanner} />
 
       <SectionRail
-        title="Mesečna akcija"
-        icon={akcijaIcon}
-        campaignSticker="action"
-        href="/akcija"
-        products={monthly.items}
+        title="Sve do 999"
+        icon={under999CampaignSticker}
+        campaignSticker="under999"
+        href="/sve-do-999"
+        products={under999.items}
         minimalHeader
       />
-
-      <EditorialBanner banner={editorial} />
-
-      <SectionRail
-        title="Nedeljna akcija"
-        icon={akcijaIcon}
-        campaignSticker="action"
-        href="/nedeljna-akcija"
-        products={weekly.items}
-        minimalHeader
-      />
-
-      {(
-        await Promise.all(
-          otherTabs.map(async (tab) => ({
-            tab,
-            list: await productsForTab(tab.href),
-          })),
-        )
-      ).map(({ tab, list }) => {
-        if (!list.length) return null;
-        return (
-          <SectionRail
-            key={tab.id}
-            title={tab.label}
-            icon={sectionIconAsset(tab.href)}
-            iconName={sectionIconName(tab.icon, tab.href)}
-            campaignSticker={sectionCampaignSticker(tab.href)}
-            href={tab.href}
-            products={list}
-            minimalHeader
-          />
-        );
-      })}
 
       <UspStrip />
     </>
   );
-}
-
-const sectionIconByHref: Record<string, string> = {
-  "/akcija": "Tag",
-  "/nedeljna-akcija": "CalendarDays",
-  "/heroji-meseca": "Crown",
-  "/ogranicena-ponuda": "Hourglass",
-  "/sve-do-999": "ShieldCheck",
-  "/specijalne-ponude": "Sparkles",
-  "/svet-akcija": "Rows3",
-};
-
-const sectionStickerByHref: Partial<Record<string, CampaignStickerKey>> = {
-  "/akcija": "action",
-  "/nedeljna-akcija": "action",
-  "/novo": "new",
-  "/ogranicena-ponuda": "limited",
-  "/sve-do-999": "under999",
-};
-
-const supportedSectionIcons = new Set([
-  "CalendarDays",
-  "Crown",
-  "Hourglass",
-  "Rows3",
-  "ShieldCheck",
-  "Sparkles",
-  "Tag",
-]);
-
-function sectionIconName(icon: string | undefined, href: string) {
-  if (icon && supportedSectionIcons.has(icon)) return icon;
-  return sectionIconByHref[href];
-}
-
-function sectionCampaignSticker(href: string) {
-  return sectionStickerByHref[href];
-}
-
-function sectionIconAsset(href: string) {
-  const sticker = sectionCampaignSticker(href);
-  return sticker ? campaignStickers[sticker] : undefined;
-}
-
-async function productsForTab(href: string) {
-  if (href === "/novo") return (await listProducts({ newOnly: true, limit: 12 })).items;
-  if (href === "/outlet") return (await listProducts({ outletOnly: true, limit: 12 })).items;
-  if (href === "/nedeljna-akcija") {
-    return (await listProducts({ actionSlug: "nedeljna-akcija", limit: 12 })).items;
-  }
-  if (href === "/heroji-meseca") return (await listProducts({ heroOnly: true, limit: 12 })).items;
-  if (href === "/sve-do-999") return (await listProducts({ maxPrice: 999, limit: 12 })).items;
-  if (href === "/ogranicena-ponuda") {
-    return (await listProducts({ limitedOnly: true, limit: 12 })).items;
-  }
-  if (href.startsWith("/k/")) {
-    return (await listProducts({ categoryPath: href.slice(2), limit: 12 })).items;
-  }
-  return [];
 }

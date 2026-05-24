@@ -10,7 +10,7 @@
  */
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Box,
   ChevronDown,
@@ -19,7 +19,6 @@ import {
   ChevronUp,
   Play,
   X,
-  ZoomIn,
 } from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
@@ -39,8 +38,6 @@ interface PdpGalleryProps {
 }
 
 export function PdpGallery({ product, badges }: PdpGalleryProps) {
-  const reduced = useReducedMotion();
-
   const slides = useMemo<Slide[]>(() => {
     const out: Slide[] = product.media.images.map((asset) => ({
       kind: "image" as const,
@@ -53,7 +50,6 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
 
   const [active, setActive] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [zoom, setZoom] = useState({ on: false, x: 50, y: 50 });
   const mobileTrackRef = useRef<HTMLDivElement | null>(null);
   const desktopTrackRef = useRef<HTMLDivElement | null>(null);
   const thumbTrackRef = useRef<HTMLUListElement | null>(null);
@@ -108,17 +104,6 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     setActive(Math.max(0, Math.min(index, slides.length - 1)));
   }, [slides.length]);
 
-  const handleMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (slide?.kind !== "image") return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      setZoom({ on: true, x, y });
-    },
-    [slide?.kind],
-  );
-
   if (!slide) return null;
 
   return (
@@ -129,7 +114,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           <div
             ref={mobileTrackRef}
             onScroll={() => syncTrackActive(mobileTrackRef.current)}
-            className="flex touch-pan-x snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-2xl bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex touch-pan-x snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-lg bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -137,7 +122,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               <div
                 key={`${s.kind}-mobile-${index}`}
                 data-slide-index={index}
-                className="relative aspect-[4/5] min-w-full snap-center"
+                className="relative aspect-square min-w-full snap-center"
               >
                 {s.kind === "image" ? (
                   <Image
@@ -170,7 +155,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             ))}
           </div>
           {badges ? (
-            <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+            <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
             </div>
           ) : null}
@@ -196,7 +181,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           <div
             ref={desktopTrackRef}
             onScroll={() => syncTrackActive(desktopTrackRef.current)}
-            className="bg-white ring-border/60 flex h-[min(72vh,680px)] min-h-[420px] w-full snap-x snap-mandatory overflow-x-auto rounded-2xl ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="bg-white ring-border/60 flex h-[min(65vh,620px)] min-h-[360px] w-full snap-x snap-mandatory overflow-x-auto rounded-lg ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -204,18 +189,16 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               <div
                 key={`${s.kind}-desktop-${index}`}
                 data-slide-index={index}
-                onMouseMove={index === active ? handleMove : undefined}
-                onMouseLeave={() => setZoom((z) => ({ ...z, on: false }))}
                 onClick={() => {
                   setActive(index);
                   if (s.kind === "image") setLightboxOpen(true);
                 }}
                 className={cn(
                   "relative min-w-full snap-center",
-                  s.kind === "image" ? "cursor-zoom-in" : "cursor-default",
+                  s.kind === "image" ? "cursor-pointer" : "cursor-default",
                 )}
                 role={s.kind === "image" ? "button" : undefined}
-                aria-label={s.kind === "image" ? "Uvećaj sliku" : undefined}
+                aria-label={s.kind === "image" ? "Otvori sliku" : undefined}
               >
                 {s.kind === "image" ? (
                   <>
@@ -237,24 +220,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                         placeholder="blur"
                         blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
                         className="object-contain p-4"
-                        style={
-                          index === active && zoom.on && !reduced
-                            ? {
-                                transformOrigin: `${zoom.x}% ${zoom.y}%`,
-                                transform: "scale(1.6)",
-                                transition: "transform 120ms ease-out",
-                              }
-                            : { transition: "transform 200ms ease-out" }
-                        }
                       />
                     </motion.div>
-                    <div
-                      aria-hidden
-                      className="from-ink-900/12 pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t to-transparent"
-                    />
-                    <span className="bg-surface/85 text-ink-700 ring-border/60 absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] ring-1 backdrop-blur">
-                      <ZoomIn className="size-3.5" aria-hidden /> Uvećaj
-                    </span>
                   </>
                 ) : s.kind === "video" ? (
                   <div className="grid h-full w-full place-items-center">
@@ -281,7 +248,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           </div>
 
           {badges ? (
-            <div className="pointer-events-none absolute top-3 left-3 flex max-w-[70%] flex-col items-start gap-1">
+            <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
             </div>
           ) : null}

@@ -16,46 +16,25 @@ export const promoBar: PromoBar = {
 export const headerTabs: Tab[] = [
   { id: "mesecna-akcija", label: "Mesečna akcija", href: "/akcija", order: 1, icon: "Tag" },
   {
-    id: "nedeljna-akcija",
-    label: "Nedeljna akcija",
-    href: "/nedeljna-akcija",
-    order: 2,
-    icon: "CalendarDays",
-  },
-  {
     id: "heroji-meseca",
     label: "Heroji meseca",
     href: "/heroji-meseca",
-    order: 3,
+    order: 2,
     icon: "Crown",
   },
   {
-    id: "ogranicena-ponuda",
-    label: "Dok traju zalihe",
-    href: "/ogranicena-ponuda",
-    order: 4,
-    icon: "Hourglass",
+    id: "niske-cene-pod-zastitom",
+    label: "Trajno niskom cenom",
+    href: "/niske-cene-pod-zastitom",
+    order: 3,
+    icon: "ShieldCheck",
   },
   {
     id: "sve-do-999",
     label: "Sve do 999",
     href: "/sve-do-999",
-    order: 5,
+    order: 4,
     icon: "ShieldCheck",
-  },
-  {
-    id: "specijalne-ponude",
-    label: "Specijalne ponude",
-    href: "/specijalne-ponude",
-    order: 6,
-    icon: "Sparkles",
-  },
-  {
-    id: "svet-akcija-katalog",
-    label: "Katalog",
-    href: "/svet-akcija",
-    order: 7,
-    icon: "Rows3",
   },
 ];
 
@@ -137,12 +116,10 @@ export const footerColumns: { title: string; links: { label: string; href: strin
   {
     title: "Kupovina",
     links: [
-      { label: "Akcija", href: "/akcija" },
-      { label: "Nedeljna akcija", href: "/nedeljna-akcija" },
+      { label: "Mesečna akcija", href: "/akcija" },
       { label: "Heroji meseca", href: "/heroji-meseca" },
       { label: "Niske cene pod trajnom zaštitom", href: "/niske-cene-pod-zastitom" },
-      { label: "Outlet", href: "/outlet" },
-      { label: "Novo", href: "/novo" },
+      { label: "Sve do 999", href: "/sve-do-999" },
     ],
   },
   {

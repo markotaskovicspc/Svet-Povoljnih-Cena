@@ -5,15 +5,16 @@ export type PromoTabIconKey =
   | "mesecna-akcija"
   | "nedeljna-akcija"
   | "heroji-meseca"
+  | "niske-cene-pod-zastitom"
   | "ogranicena-ponuda"
   | "sve-do-999"
   | "specijalne-ponude";
 
 export const actionCampaignSticker: MediaAsset = {
-  url: "/brand/promo-stickers/heroj-akcije.svg",
+  url: "/brand/promo-stickers/akcija.svg",
   alt: "Akcija",
-  width: 4169,
-  height: 3563,
+  width: 600,
+  height: 600,
 };
 
 export const newCampaignSticker: MediaAsset = {
@@ -64,7 +65,8 @@ export const promoTabIcons: Partial<Record<PromoTabIconKey, MediaAsset>> = {
   "mesecna-akcija": akcijaIcon,
   "nedeljna-akcija": akcijaIcon,
   "heroji-meseca": herojiMesecaIcon,
+  "niske-cene-pod-zastitom": protectedPricesIcon,
   "ogranicena-ponuda": limitedCampaignSticker,
   "sve-do-999": under999CampaignSticker,
-  "specijalne-ponude": akcijaIcon,
+  "specijalne-ponude": protectedPricesIcon,
 };

@@ -3,16 +3,22 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-export type PdpInfoKey = "deliveryTerms" | "declaration" | "assemblyInstructions" | "maintenance";
+export type PdpInfoKey =
+  | "description"
+  | "deliveryTerms"
+  | "declaration"
+  | "assemblyInstructions"
+  | "maintenance";
 
 const LABELS: Record<PdpInfoKey, string> = {
+  description: "Opis proizvoda",
   deliveryTerms: "Uslovi isporuke",
   declaration: "Deklaracija",
   assemblyInstructions: "Uputstvo za sastavljanje",
@@ -30,7 +36,7 @@ export function PdpInfoLinks({
     content: sections[key]?.trim() || defaultContent(key),
   }));
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<PdpInfoKey>("deliveryTerms");
+  const [expanded, setExpanded] = useState<PdpInfoKey>("description");
 
   function show(key: PdpInfoKey) {
     setExpanded(key);
@@ -56,14 +62,17 @@ export function PdpInfoLinks({
         ))}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl bg-white p-0">
-          <DialogHeader className="border-border/60 border-b px-5 pt-5 pb-4">
-            <DialogTitle className="font-display text-xl text-ink-900">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          className="h-[100dvh] w-[92vw] max-w-none gap-0 bg-white p-0 data-[side=right]:w-[92vw] data-[side=right]:sm:max-w-none md:data-[side=right]:w-[min(52vw,46rem)]"
+        >
+          <SheetHeader className="border-border/60 border-b px-5 pt-5 pb-4">
+            <SheetTitle className="font-display text-xl font-bold text-ink-900">
               Informacije o proizvodu
-            </DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto p-5">
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-5">
             {items.map((item) => {
               const isExpanded = expanded === item.key;
               return (
@@ -72,7 +81,7 @@ export function PdpInfoLinks({
                     type="button"
                     onClick={() => setExpanded(item.key)}
                     aria-expanded={isExpanded}
-                    className="flex w-full items-center justify-between gap-3 py-4 text-left text-sm font-semibold text-ink-900"
+                    className="flex w-full items-center justify-between gap-3 py-4 text-left text-sm font-bold text-ink-900"
                   >
                     {item.label}
                     <ChevronDown
@@ -81,22 +90,22 @@ export function PdpInfoLinks({
                     />
                   </button>
                   {isExpanded ? (
-                    <div className="pb-4 text-sm leading-relaxed whitespace-pre-line text-ink-700">
-                      {item.content}
-                    </div>
+                    <RichText content={item.content} />
                   ) : null}
                 </section>
               );
             })}
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
 
 function defaultContent(key: PdpInfoKey) {
   switch (key) {
+    case "description":
+      return "Opis proizvoda će biti prikazan čim se unese u administraciji.";
     case "deliveryTerms":
       return "Rok i način isporuke zavise od adrese, raspoloživosti artikla i izabranog načina dostave. Konačan obračun prikazuje se u checkout-u.";
     case "declaration":
@@ -106,4 +115,21 @@ function defaultContent(key: PdpInfoKey) {
     case "maintenance":
       return "Održavajte proizvod prema materijalu i nameni. Koristite blaga sredstva i izbegavajte abrazivne površine.";
   }
+}
+
+function RichText({ content }: { content: string }) {
+  const hasMarkup = /<\/?[a-z][\s\S]*>/i.test(content);
+  if (hasMarkup) {
+    return (
+      <div
+        className="pb-4 text-justify text-sm leading-relaxed text-ink-700 [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+  return (
+    <div className="pb-4 text-justify text-sm leading-relaxed whitespace-pre-line text-ink-700">
+      {content}
+    </div>
+  );
 }
