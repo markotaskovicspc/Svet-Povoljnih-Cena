@@ -113,7 +113,7 @@ export default async function ProductPage({ params }: RouteProps) {
   return (
     <article className="bg-canvas pb-24 md:pb-16">
       {/* Row I — Breadcrumbs */}
-      <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6">
+      <div className="mx-auto w-full max-w-[var(--container-page)] px-4 pt-6 md:px-6">
         <Breadcrumbs trail={trail} />
       </div>
 
@@ -389,7 +389,7 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 flex aspect-square min-h-0 flex-col items-center justify-center gap-1 rounded-lg p-2 text-center leading-tight ring-1 shadow-soft-1">
+    <li className="bg-surface ring-border/60 flex aspect-[10/7] min-h-0 flex-col items-center justify-center gap-0.5 rounded-lg p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/49]">
       {icon}
       <span className="line-clamp-2 text-[11px]">{label}</span>
     </li>

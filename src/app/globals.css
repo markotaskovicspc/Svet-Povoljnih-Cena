@@ -205,6 +205,7 @@
     font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
   body {
     @apply bg-background text-foreground;
@@ -212,6 +213,7 @@
        looked broken in Serbian copy ("ja", "kupcima", "izaberi"). cv11 swaps
        the single-storey "a"; cv05 swaps "j" to a flatter, more legible form. */
     font-feature-settings: "cv05", "cv11", "ss03";
+    overflow-x: clip;
   }
   h1, h2, h3, h4, h5, .font-display {
     font-family: var(--font-display), Georgia, "Times New Roman", serif;
