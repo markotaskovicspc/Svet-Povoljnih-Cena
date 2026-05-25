@@ -6,7 +6,7 @@
  */
 import type { Product } from "@/types";
 
-export const LISTING_PAGE_SIZE = 300;
+export const LISTING_PAGE_SIZE = 36;
 
 export type SortKey = "default" | "price-asc" | "price-desc" | "discount-desc";
 

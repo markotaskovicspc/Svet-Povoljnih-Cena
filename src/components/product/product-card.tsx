@@ -2,13 +2,11 @@
 
 /**
  * Product card — Phase 1C polish.
- * Adds: horizontal image rail, image badges,
- * qty-stepper morph from "Dodaj u korpu" button when item is in cart, blur placeholder,
+ * Adds: image badges, qty-stepper morph from "Dodaj u korpu" button when item is in cart, blur placeholder,
  * skeleton loading variant, reduced-motion friendly micro-interactions.
  */
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
@@ -33,7 +31,7 @@ import {
 interface ProductCardProps {
   product: Product;
   className?: string;
-  /** Used to size the next/image inside snap rails. */
+  /** Preload the cover image for above-the-fold cards. */
   priority?: boolean;
   /** Contextual promo sticker inherited from the current rail/listing. */
   campaignSticker?: CampaignStickerKey;
@@ -62,8 +60,6 @@ export function ProductCard({
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggle);
   const setQty = useCart((s) => s.setQty);
-  const [activeImage, setActiveImage] = useState(0);
-  const imageTrackRef = useRef<HTMLDivElement | null>(null);
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
@@ -91,13 +87,6 @@ export function ProductCard({
     commitAddToCart(product);
   }
 
-  const syncActiveImage = useCallback(() => {
-    const track = imageTrackRef.current;
-    if (!track) return;
-    const next = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-    setActiveImage(Math.max(0, Math.min(next, images.length - 1)));
-  }, [images.length]);
-
   return (
     <motion.article
       {...hoverProps}
@@ -112,32 +101,6 @@ export function ProductCard({
         aria-label={`${product.name} — pregled proizvoda`}
         className="focus-visible:ring-walnut/40 relative block aspect-square overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
       >
-        {images.length > 1 ? (
-          <div
-            ref={imageTrackRef}
-            onScroll={syncActiveImage}
-            className="flex h-full snap-x snap-mandatory overflow-x-auto bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {images.map((image, index) => (
-              <span
-                key={`${image.url}-${index}`}
-                data-card-image={index}
-                className="relative block h-full min-w-full snap-center"
-              >
-                <Image
-                  src={image.url}
-                  alt={image.alt ?? product.name}
-                  fill
-                  sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
-                  priority={priority && index === 0}
-                  placeholder="blur"
-                  blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
-                  className="object-contain p-2.5"
-                />
-              </span>
-            ))}
-          </div>
-        ) : null}
         {/*
          * `layoutId` bridges this image to the PDP hero image (Phase 1H.2).
          * Framer Motion morphs between the two when navigating to /p/[slug],
@@ -145,7 +108,7 @@ export function ProductCard({
          */}
         <motion.div
           layoutId={`product-cover-${product.sku}`}
-          className={cn("absolute inset-0", images.length > 1 && "hidden")}
+          className="absolute inset-0"
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           {cover ? (
@@ -174,12 +137,6 @@ export function ProductCard({
               <ProductBadge key={b.key} badge={b} />
             ))}
           </div>
-        ) : null}
-        {images.length > 1 ? (
-          <ProductImageIndicators
-            count={images.length}
-            active={activeImage}
-          />
         ) : null}
       </Link>
 
@@ -381,29 +338,6 @@ function MobileCartControl({
           <span className="whitespace-nowrap">Dodaj u korpu</span>
         </button>
       )}
-    </div>
-  );
-}
-
-function ProductImageIndicators({
-  count,
-  active,
-}: {
-  count: number;
-  active: number;
-}) {
-  return (
-    <div className="pointer-events-none absolute right-2 bottom-2 flex items-center gap-1">
-      {Array.from({ length: count }, (_, index) => (
-        <span
-          key={index}
-          aria-hidden
-          className={cn(
-            "h-1.5 rounded-full bg-ink-300/70 transition-all",
-            index === active ? "w-6 bg-ink-900" : "w-1.5",
-          )}
-        />
-      ))}
     </div>
   );
 }

@@ -26,6 +26,9 @@ const supabaseImagePattern = getSupabaseImagePattern();
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   images: {
+    // Keep storefront media on direct CDN URLs so Vercel does not spend
+    // Image Optimization transformations on every product thumbnail variant.
+    unoptimized: true,
     remotePatterns: [
       // Phase 1 mocks. Replaced by the supplier cloud base URL in Phase 4.
       { protocol: "https", hostname: "placehold.co" },
