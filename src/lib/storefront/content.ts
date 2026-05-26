@@ -166,13 +166,13 @@ export const getActiveTabs = cache(async (): Promise<Tab[]> => {
 
     if (!rows.length) return headerTabs;
 
-    return headerTabs.map((tab) => {
-      const row = rows.find((candidate) => candidate.id === tab.id || candidate.href === tab.href);
-      return {
-        ...tab,
-        icon: row?.icon ?? tab.icon,
-      };
-    });
+    return rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      href: row.href,
+      order: row.order,
+      icon: row.icon ?? undefined,
+    }));
   } catch (error) {
     console.error("Failed to load active tabs", error);
     return headerTabs;

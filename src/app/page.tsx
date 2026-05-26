@@ -1,9 +1,11 @@
 import { HeroCarousel } from "@/components/home/hero-carousel";
+import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { SectionRail } from "@/components/home/section-rail";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import { UspStrip } from "@/components/home/usp-strip";
 import {
   getActiveBanners,
+  getActiveTabs,
   getProtectedPricesBanner,
 } from "@/lib/storefront/content";
 import { listProducts } from "@/lib/api/catalog";
@@ -14,9 +16,10 @@ import {
 } from "@/data/campaign-icons";
 
 export default async function Home() {
-  const [banners, protectedBanner] = await Promise.all([
+  const [banners, protectedBanner, activeTabs] = await Promise.all([
     getActiveBanners(),
     getProtectedPricesBanner(),
+    getActiveTabs(),
   ]);
   const [monthly, heroes, under999] = await Promise.all([
     listProducts({ actionSlug: "akcija", limit: 12 }),
@@ -27,6 +30,9 @@ export default async function Home() {
   return (
     <>
       <HeroCarousel banners={banners} />
+      <div className="md:hidden">
+        <ShortcutStrip tabs={activeTabs} />
+      </div>
 
       <SectionRail
         title="Mesečna akcija"
