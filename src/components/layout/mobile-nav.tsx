@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { motion, AnimatePresence } from "framer-motion";
 import { primaryNav, type NavNode } from "@/data/site";
-import { promoTabIcons } from "@/data/campaign-icons";
+import { getPromoTabPresentation } from "@/data/campaign-icons";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
@@ -236,13 +236,16 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                     <div className="border-y border-brand-blue/10 bg-brand-blue px-4 py-5">
                       <ul className="grid grid-cols-2 gap-3">
                         {tabs.map((t) => {
-                          const isActive = pathname === t.href;
-                          const Icon = tabIcons[t.id as keyof typeof tabIcons] ?? Sparkles;
-                          const iconAsset = promoTabIcons[t.id as keyof typeof promoTabIcons];
+                          const promoTab = getPromoTabPresentation(t);
+                          const isActive = pathname === promoTab.href;
+                          const Icon =
+                            tabIcons[(promoTab.iconKey ?? promoTab.id) as keyof typeof tabIcons] ??
+                            Sparkles;
+                          const iconAsset = promoTab.iconAsset;
                           return (
                             <li key={t.id}>
                               <Link
-                                href={t.href}
+                                href={promoTab.href}
                                 onClick={close}
                                 className={cn(
                                   "flex min-h-14 items-center gap-3 rounded-md border border-white/20 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none",
@@ -268,7 +271,9 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                     <Icon className="size-4" aria-hidden />
                                   )}
                                 </span>
-                                <span className="min-w-0 leading-tight break-words">{t.label}</span>
+                                <span className="min-w-0 leading-tight break-words">
+                                  {promoTab.label}
+                                </span>
                               </Link>
                             </li>
                           );

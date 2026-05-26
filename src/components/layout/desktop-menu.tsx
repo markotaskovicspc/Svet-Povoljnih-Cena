@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { primaryNav, type NavNode } from "@/data/site";
-import { promoTabIcons } from "@/data/campaign-icons";
+import { getPromoTabPresentation } from "@/data/campaign-icons";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
@@ -141,12 +141,13 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
           {stack.length === 1 ? (
             <ul className="mt-3 border-t border-border">
               {tabs.map((tab) => {
-                const isActive = pathname === tab.href;
-                const iconAsset = promoTabIcons[tab.id as keyof typeof promoTabIcons];
+                const promoTab = getPromoTabPresentation(tab);
+                const isActive = pathname === promoTab.href;
+                const iconAsset = promoTab.iconAsset;
                 return (
                   <li key={tab.id} className="border-b border-border">
                     <Link
-                      href={tab.href}
+                      href={promoTab.href}
                       onClick={close}
                       className={cn(
                         "flex min-h-13 items-center justify-between gap-4 px-5 py-3.5 text-sm font-medium text-ink-700 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
@@ -166,7 +167,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                             />
                           </span>
                         ) : null}
-                        <span className="min-w-0 break-words">{tab.label}</span>
+                        <span className="min-w-0 break-words">{promoTab.label}</span>
                       </span>
                       <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
                     </Link>

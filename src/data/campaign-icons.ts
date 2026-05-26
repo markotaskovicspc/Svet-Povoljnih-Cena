@@ -1,4 +1,4 @@
-import type { MediaAsset } from "@/types";
+import type { MediaAsset, Tab } from "@/types";
 
 export type CampaignStickerKey = "action" | "new" | "under999" | "limited";
 export type PromoTabIconKey =
@@ -70,3 +70,62 @@ export const promoTabIcons: Partial<Record<PromoTabIconKey, MediaAsset>> = {
   "sve-do-999": under999CampaignSticker,
   "specijalne-ponude": protectedPricesIcon,
 };
+
+export interface PromoTabPresentation extends Tab {
+  iconAsset?: MediaAsset;
+  iconKey?: PromoTabIconKey;
+}
+
+const promoTabKeyByHref: Record<string, PromoTabIconKey> = {
+  "/akcija": "mesecna-akcija",
+  "/nedeljna-akcija": "nedeljna-akcija",
+  "/heroji-meseca": "heroji-meseca",
+  "/niske-cene-pod-zastitom": "niske-cene-pod-zastitom",
+  "/ogranicena-ponuda": "ogranicena-ponuda",
+  "/sve-do-999": "sve-do-999",
+  "/specijalne-ponude": "specijalne-ponude",
+};
+
+const promoTabKeyByLabel: Record<string, PromoTabIconKey> = {
+  evonek: "heroji-meseca",
+  "heroji meseca": "heroji-meseca",
+  "mesecna akcija": "mesecna-akcija",
+  "dok traju zalihe": "ogranicena-ponuda",
+  "trajno niske cene": "niske-cene-pod-zastitom",
+  "niske cene pod trajnom zastitom": "niske-cene-pod-zastitom",
+  "sve do 999": "sve-do-999",
+};
+
+const canonicalPromoTabByKey: Partial<Record<PromoTabIconKey, Pick<Tab, "label" | "href">>> = {
+  "heroji-meseca": { label: "Heroji meseca", href: "/heroji-meseca" },
+};
+
+function normalizePromoTabText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function normalizePromoTabHref(value: string) {
+  const path = value.split(/[?#]/)[0]?.replace(/\/+$/, "");
+  return path || "/";
+}
+
+export function getPromoTabPresentation(tab: Tab): PromoTabPresentation {
+  const hrefKey = promoTabKeyByHref[normalizePromoTabHref(tab.href)];
+  const labelKey = promoTabKeyByLabel[normalizePromoTabText(tab.label)];
+  const iconKey = hrefKey ?? labelKey ?? (tab.id as PromoTabIconKey);
+  const canonical = canonicalPromoTabByKey[iconKey];
+
+  return {
+    ...tab,
+    id: iconKey in promoTabIcons ? iconKey : tab.id,
+    label: canonical?.label ?? tab.label,
+    href: canonical?.href ?? tab.href,
+    iconKey: iconKey in promoTabIcons ? iconKey : undefined,
+    iconAsset: promoTabIcons[iconKey],
+  };
+}
