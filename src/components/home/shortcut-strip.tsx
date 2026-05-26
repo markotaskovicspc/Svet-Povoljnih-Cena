@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Tab } from "@/types";
 import { getPromoTabPresentation } from "@/data/campaign-icons";
+import { cn } from "@/lib/utils";
 
 const shortcutIconMap = {
   CalendarDays,
@@ -34,6 +35,7 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
           const Icon =
             shortcutIconMap[tab.icon as keyof typeof shortcutIconMap] ?? Sparkles;
           const iconAsset = promoTab.iconAsset;
+          const isLimitedPromo = promoTab.iconKey === "ogranicena-ponuda";
           return (
             <Link
               key={tab.id}
@@ -48,7 +50,10 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
                     width={iconAsset.width ?? 80}
                     height={iconAsset.height ?? 80}
                     unoptimized={iconAsset.url.endsWith(".svg")}
-                    className="h-7 w-7 object-contain"
+                    className={cn(
+                      "object-contain",
+                      isLimitedPromo ? "h-10 w-10" : "h-7 w-7",
+                    )}
                   />
                 ) : (
                   <Icon className="size-4" aria-hidden />

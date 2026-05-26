@@ -140,7 +140,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                 href="/"
                 aria-label="Svet Akcija - početna"
                 onClick={close}
-                className="justify-self-center"
+                className="min-w-0 justify-self-center"
               >
                 <Image
                   src="/logo.webp"
@@ -148,10 +148,10 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   width={1600}
                   height={382}
                   priority
-                  className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
+                  className="h-auto w-[min(45vw,190px)] max-w-full object-contain"
                 />
               </Link>
-              <div className="flex items-center justify-end gap-1">
+              <div className="flex shrink-0 items-center justify-end gap-1">
                 <Link
                   href="/"
                   onClick={close}
@@ -242,6 +242,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                             tabIcons[(promoTab.iconKey ?? promoTab.id) as keyof typeof tabIcons] ??
                             Sparkles;
                           const iconAsset = promoTab.iconAsset;
+                          const isLimitedPromo = promoTab.iconKey === "ogranicena-ponuda";
                           return (
                             <li key={t.id}>
                               <Link
@@ -254,7 +255,8 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                               >
                                 <span
                                   className={cn(
-                                    "flex size-8 shrink-0 items-center justify-center text-brand-blue",
+                                    "flex shrink-0 items-center justify-center text-brand-blue",
+                                    isLimitedPromo ? "size-12" : "size-8",
                                     !iconAsset && "rounded-md bg-brand-blue-50",
                                   )}
                                 >
@@ -265,7 +267,10 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                       width={iconAsset.width ?? 80}
                                       height={iconAsset.height ?? 80}
                                       unoptimized={iconAsset.url.endsWith(".svg")}
-                                      className="h-8 w-8 object-contain"
+                                      className={cn(
+                                        "object-contain",
+                                        isLimitedPromo ? "h-12 w-12" : "h-8 w-8",
+                                      )}
                                     />
                                   ) : (
                                     <Icon className="size-4" aria-hidden />

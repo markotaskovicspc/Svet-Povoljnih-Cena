@@ -101,19 +101,23 @@ export function Header({ tabs }: { tabs: Tab[] }) {
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
         <MobileNav tabs={tabs} />
-        <Link href="/" aria-label="Svet Akcija — početna" className="shrink-0">
-          <div className="rounded-md px-1.5 py-0.5">
+        <Link
+          href="/"
+          aria-label="Svet Akcija — početna"
+          className="flex min-w-0 flex-1 justify-center"
+        >
+          <div className="min-w-0 rounded-md px-1.5 py-0.5">
             <Image
               src="/logo.webp"
               alt="Svet Akcija"
               width={1600}
               height={382}
               priority
-              className="h-auto w-[228px] object-contain min-[390px]:w-[258px]"
+              className="mx-auto h-auto w-[min(52vw,228px)] max-w-full object-contain"
             />
           </div>
         </Link>
-        <div className="flex items-center gap-0">
+        <div className="flex shrink-0 items-center gap-0">
           <Link
             href="/nalog"
             aria-label="Moj nalog"
