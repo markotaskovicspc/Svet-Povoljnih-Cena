@@ -211,7 +211,7 @@ function ProductBadge({ badge }: { badge: Badge }) {
       <ProductStickerBadge
         sticker={{ url: "/brand/promo-stickers/novo.svg", alt: "Novo", width: 600, height: 600 }}
         label={badge.label}
-        className="h-9 w-9 md:h-10 md:w-10"
+        className="h-[25px] w-[25px] md:h-7 md:w-7"
       />
     );
   }
@@ -221,7 +221,7 @@ function ProductBadge({ badge }: { badge: Badge }) {
       <ProductStickerBadge
         sticker={{ url: "/brand/promo-stickers/dtz2.svg", alt: "Dok traju zalihe", width: 1536, height: 1024 }}
         label={badge.label}
-        className="h-8 w-12 md:h-9 md:w-14"
+        className="h-[22px] w-[34px] md:h-[25px] md:w-[39px]"
       />
     );
   }
@@ -231,7 +231,7 @@ function ProductBadge({ badge }: { badge: Badge }) {
       <ProductStickerBadge
         sticker={herojiMesecaIcon}
         label={badge.label}
-        className="h-9 w-10 md:h-10 md:w-12"
+        className="h-[25px] w-7 md:h-7 md:w-[34px]"
       />
     );
   }
@@ -241,7 +241,7 @@ function ProductBadge({ badge }: { badge: Badge }) {
       <ProductStickerBadge
         sticker={protectedPricesIcon}
         label={badge.label}
-        className="h-9 w-11 md:h-10 md:w-12"
+        className="h-[25px] w-[31px] md:h-7 md:w-[34px]"
       />
     );
   }
@@ -249,7 +249,7 @@ function ProductBadge({ badge }: { badge: Badge }) {
   return (
     <span
       className={cn(
-        "grid size-9 place-items-center rounded-full text-[11px] leading-none font-black text-white shadow-soft-1 md:size-10 md:text-xs",
+        "grid size-[25px] place-items-center rounded-full text-[8px] leading-none font-black text-white shadow-soft-1 md:size-7 md:text-[9px]",
         badge.key === "discount" ? "bg-action" : toneClasses[badge.tone],
       )}
     >
