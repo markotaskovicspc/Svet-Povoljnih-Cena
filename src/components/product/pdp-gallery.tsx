@@ -53,6 +53,12 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const mobileTrackRef = useRef<HTMLDivElement | null>(null);
   const desktopTrackRef = useRef<HTMLDivElement | null>(null);
   const thumbTrackRef = useRef<HTMLUListElement | null>(null);
+  const dragRef = useRef({
+    pointerId: -1,
+    startX: 0,
+    scrollLeft: 0,
+    didDrag: false,
+  });
   const [thumbOverflow, setThumbOverflow] = useState({ up: false, down: false });
 
   const slide = slides[active] ?? slides[0];
@@ -104,6 +110,43 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     setActive(Math.max(0, Math.min(index, slides.length - 1)));
   }, [slides.length]);
 
+  const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" || event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, video, iframe")) return;
+
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: event.currentTarget.scrollLeft,
+      didDrag: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handleDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+
+    const distance = event.clientX - drag.startX;
+    if (Math.abs(distance) > 4) drag.didDrag = true;
+    if (drag.didDrag) {
+      event.preventDefault();
+      event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+    }
+  }, []);
+
+  const finishDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current.pointerId = -1;
+    syncTrackActive(event.currentTarget);
+  }, [syncTrackActive]);
+
   if (!slide) return null;
 
   return (
@@ -114,7 +157,11 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           <div
             ref={mobileTrackRef}
             onScroll={() => syncTrackActive(mobileTrackRef.current)}
-            className="flex touch-pan-x snap-x snap-mandatory overflow-x-auto overscroll-x-contain rounded-lg bg-white ring-1 ring-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={finishDrag}
+            onPointerCancel={finishDrag}
+            className="flex cursor-grab touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain rounded-lg bg-white ring-1 ring-border/60 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -130,6 +177,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     alt={s.asset.alt ?? product.name}
                     fill
                     priority={index === 0}
+                    draggable={false}
                     sizes="100vw"
                     placeholder="blur"
                     blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
@@ -181,7 +229,11 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           <div
             ref={desktopTrackRef}
             onScroll={() => syncTrackActive(desktopTrackRef.current)}
-            className="bg-white ring-border/60 flex h-[min(65vh,620px)] min-h-[360px] w-full snap-x snap-mandatory overflow-x-auto rounded-lg ring-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={finishDrag}
+            onPointerCancel={finishDrag}
+            className="bg-white ring-border/60 flex h-[min(65vh,620px)] min-h-[360px] w-full cursor-grab snap-x snap-mandatory select-none overflow-x-auto rounded-lg ring-1 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -190,6 +242,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                 key={`${s.kind}-desktop-${index}`}
                 data-slide-index={index}
                 onClick={() => {
+                  if (dragRef.current.didDrag) return;
                   setActive(index);
                   if (s.kind === "image") setLightboxOpen(true);
                 }}
@@ -216,6 +269,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                         alt={s.asset.alt ?? product.name}
                         fill
                         priority={index === 0}
+                        draggable={false}
                         sizes="(min-width: 1024px) 50vw, 100vw"
                         placeholder="blur"
                         blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
