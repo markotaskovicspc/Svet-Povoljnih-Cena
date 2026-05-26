@@ -1,12 +1,10 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
-import { ArrowLeft, PackageSearch } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import {
   isMeaningfulSourceValue,
-  primaryImage,
   productHref,
   sourceValue,
   svetAkcijaProducts,
@@ -15,6 +13,7 @@ import {
   getRelatedSvetAkcijaProducts,
   getSvetAkcijaProductBySku,
 } from "@/lib/svet-akcija/db";
+import { SvetAkcijaProductGallery } from "@/components/listing/svet-akcija-product-gallery";
 
 interface RouteProps {
   params: Promise<{ sifra: string }>;
@@ -36,9 +35,9 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
   const product = await getSvetAkcijaProductBySku(sifra);
   if (!product) notFound();
 
-  const image = primaryImage(product);
   const gallery = product.media?.images ?? [];
   const related = await getRelatedSvetAkcijaProducts(product);
+  const name = sourceValue(product, "Kratki naziv");
 
   return (
     <main className="bg-canvas">
@@ -52,46 +51,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
         </Link>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <section
-            aria-label="Galerija proizvoda"
-            className="overflow-hidden rounded-md border border-border bg-white"
-          >
-            <div className="relative flex aspect-[4/3] items-center justify-center bg-white text-ink-300">
-              {image ? (
-                <Image
-                  src={image.url}
-                  alt={image.alt ?? sourceValue(product, "Kratki naziv")}
-                  fill
-                  priority
-                  sizes="(min-width: 1024px) 48vw, 100vw"
-                  className="object-contain p-4"
-                />
-              ) : (
-                <>
-                  <PackageSearch className="size-20" aria-hidden />
-                  <span className="sr-only">Slika nije uneta u izvorni katalog</span>
-                </>
-              )}
-            </div>
-            {gallery.length > 1 ? (
-              <div className="grid grid-cols-4 gap-2 p-2 sm:grid-cols-5">
-                {gallery.slice(0, 10).map((item, index) => (
-                  <div
-                    key={`${item.url}-${index}`}
-                    className="relative aspect-square overflow-hidden rounded-md border border-border bg-white"
-                  >
-                    <Image
-                      src={item.url}
-                      alt={item.alt ?? `${sourceValue(product, "Kratki naziv")} ${index + 1}`}
-                      fill
-                      sizes="96px"
-                      className="object-contain p-1.5"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </section>
+          <SvetAkcijaProductGallery images={gallery} productName={name} />
 
           <section>
             <div className="flex flex-wrap gap-2">
@@ -99,7 +59,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
               <Badge>{sourceValue(product, "Grupa")}</Badge>
             </div>
             <h1 className="font-display mt-4 text-3xl text-ink-900 md:text-5xl">
-              {sourceValue(product, "Kratki naziv")}
+              {name}
             </h1>
             <p className="mt-4 text-base leading-7 text-ink-700">
               {sourceValue(product, "Opis")}

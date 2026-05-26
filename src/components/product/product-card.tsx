@@ -7,6 +7,7 @@
  */
 import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
@@ -65,7 +66,14 @@ export function ProductCard({
   );
 
   const images = product.media.images;
-  const cover = images[0];
+  const imageTrackRef = useRef<HTMLDivElement | null>(null);
+  const imageDragRef = useRef({
+    pointerId: -1,
+    startX: 0,
+    scrollLeft: 0,
+    didDrag: false,
+  });
+  const [activeImage, setActiveImage] = useState(0);
   const imageBadges = deriveImageBadges(product);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
@@ -83,6 +91,51 @@ export function ProductCard({
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
+  const syncActiveImage = useCallback(() => {
+    const track = imageTrackRef.current;
+    if (!track) return;
+    const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    setActiveImage(Math.max(0, Math.min(index, images.length - 1)));
+  }, [images.length]);
+
+  const handleImageDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" || event.button !== 0) return;
+
+    imageDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: event.currentTarget.scrollLeft,
+      didDrag: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handleImageDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = imageDragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+
+    const distance = event.clientX - drag.startX;
+    if (Math.abs(distance) > 4) drag.didDrag = true;
+    if (drag.didDrag) {
+      event.preventDefault();
+      event.currentTarget.scrollLeft = drag.scrollLeft - distance;
+    }
+  }, []);
+
+  const finishImageDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = imageDragRef.current;
+      if (drag.pointerId !== event.pointerId) return;
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      imageDragRef.current.pointerId = -1;
+      syncActiveImage();
+    },
+    [syncActiveImage],
+  );
+
   function handleAdd() {
     commitAddToCart(product);
   }
@@ -99,6 +152,9 @@ export function ProductCard({
       <Link
         href={`/p/${product.slug}`}
         aria-label={`${product.name} — pregled proizvoda`}
+        onClick={(event) => {
+          if (imageDragRef.current.didDrag) event.preventDefault();
+        }}
         className="focus-visible:ring-walnut/40 relative block aspect-square overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
       >
         {/*
@@ -106,24 +162,72 @@ export function ProductCard({
          * Framer Motion morphs between the two when navigating to /p/[slug],
          * thanks to AnimatePresence in app/template.tsx.
          */}
-        <motion.div
-          layoutId={`product-cover-${product.sku}`}
-          className="absolute inset-0"
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        <div
+          ref={imageTrackRef}
+          onScroll={syncActiveImage}
+          onPointerDown={handleImageDragStart}
+          onPointerMove={handleImageDragMove}
+          onPointerUp={finishImageDrag}
+          onPointerCancel={finishImageDrag}
+          className="absolute inset-0 flex touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {cover ? (
-            <Image
-              src={cover.url}
-              alt={cover.alt ?? product.name}
-              fill
-              sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
-              priority={priority}
-              placeholder="blur"
-              blurDataURL={cover.blurDataUrl ?? FALLBACK_BLUR}
-              className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            />
-          ) : null}
-        </motion.div>
+          {images.length
+            ? images.slice(0, 4).map((image, index) => (
+                <div
+                  key={`${image.url}-${index}`}
+                  data-card-image={index}
+                  className="relative min-w-full snap-center"
+                >
+                  {index === 0 ? (
+                    <motion.div
+                      layoutId={`product-cover-${product.sku}`}
+                      className="absolute inset-0"
+                      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <Image
+                        src={image.url}
+                        alt={image.alt ?? product.name}
+                        fill
+                        sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
+                        priority={priority}
+                        draggable={false}
+                        placeholder="blur"
+                        blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                        className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                      />
+                    </motion.div>
+                  ) : (
+                    <Image
+                      src={image.url}
+                      alt={image.alt ?? product.name}
+                      fill
+                      sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
+                      draggable={false}
+                      placeholder="blur"
+                      blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                      className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                    />
+                  )}
+                </div>
+              ))
+            : null}
+        </div>
+        {images.length > 1 ? (
+          <div className="absolute inset-x-0 bottom-1.5 z-10 flex justify-center gap-1">
+            {images.slice(0, 4).map((_, index) => (
+              <span
+                key={index}
+                aria-current={index === activeImage ? "true" : undefined}
+                className={cn(
+                  "h-1.5 rounded-full transition-all",
+                  index === activeImage
+                    ? "w-5 bg-ink-900"
+                    : "w-2 bg-white/85 ring-1 ring-border/70",
+                )}
+              />
+            ))}
+          </div>
+        ) : null}
         {topLeftBadges.length ? (
           <div className="pointer-events-none absolute top-0 left-0 flex max-w-[78%] flex-col items-start gap-1">
             {topLeftBadges.slice(0, 2).map((b) => (
