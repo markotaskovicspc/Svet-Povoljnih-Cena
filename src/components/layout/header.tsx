@@ -109,7 +109,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
               width={1600}
               height={382}
               priority
-              className="h-auto w-[190px] object-contain min-[390px]:w-[215px]"
+              className="h-auto w-[228px] object-contain min-[390px]:w-[258px]"
             />
           </div>
         </Link>
