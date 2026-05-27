@@ -14,14 +14,16 @@ export function ProtectedPricesBand({ banner }: { banner: Banner }) {
         className="group block overflow-hidden rounded-lg bg-brand-blue text-white shadow-soft-2 outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"
       >
         <div className="relative grid min-h-[170px] grid-cols-[112px_1fr] items-center gap-4 px-4 py-5 md:aspect-[24/7] md:min-h-[230px] md:grid-cols-[260px_minmax(0,1fr)_auto] md:gap-8 md:px-8 md:py-7">
-          <Image
-            src={image.url}
-            alt={image.alt ?? banner.title}
-            width={image.width ?? 1191}
-            height={image.height ?? 895}
-            unoptimized
-            className="h-auto w-full max-w-[230px] object-contain"
-          />
+          <div className="flex aspect-square w-full max-w-[112px] items-center justify-center justify-self-center rounded-lg bg-white p-3 md:max-w-[190px] md:p-5">
+            <Image
+              src={image.url}
+              alt={image.alt ?? banner.title}
+              width={image.width ?? 1191}
+              height={image.height ?? 895}
+              unoptimized
+              className="h-full w-full object-contain"
+            />
+          </div>
 
           <div className="min-w-0">
             <h2 className="font-display text-3xl leading-tight font-bold md:text-5xl">
