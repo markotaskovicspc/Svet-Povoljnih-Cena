@@ -242,7 +242,6 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                             tabIcons[(promoTab.iconKey ?? promoTab.id) as keyof typeof tabIcons] ??
                             Sparkles;
                           const iconAsset = promoTab.iconAsset;
-                          const isLimitedPromo = promoTab.iconKey === "ogranicena-ponuda";
                           return (
                             <li key={t.id}>
                               <Link
@@ -256,7 +255,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                 <span
                                   className={cn(
                                     "flex shrink-0 items-center justify-center text-brand-blue",
-                                    isLimitedPromo ? "size-12" : "size-8",
+                                    "size-8",
                                     !iconAsset && "rounded-md bg-brand-blue-50",
                                   )}
                                 >
@@ -267,10 +266,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                       width={iconAsset.width ?? 80}
                                       height={iconAsset.height ?? 80}
                                       unoptimized={iconAsset.url.endsWith(".svg")}
-                                      className={cn(
-                                        "object-contain",
-                                        isLimitedPromo ? "h-12 w-12" : "h-8 w-8",
-                                      )}
+                                      className="h-8 w-8 object-contain"
                                     />
                                   ) : (
                                     <Icon className="size-4" aria-hidden />
