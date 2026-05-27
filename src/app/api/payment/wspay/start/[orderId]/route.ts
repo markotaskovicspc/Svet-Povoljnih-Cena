@@ -125,12 +125,47 @@ export async function GET(
     throw err;
   }
 
+  await persistHostedStart({
+    orderId: order.id,
+    paymentId: latestPayment?.id ?? null,
+    amount: num(order.total),
+    rawRequest: payload.fields,
+    redirectUrl: payload.action,
+  });
+
   return new NextResponse(renderAutoPostHtml(payload), {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Robots-Tag": "noindex",
+    },
+  });
+}
+
+async function persistHostedStart(args: {
+  orderId: string;
+  paymentId: string | null;
+  amount: number;
+  rawRequest: Record<string, string>;
+  redirectUrl: string;
+}) {
+  const data = {
+    provider: "WSPAY" as const,
+    status: "PENDING" as const,
+    rawRequest: args.rawRequest as Prisma.InputJsonValue,
+    redirectUrl: args.redirectUrl,
+  };
+  if (args.paymentId) {
+    await db.payment.update({ where: { id: args.paymentId }, data });
+    return;
+  }
+  await db.payment.create({
+    data: {
+      orderId: args.orderId,
+      method: "KARTICA",
+      amount: new Prisma.Decimal(args.amount),
+      ...data,
     },
   });
 }
@@ -172,8 +207,10 @@ async function chargeViaSavedCard(args: {
         where: { id: args.paymentId },
         data: {
           status: result.ok ? "PAID" : "FAILED",
+          provider: "WSPAY",
           providerRef: result.providerRef,
           rawResponse: result.raw as Prisma.InputJsonValue,
+          paidAt: result.ok ? new Date() : undefined,
         },
       });
     } else {
@@ -181,10 +218,12 @@ async function chargeViaSavedCard(args: {
         data: {
           orderId: args.orderId,
           method: "KARTICA",
+          provider: "WSPAY",
           status: result.ok ? "PAID" : "FAILED",
           amount: new Prisma.Decimal(args.total),
           providerRef: result.providerRef,
           rawResponse: result.raw as Prisma.InputJsonValue,
+          paidAt: result.ok ? new Date() : null,
         },
       });
     }

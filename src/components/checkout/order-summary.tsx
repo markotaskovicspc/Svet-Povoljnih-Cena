@@ -186,12 +186,15 @@ export function OrderSummary({
             Način plaćanja: {PAYMENT_LABELS[paymentMethod]}
           </p>
         ) : null}
+        <p className="text-[11px] text-ink-500">
+          Sve cene su iskazane u RSD sa dve decimale. PDV je uključen u cenu.
+        </p>
 
         {cta}
 
         <p className="border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">
           <ShieldCheck className="size-3.5" aria-hidden />
-          Sigurna naplata · 256-bit TLS · WSPay 3-D Secure
+          Sigurna naplata · 256-bit TLS · IPS / 3-D Secure
         </p>
       </div>
     </aside>

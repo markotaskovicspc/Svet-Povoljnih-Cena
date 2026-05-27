@@ -53,8 +53,18 @@ export default function UsloviKupovinePage() {
 
         <ContentSection id="ips" title="IPS plaćanje">
           <p>
-            Skenirajte QR kod aplikacijom svoje banke i potvrdite — bez
-            unošenja kartice. Potvrda plaćanja stiže odmah.
+            Nakon potvrde porudžbine preusmeravamo vas na stranu banke/Payten
+            vendora, gde se prikazuje IPS QR kod ili deep link za m-banking.
+            Plaćanje je izvršeno tek kada od banke dobijemo potvrdu statusa.
+          </p>
+        </ContentSection>
+
+        <ContentSection id="povracaj" title="Povraćaj sredstava">
+          <p>
+            U slučaju vraćanja robe i povraćaja sredstava kupcu koji je
+            prethodno platio IPS Skeniraj metodom, bez obzira na razlog
+            vraćanja, Svet Akcija d.o.o. je u obavezi da povraćaj vrši
+            isključivo preko IPS sistema.
           </p>
         </ContentSection>
 

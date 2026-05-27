@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useFormContext } from "react-hook-form";
 import { motion } from "framer-motion";
 import {
@@ -21,6 +22,7 @@ interface MethodMeta {
   icon: React.ElementType;
   short: string;
   details: React.ReactNode;
+  disabled?: boolean;
 }
 
 const METHODS: MethodMeta[] = [
@@ -28,41 +30,53 @@ const METHODS: MethodMeta[] = [
     id: "ips",
     label: "IPS NBS",
     icon: ScanLine,
-    short: "Plaćanje QR kodom u banci ili m-banking aplikaciji.",
+    short: "Payten IPS QR/deep-link plaćanje preko banke.",
     details: (
-      <p>
-        Posle potvrde porudžbine prikazaćemo QR kod sa svim podacima — skenirajte
-        ga unutar mobilne banke i potvrdite plaćanje.
-      </p>
+      <div className="flex flex-col gap-2">
+        <Image
+          src="/icons/ips-skeniraj.svg"
+          alt="IPS Skeniraj"
+          width={110}
+          height={36}
+          className="h-9 w-auto"
+        />
+        <p>
+          Posle potvrde porudžbine preusmeravamo vas na stranu banke gde se
+          prikazuje QR kod ili otvara m-banking deep link.
+        </p>
+      </div>
     ),
   },
   {
     id: "kartica",
     label: "Platna kartica",
     icon: CreditCard,
-    short: "Visa, Mastercard, DinaCard — preko sigurne WSPay strane.",
+    short: "Visa, Mastercard, DinaCard — uskoro nakon Raiffeisen aktivacije.",
     details: (
       <p>
-        Preusmeravamo vas na zaštićenu WSPay stranu sa 3-D Secure validacijom.
-        Vaši podaci sa kartice ne prolaze kroz naš sistem.
+        Kartično plaćanje uključujemo nakon završetka Raiffeisen e-commerce
+        ugovora i dostavljene API dokumentacije za kartice.
       </p>
     ),
+    disabled: true,
   },
   {
     id: "google_pay",
     label: "Google Pay",
     icon: Wallet,
-    short: "Brzo plaćanje uređajem koji je već prijavljen na Google Pay.",
-    details: <p>Plaćanje se završava jednim potvrdjivanjem na vašem uređaju.</p>,
+    short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
+    details: <p>Google Pay aktiviramo zajedno sa Raiffeisen kartičnim plaćanjem.</p>,
+    disabled: true,
   },
   {
     id: "apple_pay",
     label: "Apple Pay",
     icon: Apple,
-    short: "Brzo plaćanje na Apple uređajima sa Touch ID / Face ID.",
+    short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
     details: (
-      <p>Plaćanje se završava biometrijskom potvrdom na vašem Apple uređaju.</p>
+      <p>Apple Pay aktiviramo zajedno sa Raiffeisen kartičnim plaćanjem.</p>
     ),
+    disabled: true,
   },
   {
     id: "uplata_na_racun",
@@ -120,6 +134,7 @@ export function PaymentMethodStep() {
               "bg-surface ring-border/60 group flex cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition",
               "hover:ring-walnut/40",
               checked && "ring-walnut shadow-soft-2 ring-2",
+              m.disabled && "cursor-not-allowed opacity-60 hover:ring-border/60",
             )}
           >
             <div className="flex items-start gap-3">
@@ -135,6 +150,11 @@ export function PaymentMethodStep() {
               <div className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-ink-900">
                   {m.label}
+                  {m.disabled ? (
+                    <span className="ml-2 rounded-full bg-muted-bg px-2 py-0.5 text-[10px] font-medium text-ink-500">
+                      Uskoro
+                    </span>
+                  ) : null}
                 </span>
                 <span className="text-xs text-ink-500">{m.short}</span>
               </div>
@@ -154,6 +174,7 @@ export function PaymentMethodStep() {
               type="radio"
               value={m.id}
               className="sr-only"
+              disabled={m.disabled}
               {...register("paymentMethod")}
             />
           </label>

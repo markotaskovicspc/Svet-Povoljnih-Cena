@@ -7,6 +7,7 @@ import { validateVoucher } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
 import { notifySuppliersOfReservation } from "@/lib/xml";
 import { loadOrderForEmail, sendOrderConfirmation } from "@/lib/email";
+import { providerForPaymentMethod } from "@/lib/payments";
 import {
   computeOrderPricing,
   type PricingLine,
@@ -274,6 +275,7 @@ export async function createOrder(
         payments: {
           create: {
             method: input.paymentMethod,
+            provider: providerForPaymentMethod(input.paymentMethod),
             amount: new Prisma.Decimal(total),
             status: "PENDING",
           },

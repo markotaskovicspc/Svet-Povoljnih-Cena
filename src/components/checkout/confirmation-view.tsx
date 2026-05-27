@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   CheckCircle2,
   ClipboardCheck,
   Copy,
@@ -16,16 +17,24 @@ import { useCheckout } from "@/lib/checkout/store";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
-import { FauxQrCode } from "./faux-qr-code";
 
 /**
  * `/checkout/potvrda` view. Reads the placed order from the checkout store
  * (set during onSubmit in `CheckoutFlow`) and renders payment-specific blocks.
  * If no order is in the store (e.g. direct visit), bounces back to /korpa.
  */
-export function ConfirmationView() {
+export function ConfirmationView({
+  initialOrder,
+  paymentStatus,
+  paymentMessage,
+}: {
+  initialOrder?: Order | null;
+  paymentStatus?: string;
+  paymentMessage?: string;
+}) {
   const router = useRouter();
-  const order = useCheckout((s) => s.lastOrder);
+  const storedOrder = useCheckout((s) => s.lastOrder);
+  const order = storedOrder ?? initialOrder ?? null;
 
   useEffect(() => {
     if (!order) router.replace("/korpa");
@@ -35,7 +44,8 @@ export function ConfirmationView() {
 
   return (
     <div className="flex flex-col gap-8">
-      <SuccessHero order={order} />
+      <SuccessHero order={order} paymentStatus={paymentStatus} />
+      <PaymentNotice status={paymentStatus} message={paymentMessage} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-6">
           <PaymentBlock order={order} />
@@ -49,7 +59,13 @@ export function ConfirmationView() {
   );
 }
 
-function SuccessHero({ order }: { order: Order }) {
+function SuccessHero({
+  order,
+  paymentStatus,
+}: {
+  order: Order;
+  paymentStatus?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -68,11 +84,13 @@ function SuccessHero({ order }: { order: Order }) {
           <CheckCircle2 className="size-6" aria-hidden />
         </span>
         <h1 className="font-display text-3xl text-ink-900 md:text-4xl">
-          Hvala vam na porudžbini!
+          {paymentStatus === "paid" ? "Plaćanje je potvrđeno" : "Hvala vam na porudžbini!"}
         </h1>
         <p className="max-w-prose text-sm text-ink-700">
-          Porudžbina je uspešno kreirana. Detalji su poslati i na e-poštu —
-          uskoro će stići i potvrda fiskalnog računa.
+          Porudžbina je uspešno kreirana. Detalji su poslati i na e-poštu.
+          {paymentStatus === "paid"
+            ? " Krećemo sa pripremom nakon potvrde operatera."
+            : " Status plaćanja možete proveriti na ovoj strani."}
         </p>
         <div className="bg-canvas ring-border/60 mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1">
           <span className="text-xs text-ink-500">Broj porudžbine</span>
@@ -91,6 +109,36 @@ function SuccessHero({ order }: { order: Order }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaymentNotice({
+  status,
+  message,
+}: {
+  status?: string;
+  message?: string;
+}) {
+  if (!status || status === "paid") return null;
+
+  const failedText =
+    "IPS Plaćanje nije uspešno, vaš račun nije zadužen. Možete pokušati ponovo generisanjem novog IPS QR koda";
+  const copy =
+    status === "failed"
+      ? failedText
+      : status === "cancel"
+        ? "Plaćanje je otkazano. Možete promeniti način plaćanja ili pokrenuti novi pokušaj."
+        : status === "checking"
+          ? "Proveravamo status plaćanja. Ako ste već potvrdili nalog u banci, osvežite stranicu za nekoliko trenutaka."
+          : message ?? "Status plaćanja trenutno nije moguće potvrditi.";
+
+  return (
+    <div className="border-border/60 bg-surface flex items-start gap-3 rounded-2xl p-4 ring-1">
+      <span className="bg-muted-bg text-ink-700 inline-flex size-9 shrink-0 items-center justify-center rounded-xl">
+        <AlertCircle className="size-4" aria-hidden />
+      </span>
+      <p className="text-sm text-ink-700">{copy}</p>
     </div>
   );
 }
@@ -114,22 +162,33 @@ function PaymentMethodView({
   method: PaymentMethod;
 }) {
   if (method === "ips") {
-    const payload = `K:PR|V:01|C:1|R:265100000000000000|N:Svet Akcija|I:RSD${order.total}|P:${order.shippingAddress.firstName} ${order.shippingAddress.lastName}|SF:189|S:Porudžbina ${order.id}|RO:${order.id}`;
+    const startUrl = `/api/payment/ips/start/${encodeURIComponent(order.id)}`;
+    const statusUrl = `/api/payment/ips/status/${encodeURIComponent(order.id)}`;
     return (
-      <div className="grid gap-5 sm:grid-cols-[220px_1fr]">
-        <FauxQrCode payload={payload} />
-        <div className="flex flex-col gap-2 text-sm text-ink-700">
-          <p className="text-ink-900 font-medium">IPS NBS QR kod</p>
-          <p>
-            Skenirajte kod unutar mobilne banke (sve banke u Srbiji koje
-            podržavaju NBS IPS standard).
-          </p>
-          <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
-          <DetailRow label="Poziv na broj" value={order.id} mono />
-          <DetailRow label="Račun primaoca" value="265-1000000000000-00" mono />
-          <p className="text-[11px] text-ink-500">
-            QR sadržaj: <span className="font-mono">{payload.slice(0, 64)}…</span>
-          </p>
+      <div className="bg-canvas ring-border/60 flex flex-col gap-3 rounded-xl p-5 ring-1">
+        <p className="text-ink-900 font-medium">IPS Skeniraj</p>
+        <p className="text-sm text-ink-700">
+          Plaćanje se pokreće na Payten strani banke, gde se prikazuje IPS QR kod
+          ili deep link za m-banking aplikaciju.
+        </p>
+        <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
+        <DetailRow label="Broj porudžbine" value={order.id} mono />
+        {order.payment?.paymentReference ? (
+          <DetailRow label="RP referenca" value={order.payment.paymentReference} mono />
+        ) : null}
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            href={startUrl}
+            className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Generiši IPS QR kod
+          </a>
+          <a
+            href={statusUrl}
+            className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Proveri status
+          </a>
         </div>
       </div>
     );
@@ -360,6 +419,26 @@ function OrderRecap({ order }: { order: Order }) {
           {formatRsd(order.total)}
         </span>
       </div>
+      {order.payment ? (
+        <dl className="border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
+          <Row label="Status plaćanja" value={paymentStatusLabel(order.payment.status)} />
+          {order.payment.paymentReference ? (
+            <Row label="RP referenca" value={order.payment.paymentReference} />
+          ) : null}
+          {order.payment.paidAt ? (
+            <Row
+              label="Datum uplate"
+              value={new Intl.DateTimeFormat("sr-Latn-RS", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }).format(new Date(order.payment.paidAt))}
+            />
+          ) : null}
+        </dl>
+      ) : null}
+      <p className="text-[11px] text-ink-500">
+        PDV je uključen u cenu. Račun trgovca: 160-000000-00.
+      </p>
       <p className="border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">
         <Mail className="size-3.5" aria-hidden />
         Detalji su poslati na e-poštu.
@@ -389,6 +468,24 @@ const Row = ({
     </dd>
   </div>
 );
+
+function paymentStatusLabel(status: NonNullable<Order["payment"]>["status"]) {
+  switch (status) {
+    case "paid":
+      return "Izvršeno";
+    case "failed":
+      return "Neizvršeno";
+    case "refunded":
+      return "Refundirano";
+    case "partial_refund":
+      return "Delimično refundirano";
+    case "authorized":
+      return "Autorizovano";
+    case "pending":
+    default:
+      return "U obradi";
+  }
+}
 
 function Ctas() {
   return (

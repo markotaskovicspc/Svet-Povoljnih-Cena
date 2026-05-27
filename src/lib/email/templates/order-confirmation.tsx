@@ -112,7 +112,21 @@ export function OrderConfirmation({
         Adresa isporuke: {order.shippingAddress.street},{" "}
         {order.shippingAddress.postalCode} {order.shippingAddress.city}
         <br />
+        Kupac: {order.shippingAddress.firstName} {order.shippingAddress.lastName}
+        {order.guestEmail ? `, ${order.guestEmail}` : ""}
+        <br />
         Način plaćanja: {order.paymentMethod}
+        <br />
+        Status plaćanja: {order.payment?.status ?? "pending"}
+        <br />
+        {order.payment?.paymentReference ? (
+          <>
+            RP referenca: {order.payment.paymentReference}
+            <br />
+          </>
+        ) : null}
+        Trgovac: Svet Akcija d.o.o., PIB 100000000, Vojvođanska 401, Beograd,
+        račun 160-000000-00
         <br />
         Telefon: {order.shippingAddress.phone}
       </EmailParagraph>

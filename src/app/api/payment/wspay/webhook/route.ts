@@ -97,8 +97,10 @@ export async function POST(req: Request) {
         where: { id: existing.id },
         data: {
           status: newStatus,
+          provider: "WSPAY",
           providerRef: fields.approvalCode || undefined,
           rawResponse: raw,
+          paidAt: newStatus === "PAID" ? new Date() : undefined,
         },
       });
     } else {
@@ -106,10 +108,12 @@ export async function POST(req: Request) {
         data: {
           orderId: order.id,
           method: "KARTICA",
+          provider: "WSPAY",
           status: newStatus,
           amount: new Prisma.Decimal(Number(order.total)),
           providerRef: fields.approvalCode || null,
           rawResponse: raw,
+          paidAt: newStatus === "PAID" ? new Date() : null,
         },
       });
     }

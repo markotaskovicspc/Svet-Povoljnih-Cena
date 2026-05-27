@@ -701,6 +701,14 @@ enum PaymentStatus {
   PARTIAL_REFUND
 }
 
+enum PaymentProvider {
+  IPS
+  RAIFFEISEN_CARD
+  WSPAY
+  MANUAL
+  COD
+}
+
 enum ShipmentService {
   COURIER_SMALL
   COURIER_BULKY
@@ -818,12 +826,18 @@ model Payment {
   id          String        @id @default(cuid())
   orderId     String
   method      PaymentMethod
+  provider    PaymentProvider @default(MANUAL)
   status      PaymentStatus @default(PENDING)
   amount      Decimal       @db.Decimal(12, 2)
   currency    String        @default("RSD")
-  /// External provider reference (WSPay txn id, etc.)
+  /// External provider reference (WSPay approval, IPS transaction id, etc.)
   providerRef String?
+  paymentReference String?
+  redirectUrl  String?       @db.Text
+  rawRequest   Json?
   rawResponse Json?
+  paidAt      DateTime?
+  expiresAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -831,6 +845,8 @@ model Payment {
 
   @@index([orderId])
   @@index([providerRef])
+  @@index([paymentReference])
+  @@index([provider, status])
 }
 
 model Shipment {

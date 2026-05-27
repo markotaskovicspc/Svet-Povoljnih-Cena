@@ -155,8 +155,10 @@ export async function applyPaymentResult(args: {
         where: { id: existing.id },
         data: {
           status,
+          provider: "WSPAY",
           providerRef: fields.approvalCode || existing.providerRef,
           rawResponse: raw,
+          paidAt: fields.success ? new Date() : undefined,
         },
       });
     } else {
@@ -164,10 +166,12 @@ export async function applyPaymentResult(args: {
         data: {
           orderId,
           method: "KARTICA",
+          provider: "WSPAY",
           status,
           amount: new Prisma.Decimal(amount),
           providerRef: fields.approvalCode || null,
           rawResponse: raw,
+          paidAt: fields.success ? new Date() : null,
         },
       });
     }

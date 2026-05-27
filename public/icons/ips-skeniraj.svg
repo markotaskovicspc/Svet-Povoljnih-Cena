@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 72" role="img" aria-labelledby="title">
+  <title id="title">IPS Skeniraj</title>
+  <rect width="220" height="72" rx="10" fill="#fff"/>
+  <rect x="1" y="1" width="218" height="70" rx="9" fill="none" stroke="#d6d6d6" stroke-width="2"/>
+  <path fill="#ed1c24" d="M20 17h10v38H20zM38 17h20c8 0 14 6 14 14s-6 14-14 14H48v10H38zm10 9v10h9c3 0 5-2 5-5s-2-5-5-5zM78 44c6 3 12 4 17 4 6 0 9-2 9-5 0-4-4-4-11-6-9-2-15-5-15-11 0-7 7-11 18-11 6 0 12 1 17 4l-3 8c-4-2-9-3-14-3-5 0-8 1-8 4s4 4 10 5c10 2 16 5 16 12 0 8-7 12-19 12-7 0-14-2-20-5z"/>
+  <path fill="#222" d="M129 25h16v6h-10v5h9v6h-9v13h-6zM150 25h19v6h-13v5h12v6h-12v7h14v6h-20zM176 25h8l12 20V25h6v30h-8l-12-20v20h-6z"/>
+  <text x="129" y="18" fill="#222" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1">SKENIRAJ</text>
+</svg>

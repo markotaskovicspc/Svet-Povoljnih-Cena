@@ -31,6 +31,14 @@ const ORDER_STATUS_LOWER = {
   OTKAZANO: "otkazano",
   VRACENO: "vraceno",
 } as const;
+const PAYMENT_STATUS_LOWER = {
+  PENDING: "pending",
+  AUTHORIZED: "authorized",
+  PAID: "paid",
+  FAILED: "failed",
+  REFUNDED: "refunded",
+  PARTIAL_REFUND: "partial_refund",
+} as const;
 const RECLAMATION_STATUS_LOWER = {
   PRIMLJENO: "primljeno",
   U_OBRADI: "u_obradi",
@@ -51,6 +59,7 @@ export async function loadOrderForEmail(
     where: { id: orderId },
     include: {
       items: { orderBy: { id: "asc" } },
+      payments: { orderBy: { createdAt: "desc" }, take: 1 },
       user: { select: { email: true, phone: true } },
     },
   });
@@ -109,6 +118,14 @@ export async function loadOrderForEmail(
           }
         : undefined,
     notes: row.notes ?? undefined,
+    payment: row.payments[0]
+      ? {
+          status: PAYMENT_STATUS_LOWER[row.payments[0].status],
+          providerRef: row.payments[0].providerRef ?? undefined,
+          paymentReference: row.payments[0].paymentReference ?? undefined,
+          paidAt: row.payments[0].paidAt?.toISOString(),
+        }
+      : undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

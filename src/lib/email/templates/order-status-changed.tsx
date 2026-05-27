@@ -62,6 +62,12 @@ export function OrderStatusChanged({
       <EmailParagraph>{copy.body}</EmailParagraph>
       <EmailParagraph>
         Broj porudžbine: <strong>{order.id}</strong>
+        {order.payment?.paymentReference ? (
+          <>
+            <br />
+            RP referenca: <strong>{order.payment.paymentReference}</strong>
+          </>
+        ) : null}
       </EmailParagraph>
       <EmailButton href={trackingUrl ?? orderUrl}>
         {trackingUrl ? "Prati pošiljku" : "Pregled porudžbine"}

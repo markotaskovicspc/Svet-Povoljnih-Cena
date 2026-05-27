@@ -73,6 +73,19 @@ export interface CheckoutInitialCustomer {
   address?: Partial<CheckoutAddress>;
 }
 
+type CreateOrderApiResponse =
+  | {
+      ok: true;
+      data: {
+        id: string;
+        number: string;
+        total: number;
+        paymentMethod: string;
+        shippingMethod: string;
+      };
+    }
+  | { ok: false; error?: { code?: string; reason?: string; sku?: string } };
+
 const STEP_ORDER: CheckoutStep[] = [
   "identity",
   "shipping",
@@ -102,6 +115,7 @@ export function CheckoutFlow({
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const clearCart = useCart((s) => s.clear);
@@ -132,7 +146,7 @@ export function CheckoutFlow({
       shipToDifferent: false,
       shippingMethod: "kurir",
       perItemAssembly: {},
-      paymentMethod: "kartica",
+      paymentMethod: "ips",
       voucherCode: "",
       notes: "",
       consent: false,
@@ -208,18 +222,45 @@ export function CheckoutFlow({
     if (i > 0) setStep(STEP_ORDER[i - 1]!);
   };
 
-  const onSubmit: SubmitHandler<CheckoutFormData> = (data) => {
+  const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
+    setSubmitError(null);
     rememberCheckoutFields(data);
+    const response = await fetch("/api/checkout/order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildCreateOrderPayload(data, lines)),
+    });
+    const result = (await response.json().catch(() => null)) as
+      | CreateOrderApiResponse
+      | null;
+    if (!response.ok || !result?.ok) {
+      setSubmitError(readCreateOrderError(result));
+      return;
+    }
+
     const order = buildOrder({
       data,
       lines,
       voucherDiscountRsd: voucher?.discountRsd ?? 0,
       voucherCode: voucher?.code,
+      orderNumber: result.data.number,
     });
     setLastOrder(order);
     clearCart();
     setStep("identity"); // ready for next purchase
-    router.push("/checkout/potvrda");
+    if (data.paymentMethod === "ips") {
+      router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}`);
+      return;
+    }
+    if (
+      data.paymentMethod === "kartica" ||
+      data.paymentMethod === "google_pay" ||
+      data.paymentMethod === "apple_pay"
+    ) {
+      router.push(`/api/payment/wspay/start/${encodeURIComponent(result.data.number)}`);
+      return;
+    }
+    router.push(`/checkout/potvrda?order=${encodeURIComponent(result.data.number)}`);
   };
 
   const onInvalid: SubmitErrorHandler<CheckoutFormData> = () => {
@@ -282,6 +323,11 @@ export function CheckoutFlow({
                   ) : null}
                 </motion.div>
               </AnimatePresence>
+              {submitError ? (
+                <p className="mt-4 rounded-xl border border-action/30 bg-action/5 px-4 py-3 text-sm text-action">
+                  {submitError}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -557,16 +603,91 @@ function addressFieldNames(
   return fields;
 }
 
+const PAYMENT_METHOD_UPPER = {
+  ips: "IPS",
+  kartica: "KARTICA",
+  google_pay: "GOOGLE_PAY",
+  apple_pay: "APPLE_PAY",
+  uplata_na_racun: "UPLATA_NA_RACUN",
+  pouzece_gotovina: "POUZECE_GOTOVINA",
+  pouzece_kartica: "POUZECE_KARTICA",
+} as const satisfies Record<PaymentMethod, string>;
+
+const SHIPPING_METHOD_UPPER = {
+  kurir: "KURIR",
+  kamion: "KAMION",
+} as const satisfies Record<ShippingMethod, string>;
+
+function buildCreateOrderPayload(
+  data: CheckoutFormData,
+  lines: ReturnType<typeof useCart.getState>["lines"],
+) {
+  const shipping = addressForApi(data.shipping);
+  const billing =
+    data.shipToDifferent && data.billing ? addressForApi(data.billing) : undefined;
+
+  return {
+    guestEmail: data.identity === "guest" ? data.shipping.email : undefined,
+    lines: lines.map((line) => ({
+      sku: line.sku,
+      qty: line.qty,
+      withAssembly: Boolean(data.perItemAssembly?.[line.sku]),
+    })),
+    shipping,
+    billingSameAsShipping: !data.shipToDifferent,
+    billing,
+    shippingMethod: SHIPPING_METHOD_UPPER[data.shippingMethod],
+    paymentMethod: PAYMENT_METHOD_UPPER[data.paymentMethod],
+    voucherCode: data.voucherCode || undefined,
+    notes: data.notes || undefined,
+    consent: data.consent,
+  };
+}
+
+function addressForApi(address: CheckoutAddress) {
+  return {
+    firstName: address.firstName,
+    lastName: address.lastName,
+    phone: address.phone,
+    street: address.street,
+    city: address.city,
+    postalCode: address.postalCode,
+    country: address.country || "RS",
+    companyName: address.companyName || undefined,
+    pib: address.pib || undefined,
+  };
+}
+
+function readCreateOrderError(result: CreateOrderApiResponse | null): string {
+  const error = result && !result.ok ? result.error : null;
+  switch (error?.code) {
+    case "OUT_OF_STOCK":
+      return `Artikal ${error.sku ?? ""} trenutno nema dovoljno zaliha.`;
+    case "INACTIVE":
+      return `Artikal ${error.sku ?? ""} više nije dostupan.`;
+    case "VOUCHER_INVALID":
+      return error.reason ?? "Vaučer nije važeći.";
+    case "GUEST_REQUIRES_EMAIL":
+      return "Unesite e-mail adresu za porudžbinu kao gost.";
+    case "EMPTY_CART":
+      return "Korpa je prazna.";
+    default:
+      return "Porudžbinu trenutno nije moguće kreirati. Proverite podatke i pokušajte ponovo.";
+  }
+}
+
 function buildOrder({
   data,
   lines,
   voucherDiscountRsd,
   voucherCode,
+  orderNumber,
 }: {
   data: CheckoutFormData;
   lines: ReturnType<typeof useCart.getState>["lines"];
   voucherDiscountRsd: number;
   voucherCode?: string;
+  orderNumber: string;
 }): Order {
   const itemsFull = lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0);
   const itemsSale = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
@@ -588,10 +709,6 @@ function buildOrder({
     assemblyTotal,
     voucherDiscountRsd,
   });
-
-  const orderNumber = `SPC-${new Date().getFullYear()}-${String(
-    Math.floor(100000 + Math.random() * 899999),
-  )}`;
 
   const shippingAddress: Address = {
     id: "shipping",

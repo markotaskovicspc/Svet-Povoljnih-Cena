@@ -243,6 +243,12 @@ export interface Order {
   shippingAddress: Address;
   billingAddress?: Address;
   notes?: string;
+  payment?: {
+    status: "pending" | "authorized" | "paid" | "failed" | "refunded" | "partial_refund";
+    providerRef?: string;
+    paymentReference?: string;
+    paidAt?: ISODate;
+  };
   createdAt: ISODate;
   updatedAt: ISODate;
 }

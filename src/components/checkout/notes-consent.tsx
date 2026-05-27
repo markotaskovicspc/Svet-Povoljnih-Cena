@@ -90,7 +90,7 @@ export function NotesConsent() {
         ) : null}
         <p className="inline-flex items-center gap-1.5 pl-7 text-[11px] text-ink-500">
           <ShieldCheck className="size-3.5" aria-hidden />
-          Plaćanje preko WSPay 3-D Secure infrastrukture.
+          Sigurna naplata preko IPS i 3-D Secure infrastrukture.
         </p>
       </div>
 
