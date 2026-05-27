@@ -92,6 +92,7 @@ export function ProductCard({
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
   const syncActiveImage = useCallback(() => {
+    if (!images.length) return;
     const track = imageTrackRef.current;
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
@@ -172,7 +173,7 @@ export function ProductCard({
           className="absolute inset-0 flex touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {images.length
-            ? images.slice(0, 4).map((image, index) => (
+            ? images.map((image, index) => (
                 <div
                   key={`${image.url}-${index}`}
                   data-card-image={index}
@@ -213,16 +214,17 @@ export function ProductCard({
             : null}
         </div>
         {images.length > 1 ? (
-          <div className="absolute inset-x-0 bottom-1.5 z-10 flex justify-center gap-1">
-            {images.slice(0, 4).map((_, index) => (
+          <div className="absolute inset-x-0 bottom-1 z-10 flex flex-wrap justify-center gap-0.5 px-2">
+            {images.map((_, index) => (
               <span
                 key={index}
+                data-card-image-dot
                 aria-current={index === activeImage ? "true" : undefined}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
                   index === activeImage
-                    ? "w-5 bg-ink-900"
-                    : "w-2 bg-white/85 ring-1 ring-border/70",
+                    ? "w-4 bg-ink-900"
+                    : "w-1.5 bg-white/85 ring-1 ring-border/70",
                 )}
               />
             ))}

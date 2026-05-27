@@ -155,7 +155,7 @@ export function SvetAkcijaProductGallery({
           </div>
 
           <div className="grid grid-cols-4 gap-2 p-2 sm:grid-cols-5">
-            {images.slice(0, 10).map((item, index) => (
+            {images.map((item, index) => (
               <button
                 key={`${item.url}-${index}`}
                 type="button"

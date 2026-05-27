@@ -80,7 +80,7 @@ const productListSelect = {
   collection: true,
   action: true,
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
-  media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" }, take: 2 },
+  media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" } },
   materials: { include: { material: true } },
 } satisfies Prisma.ProductSelect;
 
