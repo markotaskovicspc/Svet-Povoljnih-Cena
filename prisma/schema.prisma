@@ -389,6 +389,12 @@ model ProductAssemblyCity {
 // 3. Promo (banners, bar, tabs, actions, vouchers, ads, recs)
 // ──────────────────────────────────────────────────────────────────────
 
+enum BannerPlacement {
+  HERO
+  HOME_AFTER_SECOND_ROW
+  HOME_AFTER_FOURTH_ROW
+}
+
 model Banner {
   id           String    @id @default(cuid())
   title        String
@@ -401,10 +407,11 @@ model Banner {
   endsAt       DateTime?
   order        Int       @default(0)
   enabled      Boolean   @default(true)
+  placement    BannerPlacement @default(HERO)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  @@index([enabled, order])
+  @@index([enabled, placement, order])
 }
 
 model PromoBar {
@@ -426,6 +433,20 @@ model Tab {
   enabled Boolean @default(true)
 
   @@index([enabled, order])
+}
+
+enum HomeSectionSlotKey {
+  FIRST
+  SECOND
+  THIRD
+  FOURTH
+  FIFTH
+  SIXTH
+}
+
+enum HomeSectionSourceType {
+  ACTION
+  LANDING_PAGE
 }
 
 enum ActionKind {
@@ -454,8 +475,27 @@ model Action {
 
   products Product[]
   heroes   HeroOfMonth[]
+  homepageSlots HomeSectionSlot[]
 
   @@index([startsAt, endsAt])
+}
+
+model HomeSectionSlot {
+  id             String                @id @default(cuid())
+  slotKey        HomeSectionSlotKey    @unique
+  sourceType     HomeSectionSourceType
+  actionId       String?
+  landingPageKey String?
+  titleOverride  String?
+  productLimit   Int                   @default(12)
+  enabled        Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  action Action? @relation(fields: [actionId], references: [id], onDelete: SetNull)
+
+  @@index([enabled, slotKey])
+  @@index([actionId])
 }
 
 model HeroOfMonth {

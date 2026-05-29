@@ -37,7 +37,8 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
         });
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-        // Client navigation now exposes six commercial shortcuts below search.
+        // Navigation can expose up to six commercial tabs; the first four by
+        // order are also shown as mobile shortcuts below the homepage hero.
         if (parsed.data.enabled) {
           const enabledCount = await db.tab.count({
             where: { enabled: true, NOT: parsed.data.id ? { id: parsed.data.id } : undefined },
@@ -82,7 +83,7 @@ export default async function TabsPage() {
     <>
       <PageHeader
         title="Navigacija"
-        description="Glavna navigacija ispod pretrage — maksimalno 6 aktivnih tabova istovremeno."
+        description="Glavna navigacija ispod pretrage. Na mobilnoj početnoj, prva 4 aktivna taba po redosledu se prikazuju odmah ispod glavnog banera."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Navigacija" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_360px]">

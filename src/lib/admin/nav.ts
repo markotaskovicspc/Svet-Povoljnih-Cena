@@ -30,6 +30,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Sadržaj",
     items: [
+      { href: "/admin/pocetna", label: "Početna", allowed: C },
       { href: "/admin/baneri", label: "Baneri", allowed: C },
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
       { href: "/admin/tabovi", label: "Navigacija", allowed: C },

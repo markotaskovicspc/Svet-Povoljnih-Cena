@@ -1,9 +1,11 @@
 import "server-only";
 import { cache } from "react";
+import { BannerPlacement } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } from "@/data/banners";
 import { headerTabs, promoBar } from "@/data/site";
 import type { Banner, PromoBar, Tab } from "@/types";
+import { hasBannerPlacementColumn } from "@/lib/storefront/homepage-schema";
 
 const activeWindow = (now: Date) => ({
   AND: [
@@ -16,13 +18,25 @@ function bannerAsset(url: string, alt: string) {
   return { url, alt };
 }
 
+function isMissingSchemaError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    ((error as { code?: string }).code === "P2021" ||
+      (error as { code?: string }).code === "P2022")
+  );
+}
+
 export const getActiveBanners = cache(async (): Promise<Banner[]> => {
   if (!hasDatabaseConnection()) return heroBanners;
+  if (!(await hasBannerPlacementColumn())) return heroBanners;
 
   try {
     const rows = await db.banner.findMany({
       where: {
         enabled: true,
+        placement: BannerPlacement.HERO,
         ...activeWindow(new Date()),
       },
       orderBy: [{ order: "asc" }, { createdAt: "desc" }],
@@ -46,7 +60,9 @@ export const getActiveBanners = cache(async (): Promise<Banner[]> => {
       order: row.order,
     }));
   } catch (error) {
-    console.error("Failed to load active banners", error);
+    if (!isMissingSchemaError(error)) {
+      console.error("Failed to load active banners", error);
+    }
     return heroBanners;
   }
 });

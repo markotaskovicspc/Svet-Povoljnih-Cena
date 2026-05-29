@@ -3,29 +3,17 @@ import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { SectionRail } from "@/components/home/section-rail";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import { UspStrip } from "@/components/home/usp-strip";
-import {
-  getActiveBanners,
-  getActiveTabs,
-  getProtectedPricesBanner,
-} from "@/lib/storefront/content";
-import { listProducts } from "@/lib/api/catalog";
-import {
-  akcijaIcon,
-  herojiMesecaIcon,
-  under999CampaignSticker,
-} from "@/data/campaign-icons";
+import { getActiveBanners, getActiveTabs } from "@/lib/storefront/content";
+import { getHomeLayout } from "@/lib/storefront/homepage";
+import { HomeSectionSlotKey } from "@prisma/client";
 
 export default async function Home() {
-  const [banners, protectedBanner, activeTabs] = await Promise.all([
+  const [banners, activeTabs, homeLayout] = await Promise.all([
     getActiveBanners(),
-    getProtectedPricesBanner(),
     getActiveTabs(),
+    getHomeLayout(),
   ]);
-  const [monthly, heroes, under999] = await Promise.all([
-    listProducts({ actionSlug: "akcija", limit: 12 }),
-    listProducts({ heroOnly: true, limit: 12 }),
-    listProducts({ maxPrice: 999, limit: 12 }),
-  ]);
+  const { sections, bannerAfterSecond, bannerAfterFourth } = homeLayout;
 
   return (
     <>
@@ -34,35 +22,43 @@ export default async function Home() {
         <ShortcutStrip tabs={activeTabs} />
       </div>
 
-      <SectionRail
-        title="Mesečna akcija"
-        icon={akcijaIcon}
-        campaignSticker="action"
-        href="/akcija"
-        products={monthly.items}
-        minimalHeader
-      />
+      <HomeSection section={sections[HomeSectionSlotKey.FIRST]} />
+      <HomeSection section={sections[HomeSectionSlotKey.SECOND]} />
 
-      <SectionRail
-        title="Heroji meseca"
-        icon={herojiMesecaIcon}
-        href="/heroji-meseca"
-        products={heroes.items}
-        minimalHeader
-      />
+      {bannerAfterSecond ? (
+        <ProtectedPricesBand banner={bannerAfterSecond} />
+      ) : null}
 
-      <ProtectedPricesBand banner={protectedBanner} />
+      <HomeSection section={sections[HomeSectionSlotKey.THIRD]} />
+      <HomeSection section={sections[HomeSectionSlotKey.FOURTH]} />
 
-      <SectionRail
-        title="Sve do 999"
-        icon={under999CampaignSticker}
-        campaignSticker="under999"
-        href="/sve-do-999"
-        products={under999.items}
-        minimalHeader
-      />
+      {bannerAfterFourth ? (
+        <ProtectedPricesBand banner={bannerAfterFourth} />
+      ) : null}
+
+      <HomeSection section={sections[HomeSectionSlotKey.FIFTH]} />
+      <HomeSection section={sections[HomeSectionSlotKey.SIXTH]} />
 
       <UspStrip />
     </>
+  );
+}
+
+function HomeSection({
+  section,
+}: {
+  section?: Awaited<ReturnType<typeof getHomeLayout>>["sections"][HomeSectionSlotKey];
+}) {
+  if (!section) return null;
+
+  return (
+    <SectionRail
+      title={section.title}
+      icon={section.icon}
+      campaignSticker={section.campaignSticker}
+      href={section.href}
+      products={section.products}
+      minimalHeader
+    />
   );
 }

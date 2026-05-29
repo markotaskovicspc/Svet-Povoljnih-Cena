@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { BannerPlacement } from "@prisma/client";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -39,7 +40,14 @@ const upsertSchema = z.object({
   endsAt: z.string().optional().nullable(),
   order: z.coerce.number().int().min(0).max(9999).default(0),
   enabled: z.coerce.boolean().default(true),
+  placement: z.nativeEnum(BannerPlacement).default(BannerPlacement.HERO),
 });
+
+const bannerPlacementLabel: Record<BannerPlacement, string> = {
+  HERO: "Glavni hero baner",
+  HOME_AFTER_SECOND_ROW: "Početna: posle sekcije 2",
+  HOME_AFTER_FOURTH_ROW: "Početna: posle sekcije 4",
+};
 
 async function upsertBanner(_state: AdminActionState, formData: FormData) {
   "use server";
@@ -67,6 +75,7 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
           endsAt: data.endsAt ? new Date(data.endsAt) : null,
           order: data.order,
           enabled: data.enabled,
+          placement: data.placement,
         };
         const saved = data.id
           ? await db.banner.update({ where: { id: data.id }, data: payload })
@@ -110,7 +119,7 @@ export default async function BannersPage() {
     <>
       <PageHeader
         title="Baneri"
-        description="Hero baneri početne stranice. Niži broj redosleda = ranije se prikazuje."
+        description="Baneri za glavni carousel i dve pozicije između promo sekcija na početnoj. Niži broj redosleda = ranije se prikazuje."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Baneri" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_440px]">
@@ -119,6 +128,7 @@ export default async function BannersPage() {
             columns={[
               { key: "title", label: "Naslov" },
               { key: "schedule", label: "Period" },
+              { key: "placement", label: "Pozicija" },
               { key: "order", label: "Red.", align: "right" },
               { key: "enabled", label: "Aktivan", align: "center" },
               { key: "actions", label: "", align: "right" },
@@ -138,6 +148,7 @@ export default async function BannersPage() {
                   b.startsAt || b.endsAt
                     ? `${b.startsAt ? new Intl.DateTimeFormat("sr-Latn-RS").format(b.startsAt) : "—"} → ${b.endsAt ? new Intl.DateTimeFormat("sr-Latn-RS").format(b.endsAt) : "—"}`
                     : "Stalno",
+                placement: bannerPlacementLabel[b.placement],
                 order: b.order,
                 enabled: b.enabled ? "✓" : "—",
                 actions: (
@@ -205,6 +216,7 @@ type BannerFormValues = {
   endsAt?: string;
   order?: number;
   enabled?: boolean;
+  placement?: BannerPlacement;
 };
 
 function BannerForm({
@@ -256,6 +268,19 @@ function BannerForm({
           type="text"
           defaultValue={values?.imageMobile ?? ""}
         />
+      </Field>
+      <Field label="Pozicija">
+        <select
+          name="placement"
+          defaultValue={values?.placement ?? BannerPlacement.HERO}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+        >
+          {Object.values(BannerPlacement).map((placement) => (
+            <option key={placement} value={placement}>
+              {bannerPlacementLabel[placement]}
+            </option>
+          ))}
+        </select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Počinje">
