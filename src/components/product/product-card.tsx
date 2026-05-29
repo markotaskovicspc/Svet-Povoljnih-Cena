@@ -38,9 +38,9 @@ interface ProductCardProps {
   campaignSticker?: CampaignStickerKey;
 }
 
-/** 8×10 warm-ivory blur placeholder; matches bg-muted. */
+/** 8×10 white blur placeholder for product media loading states. */
 const FALLBACK_BLUR =
-  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2YxZWNlMyIvPjwvc3ZnPg==";
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==";
 
 const toneClasses: Record<BadgeTone, string> = {
   action: "bg-action text-white",
