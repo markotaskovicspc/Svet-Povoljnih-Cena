@@ -78,8 +78,8 @@ export default async function RootLayout({
           ) : (
             <>
               <div className="sticky top-0 z-50 bg-white">
-                <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
                 {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
+                <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
               </div>
               <main className="flex-1">{children}</main>
               <NewsletterBand />

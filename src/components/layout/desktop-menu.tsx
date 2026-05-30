@@ -82,7 +82,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                 className="flex min-h-13 w-full items-center gap-3 px-5 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6"
               >
                 <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                <span className="min-w-0 break-words">{current.label}</span>
+                <span className="min-w-0 break-words">Povratak na glavni meni</span>
               </button>
             </div>
           ) : null}
@@ -139,7 +139,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
           </ul>
 
           {stack.length === 1 ? (
-            <ul className="mt-3 border-t border-border">
+            <ul className="mt-4 border-t border-border">
               {tabs.map((tab) => {
                 const promoTab = getPromoTabPresentation(tab);
                 const isActive = pathname === promoTab.href;
@@ -156,7 +156,7 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         {iconAsset ? (
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue-50 ring-1 ring-brand-blue/10">
+                          <span className="flex size-6 shrink-0 items-center justify-center">
                             <Image
                               src={iconAsset.url}
                               alt=""

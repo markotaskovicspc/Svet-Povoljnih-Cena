@@ -82,6 +82,7 @@ const SCROLL_KEY = "spc:listing:scroll";
 export function ListingShell({
   kind,
   title,
+  subtitle,
   titleIcon,
   campaignSticker,
   period,
@@ -224,10 +225,14 @@ export function ListingShell({
               </h1>
             </div>
             {period ? (
-              <div className="bg-action/8 text-action ring-action/15 mt-3 inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ring-1">
-                <span aria-hidden className="size-1.5 rounded-full bg-action" />
+              <p className="mt-2 text-xs font-semibold text-action">
                 {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
-              </div>
+              </p>
+            ) : null}
+            {period && subtitle ? (
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-700">
+                {subtitle}
+              </p>
             ) : null}
           </motion.div>
         </header>

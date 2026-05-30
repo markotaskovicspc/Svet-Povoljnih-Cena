@@ -2,13 +2,25 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import type { Banner } from "@/types";
+import { cn } from "@/lib/utils";
 
-export function ProtectedPricesBand({ banner }: { banner: Banner }) {
+export function ProtectedPricesBand({
+  banner,
+  compact,
+}: {
+  banner: Banner;
+  compact?: boolean;
+}) {
   const href = banner.ctaHref ?? "/niske-cene-pod-zastitom";
   const image = banner.imageMobile ?? banner.imageDesktop;
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-5 md:px-6 md:py-8">
+    <section
+      className={cn(
+        "mx-auto w-full max-w-[var(--container-page)] px-4 md:px-6",
+        compact ? "py-4 md:py-5" : "py-5 md:py-8",
+      )}
+    >
       <Link
         href={href}
         className="group block overflow-hidden rounded-lg bg-brand-blue text-white shadow-soft-2 outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"

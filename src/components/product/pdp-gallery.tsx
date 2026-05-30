@@ -17,11 +17,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Heart,
   Play,
   X,
 } from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
+import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
 const FALLBACK_BLUR =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==";
@@ -38,6 +40,8 @@ interface PdpGalleryProps {
 }
 
 export function PdpGallery({ product, badges }: PdpGalleryProps) {
+  const wished = useIsWished(product.sku);
+  const toggleWish = useWishlist((s) => s.toggleProduct);
   const slides = useMemo<Slide[]>(() => {
     const out: Slide[] = product.media.images.map((asset) => ({
       kind: "image" as const,
@@ -153,6 +157,21 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     <div className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
       {/* Main stage */}
       <div className="relative flex-1">
+        <button
+          type="button"
+          aria-pressed={wished}
+          aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
+          onClick={() => toggleWish(product)}
+          className={cn(
+            "absolute top-3 right-3 z-20 hidden size-10 items-center justify-center rounded-full bg-white/90 text-ink-700 ring-1 ring-border/60 backdrop-blur transition hover:text-action focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none md:inline-flex",
+            wished && "text-action",
+          )}
+        >
+          <Heart
+            className={cn("size-5 transition", wished && "fill-action")}
+            aria-hidden
+          />
+        </button>
         <div className="relative md:hidden">
           <div
             ref={mobileTrackRef}

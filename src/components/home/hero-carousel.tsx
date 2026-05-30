@@ -69,7 +69,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      className="relative isolate bg-canvas px-2 pt-3 sm:px-3 md:px-4 md:pt-5"
+      className="relative isolate bg-canvas px-2 pt-2 sm:px-3 md:px-4 md:pt-3"
     >
       <div className="relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:h-auto md:aspect-[24/10] md:min-h-0 lg:rounded-xl">
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>

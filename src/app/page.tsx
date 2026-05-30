@@ -26,14 +26,14 @@ export default async function Home() {
       <HomeSection section={sections[HomeSectionSlotKey.SECOND]} />
 
       {bannerAfterSecond ? (
-        <ProtectedPricesBand banner={bannerAfterSecond} />
+        <ProtectedPricesBand banner={bannerAfterSecond} compact />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.THIRD]} />
       <HomeSection section={sections[HomeSectionSlotKey.FOURTH]} />
 
       {bannerAfterFourth ? (
-        <ProtectedPricesBand banner={bannerAfterFourth} />
+        <ProtectedPricesBand banner={bannerAfterFourth} compact />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.FIFTH]} />
@@ -59,6 +59,7 @@ function HomeSection({
       href={section.href}
       products={section.products}
       minimalHeader
+      dense
     />
   );
 }

@@ -44,17 +44,17 @@ export function Header({
       className="bg-white text-brand-blue"
     >
       {/* Row 1 — desktop */}
-      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-3 md:flex md:py-4">
+      <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-2 md:flex">
         <DesktopMenu tabs={tabs} />
         <Link href="/" aria-label="Svet Akcija — početna">
-          <div className="shrink-0 rounded-lg px-2 py-1">
+          <div className="shrink-0 rounded-lg px-2 py-0">
             <Image
               src="/logo.webp"
               alt="Svet Akcija"
               width={1600}
               height={382}
               priority
-              className="h-auto w-[328px] max-w-[30vw] object-contain"
+              className="h-auto w-[286px] max-w-[24vw] object-contain"
             />
           </div>
         </Link>
@@ -76,7 +76,7 @@ export function Header({
       {/* Row 2 — primary tabs (desktop) */}
       <nav
         aria-label="Glavna navigacija"
-        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 overflow-x-auto border-t border-brand-blue/10 px-6 py-2 md:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mx-auto hidden max-w-[var(--container-page)] items-center gap-1 overflow-x-auto border-t border-brand-blue/10 px-6 py-1.5 md:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {tabs.map((t) => {
           const active = pathname === t.href;

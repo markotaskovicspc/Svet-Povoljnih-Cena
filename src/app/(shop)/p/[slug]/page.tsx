@@ -16,7 +16,6 @@ import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
-import { PdpDescription } from "@/components/product/pdp-description";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
@@ -135,85 +134,80 @@ export default async function ProductPage({ params }: RouteProps) {
         />
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="flex flex-col gap-3 md:self-start">
+        <div className="flex flex-col gap-2.5 md:self-start">
           <header>
-            <h1 className="font-display text-2xl font-bold text-ink-900 md:text-4xl">
+            <h1 className="font-display text-2xl font-bold text-ink-900 md:text-3xl">
               {product.name}
             </h1>
-            <p className="mt-2 font-mono text-xs tracking-tight text-ink-500 md:text-sm">
+            <p className="mt-1.5 font-mono text-xs tracking-tight text-ink-500">
               {formatDimensions(product.dimensionsCm)}
             </p>
             <ProductColorOptions
               product={product}
               selectable
-              className="mt-4"
+              className="mt-2.5"
               label="Dostupne boje"
             />
           </header>
 
           {/* Price block — only the effective price is emphasised. */}
-          <div>
-            <p className="mb-1 text-xs font-semibold text-ink-500">
-              {price.kind === "loyalty"
-                ? "MP cena"
-                : price.kind === "sale"
-                  ? "Akcijska cena"
-                  : "Cena"}
-            </p>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              {hasReducedPrice ? (
-                <>
-                  <span className="text-action text-3xl font-bold md:text-4xl">
-                    {formatRsd(price.effective)}
-                  </span>
-                  <span className="text-sm text-ink-500 line-through md:text-base">
+          <div className="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_minmax(270px,0.9fr)] md:items-end">
+            <div>
+              <p className="mb-1 text-xs font-semibold text-ink-500">
+                {price.kind === "loyalty"
+                  ? "MP cena"
+                  : price.kind === "sale"
+                    ? "Akcijska cena"
+                    : "Cena"}
+              </p>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {hasReducedPrice ? (
+                  <>
+                    <span className="text-action text-3xl font-bold md:text-[34px]">
+                      {formatRsd(price.effective)}
+                    </span>
+                    <span className="text-sm text-ink-500 line-through">
+                      {formatRsd(price.full)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-2xl font-semibold text-ink-900 md:text-[30px]">
                     {formatRsd(price.full)}
                   </span>
-                </>
-              ) : (
-                <span className="text-2xl font-semibold text-ink-900 md:text-3xl">
-                  {formatRsd(price.full)}
-                </span>
-              )}
+                )}
+              </div>
+              {price.kind === "sale" && product.action?.isPermanent ? (
+                <p className="mt-1 text-xs text-ink-500">
+                  Trajno niska cena od 01.05.2026.
+                </p>
+              ) : price.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
+                <p className="mt-1 text-xs text-ink-500">
+                  Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
+                  {formatDate(product.action.endsAt)}
+                </p>
+              ) : price.kind === "loyalty" ? (
+                <p className="mt-1 text-xs text-ink-500">
+                  Cena za kupce sa nalogom.
+                </p>
+              ) : null}
             </div>
-            {price.kind === "sale" && product.action?.isPermanent ? (
-              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Trajno niska cena od 01.05.2026.
-              </p>
-            ) : price.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
-              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
-                {formatDate(product.action.endsAt)}
-              </p>
-            ) : price.kind === "loyalty" ? (
-              <p className="mt-1.5 text-xs text-ink-500 md:mt-2 md:text-sm">
-                Cena za kupce sa nalogom.
-              </p>
-            ) : null}
+            <PdpAddToCart product={product} variant="desktop" />
           </div>
 
-          {/* Add-to-cart with quantity stepper, moved up directly under price. */}
-          <PdpAddToCart product={product} variant="desktop" />
-
-          <ul className="border-border/60 grid grid-cols-2 gap-2 border-t pt-3 text-xs text-ink-700 md:grid-cols-3">
+          <ul className="border-border/60 grid grid-cols-2 gap-1.5 border-t pt-2 text-xs text-ink-700 md:grid-cols-3">
             {benefitChips.slice(0, 6).map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
-                icon={<PictogramIcon code={benefit.code} className="size-4 text-walnut" />}
+                icon={<PictogramIcon code={benefit.code} className="size-3.5 text-walnut" />}
                 label={benefit.label}
               />
             ))}
           </ul>
 
-          <div className="border-border/60 border-t pt-3">
-            <div className="hidden md:block">
-              <h2 className="font-display text-xl font-bold text-ink-900 md:text-2xl">
-                Opis proizvoda
-              </h2>
-              <PdpDescription description={cleanDescription} />
-            </div>
-            <div className="mt-3">
+          <div className="border-border/60 border-t pt-2.5">
+            <div>
               <PdpInfoLinks
+                descriptionPreview={cleanDescription}
                 sections={{
                   description: product.description,
                   deliveryTerms: product.pdpInfo?.deliveryTerms,
@@ -393,9 +387,9 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 flex min-h-13 items-center justify-center gap-1.5 rounded-lg p-2 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/49] md:min-h-0 md:flex-col md:gap-0.5 md:p-1.5">
+    <li className="bg-surface ring-border/60 flex min-h-11 items-center justify-center gap-1 rounded-md p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/43] md:min-h-0 md:flex-col md:gap-0.5 md:p-1">
       {icon}
-      <span className="line-clamp-2 text-xs md:text-[11px]">{label}</span>
+      <span className="line-clamp-2 text-[11px] md:text-[10px]">{label}</span>
     </li>
   );
 }

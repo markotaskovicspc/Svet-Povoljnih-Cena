@@ -39,6 +39,7 @@ interface SectionRailProps {
   minimalHeader?: boolean;
   products: Product[];
   banner?: Banner | null;
+  dense?: boolean;
   /**
    * On mobile we deliberately strip eyebrow + description for some sections
    * (e.g. Heroji meseca) to keep the layout dense and uncluttered. The
@@ -59,6 +60,7 @@ export function SectionRail({
   products,
   minimalHeader,
   banner,
+  dense,
   mobileMinimal,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -69,7 +71,12 @@ export function SectionRail({
   const showBanner = Boolean(banner && !minimalHeader);
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-4 py-5 md:px-6 md:py-10">
+    <section
+      className={cn(
+        "mx-auto w-full max-w-[var(--container-page)] px-4 md:px-6",
+        dense ? "py-4 md:py-6" : "py-5 md:py-10",
+      )}
+    >
       {showBanner && banner ? <SectionBanner banner={banner} href={href} /> : null}
 
       <header
@@ -96,10 +103,10 @@ export function SectionRail({
             </p>
           ) : null}
           <div
-            className={cn(
-              "flex min-w-0 items-center gap-3 md:gap-4",
-              !minimalHeader && "mt-1 md:mt-2",
-            )}
+          className={cn(
+            "flex min-w-0 items-center gap-3 md:gap-4",
+            !minimalHeader && (dense ? "mt-1" : "mt-1 md:mt-2"),
+          )}
           >
             {titleIcon ? (
               <span className="flex size-11 shrink-0 items-center justify-center md:size-14">
@@ -143,7 +150,10 @@ export function SectionRail({
 
       <div
         ref={railRef}
-        className="relative -mx-4 mt-3 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:mt-5 md:px-6 [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          "relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 [&::-webkit-scrollbar]:hidden",
+          dense ? "mt-2 md:mt-3" : "mt-3 md:mt-5",
+        )}
       >
         <DragHint scopeRef={railRef} />
         <motion.ul

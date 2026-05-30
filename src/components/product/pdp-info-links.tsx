@@ -27,8 +27,10 @@ const LABELS: Record<PdpInfoKey, string> = {
 
 export function PdpInfoLinks({
   sections,
+  descriptionPreview,
 }: {
   sections: Partial<Record<PdpInfoKey, string>>;
+  descriptionPreview?: string;
 }) {
   const items = (Object.keys(LABELS) as PdpInfoKey[]).map((key) => ({
     key,
@@ -45,13 +47,35 @@ export function PdpInfoLinks({
 
   return (
     <>
-      <div className="border-border/70 divide-border/70 divide-y border-y">
+      {descriptionPreview ? (
+        <button
+          type="button"
+          onClick={() => show("description")}
+          className="group hidden w-full rounded-md text-left transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none md:block"
+        >
+          <h2 className="font-display text-xl font-bold text-ink-900 transition group-hover:text-brand-blue md:text-2xl">
+            Opis proizvoda
+          </h2>
+          <p className="mt-2 line-clamp-3 text-justify text-sm leading-relaxed text-ink-700">
+            {descriptionPreview}
+          </p>
+        </button>
+      ) : null}
+      <div
+        className={cn(
+          "border-border/70 divide-border/70 divide-y border-y",
+          descriptionPreview && "mt-3 md:mt-2",
+        )}
+      >
         {items.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => show(item.key)}
-            className="group flex min-h-13 w-full items-center justify-between gap-4 py-3 text-left text-sm font-semibold text-ink-900 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+            className={cn(
+              "group flex min-h-13 w-full items-center justify-between gap-4 py-3 text-left text-sm font-semibold text-ink-900 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+              descriptionPreview && item.key === "description" && "md:hidden",
+            )}
           >
             <span>{item.label}</span>
             <ChevronDown
