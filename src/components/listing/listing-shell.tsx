@@ -2,7 +2,7 @@
 
 /**
  * Listing shell — orchestrates filter state, sort, view-toggle (3/4 col),
- * "Učitaj još" cursor pagination, scroll-restore on back, and empty state.
+ * automatic scroll pagination, scroll-restore on back, and empty state.
  *
  * Visual chrome: page header, breadcrumbs,
  * sticky desktop sidebar, mobile sheet trigger, active filter chip strip.
@@ -107,6 +107,7 @@ export function ListingShell({
   const [activeSub, setActiveSub] = useState<string | undefined>(initialSubTab);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const displayTitleIcon =
     titleIcon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
 
@@ -160,6 +161,28 @@ export function ListingShell({
   const chips = useMemo(() => activeChips(state, extents), [state, extents]);
   const shown = filtered.slice(0, visible);
   const hasMore = filtered.length > shown.length;
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setVisibleWindow((current) => ({
+          key: visibleKey,
+          count:
+            current.key === visibleKey
+              ? current.count + LISTING_PAGE_SIZE
+              : LISTING_PAGE_SIZE * 2,
+        }));
+      },
+      { rootMargin: "900px 0px 900px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, visibleKey]);
 
   const sidebar = (
     <FilterSidebar
@@ -388,22 +411,13 @@ export function ListingShell({
             )}
 
             {hasMore ? (
-              <div className="mt-12 flex justify-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="rounded-full px-8"
-                  onClick={() =>
-                    setVisibleWindow({
-                      key: visibleKey,
-                      count: visible + LISTING_PAGE_SIZE,
-                    })
-                  }
-                >
-                  Učitaj još
-                </Button>
-              </div>
+              <div
+                ref={loadMoreRef}
+                className="h-16"
+                role="status"
+                aria-live="polite"
+                aria-label="Učitavanje još proizvoda"
+              />
             ) : null}
           </div>
         </div>
