@@ -96,7 +96,7 @@ export function VoucherSection() {
                   name="code"
                   defaultValue={applied?.code ?? ""}
                   placeholder="npr. SPRING-10"
-                  className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 flex-1 rounded-full px-3 text-sm text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
+                  className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 flex-1 rounded-full px-3 text-base text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:text-sm"
                 />
                 <button
                   type="submit"

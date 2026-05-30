@@ -185,7 +185,7 @@ function CartSummary({
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="npr. SPRING-10"
-              className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas flex-1 rounded-full px-3 py-2 text-sm text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
+              className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas flex-1 rounded-full px-3 py-2 text-base text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:text-sm"
             />
             <button
               type="submit"

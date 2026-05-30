@@ -258,7 +258,7 @@ export function InstantSearch({
           placeholder="Pretraži ponudu (min. 3 znaka)…"
           aria-label="Pretraga proizvoda"
           autoComplete="off"
-          className="h-11 w-full rounded-full border border-border bg-surface pr-4 pl-9 text-sm text-ink-900 placeholder:text-ink-500 transition outline-none focus-visible:border-walnut focus-visible:ring-2 focus-visible:ring-walnut/20"
+          className="h-11 w-full rounded-full border border-border bg-surface pr-4 pl-9 text-base text-ink-900 placeholder:text-ink-500 transition outline-none focus-visible:border-walnut focus-visible:ring-2 focus-visible:ring-walnut/20 md:text-sm"
         />
       </div>
 
