@@ -59,7 +59,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
-  const toggleWish = useWishlist((s) => s.toggle);
+  const toggleWish = useWishlist((s) => s.toggleProduct);
   const setQty = useCart((s) => s.setQty);
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
@@ -170,14 +170,14 @@ export function ProductCard({
           onPointerMove={handleImageDragMove}
           onPointerUp={finishImageDrag}
           onPointerCancel={finishImageDrag}
-          className="absolute inset-0 flex touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="absolute inset-0 flex snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {images.length
             ? images.map((image, index) => (
                 <div
                   key={`${image.url}-${index}`}
                   data-card-image={index}
-                  className="relative min-w-full snap-center"
+                  className="relative min-w-full snap-center snap-always"
                 >
                   {index === 0 ? (
                     <motion.div
@@ -251,7 +251,7 @@ export function ProductCard({
         type="button"
         aria-pressed={wished}
         aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
-        onClick={() => toggleWish(product.sku)}
+        onClick={() => toggleWish(product)}
         className="bg-surface/85 ring-border/60 hover:text-action focus-visible:ring-walnut/40 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full text-ink-700 ring-1 backdrop-blur transition focus-visible:ring-2 focus-visible:outline-none"
       >
         <Heart

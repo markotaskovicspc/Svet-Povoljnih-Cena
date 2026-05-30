@@ -161,7 +161,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             onPointerMove={handleDragMove}
             onPointerUp={finishDrag}
             onPointerCancel={finishDrag}
-            className="flex cursor-grab touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain rounded-lg bg-white ring-1 ring-border/60 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex cursor-grab snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain rounded-lg bg-white ring-1 ring-border/60 [touch-action:pan-x_pan-y] active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -169,7 +169,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               <div
                 key={`${s.kind}-mobile-${index}`}
                 data-slide-index={index}
-                className="relative aspect-square min-w-full snap-center"
+                className="relative aspect-square min-w-full snap-center snap-always"
               >
                 {s.kind === "image" ? (
                   <Image
@@ -233,7 +233,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             onPointerMove={handleDragMove}
             onPointerUp={finishDrag}
             onPointerCancel={finishDrag}
-            className="bg-white ring-border/60 flex h-[min(65vh,620px)] min-h-[360px] w-full cursor-grab snap-x snap-mandatory select-none overflow-x-auto rounded-lg ring-1 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="bg-white ring-border/60 flex h-[min(65vh,620px)] min-h-[360px] w-full cursor-grab snap-x snap-mandatory select-none overflow-x-auto rounded-lg ring-1 [touch-action:pan-x_pan-y] active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Galerija proizvoda"
             aria-roledescription="carousel"
           >
@@ -247,7 +247,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   if (s.kind === "image") setLightboxOpen(true);
                 }}
                 className={cn(
-                  "relative min-w-full snap-center",
+                  "relative min-w-full snap-center snap-always",
                   s.kind === "image" ? "cursor-pointer" : "cursor-default",
                 )}
                 role={s.kind === "image" ? "button" : undefined}

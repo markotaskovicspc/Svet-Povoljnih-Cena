@@ -15,7 +15,13 @@ import { DesktopMenu } from "./desktop-menu";
 
 const SCROLL_THRESHOLD = 16;
 
-export function Header({ tabs }: { tabs: Tab[] }) {
+export function Header({
+  tabs,
+  isCustomerLoggedIn = false,
+}: {
+  tabs: Tab[];
+  isCustomerLoggedIn?: boolean;
+}) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
 
@@ -100,7 +106,7 @@ export function Header({ tabs }: { tabs: Tab[] }) {
 
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
-        <MobileNav tabs={tabs} />
+        <MobileNav tabs={tabs} isCustomerLoggedIn={isCustomerLoggedIn} />
         <Link
           href="/"
           aria-label="Svet Akcija — početna"
@@ -121,7 +127,12 @@ export function Header({ tabs }: { tabs: Tab[] }) {
           <Link
             href="/nalog"
             aria-label="Moj nalog"
-            className="inline-flex size-9 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+            className={cn(
+              "inline-flex size-9 items-center justify-center rounded-full transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none",
+              isCustomerLoggedIn
+                ? "text-action hover:text-action"
+                : "text-ink-700 hover:text-ink-900",
+            )}
           >
             <User2 className="size-4" aria-hidden />
           </Link>

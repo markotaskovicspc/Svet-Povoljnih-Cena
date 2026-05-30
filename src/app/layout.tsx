@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
+import { getCurrentUser } from "@/lib/auth/session";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -57,9 +58,10 @@ export default async function RootLayout({
   // Suppress storefront chrome on /admin — admin owns its own shell.
   const pathname = (await headers()).get("x-pathname") ?? "";
   const isAdmin = pathname.startsWith("/admin");
-  const [activePromoBar, activeTabs] = isAdmin
-    ? [null, []]
-    : await Promise.all([getActivePromoBar(), getActiveTabs()]);
+  const [activePromoBar, activeTabs, currentUser] = isAdmin
+    ? [null, [], null]
+    : await Promise.all([getActivePromoBar(), getActiveTabs(), getCurrentUser()]);
+  const isCustomerLoggedIn = currentUser?.userType === "customer";
   return (
     <html
       lang="sr-Latn"
@@ -76,7 +78,7 @@ export default async function RootLayout({
           ) : (
             <>
               <div className="sticky top-0 z-50 bg-white">
-                <Header tabs={activeTabs} />
+                <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
                 {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
               </div>
               <main className="flex-1">{children}</main>

@@ -287,8 +287,21 @@ export interface Reclamation {
   resolvedAt?: ISODate;
 }
 
+export interface WishlistProductSnapshot {
+  sku: SKU;
+  slug?: Slug;
+  name?: string;
+  fullPrice?: number;
+  effectivePrice?: number;
+  discountPct?: number;
+  inStock?: boolean;
+  incoming?: boolean;
+  thumbnailUrl?: string | null;
+}
+
 export interface WishlistItem {
   sku: SKU;
+  product?: WishlistProductSnapshot;
   notifyOnSale?: boolean;
   notifyOnRestock?: boolean;
   addedAt: ISODate;

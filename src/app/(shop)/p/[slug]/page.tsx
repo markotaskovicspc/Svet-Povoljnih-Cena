@@ -195,7 +195,7 @@ export default async function ProductPage({ params }: RouteProps) {
           {/* Add-to-cart with quantity stepper, moved up directly under price. */}
           <PdpAddToCart product={product} variant="desktop" />
 
-          <ul className="border-border/60 grid grid-cols-3 gap-2 border-t pt-3 text-xs text-ink-700">
+          <ul className="border-border/60 grid grid-cols-2 gap-2 border-t pt-3 text-xs text-ink-700 md:grid-cols-3">
             {benefitChips.slice(0, 6).map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
@@ -206,10 +206,12 @@ export default async function ProductPage({ params }: RouteProps) {
           </ul>
 
           <div className="border-border/60 border-t pt-3">
-            <h2 className="font-display text-xl font-bold text-ink-900 md:text-2xl">
-              Opis proizvoda
-            </h2>
-            <PdpDescription description={cleanDescription} />
+            <div className="hidden md:block">
+              <h2 className="font-display text-xl font-bold text-ink-900 md:text-2xl">
+                Opis proizvoda
+              </h2>
+              <PdpDescription description={cleanDescription} />
+            </div>
             <div className="mt-3">
               <PdpInfoLinks
                 sections={{
@@ -271,6 +273,7 @@ export default async function ProductPage({ params }: RouteProps) {
           }
           ctaLabel="Pogledaj kolekciju"
           products={frequentlyBought}
+          mobileMinimal
         />
       ) : null}
 
@@ -282,6 +285,7 @@ export default async function ProductPage({ params }: RouteProps) {
           href={`/k/${product.categoryPath.map(slugify).join("/")}`}
           ctaLabel="Sve iz kategorije"
           products={similar}
+          mobileMinimal
         />
       ) : null}
 
@@ -389,9 +393,9 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 flex aspect-[10/7] min-h-0 flex-col items-center justify-center gap-0.5 rounded-lg p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/49]">
+    <li className="bg-surface ring-border/60 flex min-h-13 items-center justify-center gap-1.5 rounded-lg p-2 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/49] md:min-h-0 md:flex-col md:gap-0.5 md:p-1.5">
       {icon}
-      <span className="line-clamp-2 text-[11px]">{label}</span>
+      <span className="line-clamp-2 text-xs md:text-[11px]">{label}</span>
     </li>
   );
 }

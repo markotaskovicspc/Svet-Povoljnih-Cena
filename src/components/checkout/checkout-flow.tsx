@@ -146,7 +146,7 @@ export function CheckoutFlow({
       shipToDifferent: false,
       shippingMethod: "kurir",
       perItemAssembly: {},
-      paymentMethod: "ips",
+      paymentMethod: "pouzece_gotovina",
       voucherCode: "",
       notes: "",
       consent: false,
@@ -324,9 +324,27 @@ export function CheckoutFlow({
                 </motion.div>
               </AnimatePresence>
               {submitError ? (
-                <p className="mt-4 rounded-xl border border-action/30 bg-action/5 px-4 py-3 text-sm text-action">
-                  {submitError}
-                </p>
+                <div
+                  role="alert"
+                  className="mt-4 rounded-xl border border-action/30 bg-action/5 px-4 py-3 text-sm text-action"
+                >
+                  <p>{submitError}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      href="/korpa"
+                      className="inline-flex items-center rounded-full bg-white px-3 py-1.5 text-xs font-medium text-action ring-1 ring-action/25 transition hover:bg-action/10"
+                    >
+                      Proveri korpu
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setSubmitError(null)}
+                      className="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium text-action ring-1 ring-action/25 transition hover:bg-action/10"
+                    >
+                      Nastavi proveru
+                    </button>
+                  </div>
+                </div>
               ) : null}
             </div>
           </div>
@@ -667,6 +685,8 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
       return `Artikal ${error.sku ?? ""} više nije dostupan.`;
     case "VOUCHER_INVALID":
       return error.reason ?? "Vaučer nije važeći.";
+    case "INVALID":
+      return "Proverite obavezna polja i saglasnost pre potvrde porudžbine.";
     case "GUEST_REQUIRES_EMAIL":
       return "Unesite e-mail adresu za porudžbinu kao gost.";
     case "EMPTY_CART":

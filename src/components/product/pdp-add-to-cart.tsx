@@ -9,12 +9,11 @@
  * be layered into the same control when backend availability rules are final.
  */
 import { useState } from "react";
-import { Minus, Plus, ShoppingBag } from "lucide-react";
+import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatRsd } from "@/lib/format";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
-import { effectiveUnitPrice } from "@/lib/pricing";
+import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -24,10 +23,8 @@ interface PdpAddToCartProps {
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const [pickQty, setPickQty] = useState(1);
-
-  const price = effectiveUnitPrice(product);
-  const sale = price.effective;
-  const onSale = price.effective < price.full;
+  const wished = useIsWished(product.sku);
+  const toggleWish = useWishlist((s) => s.toggleProduct);
 
   function handleAdd() {
     commitAddToCart(product, pickQty);
@@ -94,21 +91,21 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
       className="bg-surface/95 ring-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 rounded-lg px-3 py-2.5 shadow-soft-3 ring-1 backdrop-blur md:hidden"
     >
       <div className="flex items-center gap-3">
-        <div className="flex flex-col">
-          <span
-            className={cn(
-              "text-sm font-semibold",
-              onSale ? "text-action" : "text-ink-900",
-            )}
-          >
-            {formatRsd(sale)}
-          </span>
-          {onSale ? (
-            <span className="text-[11px] text-ink-500 line-through">
-              {formatRsd(product.fullPrice)}
-            </span>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          aria-pressed={wished}
+          aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
+          onClick={() => toggleWish(product)}
+          className={cn(
+            "ring-border/60 focus-visible:ring-walnut/40 inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-ink-700 ring-1 transition hover:text-action focus-visible:ring-2 focus-visible:outline-none",
+            wished && "text-action",
+          )}
+        >
+          <Heart
+            className={cn("size-5 transition", wished && "fill-action")}
+            aria-hidden
+          />
+        </button>
         {ctas}
       </div>
     </div>

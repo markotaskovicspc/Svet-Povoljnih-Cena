@@ -5,17 +5,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Crown,
   Home,
-  Hourglass,
   Menu,
-  Percent,
   Search,
-  ShieldCheck,
-  Sparkles,
   User2,
   X,
 } from "lucide-react";
@@ -29,6 +23,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { primaryNav, type NavNode } from "@/data/site";
 import { getPromoTabPresentation } from "@/data/campaign-icons";
+import {
+  AccountShortcutTile,
+  PromoShortcutTile,
+} from "@/components/home/promo-shortcut-tile";
 import { cn } from "@/lib/utils";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
@@ -81,17 +79,13 @@ const categoryTiles = primaryNav.map((node) => ({
   imageUrl: categoryTileImages[node.label] ?? fallbackCategoryImage,
 }));
 
-const tabIcons = {
-  "mesecna-akcija": Percent,
-  "nedeljna-akcija": CalendarDays,
-  "heroji-meseca": Crown,
-  "niske-cene-pod-zastitom": ShieldCheck,
-  "ogranicena-ponuda": Hourglass,
-  "sve-do-999": ShieldCheck,
-  "specijalne-ponude": Sparkles,
-} as const;
-
-export function MobileNav({ tabs }: { tabs: Tab[] }) {
+export function MobileNav({
+  tabs,
+  isCustomerLoggedIn = false,
+}: {
+  tabs: Tab[];
+  isCustomerLoggedIn?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: primaryNav }]);
@@ -164,7 +158,12 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                   href="/nalog"
                   onClick={close}
                   aria-label="Moj nalog"
-                  className="inline-flex size-10 items-center justify-center rounded-full text-ink-700 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                  className={cn(
+                    "inline-flex size-10 items-center justify-center rounded-full transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                    isCustomerLoggedIn
+                      ? "text-action hover:text-action"
+                      : "text-ink-700 hover:text-ink-900",
+                  )}
                 >
                   <User2 className="size-5" aria-hidden />
                 </Link>
@@ -224,7 +223,7 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-2 block min-h-8 text-center text-[10px] leading-tight font-bold tracking-[0.02em] text-ink-700 uppercase">
+                              <span className="mt-2 block min-h-8 text-center text-xs leading-tight font-bold tracking-[0.02em] text-ink-700 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -238,58 +237,23 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                         {tabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
-                          const Icon =
-                            tabIcons[(promoTab.iconKey ?? promoTab.id) as keyof typeof tabIcons] ??
-                            Sparkles;
-                          const iconAsset = promoTab.iconAsset;
                           return (
                             <li key={t.id}>
-                              <Link
-                                href={promoTab.href}
+                              <PromoShortcutTile
+                                tab={t}
+                                active={isActive}
                                 onClick={close}
-                                className={cn(
-                                  "flex min-h-14 items-center gap-3 rounded-md border border-white/20 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none",
-                                  isActive && "ring-2 ring-white/80",
-                                )}
-                              >
-                                <span
-                                  className={cn(
-                                    "flex shrink-0 items-center justify-center text-brand-blue",
-                                    "size-8",
-                                    !iconAsset && "rounded-md bg-brand-blue-50",
-                                  )}
-                                >
-                                  {iconAsset ? (
-                                    <Image
-                                      src={iconAsset.url}
-                                      alt=""
-                                      width={iconAsset.width ?? 80}
-                                      height={iconAsset.height ?? 80}
-                                      unoptimized={iconAsset.url.endsWith(".svg")}
-                                      className="h-8 w-8 object-contain"
-                                    />
-                                  ) : (
-                                    <Icon className="size-4" aria-hidden />
-                                  )}
-                                </span>
-                                <span className="min-w-0 leading-tight break-words">
-                                  {promoTab.label}
-                                </span>
-                              </Link>
+                                className="border-white/20 focus-visible:ring-white/70"
+                              />
                             </li>
                           );
                         })}
                         <li>
-                          <Link
-                            href="/nalog"
+                          <AccountShortcutTile
+                            active={isCustomerLoggedIn}
                             onClick={close}
-                            className="flex min-h-14 items-center gap-3 rounded-md border border-white/20 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
-                          >
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-blue-50 text-brand-blue">
-                              <User2 className="size-4" aria-hidden />
-                            </span>
-                            <span className="min-w-0 leading-tight break-words">Moj nalog</span>
-                          </Link>
+                            className="border-white/20 focus-visible:ring-white/70"
+                          />
                         </li>
                       </ul>
                     </div>
@@ -367,7 +331,12 @@ export function MobileNav({ tabs }: { tabs: Tab[] }) {
                       <Link
                         href="/nalog"
                         onClick={close}
-                        className="flex min-h-12 items-center justify-between gap-4 px-4 py-3 text-sm font-medium text-ink-700 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                        className={cn(
+                          "flex min-h-12 items-center justify-between gap-4 px-4 py-3 text-sm font-medium transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                          isCustomerLoggedIn
+                            ? "text-action hover:text-action"
+                            : "text-ink-700 hover:text-brand-blue",
+                        )}
                       >
                         <span className="inline-flex min-w-0 items-center gap-2 break-words">
                           <User2 className="size-4 shrink-0" aria-hidden />

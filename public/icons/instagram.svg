@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+  <defs>
+    <radialGradient id="ig-a" cx="30%" cy="107%" r="150%">
+      <stop offset="0" stop-color="#fdf497"/>
+      <stop offset=".05" stop-color="#fdf497"/>
+      <stop offset=".45" stop-color="#fd5949"/>
+      <stop offset=".6" stop-color="#d6249f"/>
+      <stop offset=".9" stop-color="#285AEB"/>
+    </radialGradient>
+  </defs>
+  <rect width="24" height="24" rx="6" fill="url(#ig-a)"/>
+  <path fill="#fff" d="M12 7.35A4.65 4.65 0 1 0 12 16.65 4.65 4.65 0 0 0 12 7.35Zm0 7.67A3.02 3.02 0 1 1 12 8.98a3.02 3.02 0 0 1 0 6.04Zm5.93-7.85a1.09 1.09 0 1 1-2.18 0 1.09 1.09 0 0 1 2.18 0Z"/>
+  <path fill="#fff" d="M16.3 3.8H7.7a3.9 3.9 0 0 0-3.9 3.9v8.6a3.9 3.9 0 0 0 3.9 3.9h8.6a3.9 3.9 0 0 0 3.9-3.9V7.7a3.9 3.9 0 0 0-3.9-3.9Zm2.16 12.5a2.16 2.16 0 0 1-2.16 2.16H7.7a2.16 2.16 0 0 1-2.16-2.16V7.7A2.16 2.16 0 0 1 7.7 5.54h8.6a2.16 2.16 0 0 1 2.16 2.16v8.6Z"/>
+</svg>
