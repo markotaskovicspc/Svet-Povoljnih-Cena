@@ -24,6 +24,11 @@ interface Crumb {
   nodes: NavNode[];
 }
 
+const promoMenuIconImageClassByKey = {
+  "ogranicena-ponuda": "h-8 w-12",
+  "niske-cene-pod-zastitom": "h-8 w-12",
+} as const;
+
 export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -144,6 +149,11 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                 const promoTab = getPromoTabPresentation(tab);
                 const isActive = pathname === promoTab.href;
                 const iconAsset = promoTab.iconAsset;
+                const iconImageClass = promoTab.iconKey
+                  ? promoMenuIconImageClassByKey[
+                      promoTab.iconKey as keyof typeof promoMenuIconImageClassByKey
+                    ]
+                  : undefined;
                 return (
                   <li key={tab.id} className="border-b border-border">
                     <Link
@@ -156,14 +166,14 @@ export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         {iconAsset ? (
-                          <span className="flex size-6 shrink-0 items-center justify-center">
+                          <span className="flex h-6 w-12 shrink-0 items-center justify-center">
                             <Image
                               src={iconAsset.url}
                               alt=""
                               width={iconAsset.width ?? 80}
                               height={iconAsset.height ?? 80}
                               unoptimized={iconAsset.url.endsWith(".svg")}
-                              className="h-6 w-6 object-contain"
+                              className={cn("h-6 w-6 object-contain", iconImageClass)}
                             />
                           </span>
                         ) : null}

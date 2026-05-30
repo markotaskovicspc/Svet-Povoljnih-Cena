@@ -13,7 +13,7 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
             <PromoShortcutTile
               key={tab.id}
               tab={tab}
-              className="min-h-20 text-brand-blue"
+              className="h-20 text-brand-blue"
             />
           );
         })}

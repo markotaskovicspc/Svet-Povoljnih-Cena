@@ -24,6 +24,11 @@ const shortcutIconMap = {
   Tag,
 } as const;
 
+const promoIconImageClassByKey = {
+  "ogranicena-ponuda": "h-12 w-16",
+  "niske-cene-pod-zastitom": "h-12 w-16",
+} as const;
+
 export function PromoShortcutTile({
   tab,
   active,
@@ -38,6 +43,9 @@ export function PromoShortcutTile({
   const promoTab = getPromoTabPresentation(tab);
   const Icon = shortcutIconMap[tab.icon as keyof typeof shortcutIconMap] ?? Sparkles;
   const iconAsset = promoTab.iconAsset;
+  const iconImageClass = promoTab.iconKey
+    ? promoIconImageClassByKey[promoTab.iconKey as keyof typeof promoIconImageClassByKey]
+    : undefined;
 
   return (
     <Link
@@ -49,7 +57,7 @@ export function PromoShortcutTile({
         className,
       )}
     >
-      <span className="flex size-9 shrink-0 items-center justify-center text-brand-blue">
+      <span className="flex h-12 w-16 shrink-0 items-center justify-center text-brand-blue">
         {iconAsset ? (
           <Image
             src={iconAsset.url}
@@ -57,7 +65,7 @@ export function PromoShortcutTile({
             width={iconAsset.width ?? 96}
             height={iconAsset.height ?? 96}
             unoptimized={iconAsset.url.endsWith(".svg")}
-            className="h-9 w-9 object-contain"
+            className={cn("h-9 w-9 object-contain", iconImageClass)}
           />
         ) : (
           <Icon className="size-5" aria-hidden />

@@ -243,7 +243,7 @@ export function MobileNav({
                                 tab={t}
                                 active={isActive}
                                 onClick={close}
-                                className="border-white/20 focus-visible:ring-white/70"
+                                className="h-20 border-white/20 focus-visible:ring-white/70"
                               />
                             </li>
                           );
@@ -252,7 +252,7 @@ export function MobileNav({
                           <AccountShortcutTile
                             active={isCustomerLoggedIn}
                             onClick={close}
-                            className="border-white/20 focus-visible:ring-white/70"
+                            className="h-20 border-white/20 focus-visible:ring-white/70"
                           />
                         </li>
                       </ul>
