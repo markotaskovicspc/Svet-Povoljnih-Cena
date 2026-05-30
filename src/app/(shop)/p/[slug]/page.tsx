@@ -258,7 +258,6 @@ export default async function ProductPage({ params }: RouteProps) {
       {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
-          eyebrow="Često kupovano zajedno"
           title="Upotpunite kolekciju"
           href={
             product.collection
@@ -274,7 +273,6 @@ export default async function ProductPage({ params }: RouteProps) {
       {/* Row XI — Similar products (same group) */}
       {similar.length ? (
         <SectionRail
-          eyebrow="Slični artikli"
           title="Možda će vam se svideti"
           href={`/k/${product.categoryPath.map(slugify).join("/")}`}
           ctaLabel="Sve iz kategorije"
