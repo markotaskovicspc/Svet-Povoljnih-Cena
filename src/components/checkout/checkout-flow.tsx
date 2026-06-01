@@ -303,19 +303,29 @@ export function CheckoutFlow({
 
   return (
     <FormProvider {...methods}>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <form
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           noValidate
-          className="bg-surface ring-border/60 rounded-2xl p-4 pb-28 ring-1 sm:p-7 md:pb-7"
+          className={cn(
+            "bg-surface ring-border/60 rounded-2xl p-4 pb-28 ring-1 sm:p-7 md:pb-7",
+            step === "review" && "lg:p-5",
+          )}
         >
-          <CheckoutStepper activeStep={step} />
+          <div className={cn(step === "review" && "lg:sr-only")}>
+            <CheckoutStepper activeStep={step} />
+          </div>
 
-          <div className="border-border/60 mt-6 border-t pt-6">
+          <div
+            className={cn(
+              "border-border/60 border-t",
+              step === "review" ? "mt-4 pt-4" : "mt-6 pt-6",
+            )}
+          >
             <h2 className="font-display text-xl text-ink-900 sm:text-2xl">
               {STEP_TITLES[step]}
             </h2>
-            <div className="mt-5">
+            <div className={cn(step === "review" ? "mt-4" : "mt-5")}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={step}
@@ -372,7 +382,12 @@ export function CheckoutFlow({
             </div>
           </div>
 
-          <div className="border-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 flex items-center justify-between gap-3 rounded-lg border bg-surface/95 px-3 py-2.5 shadow-soft-3 backdrop-blur md:static md:inset-auto md:mt-7 md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:pt-5 md:shadow-none md:backdrop-blur-none">
+          <div
+            className={cn(
+              "border-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 flex items-center justify-between gap-3 rounded-lg border bg-surface/95 px-3 py-2.5 shadow-soft-3 backdrop-blur md:static md:inset-auto md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:shadow-none md:backdrop-blur-none",
+              step === "review" ? "md:mt-3 md:pt-2" : "md:mt-7 md:pt-5",
+            )}
+          >
             <button
               type="button"
               onClick={prev}
@@ -464,40 +479,42 @@ function ReviewStep() {
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <ReviewBlock title="Isporuka">
-        <p className="text-sm text-ink-700">
-          {data.shipping.firstName} {data.shipping.lastName}
-          <br />
-          {data.shipping.street}, {data.shipping.postalCode} {data.shipping.city}
-          <br />
-          {data.shipping.email} · {data.shipping.phone}
-        </p>
-        {data.shipping.liceType === "pravno" ? (
-          <p className="text-xs text-ink-500">
-            {data.shipping.companyName} · PIB {data.shipping.pib}
+    <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
+      <div className="grid gap-4 lg:grid-cols-2 lg:gap-3">
+        <ReviewBlock title="Isporuka">
+          <p className="text-sm text-ink-700">
+            {data.shipping.firstName} {data.shipping.lastName}
+            <br />
+            {data.shipping.street}, {data.shipping.postalCode} {data.shipping.city}
+            <br />
+            {data.shipping.email} · {data.shipping.phone}
           </p>
-        ) : null}
-      </ReviewBlock>
-      <ReviewBlock title="Način isporuke">
-        <p className="text-sm text-ink-700">
-          {data.shippingMethod === "kurir"
-            ? "Kurirska služba"
-            : "Kamionska isporuka"}{" "}
-          · {formatRsd(SHIPPING_PRICES[data.shippingMethod])}
-        </p>
-      </ReviewBlock>
-      <ReviewBlock title="Plaćanje">
-        <p className="text-sm text-ink-700">{PAYMENT_LABELS[data.paymentMethod]}</p>
-      </ReviewBlock>
-      <ReviewBlock title="Iznos">
-        <p className="text-sm text-ink-700 tabular-nums">
-          Ukupno za plaćanje:{" "}
-          <span className="font-medium text-ink-900">{formatRsd(totals.total)}</span>
-        </p>
-      </ReviewBlock>
+          {data.shipping.liceType === "pravno" ? (
+            <p className="text-xs text-ink-500">
+              {data.shipping.companyName} · PIB {data.shipping.pib}
+            </p>
+          ) : null}
+        </ReviewBlock>
+        <ReviewBlock title="Način isporuke">
+          <p className="text-sm text-ink-700">
+            {data.shippingMethod === "kurir"
+              ? "Kurirska služba"
+              : "Kamionska isporuka"}{" "}
+            · {formatRsd(SHIPPING_PRICES[data.shippingMethod])}
+          </p>
+        </ReviewBlock>
+        <ReviewBlock title="Plaćanje">
+          <p className="text-sm text-ink-700">{PAYMENT_LABELS[data.paymentMethod]}</p>
+        </ReviewBlock>
+        <ReviewBlock title="Iznos">
+          <p className="text-sm text-ink-700 tabular-nums">
+            Ukupno za plaćanje:{" "}
+            <span className="font-medium text-ink-900">{formatRsd(totals.total)}</span>
+          </p>
+        </ReviewBlock>
+      </div>
 
-      <div className="border-border/60 border-t pt-5">
+      <div className="border-border/60 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
         <NotesConsent />
       </div>
     </div>
@@ -512,7 +529,7 @@ function ReviewBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-canvas ring-border/60 rounded-xl p-4 ring-1">
+    <div className="bg-canvas ring-border/60 rounded-xl p-4 ring-1 lg:p-3">
       <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">
         {title}
       </p>

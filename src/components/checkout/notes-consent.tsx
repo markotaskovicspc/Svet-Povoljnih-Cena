@@ -29,17 +29,17 @@ export function NotesConsent() {
   const [openTerms, setOpenTerms] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 lg:gap-3">
       <label htmlFor="notes" className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-ink-900">
           Napomene uz porudžbinu (opciono)
         </span>
         <textarea
           id="notes"
-          rows={3}
+          rows={2}
           maxLength={NOTES_MAX}
           placeholder="Npr. radno vreme za prijem, sprat bez lifta, posebne instrukcije…"
-          className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas resize-y rounded-xl px-3 py-2 text-sm text-ink-900 ring-1 transition placeholder:text-ink-300 focus-visible:ring-2 focus-visible:outline-none"
+          className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas min-h-20 resize-y rounded-xl px-3 py-2 text-sm text-ink-900 ring-1 transition placeholder:text-ink-300 focus-visible:ring-2 focus-visible:outline-none lg:min-h-16"
           {...register("notes", {
             maxLength: { value: NOTES_MAX, message: `Najviše ${NOTES_MAX} karaktera` },
           })}
@@ -49,7 +49,7 @@ export function NotesConsent() {
         </span>
       </label>
 
-      <div className="bg-muted-bg ring-border/60 flex flex-col gap-2 rounded-2xl p-4 ring-1">
+      <div className="bg-muted-bg ring-border/60 flex flex-col gap-2 rounded-2xl p-4 ring-1 lg:p-3">
         <label htmlFor="consent" className="flex items-start gap-3 text-sm">
           <input
             id="consent"
