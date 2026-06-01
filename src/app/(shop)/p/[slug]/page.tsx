@@ -119,24 +119,22 @@ export default async function ProductPage({ params }: RouteProps) {
       {/* Row II/III — Hero info pair */}
       <section className="mx-auto mt-4 grid w-full max-w-[var(--container-page)] gap-5 px-4 md:mt-6 md:grid-cols-[minmax(0,1fr)_minmax(360px,0.86fr)] md:gap-8 md:px-6">
         {/* Gallery (Row III + IV combined into one stage) */}
-        <div className="order-2 md:order-1">
-          <PdpGallery
-            product={product}
-            badges={
-              <>
-                {overlayBadges.topLeft.map((b) => (
-                  <PdpBadge key={b.key} badge={b} />
-                ))}
-                {overlayBadges.bottomLeft.map((b) => (
-                  <PdpBadge key={b.key} badge={b} />
-                ))}
-              </>
-            }
-          />
-        </div>
+        <PdpGallery
+          product={product}
+          badges={
+            <>
+              {overlayBadges.topLeft.map((b) => (
+                <PdpBadge key={b.key} badge={b} />
+              ))}
+              {overlayBadges.bottomLeft.map((b) => (
+                <PdpBadge key={b.key} badge={b} />
+              ))}
+            </>
+          }
+        />
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="order-1 flex flex-col gap-2 md:order-2 md:self-start">
+        <div className="flex flex-col gap-2 md:self-start">
           <header>
             <h1 className="font-display text-2xl font-bold text-ink-900 md:text-3xl">
               {product.name}
