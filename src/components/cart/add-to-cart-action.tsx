@@ -33,7 +33,7 @@ export function commitAddToCart(product: Product, qty = 1): number {
   };
   useCart.getState().add(line, qty);
 
-  toast.custom((id) => <AddToast id={String(id)} line={line} qty={qty} />, {
+  toast.custom((id) => <AddToast id={id} line={line} qty={qty} />, {
     duration: 4500,
   });
   return sale;
@@ -50,7 +50,7 @@ function AddToast({
   line,
   qty,
 }: {
-  id: string;
+  id: string | number;
   line: Omit<CartLine, "qty">;
   qty: number;
 }) {
