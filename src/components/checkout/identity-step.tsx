@@ -10,11 +10,10 @@ import {
   UserRound,
   Mail,
   Phone,
-  Apple,
-  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IdentityChoice } from "@/lib/checkout/store";
+import { SocialProviderMark } from "@/components/account/social-auth-buttons";
 
 /**
  * Step 1 — three identity cards. The choice is bubbled to the parent (via
@@ -104,7 +103,7 @@ export function IdentityStep({
         const Icon = c.icon;
         const active = value === c.id;
         const cardClassName = cn(
-          "bg-surface ring-border/60 group flex h-full min-h-[112px] flex-row items-center gap-3 rounded-2xl p-4 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:flex-col md:items-start md:gap-3 md:p-5",
+          "bg-surface ring-border/60 group flex h-full min-h-[92px] flex-row items-center gap-3 rounded-lg p-3 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:rounded-2xl md:flex-col md:items-start md:gap-3 md:p-5",
           "hover:ring-walnut/40 hover:shadow-soft-2",
           "focus-visible:ring-walnut/40 focus-visible:ring-2",
           active && "ring-walnut shadow-soft-3 ring-2",
@@ -178,10 +177,10 @@ export function IdentityStep({
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {[
-                { id: "google", label: "Google", Icon: Mail },
-                { id: "apple", label: "Apple", Icon: Apple },
-                { id: "facebook", label: "Facebook", Icon: Globe },
-              ].map(({ id, label, Icon }) => (
+                { id: "google" as const, label: "Google" },
+                { id: "apple" as const, label: "Apple" },
+                { id: "facebook" as const, label: "Facebook" },
+              ].map(({ id, label }) => (
                 <button
                   key={id}
                   type="button"
@@ -189,7 +188,7 @@ export function IdentityStep({
                   className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
                   onClick={() => handleSocial(id)}
                 >
-                  <Icon className="size-4" aria-hidden />
+                  <SocialProviderMark id={id} />
                   {pendingProvider === id ? "Otvaranje..." : label}
                 </button>
               ))}

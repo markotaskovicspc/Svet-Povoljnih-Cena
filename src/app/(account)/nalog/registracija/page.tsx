@@ -132,7 +132,7 @@ export default async function CustomerRegistrationPage({
           Otvorite nalog i sačuvajte omiljene proizvode, podatke za kupovinu i
           pregled važnih obaveštenja na jednom mestu.
         </p>
-        <div className="mt-8 grid gap-3 text-sm text-ink-700 sm:grid-cols-2">
+        <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-ink-700 sm:text-sm">
           {[
             { label: "Lista želja uvek pri ruci", icon: Heart },
             { label: "Brža kupovina sledeći put", icon: Sparkles },
@@ -150,7 +150,8 @@ export default async function CustomerRegistrationPage({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/70 bg-surface p-6 shadow-sm md:p-8">
+      <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm md:p-8">
+        <AuthTabs active="register" registrationHref={`/nalog/registracija?callbackUrl=${encodeURIComponent(callbackUrl)}`} loginHref={loginHref} />
         <h2 className="font-display text-2xl text-ink-900">Kreirajte nalog</h2>
         <p className="mt-1 text-sm text-ink-500">
           Najbrže je preko Google, Apple ili Facebook naloga.
@@ -195,5 +196,38 @@ export default async function CustomerRegistrationPage({
         </Link>
       </section>
     </div>
+  );
+}
+
+function AuthTabs({
+  active,
+  loginHref,
+  registrationHref,
+}: {
+  active: "login" | "register";
+  loginHref: string;
+  registrationHref: string;
+}) {
+  return (
+    <nav className="mb-5 grid grid-cols-2 rounded-lg bg-muted-bg p-1 text-sm font-semibold" aria-label="Nalog">
+      <Link
+        href={loginHref}
+        aria-current={active === "login" ? "page" : undefined}
+        className={`rounded-md px-3 py-2 text-center transition ${
+          active === "login" ? "bg-white text-ink-900 shadow-soft-1" : "text-ink-600 hover:text-ink-900"
+        }`}
+      >
+        Prijava
+      </Link>
+      <Link
+        href={registrationHref}
+        aria-current={active === "register" ? "page" : undefined}
+        className={`rounded-md px-3 py-2 text-center transition ${
+          active === "register" ? "bg-white text-ink-900 shadow-soft-1" : "text-ink-600 hover:text-ink-900"
+        }`}
+      >
+        Registracija
+      </Link>
+    </nav>
   );
 }

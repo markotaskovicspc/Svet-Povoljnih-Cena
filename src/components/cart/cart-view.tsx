@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
@@ -16,6 +16,10 @@ import { useCheckout } from "@/lib/checkout/store";
 export function CartView() {
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
 
   const subtotal = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
   const savings = lines.reduce(
@@ -144,7 +148,7 @@ function CartSummary({
       aria-label="Sažetak narudžbine"
       className="lg:sticky lg:top-28 lg:self-start"
     >
-      <div className="bg-surface ring-border/60 flex flex-col gap-4 rounded-2xl p-5 shadow-soft-2 ring-1">
+      <div className="bg-surface ring-border/60 flex flex-col gap-3 rounded-2xl p-4 shadow-soft-2 ring-1 md:gap-4 md:p-5">
         <h2 className="font-display text-lg text-ink-900">Sažetak</h2>
 
         <dl className="flex flex-col gap-2 text-sm">
@@ -235,7 +239,7 @@ function CartSummary({
             e.preventDefault();
             openSuggestion("/checkout");
           }}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-20 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas shadow-soft-2 transition focus-visible:ring-2 focus-visible:outline-none md:static md:shadow-none"
         >
           Nastavi ka podacima za isporuku
           <ArrowRight className="size-4" aria-hidden />

@@ -130,8 +130,8 @@ export function Header({
             className={cn(
               "inline-flex size-9 items-center justify-center rounded-full transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none",
               isCustomerLoggedIn
-                ? "text-action hover:text-action"
-                : "text-ink-700 hover:text-ink-900",
+                ? "bg-action text-white shadow-soft-1 hover:bg-action/90 hover:text-white"
+                : "bg-muted-bg text-ink-700 ring-1 ring-border/60 hover:text-ink-900",
             )}
           >
             <User2 className="size-4" aria-hidden />

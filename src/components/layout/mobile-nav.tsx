@@ -7,10 +7,24 @@ import { usePathname } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
+  Armchair,
+  Bath,
+  BedDouble,
+  BriefcaseBusiness,
+  DoorOpen,
+  Gamepad2,
+  Hammer,
   Home,
+  Lightbulb,
   Menu,
   Search,
+  Shapes,
+  Sofa,
+  Sparkles,
+  SquareStack,
   User2,
+  Utensils,
+  Waves,
   X,
 } from "lucide-react";
 import {
@@ -73,6 +87,23 @@ const categoryTileImages: Record<string, string> = {
 
 const fallbackCategoryImage =
   "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=320&h=210&q=80";
+
+const navIconMap = {
+  Armchair,
+  Bath,
+  BedDouble,
+  BriefcaseBusiness,
+  DoorOpen,
+  Gamepad2,
+  Hammer,
+  Lightbulb,
+  Shapes,
+  Sofa,
+  Sparkles,
+  SquareStack,
+  Utensils,
+  Waves,
+} as const;
 
 const categoryTiles = primaryNav.map((node) => ({
   ...node,
@@ -161,8 +192,8 @@ export function MobileNav({
                   className={cn(
                     "inline-flex size-10 items-center justify-center rounded-full transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                     isCustomerLoggedIn
-                      ? "text-action hover:text-action"
-                      : "text-ink-700 hover:text-ink-900",
+                      ? "bg-action text-white hover:bg-action/90 hover:text-white"
+                      : "bg-muted-bg text-ink-700 ring-1 ring-border/60 hover:text-ink-900",
                   )}
                 >
                   <User2 className="size-5" aria-hidden />
@@ -190,8 +221,11 @@ export function MobileNav({
                   className="flex min-h-13 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 break-words">{current.label}</span>
+                  <span className="min-w-0 break-words">Povratak na glavni meni</span>
                 </button>
+                <p className="px-4 pb-3 text-xs font-semibold tracking-wide text-ink-500 uppercase">
+                  {current.label}
+                </p>
               </div>
             ) : null}
             <AnimatePresence mode="wait" initial={false}>
@@ -223,7 +257,7 @@ export function MobileNav({
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-2 block min-h-8 text-center text-xs leading-tight font-bold tracking-[0.02em] text-ink-700 uppercase">
+                              <span className="mt-2 block min-h-8 text-center text-sm leading-tight font-black tracking-[0.02em] text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -243,7 +277,7 @@ export function MobileNav({
                                 tab={t}
                                 active={isActive}
                                 onClick={close}
-                                className="h-20 border-white/20 focus-visible:ring-white/70"
+                                className="h-16 border-white/20 py-2 text-xs focus-visible:ring-white/70"
                               />
                             </li>
                           );
@@ -252,7 +286,7 @@ export function MobileNav({
                           <AccountShortcutTile
                             active={isCustomerLoggedIn}
                             onClick={close}
-                            className="h-20 border-white/20 focus-visible:ring-white/70"
+                            className="h-16 border-white/20 py-2 text-xs focus-visible:ring-white/70"
                           />
                         </li>
                       </ul>
@@ -274,6 +308,9 @@ export function MobileNav({
                     {current.nodes.map((node) => {
                       const isActive = pathname === node.href;
                       const hasChildren = !!node.children?.length;
+                      const Icon = node.iconName
+                        ? navIconMap[node.iconName as keyof typeof navIconMap]
+                        : null;
                       return (
                         <li key={node.href} className="min-h-14 transition hover:bg-muted-bg">
                           {hasChildren ? (
@@ -285,7 +322,14 @@ export function MobileNav({
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
-                              <span className="min-w-0 break-words">{node.label}</span>
+                              <span className="flex min-w-0 items-center gap-3">
+                                {Icon ? (
+                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-blue/8 text-brand-blue">
+                                    <Icon className="size-4" aria-hidden />
+                                  </span>
+                                ) : null}
+                                <span className="min-w-0 break-words">{node.label}</span>
+                              </span>
                               <ChevronRight className="size-4 shrink-0 text-ink-500" aria-hidden />
                             </button>
                           ) : (
@@ -297,7 +341,14 @@ export function MobileNav({
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
-                              <span className="min-w-0 break-words">{node.label}</span>
+                              <span className="flex min-w-0 items-center gap-3">
+                                {Icon ? (
+                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-blue/8 text-brand-blue">
+                                    <Icon className="size-4" aria-hidden />
+                                  </span>
+                                ) : null}
+                                <span className="min-w-0 break-words">{node.label}</span>
+                              </span>
                               <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
                             </Link>
                           )}

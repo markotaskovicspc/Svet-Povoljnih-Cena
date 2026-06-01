@@ -225,11 +225,11 @@ export function ListingShell({
               </h1>
             </div>
             {period ? (
-              <p className="mt-2 text-xs font-semibold text-action">
+              <p className="mt-2 inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
                 {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
               </p>
             ) : null}
-            {period && subtitle ? (
+            {!period && subtitle ? (
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-700">
                 {subtitle}
               </p>

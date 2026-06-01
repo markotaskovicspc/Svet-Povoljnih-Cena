@@ -84,7 +84,7 @@ export default async function CustomerLoginPage({
           Sačuvajte listu želja, pratite porudžbine i nastavite kupovinu tamo
           gde ste stali.
         </p>
-        <div className="mt-8 grid gap-3 text-sm text-ink-700 sm:grid-cols-2">
+        <div className="mt-6 grid grid-cols-2 gap-2 text-xs text-ink-700 sm:text-sm">
           {[
             "Sačuvani favoriti",
             "Brža sledeća porudžbina",
@@ -99,7 +99,8 @@ export default async function CustomerLoginPage({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/70 bg-surface p-6 shadow-sm md:p-8">
+      <section className="rounded-2xl border border-border/70 bg-surface p-5 shadow-sm md:p-8">
+        <AuthTabs active="login" registrationHref={registrationHref} loginHref={`/nalog/prijava?callbackUrl=${encodeURIComponent(callbackUrl)}`} />
         <h2 className="font-display text-2xl text-ink-900">Prijavite se</h2>
         <p className="mt-1 text-sm text-ink-500">
           Koristite e-poštu i lozinku za svoj korisnički nalog.
@@ -109,16 +110,23 @@ export default async function CustomerLoginPage({
           <LoginError error={sp.error} />
         </div>
 
-        <form action={loginAction} className="mt-5">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <CustomerLoginFields />
-        </form>
-
         <SocialAuthButtons
           callbackUrl={callbackUrl}
           intent="login"
           providers={socialProviders}
+          showDivider={false}
         />
+
+        <div className="mt-6 flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
+          <span className="h-px flex-1 bg-border" />
+          ili nastavite e-poštom
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form action={loginAction} className="mt-5">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+          <CustomerLoginFields />
+        </form>
 
         <p className="mt-6 text-center text-sm text-ink-500">
           Nemate nalog?{" "}
@@ -137,5 +145,38 @@ export default async function CustomerLoginPage({
         </Link>
       </section>
     </div>
+  );
+}
+
+function AuthTabs({
+  active,
+  loginHref,
+  registrationHref,
+}: {
+  active: "login" | "register";
+  loginHref: string;
+  registrationHref: string;
+}) {
+  return (
+    <nav className="mb-5 grid grid-cols-2 rounded-lg bg-muted-bg p-1 text-sm font-semibold" aria-label="Nalog">
+      <Link
+        href={loginHref}
+        aria-current={active === "login" ? "page" : undefined}
+        className={`rounded-md px-3 py-2 text-center transition ${
+          active === "login" ? "bg-white text-ink-900 shadow-soft-1" : "text-ink-600 hover:text-ink-900"
+        }`}
+      >
+        Prijava
+      </Link>
+      <Link
+        href={registrationHref}
+        aria-current={active === "register" ? "page" : undefined}
+        className={`rounded-md px-3 py-2 text-center transition ${
+          active === "register" ? "bg-white text-ink-900 shadow-soft-1" : "text-ink-600 hover:text-ink-900"
+        }`}
+      >
+        Registracija
+      </Link>
+    </nav>
   );
 }

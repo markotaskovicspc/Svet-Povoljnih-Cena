@@ -161,55 +161,70 @@ export function InstantSearch({
             : `Nema rezultata za "${queryTrimmed}".`}
         </div>
       ) : (
-        <ul
-          role="listbox"
-          aria-label="Rezultati pretrage"
-          className={cn(
-            "overflow-y-auto py-1",
-            presentation === "dropdown" ? "max-h-[60vh]" : "max-h-[calc(100dvh-210px)]",
-          )}
-        >
-          {results.map((hit, i) => (
-            <li key={hit.sku}>
-              <button
-                type="button"
-                onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => goHit(hit)}
-                role="option"
-                aria-selected={activeIndex === i}
-                className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2 text-left transition",
-                  activeIndex === i ? "bg-muted-bg" : "hover:bg-muted-bg/60",
-                )}
-              >
-                <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-border/60">
-                  {hit.thumbnailUrl ? (
-                    <Image
-                      src={hit.thumbnailUrl}
-                      alt=""
-                      fill
-                      sizes="48px"
-                      className="object-contain p-1"
-                    />
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-ink-900">{hit.name}</div>
-                  <div className="truncate font-mono text-[11px] text-ink-500">
-                    {hit.breadcrumb}
+        <>
+          {queryTrimmed.length >= 3 ? (
+            <button
+              type="button"
+              onClick={goAll}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 border-b border-border px-4 py-3 text-sm font-semibold transition hover:bg-muted-bg",
+                activeIndex === results.length ? "bg-muted-bg" : "",
+              )}
+            >
+              <span className="text-ink-900">Vidi sve rezultate za {queryTrimmed}</span>
+              <ArrowRight className="size-4 text-walnut" aria-hidden />
+            </button>
+          ) : null}
+          <ul
+            role="listbox"
+            aria-label="Rezultati pretrage"
+            className={cn(
+              "overflow-y-auto py-1",
+              presentation === "dropdown" ? "max-h-[60vh]" : "max-h-[calc(100dvh-260px)]",
+            )}
+          >
+            {results.map((hit, i) => (
+              <li key={hit.sku}>
+                <button
+                  type="button"
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={() => goHit(hit)}
+                  role="option"
+                  aria-selected={activeIndex === i}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-3 py-2 text-left transition",
+                    activeIndex === i ? "bg-muted-bg" : "hover:bg-muted-bg/60",
+                  )}
+                >
+                  <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-border/60">
+                    {hit.thumbnailUrl ? (
+                      <Image
+                        src={hit.thumbnailUrl}
+                        alt=""
+                        fill
+                        sizes="48px"
+                        className="object-contain p-1"
+                      />
+                    ) : null}
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-action">
-                    {formatRsd(hit.salePrice)}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-ink-900">{hit.name}</div>
+                    <div className="truncate font-mono text-[11px] text-ink-500">
+                      {hit.breadcrumb}
+                    </div>
                   </div>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-action">
+                      {formatRsd(hit.salePrice)}
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
-      {queryTrimmed.length >= 3 ? (
+      {queryTrimmed.length >= 3 && results.length === 0 ? (
         <button
           type="button"
           onClick={goAll}

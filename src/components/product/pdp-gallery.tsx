@@ -227,7 +227,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           {slides.length > 1 ? (
-            <div className="mt-3 flex justify-center gap-1.5">
+            <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
               {slides.map((_, index) => (
                 <button
                   key={index}
@@ -236,8 +236,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   aria-label={`Prikaži sliku ${index + 1}`}
                   aria-current={index === active ? "true" : undefined}
                   className={cn(
-                    "h-1.5 rounded-full transition-all",
-                    index === active ? "w-8 bg-ink-900" : "w-3 bg-ink-200",
+                    "h-1.5 rounded-full shadow-sm transition-all",
+                    index === active
+                      ? "w-8 bg-ink-900"
+                      : "w-2 bg-white/90 ring-1 ring-ink-900/20",
                   )}
                 />
               ))}

@@ -270,14 +270,21 @@ export function ProductCard({
             {product.name}
           </Link>
         </h3>
-        <p className="truncate text-[10px] leading-tight text-ink-500 md:text-[11px]">
+        <Link
+          href={`/p/${product.slug}`}
+          className="truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]"
+        >
           {shortDescription}
-        </p>
+        </Link>
         <ProductColorOptions product={product} className="h-4 pt-0" />
 
         <div className="mt-auto pt-0">
           <div className="flex flex-col items-stretch gap-1.5">
-            <div className="min-w-0">
+            <Link
+              href={`/p/${product.slug}`}
+              aria-label={`${product.name} — cena i detalji`}
+              className="min-w-0 rounded-sm transition focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+            >
               {hasReducedPrice ? (
                 <div className="flex min-w-0 items-end justify-between gap-1.5">
                   <span className="min-w-0 truncate text-[10px] text-ink-500 line-through md:text-[11px]">
@@ -292,7 +299,7 @@ export function ProductCard({
                   {formatRsd(price.full)}
                 </span>
               )}
-            </div>
+            </Link>
             <MobileCartControl
               lineQty={lineQty}
               className="w-full"

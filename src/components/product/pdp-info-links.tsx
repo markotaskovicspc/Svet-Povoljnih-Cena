@@ -57,7 +57,7 @@ export function PdpInfoLinks({
             Opis proizvoda
           </h2>
           <p className="mt-2 line-clamp-3 text-justify text-sm leading-relaxed text-ink-700">
-            {descriptionPreview}
+            {descriptionPreview} ...
           </p>
         </button>
       ) : null}
@@ -73,7 +73,7 @@ export function PdpInfoLinks({
             type="button"
             onClick={() => show(item.key)}
             className={cn(
-              "group flex min-h-13 w-full items-center justify-between gap-4 py-3 text-left text-sm font-semibold text-ink-900 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+              "group flex min-h-12 w-full items-center justify-between gap-4 py-2.5 text-left text-base font-semibold text-ink-900 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none md:min-h-13 md:py-3 md:text-sm",
               descriptionPreview && item.key === "description" && "md:hidden",
             )}
           >

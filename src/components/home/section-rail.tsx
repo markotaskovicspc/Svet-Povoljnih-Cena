@@ -124,9 +124,14 @@ export function SectionRail({
                 <LucideIcon className="size-6 text-walnut md:size-8" aria-hidden />
               </span>
             ) : null}
-            <h2 className="font-display min-w-0 text-2xl leading-tight text-ink-900 md:text-4xl">
-              {title}
-            </h2>
+            <Link
+              href={href}
+              className="group/title min-w-0 rounded-sm focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+            >
+              <h2 className="font-display min-w-0 text-2xl leading-tight text-ink-900 transition group-hover/title:text-walnut md:text-4xl">
+                {title}
+              </h2>
+            </Link>
           </div>
           {!minimalHeader && description ? (
             <p

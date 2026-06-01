@@ -110,7 +110,7 @@ export default async function ProductPage({ params }: RouteProps) {
   const materials = product.materials;
 
   return (
-    <article className="bg-canvas pb-24 md:pb-16">
+    <article className="bg-canvas pb-36 md:pb-16">
       {/* Row I — Breadcrumbs */}
       <div className="mx-auto w-full max-w-[var(--container-page)] px-4 pt-6 md:px-6">
         <Breadcrumbs trail={trail} />
@@ -134,7 +134,7 @@ export default async function ProductPage({ params }: RouteProps) {
         />
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="flex flex-col gap-2.5 md:self-start">
+        <div className="flex flex-col gap-2 md:self-start">
           <header>
             <h1 className="font-display text-2xl font-bold text-ink-900 md:text-3xl">
               {product.name}
@@ -163,7 +163,7 @@ export default async function ProductPage({ params }: RouteProps) {
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 {hasReducedPrice ? (
                   <>
-                    <span className="text-action text-3xl font-bold md:text-[34px]">
+                    <span className="text-action text-[34px] leading-none font-black md:text-[34px]">
                       {formatRsd(price.effective)}
                     </span>
                     <span className="text-sm text-ink-500 line-through">
@@ -171,7 +171,7 @@ export default async function ProductPage({ params }: RouteProps) {
                     </span>
                   </>
                 ) : (
-                  <span className="text-2xl font-semibold text-ink-900 md:text-[30px]">
+                  <span className="text-[30px] leading-none font-black text-ink-900 md:text-[30px]">
                     {formatRsd(price.full)}
                   </span>
                 )}
@@ -194,7 +194,7 @@ export default async function ProductPage({ params }: RouteProps) {
             <PdpAddToCart product={product} variant="desktop" />
           </div>
 
-          <ul className="border-border/60 grid grid-cols-2 gap-1.5 border-t pt-2 text-xs text-ink-700 md:grid-cols-3">
+          <ul className="border-border/60 grid grid-cols-2 gap-1 border-t pt-2 text-xs text-ink-700 md:grid-cols-3">
             {benefitChips.slice(0, 6).map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
@@ -385,7 +385,7 @@ function FeatureChip({
   label: string;
 }) {
   return (
-    <li className="bg-surface ring-border/60 flex min-h-11 items-center justify-center gap-1 rounded-md p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/43] md:min-h-0 md:flex-col md:gap-0.5 md:p-1">
+    <li className="bg-surface ring-border/60 flex min-h-10 items-center justify-center gap-1 rounded-md p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/36] md:min-h-0 md:flex-col md:gap-0.5 md:p-1">
       {icon}
       <span className="line-clamp-2 text-[11px] md:text-[10px]">{label}</span>
     </li>

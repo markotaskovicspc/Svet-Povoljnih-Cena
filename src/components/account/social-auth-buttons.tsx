@@ -51,7 +51,7 @@ export function getConfiguredSocialAuthProviders(
   return providers;
 }
 
-function ProviderMark({ id }: { id: SocialAuthProvider["id"] }) {
+export function SocialProviderMark({ id }: { id: SocialAuthProvider["id"] }) {
   return (
     <Image
       src={`/icons/${id}.svg`}
@@ -73,7 +73,7 @@ function SocialButtonContent({
 }) {
   return (
     <>
-      <ProviderMark id={provider.id} />
+      <SocialProviderMark id={provider.id} />
       {actionLabel} uz {provider.label}
     </>
   );

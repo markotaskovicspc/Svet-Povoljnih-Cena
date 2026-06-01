@@ -42,6 +42,7 @@ export const headerTabs: Tab[] = [
 export interface NavNode {
   label: string;
   href: string;
+  iconName?: string;
   children?: NavNode[];
 }
 
@@ -52,26 +53,26 @@ export const primaryNav: NavNode[] = [
     label: "Nameštaj",
     href: categoryHref("namestaj"),
     children: [
-      { label: "Baštenski nameštaj", href: categoryHref("namestaj", "bastenski-namestaj") },
-      { label: "Kancelarija", href: categoryHref("namestaj", "kancelarija") },
-      { label: "Trpezarija", href: categoryHref("namestaj", "trpezarija") },
-      { label: "Dnevna soba", href: categoryHref("namestaj", "dnevna-soba") },
-      { label: "Predsoblje", href: categoryHref("namestaj", "predsoblje") },
-      { label: "Gejming", href: categoryHref("namestaj", "gejming") },
-      { label: "Spavaća soba", href: categoryHref("namestaj", "spavaca-soba") },
+      { label: "Baštenski nameštaj", href: categoryHref("namestaj", "bastenski-namestaj"), iconName: "Armchair" },
+      { label: "Kancelarija", href: categoryHref("namestaj", "kancelarija"), iconName: "BriefcaseBusiness" },
+      { label: "Trpezarija", href: categoryHref("namestaj", "trpezarija"), iconName: "Utensils" },
+      { label: "Dnevna soba", href: categoryHref("namestaj", "dnevna-soba"), iconName: "Sofa" },
+      { label: "Predsoblje", href: categoryHref("namestaj", "predsoblje"), iconName: "DoorOpen" },
+      { label: "Gejming", href: categoryHref("namestaj", "gejming"), iconName: "Gamepad2" },
+      { label: "Spavaća soba", href: categoryHref("namestaj", "spavaca-soba"), iconName: "BedDouble" },
     ],
   },
   {
     label: "Sve za kuću",
     href: categoryHref("sve-za-kucu"),
     children: [
-      { label: "Bazeni", href: categoryHref("sve-za-kucu", "bazeni") },
-      { label: "Alat", href: categoryHref("sve-za-kucu", "alat") },
-      { label: "Rasveta", href: categoryHref("sve-za-kucu", "rasveta") },
-      { label: "Čišćenje i održavanje", href: categoryHref("sve-za-kucu", "ciscenje-i-odrzavanje") },
-      { label: "Dekoracija", href: categoryHref("sve-za-kucu", "dekoracija") },
-      { label: "Kupatilo", href: categoryHref("sve-za-kucu", "kupatilo") },
-      { label: "Tepisi", href: categoryHref("sve-za-kucu", "tepisi") },
+      { label: "Bazeni", href: categoryHref("sve-za-kucu", "bazeni"), iconName: "Waves" },
+      { label: "Alat", href: categoryHref("sve-za-kucu", "alat"), iconName: "Hammer" },
+      { label: "Rasveta", href: categoryHref("sve-za-kucu", "rasveta"), iconName: "Lightbulb" },
+      { label: "Čišćenje i održavanje", href: categoryHref("sve-za-kucu", "ciscenje-i-odrzavanje"), iconName: "Sparkles" },
+      { label: "Dekoracija", href: categoryHref("sve-za-kucu", "dekoracija"), iconName: "Shapes" },
+      { label: "Kupatilo", href: categoryHref("sve-za-kucu", "kupatilo"), iconName: "Bath" },
+      { label: "Tepisi", href: categoryHref("sve-za-kucu", "tepisi"), iconName: "SquareStack" },
     ],
   },
   {

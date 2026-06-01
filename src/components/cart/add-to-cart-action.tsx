@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import type { Product } from "@/types";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
@@ -54,7 +55,15 @@ function AddToast({
   qty: number;
 }) {
   return (
-    <div className="bg-surface ring-border/60 flex w-[320px] items-center gap-3 rounded-2xl p-3 shadow-soft-3 ring-1">
+    <div className="bg-surface ring-border/60 relative flex w-[320px] items-center gap-3 rounded-2xl p-3 pr-9 shadow-soft-3 ring-1">
+      <button
+        type="button"
+        onClick={() => toast.dismiss(id)}
+        aria-label="Zatvori obaveštenje"
+        className="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-full text-ink-500 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+      >
+        <X className="size-3.5" aria-hidden />
+      </button>
       <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-border/60">
         {line.thumbnailUrl ? (
           <Image
