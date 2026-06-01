@@ -204,6 +204,7 @@ export function CheckoutFlow({
 
   const stepIndex = STEP_ORDER.indexOf(step);
   const lastHistoryStep = useRef<CheckoutStep>(step);
+  const checkoutCardRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -226,6 +227,16 @@ export function CheckoutFlow({
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [setStep]);
+
+  useEffect(() => {
+    if (step !== "review") return;
+    window.requestAnimationFrame(() => {
+      checkoutCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [step]);
 
   const next = async () => {
     if (isAdvancing) return;
@@ -305,6 +316,7 @@ export function CheckoutFlow({
     <FormProvider {...methods}>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <form
+          ref={checkoutCardRef}
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           noValidate
           className={cn(
@@ -312,9 +324,7 @@ export function CheckoutFlow({
             step === "review" && "lg:p-5",
           )}
         >
-          <div className={cn(step === "review" && "lg:sr-only")}>
-            <CheckoutStepper activeStep={step} />
-          </div>
+          <CheckoutStepper activeStep={step} />
 
           <div
             className={cn(
