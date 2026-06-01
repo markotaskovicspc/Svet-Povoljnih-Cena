@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProductBySku } from "@/lib/api/catalog";
 import { effectiveUnitPrice } from "@/lib/pricing";
-import type { WishlistProductSnapshot } from "@/types";
+import type { Product, WishlistProductSnapshot } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,9 +19,9 @@ export async function POST(req: Request) {
   }
 
   const skus = Array.from(new Set(parsed.data.skus.map((sku) => sku.trim())));
-  const products = await Promise.all(skus.map((sku) => getProductBySku(sku)));
-  const items: WishlistProductSnapshot[] = products.flatMap((product) => {
-    if (!product) return [];
+  const products: Product[] = (await Promise.all(skus.map((sku) => getProductBySku(sku))))
+    .filter((product): product is Product => Boolean(product));
+  const items: WishlistProductSnapshot[] = products.map((product) => {
     const price = effectiveUnitPrice(product);
     return {
       sku: product.sku,
@@ -36,5 +36,5 @@ export async function POST(req: Request) {
     };
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, products });
 }

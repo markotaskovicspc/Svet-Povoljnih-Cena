@@ -119,22 +119,24 @@ export default async function ProductPage({ params }: RouteProps) {
       {/* Row II/III — Hero info pair */}
       <section className="mx-auto mt-4 grid w-full max-w-[var(--container-page)] gap-5 px-4 md:mt-6 md:grid-cols-[minmax(0,1fr)_minmax(360px,0.86fr)] md:gap-8 md:px-6">
         {/* Gallery (Row III + IV combined into one stage) */}
-        <PdpGallery
-          product={product}
-          badges={
-            <>
-              {overlayBadges.topLeft.map((b) => (
-                <PdpBadge key={b.key} badge={b} />
-              ))}
-              {overlayBadges.bottomLeft.map((b) => (
-                <PdpBadge key={b.key} badge={b} />
-              ))}
-            </>
-          }
-        />
+        <div className="order-2 md:order-1">
+          <PdpGallery
+            product={product}
+            badges={
+              <>
+                {overlayBadges.topLeft.map((b) => (
+                  <PdpBadge key={b.key} badge={b} />
+                ))}
+                {overlayBadges.bottomLeft.map((b) => (
+                  <PdpBadge key={b.key} badge={b} />
+                ))}
+              </>
+            }
+          />
+        </div>
 
         {/* Right column: identity + price + sticky CTA */}
-        <div className="flex flex-col gap-2 md:self-start">
+        <div className="order-1 flex flex-col gap-2 md:order-2 md:self-start">
           <header>
             <h1 className="font-display text-2xl font-bold text-ink-900 md:text-3xl">
               {product.name}
@@ -387,7 +389,7 @@ function FeatureChip({
   return (
     <li className="bg-surface ring-border/60 flex min-h-10 items-center justify-center gap-1 rounded-md p-1.5 text-center leading-tight ring-1 shadow-soft-1 md:aspect-[100/36] md:min-h-0 md:flex-col md:gap-0.5 md:p-1">
       {icon}
-      <span className="line-clamp-2 text-[11px] md:text-[10px]">{label}</span>
+      <span className="line-clamp-2 text-xs font-bold md:text-[11px]">{label}</span>
     </li>
   );
 }

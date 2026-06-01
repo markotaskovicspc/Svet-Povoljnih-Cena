@@ -239,8 +239,8 @@ export function MobileNav({
               >
                 {stack.length === 1 ? (
                   <>
-                    <div className="px-4 pt-5 pb-4">
-                      <ul className="grid grid-cols-2 gap-x-3 gap-y-4">
+                    <div className="px-3 pt-3 pb-2">
+                      <ul className="grid grid-cols-2 gap-x-2.5 gap-y-2">
                         {categoryTiles.map((tile) => (
                           <li key={tile.href}>
                             <button
@@ -248,7 +248,7 @@ export function MobileNav({
                               onClick={() => enter(tile)}
                               className="group block w-full rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block aspect-[1.42] overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block aspect-[2.15] overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
@@ -257,7 +257,7 @@ export function MobileNav({
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-2 block min-h-8 text-center text-sm leading-tight font-black tracking-[0.02em] text-ink-800 uppercase">
+                              <span className="mt-1 block min-h-7 text-center text-xs leading-tight font-black text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -266,8 +266,16 @@ export function MobileNav({
                       </ul>
                     </div>
 
-                    <div className="border-y border-brand-blue/10 bg-brand-blue px-4 py-5">
-                      <ul className="grid grid-cols-2 gap-3">
+                    <div className="border-y border-brand-blue/10 bg-brand-blue px-3 py-3">
+                      <ul className="grid grid-cols-2 gap-2">
+                        <li>
+                          <AccountShortcutTile
+                            active={isCustomerLoggedIn}
+                            compact
+                            onClick={close}
+                            className="h-11 border-white/20 text-[11px] focus-visible:ring-white/70"
+                          />
+                        </li>
                         {tabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
@@ -276,19 +284,13 @@ export function MobileNav({
                               <PromoShortcutTile
                                 tab={t}
                                 active={isActive}
+                                compact
                                 onClick={close}
-                                className="h-16 border-white/20 py-2 text-xs focus-visible:ring-white/70"
+                                className="h-11 border-white/20 text-[11px] focus-visible:ring-white/70"
                               />
                             </li>
                           );
                         })}
-                        <li>
-                          <AccountShortcutTile
-                            active={isCustomerLoggedIn}
-                            onClick={close}
-                            className="h-16 border-white/20 py-2 text-xs focus-visible:ring-white/70"
-                          />
-                        </li>
                       </ul>
                     </div>
 
