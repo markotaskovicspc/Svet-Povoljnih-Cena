@@ -63,6 +63,7 @@ interface ListingShellProps {
   headerVariant?: "default" | "promo";
   /** Optional period banner (e.g. action validity). */
   period?: { startsAt?: string; endsAt: string; label?: string };
+  periodPlacement?: "below-title" | "title-line";
   trail: Crumb[];
   source: Product[];
   /**
@@ -86,6 +87,7 @@ export function ListingShell({
   titleIcon,
   campaignSticker,
   period,
+  periodPlacement = "below-title",
   trail,
   source,
   subTabs,
@@ -220,11 +222,18 @@ export function ListingShell({
                   />
                 </span>
               ) : null}
-              <h1 className="font-display min-w-0 text-2xl leading-tight text-ink-900 md:text-5xl">
-                {title}
-              </h1>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-4">
+                <h1 className="font-display min-w-0 text-2xl leading-tight text-ink-900 md:text-5xl">
+                  {title}
+                </h1>
+                {period && periodPlacement === "title-line" ? (
+                  <p className="inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
+                    {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
+                  </p>
+                ) : null}
+              </div>
             </div>
-            {period ? (
+            {period && periodPlacement === "below-title" ? (
               <p className="mt-2 inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
                 {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
               </p>

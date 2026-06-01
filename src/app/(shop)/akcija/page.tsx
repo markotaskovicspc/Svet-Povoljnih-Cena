@@ -28,6 +28,7 @@ export default async function AkcijaPage() {
       headerVariant="promo"
       subtitle="Sve aktivne ponude na jednom mestu — kuratirano, ne agregirano."
       period={period ? { endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}
+      periodPlacement="title-line"
       trail={[{ label: "Akcija" }]}
       source={products}
     />
