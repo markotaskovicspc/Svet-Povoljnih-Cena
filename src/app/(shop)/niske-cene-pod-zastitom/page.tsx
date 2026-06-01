@@ -21,7 +21,6 @@ export default async function NiskeCenePodZastitomPage() {
       title="Niske cene pod trajnom zaštitom"
       titleIcon={protectedPricesIcon}
       headerVariant="promo"
-      subtitle="Stalna akcija za proizvode čije su cene zaštićene i jasno označene od 01.05.2026."
       trail={[{ label: "Niske cene pod trajnom zaštitom" }]}
       source={products}
     />

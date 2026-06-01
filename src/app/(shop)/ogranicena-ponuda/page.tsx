@@ -21,7 +21,6 @@ export default async function OgranicenaPonudaPage() {
       titleIcon={limitedCampaignSticker}
       campaignSticker="limited"
       headerVariant="promo"
-      subtitle="Ponude sa malim stanjem na lageru i jasno označenim dostupnim količinama."
       trail={[{ label: "Dok traju zalihe" }]}
       source={products}
     />
