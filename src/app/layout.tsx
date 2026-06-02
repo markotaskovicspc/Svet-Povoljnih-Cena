@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Playfair_Display, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
@@ -48,6 +48,10 @@ export const metadata: Metadata = {
   description:
     "Premium nameštaj po povoljnim cenama. Brza isporuka, montaža u glavnim gradovima, kuratirana selekcija kolekcija.",
   metadataBase: new URL("https://www.svetakcija.rs"),
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default async function RootLayout({
