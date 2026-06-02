@@ -82,6 +82,10 @@ export default async function RootLayout({
           ) : (
             <>
               <div className="sticky top-0 z-50 bg-white">
+                <div
+                  aria-hidden
+                  className="h-[max(env(safe-area-inset-top),1.5rem)] bg-white md:hidden"
+                />
                 {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
                 <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
               </div>
