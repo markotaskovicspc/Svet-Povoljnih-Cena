@@ -301,7 +301,7 @@ const Field = ({
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? `${id}-err` : undefined}
         className={cn(
-          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-11 rounded-xl px-3 text-sm text-ink-900 ring-1 transition placeholder:text-ink-300",
+          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-11 rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:text-sm",
           "focus-visible:ring-2 focus-visible:outline-none",
           error && "ring-action/60 focus-visible:ring-action/40",
         )}
