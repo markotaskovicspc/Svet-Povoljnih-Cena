@@ -35,6 +35,18 @@ const productInclude = {
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
+function categoryPathLabels(
+  categories: Array<{ category: { name: string } }>,
+): string[] {
+  const labels = categories.flatMap((c) =>
+    c.category.name
+      .split(/\s*\/\s*/)
+      .map((label) => label.trim())
+      .filter(Boolean),
+  );
+  return labels.filter((label, index) => label !== labels[index - 1]);
+}
+
 const slugify = (input: string) =>
   input
     .trim()
@@ -96,7 +108,7 @@ function mapProduct(p: ProductRow): ProductDTO {
     name: p.name,
     group: p.group?.slug ?? "",
     collection: p.collection?.slug,
-    categoryPath: sortedCats.map((c) => c.category.name),
+    categoryPath: categoryPathLabels(sortedCats),
     description: p.description,
     shortDescription: p.shortDescription ?? undefined,
     dimensionsCm: {
@@ -248,7 +260,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     name: p.name,
     group: p.group?.slug ?? "",
     collection: p.collection?.slug,
-    categoryPath: sortedCats.map((c) => c.category.name),
+    categoryPath: categoryPathLabels(sortedCats),
     description: "",
     shortDescription: p.shortDescription ?? undefined,
     dimensionsCm: {
@@ -355,6 +367,16 @@ export async function getCategoryBySlug(slug: string) {
 export async function getCategoryByPath(path: string) {
   if (!hasDatabaseConnection()) return null;
   return db.category.findUnique({ where: { path } });
+}
+
+export async function getCollectionBySlug(
+  slug: string,
+): Promise<{ slug: string; name: string } | null> {
+  if (!hasDatabaseConnection()) return null;
+  return db.collection.findUnique({
+    where: { slug },
+    select: { slug: true, name: true },
+  });
 }
 
 // ── Products ──────────────────────────────────────────────────────────

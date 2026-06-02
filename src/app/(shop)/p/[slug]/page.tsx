@@ -259,14 +259,11 @@ export default async function ProductPage({ params }: RouteProps) {
       {frequentlyBought.length ? (
         <SectionRail
           title="Upotpunite kolekciju"
-          href={
-            product.collection
-              ? `/k/${slugify(product.categoryPath[0] ?? "")}`
-              : "/"
-          }
+          href={product.collection ? `/kolekcija/${product.collection}` : "/"}
           ctaLabel="Pogledaj kolekciju"
           products={frequentlyBought}
           mobileMinimal
+          compactMobileHeader
         />
       ) : null}
 
@@ -278,6 +275,7 @@ export default async function ProductPage({ params }: RouteProps) {
           ctaLabel="Sve iz kategorije"
           products={similar}
           mobileMinimal
+          compactMobileHeader
         />
       ) : null}
 

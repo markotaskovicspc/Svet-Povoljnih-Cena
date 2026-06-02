@@ -255,7 +255,8 @@ export type ListingKind =
   | "niske-cene-pod-zastitom"
   | "outlet"
   | "novo"
-  | "kategorija";
+  | "kategorija"
+  | "kolekcija";
 
 /**
  * Per-spec default sort:
@@ -263,7 +264,7 @@ export type ListingKind =
  *   - novo: longest remaining "novo" status first
  *   - heroji: hero score then discount
  *   - outlet: % popusta desc, then niža cena
- *   - kategorija: heroji → niža cena
+ *   - kategorija/kolekcija: heroji → niža cena
  */
 function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
   const cmpHero = (a: Product, b: Product) => Number(!!b.isHero) - Number(!!a.isHero);
@@ -289,6 +290,7 @@ function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
       return list.sort((a, b) => remaining(b) - remaining(a));
     }
     case "kategorija":
+    case "kolekcija":
     default:
       return list.sort((a, b) => cmpHero(a, b) || cmpPriceAsc(a, b));
   }

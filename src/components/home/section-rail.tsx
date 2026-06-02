@@ -46,6 +46,10 @@ interface SectionRailProps {
    * desktop layout still shows them.
    */
   mobileMinimal?: boolean;
+  /**
+   * Keeps the mobile title and CTA on one compact row for PDP rails.
+   */
+  compactMobileHeader?: boolean;
 }
 
 export function SectionRail({
@@ -62,6 +66,7 @@ export function SectionRail({
   banner,
   dense,
   mobileMinimal,
+  compactMobileHeader,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
   if (!products.length) return null;
@@ -81,7 +86,10 @@ export function SectionRail({
 
       <header
         className={cn(
-          "flex flex-wrap items-center justify-between gap-3",
+          "flex items-center justify-between",
+          compactMobileHeader
+            ? "flex-nowrap gap-2 md:flex-wrap md:gap-3"
+            : "flex-wrap gap-3",
           showBanner && "mt-4 md:mt-6",
         )}
       >
@@ -90,7 +98,10 @@ export function SectionRail({
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className={cn("min-w-0", minimalHeader ? "flex-1" : "max-w-2xl")}
+          className={cn(
+            "min-w-0",
+            compactMobileHeader ? "flex-1" : minimalHeader ? "flex-1" : "max-w-2xl",
+          )}
         >
           {!minimalHeader && eyebrow ? (
             <p
@@ -103,10 +114,11 @@ export function SectionRail({
             </p>
           ) : null}
           <div
-          className={cn(
-            "flex min-w-0 items-center gap-3 md:gap-4",
-            !minimalHeader && (dense ? "mt-1" : "mt-1 md:mt-2"),
-          )}
+            className={cn(
+              "flex min-w-0 items-center gap-3 md:gap-4",
+              compactMobileHeader && "gap-2 md:gap-4",
+              !minimalHeader && (dense ? "mt-1" : "mt-1 md:mt-2"),
+            )}
           >
             {titleIcon ? (
               <span className="flex size-11 shrink-0 items-center justify-center md:size-14">
@@ -128,7 +140,14 @@ export function SectionRail({
               href={href}
               className="group/title min-w-0 rounded-sm focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
             >
-              <h2 className="font-display min-w-0 text-2xl leading-tight text-ink-900 transition group-hover/title:text-walnut md:text-4xl">
+              <h2
+                className={cn(
+                  "font-display min-w-0 leading-tight text-ink-900 transition group-hover/title:text-walnut md:text-4xl",
+                  compactMobileHeader
+                    ? "text-[1.05rem] whitespace-nowrap min-[375px]:text-xl sm:text-2xl"
+                    : "text-2xl",
+                )}
+              >
                 {title}
               </h2>
             </Link>
@@ -146,10 +165,16 @@ export function SectionRail({
         </motion.div>
         <Link
           href={href}
-          className="hover:text-walnut focus-visible:ring-walnut/40 ml-auto inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-ink-900 transition focus-visible:rounded-full focus-visible:ring-2 focus-visible:outline-none"
+          className={cn(
+            "hover:text-walnut focus-visible:ring-walnut/40 ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-ink-900 transition focus-visible:rounded-full focus-visible:ring-2 focus-visible:outline-none",
+            compactMobileHeader ? "text-[11px] whitespace-nowrap min-[375px]:text-xs sm:text-sm" : "text-sm",
+          )}
         >
           {ctaLabel}
-          <ArrowRight className="size-4" aria-hidden />
+          <ArrowRight
+            className={cn("shrink-0", compactMobileHeader ? "size-3.5 sm:size-4" : "size-4")}
+            aria-hidden
+          />
         </Link>
       </header>
 
