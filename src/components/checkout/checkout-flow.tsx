@@ -204,7 +204,6 @@ export function CheckoutFlow({
 
   const stepIndex = STEP_ORDER.indexOf(step);
   const lastHistoryStep = useRef<CheckoutStep>(step);
-  const checkoutCardRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -229,12 +228,9 @@ export function CheckoutFlow({
   }, [setStep]);
 
   useEffect(() => {
-    if (step !== "review") return;
+    if (typeof window === "undefined") return;
     window.requestAnimationFrame(() => {
-      checkoutCardRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
   }, [step]);
 
@@ -243,7 +239,10 @@ export function CheckoutFlow({
     setIsAdvancing(true);
     try {
       const ok = await validateStep(step, trigger, getValues, identity);
-      if (!ok) return;
+      if (!ok) {
+        focusFirstInvalidField();
+        return;
+      }
       if (step === "shipping") rememberCheckoutFields(getValues());
       const i = STEP_ORDER.indexOf(step);
       if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1]!);
@@ -298,14 +297,18 @@ export function CheckoutFlow({
   };
 
   const onInvalid: SubmitErrorHandler<CheckoutFormData> = () => {
-    // Scroll to first invalid field.
-    if (typeof document === "undefined") return;
-    const el = document.querySelector<HTMLElement>(
-      '[aria-invalid="true"]',
-    );
-    el?.scrollIntoView({ behavior: "auto", block: "center" });
-    el?.focus({ preventScroll: true });
+    focusFirstInvalidField();
   };
+
+  function focusFirstInvalidField() {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+    });
+  }
 
   // Empty-cart guard.
   if (hydrated && lines.length === 0 && !useCheckout.getState().lastOrder) {
@@ -314,13 +317,12 @@ export function CheckoutFlow({
 
   return (
     <FormProvider {...methods}>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
         <form
-          ref={checkoutCardRef}
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           noValidate
           className={cn(
-            "bg-surface ring-border/60 rounded-2xl p-4 pb-28 ring-1 sm:p-7 md:pb-7",
+            "bg-surface ring-border/60 rounded-2xl p-4 pb-24 ring-1 sm:p-5 md:pb-5",
             step === "review" && "lg:p-5",
           )}
         >
@@ -329,13 +331,13 @@ export function CheckoutFlow({
           <div
             className={cn(
               "border-border/60 border-t",
-              step === "review" ? "mt-4 pt-4" : "mt-6 pt-6",
+              step === "review" ? "mt-4 pt-4" : "mt-5 pt-5",
             )}
           >
             <h2 className="font-display text-xl text-ink-900 sm:text-2xl">
               {STEP_TITLES[step]}
             </h2>
-            <div className={cn(step === "review" ? "mt-4" : "mt-5")}>
+            <div className={cn(step === "review" ? "mt-4" : "mt-4")}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={step}
@@ -394,8 +396,8 @@ export function CheckoutFlow({
 
           <div
             className={cn(
-              "border-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 flex items-center justify-between gap-3 rounded-lg border bg-surface/95 px-3 py-2.5 shadow-soft-3 backdrop-blur md:static md:inset-auto md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:shadow-none md:backdrop-blur-none",
-              step === "review" ? "md:mt-3 md:pt-2" : "md:mt-7 md:pt-5",
+              "border-border/60 fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 rounded-t-xl border border-x-0 border-b-0 bg-surface/95 px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] shadow-soft-3 backdrop-blur md:static md:inset-auto md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:shadow-none md:backdrop-blur-none",
+              step === "review" ? "md:mt-3 md:pt-2" : "md:mt-5 md:pt-4",
             )}
           >
             <button

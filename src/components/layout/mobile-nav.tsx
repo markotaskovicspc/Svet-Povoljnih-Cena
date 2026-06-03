@@ -238,22 +238,22 @@ export function MobileNav({
                 className={cn(
                   "min-h-0 flex-1",
                   stack.length === 1
-                    ? "flex flex-col overflow-hidden"
+                    ? "flex flex-col overflow-y-auto overscroll-contain"
                     : "overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)]",
                 )}
               >
                 {stack.length === 1 ? (
                   <>
-                    <div className="min-h-0 flex-1 px-3 pt-2.5 pb-2">
-                      <ul className="grid h-full grid-cols-2 grid-rows-2 gap-x-2.5 gap-y-1.5">
+                    <div className="shrink-0 px-3 pt-3 pb-4">
+                      <ul className="grid grid-cols-2 gap-x-2.5 gap-y-4">
                         {categoryTiles.map((tile) => (
-                          <li key={tile.href} className="min-h-0">
+                          <li key={tile.href}>
                             <button
                               type="button"
                               onClick={() => enter(tile)}
-                              className="group flex h-full min-h-0 w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block min-h-0 flex-1 overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block aspect-[2.05/1] w-full overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
@@ -262,7 +262,7 @@ export function MobileNav({
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-0.5 block min-h-6 text-center text-[11px] leading-[1.08] font-black text-ink-800 uppercase">
+                              <span className="mt-1 block min-h-[15px] text-center text-[10px] leading-none font-black text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -271,16 +271,8 @@ export function MobileNav({
                       </ul>
                     </div>
 
-                    <div className="shrink-0 border-y border-brand-blue/10 bg-brand-blue px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
-                      <ul className="grid grid-cols-2 gap-1.5">
-                        <li>
-                          <AccountShortcutTile
-                            active={isCustomerLoggedIn}
-                            compact
-                            onClick={close}
-                            className="h-10 border-white/20 text-[11px] focus-visible:ring-white/70"
-                          />
-                        </li>
+                    <div className="mt-auto shrink-0 border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                      <ul className="grid grid-cols-2 gap-2.5">
                         {tabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
@@ -291,11 +283,19 @@ export function MobileNav({
                                 active={isActive}
                                 compact
                                 onClick={close}
-                                className="h-10 border-white/20 text-[11px] focus-visible:ring-white/70"
+                                className="h-11 border-white/20 text-[12px] focus-visible:ring-white/70"
                               />
                             </li>
                           );
                         })}
+                        <li>
+                          <AccountShortcutTile
+                            active={isCustomerLoggedIn}
+                            compact
+                            onClick={close}
+                            className="h-11 border-white/20 text-[12px] focus-visible:ring-white/70"
+                          />
+                        </li>
                       </ul>
                     </div>
 

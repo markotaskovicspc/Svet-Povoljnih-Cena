@@ -20,21 +20,21 @@ export default async function CheckoutPodaciPage() {
   const defaultAddress = addresses[0];
 
   return (
-    <div className="mx-auto max-w-[var(--container-page)] px-4 pt-4 pb-36 md:px-6 md:pt-6 md:pb-24">
+    <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
       <Breadcrumbs
         trail={[
           { label: "Korpa", href: "/korpa" },
           { label: "Naplata" },
         ]}
       />
-      <h1 className="font-display mt-3 text-2xl text-ink-900 md:text-4xl">
+      <h1 className="font-display mt-2 text-2xl text-ink-900 md:text-4xl">
         Naplata
       </h1>
       <p className="mt-1 max-w-prose text-xs text-ink-500 md:text-sm">
         Sve što vam treba za bezbednu kupovinu — u jednom toku, bez odlaska sa
         stranice.
       </p>
-      <div className="mt-4 md:mt-8">
+      <div className="mt-3 md:mt-5">
         <CheckoutFlow
           initialCustomer={
             user?.userType === "customer"

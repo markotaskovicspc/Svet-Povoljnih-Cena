@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { ProductCard } from "@/components/product/product-card";
 import { suggest } from "@/lib/api/search";
-import { formatRsd } from "@/lib/format";
+import { getProductBySlug } from "@/lib/api/catalog";
+import type { Product } from "@/types";
 import type { SearchHit } from "@/types/search";
 
 export const metadata: Metadata = {
@@ -21,6 +20,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const rawQuery = Array.isArray(params.q) ? params.q[0] : params.q;
   const query = (rawQuery ?? "").trim();
   const hits = query.length >= 3 ? await getHits(query) : [];
+  const products = hits.length ? await getProductsFromHits(hits) : [];
 
   return (
     <main className="bg-canvas pb-24">
@@ -34,17 +34,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           <p className="mt-3 text-sm text-ink-500" aria-live="polite">
             {query.length < 3
               ? "Unesite najmanje 3 znaka za pretragu."
-              : `${hits.length} ${hits.length === 1 ? "rezultat" : "rezultata"}`}
+              : `${products.length} ${products.length === 1 ? "rezultat" : "rezultata"}`}
           </p>
         </header>
 
         <section className="mt-6 md:mt-8">
           {query.length < 3 ? (
             <EmptyState title="Prekratak upit" text="Pretraga počinje od najmanje 3 znaka." />
-          ) : hits.length ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {hits.map((hit) => (
-                <SearchResultCard key={hit.sku} hit={hit} />
+          ) : products.length ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+              {products.map((product) => (
+                <ProductCard key={product.sku} product={product} />
               ))}
             </div>
           ) : (
@@ -65,41 +65,9 @@ async function getHits(query: string): Promise<SearchHit[]> {
   }
 }
 
-function SearchResultCard({ hit }: { hit: SearchHit }) {
-  return (
-    <Link
-      href={`/p/${hit.slug}`}
-      className="group overflow-hidden rounded-lg bg-white ring-1 ring-border transition hover:-translate-y-0.5 hover:shadow-soft-3 hover:ring-walnut/30 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
-    >
-      <div className="relative aspect-[4/3] bg-white">
-        {hit.thumbnailUrl ? (
-          <Image
-            src={hit.thumbnailUrl}
-            alt={hit.name}
-            fill
-            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-contain p-3 transition duration-300"
-          />
-        ) : null}
-      </div>
-      <div className="space-y-2 p-3">
-        <p className="truncate font-mono text-[11px] text-ink-500">
-          {hit.breadcrumb || hit.sku}
-        </p>
-        <h2 className="line-clamp-2 min-h-10 text-sm font-semibold text-ink-900">
-          {hit.name}
-        </h2>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-base font-semibold text-action">
-              {formatRsd(hit.salePrice)}
-            </p>
-          </div>
-          <ArrowRight className="size-4 shrink-0 text-walnut transition group-hover:translate-x-0.5" />
-        </div>
-      </div>
-    </Link>
-  );
+async function getProductsFromHits(hits: SearchHit[]) {
+  const products = await Promise.all(hits.map((hit) => getProductBySlug(hit.slug)));
+  return products.filter((product): product is Product => Boolean(product));
 }
 
 function EmptyState({ title, text }: { title: string; text: string }) {

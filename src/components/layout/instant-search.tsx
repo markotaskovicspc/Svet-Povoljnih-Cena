@@ -124,18 +124,17 @@ export function InstantSearch({
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open) return;
     if (e.key === "ArrowDown") {
+      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) => Math.min(i + 1, results.length));
     } else if (e.key === "ArrowUp") {
+      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const hit = results[activeIndex];
-      if (hit) goHit(hit);
-      else goAll();
+      goAll();
     }
   };
 

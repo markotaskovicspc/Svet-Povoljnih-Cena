@@ -26,8 +26,8 @@ export function CustomerLoginFields() {
   const { pending } = useFormStatus();
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
+    <div className="space-y-3 md:space-y-4">
+      <div className="space-y-1.5 md:space-y-2">
         <Label htmlFor="email">E-pošta</Label>
         <Input
           id="email"
@@ -37,10 +37,10 @@ export function CustomerLoginFields() {
           autoComplete="email"
           autoFocus
           placeholder="ime@primer.rs"
-          className="h-11 bg-white"
+          className="h-10 bg-white md:h-11"
         />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1.5 md:space-y-2">
         <Label htmlFor="password">Lozinka</Label>
         <Input
           id="password"
@@ -49,7 +49,7 @@ export function CustomerLoginFields() {
           required
           autoComplete="current-password"
           minLength={8}
-          className="h-11 bg-white"
+          className="h-10 bg-white md:h-11"
         />
       </div>
       <label className="flex items-center gap-2 text-sm text-ink-600">
@@ -61,7 +61,7 @@ export function CustomerLoginFields() {
         />
         Zapamti me
       </label>
-      <Button type="submit" disabled={pending} className="h-11 w-full gap-2">
+      <Button type="submit" disabled={pending} className="h-10 w-full gap-2 md:h-11">
         <LogIn className="size-4" aria-hidden />
         {pending ? "Prijava..." : "Prijavi se"}
       </Button>

@@ -54,8 +54,9 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
   }, [index, paused, reduce, count, next]);
 
   const onDragEnd = (_e: unknown, info: PanInfo) => {
-    if (info.offset.x < -SWIPE_THRESHOLD) next();
-    else if (info.offset.x > SWIPE_THRESHOLD) prev();
+    const swipe = info.offset.x + info.velocity.x * 0.12;
+    if (swipe < -SWIPE_THRESHOLD) next();
+    else if (swipe > SWIPE_THRESHOLD) prev();
   };
 
   if (!count) return null;
@@ -75,14 +76,16 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
-            className="absolute inset-0"
+            className="absolute inset-0 cursor-grab [touch-action:pan-y] active:cursor-grabbing"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.7, ease }}
             drag={count > 1 ? "x" : false}
+            dragDirectionLock
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.1}
+            dragMomentum={false}
             onDragEnd={onDragEnd}
           >
             <Image

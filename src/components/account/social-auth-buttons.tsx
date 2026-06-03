@@ -95,7 +95,7 @@ export function SocialAuthButtons({
   const actionLabel = intent === "register" ? "Registrujte se" : "Prijavite se";
 
   return (
-    <div className="mt-6 space-y-3">
+    <div className="mt-4 space-y-2 md:mt-6 md:space-y-3">
       {showDivider ? (
         <div className="flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
           <span className="h-px flex-1 bg-border" />
@@ -113,7 +113,7 @@ export function SocialAuthButtons({
                 aria-label={`${actionLabel} preko ${provider.label}`}
                 className={cn(
                   buttonVariants({ variant: "outline", size: "lg" }),
-                  "h-11 w-full gap-2 bg-white",
+                  "h-10 w-full gap-2 bg-white md:h-11",
                 )}
               >
                 <SocialButtonContent
@@ -131,7 +131,7 @@ export function SocialAuthButtons({
               title={`${provider.label} prijava nije konfigurisana`}
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "h-11 w-full cursor-not-allowed gap-2 bg-white opacity-60",
+                "h-10 w-full cursor-not-allowed gap-2 bg-white opacity-60 md:h-11",
               )}
             >
               <SocialButtonContent

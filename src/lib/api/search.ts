@@ -33,7 +33,7 @@ const MIN_QUERY_LEN = 3;
 export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
-  const safeLimit = Math.min(Math.max(limit, 1), 20);
+  const safeLimit = Math.min(Math.max(limit, 1), 96);
   if (!hasDatabaseConnection()) return [];
 
   let rows: SuggestRow[] = [];

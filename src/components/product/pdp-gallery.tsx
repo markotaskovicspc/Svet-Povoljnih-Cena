@@ -188,7 +188,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               <div
                 key={`${s.kind}-mobile-${index}`}
                 data-slide-index={index}
-                className="relative aspect-square min-w-full snap-center snap-always"
+                className="relative aspect-[4/3] min-w-full snap-center snap-always"
               >
                 {s.kind === "image" ? (
                   <Image
@@ -382,7 +382,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
         <ul
           ref={thumbTrackRef}
           onScroll={updateThumbOverflow}
-          className="flex max-h-[min(72vh,680px)] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex max-h-[432px] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
           aria-label="Galerija proizvoda"
         >

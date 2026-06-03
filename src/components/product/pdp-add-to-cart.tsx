@@ -88,9 +88,9 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   // Mobile sticky bar
   return (
     <div
-      className="bg-surface/95 ring-border/60 fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-40 rounded-lg px-3 py-2.5 shadow-soft-3 ring-1 backdrop-blur md:hidden"
+      className="bg-surface/95 ring-border/60 fixed inset-x-0 bottom-0 z-40 rounded-t-xl px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] shadow-soft-3 ring-1 backdrop-blur md:hidden"
     >
-      <div className="flex items-center gap-3">
+      <div className="mx-auto flex max-w-[520px] items-center gap-2.5">
         <button
           type="button"
           aria-pressed={wished}

@@ -147,7 +147,7 @@ export function CityAutocomplete({
           aria-describedby={error ? `${inputId}-err` : undefined}
           placeholder={`Unesite najmanje ${minChars} slova…`}
           className={cn(
-            "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-11 w-full rounded-xl pr-3 pl-9 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:text-sm",
+            "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 w-full rounded-xl pr-3 pl-9 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm",
             "focus-visible:ring-2 focus-visible:outline-none",
             error && "ring-action/60 focus-visible:ring-action/40",
           )}

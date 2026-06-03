@@ -24,8 +24,8 @@ export function ShippingForm() {
   const billingLice = watch("billing.liceType");
 
   return (
-    <div className="flex flex-col gap-6">
-      <fieldset className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 md:gap-5">
+      <fieldset className="flex flex-col gap-2.5">
         <legend className="text-sm font-medium text-ink-900">
           Tip kupca
         </legend>
@@ -89,7 +89,7 @@ export function ShippingForm() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-border/60 mt-2 flex flex-col gap-4 border-t pt-5">
+            <div className="border-border/60 mt-2 flex flex-col gap-4 border-t pt-4">
               <p className="text-sm font-medium text-ink-900">
                 Druga adresa za isporuku
               </p>
@@ -140,7 +140,7 @@ function AddressFieldset({
     showSubmitErrors ? errAt(`${prefix}.${path}`) : undefined;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3">
       {liceType === "pravno" ? (
         <>
           <Field
@@ -301,7 +301,7 @@ const Field = ({
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? `${id}-err` : undefined}
         className={cn(
-          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-11 rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:text-sm",
+          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm",
           "focus-visible:ring-2 focus-visible:outline-none",
           error && "ring-action/60 focus-visible:ring-action/40",
         )}
