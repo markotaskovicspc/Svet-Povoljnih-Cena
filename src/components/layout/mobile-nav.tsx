@@ -276,15 +276,15 @@ export function MobileNav({
                 {stack.length === 1 ? (
                   <>
                     <div className="flex-[2_1_0%] overflow-hidden bg-white px-3 pt-3 pb-4">
-                      <ul className="grid h-full grid-cols-2 grid-rows-2 gap-x-2.5 gap-y-3">
+                      <ul className="grid grid-cols-2 gap-x-2.5 gap-y-4">
                         {categoryTiles.map((tile) => (
-                          <li key={tile.href} className="min-h-0">
+                          <li key={tile.href}>
                             <button
                               type="button"
                               onClick={() => enter(tile)}
-                              className="group flex h-full w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block min-h-0 flex-1 overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block aspect-[2.08/1] w-full overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
@@ -314,7 +314,7 @@ export function MobileNav({
                                 active={isActive}
                                 compact
                                 onClick={close}
-                                className="h-11 border-white/20 text-[12px] focus-visible:ring-white/70"
+                                className="h-12 border-white/20 text-[12px] focus-visible:ring-white/70"
                               />
                             </li>
                           );
@@ -324,7 +324,7 @@ export function MobileNav({
                             active={isCustomerLoggedIn}
                             compact
                             onClick={close}
-                            className="h-11 border-white/20 text-[12px] focus-visible:ring-white/70"
+                            className="h-12 border-white/20 text-[12px] focus-visible:ring-white/70"
                           />
                         </li>
                       </ul>
