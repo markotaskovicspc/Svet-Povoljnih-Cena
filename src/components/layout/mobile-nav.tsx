@@ -269,22 +269,22 @@ export function MobileNav({
                 className={cn(
                   "min-h-0 flex-1",
                   stack.length === 1
-                    ? "flex flex-col overflow-y-auto overscroll-contain"
+                    ? "flex flex-col overflow-hidden"
                     : "overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)]",
                 )}
               >
                 {stack.length === 1 ? (
                   <>
-                    <div className="shrink-0 px-3 pt-3 pb-4">
-                      <ul className="grid grid-cols-2 gap-x-2.5 gap-y-4">
+                    <div className="flex-[2_1_0%] overflow-hidden bg-white px-3 pt-3 pb-4">
+                      <ul className="grid h-full grid-cols-2 grid-rows-2 gap-x-2.5 gap-y-3">
                         {categoryTiles.map((tile) => (
-                          <li key={tile.href}>
+                          <li key={tile.href} className="min-h-0">
                             <button
                               type="button"
                               onClick={() => enter(tile)}
-                              className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              className="group flex h-full w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block aspect-[2.08/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block min-h-0 flex-1 overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
@@ -302,7 +302,7 @@ export function MobileNav({
                       </ul>
                     </div>
 
-                    <div className="min-h-[178px] flex-1 border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                    <div className="flex-[1_1_0%] border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                       <ul className="grid grid-cols-2 gap-2.5">
                         {mobileMenuShortcutTabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);

@@ -135,7 +135,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease, delay: 0.1 }}
-              className="pointer-events-auto max-w-xl text-canvas"
+              className="pointer-events-none max-w-xl text-canvas"
             >
               <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
                 {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
@@ -151,7 +151,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               {slide.ctaHref && slide.ctaLabel ? (
                 <Link
                   href={slide.ctaHref}
-                  className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 mt-3 inline-flex items-center rounded-full px-5 py-2 text-xs shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:mt-6 md:px-6 md:py-3 md:text-sm"
+                  className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto mt-3 inline-flex items-center rounded-full px-5 py-2 text-xs shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:mt-6 md:px-6 md:py-3 md:text-sm"
                 >
                   {slide.ctaLabel}
                 </Link>
