@@ -24,8 +24,8 @@ export function ShippingForm() {
   const billingLice = watch("billing.liceType");
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
-      <fieldset className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-4 md:gap-5 lg:gap-3">
+      <fieldset className="flex flex-col gap-2.5 lg:gap-2">
         <legend className="text-sm font-medium text-ink-900">
           Tip kupca
         </legend>
@@ -89,7 +89,7 @@ export function ShippingForm() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="border-border/60 mt-2 flex flex-col gap-4 border-t pt-4">
+            <div className="border-border/60 mt-2 flex flex-col gap-4 border-t pt-4 lg:gap-3 lg:pt-3">
               <p className="text-sm font-medium text-ink-900">
                 Druga adresa za isporuku
               </p>
@@ -140,7 +140,7 @@ function AddressFieldset({
     showSubmitErrors ? errAt(`${prefix}.${path}`) : undefined;
 
   return (
-    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3">
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3 lg:gap-2.5">
       {liceType === "pravno" ? (
         <>
           <Field
@@ -291,7 +291,7 @@ const Field = ({
 } & React.ComponentProps<"input">) => {
   const id = `f-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${props.name ?? ""}`;
   return (
-    <label className={cn("flex flex-col gap-1.5", className)} htmlFor={id}>
+    <label className={cn("flex flex-col gap-1.5 lg:gap-1", className)} htmlFor={id}>
       <span className="text-xs font-medium text-ink-700">
         {label}
         {required ? <span className="text-action ml-0.5">*</span> : null}
@@ -301,7 +301,7 @@ const Field = ({
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? `${id}-err` : undefined}
         className={cn(
-          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm",
+          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm lg:h-10",
           "focus-visible:ring-2 focus-visible:outline-none",
           error && "ring-action/60 focus-visible:ring-action/40",
         )}

@@ -122,7 +122,7 @@ export function PaymentMethodStep() {
   const active = watch("paymentMethod");
 
   return (
-    <fieldset className="grid gap-3 md:grid-cols-2">
+    <fieldset className="grid gap-3 md:grid-cols-2 lg:gap-2.5">
       {METHODS.map((m) => {
         const Icon = m.icon;
         const checked = active === m.id;
@@ -131,7 +131,7 @@ export function PaymentMethodStep() {
             key={m.id}
             htmlFor={`pay-${m.id}`}
             className={cn(
-              "bg-surface ring-border/60 group flex cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition",
+              "bg-surface ring-border/60 group flex cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
               "hover:ring-walnut/40",
               checked && "ring-walnut shadow-soft-2 ring-2",
               m.disabled && "cursor-not-allowed opacity-60 hover:ring-border/60",
@@ -140,7 +140,7 @@ export function PaymentMethodStep() {
             <div className="flex items-start gap-3">
               <span
                 className={cn(
-                  "inline-flex size-9 items-center justify-center rounded-xl",
+                  "inline-flex size-9 items-center justify-center rounded-xl lg:size-8",
                   checked ? "bg-walnut text-canvas" : "bg-muted-bg text-ink-700",
                 )}
                 aria-hidden
@@ -164,7 +164,7 @@ export function PaymentMethodStep() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="border-border/60 mt-1 overflow-hidden border-t pt-2 text-xs text-ink-700"
+                className="border-border/60 mt-1 overflow-hidden border-t pt-2 text-xs text-ink-700 lg:pt-1.5"
               >
                 {m.details}
               </motion.div>

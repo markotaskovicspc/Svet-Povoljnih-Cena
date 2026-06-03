@@ -114,7 +114,7 @@ export function CityAutocomplete({
   return (
     <label
       htmlFor={inputId}
-      className={cn("relative flex flex-col gap-1.5", className)}
+      className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)}
     >
       <span className="text-xs font-medium text-ink-700">
         {label}
@@ -147,7 +147,7 @@ export function CityAutocomplete({
           aria-describedby={error ? `${inputId}-err` : undefined}
           placeholder={`Unesite najmanje ${minChars} slova…`}
           className={cn(
-            "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 w-full rounded-xl pr-3 pl-9 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm",
+            "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 w-full rounded-xl pr-3 pl-9 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm lg:h-10",
             "focus-visible:ring-2 focus-visible:outline-none",
             error && "ring-action/60 focus-visible:ring-action/40",
           )}

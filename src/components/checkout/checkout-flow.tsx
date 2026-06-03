@@ -203,6 +203,7 @@ export function CheckoutFlow({
   }, [formState.dirtyFields.shipping, getValues, initialCustomer, setValue]);
 
   const stepIndex = STEP_ORDER.indexOf(step);
+  const isCompactDesktopStep = step === "shipping" || step === "payment";
   const lastHistoryStep = useRef<CheckoutStep>(step);
 
   useEffect(() => {
@@ -323,6 +324,7 @@ export function CheckoutFlow({
           noValidate
           className={cn(
             "bg-surface ring-border/60 rounded-2xl p-4 pb-24 ring-1 sm:p-5 md:pb-5",
+            isCompactDesktopStep && "lg:p-4",
             step === "review" && "lg:p-5",
           )}
         >
@@ -331,13 +333,22 @@ export function CheckoutFlow({
           <div
             className={cn(
               "border-border/60 border-t",
-              step === "review" ? "mt-4 pt-4" : "mt-5 pt-5",
+              step === "review"
+                ? "mt-4 pt-4"
+                : isCompactDesktopStep
+                  ? "mt-4 pt-4 lg:mt-3 lg:pt-3"
+                  : "mt-5 pt-5",
             )}
           >
-            <h2 className="font-display text-xl text-ink-900 sm:text-2xl">
+            <h2
+              className={cn(
+                "font-display text-xl text-ink-900 sm:text-2xl",
+                isCompactDesktopStep && "lg:text-xl",
+              )}
+            >
               {STEP_TITLES[step]}
             </h2>
-            <div className={cn(step === "review" ? "mt-4" : "mt-4")}>
+            <div className={cn("mt-4", isCompactDesktopStep && "lg:mt-3")}>
               <AnimatePresence mode="wait">
                 <motion.div
                   key={step}
@@ -397,7 +408,11 @@ export function CheckoutFlow({
           <div
             className={cn(
               "border-border/60 fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 rounded-t-xl border border-x-0 border-b-0 bg-surface/95 px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] shadow-soft-3 backdrop-blur md:static md:inset-auto md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:shadow-none md:backdrop-blur-none",
-              step === "review" ? "md:mt-3 md:pt-2" : "md:mt-5 md:pt-4",
+              step === "review"
+                ? "md:mt-3 md:pt-2"
+                : isCompactDesktopStep
+                  ? "md:mt-4 md:pt-3 lg:mt-3 lg:pt-2"
+                  : "md:mt-5 md:pt-4",
             )}
           >
             <button
