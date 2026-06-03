@@ -55,6 +55,8 @@ export function NotesConsent() {
             id="consent"
             type="checkbox"
             className="accent-walnut mt-0.5 size-4"
+            aria-invalid={Boolean(consentErr) || undefined}
+            aria-describedby={consentErr ? "consent-error" : undefined}
             {...register("consent", {
               validate: (v) => v === true || "Saglasnost je obavezna pre porudžbine",
             })}
@@ -80,6 +82,7 @@ export function NotesConsent() {
         </label>
         {consentErr ? (
           <p
+            id="consent-error"
             className={cn(
               "text-action pl-7 text-[11px]",
               "animate-in fade-in slide-in-from-top-1",
