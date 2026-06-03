@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { motion } from "framer-motion";
 import {
+  CheckCircle2,
   LogIn,
   UserPlus,
   UserRound,
@@ -22,13 +23,24 @@ import { SocialProviderMark } from "@/components/account/social-auth-buttons";
  */
 export function IdentityStep({
   value,
+  authenticatedCustomer,
   onPick,
+  onAuthenticatedContinue,
 }: {
   value: IdentityChoice | null;
+  authenticatedCustomer?: {
+    name?: string | null;
+    email?: string | null;
+  };
   onPick: (c: IdentityChoice) => void;
+  onAuthenticatedContinue?: () => void;
 }) {
   const [showSocial, setShowSocial] = useState<"login" | "register" | null>(
-    value === "login" || value === "register" ? value : null,
+    authenticatedCustomer
+      ? null
+      : value === "login" || value === "register"
+        ? value
+        : null,
   );
   const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
@@ -36,6 +48,7 @@ export function IdentityStep({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
+    if (authenticatedCustomer) return;
     let cancelled = false;
     fetch("/api/auth/providers")
       .then((response) => response.json())
@@ -48,7 +61,7 @@ export function IdentityStep({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authenticatedCustomer]);
 
   function handleSocial(providerId: string) {
     setSocialError(null);
@@ -96,6 +109,48 @@ export function IdentityStep({
       desc: "Bez registracije — samo unesite podatke za isporuku.",
     },
   ];
+
+  if (authenticatedCustomer) {
+    const displayName =
+      authenticatedCustomer.name?.trim() ||
+      authenticatedCustomer.email?.trim() ||
+      "Vaš nalog";
+
+    return (
+      <div className="rounded-2xl border border-border/70 bg-surface p-4 shadow-sm md:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-action text-white">
+              <CheckCircle2 className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium tracking-wide text-ink-500 uppercase">
+                Kupujete kao ulogovan korisnik
+              </p>
+              <p className="font-display mt-1 truncate text-xl text-ink-900">
+                {displayName}
+              </p>
+              {authenticatedCustomer.email ? (
+                <p className="mt-1 truncate text-sm text-ink-500">
+                  {authenticatedCustomer.email}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onPick("login");
+              onAuthenticatedContinue?.();
+            }}
+            className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Nastavi sa ovim nalogom
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-3 md:grid-cols-3">

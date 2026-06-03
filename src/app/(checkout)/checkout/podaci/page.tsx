@@ -41,6 +41,7 @@ export default async function CheckoutPodaciPage() {
               ? {
                   name: user.name ?? undefined,
                   email: user.email ?? undefined,
+                  authenticated: true,
                   address: defaultAddress
                     ? {
                         firstName: defaultAddress.firstName,

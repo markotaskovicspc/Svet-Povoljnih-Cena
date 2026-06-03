@@ -68,6 +68,7 @@ export interface CheckoutFormData {
 }
 
 export interface CheckoutInitialCustomer {
+  authenticated?: boolean;
   name?: string;
   email?: string | null;
   address?: Partial<CheckoutAddress>;
@@ -166,11 +167,18 @@ export function CheckoutFlow({
     control: methods.control,
     name: "perItemAssembly",
   });
+  const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
 
   // Keep identity in store + form synced.
   useEffect(() => {
     if (identity) methods.setValue("identity", identity, { shouldDirty: false });
   }, [identity, methods]);
+
+  useEffect(() => {
+    if (!isAuthenticatedCustomer) return;
+    setIdentity("login");
+    methods.setValue("identity", "login", { shouldDirty: false });
+  }, [isAuthenticatedCustomer, methods, setIdentity]);
 
   useEffect(() => {
     const remembered = readRememberedCheckout();
@@ -360,10 +368,19 @@ export function CheckoutFlow({
                   {step === "identity" ? (
                     <IdentityStep
                       value={identity}
+                      authenticatedCustomer={
+                        isAuthenticatedCustomer
+                          ? {
+                              name: initialCustomer?.name,
+                              email: initialCustomer?.email,
+                            }
+                          : undefined
+                      }
                       onPick={(c) => {
                         setIdentity(c);
                         methods.setValue("identity", c, { shouldDirty: true });
                       }}
+                      onAuthenticatedContinue={next}
                     />
                   ) : null}
                   {step === "shipping" ? <ShippingForm /> : null}
