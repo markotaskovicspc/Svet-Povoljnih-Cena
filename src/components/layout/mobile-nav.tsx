@@ -105,10 +105,41 @@ const navIconMap = {
   Waves,
 } as const;
 
-const categoryTiles = primaryNav.map((node) => ({
+const categoryTiles = primaryNav.slice(0, 4).map((node) => ({
   ...node,
   imageUrl: categoryTileImages[node.label] ?? fallbackCategoryImage,
 }));
+
+const mobileMenuShortcutTabs = [
+  {
+    id: "ogranicena-ponuda",
+    label: "Dok traju zalihe",
+    href: "/ogranicena-ponuda",
+    order: 1,
+    icon: "Hourglass",
+  },
+  {
+    id: "heroji-meseca",
+    label: "Heroji meseca",
+    href: "/heroji-meseca",
+    order: 2,
+    icon: "Crown",
+  },
+  {
+    id: "mesecna-akcija",
+    label: "Mesečna akcija",
+    href: "/akcija",
+    order: 3,
+    icon: "Tag",
+  },
+  {
+    id: "niske-cene-pod-zastitom",
+    label: "Trajno niske cene",
+    href: "/niske-cene-pod-zastitom",
+    order: 4,
+    icon: "ShieldCheck",
+  },
+] satisfies Tab[];
 
 export function MobileNav({
   tabs,
@@ -253,7 +284,7 @@ export function MobileNav({
                               onClick={() => enter(tile)}
                               className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block aspect-[2.05/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block aspect-[2.08/1] w-full overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
@@ -262,7 +293,7 @@ export function MobileNav({
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-1 block min-h-[15px] text-center text-[10px] leading-none font-black text-ink-800 uppercase">
+                              <span className="mt-1 block h-[15px] truncate text-center text-[10px] leading-none font-black text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -271,9 +302,9 @@ export function MobileNav({
                       </ul>
                     </div>
 
-                    <div className="mt-auto shrink-0 border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                    <div className="min-h-[178px] flex-1 border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                       <ul className="grid grid-cols-2 gap-2.5">
-                        {tabs.map((t) => {
+                        {mobileMenuShortcutTabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
                           return (
