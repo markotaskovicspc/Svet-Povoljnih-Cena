@@ -23,6 +23,7 @@ export function CartLineRow({
   const remove = useCart((s) => s.remove);
   const onSale = line.unitPriceSale < line.unitPriceFull;
   const lineTotal = line.unitPriceSale * line.qty;
+  const decrementRemoves = line.qty <= 1;
 
   return (
     <div
@@ -69,7 +70,8 @@ export function CartLineRow({
             <button
               type="button"
               onClick={() => setQty(line.sku, line.qty - 1)}
-              aria-label="Smanji količinu"
+              aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
+              title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
               className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center text-ink-700 transition focus-visible:ring-2 focus-visible:outline-none"
             >
               <Minus className="size-3.5" aria-hidden />

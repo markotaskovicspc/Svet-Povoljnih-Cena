@@ -48,11 +48,14 @@ export const useCart = create<CartState>()(
       remove: (sku) =>
         set((s) => ({ lines: s.lines.filter((l) => l.sku !== sku) })),
       setQty: (sku, qty) =>
-        set((s) => ({
-          lines: s.lines
-            .map((l) => (l.sku === sku ? { ...l, qty } : l))
-            .filter((l) => l.qty > 0),
-        })),
+        set((s) => {
+          if (qty <= 0) {
+            return { lines: s.lines.filter((l) => l.sku !== sku) };
+          }
+          return {
+            lines: s.lines.map((l) => (l.sku === sku ? { ...l, qty } : l)),
+          };
+        }),
       toggleAssembly: (sku) =>
         set((s) => ({
           lines: s.lines.map((l) =>

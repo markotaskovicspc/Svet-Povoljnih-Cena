@@ -410,6 +410,8 @@ function MobileCartControl({
   onDecrease: () => void;
   onIncrease: () => void;
 }) {
+  const decrementRemoves = lineQty <= 1;
+
   return (
     <div className={cn("w-full", className)}>
       {lineQty > 0 ? (
@@ -421,7 +423,8 @@ function MobileCartControl({
           <button
             type="button"
             onClick={onDecrease}
-            aria-label="Smanji količinu"
+            aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
+            title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
             className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
           >
             <Minus className="size-3.5" aria-hidden />
