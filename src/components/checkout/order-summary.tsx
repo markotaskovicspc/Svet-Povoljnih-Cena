@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Loader2, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
+import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import {
   ASSEMBLY_PRICE_DEFAULT,
   PAYMENT_LABELS,
@@ -107,7 +108,7 @@ export function OrderSummary({
             {lines.map((l) => (
               <li
                 key={l.sku}
-                className="grid grid-cols-[44px_1fr_auto] items-center gap-3 py-3"
+                className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 py-3"
               >
                 <span className="bg-white ring-border/60 relative block size-11 overflow-hidden rounded-lg ring-1">
                   {l.thumbnailUrl ? (
@@ -129,6 +130,9 @@ export function OrderSummary({
                 <span className="text-xs font-medium text-ink-900 tabular-nums">
                   {formatRsd(l.unitPriceSale * l.qty)}
                 </span>
+                <div className="col-start-2 col-span-2 -mt-1">
+                  <CartQuantityControl sku={l.sku} quantity={l.qty} />
+                </div>
               </li>
             ))}
           </ul>

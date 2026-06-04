@@ -169,6 +169,18 @@ export function CheckoutFlow({
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
 
+  useEffect(() => {
+    const activeSkus = new Set(lines.map((line) => line.sku));
+    const current = getValues("perItemAssembly") ?? {};
+    const next = Object.fromEntries(
+      Object.entries(current).filter(([sku]) => activeSkus.has(sku)),
+    ) as Record<SKU, boolean>;
+
+    if (Object.keys(next).length !== Object.keys(current).length) {
+      setValue("perItemAssembly", next, { shouldDirty: true });
+    }
+  }, [getValues, lines, setValue]);
+
   // Keep identity in store + form synced.
   useEffect(() => {
     if (identity) methods.setValue("identity", identity, { shouldDirty: false });

@@ -9,13 +9,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
+import { Heart } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
+import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { ProductColorOptions } from "@/components/product/color-options";
 import {
   deriveImageBadges,
@@ -60,7 +61,6 @@ export function ProductCard({
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
-  const setQty = useCart((s) => s.setQty);
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
@@ -300,12 +300,14 @@ export function ProductCard({
                 </span>
               )}
             </Link>
-            <MobileCartControl
-              lineQty={lineQty}
-              className="w-full"
+            <CartQuantityControl
+              sku={product.sku}
+              quantity={lineQty}
               onAdd={handleAdd}
-              onDecrease={() => setQty(product.sku, lineQty - 1)}
-              onIncrease={() => setQty(product.sku, lineQty + 1)}
+              tone="dark"
+              addTone="dark"
+              fullWidth
+              className="w-full"
             />
           </div>
           <p className="mt-1 min-h-3.5 truncate text-[10px] leading-none text-ink-500 md:text-[11px]">
@@ -394,67 +396,6 @@ function ProductStickerBadge({
         className="h-full w-full object-contain"
       />
     </span>
-  );
-}
-
-function MobileCartControl({
-  lineQty,
-  className,
-  onAdd,
-  onDecrease,
-  onIncrease,
-}: {
-  lineQty: number;
-  className?: string;
-  onAdd: () => void;
-  onDecrease: () => void;
-  onIncrease: () => void;
-}) {
-  const decrementRemoves = lineQty <= 1;
-
-  return (
-    <div className={cn("w-full", className)}>
-      {lineQty > 0 ? (
-        <div
-          className="bg-ink-900 inline-flex h-9 w-full items-center justify-between overflow-hidden rounded-full text-canvas md:h-10"
-          role="group"
-          aria-label="Količina u korpi"
-        >
-          <button
-            type="button"
-            onClick={onDecrease}
-            aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
-            title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
-            className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
-          >
-            <Minus className="size-3.5" aria-hidden />
-          </button>
-          <span
-            aria-live="polite"
-            className="min-w-5 text-center text-xs font-medium tabular-nums"
-          >
-            {lineQty}
-          </span>
-          <button
-            type="button"
-            onClick={onIncrease}
-            aria-label="Povećaj količinu"
-            className="hover:bg-walnut focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none"
-          >
-            <Plus className="size-3.5" aria-hidden />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:h-10 md:px-3"
-        >
-          <ShoppingBag className="size-3.5 shrink-0" aria-hidden />
-          <span className="whitespace-nowrap">Dodaj u korpu</span>
-        </button>
-      )}
-    </div>
   );
 }
 

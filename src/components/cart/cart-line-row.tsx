@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 
 interface CartLineRowProps {
   line: CartLine;
@@ -19,11 +20,9 @@ export function CartLineRow({
   variant = "drawer",
   onNavigate,
 }: CartLineRowProps) {
-  const setQty = useCart((s) => s.setQty);
   const remove = useCart((s) => s.remove);
   const onSale = line.unitPriceSale < line.unitPriceFull;
   const lineTotal = line.unitPriceSale * line.qty;
-  const decrementRemoves = line.qty <= 1;
 
   return (
     <div
@@ -62,32 +61,7 @@ export function CartLineRow({
           {line.sku}
         </p>
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-          <div
-            role="group"
-            aria-label="Količina"
-            className="bg-canvas ring-border/60 inline-flex items-center overflow-hidden rounded-full ring-1"
-          >
-            <button
-              type="button"
-              onClick={() => setQty(line.sku, line.qty - 1)}
-              aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
-              title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
-              className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center text-ink-700 transition focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <Minus className="size-3.5" aria-hidden />
-            </button>
-            <span className="min-w-6 text-center text-xs font-medium tabular-nums text-ink-900">
-              {line.qty}
-            </span>
-            <button
-              type="button"
-              onClick={() => setQty(line.sku, line.qty + 1)}
-              aria-label="Povećaj količinu"
-              className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex size-7 items-center justify-center text-ink-700 transition focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <Plus className="size-3.5" aria-hidden />
-            </button>
-          </div>
+          <CartQuantityControl sku={line.sku} quantity={line.qty} />
           <div className="text-right">
             <div
               className={cn(

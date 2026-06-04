@@ -29,11 +29,28 @@ export const cartPayloadSchema = z.object({
 
 export type ServerCartLine = z.infer<typeof cartLineSchema>;
 
+function normalizeServerCartLines(lines: ServerCartLine[]): ServerCartLine[] {
+  const bySku = new Map<string, ServerCartLine>();
+
+  for (const line of lines) {
+    if (line.qty <= 0) continue;
+    const existing = bySku.get(line.sku);
+    bySku.set(
+      line.sku,
+      existing
+        ? { ...line, qty: Math.min(99, existing.qty + line.qty) }
+        : { ...line, qty: Math.min(99, line.qty) },
+    );
+  }
+
+  return Array.from(bySku.values());
+}
+
 export async function getServerCart(userId: string): Promise<ServerCartLine[]> {
   const row = await db.cart.findUnique({ where: { userId } });
   if (!row) return [];
   const parsed = z.array(cartLineSchema).safeParse(row.lines);
-  return parsed.success ? parsed.data : [];
+  return parsed.success ? normalizeServerCartLines(parsed.data) : [];
 }
 
 export async function saveServerCart(
@@ -41,7 +58,7 @@ export async function saveServerCart(
   lines: ServerCartLine[],
 ): Promise<void> {
   // Drop empty / zero-qty lines defensively.
-  const clean = lines.filter((l) => l.qty > 0);
+  const clean = normalizeServerCartLines(lines);
   await db.cart.upsert({
     where: { userId },
     create: { userId, lines: clean },

@@ -8,11 +8,12 @@
  * Keeps the purchase control visible on desktop and mobile; stock messaging can
  * be layered into the same control when backend availability rules are final.
  */
-import { useState } from "react";
-import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
+import { Heart } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
+import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
+import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
 interface PdpAddToCartProps {
@@ -22,56 +23,28 @@ interface PdpAddToCartProps {
 }
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
-  const [pickQty, setPickQty] = useState(1);
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
+  const lineQty = useCart(
+    (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
+  );
 
   function handleAdd() {
-    commitAddToCart(product, pickQty);
+    commitAddToCart(product, 1);
   }
-
-  const stepper = (
-    <div
-      role="group"
-      aria-label="Količina"
-      className="bg-canvas ring-border/60 inline-flex items-center overflow-hidden rounded-full ring-1"
-    >
-      <button
-        type="button"
-        onClick={() => setPickQty((q) => Math.max(1, q - 1))}
-        aria-label="Smanji količinu"
-        className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex size-9 items-center justify-center text-ink-700 transition focus-visible:ring-2 focus-visible:outline-none"
-      >
-        <Minus className="size-4" aria-hidden />
-      </button>
-      <span
-        aria-live="polite"
-        className="min-w-7 text-center text-sm font-medium tabular-nums text-ink-900"
-      >
-        {pickQty}
-      </span>
-      <button
-        type="button"
-        onClick={() => setPickQty((q) => q + 1)}
-        aria-label="Povećaj količinu"
-        className="hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex size-9 items-center justify-center text-ink-700 transition focus-visible:ring-2 focus-visible:outline-none"
-      >
-        <Plus className="size-4" aria-hidden />
-      </button>
-    </div>
-  );
 
   const ctas = (
     <div className="flex flex-1 items-center gap-2">
-      {stepper}
-      <button
-        type="button"
-        onClick={handleAdd}
-        className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
-      >
-        <ShoppingBag className="size-4" aria-hidden />
-        <span className="whitespace-nowrap">Dodaj u korpu</span>
-      </button>
+      <CartQuantityControl
+        sku={product.sku}
+        quantity={lineQty}
+        onAdd={handleAdd}
+        size="md"
+        tone="light"
+        addTone="dark"
+        fullWidth
+        className="flex-1"
+      />
     </div>
   );
 

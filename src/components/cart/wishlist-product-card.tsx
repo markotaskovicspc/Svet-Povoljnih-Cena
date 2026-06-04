@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, BellOff, ShoppingBag, Trash2 } from "lucide-react";
+import { Bell, BellOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WishlistEntry } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
+import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { cn } from "@/lib/utils";
 import { formatRsd } from "@/lib/format";
 
@@ -26,6 +27,7 @@ export function WishlistProductCard({
   onNavigate?: () => void;
 }) {
   const add = useCart((s) => s.add);
+  const lineQty = useCart((s) => s.lines.find((l) => l.sku === entry.sku)?.qty ?? 0);
   const product = entry.product;
   const name = product?.name ?? "Sačuvan proizvod";
   const href = product?.slug ? `/p/${product.slug}` : undefined;
@@ -142,15 +144,16 @@ export function WishlistProductCard({
         </div>
 
         <div className="flex items-center gap-2 border-t border-border/60 pt-3">
-          <button
-            type="button"
-            onClick={addToCart}
-            disabled={!product?.inStock}
-            className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <ShoppingBag className="size-3.5" aria-hidden />
-            Dodaj
-          </button>
+          <CartQuantityControl
+            sku={entry.sku}
+            quantity={lineQty}
+            onAdd={addToCart}
+            addLabel="Dodaj"
+            addDisabled={!product?.inStock}
+            addTone="dark"
+            fullWidth
+            className="flex-1"
+          />
           <button
             type="button"
             onClick={onRemove}
