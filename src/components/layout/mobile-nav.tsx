@@ -269,14 +269,14 @@ export function MobileNav({
                 className={cn(
                   "min-h-0 flex-1",
                   stack.length === 1
-                    ? "flex flex-col overflow-hidden"
+                    ? "flex flex-col overflow-y-auto overscroll-contain"
                     : "overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)]",
                 )}
               >
                 {stack.length === 1 ? (
                   <>
-                    <div className="flex-[2_1_0%] overflow-hidden bg-white px-3 pt-3 pb-4">
-                      <ul className="grid grid-cols-2 gap-x-2.5 gap-y-4">
+                    <div className="shrink-0 bg-white px-[clamp(10px,3.2vw,14px)] pt-3 pb-[clamp(24px,7vw,34px)]">
+                      <ul className="grid grid-cols-2 gap-x-[clamp(10px,3.2vw,14px)] gap-y-[clamp(24px,7vw,32px)]">
                         {categoryTiles.map((tile) => (
                           <li key={tile.href}>
                             <button
@@ -284,16 +284,16 @@ export function MobileNav({
                               onClick={() => enter(tile)}
                               className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                             >
-                              <span className="relative block aspect-[2.08/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                              <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
                                   alt=""
                                   fill
-                                  sizes="45vw"
+                                  sizes="(max-width: 768px) 45vw, 320px"
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-1 block h-[15px] truncate text-center text-[10px] leading-none font-black text-ink-800 uppercase">
+                              <span className="mt-1 block min-h-[1em] truncate text-center text-[clamp(9px,2.65vw,11px)] leading-none font-black text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
@@ -302,8 +302,8 @@ export function MobileNav({
                       </ul>
                     </div>
 
-                    <div className="flex-[1_1_0%] border-y border-brand-blue/10 bg-brand-blue px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-                      <ul className="grid grid-cols-2 gap-2.5">
+                    <div className="min-h-fit flex-1 border-y border-brand-blue/10 bg-brand-blue px-[clamp(10px,3.2vw,14px)] pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+                      <ul className="grid grid-cols-2 gap-[clamp(10px,3vw,13px)]">
                         {mobileMenuShortcutTabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
@@ -314,7 +314,7 @@ export function MobileNav({
                                 active={isActive}
                                 compact
                                 onClick={close}
-                                className="h-12 border-white/20 text-[12px] focus-visible:ring-white/70"
+                                className="h-[clamp(42px,13vw,60px)] border-white/20 text-[clamp(11px,3.15vw,13px)] focus-visible:ring-white/70"
                               />
                             </li>
                           );
@@ -324,7 +324,7 @@ export function MobileNav({
                             active={isCustomerLoggedIn}
                             compact
                             onClick={close}
-                            className="h-12 border-white/20 text-[12px] focus-visible:ring-white/70"
+                            className="h-[clamp(42px,13vw,60px)] border-white/20 text-[clamp(11px,3.15vw,13px)] focus-visible:ring-white/70"
                           />
                         </li>
                       </ul>
