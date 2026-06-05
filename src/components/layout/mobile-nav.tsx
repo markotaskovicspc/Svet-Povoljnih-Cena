@@ -293,7 +293,7 @@ export function MobileNav({
                                   className="object-cover transition duration-200 group-hover:scale-105"
                                 />
                               </span>
-                              <span className="mt-1 block min-h-[1em] truncate text-center text-[clamp(9px,2.65vw,11px)] leading-none font-black text-ink-800 uppercase">
+                              <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
                                 {tile.label}
                               </span>
                             </button>
