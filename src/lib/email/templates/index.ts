@@ -8,5 +8,8 @@ export { OrderConfirmation } from "./order-confirmation";
 export { OrderStatusChanged } from "./order-status-changed";
 export { FiscalReceiptEmail } from "./fiscal-receipt";
 export { ReclamationReceipt } from "./reclamation-receipt";
+export { ReclamationStatusChanged } from "./reclamation-status-changed";
 export { PasswordReset } from "./password-reset";
 export { OtpEmail } from "./otp";
+export { EmailConfirmation } from "./email-confirmation";
+export { ProductAlert } from "./product-alert";

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { getEmailConfig } from "./config";
 
 /**
@@ -46,7 +47,7 @@ export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
     console.info(
       `[email:dev] to=${to} subject=${JSON.stringify(input.subject)} bytes=${input.html.length}`,
     );
-    return { ok: true, id: `dev-${Date.now()}`, provider: "none" };
+    return { ok: true, id: `dev-${randomUUID()}`, provider: "none" };
   }
 
   try {

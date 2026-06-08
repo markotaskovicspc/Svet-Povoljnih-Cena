@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { syncUserMarketingConsentToResend } from "@/lib/email/resend-marketing";
 
 /**
  * GDPR / data-portability helpers (per Phase 6 requirements, surfaced from
@@ -94,7 +95,7 @@ export async function setMarketingConsent(
   userId: string,
   channels: { email?: boolean; sms?: boolean; viber?: boolean },
 ) {
-  return db.marketingConsent.upsert({
+  const consent = await db.marketingConsent.upsert({
     where: { userId },
     create: {
       userId,
@@ -108,4 +109,10 @@ export async function setMarketingConsent(
       ...(channels.viber !== undefined ? { viber: channels.viber } : {}),
     },
   });
+  if (channels.email !== undefined) {
+    void syncUserMarketingConsentToResend(userId).catch((err) => {
+      console.error("[email] marketing consent Resend sync failed", err);
+    });
+  }
+  return consent;
 }

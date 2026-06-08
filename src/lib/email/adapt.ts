@@ -47,9 +47,16 @@ const RECLAMATION_STATUS_LOWER = {
 } as const;
 
 export type PrismaOrderStatus = keyof typeof ORDER_STATUS_LOWER;
+export type PrismaReclamationStatus = keyof typeof RECLAMATION_STATUS_LOWER;
 
 export function lowerOrderStatus(s: PrismaOrderStatus): Order["status"] {
   return ORDER_STATUS_LOWER[s];
+}
+
+export function lowerReclamationStatus(
+  s: PrismaReclamationStatus,
+): Reclamation["status"] {
+  return RECLAMATION_STATUS_LOWER[s];
 }
 
 export async function loadOrderForEmail(

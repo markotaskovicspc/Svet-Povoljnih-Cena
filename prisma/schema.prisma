@@ -155,6 +155,69 @@ model MarketingConsent {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+enum EmailMessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
+model EmailMessage {
+  id                String             @id @default(cuid())
+  kind              String
+  recipient         String
+  subject           String
+  provider          String
+  providerMessageId String?            @unique
+  idempotencyKey    String?            @unique
+  status            EmailMessageStatus @default(QUEUED)
+  tags              Json?
+  metadata          Json?
+  error             String?            @db.Text
+  createdAt         DateTime           @default(now())
+  sentAt            DateTime?
+  updatedAt         DateTime           @updatedAt
+
+  events EmailProviderEvent[]
+
+  @@index([kind, createdAt])
+  @@index([recipient, createdAt])
+  @@index([provider, status])
+}
+
+model EmailProviderEvent {
+  id                String   @id @default(cuid())
+  provider          String
+  eventId           String
+  type              String
+  providerMessageId String?
+  messageId         String?
+  payload           Json
+  receivedAt        DateTime @default(now())
+
+  message EmailMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([providerMessageId])
+  @@index([type, receivedAt])
+}
+
+model EmailSuppression {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  reason          String
+  provider        String?
+  providerEventId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([reason, createdAt])
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // 2. Catalog
 // ──────────────────────────────────────────────────────────────────────

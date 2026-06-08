@@ -11,9 +11,12 @@ export {
   verifyPhoneOtp,
   createPasswordResetToken,
   consumePasswordResetToken,
+  createEmailConfirmationToken,
+  consumeEmailConfirmationToken,
 } from "@/lib/auth/credentials";
 export {
   exportUserData,
   softDeleteAccount,
   setMarketingConsent,
 } from "@/lib/auth/gdpr";
+export { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";

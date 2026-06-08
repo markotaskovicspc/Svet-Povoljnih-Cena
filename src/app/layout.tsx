@@ -7,6 +7,7 @@ import { PromoBar } from "@/components/layout/promo-bar";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
+import { FirstPurchaseCta } from "@/components/layout/first-purchase-cta";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -66,6 +67,11 @@ export default async function RootLayout({
     ? [null, [], null]
     : await Promise.all([getActivePromoBar(), getActiveTabs(), getCurrentUser()]);
   const isCustomerLoggedIn = currentUser?.userType === "customer";
+  const showFirstPurchaseCta =
+    !isAdmin &&
+    !isCustomerLoggedIn &&
+    !pathname.startsWith("/nalog") &&
+    !pathname.startsWith("/checkout");
   return (
     <html
       lang="sr-Latn"
@@ -90,6 +96,7 @@ export default async function RootLayout({
                 <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
               </div>
               <main className="flex-1">{children}</main>
+              {showFirstPurchaseCta ? <FirstPurchaseCta /> : null}
               <NewsletterBand />
               <Footer />
             </>

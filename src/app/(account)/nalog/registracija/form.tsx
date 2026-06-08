@@ -100,6 +100,22 @@ export function CustomerRegistrationFields() {
           className="h-11 bg-white"
         />
       </div>
+      <label
+        htmlFor="marketingEmailConsent"
+        className="flex gap-3 rounded-lg border border-border/70 bg-muted-bg/50 p-3 text-sm leading-relaxed text-ink-700"
+      >
+        <input
+          id="marketingEmailConsent"
+          name="marketingEmailConsent"
+          type="checkbox"
+          value="true"
+          className="mt-1 size-4 shrink-0 rounded border-input text-ink-900 accent-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+        />
+        <span>
+          Želim promotivne mejlove, kupone i najbolje ponude. Mogu da se
+          odjavim jednim klikom u svakom mejlu.
+        </span>
+      </label>
       <Button type="submit" disabled={pending} className="h-11 w-full gap-2">
         <UserPlus className="size-4" aria-hidden />
         {pending ? "Kreiranje naloga..." : "Kreiraj nalog"}

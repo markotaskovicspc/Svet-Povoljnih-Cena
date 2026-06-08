@@ -12,15 +12,37 @@ export {
   sendOrderStatusChanged,
   sendFiscalReceipt,
   sendReclamationReceipt,
+  sendReclamationStatusChanged,
   sendPasswordReset,
   sendOtpEmail,
   sendMagicLink,
+  sendEmailConfirmation,
+  sendBackInStockAlert,
+  sendOnSaleAlert,
 } from "./send";
+export {
+  trackedDispatch,
+  recordProviderEvent,
+  isEmailSuppressed,
+} from "./tracking";
+export {
+  buildEmailUnsubscribeUrl,
+  buildEmailUnsubscribeToken,
+  verifyEmailUnsubscribeToken,
+  applyEmailUnsubscribe,
+} from "./unsubscribe";
+export {
+  syncNewsletterSubscriberToResend,
+  syncUserMarketingConsentToResend,
+  syncResendMarketingContacts,
+} from "./resend-marketing";
 export {
   loadOrderForEmail,
   loadReclamationForEmail,
   lowerOrderStatus,
+  lowerReclamationStatus,
   type PrismaOrderStatus,
+  type PrismaReclamationStatus,
 } from "./adapt";
 export {
   normalizeInbound,

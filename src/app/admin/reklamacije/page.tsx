@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ReclamationStatus } from "@prisma/client";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
+import {
+  loadReclamationForEmail,
+  lowerReclamationStatus,
+  sendReclamationStatusChanged,
+} from "@/lib/email";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -38,6 +43,20 @@ async function updateStatus(formData: FormData) {
             data: { reclamationId: id, status, note, actorId },
           }),
         ]);
+        void (async () => {
+          try {
+            const loaded = await loadReclamationForEmail(id);
+            if (loaded?.recipient) {
+              await sendReclamationStatusChanged({
+                reclamation: loaded.reclamation,
+                status: lowerReclamationStatus(status),
+                to: loaded.recipient,
+              });
+            }
+          } catch (err) {
+            console.error("[email] admin reclamation-status failed", err);
+          }
+        })();
         revalidatePath("/admin/reklamacije");
         return { ok: true as const, entityId: id, diff: { status, note } };
       },

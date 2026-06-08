@@ -1,16 +1,23 @@
 import "server-only";
 
-import type { Order, OrderStatus, Reclamation } from "@/types";
+import { createHash } from "node:crypto";
+import type { Order, OrderStatus, Reclamation, ReclamationStatus } from "@/types";
+import { formatRsd } from "@/lib/format";
 import { OrderConfirmation } from "./templates/order-confirmation";
 import { OrderStatusChanged } from "./templates/order-status-changed";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
+import { ReclamationStatusChanged } from "./templates/reclamation-status-changed";
 import { PasswordReset } from "./templates/password-reset";
 import { OtpEmail } from "./templates/otp";
+import { EmailConfirmation } from "./templates/email-confirmation";
+import { ProductAlert } from "./templates/product-alert";
 import { renderEmail } from "./render";
-import { dispatch, type DispatchResult, type EmailAttachment } from "./transport";
+import { type DispatchResult, type EmailAttachment } from "./transport";
 import { getEmailConfig } from "./config";
 import { buildInvoicePdf, buildWithdrawalFormPdf } from "./pdf";
+import { trackedDispatch } from "./tracking";
+import { buildEmailUnsubscribeUrl } from "./unsubscribe";
 
 /**
  * Phase 4D — typed senders the rest of the codebase calls.
@@ -49,7 +56,8 @@ export async function sendOrderConfirmation(args: {
     });
   }
 
-  return dispatch({
+  return trackedDispatch({
+    kind: "order_confirmation",
     to: args.to,
     subject: `Porudžbina ${args.order.id} — potvrda`,
     html,
@@ -77,7 +85,8 @@ export async function sendOrderStatusChanged(args: {
       trackingUrl: args.trackingUrl,
     }),
   );
-  return dispatch({
+  return trackedDispatch({
+    kind: "order_status",
     to: args.to,
     subject: `Porudžbina ${args.order.id} — ${STATUS_SUBJECT[args.status]}`,
     html,
@@ -115,7 +124,8 @@ export async function sendFiscalReceipt(args: {
       baseUrl: cfg.baseUrl,
     }),
   );
-  return dispatch({
+  return trackedDispatch({
+    kind: "fiscal_receipt",
     to: args.to,
     subject: `Fiskalni račun ${args.receiptNumber} — porudžbina ${args.order.id}`,
     html,
@@ -142,7 +152,8 @@ export async function sendReclamationReceipt(args: {
   const { html, text } = await renderEmail(
     ReclamationReceipt({ reclamation: args.reclamation, baseUrl: cfg.baseUrl }),
   );
-  return dispatch({
+  return trackedDispatch({
+    kind: "reclamation_receipt",
     to: args.to,
     subject: `Reklamacija ${args.reclamation.id} — potvrda prijema`,
     html,
@@ -150,6 +161,36 @@ export async function sendReclamationReceipt(args: {
     bcc: cfg.orderBcc,
     tags: { kind: "reclamation_receipt", reclamation: args.reclamation.id },
     idempotencyKey: `reclamation:${args.reclamation.id}`,
+  });
+}
+
+export async function sendReclamationStatusChanged(args: {
+  reclamation: Reclamation;
+  status: ReclamationStatus;
+  to: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const { html, text } = await renderEmail(
+    ReclamationStatusChanged({
+      reclamation: args.reclamation,
+      status: args.status,
+      baseUrl: cfg.baseUrl,
+    }),
+  );
+  return trackedDispatch({
+    kind: "reclamation_status",
+    to: args.to,
+    subject: `Reklamacija ${args.reclamation.id} — promena statusa`,
+    html,
+    text,
+    bcc: cfg.orderBcc,
+    tags: {
+      kind: "reclamation_status",
+      reclamation: args.reclamation.id,
+      status: args.status,
+    },
+    idempotencyKey: `reclamation-status:${args.reclamation.id}:${args.status}`,
   });
 }
 
@@ -163,12 +204,14 @@ export async function sendPasswordReset(args: {
   const { html, text } = await renderEmail(
     PasswordReset({ resetUrl, expiresInMinutes: args.expiresInMinutes }),
   );
-  return dispatch({
+  return trackedDispatch({
+    kind: "password_reset",
     to: args.to,
     subject: "Resetovanje lozinke — Svet Akcija",
     html,
     text,
     tags: { kind: "password_reset" },
+    idempotencyKey: `password-reset:${hashId(args.token)}`,
   });
 }
 
@@ -180,12 +223,41 @@ export async function sendOtpEmail(args: {
   const { html, text } = await renderEmail(
     OtpEmail({ code: args.code, expiresInMinutes: args.expiresInMinutes }),
   );
-  return dispatch({
+  return trackedDispatch({
+    kind: "otp",
     to: args.to,
     subject: `Vaš jednokratni kod: ${args.code}`,
     html,
     text,
     tags: { kind: "otp" },
+  });
+}
+
+export async function sendEmailConfirmation(args: {
+  to: string;
+  token: string;
+  expiresInHours?: number;
+  includeFirstPurchaseOffer?: boolean;
+  marketingUnsubscribeUrl?: string;
+}): Promise<DispatchResult> {
+  const cfg = getEmailConfig();
+  const confirmUrl = `${cfg.baseUrl}/nalog/email/potvrdi?token=${encodeURIComponent(args.token)}`;
+  const { html, text } = await renderEmail(
+    EmailConfirmation({
+      confirmUrl,
+      expiresInHours: args.expiresInHours,
+      includeFirstPurchaseOffer: args.includeFirstPurchaseOffer,
+      marketingUnsubscribeUrl: args.marketingUnsubscribeUrl,
+    }),
+  );
+  return trackedDispatch({
+    kind: "email_confirmation",
+    to: args.to,
+    subject: "Potvrdite e-poštu — Svet Akcija",
+    html,
+    text,
+    tags: { kind: "email_confirmation" },
+    idempotencyKey: `email-confirm:${hashId(args.token)}`,
   });
 }
 
@@ -198,7 +270,8 @@ export async function sendMagicLink(args: {
   url: string;
 }): Promise<DispatchResult> {
   const html = `<!doctype html><html><body style="font-family:Inter,sans-serif;background:#FAF7F2;padding:32px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;"><h1 style="font-family:'Playfair Display',Georgia,serif;font-size:22px;margin:0 0 12px;">Prijava na nalog</h1><p style="margin:0 0 20px;color:#3B342D;">Klikom na dugme ispod prijavićete se na svoj nalog. Link važi 15 minuta.</p><a href="${escapeAttr(args.url)}" style="display:inline-block;background:#1A1714;color:#FAF7F2;padding:12px 22px;border-radius:999px;text-decoration:none;">Prijavi me</a><p style="margin:20px 0 0;color:#6B6259;font-size:12px;">Ako niste tražili prijavu, ignorišite ovaj mejl.</p></div></body></html>`;
-  return dispatch({
+  return trackedDispatch({
+    kind: "magic_link",
     to: args.to,
     subject: "Prijava na Svet Akcija",
     html,
@@ -207,8 +280,92 @@ export async function sendMagicLink(args: {
   });
 }
 
+export async function sendBackInStockAlert(args: {
+  to: string;
+  userId: string;
+  product: AlertProduct;
+}): Promise<DispatchResult> {
+  return sendProductAlert({
+    kind: "back_in_stock",
+    to: args.to,
+    userId: args.userId,
+    product: args.product,
+  });
+}
+
+export async function sendOnSaleAlert(args: {
+  to: string;
+  userId: string;
+  product: AlertProduct;
+}): Promise<DispatchResult> {
+  return sendProductAlert({
+    kind: "on_sale",
+    to: args.to,
+    userId: args.userId,
+    product: args.product,
+  });
+}
+
+interface AlertProduct {
+  id: string;
+  sku: string;
+  slug: string;
+  name: string;
+  fullPrice: number;
+  salePrice?: number | null;
+}
+
+async function sendProductAlert(args: {
+  kind: "back_in_stock" | "on_sale";
+  to: string;
+  userId: string;
+  product: AlertProduct;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const productUrl = `${cfg.baseUrl}/p/${encodeURIComponent(args.product.slug)}`;
+  const manageUrl = buildEmailUnsubscribeUrl({
+    purpose: "alert",
+    userId: args.userId,
+    productId: args.product.id,
+    alert: args.kind,
+  });
+  const price = args.product.salePrice ?? args.product.fullPrice;
+  const { html, text } = await renderEmail(
+    ProductAlert({
+      kind: args.kind,
+      product: {
+        name: args.product.name,
+        sku: args.product.sku,
+        price: formatRsd(price),
+      },
+      productUrl,
+      manageUrl,
+    }),
+  );
+  return trackedDispatch({
+    kind: args.kind,
+    to: args.to,
+    subject:
+      args.kind === "back_in_stock"
+        ? `${args.product.name} je ponovo na stanju`
+        : `${args.product.name} je na akciji`,
+    html,
+    text,
+    tags: {
+      kind: args.kind,
+      product: args.product.sku,
+    },
+    idempotencyKey: `${args.kind}:${args.userId}:${args.product.id}`,
+  });
+}
+
 function escapeAttr(s: string) {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function hashId(value: string) {
+  return createHash("sha256").update(value).digest("base64url").slice(0, 32);
 }
 
 function orderToPdfInput(order: Order) {

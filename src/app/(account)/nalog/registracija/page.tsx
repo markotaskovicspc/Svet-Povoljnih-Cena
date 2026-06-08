@@ -16,6 +16,8 @@ import {
 import { getCurrentUser } from "@/lib/auth/session";
 import { signIn } from "@/lib/auth/auth";
 import { registerCustomer } from "@/lib/auth/credentials";
+import { setMarketingConsent } from "@/lib/auth/gdpr";
+import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
 import { customerCallback } from "@/lib/auth/customer-callback";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
 
@@ -47,6 +49,8 @@ async function registerAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const marketingEmailConsent =
+    formData.get("marketingEmailConsent") === "true";
 
   if (!emailPattern.test(email)) {
     redirect(registrationUrl("invalid_email", callbackUrl));
@@ -61,11 +65,19 @@ async function registerAction(formData: FormData) {
   let registrationError: RegistrationErrorCode | null = null;
 
   try {
-    await registerCustomer({
+    const user = await registerCustomer({
       email,
       password,
       firstName: optionalText(formData.get("firstName")),
       lastName: optionalText(formData.get("lastName")),
+    });
+    if (marketingEmailConsent) {
+      await setMarketingConsent(user.id, { email: true });
+    }
+    await sendEmailConfirmationForUser(user.id, {
+      includeFirstPurchaseOffer: marketingEmailConsent,
+    }).catch((err) => {
+      console.error("[email] registration confirmation failed", err);
     });
   } catch (err) {
     registrationError =

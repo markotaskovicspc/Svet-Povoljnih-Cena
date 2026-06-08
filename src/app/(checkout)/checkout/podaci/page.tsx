@@ -3,6 +3,8 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { CheckoutFlow } from "@/components/checkout/checkout-flow";
 import { listAddresses } from "@/lib/api/addresses";
 import { getCurrentUser } from "@/lib/auth/session";
+import { db } from "@/lib/db";
+import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
 
 export const metadata: Metadata = {
   title: "Naplata — podaci za isporuku",
@@ -13,11 +15,22 @@ export const metadata: Metadata = {
 
 export default async function CheckoutPodaciPage() {
   const user = await getCurrentUser();
+  const account =
+    user?.userType === "customer"
+      ? await db.user.findUnique({
+          where: { id: user.id },
+          select: { email: true, emailVerified: true, name: true, firstName: true, lastName: true },
+        })
+      : null;
   const addresses =
     user?.userType === "customer"
       ? await listAddresses(user.id).catch(() => [])
       : [];
   const defaultAddress = addresses[0];
+  const accountFullName = [account?.firstName, account?.lastName]
+    .filter(Boolean)
+    .join(" ");
+  const accountName = account?.name ?? (accountFullName || null);
 
   return (
     <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
@@ -35,12 +48,17 @@ export default async function CheckoutPodaciPage() {
         stranice.
       </p>
       <div className="mt-3 md:mt-5">
+        {account?.email && !account.emailVerified ? (
+          <div className="mb-4">
+            <EmailVerificationBanner email={account.email} />
+          </div>
+        ) : null}
         <CheckoutFlow
           initialCustomer={
             user?.userType === "customer"
               ? {
-                  name: user.name ?? undefined,
-                  email: user.email ?? undefined,
+                  name: accountName ?? user.name ?? undefined,
+                  email: account?.email ?? user.email ?? undefined,
                   authenticated: true,
                   address: defaultAddress
                     ? {

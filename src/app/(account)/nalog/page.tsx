@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth/auth";
 import { requireUser } from "@/lib/auth/session";
+import { db } from "@/lib/db";
+import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +51,20 @@ const quickLinks = [
 
 export default async function AccountPage() {
   const user = await requireUser("/nalog");
-  const displayName = user.name ?? user.email ?? "Kupac";
+  const account = await db.user.findUnique({
+    where: { id: user.id },
+    select: { email: true, emailVerified: true, name: true, firstName: true, lastName: true },
+  });
+  const joinedAccountName = [account?.firstName, account?.lastName]
+    .filter(Boolean)
+    .join(" ");
+  const accountName = account?.name ?? (joinedAccountName || null);
+  const displayName =
+    accountName ??
+    account?.email ??
+    user.name ??
+    user.email ??
+    "Kupac";
 
   return (
     <div className="mx-auto w-full max-w-[var(--container-page)] px-4 py-10 md:px-6 md:py-14">
@@ -70,6 +85,12 @@ export default async function AccountPage() {
           </Button>
         </form>
       </div>
+
+      {account?.email && !account.emailVerified ? (
+        <div className="mt-6">
+          <EmailVerificationBanner email={account.email} />
+        </div>
+      ) : null}
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         {quickLinks.map((item) => {

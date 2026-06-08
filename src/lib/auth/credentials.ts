@@ -1,5 +1,5 @@
 import "server-only";
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
@@ -17,6 +17,11 @@ import { db } from "@/lib/db";
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const RESET_TTL_MS = 60 * 60 * 1000;
+const EMAIL_CONFIRM_TTL_MS = 24 * 60 * 60 * 1000;
+
+function secureUrlToken() {
+  return randomBytes(32).toString("base64url");
+}
 
 export async function registerCustomer(input: {
   email: string;
@@ -47,6 +52,7 @@ export async function registerCustomer(input: {
       isBusiness: input.isBusiness ?? false,
       companyName: input.companyName ?? null,
       pib: input.pib ?? null,
+      emailVerified: null,
     },
     update: {
       passwordHash,
@@ -57,6 +63,7 @@ export async function registerCustomer(input: {
       companyName: input.companyName ?? null,
       pib: input.pib ?? null,
       deletedAt: null,
+      emailVerified: null,
     },
   });
 
@@ -99,7 +106,7 @@ export async function createPasswordResetToken(emailRaw: string) {
   const user = await db.user.findUnique({ where: { email } });
   if (!user || user.deletedAt) return null;
 
-  const token = randomInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+  const token = secureUrlToken();
   const identifier = `pwreset:${user.id}`;
   await db.verificationToken.deleteMany({ where: { identifier } });
   await db.verificationToken.create({
@@ -110,6 +117,26 @@ export async function createPasswordResetToken(emailRaw: string) {
     },
   });
   return { token, userId: user.id };
+}
+
+export async function createEmailConfirmationToken(userId: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, emailVerified: true, deletedAt: true },
+  });
+  if (!user?.email || user.deletedAt || user.emailVerified) return null;
+
+  const token = secureUrlToken();
+  const identifier = `email-confirm:${user.id}`;
+  await db.verificationToken.deleteMany({ where: { identifier } });
+  await db.verificationToken.create({
+    data: {
+      identifier,
+      token,
+      expires: new Date(Date.now() + EMAIL_CONFIRM_TTL_MS),
+    },
+  });
+  return { token, email: user.email, userId: user.id, expiresInHours: 24 };
 }
 
 export async function consumePasswordResetToken(token: string, newPassword: string) {
@@ -126,4 +153,27 @@ export async function consumePasswordResetToken(token: string, newPassword: stri
     db.verificationToken.delete({ where: { token } }),
   ]);
   return true;
+}
+
+export async function consumeEmailConfirmationToken(token: string) {
+  const record = await db.verificationToken.findUnique({ where: { token } });
+  if (!record || !record.identifier.startsWith("email-confirm:")) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
+  if (record.expires < new Date()) {
+    await db.verificationToken.delete({ where: { token } });
+    return { ok: false as const, reason: "expired" as const };
+  }
+
+  const userId = record.identifier.slice("email-confirm:".length);
+  await db.$transaction([
+    db.user.update({
+      where: { id: userId },
+      data: { emailVerified: new Date() },
+    }),
+    db.verificationToken.deleteMany({
+      where: { identifier: record.identifier },
+    }),
+  ]);
+  return { ok: true as const, userId };
 }

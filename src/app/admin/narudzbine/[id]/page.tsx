@@ -3,6 +3,11 @@ import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
+import {
+  loadOrderForEmail,
+  lowerOrderStatus,
+  sendOrderStatusChanged,
+} from "@/lib/email";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -36,6 +41,20 @@ async function updateStatus(formData: FormData) {
             data: { orderId: id, status, note, actorId },
           }),
         ]);
+        void (async () => {
+          try {
+            const loaded = await loadOrderForEmail(id);
+            if (loaded?.recipient) {
+              await sendOrderStatusChanged({
+                order: loaded.order,
+                status: lowerOrderStatus(status),
+                to: loaded.recipient,
+              });
+            }
+          } catch (err) {
+            console.error("[email] admin order-status failed", err);
+          }
+        })();
         revalidatePath(`/admin/narudzbine/${id}`);
         revalidatePath("/admin/narudzbine");
         return { ok: true as const, entityId: id, diff: { status, note } };
