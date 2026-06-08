@@ -3,11 +3,14 @@ import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { createShipmentForOrder } from "@/lib/courier";
 import {
   loadOrderForEmail,
   lowerOrderStatus,
   sendOrderStatusChanged,
 } from "@/lib/email";
+import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { syncXExpressShipmentById } from "@/lib/x-express/sync";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -55,10 +58,54 @@ async function updateStatus(formData: FormData) {
             console.error("[email] admin order-status failed", err);
           }
         })();
+        if (status === "SPREMNO_ZA_ISPORUKU" && getXExpressConfig().autoCreate) {
+          void createShipmentForOrder(id).catch((err) => {
+            console.error("[x-express] auto-create failed", err);
+          });
+        }
         revalidatePath(`/admin/narudzbine/${id}`);
         revalidatePath("/admin/narudzbine");
         return { ok: true as const, entityId: id, diff: { status, note } };
       },
+  )(formData);
+}
+
+async function createCourierShipment(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.xExpressCreate", entity: "Shipment" },
+    async (_actorId, formData: FormData) => {
+      const id = String(formData.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
+      const shipment = await createShipmentForOrder(id);
+      revalidatePath(`/admin/narudzbine/${id}`);
+      revalidatePath("/admin/narudzbine");
+      return {
+        ok: true as const,
+        entityId: shipment.id,
+        diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
+      };
+    },
+  )(formData);
+}
+
+async function syncCourierShipment(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.xExpressStatusSync", entity: "Shipment" },
+    async (_actorId, formData: FormData) => {
+      const shipmentId = String(formData.get("shipmentId") ?? "");
+      const orderId = String(formData.get("orderId") ?? "");
+      if (!shipmentId || !orderId) {
+        return { ok: false as const, error: "Nedostaje ID pošiljke." };
+      }
+      const result = await syncXExpressShipmentById(shipmentId);
+      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath("/admin/narudzbine");
+      return { ok: true as const, entityId: shipmentId, diff: result };
+    },
   )(formData);
 }
 
@@ -216,6 +263,125 @@ export default async function OrderDetail({
                 <SubmitButton size="sm">Sačuvaj</SubmitButton>
               </div>
             </form>
+          </Card>
+
+          <Card>
+            <CardTitle
+              description={
+                order.shippingMethod === "KURIR"
+                  ? "X Express nalog i statusi"
+                  : "Nije kurirska isporuka"
+              }
+            >
+              Kurir
+            </CardTitle>
+            {order.shippingMethod !== "KURIR" ? (
+              <p className="text-sm text-ink-500">
+                Kamionska isporuka se ne šalje kroz X Express.
+              </p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                {order.shipments.length ? (
+                  <ul className="space-y-3">
+                    {order.shipments.map((shipment) => (
+                      <li key={shipment.id} className="rounded-lg border border-border p-3">
+                        <dl className="space-y-1 text-ink-700">
+                          <Row k="Provider" v={shipment.provider ?? "—"} />
+                          <Row
+                            k="Tracking"
+                            v={
+                              <span className="font-mono text-xs">
+                                {shipment.trackingNo ?? "—"}
+                              </span>
+                            }
+                          />
+                          <Row k="Status" v={shipment.status} />
+                          <Row k="X status" v={shipment.providerStatusCode ?? "—"} />
+                          <Row
+                            k="Sync"
+                            v={
+                              shipment.lastStatusSyncAt
+                                ? shipment.lastStatusSyncAt.toLocaleString("sr-Latn-RS")
+                                : "—"
+                            }
+                          />
+                          {shipment.providerOrderId ? (
+                            <Row
+                              k="Nalog"
+                              v={<span className="font-mono text-xs">{shipment.providerOrderId}</span>}
+                            />
+                          ) : null}
+                          {shipment.labelUrl ? (
+                            <Row
+                              k="Etiketa"
+                              v={
+                                <a
+                                  href={shipment.labelUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-walnut underline"
+                                >
+                                  Otvori
+                                </a>
+                              }
+                            />
+                          ) : null}
+                        </dl>
+                        {shipment.syncError ? (
+                          <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">
+                            {shipment.syncError}
+                          </p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap justify-end gap-2">
+                          {shipment.provider === X_EXPRESS_PROVIDER && shipment.trackingNo ? (
+                            <form action={syncCourierShipment}>
+                              <input type="hidden" name="shipmentId" value={shipment.id} />
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <SubmitButton variant="outline" size="xs">
+                                Osveži status
+                              </SubmitButton>
+                            </form>
+                          ) : null}
+                          {shipment.status === "FAILED" ? (
+                            <form action={createCourierShipment}>
+                              <input type="hidden" name="id" value={order.id} />
+                              <SubmitButton size="xs">Ponovi nalog</SubmitButton>
+                            </form>
+                          ) : null}
+                        </div>
+                        {shipment.events.length ? (
+                          <details className="mt-3 text-xs text-ink-600">
+                            <summary className="cursor-pointer">
+                              Događaji ({shipment.events.length})
+                            </summary>
+                            <ul className="mt-2 space-y-1">
+                              {shipment.events.map((event) => (
+                                <li key={event.id}>
+                                  {event.occurredAt.toLocaleString("sr-Latn-RS")} ·{" "}
+                                  {event.status}
+                                  {event.message ? ` · ${event.message}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-ink-500">X Express nalog još nije kreiran.</p>
+                )}
+                {order.shipments.every(
+                  (shipment) =>
+                    shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED",
+                ) ? (
+                  <form action={createCourierShipment} className="flex justify-end">
+                    <input type="hidden" name="id" value={order.id} />
+                    <SubmitButton size="sm">Kreiraj X Express nalog</SubmitButton>
+                  </form>
+                ) : null}
+              </div>
+            )}
           </Card>
 
           <Card>

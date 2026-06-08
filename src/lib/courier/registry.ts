@@ -1,7 +1,14 @@
 import "server-only";
 
-import { type OrderStatus, type ShipmentService, type ShipmentStatus } from "@prisma/client";
+import {
+  Prisma,
+  type OrderStatus,
+  type ShipmentService,
+  type ShipmentStatus,
+} from "@prisma/client";
 import { db } from "@/lib/db";
+import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
 import { bulkyAdapter } from "./bulky";
 import { smallParcelAdapter } from "./small-parcel";
 import {
@@ -83,6 +90,10 @@ export async function createShipmentForOrder(orderId: string) {
     shippingMethod: order.shippingMethod,
     items: order.items,
   });
+  if (service === "COURIER_SMALL") {
+    return createXExpressShipmentForOrder(order.id);
+  }
+
   const adapter = getAdapter(service);
 
   const cashOnDelivery =
@@ -151,6 +162,7 @@ export interface ApplyEventResult {
   status: ShipmentStatus;
   customerEmail: string | null;
   customerPhone: string | null;
+  eventCreated: boolean;
 }
 
 /**
@@ -184,35 +196,48 @@ export async function applyShipmentEvent(
   const occurredAt = event.occurredAt ?? new Date();
   const newOrderStatus = orderStatusFor(event.status);
   const message = event.message ?? SHIPMENT_STATUS_LABEL[event.status];
+  let eventCreated = false;
 
   await db.$transaction(async (tx) => {
-    // Idempotency: skip if the most recent event is identical.
-    const last = await tx.shipmentEvent.findFirst({
-      where: { shipmentId: shipment.id },
-      orderBy: { occurredAt: "desc" },
-      select: { status: true, occurredAt: true },
-    });
-    if (
-      last &&
-      last.status === event.status &&
-      last.occurredAt.getTime() === occurredAt.getTime()
-    ) {
-      return;
+    if (event.providerEventId) {
+      const duplicate = await tx.shipmentEvent.findUnique({
+        where: { providerEventId: event.providerEventId },
+        select: { id: true },
+      });
+      if (duplicate) return;
+    } else {
+      const duplicate = await tx.shipmentEvent.findFirst({
+        where: {
+          shipmentId: shipment.id,
+          status: event.status,
+          occurredAt,
+        },
+        select: { id: true },
+      });
+      if (duplicate) return;
     }
 
     await tx.shipmentEvent.create({
       data: {
         shipmentId: shipment.id,
         status: event.status,
+        providerStatusCode: event.providerStatusCode ?? null,
+        providerEventId: event.providerEventId ?? null,
         message,
+        raw: event.raw as Prisma.InputJsonValue | undefined,
         occurredAt,
       },
     });
+    eventCreated = true;
 
     await tx.shipment.update({
       where: { id: shipment.id },
       data: {
+        provider: shipment.provider ?? (service === "COURIER_SMALL" ? X_EXPRESS_PROVIDER : undefined),
         status: event.status,
+        providerStatusCode: event.providerStatusCode ?? shipment.providerStatusCode,
+        lastStatusSyncAt: new Date(),
+        syncError: null,
         shippedAt:
           shipment.shippedAt ?? (event.status === "PICKED_UP" ? occurredAt : undefined),
         deliveredAt:
@@ -241,6 +266,7 @@ export async function applyShipmentEvent(
     status: event.status,
     customerEmail: shipment.order.user?.email ?? shipment.order.guestEmail ?? null,
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
+    eventCreated,
   };
 }
 

@@ -827,6 +827,19 @@ enum ShipmentStatus {
   FAILED
 }
 
+enum CourierSyncKind {
+  LOCATIONS
+  STATUSES
+  SHIPMENTS
+}
+
+enum CourierSyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
 model Order {
   id         String      @id @default(cuid())
   /// Human-friendly number e.g. "SPC-2026-001234"
@@ -953,34 +966,114 @@ model Payment {
 }
 
 model Shipment {
-  id          String          @id @default(cuid())
-  orderId     String
-  service     ShipmentService
-  trackingNo  String?
-  labelUrl    String?
-  status      ShipmentStatus  @default(CREATED)
-  shippedAt   DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  orderId            String
+  service            ShipmentService
+  provider           String?
+  providerOrderId    String?
+  providerShipmentId String?
+  trackingNo         String?
+  labelUrl           String?
+  status             ShipmentStatus  @default(CREATED)
+  providerStatusCode String?
+  lastStatusSyncAt   DateTime?
+  rawCreateResponse  Json?
+  syncError          String?         @db.Text
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   events ShipmentEvent[]
 
   @@index([orderId])
+  @@index([provider, status, lastStatusSyncAt])
+  @@index([providerOrderId])
+  @@index([providerShipmentId])
   @@index([trackingNo])
 }
 
 model ShipmentEvent {
-  id         String         @id @default(cuid())
-  shipmentId String
-  status     ShipmentStatus
-  message    String?
-  occurredAt DateTime       @default(now())
+  id                 String         @id @default(cuid())
+  shipmentId         String
+  status             ShipmentStatus
+  providerStatusCode String?
+  providerEventId    String?
+  message            String?
+  raw                Json?
+  occurredAt         DateTime       @default(now())
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
+  @@unique([providerEventId])
   @@index([shipmentId, occurredAt])
+}
+
+model CourierLocationCode {
+  id           String   @id @default(cuid())
+  provider     String   @default("X_EXPRESS")
+  code         String
+  name         String
+  postalCode   String?
+  municipality String?
+  city         String?
+  settlement   String?
+  active       Boolean  @default(true)
+  raw          Json?
+  syncedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([provider, code])
+  @@index([provider, active, name])
+  @@index([postalCode])
+}
+
+model CourierStatusCode {
+  id             String          @id @default(cuid())
+  provider       String          @default("X_EXPRESS")
+  code           String
+  label          String
+  shipmentStatus ShipmentStatus?
+  orderStatus    OrderStatus?
+  active         Boolean         @default(true)
+  raw            Json?
+  syncedAt       DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([provider, code])
+  @@index([provider, active])
+  @@index([shipmentStatus])
+}
+
+model CourierSyncRun {
+  id           String            @id @default(cuid())
+  provider     String            @default("X_EXPRESS")
+  kind         CourierSyncKind
+  status       CourierSyncStatus @default(RUNNING)
+  recordsRead  Int               @default(0)
+  recordsOk    Int               @default(0)
+  recordsFail  Int               @default(0)
+  errorMessage String?           @db.Text
+  raw          Json?
+  startedAt    DateTime          @default(now())
+  finishedAt   DateTime?
+
+  @@index([provider, kind, startedAt])
+  @@index([status, startedAt])
+}
+
+model CourierCodeSequence {
+  id         String   @id @default(cuid())
+  provider   String   @default("X_EXPRESS")
+  prefix     String
+  rangeStart Int
+  rangeEnd   Int
+  nextValue  Int
+  warningAt  Int?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([provider, prefix])
 }
 
 model Invoice {

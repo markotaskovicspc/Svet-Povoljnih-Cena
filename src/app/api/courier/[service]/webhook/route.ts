@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 /**
  * Phase 4C item 3 — courier status webhooks.
  *
- *   POST /api/courier/small/webhook  ← BEX (small parcel)
+ *   POST /api/courier/small/webhook  ← X Express (optional webhook)
  *   POST /api/courier/bulky/webhook  ← in-house dispatcher (kamionska)
  *
  * The body is verified per-adapter (HMAC-SHA256 over the raw bytes), then
@@ -76,7 +76,7 @@ export async function POST(
   }
 
   // Phase 4D — let the customer know about the new shipment status.
-  if (result.customerEmail) {
+  if (result.eventCreated && result.customerEmail) {
     void (async () => {
       try {
         const loaded = await loadOrderForEmail(result.orderId);
@@ -96,7 +96,7 @@ export async function POST(
   // Phase 4F — warehouse pickup is the legal trigger for the fiscal
   // receipt (Zakon o fiskalizaciji). Fire-and-forget so a transient
   // gateway error doesn't break the shipment webhook.
-  if (result.status === "PICKED_UP") {
+  if (result.eventCreated && result.status === "PICKED_UP") {
     void issueAndDeliverFiscalReceipt(result.orderId).catch((err) => {
       console.error("[fiscal] courier-trigger failed", err);
     });

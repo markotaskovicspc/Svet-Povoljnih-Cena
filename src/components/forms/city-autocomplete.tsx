@@ -20,6 +20,8 @@ import {
   type SerbianPlace,
 } from "@/data/serbian-places";
 
+type RemotePlace = SerbianPlace & { code?: string };
+
 interface CityAutocompleteProps {
   /** Currently typed city value (controlled). */
   value: string;
@@ -60,11 +62,47 @@ export function CityAutocomplete({
 
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<{
+    query: string;
+    items: RemotePlace[];
+  }>({ query: "", items: [] });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const suggestions = useMemo(() => {
-    if (value.trim().length < minChars) return [];
-    return searchSerbianPlaces(value, 8);
+    const q = value.trim();
+    if (q.length < minChars) return [];
+    return remoteSuggestions.query === q && remoteSuggestions.items.length
+      ? remoteSuggestions.items
+      : searchSerbianPlaces(value, 8);
+  }, [remoteSuggestions, value, minChars]);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < minChars) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/x-express/locations?q=${encodeURIComponent(q)}&limit=8`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as { items?: RemotePlace[] };
+        setRemoteSuggestions({
+          query: q,
+          items: (json.items ?? []).filter((item) => item.name && item.postalCode),
+        });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setRemoteSuggestions({ query: q, items: [] });
+      }
+    }, 180);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [value, minChars]);
 
   // Close on outside click.

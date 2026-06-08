@@ -6,7 +6,7 @@ import type { ShipmentService, ShipmentStatus } from "@prisma/client";
  * Two services are integrated:
  *
  *   COURIER_SMALL  — parcel courier for boxable items (≤ 30 kg, ≤ 1.2 m).
- *                    Real provider in v1: BEX Express (REST + HMAC).
+ *                    Real provider in v1: X Express.
  *   COURIER_BULKY  — kamionska isporuka for furniture (krevet, ormar, …).
  *                    Real provider in v1: in-house dispatch + sub-contractor
  *                    accessed via a small REST shim.
@@ -56,6 +56,10 @@ export interface CourierWebhookEvent {
   trackingNo: string;
   /** Mapped status. */
   status: ShipmentStatus;
+  /** Provider-native status code, when known. */
+  providerStatusCode?: string;
+  /** Provider-native event id for idempotency, when available. */
+  providerEventId?: string;
   /** Free-form provider message ("Pošiljka preuzeta", "Adresant odsutan", …). */
   message?: string;
   /** Event timestamp from the provider, falls back to "now" if missing. */

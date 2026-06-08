@@ -1,14 +1,13 @@
 import type { ShipmentStatus } from "@prisma/client";
 
 /**
- * Maps a provider status code (BEX-style alphanumeric, plus the bulky
+ * Maps a provider status code (X Express-style alphanumeric, plus the bulky
  * dispatcher's Serbian short codes) to our internal `ShipmentStatus`.
  *
  * Unknown codes return `null` so the webhook handler can log + ignore
  * instead of mis-classifying the shipment.
  */
-const SMALL_PARCEL_MAP: Record<string, ShipmentStatus> = {
-  // BEX-style codes (small parcel)
+const X_EXPRESS_MAP: Record<string, ShipmentStatus> = {
   CREATED: "CREATED",
   REGISTERED: "CREATED",
   PICKED_UP: "PICKED_UP",
@@ -34,8 +33,10 @@ const BULKY_MAP: Record<string, ShipmentStatus> = {
 };
 
 export function mapSmallParcelStatus(code: string): ShipmentStatus | null {
-  return SMALL_PARCEL_MAP[code.toUpperCase()] ?? null;
+  return X_EXPRESS_MAP[code.toUpperCase()] ?? null;
 }
+
+export const mapXExpressStatus = mapSmallParcelStatus;
 
 export function mapBulkyStatus(code: string): ShipmentStatus | null {
   return BULKY_MAP[code.toUpperCase()] ?? null;

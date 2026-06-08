@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { DeliveryScope } from "@prisma/client";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { syncXExpressDictionaries } from "@/lib/x-express/sync";
+import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -95,9 +97,22 @@ async function toggleTruck(formData: FormData) {
   )(formData);
 }
 
+async function syncXExpressDictionariesAction() {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "delivery.xExpressDictionarySync", entity: "CourierSyncRun" },
+    async () => {
+      const result = await syncXExpressDictionaries();
+      revalidatePath("/admin/dostava");
+      return { ok: true as const, diff: result };
+    },
+  )();
+}
+
 export default async function DeliveryPage() {
   await requireAdminAction(["OPS"]);
-  const [rules, cities, categories] = await Promise.all([
+  const [rules, cities, categories, xLocations, xStatuses, xRuns] = await Promise.all([
     db.deliveryPriceRule.findMany({
       orderBy: [{ scope: "asc" }, { updatedAt: "desc" }],
       include: {
@@ -108,6 +123,17 @@ export default async function DeliveryPage() {
     }),
     db.deliveryCity.findMany({ orderBy: { name: "asc" } }),
     db.category.findMany({ orderBy: { path: "asc" }, select: { id: true, name: true, path: true } }),
+    db.courierLocationCode.count({
+      where: { provider: X_EXPRESS_PROVIDER, active: true },
+    }),
+    db.courierStatusCode.count({
+      where: { provider: X_EXPRESS_PROVIDER, active: true },
+    }),
+    db.courierSyncRun.findMany({
+      where: { provider: X_EXPRESS_PROVIDER },
+      orderBy: { startedAt: "desc" },
+      take: 5,
+    }),
   ]);
 
   return (
@@ -217,6 +243,38 @@ export default async function DeliveryPage() {
             </form>
           </Card>
         </div>
+
+        <Card>
+          <CardTitle
+            description={`${xLocations} adresa · ${xStatuses} statusa u lokalnom kešu`}
+          >
+            X Express šifarnici
+          </CardTitle>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="text-sm text-ink-700">
+              <p>
+                Checkout koristi lokalno keširane X Express adrese. Osvežavanje
+                ne izlaže API kredencijale browseru.
+              </p>
+              {xRuns.length ? (
+                <ul className="mt-3 space-y-1 text-xs text-ink-600">
+                  {xRuns.map((run) => (
+                    <li key={run.id}>
+                      {run.startedAt.toLocaleString("sr-Latn-RS")} · {run.kind} ·{" "}
+                      {run.status} · {run.recordsOk}/{run.recordsRead}
+                      {run.errorMessage ? ` · ${run.errorMessage}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-xs text-ink-500">Još nema sync pokušaja.</p>
+              )}
+            </div>
+            <form action={syncXExpressDictionariesAction}>
+              <SubmitButton variant="outline">Osveži X Express</SubmitButton>
+            </form>
+          </div>
+        </Card>
 
         <Card>
           <CardTitle description="Toggle za kamionsku isporuku po gradu.">
