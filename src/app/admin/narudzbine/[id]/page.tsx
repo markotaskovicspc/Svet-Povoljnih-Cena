@@ -3,14 +3,20 @@ import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
-import { createShipmentForOrder } from "@/lib/courier";
+import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
 import {
   loadOrderForEmail,
   lowerOrderStatus,
   sendOrderStatusChanged,
 } from "@/lib/email";
 import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
-import { syncXExpressShipmentById } from "@/lib/x-express/sync";
+import {
+  deleteMyGlsLabelsForShipment,
+  getMyGlsConfig,
+  getSmallParcelProvider,
+  modifyMyGlsCODForShipment,
+  MYGLS_PROVIDER,
+} from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -58,9 +64,9 @@ async function updateStatus(formData: FormData) {
             console.error("[email] admin order-status failed", err);
           }
         })();
-        if (status === "SPREMNO_ZA_ISPORUKU" && getXExpressConfig().autoCreate) {
+        if (status === "SPREMNO_ZA_ISPORUKU" && smallParcelAutoCreateEnabled()) {
           void createShipmentForOrder(id).catch((err) => {
-            console.error("[x-express] auto-create failed", err);
+            console.error("[courier] auto-create failed", err);
           });
         }
         revalidatePath(`/admin/narudzbine/${id}`);
@@ -74,7 +80,7 @@ async function createCourierShipment(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "order.xExpressCreate", entity: "Shipment" },
+    { allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
@@ -94,14 +100,53 @@ async function syncCourierShipment(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "order.xExpressStatusSync", entity: "Shipment" },
+    { allowed: ["OPS"], action: "order.courierStatusSync", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const orderId = String(formData.get("orderId") ?? "");
       if (!shipmentId || !orderId) {
         return { ok: false as const, error: "Nedostaje ID pošiljke." };
       }
-      const result = await syncXExpressShipmentById(shipmentId);
+      const result = await syncCourierShipmentById(shipmentId);
+      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath("/admin/narudzbine");
+      return { ok: true as const, entityId: shipmentId, diff: result };
+    },
+  )(formData);
+}
+
+async function deleteMyGlsShipment(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.myGlsDeleteLabels", entity: "Shipment" },
+    async (_actorId, formData: FormData) => {
+      const shipmentId = String(formData.get("shipmentId") ?? "");
+      const orderId = String(formData.get("orderId") ?? "");
+      if (!shipmentId || !orderId) {
+        return { ok: false as const, error: "Nedostaje ID pošiljke." };
+      }
+      const result = await deleteMyGlsLabelsForShipment(shipmentId);
+      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath("/admin/narudzbine");
+      return { ok: true as const, entityId: shipmentId, diff: result };
+    },
+  )(formData);
+}
+
+async function modifyMyGlsCOD(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "order.myGlsModifyCOD", entity: "Shipment" },
+    async (_actorId, formData: FormData) => {
+      const shipmentId = String(formData.get("shipmentId") ?? "");
+      const orderId = String(formData.get("orderId") ?? "");
+      const codAmount = Number(formData.get("codAmount") ?? "");
+      if (!shipmentId || !orderId || !Number.isFinite(codAmount) || codAmount < 0) {
+        return { ok: false as const, error: "Neispravan COD iznos." };
+      }
+      const result = await modifyMyGlsCODForShipment(shipmentId, codAmount);
       revalidatePath(`/admin/narudzbine/${orderId}`);
       revalidatePath("/admin/narudzbine");
       return { ok: true as const, entityId: shipmentId, diff: result };
@@ -151,6 +196,8 @@ export default async function OrderDetail({
     },
   });
   if (!order) notFound();
+  const activeSmallProvider =
+    getSmallParcelProvider() === "MYGLS" ? MYGLS_PROVIDER : X_EXPRESS_PROVIDER;
 
   return (
     <>
@@ -269,7 +316,7 @@ export default async function OrderDetail({
             <CardTitle
               description={
                 order.shippingMethod === "KURIR"
-                  ? "X Express nalog i statusi"
+                  ? "Kurirski nalog i statusi"
                   : "Nije kurirska isporuka"
               }
             >
@@ -277,7 +324,7 @@ export default async function OrderDetail({
             </CardTitle>
             {order.shippingMethod !== "KURIR" ? (
               <p className="text-sm text-ink-500">
-                Kamionska isporuka se ne šalje kroz X Express.
+                Kamionska isporuka se ne šalje kroz kurira za male pošiljke.
               </p>
             ) : (
               <div className="space-y-3 text-sm">
@@ -296,7 +343,24 @@ export default async function OrderDetail({
                             }
                           />
                           <Row k="Status" v={shipment.status} />
-                          <Row k="X status" v={shipment.providerStatusCode ?? "—"} />
+                          <Row k="Kurir status" v={shipment.providerStatusCode ?? "—"} />
+                          {shipment.providerParcelId ? (
+                            <Row
+                              k="Parcel ID"
+                              v={<span className="font-mono text-xs">{shipment.providerParcelId}</span>}
+                            />
+                          ) : null}
+                          {Array.isArray(shipment.providerParcelNumbers) &&
+                          shipment.providerParcelNumbers.length ? (
+                            <Row
+                              k="Parcel brojevi"
+                              v={
+                                <span className="font-mono text-xs">
+                                  {shipment.providerParcelNumbers.join(", ")}
+                                </span>
+                              }
+                            />
+                          ) : null}
                           <Row
                             k="Sync"
                             v={
@@ -333,7 +397,7 @@ export default async function OrderDetail({
                           </p>
                         ) : null}
                         <div className="mt-3 flex flex-wrap justify-end gap-2">
-                          {shipment.provider === X_EXPRESS_PROVIDER && shipment.trackingNo ? (
+                          {shipment.provider && shipment.trackingNo ? (
                             <form action={syncCourierShipment}>
                               <input type="hidden" name="shipmentId" value={shipment.id} />
                               <input type="hidden" name="orderId" value={order.id} />
@@ -341,6 +405,33 @@ export default async function OrderDetail({
                                 Osveži status
                               </SubmitButton>
                             </form>
+                          ) : null}
+                          {shipment.provider === MYGLS_PROVIDER &&
+                          shipment.status !== "DELIVERED" &&
+                          shipment.status !== "RETURNED" ? (
+                            <>
+                              <form action={modifyMyGlsCOD} className="flex items-center gap-2">
+                                <input type="hidden" name="shipmentId" value={shipment.id} />
+                                <input type="hidden" name="orderId" value={order.id} />
+                                <input
+                                  name="codAmount"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={num(order.total)}
+                                  className="h-7 w-24 rounded-md border border-input bg-transparent px-2 text-xs"
+                                />
+                                <SubmitButton variant="outline" size="xs">
+                                  Izmeni COD
+                                </SubmitButton>
+                              </form>
+                              <form action={deleteMyGlsShipment}>
+                                <input type="hidden" name="shipmentId" value={shipment.id} />
+                                <input type="hidden" name="orderId" value={order.id} />
+                                <SubmitButton variant="destructive" size="xs">
+                                  Obriši GLS
+                                </SubmitButton>
+                              </form>
+                            </>
                           ) : null}
                           {shipment.status === "FAILED" ? (
                             <form action={createCourierShipment}>
@@ -369,15 +460,17 @@ export default async function OrderDetail({
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-ink-500">X Express nalog još nije kreiran.</p>
+                  <p className="text-ink-500">Kurirski nalog još nije kreiran.</p>
                 )}
                 {order.shipments.every(
                   (shipment) =>
-                    shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED",
+                    shipment.provider !== activeSmallProvider || shipment.status === "FAILED",
                 ) ? (
                   <form action={createCourierShipment} className="flex justify-end">
                     <input type="hidden" name="id" value={order.id} />
-                    <SubmitButton size="sm">Kreiraj X Express nalog</SubmitButton>
+                    <SubmitButton size="sm">
+                      Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
+                    </SubmitButton>
                   </form>
                 ) : null}
               </div>
@@ -420,6 +513,12 @@ export default async function OrderDetail({
       </div>
     </>
   );
+}
+
+function smallParcelAutoCreateEnabled() {
+  return getSmallParcelProvider() === "MYGLS"
+    ? getMyGlsConfig().autoCreate
+    : getXExpressConfig().autoCreate;
 }
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {

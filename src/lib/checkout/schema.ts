@@ -73,6 +73,17 @@ export const checkoutFormSchema = z
     shipToDifferent: z.boolean().default(false),
     billing: addressSchema.optional(),
     shippingMethod: z.enum(["kurir", "kamion"]),
+    glsDeliveryPoint: z
+      .object({
+        code: z.string().min(1),
+        name: z.string().min(1),
+        street: z.string().optional().nullable(),
+        city: z.string().optional().nullable(),
+        postalCode: z.string().optional().nullable(),
+        label: z.string().optional().nullable(),
+      })
+      .optional()
+      .nullable(),
     paymentMethod: z.enum([
       "ips",
       "kartica",

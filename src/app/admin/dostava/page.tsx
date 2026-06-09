@@ -5,6 +5,11 @@ import { DeliveryScope } from "@prisma/client";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
 import { syncXExpressDictionaries } from "@/lib/x-express/sync";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import {
+  getSmallParcelProvider,
+  MYGLS_PROVIDER,
+  syncMyGlsMasterData,
+} from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -110,9 +115,32 @@ async function syncXExpressDictionariesAction() {
   )();
 }
 
+async function syncMyGlsMasterDataAction() {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["OPS"], action: "delivery.myGlsMasterDataSync", entity: "CourierSyncRun" },
+    async () => {
+      const result = await syncMyGlsMasterData();
+      revalidatePath("/admin/dostava");
+      return { ok: true as const, diff: result };
+    },
+  )();
+}
+
 export default async function DeliveryPage() {
   await requireAdminAction(["OPS"]);
-  const [rules, cities, categories, xLocations, xStatuses, xRuns] = await Promise.all([
+  const [
+    rules,
+    cities,
+    categories,
+    xLocations,
+    xStatuses,
+    xRuns,
+    glsDeliveryPoints,
+    glsLocations,
+    glsRuns,
+  ] = await Promise.all([
     db.deliveryPriceRule.findMany({
       orderBy: [{ scope: "asc" }, { updatedAt: "desc" }],
       include: {
@@ -134,7 +162,19 @@ export default async function DeliveryPage() {
       orderBy: { startedAt: "desc" },
       take: 5,
     }),
+    db.courierDeliveryPoint.count({
+      where: { provider: MYGLS_PROVIDER, active: true },
+    }),
+    db.courierLocationCode.count({
+      where: { provider: MYGLS_PROVIDER, active: true },
+    }),
+    db.courierSyncRun.findMany({
+      where: { provider: MYGLS_PROVIDER },
+      orderBy: { startedAt: "desc" },
+      take: 5,
+    }),
   ]);
+  const smallProvider = getSmallParcelProvider();
 
   return (
     <>
@@ -244,37 +284,49 @@ export default async function DeliveryPage() {
           </Card>
         </div>
 
-        <Card>
-          <CardTitle
-            description={`${xLocations} adresa · ${xStatuses} statusa u lokalnom kešu`}
-          >
-            X Express šifarnici
-          </CardTitle>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="text-sm text-ink-700">
-              <p>
-                Checkout koristi lokalno keširane X Express adrese. Osvežavanje
-                ne izlaže API kredencijale browseru.
-              </p>
-              {xRuns.length ? (
-                <ul className="mt-3 space-y-1 text-xs text-ink-600">
-                  {xRuns.map((run) => (
-                    <li key={run.id}>
-                      {run.startedAt.toLocaleString("sr-Latn-RS")} · {run.kind} ·{" "}
-                      {run.status} · {run.recordsOk}/{run.recordsRead}
-                      {run.errorMessage ? ` · ${run.errorMessage}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-xs text-ink-500">Još nema sync pokušaja.</p>
-              )}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardTitle
+              description={`${xLocations} adresa · ${xStatuses} statusa u lokalnom kešu`}
+            >
+              X Express šifarnici
+            </CardTitle>
+            <ProviderStatus active={smallProvider === "X_EXPRESS"} />
+            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="text-sm text-ink-700">
+                <p>
+                  Checkout koristi lokalno keširane X Express adrese. Osvežavanje
+                  ne izlaže API kredencijale browseru.
+                </p>
+                <SyncRunList runs={xRuns} />
+              </div>
+              <form action={syncXExpressDictionariesAction}>
+                <SubmitButton variant="outline">Osveži X Express</SubmitButton>
+              </form>
             </div>
-            <form action={syncXExpressDictionariesAction}>
-              <SubmitButton variant="outline">Osveži X Express</SubmitButton>
-            </form>
-          </div>
-        </Card>
+          </Card>
+
+          <Card>
+            <CardTitle
+              description={`${glsDeliveryPoints} paket tačaka · ${glsLocations} lokacija u lokalnom kešu`}
+            >
+              MyGLS šifarnici
+            </CardTitle>
+            <ProviderStatus active={smallProvider === "MYGLS"} />
+            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="text-sm text-ink-700">
+                <p>
+                  MyGLS keš sadrži paket shopove/lockere i lokacije za Srbiju.
+                  Koristi se kada je COURIER_SMALL_PROVIDER=MYGLS.
+                </p>
+                <SyncRunList runs={glsRuns} />
+              </div>
+              <form action={syncMyGlsMasterDataAction}>
+                <SubmitButton variant="outline">Osveži MyGLS</SubmitButton>
+              </form>
+            </div>
+          </Card>
+        </div>
 
         <Card>
           <CardTitle description="Toggle za kamionsku isporuku po gradu.">
@@ -313,5 +365,46 @@ export default async function DeliveryPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+function ProviderStatus({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+        active ? "bg-green-50 text-green-700" : "bg-ink-50 text-ink-500"
+      }`}
+    >
+      {active ? "Aktivan kurir za male pošiljke" : "Nije aktivan provider"}
+    </span>
+  );
+}
+
+function SyncRunList({
+  runs,
+}: {
+  runs: Array<{
+    id: string;
+    startedAt: Date;
+    kind: string;
+    status: string;
+    recordsOk: number;
+    recordsRead: number;
+    errorMessage: string | null;
+  }>;
+}) {
+  if (!runs.length) {
+    return <p className="mt-3 text-xs text-ink-500">Još nema sync pokušaja.</p>;
+  }
+  return (
+    <ul className="mt-3 space-y-1 text-xs text-ink-600">
+      {runs.map((run) => (
+        <li key={run.id}>
+          {run.startedAt.toLocaleString("sr-Latn-RS")} · {run.kind} ·{" "}
+          {run.status} · {run.recordsOk}/{run.recordsRead}
+          {run.errorMessage ? ` · ${run.errorMessage}` : ""}
+        </li>
+      ))}
+    </ul>
   );
 }

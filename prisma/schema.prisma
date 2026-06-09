@@ -873,6 +873,11 @@ model Order {
   shipCountry           String  @default("RS")
   shipCompanyName       String?
   shipPib               String?
+  glsDeliveryPointId    String?
+  glsDeliveryPointName  String?
+  glsDeliveryPointAddress String?
+  glsDeliveryPointCity  String?
+  glsDeliveryPointPostalCode String?
   billingSameAsShipping Boolean @default(true)
   billFirstName         String?
   billLastName          String?
@@ -976,9 +981,14 @@ model Shipment {
   labelUrl           String?
   status             ShipmentStatus  @default(CREATED)
   providerStatusCode String?
+  providerParcelId   String?
+  providerParcelIds  Json?
+  providerParcelNumbers Json?
   lastStatusSyncAt   DateTime?
   rawCreateResponse  Json?
   syncError          String?         @db.Text
+  labelObjectKey     String?
+  labelMimeType      String?
   shippedAt          DateTime?
   deliveredAt        DateTime?
   createdAt          DateTime        @default(now())
@@ -1029,6 +1039,31 @@ model CourierLocationCode {
   @@index([postalCode])
 }
 
+model CourierDeliveryPoint {
+  id           String   @id @default(cuid())
+  provider     String   @default("MYGLS")
+  code         String
+  name         String
+  type         String?
+  street       String?
+  city         String?
+  postalCode   String?
+  country      String   @default("RS")
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  latitude     Decimal? @db.Decimal(10, 6)
+  longitude    Decimal? @db.Decimal(10, 6)
+  active       Boolean  @default(true)
+  raw          Json?
+  syncedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([provider, code])
+  @@index([provider, active, city])
+  @@index([postalCode])
+}
+
 model CourierStatusCode {
   id             String          @id @default(cuid())
   provider       String          @default("X_EXPRESS")
@@ -1044,6 +1079,20 @@ model CourierStatusCode {
   @@unique([provider, code])
   @@index([provider, active])
   @@index([shipmentStatus])
+}
+
+model CourierMasterDataCursor {
+  id           String   @id @default(cuid())
+  provider     String   @default("MYGLS")
+  kind         String
+  cursor       String?
+  etag         String?
+  lastSyncedAt DateTime?
+  raw          Json?
+  updatedAt    DateTime @updatedAt
+
+  @@unique([provider, kind])
+  @@index([provider, updatedAt])
 }
 
 model CourierSyncRun {

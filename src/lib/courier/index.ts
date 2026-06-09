@@ -9,4 +9,5 @@ export {
   getAdapter,
   routeService,
   SERVICE_SLUG,
+  syncCourierShipmentById,
 } from "./registry";

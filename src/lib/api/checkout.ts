@@ -13,6 +13,7 @@ import {
   type PricingLine,
 } from "@/lib/pricing";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { getSmallParcelProvider, MYGLS_PROVIDER } from "@/lib/mygls";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -56,6 +57,17 @@ export const createOrderSchema = z.object({
   billingSameAsShipping: z.boolean().default(true),
   billing: addressSchema.optional(),
   shippingMethod: z.enum(["KURIR", "KAMION"]),
+  glsDeliveryPoint: z
+    .object({
+      code: z.string().min(1),
+      name: z.string().min(1),
+      street: z.string().optional().nullable(),
+      city: z.string().optional().nullable(),
+      postalCode: z.string().optional().nullable(),
+      label: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   paymentMethod: z.enum([
     "IPS",
     "KARTICA",
@@ -79,7 +91,8 @@ export type CreateOrderError =
   | { code: "OUT_OF_STOCK"; sku: string }
   | { code: "INACTIVE"; sku: string }
   | { code: "VOUCHER_INVALID"; reason: string }
-  | { code: "GUEST_REQUIRES_EMAIL" };
+  | { code: "GUEST_REQUIRES_EMAIL" }
+  | { code: "DELIVERY_POINT_INVALID" };
 
 export interface CreateOrderResult {
   number: string;
@@ -227,6 +240,32 @@ export async function createOrder(
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : input.billing ?? null;
+  const glsProviderActive = getSmallParcelProvider() === "MYGLS";
+  const glsDeliveryPoint =
+    input.shippingMethod === "KURIR" && glsProviderActive && input.glsDeliveryPoint?.code
+      ? await db.courierDeliveryPoint.findFirst({
+          where: {
+            provider: MYGLS_PROVIDER,
+            active: true,
+            code: input.glsDeliveryPoint.code,
+          },
+          select: {
+            code: true,
+            name: true,
+            street: true,
+            city: true,
+            postalCode: true,
+          },
+        })
+      : null;
+  if (
+    input.shippingMethod === "KURIR" &&
+    glsProviderActive &&
+    input.glsDeliveryPoint?.code &&
+    !glsDeliveryPoint
+  ) {
+    return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
+  }
 
   const created = await db.$transaction(async (tx) => {
     const number = await nextOrderNumber(tx);
@@ -260,6 +299,11 @@ export async function createOrder(
         shipCountry: ship.country,
         shipCompanyName: ship.companyName ?? null,
         shipPib: ship.pib ?? null,
+        glsDeliveryPointId: glsDeliveryPoint?.code ?? null,
+        glsDeliveryPointName: glsDeliveryPoint?.name ?? null,
+        glsDeliveryPointAddress: glsDeliveryPoint?.street ?? null,
+        glsDeliveryPointCity: glsDeliveryPoint?.city ?? null,
+        glsDeliveryPointPostalCode: glsDeliveryPoint?.postalCode ?? null,
         billingSameAsShipping: input.billingSameAsShipping,
         billFirstName: bill?.firstName ?? null,
         billLastName: bill?.lastName ?? null,

@@ -9,6 +9,13 @@ import {
 import { db } from "@/lib/db";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
+import { syncXExpressShipmentById } from "@/lib/x-express/sync";
+import {
+  getSmallParcelProvider,
+  MYGLS_PROVIDER,
+  createMyGlsShipmentForOrder,
+  syncMyGlsShipmentById,
+} from "@/lib/mygls";
 import { bulkyAdapter } from "./bulky";
 import { smallParcelAdapter } from "./small-parcel";
 import {
@@ -91,7 +98,9 @@ export async function createShipmentForOrder(orderId: string) {
     items: order.items,
   });
   if (service === "COURIER_SMALL") {
-    return createXExpressShipmentForOrder(order.id);
+    return getSmallParcelProvider() === "MYGLS"
+      ? createMyGlsShipmentForOrder(order.id)
+      : createXExpressShipmentForOrder(order.id);
   }
 
   const adapter = getAdapter(service);
@@ -233,7 +242,13 @@ export async function applyShipmentEvent(
     await tx.shipment.update({
       where: { id: shipment.id },
       data: {
-        provider: shipment.provider ?? (service === "COURIER_SMALL" ? X_EXPRESS_PROVIDER : undefined),
+        provider:
+          shipment.provider ??
+          (service === "COURIER_SMALL"
+            ? getSmallParcelProvider() === "MYGLS"
+              ? MYGLS_PROVIDER
+              : X_EXPRESS_PROVIDER
+            : undefined),
         status: event.status,
         providerStatusCode: event.providerStatusCode ?? shipment.providerStatusCode,
         lastStatusSyncAt: new Date(),
@@ -268,6 +283,19 @@ export async function applyShipmentEvent(
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
     eventCreated,
   };
+}
+
+export async function syncCourierShipmentById(shipmentId: string) {
+  const shipment = await db.shipment.findUnique({
+    where: { id: shipmentId },
+    select: { provider: true },
+  });
+  if (!shipment?.provider) {
+    throw new Error("Pošiljka nema podešenog kurira.");
+  }
+  if (shipment.provider === MYGLS_PROVIDER) return syncMyGlsShipmentById(shipmentId);
+  if (shipment.provider === X_EXPRESS_PROVIDER) return syncXExpressShipmentById(shipmentId);
+  throw new Error(`Status sync nije podržan za kurira ${shipment.provider}.`);
 }
 
 export { CourierConfigError };

@@ -54,12 +54,22 @@ export interface CheckoutAddress {
   pib?: string;
 }
 
+export interface CheckoutDeliveryPoint {
+  code: string;
+  name: string;
+  street?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  label?: string | null;
+}
+
 export interface CheckoutFormData {
   identity: IdentityChoice;
   shipping: CheckoutAddress;
   shipToDifferent: boolean;
   billing?: CheckoutAddress;
   shippingMethod: ShippingMethod;
+  glsDeliveryPoint?: CheckoutDeliveryPoint | null;
   perItemAssembly: Record<SKU, boolean>;
   paymentMethod: PaymentMethod;
   voucherCode?: string;
@@ -111,8 +121,10 @@ const STEP_TITLES: Record<CheckoutStep, string> = {
  */
 export function CheckoutFlow({
   initialCustomer,
+  glsDeliveryPointsEnabled = false,
 }: {
   initialCustomer?: CheckoutInitialCustomer;
+  glsDeliveryPointsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -146,6 +158,7 @@ export function CheckoutFlow({
       },
       shipToDifferent: false,
       shippingMethod: "kurir",
+      glsDeliveryPoint: null,
       perItemAssembly: {},
       paymentMethod: "pouzece_gotovina",
       voucherCode: "",
@@ -398,7 +411,9 @@ export function CheckoutFlow({
                   {step === "shipping" ? <ShippingForm /> : null}
                   {step === "method" ? (
                     <div className="flex flex-col gap-5">
-                      <ShippingMethodStep />
+                      <ShippingMethodStep
+                        glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
+                      />
                       <VoucherSection />
                     </div>
                   ) : null}
@@ -558,6 +573,11 @@ function ReviewStep() {
               : "Kamionska isporuka"}{" "}
             · {formatRsd(SHIPPING_PRICES[data.shippingMethod])}
           </p>
+          {data.shippingMethod === "kurir" && data.glsDeliveryPoint ? (
+            <p className="mt-1 text-xs text-ink-500">
+              MyGLS paket tačka: {data.glsDeliveryPoint.label ?? data.glsDeliveryPoint.name}
+            </p>
+          ) : null}
         </ReviewBlock>
         <ReviewBlock title="Plaćanje">
           <p className="text-sm text-ink-700">{PAYMENT_LABELS[data.paymentMethod]}</p>
@@ -748,6 +768,8 @@ function buildCreateOrderPayload(
       withAssembly: Boolean(data.perItemAssembly?.[line.sku]),
     })),
     shipping,
+    glsDeliveryPoint:
+      data.shippingMethod === "kurir" ? data.glsDeliveryPoint ?? undefined : undefined,
     billingSameAsShipping: !data.shipToDifferent,
     billing,
     shippingMethod: SHIPPING_METHOD_UPPER[data.shippingMethod],
@@ -785,6 +807,8 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
       return "Proverite obavezna polja i saglasnost pre potvrde porudžbine.";
     case "GUEST_REQUIRES_EMAIL":
       return "Unesite e-mail adresu za porudžbinu kao gost.";
+    case "DELIVERY_POINT_INVALID":
+      return "Izabrana MyGLS paket tačka više nije dostupna. Izaberite drugu lokaciju ili dostavu na adresu.";
     case "EMPTY_CART":
       return "Korpa je prazna.";
     default:

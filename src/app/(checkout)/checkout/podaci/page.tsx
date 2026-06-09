@@ -5,6 +5,7 @@ import { listAddresses } from "@/lib/api/addresses";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
+import { getSmallParcelProvider } from "@/lib/mygls";
 
 export const metadata: Metadata = {
   title: "Naplata — podaci za isporuku",
@@ -31,6 +32,7 @@ export default async function CheckoutPodaciPage() {
     .filter(Boolean)
     .join(" ");
   const accountName = account?.name ?? (accountFullName || null);
+  const glsDeliveryPointsEnabled = getSmallParcelProvider() === "MYGLS";
 
   return (
     <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
@@ -54,6 +56,7 @@ export default async function CheckoutPodaciPage() {
           </div>
         ) : null}
         <CheckoutFlow
+          glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
           initialCustomer={
             user?.userType === "customer"
               ? {
