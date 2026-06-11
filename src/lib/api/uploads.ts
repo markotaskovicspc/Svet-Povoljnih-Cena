@@ -1,15 +1,9 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-/**
- * Presigned upload URL stub (Phase 3C — item 5b).
- *
- * Returns a placeholder `uploadUrl` + `publicUrl`. The real implementation in
- * Phase 6 will sign an S3 / R2 PUT URL — clients PUT the file there directly,
- * then submit `publicUrl` back to the reclamation form. Keeping the contract
- * stable now so the form code can ship without rework later.
- */
+const DEFAULT_RECLAMATION_UPLOAD_BUCKET = "reclamation-uploads";
 
 export const presignSchema = z.object({
   filename: z.string().min(1).max(255),
@@ -30,14 +24,23 @@ export interface PresignResult {
   expiresInSec: number;
 }
 
-export function presignUpload(input: PresignInput): PresignResult {
+export async function presignUpload(input: PresignInput): Promise<PresignResult> {
   const ext = (input.filename.match(/\.([a-z0-9]{1,8})$/i)?.[1] ?? "bin").toLowerCase();
   const id = randomBytes(12).toString("hex");
   const key = `${input.scope}/${new Date().toISOString().slice(0, 10)}/${id}.${ext}`;
-  const base = process.env.CLOUD_BASE_URL?.replace(/\/$/, "") ?? "https://uploads.spc.local";
+  const bucket =
+    process.env.SUPABASE_RECLAMATION_UPLOAD_BUCKET ??
+    process.env.NEXT_PUBLIC_SUPABASE_RECLAMATION_UPLOAD_BUCKET ??
+    DEFAULT_RECLAMATION_UPLOAD_BUCKET;
+  const storage = createAdminClient().storage.from(bucket);
+  const { data, error } = await storage.createSignedUploadUrl(key);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? "Upload URL nije moguće kreirati.");
+  }
+  const publicUrl = storage.getPublicUrl(key).data.publicUrl;
   return {
-    uploadUrl: `${base}/_presigned/${key}?stub=1`,
-    publicUrl: `${base}/${key}`,
+    uploadUrl: data.signedUrl,
+    publicUrl,
     key,
     expiresInSec: 600,
   };

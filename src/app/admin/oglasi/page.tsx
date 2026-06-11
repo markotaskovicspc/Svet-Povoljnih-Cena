@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { AdChannel } from "@prisma/client";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -20,10 +22,10 @@ const CHANNEL_LABEL: Record<AdChannel, string> = {
   TIKTOK: "TikTok katalog",
 };
 
-async function saveFlag(formData: FormData) {
+async function saveFlag(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["ADS"], action: "ad.flagSave", entity: "AdFlag" },
     async (_a, formData: FormData) => {
         const channel = String(formData.get("channel") ?? "") as AdChannel;
@@ -42,7 +44,14 @@ async function saveFlag(formData: FormData) {
           update: { enabled, budgetRsd: budget },
         });
         revalidatePath("/admin/oglasi");
-        return { ok: true as const, entityId: channel, diff: { enabled, budget } };
+        revalidatePath("/api/feeds/google");
+        revalidatePath("/api/feeds/meta");
+        return {
+          ok: true as const,
+          entityId: channel,
+          diff: { enabled, budget },
+          message: "Podešavanja feeda su sačuvana.",
+        };
       },
   )(formData);
 }
@@ -53,10 +62,10 @@ const FIELD_BY_CHANNEL: Record<AdChannel, "inGoogleMerchant" | "inMetaCatalog" |
   TIKTOK: "inTiktokCatalog",
 };
 
-async function toggleProductCatalog(formData: FormData) {
+async function toggleProductCatalog(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["ADS"], action: "ad.productToggle", entity: "Product" },
     async (_a, formData: FormData) => {
         const productId = String(formData.get("productId") ?? "");
@@ -70,7 +79,14 @@ async function toggleProductCatalog(formData: FormData) {
           data: { [FIELD_BY_CHANNEL[channel]]: next },
         });
         revalidatePath("/admin/oglasi");
-        return { ok: true as const, entityId: productId, diff: { [channel]: next } };
+        revalidatePath("/api/feeds/google");
+        revalidatePath("/api/feeds/meta");
+        return {
+          ok: true as const,
+          entityId: productId,
+          diff: { [channel]: next },
+          message: "Katalog oznaka je promenjena.",
+        };
       },
   )(formData);
 }
@@ -84,7 +100,7 @@ export default async function AdsPage({
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
 
-  const [flags, products] = await Promise.all([
+  const [flags, products, feedCounts] = await Promise.all([
     db.adFlag.findMany(),
     db.product.findMany({
       where: q
@@ -106,8 +122,26 @@ export default async function AdsPage({
         inTiktokCatalog: true,
       },
     }),
+    Promise.all(
+      Object.values(AdChannel).map(async (channel) => {
+        const field = FIELD_BY_CHANNEL[channel];
+        const count = await db.product.count({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            [field]: true,
+            media: { some: { kind: "IMAGE" } },
+          },
+        });
+        return [channel, count] as const;
+      }),
+    ),
   ]);
   const flagMap = new Map(flags.map((f) => [f.channel, f]));
+  const feedCountMap = new Map(feedCounts);
+  const zeroFeedWarnings = [AdChannel.GOOGLE_MERCHANT, AdChannel.META].filter(
+    (channel) => feedCountMap.get(channel) === 0,
+  );
 
   return (
     <>
@@ -122,8 +156,12 @@ export default async function AdsPage({
             const f = flagMap.get(channel);
             return (
               <Card key={channel}>
-                <CardTitle description={channel}>{CHANNEL_LABEL[channel]}</CardTitle>
-                <form action={saveFlag} className="space-y-3">
+                <CardTitle
+                  description={`${channel} · ${feedCountMap.get(channel) ?? 0} feed artikala`}
+                >
+                  {CHANNEL_LABEL[channel]}
+                </CardTitle>
+                <AdminActionForm action={saveFlag} className="space-y-3">
                   <input type="hidden" name="channel" value={channel} />
                   <Field label="Aktivno">
                     <label className="flex items-center gap-2 text-sm">
@@ -148,11 +186,19 @@ export default async function AdsPage({
                   <div className="flex justify-end">
                     <SubmitButton size="sm">Sačuvaj</SubmitButton>
                   </div>
-                </form>
+                </AdminActionForm>
               </Card>
             );
           })}
         </div>
+
+        {zeroFeedWarnings.length ? (
+          <div className="rounded-lg border border-action/25 bg-action/5 px-4 py-3 text-sm text-action">
+            {zeroFeedWarnings.map((channel) => CHANNEL_LABEL[channel]).join(" i ")}{" "}
+            trenutno nema nijedan feed artikal. Označite aktivne proizvode sa
+            slikom u tabeli ispod ili primenite seed SQL iz isporuke.
+          </div>
+        ) : null}
 
         <Card>
           <CardTitle description={`${products.length} proizvoda`}>Katalog po proizvodu</CardTitle>
@@ -191,14 +237,14 @@ export default async function AdsPage({
                       const cur = p[field];
                       return (
                         <td key={c} className="px-3 py-2 text-center">
-                          <form action={toggleProductCatalog}>
+                          <AdminActionForm action={toggleProductCatalog}>
                             <input type="hidden" name="productId" value={p.id} />
                             <input type="hidden" name="channel" value={c} />
                             <input type="hidden" name="next" value={String(!cur)} />
                             <SubmitButton size="sm" variant={cur ? "default" : "outline"}>
                               {cur ? "✓" : "—"}
                             </SubmitButton>
-                          </form>
+                          </AdminActionForm>
                         </td>
                       );
                     })}

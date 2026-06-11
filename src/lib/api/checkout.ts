@@ -14,6 +14,10 @@ import {
 } from "@/lib/pricing";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { getSmallParcelProvider, MYGLS_PROVIDER } from "@/lib/mygls";
+import {
+  isPaymentMethodEnabled,
+  resolveDeliveryQuote,
+} from "@/lib/checkout/config";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -92,7 +96,9 @@ export type CreateOrderError =
   | { code: "INACTIVE"; sku: string }
   | { code: "VOUCHER_INVALID"; reason: string }
   | { code: "GUEST_REQUIRES_EMAIL" }
-  | { code: "DELIVERY_POINT_INVALID" };
+  | { code: "DELIVERY_POINT_INVALID" }
+  | { code: "PAYMENT_UNAVAILABLE" }
+  | { code: "DELIVERY_UNAVAILABLE" };
 
 export interface CreateOrderResult {
   number: string;
@@ -101,12 +107,6 @@ export interface CreateOrderResult {
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
 }
-
-const SHIPPING_PRICE_DEFAULT: Record<ShippingMethod, number> = {
-  KURIR: 990,
-  KAMION: 4990,
-};
-const ASSEMBLY_PRICE_DEFAULT = 2990;
 
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
@@ -128,6 +128,9 @@ export async function createOrder(
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
   if (!input.lines.length) return { ok: false, error: { code: "EMPTY_CART" } };
+  if (!(await isPaymentMethodEnabled(input.paymentMethod))) {
+    return { ok: false, error: { code: "PAYMENT_UNAVAILABLE" } };
+  }
 
   const skus = input.lines.map((l) => l.sku);
   const products = await db.product.findMany({
@@ -171,13 +174,23 @@ export async function createOrder(
     };
   });
 
+  const deliveryQuote = await resolveDeliveryQuote({
+    city: input.shipping.city,
+    lines: input.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
+  });
+  if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
+    return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
+  }
+
   // Per-line assembly is independent of the pricing engine.
   let assemblyTotal = 0;
   const assemblyBySku = new Map<string, number | null>();
   for (const line of input.lines) {
     const p = bySku.get(line.sku)!;
     const wants = !!line.withAssembly && p.allowsAssembly;
-    const price = wants ? ASSEMBLY_PRICE_DEFAULT : null;
+    const quotedAssembly =
+      deliveryQuote.assemblyPricesBySku[line.sku] ?? deliveryQuote.assemblyPrice;
+    const price = wants && quotedAssembly > 0 ? quotedAssembly : null;
     assemblyBySku.set(line.sku, price);
     if (price) assemblyTotal += price * line.qty;
   }
@@ -230,7 +243,10 @@ export async function createOrder(
 
   const subtotal = pricing.subtotal;
   const savings = pricing.savings;
-  const shippingPrice = SHIPPING_PRICE_DEFAULT[input.shippingMethod];
+  const shippingPrice =
+    input.shippingMethod === "KURIR"
+      ? deliveryQuote.prices.kurir
+      : deliveryQuote.prices.kamion;
   const voucherDiscount = pricing.voucherDiscount;
   const voucherCode = pricing.voucherCode;
   const total = Math.max(

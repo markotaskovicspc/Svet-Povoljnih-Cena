@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
+import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import {
   loadOrderForEmail,
   lowerOrderStatus,
@@ -25,6 +27,7 @@ import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/admin/data-table";
+import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -154,10 +157,42 @@ async function modifyMyGlsCOD(formData: FormData) {
   )(formData);
 }
 
-async function markFiscalized(formData: FormData) {
+async function issueFiscalReceiptAction(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.fiscalIssue", entity: "FiscalReceipt" },
+    async (_actorId, formData: FormData) => {
+      const id = String(formData.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
+      const result = await issueAndDeliverFiscalReceipt(id);
+      revalidatePath(`/admin/narudzbine/${id}`);
+      if (!result.outcome.ok) {
+        return {
+          ok: false as const,
+          error: result.outcome.error,
+        };
+      }
+      return {
+        ok: true as const,
+        entityId: result.outcome.receipt.id,
+        diff: {
+          receiptNumber: result.outcome.receipt.receiptNumber,
+          emailed: result.emailed,
+          emailError: result.emailError,
+        },
+        message: result.emailed
+          ? "Fiskalni račun je izdat i poslat kupcu."
+          : "Fiskalni račun je izdat, ali slanje e-pošte nije potvrđeno.",
+      };
+    },
+  )(formData);
+}
+
+async function markFiscalized(_state: AdminActionState, formData: FormData) {
+  "use server";
+
+  return withAdminState(
     { allowed: ["OPS"], action: "order.markFiscalized", entity: "Order" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
@@ -171,7 +206,12 @@ async function markFiscalized(formData: FormData) {
           update: { receiptNumber },
         });
         revalidatePath(`/admin/narudzbine/${id}`);
-        return { ok: true as const, entityId: id, diff: { receiptNumber } };
+        return {
+          ok: true as const,
+          entityId: id,
+          diff: { receiptNumber },
+          message: "Broj fiskalnog računa je sačuvan.",
+        };
       },
   )(formData);
 }
@@ -481,7 +521,13 @@ export default async function OrderDetail({
             <CardTitle description={order.fiscal?.receiptNumber ?? "Nije fiskalizovano"}>
               Fiskalizacija
             </CardTitle>
-            <form action={markFiscalized} className="space-y-2">
+            <AdminActionForm action={issueFiscalReceiptAction} className="mb-4">
+              <input type="hidden" name="id" value={order.id} />
+              <SubmitButton size="sm">
+                {order.fiscal ? "Ponovo pošalji fiskalni račun" : "Izdaj fiskalni račun"}
+              </SubmitButton>
+            </AdminActionForm>
+            <AdminActionForm action={markFiscalized} className="space-y-2">
               <input type="hidden" name="id" value={order.id} />
               <Field label="Broj fiskalnog računa">
                 <input
@@ -494,7 +540,7 @@ export default async function OrderDetail({
               <div className="flex justify-end">
                 <SubmitButton size="sm">Sačuvaj</SubmitButton>
               </div>
-            </form>
+            </AdminActionForm>
           </Card>
 
           {order.reclamations.length > 0 ? (

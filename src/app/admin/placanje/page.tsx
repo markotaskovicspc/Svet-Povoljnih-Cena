@@ -1,7 +1,10 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { PaymentMethod } from "@prisma/client";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
+import { getCheckoutPaymentMethods, clientPaymentMethodToDb } from "@/lib/checkout/config";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -24,10 +27,10 @@ const LABEL: Record<PaymentMethod, string> = {
   POUZECE_KARTICA: "Pouzeće — kartica",
 };
 
-async function updateMethod(formData: FormData) {
+async function updateMethod(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "payment.update", entity: "PaymentMethodConfig" },
     async (_a, formData: FormData) => {
         const method = String(formData.get("method") ?? "") as PaymentMethod;
@@ -44,15 +47,21 @@ async function updateMethod(formData: FormData) {
         });
         revalidatePath("/admin/placanje");
         revalidatePath("/checkout");
-        return { ok: true as const, entityId: method, diff: { enabled, label, note } };
+        revalidatePath("/checkout/podaci");
+        return {
+          ok: true as const,
+          entityId: method,
+          diff: { enabled, label, note },
+          message: "Način plaćanja je sačuvan.",
+        };
       },
   )(formData);
 }
 
 export default async function PaymentsPage() {
   await requireAdminAction(["OPS"]);
-  const configs = await db.paymentMethodConfig.findMany();
-  const map = new Map(configs.map((c) => [c.method, c]));
+  const configs = await getCheckoutPaymentMethods({ enabledOnly: false });
+  const map = new Map(configs.map((c) => [clientPaymentMethodToDb(c.id), c]));
 
   return (
     <>
@@ -67,7 +76,7 @@ export default async function PaymentsPage() {
           return (
             <Card key={method}>
               <CardTitle description={method}>{LABEL[method]}</CardTitle>
-              <form action={updateMethod} className="space-y-3">
+              <AdminActionForm action={updateMethod} className="space-y-3">
                 <input type="hidden" name="method" value={method} />
                 <Field label="Aktivan">
                   <label className="flex items-center gap-2 text-sm">
@@ -89,7 +98,7 @@ export default async function PaymentsPage() {
                 <div className="flex justify-end">
                   <SubmitButton>Sačuvaj</SubmitButton>
                 </div>
-              </form>
+              </AdminActionForm>
             </Card>
           );
         })}

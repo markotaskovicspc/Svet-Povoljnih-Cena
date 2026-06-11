@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { DeliveryScope } from "@prisma/client";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { syncXExpressDictionaries } from "@/lib/x-express/sync";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import {
@@ -18,6 +19,7 @@ import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { DataTable } from "@/components/admin/data-table";
+import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -45,10 +47,10 @@ const ruleSchema = z.object({
     .optional(),
 });
 
-async function upsertRule(formData: FormData) {
+async function upsertRule(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "delivery.upsert", entity: "DeliveryPriceRule" },
     async (_a, formData: FormData) => {
         const parsed = ruleSchema.safeParse(Object.fromEntries(formData));
@@ -67,7 +69,13 @@ async function upsertRule(formData: FormData) {
           ? await db.deliveryPriceRule.update({ where: { id: d.id }, data })
           : await db.deliveryPriceRule.create({ data });
         revalidatePath("/admin/dostava");
-        return { ok: true as const, entityId: saved.id, diff: data };
+        revalidatePath("/checkout/podaci");
+        return {
+          ok: true as const,
+          entityId: saved.id,
+          diff: data,
+          message: "Pravilo dostave je sačuvano.",
+        };
       },
   )(formData);
 }
@@ -87,17 +95,23 @@ async function removeRule(formData: FormData) {
   )(formData);
 }
 
-async function toggleTruck(formData: FormData) {
+async function toggleTruck(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "city.toggleTruck", entity: "DeliveryCity" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         const enabled = formData.get("enabled") === "1";
         await db.deliveryCity.update({ where: { id }, data: { truckEnabled: enabled } });
         revalidatePath("/admin/dostava");
-        return { ok: true as const, entityId: id, diff: { truckEnabled: enabled } };
+        revalidatePath("/checkout/podaci");
+        return {
+          ok: true as const,
+          entityId: id,
+          diff: { truckEnabled: enabled },
+          message: "Dostupnost kamiona je promenjena.",
+        };
       },
   )(formData);
 }
@@ -105,12 +119,12 @@ async function toggleTruck(formData: FormData) {
 async function syncXExpressDictionariesAction() {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "delivery.xExpressDictionarySync", entity: "CourierSyncRun" },
     async () => {
       const result = await syncXExpressDictionaries();
       revalidatePath("/admin/dostava");
-      return { ok: true as const, diff: result };
+      return { ok: true as const, diff: result, message: "X Express šifarnici su osveženi." };
     },
   )();
 }
@@ -118,12 +132,12 @@ async function syncXExpressDictionariesAction() {
 async function syncMyGlsMasterDataAction() {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "delivery.myGlsMasterDataSync", entity: "CourierSyncRun" },
     async () => {
       const result = await syncMyGlsMasterData();
       revalidatePath("/admin/dostava");
-      return { ok: true as const, diff: result };
+      return { ok: true as const, diff: result, message: "MyGLS šifarnici su osveženi." };
     },
   )();
 }
@@ -225,7 +239,7 @@ export default async function DeliveryPage() {
           </Card>
           <Card>
             <CardTitle>Novo pravilo</CardTitle>
-            <form action={upsertRule} className="space-y-3">
+            <AdminActionForm action={upsertRule} className="space-y-3">
               <Field label="Opseg">
                 <select
                   name="scope"
@@ -280,7 +294,7 @@ export default async function DeliveryPage() {
               <div className="flex justify-end">
                 <SubmitButton>Dodaj</SubmitButton>
               </div>
-            </form>
+            </AdminActionForm>
           </Card>
         </div>
 
@@ -300,9 +314,9 @@ export default async function DeliveryPage() {
                 </p>
                 <SyncRunList runs={xRuns} />
               </div>
-              <form action={syncXExpressDictionariesAction}>
+              <AdminActionForm action={syncXExpressDictionariesAction}>
                 <SubmitButton variant="outline">Osveži X Express</SubmitButton>
-              </form>
+              </AdminActionForm>
             </div>
           </Card>
 
@@ -321,9 +335,9 @@ export default async function DeliveryPage() {
                 </p>
                 <SyncRunList runs={glsRuns} />
               </div>
-              <form action={syncMyGlsMasterDataAction}>
+              <AdminActionForm action={syncMyGlsMasterDataAction}>
                 <SubmitButton variant="outline">Osveži MyGLS</SubmitButton>
-              </form>
+              </AdminActionForm>
             </div>
           </Card>
         </div>
@@ -346,7 +360,7 @@ export default async function DeliveryPage() {
                 postal: c.postalCode ?? "—",
                 truck: c.truckEnabled ? "✓" : "—",
                 actions: (
-                  <form action={toggleTruck}>
+                  <AdminActionForm action={toggleTruck}>
                     <input type="hidden" name="id" value={c.id} />
                     <input
                       type="hidden"
@@ -356,7 +370,7 @@ export default async function DeliveryPage() {
                     <SubmitButton variant="outline" size="xs">
                       {c.truckEnabled ? "Isključi" : "Uključi"} kamion
                     </SubmitButton>
-                  </form>
+                  </AdminActionForm>
                 ),
               },
             }))}

@@ -10,5 +10,15 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid", issues: parsed.error.flatten() }, { status: 400 });
   }
-  return NextResponse.json(presignUpload(parsed.data));
+  try {
+    return NextResponse.json(await presignUpload(parsed.data));
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "upload_unavailable",
+        message: err instanceof Error ? err.message : "Upload trenutno nije dostupan.",
+      },
+      { status: 503 },
+    );
+  }
 }

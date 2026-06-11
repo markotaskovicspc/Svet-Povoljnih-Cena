@@ -4,12 +4,13 @@ import Image from "next/image";
 import { Loader2, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
+import { useCheckout } from "@/lib/checkout/store";
 import {
-  ASSEMBLY_PRICE_DEFAULT,
-  PAYMENT_LABELS,
   SHIPPING_PRICES,
-  useCheckout,
-} from "@/lib/checkout/store";
+  getPaymentLabel,
+  type CheckoutDeliveryQuote,
+  type CheckoutPaymentMethodConfig,
+} from "@/lib/checkout/config-shared";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
@@ -30,14 +31,16 @@ export function computeTotals({
   shippingMethod,
   assemblyTotal,
   voucherDiscountRsd,
+  shippingPrices = SHIPPING_PRICES,
 }: {
   itemsFull: number;
   itemsSale: number;
   shippingMethod: ShippingMethod;
   assemblyTotal: number;
   voucherDiscountRsd: number;
+  shippingPrices?: Record<ShippingMethod, number>;
 }): SummaryTotals {
-  const shipping = SHIPPING_PRICES[shippingMethod];
+  const shipping = shippingPrices[shippingMethod];
   const voucherDiscount = Math.min(Math.max(0, voucherDiscountRsd), itemsSale);
   const total = itemsSale + shipping + assemblyTotal - voucherDiscount;
   return {
@@ -52,6 +55,8 @@ export function computeTotals({
 }
 
 interface OrderSummaryProps {
+  deliveryQuote: CheckoutDeliveryQuote;
+  paymentMethods?: CheckoutPaymentMethodConfig[];
   shippingMethod: ShippingMethod;
   paymentMethod?: PaymentMethod | null;
   perItemAssembly?: Record<SKU, boolean>;
@@ -62,6 +67,8 @@ interface OrderSummaryProps {
 }
 
 export function OrderSummary({
+  deliveryQuote,
+  paymentMethods,
   shippingMethod,
   paymentMethod,
   perItemAssembly,
@@ -78,7 +85,11 @@ export function OrderSummary({
     shippingMethod === "kamion" && perItemAssembly
       ? lines.reduce(
           (n, l) =>
-            n + (perItemAssembly[l.sku] ? ASSEMBLY_PRICE_DEFAULT * l.qty : 0),
+            n +
+            (perItemAssembly[l.sku]
+              ? (deliveryQuote.assemblyPricesBySku[l.sku] ??
+                  deliveryQuote.assemblyPrice) * l.qty
+              : 0),
           0,
         )
       : 0;
@@ -89,6 +100,7 @@ export function OrderSummary({
     shippingMethod,
     assemblyTotal,
     voucherDiscountRsd: voucher?.discountRsd ?? 0,
+    shippingPrices: deliveryQuote.prices,
   });
 
   return (
@@ -187,7 +199,7 @@ export function OrderSummary({
 
         {paymentMethod ? (
           <p className="text-[11px] text-ink-500">
-            Način plaćanja: {PAYMENT_LABELS[paymentMethod]}
+            Način plaćanja: {getPaymentLabel(paymentMethod, paymentMethods)}
           </p>
         ) : null}
         <p className="text-[11px] text-ink-500">

@@ -15,13 +15,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, ShoppingBag } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import {
-  ASSEMBLY_PRICE_DEFAULT,
-  PAYMENT_LABELS,
-  SHIPPING_PRICES,
   useCheckout,
   type CheckoutStep,
   type IdentityChoice,
 } from "@/lib/checkout/store";
+import {
+  getPaymentLabel,
+  type CheckoutConfig,
+  type CheckoutDeliveryQuote,
+  type CheckoutPaymentMethodConfig,
+} from "@/lib/checkout/config-shared";
 import { cn } from "@/lib/utils";
 import { formatRsd } from "@/lib/format";
 import type {
@@ -120,15 +123,20 @@ const STEP_TITLES: Record<CheckoutStep, string> = {
  * `/checkout/potvrda`. Real `POST /api/orders` lands in Phase 3.
  */
 export function CheckoutFlow({
+  checkoutConfig,
   initialCustomer,
   glsDeliveryPointsEnabled = false,
 }: {
+  checkoutConfig: CheckoutConfig;
   initialCustomer?: CheckoutInitialCustomer;
   glsDeliveryPointsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [deliveryQuote, setDeliveryQuote] = useState<CheckoutDeliveryQuote>(
+    checkoutConfig.deliveryQuote,
+  );
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const clearCart = useCart((s) => s.clear);
@@ -160,7 +168,7 @@ export function CheckoutFlow({
       shippingMethod: "kurir",
       glsDeliveryPoint: null,
       perItemAssembly: {},
-      paymentMethod: "pouzece_gotovina",
+      paymentMethod: checkoutConfig.defaultPaymentMethod,
       voucherCode: "",
       notes: "",
       consent: false,
@@ -175,6 +183,10 @@ export function CheckoutFlow({
   const paymentMethod = useWatch({
     control: methods.control,
     name: "paymentMethod",
+  });
+  const shippingCity = useWatch({
+    control: methods.control,
+    name: "shipping.city",
   });
   const perItemAssembly = useWatch({
     control: methods.control,
@@ -193,6 +205,62 @@ export function CheckoutFlow({
       setValue("perItemAssembly", next, { shouldDirty: true });
     }
   }, [getValues, lines, setValue]);
+
+  useEffect(() => {
+    const enabled = new Set(checkoutConfig.paymentMethods.map((method) => method.id));
+    if (enabled.has(getValues("paymentMethod"))) return;
+    const nextMethod =
+      checkoutConfig.paymentMethods[0]?.id ?? checkoutConfig.defaultPaymentMethod;
+    setValue("paymentMethod", nextMethod, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [checkoutConfig.defaultPaymentMethod, checkoutConfig.paymentMethods, getValues, setValue]);
+
+  const quoteLineKey = useMemo(
+    () =>
+      lines
+        .map((line) => `${line.sku}:${line.qty}`)
+        .sort()
+        .join("|"),
+    [lines],
+  );
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/checkout/delivery-quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            city: shippingCity,
+            lines: lines.map((line) => ({ sku: line.sku, qty: line.qty })),
+          }),
+        });
+        const result = (await response.json().catch(() => null)) as
+          | { ok: true; data: CheckoutDeliveryQuote }
+          | null;
+        if (response.ok && result?.ok) {
+          setDeliveryQuote(result.data);
+          if (!result.data.truckAvailable && getValues("shippingMethod") === "kamion") {
+            setValue("shippingMethod", "kurir", {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [getValues, hydrated, lines, quoteLineKey, setValue, shippingCity]);
 
   // Keep identity in store + form synced.
   useEffect(() => {
@@ -308,6 +376,7 @@ export function CheckoutFlow({
     const order = buildOrder({
       data,
       lines,
+      deliveryQuote,
       voucherDiscountRsd: voucher?.discountRsd ?? 0,
       voucherCode: voucher?.code,
       orderNumber: result.data.number,
@@ -412,14 +481,20 @@ export function CheckoutFlow({
                   {step === "method" ? (
                     <div className="flex flex-col gap-5">
                       <ShippingMethodStep
+                        deliveryQuote={deliveryQuote}
                         glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
                       />
                       <VoucherSection />
                     </div>
                   ) : null}
-                  {step === "payment" ? <PaymentMethodStep /> : null}
+                  {step === "payment" ? (
+                    <PaymentMethodStep methods={checkoutConfig.paymentMethods} />
+                  ) : null}
                   {step === "review" ? (
-                    <ReviewStep />
+                    <ReviewStep
+                      deliveryQuote={deliveryQuote}
+                      paymentMethods={checkoutConfig.paymentMethods}
+                    />
                   ) : null}
                 </motion.div>
               </AnimatePresence>
@@ -501,6 +576,8 @@ export function CheckoutFlow({
         </form>
 
         <OrderSummary
+          deliveryQuote={deliveryQuote}
+          paymentMethods={checkoutConfig.paymentMethods}
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
@@ -523,7 +600,13 @@ export function CheckoutFlow({
   );
 }
 
-function ReviewStep() {
+function ReviewStep({
+  deliveryQuote,
+  paymentMethods,
+}: {
+  deliveryQuote: CheckoutDeliveryQuote;
+  paymentMethods: CheckoutPaymentMethodConfig[];
+}) {
   const data = useFormContext<CheckoutFormData>().getValues();
   const lines = useCart((s) => s.lines);
   const voucher = useCheckout((s) => s.voucher);
@@ -539,14 +622,15 @@ function ReviewStep() {
                 (n, l) =>
                   n +
                   (data.perItemAssembly?.[l.sku]
-                    ? ASSEMBLY_PRICE_DEFAULT * l.qty
+                    ? lineAssemblyPrice(deliveryQuote, l.sku) * l.qty
                     : 0),
                 0,
               )
             : 0,
         voucherDiscountRsd: voucher?.discountRsd ?? 0,
+        shippingPrices: deliveryQuote.prices,
       }),
-    [lines, data.shippingMethod, data.perItemAssembly, voucher],
+    [deliveryQuote, lines, data.shippingMethod, data.perItemAssembly, voucher],
   );
 
   return (
@@ -571,7 +655,7 @@ function ReviewStep() {
             {data.shippingMethod === "kurir"
               ? "Kurirska služba"
               : "Kamionska isporuka"}{" "}
-            · {formatRsd(SHIPPING_PRICES[data.shippingMethod])}
+            · {formatRsd(deliveryQuote.prices[data.shippingMethod])}
           </p>
           {data.shippingMethod === "kurir" && data.glsDeliveryPoint ? (
             <p className="mt-1 text-xs text-ink-500">
@@ -580,7 +664,9 @@ function ReviewStep() {
           ) : null}
         </ReviewBlock>
         <ReviewBlock title="Plaćanje">
-          <p className="text-sm text-ink-700">{PAYMENT_LABELS[data.paymentMethod]}</p>
+          <p className="text-sm text-ink-700">
+            {getPaymentLabel(data.paymentMethod, paymentMethods)}
+          </p>
         </ReviewBlock>
         <ReviewBlock title="Iznos">
           <p className="text-sm text-ink-700 tabular-nums">
@@ -809,6 +895,10 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
       return "Unesite e-mail adresu za porudžbinu kao gost.";
     case "DELIVERY_POINT_INVALID":
       return "Izabrana MyGLS paket tačka više nije dostupna. Izaberite drugu lokaciju ili dostavu na adresu.";
+    case "PAYMENT_UNAVAILABLE":
+      return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
+    case "DELIVERY_UNAVAILABLE":
+      return "Izabrani način isporuke trenutno nije dostupan za uneti grad.";
     case "EMPTY_CART":
       return "Korpa je prazna.";
     default:
@@ -816,15 +906,21 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
   }
 }
 
+function lineAssemblyPrice(deliveryQuote: CheckoutDeliveryQuote, sku: SKU) {
+  return deliveryQuote.assemblyPricesBySku[sku] ?? deliveryQuote.assemblyPrice;
+}
+
 function buildOrder({
   data,
   lines,
+  deliveryQuote,
   voucherDiscountRsd,
   voucherCode,
   orderNumber,
 }: {
   data: CheckoutFormData;
   lines: ReturnType<typeof useCart.getState>["lines"];
+  deliveryQuote: CheckoutDeliveryQuote;
   voucherDiscountRsd: number;
   voucherCode?: string;
   orderNumber: string;
@@ -837,7 +933,7 @@ function buildOrder({
           (n, l) =>
             n +
             (data.perItemAssembly?.[l.sku]
-              ? ASSEMBLY_PRICE_DEFAULT * l.qty
+              ? lineAssemblyPrice(deliveryQuote, l.sku) * l.qty
               : 0),
           0,
         )
@@ -848,6 +944,7 @@ function buildOrder({
     shippingMethod: data.shippingMethod,
     assemblyTotal,
     voucherDiscountRsd,
+    shippingPrices: deliveryQuote.prices,
   });
 
   const shippingAddress: Address = {
@@ -892,7 +989,7 @@ function buildOrder({
       unitPriceSale: l.unitPriceSale,
       withAssembly: Boolean(data.perItemAssembly?.[l.sku]),
       assemblyPrice: data.perItemAssembly?.[l.sku]
-        ? ASSEMBLY_PRICE_DEFAULT
+        ? lineAssemblyPrice(deliveryQuote, l.sku)
         : undefined,
       thumbnailUrl: l.thumbnailUrl,
     })),

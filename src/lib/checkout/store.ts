@@ -10,7 +10,12 @@
  * a summary without re-reading the cart (cart gets cleared post-submit).
  */
 import { create } from "zustand";
-import type { Address, Order, PaymentMethod, ShippingMethod } from "@/types";
+import type { Address, Order } from "@/types";
+export {
+  ASSEMBLY_PRICE_DEFAULT,
+  PAYMENT_LABELS,
+  SHIPPING_PRICES,
+} from "./config-shared";
 
 export type CheckoutStep =
   | "identity"
@@ -59,25 +64,5 @@ export const useCheckout = create<CheckoutState>()((set) => ({
       lastOrder: null,
     }),
 }));
-
-/**
- * Pricing constants. Real prices come from delivery rules in Phase 3 (admin-driven).
- */
-export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
-  kurir: 990,
-  kamion: 4990,
-};
-
-export const ASSEMBLY_PRICE_DEFAULT = 2990;
-
-export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  ips: "IPS NBS",
-  kartica: "Platna kartica",
-  google_pay: "Google Pay",
-  apple_pay: "Apple Pay",
-  uplata_na_racun: "Uplata na račun",
-  pouzece_gotovina: "Pouzeće — gotovina",
-  pouzece_kartica: "Pouzeće — kartica",
-};
 
 export type AddressDraft = Omit<Address, "id"> & { liceType?: "fizicko" | "pravno" };

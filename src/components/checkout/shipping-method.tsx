@@ -5,41 +5,30 @@ import { useFormContext } from "react-hook-form";
 import { Loader2, MapPin, PackageOpen, Search, Truck, Wrench } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCart } from "@/lib/hooks/use-cart";
-import {
-  SHIPPING_PRICES,
-  ASSEMBLY_PRICE_DEFAULT,
-} from "@/lib/checkout/store";
+import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CheckoutDeliveryPoint, CheckoutFormData } from "./checkout-flow";
 
-const ASSEMBLY_CITY_ALLOWLIST = new Set([
-  "Beograd",
-  "Novi Sad",
-  "Niš",
-  "Kragujevac",
-  "Subotica",
-  "Pančevo",
-]);
-
 /**
  * Step 3 — Shipping method.
- * Kamionska is hidden for cities outside the assembly allowlist.
+ * Kamionska is hidden when the admin delivery settings disable it for a city.
  * When selected, every cart line gets a per-item assembly toggle.
  */
 export function ShippingMethodStep({
+  deliveryQuote,
   glsDeliveryPointsEnabled = false,
 }: {
+  deliveryQuote: CheckoutDeliveryQuote;
   glsDeliveryPointsEnabled?: boolean;
 }) {
   const { register, watch, setValue } = useFormContext<CheckoutFormData>();
   const lines = useCart((s) => s.lines);
-  const city = watch("shipping.city");
   const method = watch("shippingMethod");
   const perItemAssembly = watch("perItemAssembly");
   const glsDeliveryPoint = watch("glsDeliveryPoint");
 
-  const showKamion = city ? ASSEMBLY_CITY_ALLOWLIST.has(city.trim()) : true;
+  const showKamion = deliveryQuote.truckAvailable;
 
   useEffect(() => {
     if (method !== "kurir") {
@@ -54,7 +43,7 @@ export function ShippingMethodStep({
           id="kurir"
           label="Kurirska služba"
           desc="Brza dostava manjih pakovanja na adresu (1–3 dana)."
-          price={SHIPPING_PRICES.kurir}
+          price={deliveryQuote.prices.kurir}
           icon={Truck}
           checked={method === "kurir"}
           {...register("shippingMethod")}
@@ -64,7 +53,7 @@ export function ShippingMethodStep({
             id="kamion"
             label="Kamionska isporuka"
             desc="Za nameštaj velikih dimenzija — uključuje unos do stana."
-            price={SHIPPING_PRICES.kamion}
+            price={deliveryQuote.prices.kamion}
             icon={PackageOpen}
             checked={method === "kamion"}
             {...register("shippingMethod")}
@@ -104,38 +93,50 @@ export function ShippingMethodStep({
             </span>
           </div>
           <ul className="divide-border/60 divide-y">
-            {lines.map((l) => (
-              <li
-                key={l.sku}
-                className="flex items-center justify-between gap-3 py-3 text-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-ink-900">{l.name}</p>
-                  <p className="text-[11px] text-ink-500">SKU {l.sku}</p>
-                </div>
-                <span className="text-walnut text-xs font-medium tabular-nums">
-                  +{formatRsd(ASSEMBLY_PRICE_DEFAULT)}
-                </span>
-                <label className="inline-flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    className="accent-walnut size-4"
-                    checked={Boolean(perItemAssembly?.[l.sku])}
-                    onChange={(e) =>
-                      setValue(
-                        "perItemAssembly",
-                        {
-                          ...(perItemAssembly ?? {}),
-                          [l.sku]: e.target.checked,
-                        },
-                        { shouldDirty: true },
-                      )
-                    }
-                  />
-                  <span className="text-xs text-ink-700">Dodaj montažu</span>
-                </label>
-              </li>
-            ))}
+            {lines.map((l) => {
+              const assemblyPrice =
+                deliveryQuote.assemblyPricesBySku[l.sku] ??
+                deliveryQuote.assemblyPrice;
+              const assemblyAvailable = assemblyPrice > 0;
+              return (
+                <li
+                  key={l.sku}
+                  className="flex items-center justify-between gap-3 py-3 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-ink-900">{l.name}</p>
+                    <p className="text-[11px] text-ink-500">SKU {l.sku}</p>
+                  </div>
+                  <span className="text-walnut text-xs font-medium tabular-nums">
+                    {assemblyAvailable ? `+${formatRsd(assemblyPrice)}` : "Nedostupno"}
+                  </span>
+                  <label
+                    className={cn(
+                      "inline-flex items-center gap-2",
+                      assemblyAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-walnut size-4"
+                      disabled={!assemblyAvailable}
+                      checked={Boolean(perItemAssembly?.[l.sku]) && assemblyAvailable}
+                      onChange={(e) =>
+                        setValue(
+                          "perItemAssembly",
+                          {
+                            ...(perItemAssembly ?? {}),
+                            [l.sku]: e.target.checked,
+                          },
+                          { shouldDirty: true },
+                        )
+                      }
+                    />
+                    <span className="text-xs text-ink-700">Dodaj montažu</span>
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         </motion.div>
       ) : null}
