@@ -8,7 +8,7 @@ export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
 export const ASSEMBLY_PRICE_DEFAULT = 2990;
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  ips: "IPS NBS",
+  ips: "Raiffeisen IPS",
   kartica: "Platna kartica",
   google_pay: "Google Pay",
   apple_pay: "Apple Pay",

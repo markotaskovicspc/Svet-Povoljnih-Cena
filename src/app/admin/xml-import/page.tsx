@@ -66,11 +66,30 @@ async function triggerImport(formData: FormData) {
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID dobavljača." };
-        const summary = await importSupplier(id);
+        const dryRun = formData.get("dryRun") === "on" || formData.get("dryRun") === "true";
+        const summary = await importSupplier(id, { dryRun });
         revalidatePath("/admin/xml-import");
-        return { ok: true as const, entityId: id, diff: summary as unknown as Record<string, unknown> };
+        return {
+          ok: true as const,
+          entityId: id,
+          diff: { dryRun, summary } as unknown as Record<string, unknown>,
+        };
       },
   )(formData);
+}
+
+function formatRunErrors(value: Prisma.JsonValue | null) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  return value
+    .slice(0, 3)
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return String(item);
+      const record = item as Record<string, Prisma.JsonValue>;
+      const externalId = typeof record.externalId === "string" ? `${record.externalId}: ` : "";
+      const message = typeof record.message === "string" ? record.message : JSON.stringify(record);
+      return `${externalId}${message}`;
+    })
+    .join("\n");
 }
 
 export default async function XmlImportPage({
@@ -121,10 +140,17 @@ export default async function XmlImportPage({
                   ) : "—",
                   enabled: s.enabled ? "Da" : "Ne",
                   actions: (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <a href={`?supplier=${s.id}`} className="text-xs text-walnut hover:underline">
                         Izmeni
                       </a>
+                      <form action={triggerImport}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <input type="hidden" name="dryRun" value="true" />
+                        <SubmitButton size="sm" variant="secondary" pendingLabel="Proveravam…">
+                          Preview
+                        </SubmitButton>
+                      </form>
                       <form action={triggerImport}>
                         <input type="hidden" name="id" value={s.id} />
                         <SubmitButton size="sm" pendingLabel="Importujem…">Pokreni import</SubmitButton>
@@ -142,6 +168,7 @@ export default async function XmlImportPage({
             <DataTable
               columns={[
                 { key: "supplier", label: "Dobavljač" },
+                { key: "mode", label: "Mod" },
                 { key: "started", label: "Početak" },
                 { key: "duration", label: "Trajanje" },
                 { key: "status", label: "Status" },
@@ -152,6 +179,7 @@ export default async function XmlImportPage({
                 id: r.id,
                 cells: {
                   supplier: r.supplier.name,
+                  mode: r.dryRun ? "Preview" : "Import",
                   started: r.startedAt.toLocaleString("sr-Latn-RS"),
                   duration: r.finishedAt
                     ? `${Math.round((r.finishedAt.getTime() - r.startedAt.getTime()) / 1000)}s`
@@ -172,9 +200,9 @@ export default async function XmlImportPage({
                     </span>
                   ),
                   stats: `${r.recordsOk} / ${r.recordsFail} / ${r.recordsRead}`,
-                  error: r.errorMessage ? (
+                  error: r.errorMessage || r.errors ? (
                     <span className="line-clamp-2 max-w-xs text-xs text-destructive">
-                      {r.errorMessage}
+                      {[r.errorMessage, formatRunErrors(r.errors)].filter(Boolean).join("\n")}
                     </span>
                   ) : "—",
                 },

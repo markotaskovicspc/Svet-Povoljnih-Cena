@@ -55,7 +55,9 @@ export function OrderStatusChanged({
   trackingUrl,
 }: OrderStatusChangedProps) {
   const copy = STATUS_COPY[status];
-  const orderUrl = `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`;
+  const orderUrl = order.userId
+    ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
+    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
   return (
     <EmailLayout preview={`${copy.title} — ${order.id}`}>
       <EmailHeading>{copy.title}</EmailHeading>

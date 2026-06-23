@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import type { Order } from "@/types";
+import { verifyOrderAccessToken } from "@/lib/api/order-access";
 
 /**
  * Order history reads for `/nalog/porudzbine`.
@@ -87,20 +88,33 @@ const PAYMENT_STATUS_LOWER = {
   PARTIAL_REFUND: "partial_refund",
 } as const;
 
-export async function getPublicOrderForConfirmation(numberOrId: string): Promise<Order | null> {
+export async function getPublicOrderForConfirmation(
+  numberOrId: string,
+  accessToken?: string | null,
+): Promise<Order | null> {
   const row = await db.order.findFirst({
     where: { OR: [{ id: numberOrId }, { number: numberOrId }] },
     include: {
       items: { orderBy: { id: "asc" } },
       payments: { orderBy: { createdAt: "desc" }, take: 1 },
+      user: { select: { email: true } },
     },
   });
   if (!row) return null;
+  if (
+    !verifyOrderAccessToken({
+      token: accessToken,
+      tokenHash: row.publicAccessTokenHash,
+    })
+  ) {
+    return null;
+  }
 
   return {
     id: row.number,
     userId: row.userId ?? undefined,
     guestEmail: row.guestEmail ?? undefined,
+    customerEmail: row.user?.email ?? row.guestEmail ?? undefined,
     status: ORDER_STATUS_LOWER[row.status],
     items: row.items.map((i) => ({
       sku: i.sku,

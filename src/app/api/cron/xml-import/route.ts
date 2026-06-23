@@ -34,12 +34,13 @@ async function run(req: Request) {
   }
   const url = new URL(req.url);
   const supplierId = url.searchParams.get("supplierId");
+  const dryRun = url.searchParams.get("dryRun") === "1";
   try {
     if (supplierId) {
-      const summary = await importSupplier(supplierId);
+      const summary = await importSupplier(supplierId, { dryRun });
       return NextResponse.json({ ok: true, summary });
     }
-    const summaries = await importAllSuppliers();
+    const summaries = await importAllSuppliers({ dryRun });
     return NextResponse.json({ ok: true, summaries });
   } catch (err) {
     return NextResponse.json(

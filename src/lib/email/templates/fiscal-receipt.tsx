@@ -19,7 +19,9 @@ export function FiscalReceiptEmail({
   qrUrl,
   baseUrl = "https://www.svetpovoljnihcena.rs",
 }: FiscalReceiptProps) {
-  const orderUrl = `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`;
+  const orderUrl = order.userId
+    ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
+    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
   return (
     <EmailLayout preview={`Fiskalni račun ${receiptNumber}`}>
       <EmailHeading>Fiskalni račun je izdat</EmailHeading>

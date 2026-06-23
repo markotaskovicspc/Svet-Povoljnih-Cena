@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
-import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import { loadOrderForEmail, sendIpsPaymentConfirmation } from "@/lib/email";
 import type {
   CreatePaymentResult,
   PaymentProviderAdapter,
@@ -61,8 +61,8 @@ export function getIpsConfig(): IpsConfig {
   const tid = process.env.IPS_TID;
   const publicBaseUrl = (
     process.env.IPS_PUBLIC_BASE_URL ??
+    process.env.NEXT_PUBLIC_BASE_URL ??
     process.env.NEXTAUTH_URL ??
-    process.env.WSPAY_PUBLIC_BASE_URL ??
     ""
   ).replace(/\/$/, "");
 
@@ -175,12 +175,17 @@ async function refundPayment(
 ): Promise<RefundPaymentResult> {
   const order = await db.order.findFirst({
     where: { OR: [{ id: orderId }, { number: orderId }] },
-    select: { id: true, number: true },
+    select: { id: true, number: true, total: true },
   });
   if (!order) throw new Error(`Porudžbina ${orderId} ne postoji.`);
 
   const cfg = getIpsConfig();
   const token = await getSessionToken(cfg);
+  const orderTotal = num(order.total);
+  if (amount > orderTotal) {
+    throw new Error("IPS povraćaj ne može biti veći od iznosa porudžbine.");
+  }
+  const refundStatus = amount < orderTotal ? "PARTIAL_REFUND" : "REFUNDED";
   const rawRequest = {
     tid: cfg.tid,
     amount: formatIpsAmount(amount),
@@ -206,7 +211,7 @@ async function refundPayment(
         await tx.payment.update({
           where: { id: payment.id },
           data: {
-            status: "REFUNDED",
+            status: refundStatus,
             rawRequest: rawRequest as Prisma.InputJsonValue,
             rawResponse: rawResponse as Prisma.InputJsonValue,
           },
@@ -216,7 +221,10 @@ async function refundPayment(
         data: {
           orderId: order.id,
           status: "VRACENO",
-          note: "Povraćaj sredstava izvršen preko IPS sistema.",
+          note:
+            refundStatus === "PARTIAL_REFUND"
+              ? `Delimičan povraćaj sredstava izvršen preko IPS sistema (${rawRequest.amount} RSD).`
+              : "Povraćaj sredstava izvršen preko IPS sistema.",
         },
       });
     });
@@ -355,6 +363,7 @@ async function applyIpsResult(
         where: { id: existing.id },
         data: {
           status,
+          providerRef: payload.paymentReference ?? undefined,
           paymentReference: payload.paymentReference ?? undefined,
           rawRequest: request,
           rawResponse: raw,
@@ -399,14 +408,13 @@ async function applyIpsResult(
       try {
         const loaded = await loadOrderForEmail(order.id);
         if (loaded?.recipient) {
-          await sendOrderStatusChanged({
+          await sendIpsPaymentConfirmation({
             order: loaded.order,
-            status: "potvrdjeno",
             to: loaded.recipient,
           });
         }
       } catch (err) {
-        console.error("[email] order-status (ips) failed", err);
+        console.error("[email] ips-payment-confirmation failed", err);
       }
     })();
   }

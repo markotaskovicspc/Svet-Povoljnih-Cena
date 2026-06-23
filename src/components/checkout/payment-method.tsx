@@ -28,7 +28,7 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
   ips: {
     id: "ips",
     icon: ScanLine,
-    short: "Payten IPS QR/deep-link plaćanje preko banke.",
+    short: "Raiffeisen IPS QR/deep-link plaćanje preko m-banking aplikacije.",
     details: (
       <div className="flex flex-col gap-2">
         <Image
@@ -39,8 +39,8 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
           className="h-9 w-auto"
         />
         <p>
-          Posle potvrde porudžbine preusmeravamo vas na stranu banke gde se
-          prikazuje QR kod ili otvara m-banking deep link.
+          Posle potvrde porudžbine preusmeravamo vas na Raiffeisen IPS stranu
+          gde se prikazuje QR kod ili otvara m-banking deep link.
         </p>
       </div>
     ),
@@ -48,11 +48,11 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
   kartica: {
     id: "kartica",
     icon: CreditCard,
-    short: "Visa, Mastercard, DinaCard — uskoro nakon Raiffeisen aktivacije.",
+    short: "Visa, Mastercard, DinaCard — kartično plaćanje preko WSPay-a.",
     details: (
       <p>
-        Kartično plaćanje uključujemo nakon završetka Raiffeisen e-commerce
-        ugovora i dostavljene API dokumentacije za kartice.
+        Kartično plaćanje ide odvojeno od IPS-a, preko WSPay hosted strane i
+        3-D Secure provere.
       </p>
     ),
   },
@@ -60,14 +60,14 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
     id: "google_pay",
     icon: Wallet,
     short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
-    details: <p>Google Pay aktiviramo zajedno sa Raiffeisen kartičnim plaćanjem.</p>,
+    details: <p>Google Pay radi kroz kartični WSPay tok kada je metod aktivan.</p>,
   },
   apple_pay: {
     id: "apple_pay",
     icon: Apple,
     short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
     details: (
-      <p>Apple Pay aktiviramo zajedno sa Raiffeisen kartičnim plaćanjem.</p>
+      <p>Apple Pay radi kroz kartični WSPay tok kada je metod aktivan.</p>
     ),
   },
   uplata_na_racun: {

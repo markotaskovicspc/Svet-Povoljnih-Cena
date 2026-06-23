@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { ProductCard } from "@/components/product/product-card";
-import { suggest } from "@/lib/api/search";
+import { searchProducts } from "@/lib/api/search";
 import { getProductBySlug } from "@/lib/api/catalog";
 import type { Product } from "@/types";
 import type { SearchHit } from "@/types/search";
@@ -58,7 +58,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
 async function getHits(query: string): Promise<SearchHit[]> {
   try {
-    return await suggest(query, 48);
+    return await searchProducts(query, 72);
   } catch (error) {
     console.error("[pretraga]", error);
     return [];

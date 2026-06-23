@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Download,
   Eye,
@@ -85,10 +86,6 @@ function storageKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:views`;
 }
 
-function rowEditsKey(moduleSlug: string) {
-  return `svet-akcija:erp:${moduleSlug}:row-edits`;
-}
-
 function columnOrderKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:column-order`;
 }
@@ -106,21 +103,6 @@ function readViews(moduleSlug: string): SavedView[] {
 function writeViews(moduleSlug: string, views: SavedView[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(storageKey(moduleSlug), JSON.stringify(views));
-}
-
-function readRowEdits(moduleSlug: string): Record<string, Record<string, ErpValue>> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(rowEditsKey(moduleSlug));
-    return raw ? (JSON.parse(raw) as Record<string, Record<string, ErpValue>>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeRowEdits(moduleSlug: string, edits: Record<string, Record<string, ErpValue>>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(rowEditsKey(moduleSlug), JSON.stringify(edits));
 }
 
 function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
@@ -160,6 +142,7 @@ function inputType(column: ErpColumn) {
 }
 
 export function ErpGrid({ module }: { module: ErpModule }) {
+  const router = useRouter();
   const defaultColumns = useMemo(
     () =>
       module.columns
@@ -170,17 +153,18 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<FilterCriterion[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
+  const [cellEdits, setCellEdits] = useState<Record<string, Record<string, ErpValue>>>({});
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     readColumnOrder(module.slug, module.columns),
-  );
-  const [rowEdits, setRowEdits] = useState<Record<string, Record<string, ErpValue>>>(() =>
-    readRowEdits(module.slug),
   );
   const [views, setViews] = useState<SavedView[]>(() => readViews(module.slug));
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [savedCellCount, setSavedCellCount] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingCell, setSavingCell] = useState<EditingCell>(null);
 
   const visible = useMemo(
     () => {
@@ -199,19 +183,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         ...row,
         values: {
           ...row.values,
-          ...(rowEdits[row.id] ?? {}),
+          ...(cellEdits[row.id] ?? {}),
         },
       })),
-    [module.rows, rowEdits],
-  );
-
-  const editedCellCount = useMemo(
-    () =>
-      Object.values(rowEdits).reduce(
-        (count, values) => count + Object.keys(values).length,
-        0,
-      ),
-    [rowEdits],
+    [cellEdits, module.rows],
   );
 
   const getSelectOptions = (column: ErpColumn, currentValue: ErpValue) => {
@@ -288,26 +263,47 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     setQuery(view.query);
   };
 
-  const commitCell = (row: ErpRow, column: ErpColumn, value: ErpValue) => {
+  const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
     if (!isEditMode) return;
-    const next = {
-      ...rowEdits,
+    setEditingCell(null);
+    setSaveError(null);
+    setSavingCell({ rowId: row.id, columnKey: column.key });
+    const previousEdits = cellEdits;
+    setCellEdits((current) => ({
+      ...current,
       [row.id]: {
-        ...(rowEdits[row.id] ?? {}),
+        ...(current[row.id] ?? {}),
         [column.key]: value,
       },
-    };
-    setRowEdits(next);
-    writeRowEdits(module.slug, next);
-    setEditingCell(null);
+    }));
+    try {
+      const res = await fetch(
+        `/api/admin/erp/${encodeURIComponent(module.slug)}/rows/${encodeURIComponent(row.id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ columnKey: column.key, value }),
+        },
+      );
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "ERP izmena nije snimljena.");
+      }
+      setSavedCellCount((count) => count + 1);
+    } catch (err) {
+      setCellEdits(previousEdits);
+      setSaveError(err instanceof Error ? err.message : "ERP izmena nije snimljena.");
+    } finally {
+      setSavingCell(null);
+    }
   };
 
-  const resetEdits = () => {
-    const confirmed = window.confirm("Poništiti sve lokalne izmene u ovoj ERP tabeli?");
-    if (!confirmed) return;
-    setRowEdits({});
-    writeRowEdits(module.slug, {});
+  const refreshRows = () => {
     setEditingCell(null);
+    setSavedCellCount(0);
+    setCellEdits({});
+    setSaveError(null);
+    router.refresh();
   };
 
   const resetColumns = () => {
@@ -460,22 +456,28 @@ export function ErpGrid({ module }: { module: ErpModule }) {
               <Download className="size-4" aria-hidden />
               Excel
             </Button>
-            {editedCellCount ? (
-              <Button type="button" variant="outline" onClick={resetEdits}>
+            {savedCellCount ? (
+              <Button type="button" variant="outline" onClick={refreshRows}>
                 <RotateCcw className="size-4" aria-hidden />
-                Poništi izmene
+                Osveži podatke
               </Button>
             ) : null}
           </div>
         </div>
       </div>
 
+      {saveError ? (
+        <div className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {saveError}
+        </div>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <p className="text-sm text-ink-500">
               {filteredRows.length} redova · {visible.length} vidljivih kolona
-              {editedCellCount ? ` · ${editedCellCount} lokalnih izmena` : ""}
+              {savedCellCount ? ` · ${savedCellCount} snimljenih izmena` : ""}
               {isEditMode ? " · uređivanje uključeno" : ""}
             </p>
             <div className="flex items-center gap-2">
@@ -540,13 +542,14 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       const originalValue = module.rows.find((item) => item.id === row.id)?.values[
                         column.key
                       ] ?? null;
-                      const isEdited = rowEdits[row.id]?.[column.key] !== undefined;
+                      const isSaving =
+                        savingCell?.rowId === row.id && savingCell.columnKey === column.key;
                       return (
                         <td
                           key={column.key}
                           className={cn(
                             "whitespace-nowrap px-3 py-2 text-ink-700",
-                            isEdited && "bg-warning/5",
+                            isSaving && "bg-warning/5",
                             column.align === "right" && "text-right tabular-nums",
                             column.align === "center" && "text-center",
                           )}
@@ -556,7 +559,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               <input
                                 type="checkbox"
                                 checked={Boolean(value)}
-                                disabled={!isEditMode}
+                                disabled={!isEditMode || Boolean(savingCell)}
                                 onChange={(event) =>
                                   commitCell(row, column, event.target.checked)
                                 }
@@ -649,7 +652,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                                 isEditMode &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
-                              disabled={!isEditMode}
+                              disabled={!isEditMode || Boolean(savingCell)}
                               className="inline-flex size-8 items-center justify-center rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:bg-surface hover:text-ink-900 disabled:cursor-default disabled:hover:bg-muted-bg disabled:hover:text-ink-500"
                               title={
                                 isEditMode
@@ -666,7 +669,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                                 isEditMode &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
-                              disabled={!isEditMode}
+                              disabled={!isEditMode || Boolean(savingCell)}
                               className={cn(
                                 "group inline-flex min-h-8 max-w-[360px] items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-muted-bg",
                                 !isEditMode && "cursor-default hover:bg-transparent",

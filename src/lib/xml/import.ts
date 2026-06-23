@@ -31,6 +31,10 @@ import type {
 
 const MAX_ERRORS_RECORDED = 50;
 
+export interface ImportSupplierOptions {
+  dryRun?: boolean;
+}
+
 function isMapping(value: unknown): value is SupplierFeedMapping {
   return (
     !!value &&
@@ -58,12 +62,14 @@ function toConfig(supplier: Supplier): SupplierConfig | null {
 }
 
 /** Run imports for every enabled, fully-configured supplier. */
-export async function importAllSuppliers(): Promise<ImportSummary[]> {
+export async function importAllSuppliers(
+  opts: ImportSupplierOptions = {},
+): Promise<ImportSummary[]> {
   const suppliers = await db.supplier.findMany({ where: { enabled: true } });
   const out: ImportSummary[] = [];
   for (const s of suppliers) {
     try {
-      out.push(await importSupplier(s.id));
+      out.push(await importSupplier(s.id, opts));
     } catch (err) {
       // importSupplier already records its own ImportRun row; this is for
       // truly catastrophic failures (e.g., DB unreachable) where we still
@@ -86,13 +92,16 @@ export async function importAllSuppliers(): Promise<ImportSummary[]> {
   return out;
 }
 
-export async function importSupplier(supplierId: string): Promise<ImportSummary> {
+export async function importSupplier(
+  supplierId: string,
+  opts: ImportSupplierOptions = {},
+): Promise<ImportSummary> {
   const supplier = await db.supplier.findUnique({ where: { id: supplierId } });
   if (!supplier) throw new Error(`Supplier ${supplierId} not found`);
   const config = toConfig(supplier);
 
   const run = await db.importRun.create({
-    data: { supplierId, status: "RUNNING" },
+    data: { supplierId, status: "RUNNING", dryRun: opts.dryRun ?? false },
   });
 
   const errors: ImportSummary["errors"] = [];
@@ -115,6 +124,7 @@ export async function importSupplier(supplierId: string): Promise<ImportSummary>
         recordsOk: ok,
         recordsFail: failed,
         errorMessage: message ?? (errors.length ? errors[0].message : null),
+        errors: errors.length ? (errors as Prisma.InputJsonValue) : undefined,
       },
     });
     return {
@@ -157,6 +167,14 @@ export async function importSupplier(supplierId: string): Promise<ImportSummary>
   for (const item of items) {
     seenExternalIds.add(item.externalId);
     try {
+      const validationErrors = validateFeedItem(item);
+      if (validationErrors.length) {
+        throw new Error(validationErrors.join("; "));
+      }
+      if (opts.dryRun) {
+        ok++;
+        continue;
+      }
       const result = await upsertFeedItem(item, supplierId);
       if (result === "created") created++;
       else updated++;
@@ -175,10 +193,67 @@ export async function importSupplier(supplierId: string): Promise<ImportSummary>
   // Auto-disable rule: applies to every product belonging to this supplier,
   // regardless of whether it appeared in this run (a product that drops out
   // of the feed should not stay live).
-  disabled = await applyAutoDisable(supplierId);
+  disabled = opts.dryRun ? 0 : await applyAutoDisable(supplierId);
 
   const status: "SUCCESS" | "PARTIAL" = failed === 0 ? "SUCCESS" : "PARTIAL";
   return close(status);
+}
+
+function validateFeedItem(item: FeedItem) {
+  const errors: string[] = [];
+  if (!item.externalId?.trim()) errors.push("externalId is required");
+  if (!item.sku?.trim()) errors.push("sku is required");
+  if (!item.name?.trim()) errors.push("name is required");
+  if (!Number.isFinite(item.fullPrice) || item.fullPrice <= 0) {
+    errors.push("fullPrice must be a positive number");
+  }
+  if (!Number.isInteger(item.stock) || item.stock < 0) {
+    errors.push("stock must be a non-negative integer");
+  }
+  if (item.incomingStock != null && (!Number.isInteger(item.incomingStock) || item.incomingStock < 0)) {
+    errors.push("incomingStock must be a non-negative integer");
+  }
+  if (!item.categoryPath?.length) errors.push("categoryPath is required");
+  if (!item.groupSlug?.trim()) errors.push("groupSlug is required");
+  return errors;
+}
+
+function parseSyncOverrideFields(value: Prisma.JsonValue | null | undefined) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return new Set<string>();
+  }
+  const fields = (value as Record<string, unknown>).fields;
+  if (!Array.isArray(fields)) return new Set<string>();
+  return new Set(
+    fields
+      .map((field) => (typeof field === "string" ? field.trim() : ""))
+      .filter(Boolean),
+  );
+}
+
+function applyProductOverrides(
+  data: Prisma.ProductUncheckedCreateInput,
+  fields: Set<string>,
+): Prisma.ProductUncheckedUpdateInput {
+  const out: Record<string, unknown> = { ...data };
+  const groups: Record<string, string[]> = {
+    identity: ["sku", "slug", "name", "description", "shortDescription"],
+    name: ["name"],
+    description: ["description", "shortDescription"],
+    pricing: ["fullPrice", "salePrice", "discountPct", "actionId"],
+    price: ["fullPrice", "salePrice", "discountPct", "actionId"],
+    stock: ["stock", "incomingStock", "supplierStock", "isActive"],
+    flags: ["isHero", "isNew", "newUntil", "isLimited", "isDtz"],
+    dimensions: ["widthCm", "depthCm", "heightCm"],
+    delivery: ["deliveryDaysMin", "deliveryDaysMax", "allowsAssembly"],
+    grouping: ["groupId", "collectionId"],
+  };
+  for (const field of fields) {
+    for (const key of groups[field] ?? [field]) {
+      delete out[key];
+    }
+  }
+  return out as Prisma.ProductUncheckedUpdateInput;
 }
 
 async function upsertFeedItem(
@@ -205,7 +280,7 @@ async function upsertFeedItem(
           { supplierId, supplierExternalId: item.externalId },
         ],
       },
-      select: { id: true },
+      select: { id: true, syncOverrides: true },
     });
 
     const slug = item.slug ?? item.sku.toLowerCase();
@@ -246,8 +321,11 @@ async function upsertFeedItem(
 
     let productId: string;
     let kind: "created" | "updated";
+    const overrides = existing ? parseSyncOverrideFields(existing.syncOverrides) : new Set<string>();
+    const productData = existing ? applyProductOverrides(data, overrides) : data;
+
     if (existing) {
-      await tx.product.update({ where: { id: existing.id }, data });
+      await tx.product.update({ where: { id: existing.id }, data: productData });
       productId = existing.id;
       kind = "updated";
     } else {
@@ -256,7 +334,7 @@ async function upsertFeedItem(
       kind = "created";
     }
 
-    if (categoryId) {
+    if (categoryId && !overrides.has("categories") && !overrides.has("category")) {
       // Replace the category links (a product can move between categories
       // across imports). Re-creating the join row is cheap and keeps logic
       // simple compared to diffing.
@@ -264,7 +342,7 @@ async function upsertFeedItem(
       await tx.productCategory.create({ data: { productId, categoryId } });
     }
 
-    if (item.media) {
+    if (item.media && !overrides.has("media") && !overrides.has("images")) {
       await tx.productMedia.deleteMany({ where: { productId } });
       await tx.productMedia.createMany({
         data: item.media.map((m, idx) => ({
@@ -282,7 +360,7 @@ async function upsertFeedItem(
       });
     }
 
-    if (item.pictograms?.length) {
+    if (item.pictograms?.length && !overrides.has("pictograms")) {
       const pictoIds: string[] = [];
       for (const p of item.pictograms) {
         const row = await tx.pictogram.upsert({
@@ -305,7 +383,7 @@ async function upsertFeedItem(
       });
     }
 
-    if (item.materials?.length) {
+    if (item.materials?.length && !overrides.has("materials")) {
       const matIds: string[] = [];
       for (const m of item.materials) {
         const row = await tx.material.upsert({

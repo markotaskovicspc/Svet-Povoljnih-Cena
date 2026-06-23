@@ -106,3 +106,7 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
     isHero: r.is_hero,
   }));
 }
+
+export async function searchProducts(query: string, limit = 48): Promise<SearchHit[]> {
+  return suggest(query, Math.min(Math.max(limit, 1), 120));
+}

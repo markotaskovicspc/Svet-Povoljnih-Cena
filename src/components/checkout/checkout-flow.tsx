@@ -93,6 +93,7 @@ type CreateOrderApiResponse =
       data: {
         id: string;
         number: string;
+        accessToken: string;
         total: number;
         paymentMethod: string;
         shippingMethod: string;
@@ -134,6 +135,7 @@ export function CheckoutFlow({
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
   const [deliveryQuote, setDeliveryQuote] = useState<CheckoutDeliveryQuote>(
     checkoutConfig.deliveryQuote,
   );
@@ -188,11 +190,49 @@ export function CheckoutFlow({
     control: methods.control,
     name: "shipping.city",
   });
+  const shippingEmail = useWatch({
+    control: methods.control,
+    name: "shipping.email",
+  });
   const perItemAssembly = useWatch({
     control: methods.control,
     name: "perItemAssembly",
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setCheckoutSessionId(getCheckoutSessionId());
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !checkoutSessionId) return;
+    const timeout = window.setTimeout(() => {
+      void trackCheckoutSession({
+        sessionId: checkoutSessionId,
+        step,
+        identity,
+        guestEmail: identity === "guest" ? shippingEmail : null,
+        shippingCity,
+        shippingMethod,
+        paymentMethod,
+        lines,
+      });
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [
+    checkoutSessionId,
+    hydrated,
+    identity,
+    lines,
+    paymentMethod,
+    shippingCity,
+    shippingEmail,
+    shippingMethod,
+    step,
+  ]);
 
   useEffect(() => {
     const activeSkus = new Set(lines.map((line) => line.sku));
@@ -363,7 +403,13 @@ export function CheckoutFlow({
     const response = await fetch("/api/checkout/order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildCreateOrderPayload(data, lines)),
+      body: JSON.stringify(
+        buildCreateOrderPayload(
+          data,
+          lines,
+          checkoutSessionId ?? getCheckoutSessionId(),
+        ),
+      ),
     });
     const result = (await response.json().catch(() => null)) as
       | CreateOrderApiResponse
@@ -396,7 +442,11 @@ export function CheckoutFlow({
       router.push(`/api/payment/wspay/start/${encodeURIComponent(result.data.number)}`);
       return;
     }
-    router.push(`/checkout/potvrda?order=${encodeURIComponent(result.data.number)}`);
+    router.push(
+      `/checkout/potvrda?order=${encodeURIComponent(result.data.number)}&token=${encodeURIComponent(
+        result.data.accessToken,
+      )}`,
+    );
   };
 
   const onInvalid: SubmitErrorHandler<CheckoutFormData> = () => {
@@ -841,6 +891,7 @@ const SHIPPING_METHOD_UPPER = {
 function buildCreateOrderPayload(
   data: CheckoutFormData,
   lines: ReturnType<typeof useCart.getState>["lines"],
+  checkoutSessionId?: string | null,
 ) {
   const shipping = addressForApi(data.shipping);
   const billing =
@@ -860,10 +911,64 @@ function buildCreateOrderPayload(
     billing,
     shippingMethod: SHIPPING_METHOD_UPPER[data.shippingMethod],
     paymentMethod: PAYMENT_METHOD_UPPER[data.paymentMethod],
+    checkoutSessionId: checkoutSessionId ?? undefined,
     voucherCode: data.voucherCode || undefined,
     notes: data.notes || undefined,
     consent: data.consent,
   };
+}
+
+const CHECKOUT_SESSION_KEY = "spc.checkoutSessionId";
+
+function getCheckoutSessionId() {
+  if (typeof window === "undefined") return null;
+  const existing = window.localStorage.getItem(CHECKOUT_SESSION_KEY);
+  if (existing) return existing;
+  const id =
+    typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now()}${Math.random().toString(36).slice(2, 14)}`;
+  window.localStorage.setItem(CHECKOUT_SESSION_KEY, id);
+  return id;
+}
+
+async function trackCheckoutSession({
+  sessionId,
+  step,
+  identity,
+  guestEmail,
+  shippingCity,
+  shippingMethod,
+  paymentMethod,
+  lines,
+}: {
+  sessionId: string;
+  step: CheckoutStep;
+  identity: IdentityChoice | null;
+  guestEmail: string | null;
+  shippingCity: string;
+  shippingMethod: ShippingMethod;
+  paymentMethod: PaymentMethod;
+  lines: ReturnType<typeof useCart.getState>["lines"];
+}) {
+  if (!lines.length) return;
+  const cartTotal = lines.reduce((n, line) => n + line.unitPriceSale * line.qty, 0);
+  await fetch("/api/checkout/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      step,
+      identity,
+      guestEmail: guestEmail || null,
+      shippingCity: shippingCity || null,
+      shippingMethod,
+      paymentMethod,
+      lineCount: lines.length,
+      itemQty: lines.reduce((n, line) => n + line.qty, 0),
+      cartTotal,
+    }),
+  }).catch(() => undefined);
 }
 
 function addressForApi(address: CheckoutAddress) {
@@ -980,6 +1085,7 @@ function buildOrder({
   return {
     id: orderNumber,
     guestEmail: data.identity === "guest" ? data.shipping.email : undefined,
+    customerEmail: data.shipping.email,
     status: "kreirano",
     items: lines.map((l) => ({
       sku: l.sku,

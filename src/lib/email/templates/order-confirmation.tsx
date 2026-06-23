@@ -1,4 +1,5 @@
 import type { Order } from "@/types";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import {
   EmailButton,
   EmailDivider,
@@ -23,7 +24,9 @@ export function OrderConfirmation({
   order,
   baseUrl = "https://www.svetpovoljnihcena.rs",
 }: OrderConfirmationProps) {
-  const orderUrl = `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`;
+  const orderUrl = order.userId
+    ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
+    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
   return (
     <EmailLayout preview={`Porudžbina ${order.id} je primljena`}>
       <EmailHeading>Hvala vam na porudžbini!</EmailHeading>
@@ -113,7 +116,9 @@ export function OrderConfirmation({
         {order.shippingAddress.postalCode} {order.shippingAddress.city}
         <br />
         Kupac: {order.shippingAddress.firstName} {order.shippingAddress.lastName}
-        {order.guestEmail ? `, ${order.guestEmail}` : ""}
+        {order.customerEmail ?? order.guestEmail
+          ? `, ${order.customerEmail ?? order.guestEmail}`
+          : ""}
         <br />
         Način plaćanja: {order.paymentMethod}
         <br />
@@ -125,8 +130,8 @@ export function OrderConfirmation({
             <br />
           </>
         ) : null}
-        Trgovac: Svet Akcija d.o.o., PIB 100000000, Vojvođanska 401, Beograd,
-        račun 160-000000-00
+        Trgovac: {MERCHANT_LEGAL_INFO.name}, PIB {MERCHANT_LEGAL_INFO.pib},{" "}
+        {MERCHANT_LEGAL_INFO.shortAddress}, račun {MERCHANT_LEGAL_INFO.bankAccount}
         <br />
         Telefon: {order.shippingAddress.phone}
       </EmailParagraph>

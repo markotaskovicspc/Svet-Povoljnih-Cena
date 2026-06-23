@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { Order, OrderStatus, Reclamation, ReclamationStatus } from "@/types";
 import { formatRsd } from "@/lib/format";
 import { OrderConfirmation } from "./templates/order-confirmation";
+import { IpsPaymentConfirmation } from "./templates/ips-payment-confirmation";
 import { OrderStatusChanged } from "./templates/order-status-changed";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
@@ -34,6 +35,7 @@ export async function sendOrderConfirmation(args: {
   order: Order;
   to: string;
   attachInvoice?: boolean;
+  idempotencyKey?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
@@ -45,7 +47,7 @@ export async function sendOrderConfirmation(args: {
   if (args.attachInvoice !== false) {
     const pdfOrder = orderToPdfInput(args.order);
     attachments.push({
-      filename: `predracun-${args.order.id}.pdf`,
+      filename: `predracun-racun-${args.order.id}.pdf`,
       content: buildInvoicePdf(pdfOrder).toString("base64"),
       contentType: "application/pdf",
     });
@@ -65,7 +67,7 @@ export async function sendOrderConfirmation(args: {
     bcc: cfg.orderBcc,
     attachments,
     tags: { kind: "order_confirmation", order: args.order.id },
-    idempotencyKey: `order-conf:${args.order.id}`,
+    idempotencyKey: args.idempotencyKey ?? `order-conf:${args.order.id}`,
   });
 }
 
@@ -96,6 +98,35 @@ export async function sendOrderStatusChanged(args: {
   });
 }
 
+export async function sendIpsPaymentConfirmation(args: {
+  order: Order;
+  to: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const { html, text } = await renderEmail(
+    IpsPaymentConfirmation({ order: args.order, baseUrl: cfg.baseUrl }),
+  );
+  return trackedDispatch({
+    kind: "ips_payment_confirmation",
+    to: args.to,
+    subject: `IPS plaćanje ${args.order.id} — potvrda`,
+    html,
+    text,
+    bcc: cfg.orderBcc,
+    tags: {
+      kind: "ips_payment_confirmation",
+      order: args.order.id,
+      paymentReference: args.order.payment?.paymentReference ?? "none",
+    },
+    metadata: {
+      paymentReference: args.order.payment?.paymentReference ?? null,
+      paidAt: args.order.payment?.paidAt ?? null,
+    },
+    idempotencyKey: `ips-payment:${args.order.id}`,
+  });
+}
+
 const STATUS_SUBJECT: Record<OrderStatus, string> = {
   kreirano: "primljena",
   potvrdjeno: "potvrđena",
@@ -113,6 +144,7 @@ export async function sendFiscalReceipt(args: {
   receiptNumber: string;
   qrUrl?: string | null;
   pdf: Buffer;
+  idempotencyKey?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
@@ -139,7 +171,7 @@ export async function sendFiscalReceipt(args: {
       },
     ],
     tags: { kind: "fiscal_receipt", order: args.order.id, receipt: args.receiptNumber },
-    idempotencyKey: `fiscal:${args.receiptNumber}`,
+    idempotencyKey: args.idempotencyKey ?? `fiscal:${args.receiptNumber}`,
   });
 }
 

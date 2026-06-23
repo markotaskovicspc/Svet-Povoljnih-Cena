@@ -317,6 +317,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
 }
 
 function getSvetAkcijaFallbackBySlug(slug: string): ProductDTO | null {
+  if (!allowStaticCatalogFallback()) return null;
   const decoded = decodeURIComponent(slug);
   const product = svetAkcijaProducts.find((item) => {
     const sku = sourceValue(item, "Šifra");
@@ -324,6 +325,13 @@ function getSvetAkcijaFallbackBySlug(slug: string): ProductDTO | null {
     return slugify(`${name}-${sku}`) === decoded;
   });
   return product ? mapSvetAkcijaFallback(product) : null;
+}
+
+function allowStaticCatalogFallback() {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ENABLE_STATIC_CATALOG_FALLBACK === "1"
+  );
 }
 
 // ── Categories ────────────────────────────────────────────────────────

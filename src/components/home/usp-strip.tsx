@@ -1,6 +1,7 @@
 "use client";
 
 /** USP strip — delivery, returns, secure pay, support. Sits above newsletter/footer. */
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Truck,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 interface UspItem {
+  id: string;
   icon: LucideIcon;
   title: string;
   body: string;
@@ -18,21 +20,25 @@ interface UspItem {
 
 const items: UspItem[] = [
   {
+    id: "delivery",
     icon: Truck,
     title: "Brza isporuka",
     body: "Isporuka 3–10 dana širom Srbije. Besplatno preko 30.000 RSD.",
   },
   {
+    id: "returns",
     icon: RotateCcw,
     title: "Vraćanje 14 dana",
     body: "Bez objašnjenja. Pun povrat sredstava u skladu sa zakonom.",
   },
   {
+    id: "payment",
     icon: ShieldCheck,
     title: "Bezbedno plaćanje",
-    body: "WSPay i IPS NBS. Sve glavne kartice + Apple Pay i Google Pay.",
+    body: "Raiffeisen IPS za QR plaćanje, WSPay za kartice i novčanike.",
   },
   {
+    id: "support",
     icon: Headphones,
     title: "Podrška svaki dan",
     body: "Tim za korisnike dostupan radnim danom 9–20h, vikendom 10–16h.",
@@ -65,6 +71,15 @@ export function UspStrip() {
             <div>
               <p className="text-sm font-medium text-ink-900">{item.title}</p>
               <p className="mt-1 text-xs text-ink-500">{item.body}</p>
+              {item.id === "payment" ? (
+                <Image
+                  src="/icons/ips-skeniraj.svg"
+                  alt="IPS Skeniraj"
+                  width={100}
+                  height={33}
+                  className="mt-2 h-7 w-auto"
+                />
+              ) : null}
             </div>
           </motion.div>
         ))}

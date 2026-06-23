@@ -52,6 +52,7 @@ model User {
   marketingConsent   MarketingConsent?
   voucherRedemptions VoucherRedemption[]
   cart               Cart?
+  checkoutSessions   CheckoutSession[]
 
   @@index([createdAt])
 }
@@ -319,6 +320,9 @@ model Product {
   supplierId         String?
   supplier           Supplier? @relation(fields: [supplierId], references: [id])
   supplierExternalId String?
+  /// Field-level admin overrides that XML imports must not overwrite.
+  /// Shape: { fields: ["name", "description", "media", ...], updatedBy, updatedAt }
+  syncOverrides      Json?
 
   // Ads
   inGoogleMerchant Boolean @default(false)
@@ -341,6 +345,9 @@ model Product {
   deliveryRules     DeliveryPriceRule[]
   recommendedBy     RecommendationRule[]    @relation("RecommendationRuleProducts")
   orderItems        OrderItem[]
+  purchasePrices    PurchasePrice[]
+  purchaseOrderItems PurchaseOrderItem[]
+  inboundInvoiceItems InboundInvoiceItem[]
   wishlistItems     WishlistItem[]
   backInStockAlerts BackInStockAlert[]
   onSaleAlerts      OnSaleAlert[]
@@ -659,6 +666,9 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   products    Product[]
+  purchasePrices PurchasePrice[]
+  purchaseOrders PurchaseOrder[]
+  inboundInvoices InboundInvoice[]
   importRuns  ImportRun[]
   snapshots   SupplierStockSnapshot[]
   safetyRules SafetyStockRule[]
@@ -701,6 +711,7 @@ enum ImportStatus {
 model ImportRun {
   id           String       @id @default(cuid())
   supplierId   String
+  dryRun       Boolean      @default(false)
   startedAt    DateTime     @default(now())
   finishedAt   DateTime?
   status       ImportStatus @default(RUNNING)
@@ -708,6 +719,7 @@ model ImportRun {
   recordsOk    Int          @default(0)
   recordsFail  Int          @default(0)
   errorMessage String?      @db.Text
+  errors       Json?
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
@@ -795,6 +807,12 @@ enum ShippingMethod {
   KAMION
 }
 
+enum CheckoutSessionStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+}
+
 enum PaymentStatus {
   PENDING
   AUTHORIZED
@@ -844,6 +862,9 @@ model Order {
   id         String      @id @default(cuid())
   /// Human-friendly number e.g. "SPC-2026-001234"
   number     String      @unique
+  /// Hash of an opaque guest/public confirmation token.
+  publicAccessTokenHash String? @unique
+  publicAccessTokenCreatedAt DateTime?
   userId     String?
   guestEmail String?
   status     OrderStatus @default(KREIRANO)
@@ -889,6 +910,9 @@ model Order {
 
   notes           String?  @db.Text
   termsAcceptedAt DateTime
+  expiresAt       DateTime?
+  stockRestoredAt DateTime?
+  cancelledAt     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -901,10 +925,38 @@ model Order {
   fiscal            FiscalReceipt?
   reclamations      Reclamation[]
   voucherRedemption VoucherRedemption?
+  checkoutSessions  CheckoutSession[]
 
   @@index([userId, createdAt])
   @@index([status])
+  @@index([expiresAt])
   @@index([createdAt])
+}
+
+model CheckoutSession {
+  id             String                @id
+  userId         String?
+  guestEmail     String?
+  identity       String?
+  step           String
+  status         CheckoutSessionStatus @default(ACTIVE)
+  lineCount      Int                   @default(0)
+  itemQty        Int                   @default(0)
+  cartTotal      Decimal               @default(0) @db.Decimal(12, 2)
+  shippingCity   String?
+  shippingMethod ShippingMethod?
+  paymentMethod  PaymentMethod?
+  orderId        String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@index([userId, updatedAt])
+  @@index([guestEmail])
+  @@index([orderId])
 }
 
 model OrderItem {
@@ -1125,17 +1177,40 @@ model CourierCodeSequence {
   @@unique([provider, prefix])
 }
 
+enum InvoiceKind {
+  PROFORMA
+  BUYER_RECEIPT
+}
+
+enum InvoiceStatus {
+  ISSUED
+  EMAIL_SENT
+  EMAIL_FAILED
+  CANCELLED
+}
+
 model Invoice {
-  id       String   @id @default(cuid())
-  orderId  String
-  number   String   @unique
-  pdfUrl   String?
-  total    Decimal  @db.Decimal(12, 2)
-  issuedAt DateTime @default(now())
+  id             String        @id @default(cuid())
+  orderId        String
+  kind           InvoiceKind   @default(PROFORMA)
+  status         InvoiceStatus @default(ISSUED)
+  number         String        @unique
+  pdfUrl         String?
+  pdfObjectKey   String?
+  recipientEmail String?
+  emailedAt      DateTime?
+  emailError     String?       @db.Text
+  snapshot       Json?
+  total          Decimal       @db.Decimal(12, 2)
+  issuedAt       DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@unique([orderId, kind])
   @@index([orderId])
+  @@index([kind, issuedAt])
+  @@index([status, issuedAt])
 }
 
 model FiscalReceipt {
@@ -1149,6 +1224,179 @@ model FiscalReceipt {
   fiscalizedAt  DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6b. ERP purchasing and inbound finance foundation
+// ──────────────────────────────────────────────────────────────────────
+
+enum ErpCurrency {
+  RSD
+  EUR
+  USD
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  RECEIVED
+  CANCELLED
+}
+
+enum InboundInvoiceType {
+  DOM
+  INO
+  COGS
+}
+
+enum InboundInvoiceStatus {
+  DRAFT
+  RECEIVED
+  POSTED
+  CANCELLED
+}
+
+enum CogsStatus {
+  PENDING
+  CALCULATED
+  LOCKED
+}
+
+model PurchasePrice {
+  id        String      @id @default(cuid())
+  productId String?
+  supplierId String?
+  sku       String
+  name      String?
+  attributes String?
+  pattern   String?
+  price     Decimal     @db.Decimal(12, 2)
+  currency  ErpCurrency @default(RSD)
+  parity    String?
+  validFrom DateTime
+  validTo   DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([sku])
+  @@index([supplierId, validFrom])
+  @@index([productId, validFrom])
+}
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  number        String              @unique
+  status        PurchaseOrderStatus @default(DRAFT)
+  supplierId    String?
+  orderDate     DateTime?
+  loadingDate   DateTime?
+  deliveryDate  DateTime?
+  totalVolume   Decimal?            @db.Decimal(12, 3)
+  totalWeight   Decimal?            @db.Decimal(12, 3)
+  totalPrice    Decimal             @default(0) @db.Decimal(12, 2)
+  currency      ErpCurrency         @default(RSD)
+  transportType String?
+  parity        String?
+  bmPct         Decimal?            @db.Decimal(8, 2)
+  pdfUrl        String?
+  notes         String?             @db.Text
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    PurchaseOrderItem[]
+  events   PurchaseOrderStatusEvent[]
+
+  @@index([supplierId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  productId       String?
+  sku             String
+  name            String
+  attributes      String?
+  pattern         String?
+  purchasePrice   Decimal       @db.Decimal(12, 2)
+  currency        ErpCurrency   @default(RSD)
+  parity          String?
+  moq             Int?
+  packQty         Int?
+  qty             Int
+  receivedQty     Int           @default(0)
+  totalVolume     Decimal?      @db.Decimal(12, 3)
+  totalWeight     Decimal?      @db.Decimal(12, 3)
+  customsRate     Decimal?      @db.Decimal(8, 2)
+  calcRetailPrice Decimal?      @db.Decimal(12, 2)
+  bmPct           Decimal?      @db.Decimal(8, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseOrderId])
+  @@index([sku])
+  @@index([productId])
+}
+
+model PurchaseOrderStatusEvent {
+  id              String              @id @default(cuid())
+  purchaseOrderId String
+  status          PurchaseOrderStatus
+  note            String?             @db.Text
+  actorId         String?
+  createdAt       DateTime            @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId, createdAt])
+}
+
+model InboundInvoice {
+  id          String               @id @default(cuid())
+  number      String               @unique
+  type        InboundInvoiceType
+  supplierId  String?
+  status      InboundInvoiceStatus @default(DRAFT)
+  invoiceDate DateTime?
+  currency    ErpCurrency          @default(RSD)
+  value       Decimal              @default(0) @db.Decimal(12, 2)
+  cogsStatus  CogsStatus           @default(PENDING)
+  notes       String?              @db.Text
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    InboundInvoiceItem[]
+
+  @@index([supplierId, invoiceDate])
+  @@index([status, invoiceDate])
+}
+
+model InboundInvoiceItem {
+  id               String   @id @default(cuid())
+  inboundInvoiceId String
+  productId        String?
+  sku              String?
+  name             String
+  qty              Int      @default(1)
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  total            Decimal  @db.Decimal(12, 2)
+  createdAt        DateTime @default(now())
+
+  inboundInvoice InboundInvoice @relation(fields: [inboundInvoiceId], references: [id], onDelete: Cascade)
+  product        Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([inboundInvoiceId])
+  @@index([sku])
+  @@index([productId])
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1334,6 +1582,25 @@ model OnSaleAlert {
 
   @@unique([userId, productId, channel])
   @@index([productId, notifiedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 8. CMS content pages
+// ──────────────────────────────────────────────────────────────────────
+
+model ContentPage {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  title          String
+  lead           String?  @db.Text
+  bodyMarkdown   String   @db.Text
+  seoTitle       String?
+  seoDescription String?  @db.Text
+  published      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([published, updatedAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

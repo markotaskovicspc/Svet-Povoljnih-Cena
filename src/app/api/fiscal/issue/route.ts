@@ -50,7 +50,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await issueAndDeliverFiscalReceipt(parsed.data.orderId);
+  const url = new URL(req.url);
+  const result = await issueAndDeliverFiscalReceipt(parsed.data.orderId, {
+    forceEmail: url.searchParams.get("resend") === "1",
+  });
   if (!result.outcome.ok) {
     const status = result.outcome.reason === "not_found" ? 404 : 502;
     return NextResponse.json(

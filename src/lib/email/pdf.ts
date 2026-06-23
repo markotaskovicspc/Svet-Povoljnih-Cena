@@ -1,8 +1,10 @@
 import "server-only";
 
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+
 /**
- * Phase 4D — minimal PDF generator for the order confirmation attachments
- * (`predracun.pdf` and `obrazac-za-odustajanje.pdf`).
+ * Minimal PDF generator for the order confirmation attachments
+ * (`predracun-racun.pdf` and `obrazac-za-odustajanje.pdf`).
  *
  * We hand-roll a single-page PDF rather than pulling in a PDF library:
  *   - PDF text uses standard 14 fonts (Helvetica / Helvetica-Bold) which are
@@ -144,8 +146,18 @@ const fmt = (n: number) => `${n.toLocaleString("sr-Latn-RS").replace(/\u00A0/g, 
 
 export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
   const lines: Line[] = [
-    { text: `Predračun broj ${order.number}`, bold: true, size: 13 },
+    { text: `Predračun / račun za kupca ${order.number}`, bold: true, size: 13 },
     { text: `Datum: ${order.createdAt.toLocaleDateString("sr-Latn-RS")}` },
+    { text: "" },
+    { text: "Prodavac:", bold: true },
+    { text: MERCHANT_LEGAL_INFO.name },
+    {
+      text: `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`,
+    },
+    { text: MERCHANT_LEGAL_INFO.shortAddress },
+    {
+      text: `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`,
+    },
     { text: "" },
     { text: "Kupac:", bold: true },
     {
@@ -176,11 +188,10 @@ export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
   lines.push({ text: "" });
   lines.push({ text: `Način plaćanja: ${order.paymentMethod}` });
   lines.push({ text: "" });
-  lines.push({
-    text: "Ovo je predračun u skladu sa Zakonom o ZP. Konačan fiskalni račun se izdaje po preuzimanju robe iz skladišta.",
-  });
+  lines.push({ text: "Ovaj dokument je interna potvrda kupovine za kupca." });
+  lines.push({ text: MERCHANT_LEGAL_INFO.pdvNote });
 
-  return buildPdf("Predračun", lines);
+  return buildPdf("Predračun / račun", lines);
 }
 
 export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {

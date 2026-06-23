@@ -6,8 +6,9 @@ import { num } from "@/lib/api/_helpers";
 import { validateVoucher } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
 import { notifySuppliersOfReservation } from "@/lib/xml";
-import { loadOrderForEmail, sendOrderConfirmation } from "@/lib/email";
 import { providerForPaymentMethod } from "@/lib/payments";
+import { createOrderAccessToken, hashOrderAccessToken } from "@/lib/api/order-access";
+import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import {
   computeOrderPricing,
   type PricingLine,
@@ -55,6 +56,12 @@ const addressSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
+  checkoutSessionId: z
+    .string()
+    .min(12)
+    .max(80)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
   guestEmail: z.email().optional(),
   lines: z.array(lineSchema).min(1).max(50),
   shipping: addressSchema,
@@ -103,9 +110,16 @@ export type CreateOrderError =
 export interface CreateOrderResult {
   number: string;
   id: string;
+  accessToken: string;
   total: number;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
+}
+
+class StockReservationError extends Error {
+  constructor(readonly sku: string) {
+    super(`Insufficient stock for ${sku}`);
+  }
 }
 
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -118,6 +132,24 @@ async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   });
   const seq = last ? Number(last.number.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(seq).padStart(6, "0")}`;
+}
+
+function isOnlinePayment(method: PaymentMethod) {
+  return (
+    method === "IPS" ||
+    method === "KARTICA" ||
+    method === "GOOGLE_PAY" ||
+    method === "APPLE_PAY"
+  );
+}
+
+function paymentExpiresAt(method: PaymentMethod) {
+  if (!isOnlinePayment(method)) return null;
+  const minutes = Math.min(
+    Math.max(Number(process.env.PAYMENT_PENDING_EXPIRY_MINUTES ?? 45) || 45, 5),
+    24 * 60,
+  );
+  return new Date(Date.now() + minutes * 60_000);
 }
 
 export async function createOrder(
@@ -283,89 +315,141 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
   }
 
-  const created = await db.$transaction(async (tx) => {
-    const number = await nextOrderNumber(tx);
+  const accessToken = createOrderAccessToken();
+  const expiresAt = paymentExpiresAt(input.paymentMethod);
 
-    const order = await tx.order.create({
-      data: {
-        number,
-        userId,
-        guestEmail: userId ? null : input.guestEmail ?? null,
-        subtotal: new Prisma.Decimal(subtotal),
-        savings: new Prisma.Decimal(savings),
-        shipping: new Prisma.Decimal(shippingPrice),
-        assemblyTotal: new Prisma.Decimal(assemblyTotal),
-        voucherCode,
-        voucherDiscount: voucherDiscount ? new Prisma.Decimal(voucherDiscount) : null,
-        firstPurchaseDiscount: pricing.firstPurchaseDiscount
-          ? new Prisma.Decimal(pricing.firstPurchaseDiscount)
-          : null,
-        savedCardDiscount: pricing.savedCardDiscount
-          ? new Prisma.Decimal(pricing.savedCardDiscount)
-          : null,
-        total: new Prisma.Decimal(total),
-        shippingMethod: input.shippingMethod,
-        paymentMethod: input.paymentMethod,
-        shipFirstName: ship.firstName,
-        shipLastName: ship.lastName,
-        shipPhone: ship.phone,
-        shipStreet: ship.street,
-        shipCity: ship.city,
-        shipPostalCode: ship.postalCode,
-        shipCountry: ship.country,
-        shipCompanyName: ship.companyName ?? null,
-        shipPib: ship.pib ?? null,
-        glsDeliveryPointId: glsDeliveryPoint?.code ?? null,
-        glsDeliveryPointName: glsDeliveryPoint?.name ?? null,
-        glsDeliveryPointAddress: glsDeliveryPoint?.street ?? null,
-        glsDeliveryPointCity: glsDeliveryPoint?.city ?? null,
-        glsDeliveryPointPostalCode: glsDeliveryPoint?.postalCode ?? null,
-        billingSameAsShipping: input.billingSameAsShipping,
-        billFirstName: bill?.firstName ?? null,
-        billLastName: bill?.lastName ?? null,
-        billStreet: bill?.street ?? null,
-        billCity: bill?.city ?? null,
-        billPostalCode: bill?.postalCode ?? null,
-        billCompanyName: bill?.companyName ?? null,
-        billPib: bill?.pib ?? null,
-        notes: input.notes ?? null,
-        termsAcceptedAt: new Date(),
-        items: { createMany: { data: itemsForCreate } },
-        events: { create: { status: "KREIRANO", note: "Porudžbina kreirana" } },
-        payments: {
-          create: {
-            method: input.paymentMethod,
-            provider: providerForPaymentMethod(input.paymentMethod),
-            amount: new Prisma.Decimal(total),
-            status: "PENDING",
+  let created: { id: string; number: string; total: Prisma.Decimal };
+  try {
+    created = await db.$transaction(async (tx) => {
+      const number = await nextOrderNumber(tx);
+
+      for (const line of input.lines) {
+        const p = bySku.get(line.sku)!;
+        const updated = await tx.product.updateMany({
+          where: { id: p.id, isActive: true, stock: { gte: line.qty } },
+          data: { stock: { decrement: line.qty } },
+        });
+        if (updated.count !== 1) {
+          throw new StockReservationError(line.sku);
+        }
+      }
+
+      const order = await tx.order.create({
+        data: {
+          number,
+          publicAccessTokenHash: hashOrderAccessToken(accessToken),
+          publicAccessTokenCreatedAt: new Date(),
+          userId,
+          guestEmail: userId ? null : input.guestEmail ?? null,
+          subtotal: new Prisma.Decimal(subtotal),
+          savings: new Prisma.Decimal(savings),
+          shipping: new Prisma.Decimal(shippingPrice),
+          assemblyTotal: new Prisma.Decimal(assemblyTotal),
+          voucherCode,
+          voucherDiscount: voucherDiscount ? new Prisma.Decimal(voucherDiscount) : null,
+          firstPurchaseDiscount: pricing.firstPurchaseDiscount
+            ? new Prisma.Decimal(pricing.firstPurchaseDiscount)
+            : null,
+          savedCardDiscount: pricing.savedCardDiscount
+            ? new Prisma.Decimal(pricing.savedCardDiscount)
+            : null,
+          total: new Prisma.Decimal(total),
+          shippingMethod: input.shippingMethod,
+          paymentMethod: input.paymentMethod,
+          shipFirstName: ship.firstName,
+          shipLastName: ship.lastName,
+          shipPhone: ship.phone,
+          shipStreet: ship.street,
+          shipCity: ship.city,
+          shipPostalCode: ship.postalCode,
+          shipCountry: ship.country,
+          shipCompanyName: ship.companyName ?? null,
+          shipPib: ship.pib ?? null,
+          glsDeliveryPointId: glsDeliveryPoint?.code ?? null,
+          glsDeliveryPointName: glsDeliveryPoint?.name ?? null,
+          glsDeliveryPointAddress: glsDeliveryPoint?.street ?? null,
+          glsDeliveryPointCity: glsDeliveryPoint?.city ?? null,
+          glsDeliveryPointPostalCode: glsDeliveryPoint?.postalCode ?? null,
+          billingSameAsShipping: input.billingSameAsShipping,
+          billFirstName: bill?.firstName ?? null,
+          billLastName: bill?.lastName ?? null,
+          billStreet: bill?.street ?? null,
+          billCity: bill?.city ?? null,
+          billPostalCode: bill?.postalCode ?? null,
+          billCompanyName: bill?.companyName ?? null,
+          billPib: bill?.pib ?? null,
+          notes: input.notes ?? null,
+          termsAcceptedAt: new Date(),
+          expiresAt,
+          items: { createMany: { data: itemsForCreate } },
+          events: { create: { status: "KREIRANO", note: "Porudžbina kreirana" } },
+          payments: {
+            create: {
+              method: input.paymentMethod,
+              provider: providerForPaymentMethod(input.paymentMethod),
+              amount: new Prisma.Decimal(total),
+              status: "PENDING",
+              expiresAt,
+            },
           },
         },
-      },
-      select: { id: true, number: true, total: true },
+        select: { id: true, number: true, total: true },
+      });
+
+      if (voucherCode) {
+        await tx.voucherRedemption.create({
+          data: {
+            voucherCode,
+            userId,
+            orderId: order.id,
+            amount: new Prisma.Decimal(voucherDiscount),
+          },
+        });
+      }
+
+      if (input.checkoutSessionId) {
+        await tx.checkoutSession.upsert({
+          where: { id: input.checkoutSessionId },
+          create: {
+            id: input.checkoutSessionId,
+            userId,
+            guestEmail: userId ? null : input.guestEmail ?? null,
+            identity: userId ? "login" : "guest",
+            step: "review",
+            status: "CONVERTED",
+            lineCount: input.lines.length,
+            itemQty: input.lines.reduce((sum, line) => sum + line.qty, 0),
+            cartTotal: new Prisma.Decimal(total),
+            shippingCity: input.shipping.city,
+            shippingMethod: input.shippingMethod,
+            paymentMethod: input.paymentMethod,
+            orderId: order.id,
+          },
+          update: {
+            userId,
+            guestEmail: userId ? null : input.guestEmail ?? null,
+            identity: userId ? "login" : "guest",
+            step: "review",
+            status: "CONVERTED",
+            lineCount: input.lines.length,
+            itemQty: input.lines.reduce((sum, line) => sum + line.qty, 0),
+            cartTotal: new Prisma.Decimal(total),
+            shippingCity: input.shipping.city,
+            shippingMethod: input.shippingMethod,
+            paymentMethod: input.paymentMethod,
+            orderId: order.id,
+          },
+        });
+      }
+
+      return order;
     });
-
-    // Decrement stock optimistically (supplier reservation callback in 4A).
-    for (const line of input.lines) {
-      const p = bySku.get(line.sku)!;
-      await tx.product.update({
-        where: { id: p.id },
-        data: { stock: { decrement: line.qty } },
-      });
+  } catch (err) {
+    if (err instanceof StockReservationError) {
+      return { ok: false, error: { code: "OUT_OF_STOCK", sku: err.sku } };
     }
-
-    if (voucherCode) {
-      await tx.voucherRedemption.create({
-        data: {
-          voucherCode,
-          userId,
-          orderId: order.id,
-          amount: new Prisma.Decimal(voucherDiscount),
-        },
-      });
-    }
-
-    return order;
-  });
+    throw err;
+  }
 
   if (userId) await clearServerCart(userId).catch(() => undefined);
 
@@ -381,20 +465,13 @@ export async function createOrder(
     })),
   });
 
-  // Phase 4D: send the customer + admin BCC the order confirmation with
-  // the predračun + odustajanje PDFs attached. Fire-and-forget — the
-  // order is committed and we don't want a transient SMTP error to mask
-  // a successful checkout.
+  // Buyer receipt/proforma: create the durable Invoice row, upload/regenerate
+  // the PDF as available, and send the tracked customer confirmation.
   void (async () => {
     try {
-      const loaded = await loadOrderForEmail(created.id);
-      if (!loaded?.recipient) return;
-      await sendOrderConfirmation({
-        order: loaded.order,
-        to: loaded.recipient,
-      });
+      await issueBuyerReceiptForOrder(created.id);
     } catch (err) {
-      console.error("[email] order-confirmation failed", err);
+      console.error("[receipt] buyer receipt failed", err);
     }
   })();
 
@@ -403,6 +480,7 @@ export async function createOrder(
     data: {
       id: created.id,
       number: created.number,
+      accessToken,
       total: num(created.total),
       paymentMethod: input.paymentMethod,
       shippingMethod: input.shippingMethod,

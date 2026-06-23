@@ -6,6 +6,8 @@ import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { issueBuyerReceiptForOrder } from "@/lib/receipts";
+import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
 import {
   loadOrderForEmail,
   lowerOrderStatus,
@@ -165,7 +167,13 @@ async function issueFiscalReceiptAction(_state: AdminActionState, formData: Form
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
-      const result = await issueAndDeliverFiscalReceipt(id);
+      const existing = await db.fiscalReceipt.findUnique({
+        where: { orderId: id },
+        select: { id: true },
+      });
+      const result = await issueAndDeliverFiscalReceipt(id, {
+        forceEmail: Boolean(existing),
+      });
       revalidatePath(`/admin/narudzbine/${id}`);
       if (!result.outcome.ok) {
         return {
@@ -185,6 +193,33 @@ async function issueFiscalReceiptAction(_state: AdminActionState, formData: Form
           ? "Fiskalni račun je izdat i poslat kupcu."
           : "Fiskalni račun je izdat, ali slanje e-pošte nije potvrđeno.",
       };
+    },
+  )(formData);
+}
+
+async function resendBuyerReceiptAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "invoice.buyerReceiptResend", entity: "Invoice" },
+    async (_actorId, formData: FormData) => {
+      const id = String(formData.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
+      const result = await issueBuyerReceiptForOrder(id, {
+        sendEmail: true,
+        forceEmail: true,
+      });
+      revalidatePath(`/admin/narudzbine/${id}`);
+      return result.ok
+        ? {
+            ok: true as const,
+            entityId: result.invoiceId,
+            diff: { number: result.number, emailed: result.emailed },
+            message: result.emailed
+              ? "Predračun/račun je ponovo poslat kupcu."
+              : "Predračun/račun je regenerisan, ali slanje nije potvrđeno.",
+          }
+        : { ok: false as const, error: result.error };
     },
   )(formData);
 }
@@ -216,6 +251,93 @@ async function markFiscalized(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
+async function refundIpsPaymentAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.ipsRefund", entity: "Payment" },
+    async (_a, formData: FormData) => {
+      const id = String(formData.get("id") ?? "");
+      const amount = Number(formData.get("amount") ?? "");
+      if (!id || !Number.isFinite(amount) || amount <= 0) {
+        return { ok: false as const, error: "Unesite ispravan iznos za IPS povraćaj." };
+      }
+
+      const order = await db.order.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          number: true,
+          total: true,
+          paymentMethod: true,
+          payments: {
+            where: { provider: "IPS" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { status: true, paymentReference: true },
+          },
+        },
+      });
+      if (!order) return { ok: false as const, error: "Porudžbina nije pronađena." };
+      if (order.paymentMethod !== "IPS") {
+        return { ok: false as const, error: "Ova porudžbina nije plaćena IPS metodom." };
+      }
+
+      const total = num(order.total);
+      if (amount > total) {
+        return {
+          ok: false as const,
+          error: "Iznos povraćaja ne može biti veći od iznosa porudžbine.",
+        };
+      }
+
+      const latestPayment = order.payments[0] ?? null;
+      if (!latestPayment || latestPayment.status !== "PAID") {
+        return {
+          ok: false as const,
+          error: "IPS povraćaj je moguć samo za plaćenu IPS transakciju.",
+        };
+      }
+
+      try {
+        const result = await ipsPaymentProvider.refundPayment(order.number, amount);
+        if (!result.refunded) {
+          return {
+            ok: false as const,
+            error: `IPS nije potvrdio povraćaj (kod ${result.responseCode || "—"}).`,
+          };
+        }
+      } catch (err) {
+        if (err instanceof IpsConfigError) {
+          return { ok: false as const, error: "IPS nije konfigurisan." };
+        }
+        if (err instanceof IpsGatewayError) {
+          return {
+            ok: false as const,
+            error: `IPS gateway greška (${err.status}).`,
+          };
+        }
+        throw err;
+      }
+
+      revalidatePath(`/admin/narudzbine/${id}`);
+      revalidatePath("/admin/narudzbine");
+      return {
+        ok: true as const,
+        entityId: id,
+        diff: {
+          amount,
+          paymentReference: latestPayment.paymentReference,
+        },
+        message:
+          amount < total
+            ? "Delimičan IPS povraćaj je izvršen."
+            : "IPS povraćaj je izvršen.",
+      };
+    },
+  )(formData);
+}
+
 export default async function OrderDetail({
   params,
 }: {
@@ -238,6 +360,12 @@ export default async function OrderDetail({
   if (!order) notFound();
   const activeSmallProvider =
     getSmallParcelProvider() === "MYGLS" ? MYGLS_PROVIDER : X_EXPRESS_PROVIDER;
+  const latestIpsPayment =
+    order.payments.find((payment) => payment.provider === "IPS") ?? null;
+  const canRefundIps =
+    order.paymentMethod === "IPS" && latestIpsPayment?.status === "PAID";
+  const buyerReceipt =
+    order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
 
   return (
     <>
@@ -351,6 +479,60 @@ export default async function OrderDetail({
               </div>
             </form>
           </Card>
+
+          {order.paymentMethod === "IPS" ? (
+            <Card>
+              <CardTitle
+                description={
+                  latestIpsPayment?.paymentReference
+                    ? `RP ${latestIpsPayment.paymentReference}`
+                    : "IPS transakcija"
+                }
+              >
+                IPS povraćaj
+              </CardTitle>
+              <dl className="mb-3 space-y-1 text-sm">
+                <Row k="Status plaćanja" v={latestIpsPayment?.status ?? "—"} />
+                <Row
+                  k="RP referenca"
+                  v={
+                    <span className="font-mono text-xs">
+                      {latestIpsPayment?.paymentReference ?? "—"}
+                    </span>
+                  }
+                />
+                <Row k="Ukupno" v={formatRsd(num(order.total))} />
+              </dl>
+              {canRefundIps ? (
+                <AdminActionForm action={refundIpsPaymentAction} className="space-y-3">
+                  <input type="hidden" name="id" value={order.id} />
+                  <Field
+                    label="Iznos za povraćaj"
+                    hint="Podrazumevano je pun iznos porudžbine; unesite manji iznos za delimičan povraćaj."
+                  >
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      max={num(order.total).toFixed(2)}
+                      step="0.01"
+                      defaultValue={num(order.total).toFixed(2)}
+                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2 font-mono text-sm"
+                    />
+                  </Field>
+                  <div className="flex justify-end">
+                    <SubmitButton variant="destructive" size="sm">
+                      Izvrši IPS povraćaj
+                    </SubmitButton>
+                  </div>
+                </AdminActionForm>
+              ) : (
+                <p className="text-sm text-ink-500">
+                  Povraćaj je dostupan samo dok je poslednja IPS uplata u statusu PAID.
+                </p>
+              )}
+            </Card>
+          ) : null}
 
           <Card>
             <CardTitle
@@ -515,6 +697,43 @@ export default async function OrderDetail({
                 ) : null}
               </div>
             )}
+          </Card>
+
+          <Card>
+            <CardTitle description={buyerReceipt?.number ?? "Nije izdat"}>
+              Predračun / račun za kupca
+            </CardTitle>
+            {buyerReceipt ? (
+              <dl className="mb-4 space-y-1 text-sm">
+                <Row k="Status" v={buyerReceipt.status} />
+                <Row
+                  k="Poslato"
+                  v={buyerReceipt.emailedAt ? buyerReceipt.emailedAt.toLocaleString("sr-Latn-RS") : "—"}
+                />
+                <Row k="Primalac" v={buyerReceipt.recipientEmail ?? "—"} />
+              </dl>
+            ) : (
+              <p className="mb-4 text-sm text-ink-500">
+                Predračun se automatski izdaje nakon kupovine. Ako ga nema,
+                regenerišite ga ručno.
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              {buyerReceipt ? (
+                <a
+                  href={`/api/admin/invoices/${buyerReceipt.id}/pdf`}
+                  className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+                >
+                  Preuzmi PDF
+                </a>
+              ) : null}
+              <AdminActionForm action={resendBuyerReceiptAction}>
+                <input type="hidden" name="id" value={order.id} />
+                <SubmitButton size="sm">
+                  {buyerReceipt ? "Ponovo pošalji" : "Izdaj i pošalji"}
+                </SubmitButton>
+              </AdminActionForm>
+            </div>
           </Card>
 
           <Card>

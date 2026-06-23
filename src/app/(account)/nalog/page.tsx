@@ -6,7 +6,6 @@ import {
   LogOut,
   PackageCheck,
   ShoppingBag,
-  User2,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/auth";
 import { requireUser } from "@/lib/auth/session";
@@ -29,6 +28,12 @@ async function signOutAction() {
 }
 
 const quickLinks = [
+  {
+    href: "/nalog/porudzbine",
+    title: "Porudžbine",
+    description: "Pratite kupovine, statuse i detalje isporuke.",
+    icon: PackageCheck,
+  },
   {
     href: "/nalog/lista-zelja",
     title: "Lista želja",
@@ -92,7 +97,7 @@ export default async function AccountPage() {
         </div>
       ) : null}
 
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <div className="mt-8 grid gap-4 md:grid-cols-4">
         {quickLinks.map((item) => {
           const Icon = item.icon;
           return (
@@ -122,20 +127,20 @@ export default async function AccountPage() {
             <PackageCheck className="mt-0.5 size-5 text-walnut" aria-hidden />
             <div>
               <h2 className="font-display text-xl text-ink-900">
-                Porudžbine stižu uskoro u nalog
+                Porudžbine su povezane sa nalogom
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-ink-600">
-                Dok se istorija porudžbina povezuje, potvrde i statusi stižu na
-                e-poštu koju koristite pri kupovini.
+                Istoriju porudžbina, statuse i osnovne podatke o isporuci
+                možete otvoriti direktno iz naloga.
               </p>
             </div>
           </div>
           <Link
-            href="/checkout"
+            href="/nalog/porudzbine"
             className={cn(buttonVariants({ variant: "default", size: "lg" }), "gap-2")}
           >
-            <User2 className="size-4" aria-hidden />
-            Nastavi kupovinu
+            <PackageCheck className="size-4" aria-hidden />
+            Otvori porudžbine
           </Link>
         </div>
       </section>

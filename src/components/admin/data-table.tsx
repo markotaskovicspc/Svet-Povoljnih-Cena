@@ -25,42 +25,44 @@ export function DataTable({
         className,
       )}
     >
-      <table className="w-full text-sm">
-        <thead className="bg-muted-bg/60 text-xs uppercase tracking-[0.14em] text-ink-500">
-          <tr>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                className={cn(
-                  "px-4 py-3 text-left font-medium",
-                  c.align === "right" && "text-right",
-                  c.align === "center" && "text-center",
-                )}
-              >
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border/60">
-          {rows.map((row) => (
-            <tr key={row.id} className="hover:bg-muted-bg/30">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted-bg/60 text-xs uppercase tracking-[0.14em] text-ink-500">
+            <tr>
               {columns.map((c) => (
-                <td
+                <th
                   key={c.key}
                   className={cn(
-                    "px-4 py-3 align-middle text-ink-700",
+                    "whitespace-nowrap px-4 py-3 text-left font-medium",
                     c.align === "right" && "text-right",
                     c.align === "center" && "text-center",
                   )}
                 >
-                  {row.cells[c.key]}
-                </td>
+                  {c.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {rows.map((row) => (
+              <tr key={row.id} className="hover:bg-muted-bg/30">
+                {columns.map((c) => (
+                  <td
+                    key={c.key}
+                    className={cn(
+                      "px-4 py-3 align-middle text-ink-700",
+                      c.align === "right" && "text-right",
+                      c.align === "center" && "text-center",
+                    )}
+                  >
+                    {row.cells[c.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

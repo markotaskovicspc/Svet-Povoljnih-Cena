@@ -42,8 +42,6 @@ export const getActiveBanners = cache(async (): Promise<Banner[]> => {
       orderBy: [{ order: "asc" }, { createdAt: "desc" }],
     });
 
-    if (!rows.length) return heroBanners;
-
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
@@ -86,7 +84,7 @@ export async function getSectionBanner(sectionId: string): Promise<Banner | null
       orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
     });
 
-    if (!row) return fallback;
+    if (!row) return null;
 
     return {
       id: row.id,
@@ -155,7 +153,7 @@ export const getActivePromoBar = cache(async (): Promise<PromoBar | null> => {
       orderBy: { updatedAt: "desc" },
     });
 
-    if (!row) return promoBar;
+    if (!row) return null;
 
     return {
       id: row.id,
@@ -179,8 +177,6 @@ export const getActiveTabs = cache(async (): Promise<Tab[]> => {
       where: { enabled: true },
       orderBy: [{ order: "asc" }, { label: "asc" }],
     });
-
-    if (!rows.length) return headerTabs;
 
     return rows.map((row) => ({
       id: row.id,

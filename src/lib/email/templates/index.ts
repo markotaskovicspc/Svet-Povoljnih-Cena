@@ -5,6 +5,7 @@
  * `@react-email/components` so Resend can render them to HTML.
  */
 export { OrderConfirmation } from "./order-confirmation";
+export { IpsPaymentConfirmation } from "./ips-payment-confirmation";
 export { OrderStatusChanged } from "./order-status-changed";
 export { FiscalReceiptEmail } from "./fiscal-receipt";
 export { ReclamationReceipt } from "./reclamation-receipt";

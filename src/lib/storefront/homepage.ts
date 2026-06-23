@@ -310,7 +310,7 @@ async function getHomeBanner(placement: BannerPlacement, fallback: Banner | null
       orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
     });
 
-    return row ? mapBanner(row) : fallback;
+    return row ? mapBanner(row) : null;
   } catch (error) {
     if (!isMissingSchemaError(error)) {
       console.error(`Failed to load homepage banner "${placement}".`, error);

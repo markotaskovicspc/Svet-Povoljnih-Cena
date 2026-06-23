@@ -76,6 +76,7 @@ export async function loadOrderForEmail(
     id: row.number,
     userId: row.userId ?? undefined,
     guestEmail: row.guestEmail ?? undefined,
+    customerEmail: row.user?.email ?? row.guestEmail ?? undefined,
     status: ORDER_STATUS_LOWER[row.status],
     items: row.items.map((i) => ({
       sku: i.sku,

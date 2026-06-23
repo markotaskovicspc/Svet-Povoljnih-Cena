@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCheckout } from "@/lib/checkout/store";
 import { formatRsd } from "@/lib/format";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
 
@@ -49,6 +51,7 @@ export function ConfirmationView({
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-6">
           <PaymentBlock order={order} />
+          <IpsPaymentReceipt order={order} paymentStatus={paymentStatus} />
           <StatusTimeline />
           <NotesBlock order={order} />
         </div>
@@ -166,10 +169,19 @@ function PaymentMethodView({
     const statusUrl = `/api/payment/ips/status/${encodeURIComponent(order.id)}`;
     return (
       <div className="bg-canvas ring-border/60 flex flex-col gap-3 rounded-xl p-5 ring-1">
-        <p className="text-ink-900 font-medium">IPS Skeniraj</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-ink-900 font-medium">IPS Skeniraj</p>
+          <Image
+            src="/icons/ips-skeniraj.svg"
+            alt="IPS Skeniraj"
+            width={110}
+            height={36}
+            className="h-8 w-auto"
+          />
+        </div>
         <p className="text-sm text-ink-700">
-          Plaćanje se pokreće na Payten strani banke, gde se prikazuje IPS QR kod
-          ili deep link za m-banking aplikaciju.
+          Plaćanje se pokreće na Raiffeisen IPS strani, gde se prikazuje IPS QR
+          kod ili deep link za m-banking aplikaciju.
         </p>
         <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
         <DetailRow label="Broj porudžbine" value={order.id} mono />
@@ -260,6 +272,107 @@ function PaymentMethodView({
   return null;
 }
 
+function IpsPaymentReceipt({
+  order,
+  paymentStatus,
+}: {
+  order: Order;
+  paymentStatus?: string;
+}) {
+  if (order.paymentMethod !== "ips") return null;
+
+  const payment = order.payment;
+  const statusLabel = payment
+    ? paymentStatusLabel(payment.status)
+    : paymentStatus === "paid"
+      ? "Izvršeno"
+      : paymentStatus === "failed"
+        ? "Neizvršeno"
+        : "U obradi";
+  const paidAt = payment?.paidAt
+    ? new Intl.DateTimeFormat("sr-Latn-RS", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(payment.paidAt))
+    : "—";
+  const customerAddress = order.billingAddress ?? order.shippingAddress;
+
+  return (
+    <section className="bg-surface ring-border/60 rounded-2xl p-5 ring-1">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg text-ink-900">
+            Potvrda IPS plaćanja
+          </h2>
+          <p className="mt-1 text-xs text-ink-500">
+            Podaci za potvrdu plaćanja prema IPS Skeniraj pravilima.
+          </p>
+        </div>
+        <Image
+          src="/icons/ips-skeniraj.svg"
+          alt="IPS Skeniraj"
+          width={128}
+          height={42}
+          className="h-9 w-auto"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="bg-canvas ring-border/60 rounded-xl p-4 ring-1">
+          <p className="mb-2 text-xs font-medium tracking-wide text-ink-500 uppercase">
+            Transakcija
+          </p>
+          <div className="flex flex-col gap-2">
+            <DetailRow label="Broj porudžbine" value={order.id} mono />
+            <DetailRow label="Iznos transakcije" value={formatRsd(order.total)} mono />
+            <DetailRow label="Status transakcije" value={statusLabel} />
+            <DetailRow
+              label="RP referenca"
+              value={payment?.paymentReference ?? "—"}
+              mono
+            />
+            <DetailRow label="Datum uplate" value={paidAt} />
+            <DetailRow
+              label="Račun trgovca"
+              value={MERCHANT_LEGAL_INFO.bankAccount}
+              mono
+            />
+          </div>
+        </div>
+
+        <div className="bg-canvas ring-border/60 rounded-xl p-4 ring-1">
+          <p className="mb-2 text-xs font-medium tracking-wide text-ink-500 uppercase">
+            Kupac i trgovac
+          </p>
+          <div className="flex flex-col gap-2">
+            <DetailRow
+              label="Kupac"
+              value={`${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`}
+            />
+            <DetailRow
+              label="E-pošta kupca"
+              value={order.customerEmail ?? order.guestEmail ?? "—"}
+            />
+            <DetailRow label="Adresa kupca" value={formatAddress(customerAddress)} />
+            <DetailRow
+              label="Adresa isporuke"
+              value={formatAddress(order.shippingAddress)}
+            />
+            <DetailRow label="Trgovac" value={MERCHANT_LEGAL_INFO.name} />
+            <DetailRow label="PIB trgovca" value={MERCHANT_LEGAL_INFO.pib} mono />
+            <DetailRow label="Adresa trgovca" value={MERCHANT_LEGAL_INFO.shortAddress} />
+            <DetailRow label="E-pošta trgovca" value={MERCHANT_LEGAL_INFO.email} />
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] text-ink-500">
+        {MERCHANT_LEGAL_INFO.pdvNote}
+      </p>
+    </section>
+  );
+}
+
 function DetailRow({
   label,
   value,
@@ -270,11 +383,11 @@ function DetailRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-xs text-ink-500">{label}</span>
+    <div className="flex items-start justify-between gap-3">
+      <span className="shrink-0 text-xs text-ink-500">{label}</span>
       <span
         className={cn(
-          "text-ink-900 text-sm font-medium tabular-nums",
+          "text-ink-900 min-w-0 break-words text-right text-sm font-medium tabular-nums",
           mono && "font-mono",
         )}
       >
@@ -282,6 +395,10 @@ function DetailRow({
       </span>
     </div>
   );
+}
+
+function formatAddress(address: Order["shippingAddress"]) {
+  return `${address.street}, ${address.postalCode} ${address.city}`;
 }
 
 function Uplatnica({ order }: { order: Order }) {
@@ -437,7 +554,8 @@ function OrderRecap({ order }: { order: Order }) {
         </dl>
       ) : null}
       <p className="text-[11px] text-ink-500">
-        PDV je uključen u cenu. Račun trgovca: 160-000000-00.
+        {MERCHANT_LEGAL_INFO.pdvNote} Račun trgovca:{" "}
+        {MERCHANT_LEGAL_INFO.bankAccount}.
       </p>
       <p className="border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">
         <Mail className="size-3.5" aria-hidden />

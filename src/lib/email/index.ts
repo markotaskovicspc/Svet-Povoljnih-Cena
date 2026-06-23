@@ -9,6 +9,7 @@ export type { DispatchResult, EmailAttachment } from "./transport";
 export { renderEmail } from "./render";
 export {
   sendOrderConfirmation,
+  sendIpsPaymentConfirmation,
   sendOrderStatusChanged,
   sendFiscalReceipt,
   sendReclamationReceipt,

@@ -229,6 +229,7 @@ export interface Order {
   id: string; // human number e.g. "SPC-2026-001234"
   userId?: string;
   guestEmail?: string;
+  customerEmail?: string;
   status: OrderStatus;
   items: OrderItem[];
   subtotal: number;

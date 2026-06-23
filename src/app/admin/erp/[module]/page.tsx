@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { erpModules, getErpModule } from "@/lib/admin/erp";
+import { erpModules, getErpModule, getErpModuleDefinition } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { ErpGrid } from "@/components/admin/erp-grid";
 
@@ -16,7 +16,7 @@ export async function generateMetadata({
   params: Promise<{ module: string }>;
 }) {
   const { module: slug } = await params;
-  const erpModule = getErpModule(slug);
+  const erpModule = getErpModuleDefinition(slug);
   return {
     title: erpModule ? `${erpModule.title} · ERP` : "ERP",
     robots: { index: false, follow: false },
@@ -29,7 +29,7 @@ export default async function ErpModulePage({
   params: Promise<{ module: string }>;
 }) {
   const { module: slug } = await params;
-  const erpModule = getErpModule(slug);
+  const erpModule = await getErpModule(slug);
   if (!erpModule) notFound();
 
   return (

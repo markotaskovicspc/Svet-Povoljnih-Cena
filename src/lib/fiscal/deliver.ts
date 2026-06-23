@@ -31,6 +31,7 @@ export interface DeliverResult {
 
 export async function issueAndDeliverFiscalReceipt(
   orderId: string,
+  opts: { forceEmail?: boolean } = {},
 ): Promise<DeliverResult> {
   const outcome = await tryIssueFiscalReceipt(orderId);
   if (!outcome.ok) {
@@ -84,6 +85,9 @@ export async function issueAndDeliverFiscalReceipt(
     receiptNumber: outcome.receipt.receiptNumber,
     qrUrl: outcome.receipt.qrUrl,
     pdf,
+    idempotencyKey: opts.forceEmail
+      ? `fiscal:${outcome.receipt.receiptNumber}:resend:${Date.now()}`
+      : undefined,
   });
 
   if (!send.ok) {

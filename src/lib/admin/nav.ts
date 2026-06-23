@@ -31,6 +31,7 @@ export const adminNav: AdminNavGroup[] = [
     label: "Sadržaj",
     items: [
       { href: "/admin/pocetna", label: "Početna", allowed: C },
+      { href: "/admin/sadrzaj", label: "Tekstovi", allowed: C },
       { href: "/admin/baneri", label: "Baneri", allowed: C },
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
       { href: "/admin/tabovi", label: "Navigacija", allowed: C },
@@ -60,6 +61,7 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/erp", label: "ERP sistem", allowed: ALL },
       { href: "/admin/narudzbine", label: "Narudžbine", allowed: O },
+      { href: "/admin/checkouti", label: "Checkouti", allowed: O },
       { href: "/admin/reklamacije", label: "Reklamacije", allowed: O },
       { href: "/admin/komentari", label: "Komentari", allowed: CO },
       { href: "/admin/xml-import", label: "XML feed", allowed: O },

@@ -11,11 +11,11 @@ export const metadata: Metadata = {
 export default async function CheckoutPotvrdaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ order?: string; status?: string; err?: string }>;
+  searchParams: Promise<{ order?: string; token?: string; status?: string; err?: string }>;
 }) {
   const params = await searchParams;
   const initialOrder = params.order
-    ? await getPublicOrderForConfirmation(params.order)
+    ? await getPublicOrderForConfirmation(params.order, params.token)
     : null;
 
   return (

@@ -9,6 +9,7 @@ import {
   renderAutoPostHtml,
   WsPayConfigError,
 } from "@/lib/wspay";
+import { rotateOrderAccessToken } from "@/lib/api/order-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,8 +75,14 @@ export async function GET(
 
   const latestPayment = order.payments[0] ?? null;
   if (latestPayment?.status === "PAID") {
+    const token = await rotateOrderAccessToken(order.id);
     return NextResponse.redirect(
-      new URL(`/checkout/potvrda?order=${encodeURIComponent(order.number)}&status=paid`, baseUrl()),
+      new URL(
+        `/checkout/potvrda?order=${encodeURIComponent(order.number)}&token=${encodeURIComponent(
+          token,
+        )}&status=paid`,
+        baseUrl(),
+      ),
       { status: 303 },
     );
   }
@@ -242,12 +249,11 @@ async function chargeViaSavedCard(args: {
     }
   });
 
-  const url = new URL(
-    `/checkout/potvrda?order=${encodeURIComponent(args.orderNumber)}&status=${
-      result.ok ? "paid" : "failed"
-    }`,
-    baseUrl(),
-  );
+  const token = await rotateOrderAccessToken(args.orderId);
+  const url = new URL("/checkout/potvrda", baseUrl());
+  url.searchParams.set("order", args.orderNumber);
+  url.searchParams.set("token", token);
+  url.searchParams.set("status", result.ok ? "paid" : "failed");
   return NextResponse.redirect(url, { status: 303 });
 }
 

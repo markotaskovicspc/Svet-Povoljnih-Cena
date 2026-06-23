@@ -9,6 +9,7 @@ import {
   type WsPayReturnFields,
 } from "@/lib/wspay";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import { rotateOrderAccessToken } from "@/lib/api/order-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +60,7 @@ async function handle(params: URLSearchParams) {
   const fields = parseReturnFields(params);
   const orderId = fields.orderId;
   if (!orderId) {
-    return redirectFinal({
+    return await redirectFinal({
       number: null,
       status: "error",
       message: "Nepoznata porudžbina.",
@@ -81,7 +82,7 @@ async function handle(params: URLSearchParams) {
     },
   });
   if (!order) {
-    return redirectFinal({
+    return await redirectFinal({
       number: null,
       status: "error",
       message: "Porudžbina nije pronađena.",
@@ -90,7 +91,7 @@ async function handle(params: URLSearchParams) {
 
   // Cancel: WSPay redirects without a signature; bounce back without changes.
   if (fields.result === "cancel") {
-    return redirectFinal({ number: order.number, status: "cancel" });
+    return await redirectFinal({ number: order.number, status: "cancel" });
   }
 
   // Every other result (success / error) MUST carry a verified signature.
@@ -99,7 +100,7 @@ async function handle(params: URLSearchParams) {
     signatureValid = verifyReturnSignature(fields);
   } catch (err) {
     if (err instanceof WsPayConfigError) {
-      return redirectFinal({
+      return await redirectFinal({
         number: order.number,
         status: "error",
         message: err.message,
@@ -108,7 +109,7 @@ async function handle(params: URLSearchParams) {
     throw err;
   }
   if (!signatureValid) {
-    return redirectFinal({
+    return await redirectFinal({
       number: order.number,
       status: "error",
       message: "Neispravna potvrda banke.",
@@ -126,7 +127,7 @@ async function handle(params: URLSearchParams) {
     await persistTokenAsSavedCard({ userId: order.userId, fields });
   }
 
-  return redirectFinal({
+  return await redirectFinal({
     number: order.number,
     status: fields.success ? "paid" : "failed",
     message: fields.success ? null : fields.errorMessage,
@@ -148,7 +149,7 @@ export async function applyPaymentResult(args: {
     const existing = paymentId
       ? await tx.payment.findUnique({ where: { id: paymentId } })
       : null;
-    if (existing?.status === "PAID" && fields.success) return; // idempotent
+    if (existing?.status === "PAID") return; // idempotent; never regress a paid payment
 
     if (existing) {
       await tx.payment.update({
@@ -260,7 +261,7 @@ function serializeFields(fields: WsPayReturnFields): Prisma.InputJsonValue {
   } satisfies Record<string, unknown> as Prisma.InputJsonValue;
 }
 
-function redirectFinal(args: {
+async function redirectFinal(args: {
   number: string | null;
   status: "paid" | "failed" | "cancel" | "error";
   message?: string | null;
@@ -276,7 +277,14 @@ function redirectFinal(args: {
     args.status === "error" || !args.number
       ? new URL("/korpa", base)
       : new URL(`/checkout/potvrda`, base);
-  if (args.number) target.searchParams.set("order", args.number);
+  if (args.number) {
+    target.searchParams.set("order", args.number);
+    const token = await rotateOrderAccessToken(args.number).catch((err) => {
+      console.error("[order-access] WSPay return token rotation failed", err);
+      return null;
+    });
+    if (token) target.searchParams.set("token", token);
+  }
   target.searchParams.set("status", args.status);
   if (args.message) target.searchParams.set("err", args.message);
   return NextResponse.redirect(target, { status: 303 });

@@ -1,9 +1,17 @@
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import Image from "next/image";
+import { randomBytes } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
 import { num } from "@/lib/api/_helpers";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getProductMediaBucket,
+  resolveSupabaseStorageUrl,
+} from "@/lib/supabase/storage";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -64,14 +72,115 @@ const categorySchema = z.object({
 
 const mediaSchema = z.object({
   productId: z.string(),
-  url: z.string().url().max(2000),
+  url: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .nullable()
+    .refine(
+      (value) =>
+        !value ||
+        value.startsWith("/") ||
+        /^https?:\/\//.test(value),
+      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+    ),
   alt: z.string().max(200).optional().nullable(),
+});
+
+const mediaUpdateSchema = z.object({
+  productId: z.string(),
+  mediaId: z.string(),
+  url: z
+    .string()
+    .trim()
+    .max(2000)
+    .refine(
+      (value) => value.startsWith("/") || /^https?:\/\//.test(value),
+      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+    ),
+  alt: z.string().max(200).optional().nullable(),
+  order: z.coerce.number().int().min(0).max(999),
 });
 
 const mediaDeleteSchema = z.object({
   productId: z.string(),
   mediaId: z.string(),
 });
+
+const XML_OVERRIDE_OPTIONS = [
+  { value: "identity", label: "SKU / barkod / eksterni ID" },
+  { value: "name", label: "Naziv" },
+  { value: "description", label: "Opisi i PDP tekstovi" },
+  { value: "pricing", label: "Cene i akcije" },
+  { value: "stock", label: "Zalihe i ulaz" },
+  { value: "flags", label: "Statusi i kanali prodaje" },
+  { value: "dimensions", label: "Dimenzije" },
+  { value: "delivery", label: "Isporuka i montaža" },
+  { value: "grouping", label: "Grupa i kolekcija" },
+  { value: "categories", label: "Kategorije" },
+  { value: "media", label: "Fotografije" },
+  { value: "pictograms", label: "Piktogrami" },
+  { value: "materials", label: "Materijali" },
+] as const;
+
+type XmlOverrideValue = (typeof XML_OVERRIDE_OPTIONS)[number]["value"];
+
+const XML_OVERRIDE_VALUES = new Set(XML_OVERRIDE_OPTIONS.map((option) => option.value));
+
+const COMMON_PRODUCT_SURFACES = [
+  "/",
+  "/akcija",
+  "/pretraga",
+  "/novo",
+  "/outlet",
+  "/ogranicena-ponuda",
+  "/sve-do-999",
+  "/heroji-meseca",
+  "/nedeljna-akcija",
+  "/niske-cene-pod-zastitom",
+  "/specijalne-ponude",
+];
+
+async function revalidateProductSurfaces(productId: string, slug?: string | null) {
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    select: {
+      slug: true,
+      categories: { select: { category: { select: { path: true } } } },
+    },
+  });
+  const productSlug = slug ?? product?.slug;
+  revalidatePath("/admin/proizvodi");
+  revalidatePath(`/admin/proizvodi/${productId}`);
+  if (productSlug) revalidatePath(`/p/${productSlug}`);
+  for (const path of COMMON_PRODUCT_SURFACES) revalidatePath(path);
+  for (const relation of product?.categories ?? []) {
+    const categoryPath = relation.category.path.replace(/^\/+/, "");
+    if (categoryPath) revalidatePath(`/k/${categoryPath}`);
+  }
+}
+
+async function uploadProductImage(productId: string, file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Upload podržava samo slike.");
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Fotografija ne sme biti veća od 8 MB.");
+  }
+  const extension =
+    file.name.match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase() ??
+    file.type.split("/")[1] ??
+    "jpg";
+  const key = `products/${productId}/${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
+  const storage = createAdminClient().storage.from(getProductMediaBucket());
+  const { error } = await storage.upload(key, Buffer.from(await file.arrayBuffer()), {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  return key;
+}
 
 async function updateProduct(formData: FormData) {
   "use server";
@@ -137,10 +246,12 @@ async function updateProduct(formData: FormData) {
           inGoogleMerchant: d.inGoogleMerchant,
           inMetaCatalog: d.inMetaCatalog,
         };
-        await db.product.update({ where: { id: d.id }, data });
-        revalidatePath("/admin/proizvodi");
-        revalidatePath(`/admin/proizvodi/${d.id}`);
-        revalidatePath("/");
+        const updated = await db.product.update({
+          where: { id: d.id },
+          data,
+          select: { slug: true },
+        });
+        await revalidateProductSurfaces(d.id, updated.slug);
         return { ok: true as const, entityId: d.id, diff: data };
       },
   )(formData);
@@ -161,9 +272,7 @@ async function updateProductCategory(formData: FormData) {
         await tx.productCategory.deleteMany({ where: { productId } });
         await tx.productCategory.create({ data: { productId, categoryId } });
       });
-      revalidatePath("/admin/proizvodi");
-      revalidatePath(`/admin/proizvodi/${productId}`);
-      revalidatePath("/");
+      await revalidateProductSurfaces(productId);
       return { ok: true as const, entityId: productId, diff: { categoryId } };
     },
   )(formData);
@@ -179,7 +288,22 @@ async function addProductImage(formData: FormData) {
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
-      const { productId, url, alt } = parsed.data;
+      const { productId, alt } = parsed.data;
+      const file = formData.get("file");
+      let url = parsed.data.url?.trim() || "";
+      if (file instanceof File && file.size > 0) {
+        try {
+          url = await uploadProductImage(productId, file);
+        } catch (err) {
+          return {
+            ok: false as const,
+            error: err instanceof Error ? err.message : "Upload fotografije nije uspeo.",
+          };
+        }
+      }
+      if (!url) {
+        return { ok: false as const, error: "Dodajte URL ili upload fotografiju." };
+      }
       const last = await db.productMedia.aggregate({
         where: { productId },
         _max: { order: true },
@@ -193,10 +317,37 @@ async function addProductImage(formData: FormData) {
         },
         select: { id: true },
       });
-      revalidatePath("/admin/proizvodi");
-      revalidatePath(`/admin/proizvodi/${productId}`);
-      revalidatePath("/");
+      await revalidateProductSurfaces(productId);
       return { ok: true as const, entityId: media.id, diff: { productId, url } };
+    },
+  )(formData);
+}
+
+async function updateProductMedia(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.media.update", entity: "ProductMedia" },
+    async (_a, formData: FormData) => {
+      const parsed = mediaUpdateSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+      }
+      const { productId, mediaId, url, alt, order } = parsed.data;
+      await db.productMedia.updateMany({
+        where: { id: mediaId, productId },
+        data: {
+          url,
+          alt: alt?.trim() || null,
+          order,
+        },
+      });
+      await revalidateProductSurfaces(productId);
+      return {
+        ok: true as const,
+        entityId: mediaId,
+        diff: { productId, url, alt, order },
+      };
     },
   )(formData);
 }
@@ -213,12 +364,56 @@ async function deleteProductMedia(formData: FormData) {
       }
       const { productId, mediaId } = parsed.data;
       await db.productMedia.deleteMany({ where: { id: mediaId, productId } });
-      revalidatePath("/admin/proizvodi");
-      revalidatePath(`/admin/proizvodi/${productId}`);
-      revalidatePath("/");
+      await revalidateProductSurfaces(productId);
       return { ok: true as const, entityId: mediaId, diff: { productId } };
     },
   )(formData);
+}
+
+async function updateProductSyncOverrides(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    { allowed: ["CONTENT", "OPS"], action: "product.xml-overrides.update", entity: "Product" },
+    async (actorId, formData: FormData) => {
+      const productId = String(formData.get("productId") ?? "");
+      if (!productId) {
+        return { ok: false as const, error: "Nedostaje proizvod." };
+      }
+      const fields = formData
+        .getAll("fields")
+        .map((value) => String(value))
+        .filter((value): value is XmlOverrideValue =>
+          XML_OVERRIDE_VALUES.has(value as XmlOverrideValue),
+        );
+      const uniqueFields = Array.from(new Set(fields));
+      const syncOverrides = uniqueFields.length
+        ? ({
+            fields: uniqueFields,
+            updatedAt: new Date().toISOString(),
+            updatedBy: actorId,
+          } satisfies Prisma.InputJsonObject)
+        : null;
+
+      await db.product.update({
+        where: { id: productId },
+        data: { syncOverrides: syncOverrides ?? Prisma.DbNull },
+      });
+      await revalidateProductSurfaces(productId);
+      return {
+        ok: true as const,
+        entityId: productId,
+        diff: { fields: uniqueFields },
+      };
+    },
+  )(formData);
+}
+
+function readSyncOverrideFields(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return new Set<string>();
+  const fields = (value as Record<string, Prisma.JsonValue>).fields;
+  if (!Array.isArray(fields)) return new Set<string>();
+  return new Set(fields.filter((field): field is string => typeof field === "string"));
 }
 
 export default async function ProductDetail({
@@ -238,6 +433,7 @@ export default async function ProductDetail({
     },
   });
   if (!product) notFound();
+  const syncOverrideFields = readSyncOverrideFields(product.syncOverrides);
   const categories = await db.category.findMany({
     orderBy: [{ level: "asc" }, { name: "asc" }],
     select: { id: true, name: true, path: true },
@@ -416,7 +612,7 @@ export default async function ProductDetail({
                 <Toggle name="isActive" defaultChecked={product.isActive} label="Aktivan" />
                 <Toggle name="isHero" defaultChecked={product.isHero} label="Hero meseca" />
                 <Toggle name="isNew" defaultChecked={product.isNew} label="Novo" />
-                <Toggle name="isLimited" defaultChecked={product.isLimited} label="Dok traju zalihe" />
+                <Toggle name="isLimited" defaultChecked={product.isLimited} label="Ograničena ponuda" />
                 <Toggle name="isDtz" defaultChecked={product.isDtz} label="Dok traju zalihe" />
                 <Toggle name="allowsAssembly" defaultChecked={product.allowsAssembly} label="Dozvoljena montaža" />
                 <Toggle
@@ -501,13 +697,77 @@ export default async function ProductDetail({
           </Card>
 
           <Card>
+            <CardTitle description="Označena polja XML import neće prepisivati.">
+              XML zaštita polja
+            </CardTitle>
+            <form action={updateProductSyncOverrides} className="space-y-3">
+              <input type="hidden" name="productId" value={product.id} />
+              <div className="grid grid-cols-1 gap-2 text-sm">
+                {XML_OVERRIDE_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="fields"
+                      value={option.value}
+                      defaultChecked={syncOverrideFields.has(option.value)}
+                      className="size-4 accent-walnut"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <SubmitButton>Sačuvaj XML zaštitu</SubmitButton>
+            </form>
+          </Card>
+
+          <Card>
             <CardTitle>Mediji ({product.media.length})</CardTitle>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-3 text-xs">
               {product.media.map((m) => (
-                <li key={m.id} className="rounded-lg border border-border/60 p-2">
-                  <div className="truncate font-mono text-ink-500">
-                    {m.kind} · {m.url}
+                <li key={m.id} className="rounded-lg border border-border/60 p-3">
+                  <div className="flex gap-3">
+                    {m.kind === "IMAGE" ? (
+                      <Image
+                        src={resolveSupabaseStorageUrl(m.url)}
+                        alt={m.alt ?? product.name}
+                        width={64}
+                        height={64}
+                        unoptimized
+                        className="size-16 rounded-md object-cover ring-1 ring-border/60"
+                      />
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-ink-500">
+                        {m.kind} · {m.url}
+                      </div>
+                      <p className="mt-1 text-ink-500">
+                        Redosled {m.order} · Alt: {m.alt || "—"}
+                      </p>
+                    </div>
                   </div>
+                  <form action={updateProductMedia} className="mt-3 space-y-2">
+                    <input type="hidden" name="productId" value={product.id} />
+                    <input type="hidden" name="mediaId" value={m.id} />
+                    <Field label="URL / storage putanja">
+                      <Input name="url" defaultValue={m.url} required />
+                    </Field>
+                    <div className="grid grid-cols-[90px_1fr] gap-2">
+                      <Field label="Redosled">
+                        <Input
+                          name="order"
+                          type="number"
+                          min={0}
+                          defaultValue={m.order}
+                        />
+                      </Field>
+                      <Field label="Alt tekst">
+                        <Input name="alt" defaultValue={m.alt ?? product.name} />
+                      </Field>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <SubmitButton>Sačuvaj medij</SubmitButton>
+                    </div>
+                  </form>
                   <form action={deleteProductMedia} className="mt-2">
                     <input type="hidden" name="productId" value={product.id} />
                     <input type="hidden" name="mediaId" value={m.id} />
@@ -521,10 +781,17 @@ export default async function ProductDetail({
                 <li className="text-sm text-ink-500">Nema fotografija.</li>
               ) : null}
             </ul>
-            <form action={addProductImage} className="mt-4 space-y-3">
+            <form
+              action={addProductImage}
+              className="mt-4 space-y-3"
+              encType="multipart/form-data"
+            >
               <input type="hidden" name="productId" value={product.id} />
+              <Field label="Upload fotografije">
+                <Input name="file" type="file" accept="image/*" />
+              </Field>
               <Field label="URL fotografije">
-                <Input name="url" type="url" placeholder="https://..." required />
+                <Input name="url" placeholder="https://... ili /putanja/slika.jpg" />
               </Field>
               <Field label="Alt tekst">
                 <Input name="alt" defaultValue={product.name} />

@@ -8,6 +8,7 @@ import {
   IpsConfigError,
   IpsGatewayError,
 } from "@/lib/payments";
+import { rotateOrderAccessToken } from "@/lib/api/order-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,8 +41,14 @@ export async function GET(
   const base = baseUrl();
   const latestPayment = order.payments[0] ?? null;
   if (latestPayment?.status === "PAID") {
+    const token = await rotateOrderAccessToken(order.id);
     return NextResponse.redirect(
-      new URL(`/checkout/potvrda?order=${encodeURIComponent(order.number)}&status=paid`, base),
+      new URL(
+        `/checkout/potvrda?order=${encodeURIComponent(order.number)}&token=${encodeURIComponent(
+          token,
+        )}&status=paid`,
+        base,
+      ),
       { status: 303 },
     );
   }
