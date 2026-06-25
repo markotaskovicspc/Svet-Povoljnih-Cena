@@ -6,11 +6,12 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Pomoć",
   description:
-    "Često postavljana pitanja o porudžbinama, dostavi, plaćanju i nalogu — Svet Akcija.",
+    `Često postavljana pitanja o porudžbinama, dostavi, plaćanju i nalogu — ${BRAND.name}.`,
 };
 
 const faqs = [

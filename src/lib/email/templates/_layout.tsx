@@ -7,6 +7,7 @@
  * future internal `/admin/email-preview` route.
  */
 import type { ReactNode } from "react";
+import { BRAND } from "@/lib/brand";
 
 export interface EmailLayoutProps {
   preview: string;
@@ -51,7 +52,7 @@ export function EmailLayout({
                   color: "#1A1714",
                 }}
               >
-                Svet Akcija
+                {BRAND.name}
               </span>
             </td>
           </tr>
@@ -79,7 +80,7 @@ export function EmailLayout({
               {footerNote ??
                 "Dobili ste ovu poruku jer ste izvršili akciju na svetpovoljnihcena.rs."}
               <br />
-              Svet Akcija d.o.o. · Beograd, Srbija ·{" "}
+              {BRAND.legalName} · Beograd, Srbija ·{" "}
               <a
                 href="https://www.svetpovoljnihcena.rs"
                 style={{ color: "#6B4423" }}

@@ -6,7 +6,9 @@ import type {
   Category as CategoryDTO,
   Product as ProductDTO,
 } from "@/types";
+import { BRAND } from "@/lib/brand";
 import { num, numOrNull } from "@/lib/api/_helpers";
+import { isRenderableImageUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import {
   parseSourcePrice,
@@ -170,7 +172,8 @@ function mapProduct(p: ProductRow): ProductDTO {
           width: m.width ?? undefined,
           height: m.height ?? undefined,
           blurDataUrl: m.blurDataUrl ?? undefined,
-        })),
+        }))
+        .filter((m) => isRenderableImageUrl(m.url)),
       video: p.media.find((m) => m.kind === "VIDEO")
         ? { url: p.media.find((m) => m.kind === "VIDEO")!.url }
         : undefined,
@@ -226,7 +229,7 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     action: salePrice
       ? {
           id: "svet-akcija",
-          name: "Svet akcija - maj 2026",
+          name: `${BRAND.name} - maj 2026`,
           startsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene od")),
           endsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene do")),
           isHero: false,
@@ -237,13 +240,15 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     assemblyCities: [],
     media: {
       images:
-        product.media?.images.map((image) => ({
-          url: resolveSupabaseStorageUrl(image.url),
-          alt: image.alt ?? name,
-          width: image.width ?? undefined,
-          height: image.height ?? undefined,
-          blurDataUrl: image.blurDataUrl ?? undefined,
-        })) ?? [],
+        product.media?.images
+          .map((image) => ({
+            url: resolveSupabaseStorageUrl(image.url),
+            alt: image.alt ?? name,
+            width: image.width ?? undefined,
+            height: image.height ?? undefined,
+            blurDataUrl: image.blurDataUrl ?? undefined,
+          }))
+          .filter((image) => isRenderableImageUrl(image.url)) ?? [],
     },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
@@ -303,13 +308,15 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     allowsAssembly: p.allowsAssembly,
     assemblyCities: [],
     media: {
-      images: p.media.map((m) => ({
-        url: resolveSupabaseStorageUrl(m.url),
-        alt: m.alt ?? undefined,
-        width: m.width ?? undefined,
-        height: m.height ?? undefined,
-        blurDataUrl: m.blurDataUrl ?? undefined,
-      })),
+      images: p.media
+        .map((m) => ({
+          url: resolveSupabaseStorageUrl(m.url),
+          alt: m.alt ?? undefined,
+          width: m.width ?? undefined,
+          height: m.height ?? undefined,
+          blurDataUrl: m.blurDataUrl ?? undefined,
+        }))
+        .filter((m) => isRenderableImageUrl(m.url)),
     },
     recommendedSkus: [],
     frequentlyBoughtSkus: [],

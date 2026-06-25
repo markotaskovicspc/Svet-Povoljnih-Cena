@@ -7,11 +7,13 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { BRAND } from "@/lib/brand";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const metadata: Metadata = {
   title: "Kontakt",
   description:
-    "Kontaktirajte Svet Akcija tim — telefon, e-pošta, radno vreme, Viber i adresa skladišta.",
+    `Kontaktirajte ${BRAND.name} tim — telefon, e-pošta, radno vreme, Viber i adresa skladišta.`,
 };
 
 const channels = [
@@ -86,9 +88,10 @@ export default function KontaktPage() {
 
         <ContentSection id="firma" title="Podaci o firmi">
           <p>
-            <strong>Svet Akcija d.o.o.</strong> — Vojvođanska 401, 11000
-            Beograd, Republika Srbija. PIB 100000000, matični broj 20000000.
-            Tekući račun 160-000000-00 (Banca Intesa).
+            <strong>{MERCHANT_LEGAL_INFO.name}</strong> —{" "}
+            {MERCHANT_LEGAL_INFO.address}. PIB {MERCHANT_LEGAL_INFO.pib},
+            matični broj {MERCHANT_LEGAL_INFO.registrationNumber}. Tekući račun{" "}
+            {MERCHANT_LEGAL_INFO.bankAccount} ({MERCHANT_LEGAL_INFO.bankName}).
           </p>
         </ContentSection>
 

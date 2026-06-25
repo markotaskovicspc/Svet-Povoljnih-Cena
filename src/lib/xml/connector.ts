@@ -185,7 +185,7 @@ export class HttpXmlConnector implements SupplierConnector {
     const headers: Record<string, string> = {
       // Some PHP feed endpoints serve HTML if we omit Accept.
       Accept: "application/xml, text/xml, */*;q=0.5",
-      "User-Agent": "SvetAkcija-FeedImporter/1.0",
+      "User-Agent": "SvetPovoljnihCena-FeedImporter/1.0",
     };
     if (this.cfg.authUser) {
       const token = Buffer.from(

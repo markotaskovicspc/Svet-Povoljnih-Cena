@@ -12,10 +12,11 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { signIn } from "@/lib/auth/auth";
 import { customerCallback } from "@/lib/auth/customer-callback";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Prijava",
-  description: "Prijavite se na svoj Svet Akcija nalog.",
+  description: `Prijavite se na svoj ${BRAND.name} nalog.`,
   robots: { index: false, follow: false },
 };
 

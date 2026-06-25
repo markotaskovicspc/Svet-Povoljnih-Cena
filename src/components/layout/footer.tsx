@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { footerColumns, paymentMethods, socials } from "@/data/site";
 import { Marquee } from "@/components/motion/marquee";
+import { BRAND } from "@/lib/brand";
 
 const SOCIAL_ICON_SRC: Record<string, string> = {
   fb: "/icons/facebook.svg",
@@ -16,10 +17,10 @@ export function Footer() {
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
             <div className="flex items-center gap-3 sm:gap-4">
-              <Link href="/" aria-label="Svet Akcija — početna" className="inline-block shrink-0">
+              <Link href="/" aria-label={`${BRAND.name} — početna`} className="inline-block shrink-0">
                 <Image
                   src="/logo.webp"
-                  alt="Svet Akcija"
+                  alt={BRAND.name}
                   width={1600}
                   height={382}
                   className="h-auto w-[160px] object-contain min-[390px]:w-[180px] md:w-[328px] md:max-w-[30vw]"

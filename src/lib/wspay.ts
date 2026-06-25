@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 /**
  * Phase 4B — WSPay (cards + Apple/Google Pay).
  *
- * WSPay is the Adriatic-region acquirer used by Svet Akcija. The
+ * WSPay is the Adriatic-region acquirer used by Svet Povoljnih Cena. The
  * customer pays on a hosted form (no PAN ever touches our infra) and is
  * redirected back with a signed result. This module covers:
  *

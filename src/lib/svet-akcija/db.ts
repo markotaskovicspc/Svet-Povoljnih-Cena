@@ -1,6 +1,8 @@
 import "server-only";
 
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { BRAND } from "@/lib/brand";
+import { isRenderableImageUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import {
   sourceValue,
@@ -46,7 +48,7 @@ async function fetchDbProducts() {
       },
     });
   } catch (error) {
-    console.error("Failed to load Svet Akcija products from database", error);
+    console.error(`Failed to load ${BRAND.name} products from database`, error);
     return [];
   }
 }
@@ -62,7 +64,7 @@ function mergeProduct(base: SvetAkcijaProduct, row: DbSvetAkcijaProduct | undefi
       ...media,
       url: resolveSupabaseStorageUrl(media.url),
     }))
-    .filter((media) => media.url);
+    .filter((media) => isRenderableImageUrl(media.url));
 
   return {
     ...base,

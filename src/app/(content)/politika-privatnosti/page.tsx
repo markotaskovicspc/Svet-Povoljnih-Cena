@@ -6,11 +6,13 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { BRAND } from "@/lib/brand";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const metadata: Metadata = {
   title: "Politika privatnosti",
   description:
-    "Kako prikupljamo, koristimo i čuvamo vaše lične podatke — Svet Akcija.",
+    `Kako prikupljamo, koristimo i čuvamo vaše lične podatke — ${BRAND.name}.`,
 };
 
 export default function PrivatnostPage() {
@@ -28,8 +30,8 @@ export default function PrivatnostPage() {
       <ContentBody>
         <ContentSection id="rukovalac" title="Rukovalac podacima">
           <p>
-            <strong>Svet Akcija d.o.o.</strong>, Vojvođanska 401, 11000
-            Beograd. Kontakt za zaštitu podataka:{" "}
+            <strong>{MERCHANT_LEGAL_INFO.name}</strong>,{" "}
+            {MERCHANT_LEGAL_INFO.shortAddress}. Kontakt za zaštitu podataka:{" "}
             <Link href="mailto:dpo@svetpovoljnihcena.rs">
               dpo@svetpovoljnihcena.rs
             </Link>

@@ -7,12 +7,13 @@
  */
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Heart } from "lucide-react";
+import { Heart, PackageSearch } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
+import { isRenderableImageUrl } from "@/lib/media";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
@@ -61,11 +62,21 @@ export function ProductCard({
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
+  const cartHydrated = useCart((s) => s.hydrated);
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
+  const visibleLineQty = cartHydrated ? lineQty : 0;
 
-  const images = product.media.images;
+  const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
+  const images = useMemo(
+    () =>
+      product.media.images.filter(
+        (image) =>
+          isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
+      ),
+    [failedImageUrls, product.media.images],
+  );
   const imageTrackRef = useRef<HTMLDivElement | null>(null);
   const imageDragRef = useRef({
     pointerId: -1,
@@ -141,6 +152,12 @@ export function ProductCard({
     commitAddToCart(product);
   }
 
+  const markImageFailed = useCallback((url: string) => {
+    setFailedImageUrls((current) =>
+      current.includes(url) ? current : [...current, url],
+    );
+  }, []);
+
   return (
     <motion.article
       {...hoverProps}
@@ -194,6 +211,7 @@ export function ProductCard({
                         draggable={false}
                         placeholder="blur"
                         blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                        onError={() => markImageFailed(image.url)}
                         className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
                       />
                     </motion.div>
@@ -206,12 +224,18 @@ export function ProductCard({
                       draggable={false}
                       placeholder="blur"
                       blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                      onError={() => markImageFailed(image.url)}
                       className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
                     />
                   )}
                 </div>
               ))
-            : null}
+            : (
+              <div className="grid min-w-full place-items-center bg-white text-ink-300">
+                <PackageSearch className="size-12" aria-hidden />
+                <span className="sr-only">Slika proizvoda nije dostupna</span>
+              </div>
+            )}
         </div>
         {images.length > 1 ? (
           <div className="absolute inset-x-0 bottom-1 z-10 flex flex-wrap justify-center gap-0.5 px-2">
@@ -302,7 +326,7 @@ export function ProductCard({
             </Link>
             <CartQuantityControl
               sku={product.sku}
-              quantity={lineQty}
+              quantity={visibleLineQty}
               onAdd={handleAdd}
               tone="dark"
               addTone="dark"

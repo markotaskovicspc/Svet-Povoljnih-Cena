@@ -42,6 +42,7 @@ import {
   PromoShortcutTile,
 } from "@/components/home/promo-shortcut-tile";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
 
@@ -194,13 +195,13 @@ export function MobileNav({
               </button>
               <Link
                 href="/"
-                aria-label="Svet Akcija - početna"
+                aria-label={`${BRAND.name} - početna`}
                 onClick={close}
                 className="min-w-0 justify-self-center"
               >
                 <Image
                   src="/logo.webp"
-                  alt="Svet Akcija"
+                  alt={BRAND.name}
                   width={1600}
                   height={382}
                   priority

@@ -17,6 +17,7 @@ import {
   hasBannerPlacementColumn,
   hasHomeSectionSlotTable,
 } from "@/lib/storefront/homepage-schema";
+import { normalizeStorefrontHref } from "@/lib/storefront/href";
 import {
   akcijaIcon,
   herojiMesecaIcon,
@@ -277,7 +278,7 @@ function mapBanner(row: {
     subtitle: row.subtitle ?? undefined,
     badgeLabel: row.ctaLabel ?? undefined,
     ctaLabel: row.ctaLabel ?? undefined,
-    ctaHref: row.ctaHref ?? undefined,
+    ctaHref: normalizeStorefrontHref(row.ctaHref),
     imageDesktop: bannerAsset(row.imageDesktop, row.title),
     imageMobile: row.imageMobile ? bannerAsset(row.imageMobile, row.title) : undefined,
     startsAt: row.startsAt?.toISOString(),
@@ -310,7 +311,12 @@ async function getHomeBanner(placement: BannerPlacement, fallback: Banner | null
       orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
     });
 
-    return row ? mapBanner(row) : null;
+    if (!row) {
+      const configuredCount = await db.banner.count({ where: { placement } });
+      return configuredCount === 0 ? fallback : null;
+    }
+
+    return mapBanner(row);
   } catch (error) {
     if (!isMissingSchemaError(error)) {
       console.error(`Failed to load homepage banner "${placement}".`, error);

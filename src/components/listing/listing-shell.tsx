@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatDate as formatStorefrontDate } from "@/lib/format";
 import {
   campaignStickers,
   type CampaignStickerKey,
@@ -459,11 +460,7 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("sr-RS", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
+  return formatStorefrontDate(value);
 }
 
 /** Skeleton grid for suspense fallbacks. */

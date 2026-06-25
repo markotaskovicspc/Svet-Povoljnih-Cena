@@ -1,4 +1,5 @@
 import "server-only";
+import { BRAND } from "@/lib/brand";
 
 /**
  * Phase 4D — central email configuration.
@@ -54,11 +55,11 @@ export function getEmailConfig(): EmailConfig {
           : null,
     from:
       process.env.EMAIL_FROM ??
-      "Svet Akcija <no-reply@svetpovoljnihcena.rs>",
+      `${BRAND.name} <no-reply@svetpovoljnihcena.rs>`,
     marketingFrom:
       process.env.EMAIL_MARKETING_FROM ??
       process.env.EMAIL_FROM ??
-      "Svet Akcija <no-reply@svetpovoljnihcena.rs>",
+      `${BRAND.name} <no-reply@svetpovoljnihcena.rs>`,
     replyTo: process.env.EMAIL_REPLY_TO ?? null,
     orderBcc: process.env.EMAIL_ORDER_BCC ?? null,
     reclamationsInbox:

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import type { Order, OrderStatus, Reclamation, ReclamationStatus } from "@/types";
+import { BRAND } from "@/lib/brand";
 import { formatRsd } from "@/lib/format";
 import { OrderConfirmation } from "./templates/order-confirmation";
 import { IpsPaymentConfirmation } from "./templates/ips-payment-confirmation";
@@ -239,7 +240,7 @@ export async function sendPasswordReset(args: {
   return trackedDispatch({
     kind: "password_reset",
     to: args.to,
-    subject: "Resetovanje lozinke — Svet Akcija",
+    subject: `Resetovanje lozinke — ${BRAND.name}`,
     html,
     text,
     tags: { kind: "password_reset" },
@@ -285,7 +286,7 @@ export async function sendEmailConfirmation(args: {
   return trackedDispatch({
     kind: "email_confirmation",
     to: args.to,
-    subject: "Potvrdite e-poštu — Svet Akcija",
+    subject: `Potvrdite e-poštu — ${BRAND.name}`,
     html,
     text,
     tags: { kind: "email_confirmation" },
@@ -305,7 +306,7 @@ export async function sendMagicLink(args: {
   return trackedDispatch({
     kind: "magic_link",
     to: args.to,
-    subject: "Prijava na Svet Akcija",
+    subject: `Prijava na ${BRAND.name}`,
     html,
     text: `Prijavi se: ${args.url}`,
     tags: { kind: "magic_link" },

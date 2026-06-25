@@ -10,6 +10,7 @@ import { NewsletterBand } from "@/components/layout/newsletter-band";
 import { FirstPurchaseCta } from "@/components/layout/first-purchase-cta";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCurrentUser } from "@/lib/auth/session";
+import { BRAND } from "@/lib/brand";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -43,12 +44,12 @@ const fontLogo = Bebas_Neue({
 
 export const metadata: Metadata = {
   title: {
-    default: "Svet Akcija — premium nameštaj",
-    template: "%s · Svet Akcija",
+    default: `${BRAND.name} — povoljne cene za dom`,
+    template: `%s · ${BRAND.name}`,
   },
   description:
-    "Premium nameštaj po povoljnim cenama. Brza isporuka, montaža u glavnim gradovima, kuratirana selekcija kolekcija.",
-  metadataBase: new URL("https://www.svetakcija.rs"),
+    "Povoljni proizvodi za dom, tehniku, putovanja i svakodnevnu kupovinu. Brza isporuka, sigurno plaćanje i akcijske cene.",
+  metadataBase: new URL(BRAND.url),
 };
 
 export const viewport: Viewport = {

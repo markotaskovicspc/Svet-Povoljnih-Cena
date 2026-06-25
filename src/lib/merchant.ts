@@ -1,5 +1,7 @@
+import { BRAND } from "@/lib/brand";
+
 export const MERCHANT_LEGAL_INFO = {
-  name: "Svet Akcija d.o.o.",
+  name: BRAND.legalName,
   address: "Vojvođanska 401, 11000 Beograd, Republika Srbija",
   shortAddress: "Vojvođanska 401, 11000 Beograd",
   pib: "100000000",

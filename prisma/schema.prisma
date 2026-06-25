@@ -1,4 +1,4 @@
-// Svet Akcija — Phase 3A schema
+// Svet Povoljnih Cena — Phase 3A schema
 // Postgres + Prisma. Money fields use Decimal(12,2) RSD unless stated.
 // Covers: auth/account, catalog, promo, stock & supply, delivery,
 // orders, service, wishlist & alerts, admin.

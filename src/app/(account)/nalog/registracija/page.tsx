@@ -20,10 +20,11 @@ import { setMarketingConsent } from "@/lib/auth/gdpr";
 import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
 import { customerCallback } from "@/lib/auth/customer-callback";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Registracija",
-  description: "Kreirajte Svet Akcija nalog za bržu kupovinu.",
+  description: `Kreirajte ${BRAND.name} nalog za bržu kupovinu.`,
   robots: { index: false, follow: false },
 };
 

@@ -18,11 +18,13 @@ import {
   ChevronRight,
   ChevronUp,
   Heart,
+  PackageSearch,
   Play,
   X,
 } from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
+import { isRenderableImageUrl, isRenderableMediaUrl } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
 const FALLBACK_BLUR =
@@ -42,15 +44,25 @@ interface PdpGalleryProps {
 export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
+  const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const slides = useMemo<Slide[]>(() => {
-    const out: Slide[] = product.media.images.map((asset) => ({
-      kind: "image" as const,
-      asset,
-    }));
-    if (product.media.video) out.push({ kind: "video", asset: product.media.video });
-    if (product.media.video3d) out.push({ kind: "3d", asset: product.media.video3d });
+    const out: Slide[] = product.media.images
+      .filter(
+        (asset) =>
+          isRenderableImageUrl(asset.url) && !failedImageUrls.includes(asset.url),
+      )
+      .map((asset) => ({
+        kind: "image" as const,
+        asset,
+      }));
+    if (product.media.video && isRenderableMediaUrl(product.media.video.url)) {
+      out.push({ kind: "video", asset: product.media.video });
+    }
+    if (product.media.video3d && isRenderableMediaUrl(product.media.video3d.url)) {
+      out.push({ kind: "3d", asset: product.media.video3d });
+    }
     return out;
-  }, [product.media]);
+  }, [failedImageUrls, product.media]);
 
   const [active, setActive] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -65,7 +77,15 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   });
   const [thumbOverflow, setThumbOverflow] = useState({ up: false, down: false });
 
-  const slide = slides[active] ?? slides[0];
+  const activeIndex = slides.length ? Math.min(active, slides.length - 1) : 0;
+  const slide = slides[activeIndex] ?? slides[0];
+  const posterUrl = slides.find((s) => s.kind === "image")?.asset.url;
+
+  const markImageFailed = useCallback((url: string) => {
+    setFailedImageUrls((current) =>
+      current.includes(url) ? current : [...current, url],
+    );
+  }, []);
 
   const goTo = useCallback(
     (index: number) => {
@@ -151,7 +171,36 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     syncTrackActive(event.currentTarget);
   }, [syncTrackActive]);
 
-  if (!slide) return null;
+  if (!slide) {
+    return (
+      <div className="relative overflow-hidden rounded-lg bg-white ring-1 ring-border/60">
+        <button
+          type="button"
+          aria-pressed={wished}
+          aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
+          onClick={() => toggleWish(product)}
+          className={cn(
+            "absolute top-3 right-3 z-20 hidden size-10 items-center justify-center rounded-full bg-white/90 text-ink-700 ring-1 ring-border/60 backdrop-blur transition hover:text-action focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none md:inline-flex",
+            wished && "text-action",
+          )}
+        >
+          <Heart
+            className={cn("size-5 transition", wished && "fill-action")}
+            aria-hidden
+          />
+        </button>
+        <div className="relative grid aspect-[4/3] place-items-center text-ink-300 md:h-[min(65vh,620px)] md:min-h-[360px] md:aspect-auto">
+          <PackageSearch className="size-20" aria-hidden />
+          <span className="sr-only">Slika proizvoda nije dostupna</span>
+          {badges ? (
+            <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
+              {badges}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
@@ -200,6 +249,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     sizes="100vw"
                     placeholder="blur"
                     blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
+                    onError={() => markImageFailed(s.asset.url)}
                     className="object-contain p-3"
                   />
                 ) : s.kind === "video" ? (
@@ -208,7 +258,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     controls
                     playsInline
                     className="h-full w-full object-cover"
-                    poster={product.media.images[0]?.url}
+                    poster={posterUrl}
                   />
                 ) : (
                   <iframe
@@ -234,10 +284,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   type="button"
                   onClick={() => goTo(index)}
                   aria-label={`Prikaži sliku ${index + 1}`}
-                  aria-current={index === active ? "true" : undefined}
+                  aria-current={index === activeIndex ? "true" : undefined}
                   className={cn(
                     "h-1.5 rounded-full shadow-sm transition-all",
-                    index === active
+                    index === activeIndex
                       ? "w-8 bg-ink-900"
                       : "w-2 bg-white/90 ring-1 ring-ink-900/20",
                   )}
@@ -278,7 +328,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   <>
                     <motion.div
                       layoutId={
-                        index === 0 && active === 0
+                          index === 0 && activeIndex === 0
                           ? `product-cover-${product.sku}`
                           : undefined
                       }
@@ -294,6 +344,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                         sizes="(min-width: 1024px) 50vw, 100vw"
                         placeholder="blur"
                         blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
+                        onError={() => markImageFailed(s.asset.url)}
                         className="object-contain p-4"
                       />
                     </motion.div>
@@ -305,7 +356,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                       controls
                       playsInline
                       className="h-full w-full object-cover"
-                      poster={product.media.images[0]?.url}
+                      poster={posterUrl}
                     />
                   </div>
                 ) : (
@@ -331,7 +382,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             <>
               <button
                 type="button"
-                onClick={() => goTo(active - 1)}
+                onClick={() => goTo(activeIndex - 1)}
                 aria-label="Prethodna slika"
                 className="absolute top-1/2 left-3 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur transition hover:bg-white"
               >
@@ -339,7 +390,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               </button>
               <button
                 type="button"
-                onClick={() => goTo(active + 1)}
+                onClick={() => goTo(activeIndex + 1)}
                 aria-label="Sledeća slika"
                 className="absolute top-1/2 right-3 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-ink-800 ring-1 ring-border/60 backdrop-blur transition hover:bg-white"
               >
@@ -352,10 +403,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     type="button"
                     onClick={() => goTo(index)}
                     aria-label={`Prikaži sliku ${index + 1}`}
-                    aria-current={index === active ? "true" : undefined}
+                    aria-current={index === activeIndex ? "true" : undefined}
                     className={cn(
                       "h-1.5 rounded-full transition-all",
-                      index === active
+                      index === activeIndex
                         ? "w-8 bg-ink-900"
                         : "w-3 bg-white/80 ring-1 ring-border/60",
                     )}
@@ -387,7 +438,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           aria-label="Galerija proizvoda"
         >
           {slides.map((s, i) => {
-            const isActive = i === active;
+            const isActive = i === activeIndex;
             const label =
               s.kind === "image"
                 ? `Slika ${i + 1}`
@@ -415,6 +466,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                       alt=""
                       fill
                       sizes="80px"
+                      onError={() => markImageFailed(s.asset.url)}
                       className="object-contain p-1"
                     />
                   ) : s.kind === "video" ? (
@@ -474,6 +526,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                 alt={slide.asset.alt ?? product.name}
                 fill
                 sizes="90vw"
+                onError={() => markImageFailed(slide.asset.url)}
                 className="object-contain"
               />
             </motion.div>

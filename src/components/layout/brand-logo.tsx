@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 interface BrandLogoProps {
@@ -11,7 +12,7 @@ export function BrandLogo({ className, imageClassName }: BrandLogoProps) {
     <span className={cn("inline-flex items-center", className)}>
       <Image
         src="/logo.webp"
-        alt="Svet Akcija"
+        alt={BRAND.name}
         width={1600}
         height={382}
         priority

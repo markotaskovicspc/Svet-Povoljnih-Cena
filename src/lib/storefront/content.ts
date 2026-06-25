@@ -6,6 +6,7 @@ import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } f
 import { headerTabs, promoBar } from "@/data/site";
 import type { Banner, PromoBar, Tab } from "@/types";
 import { hasBannerPlacementColumn } from "@/lib/storefront/homepage-schema";
+import { normalizeStorefrontHref } from "@/lib/storefront/href";
 
 const activeWindow = (now: Date) => ({
   AND: [
@@ -16,6 +17,35 @@ const activeWindow = (now: Date) => ({
 
 function bannerAsset(url: string, alt: string) {
   return { url, alt };
+}
+
+function mapBanner(row: {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  ctaLabel: string | null;
+  ctaHref: string | null;
+  imageDesktop: string;
+  imageMobile: string | null;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  order: number;
+}): Banner {
+  return {
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle ?? undefined,
+    badgeLabel: row.ctaLabel ?? undefined,
+    ctaLabel: row.ctaLabel ?? undefined,
+    ctaHref: normalizeStorefrontHref(row.ctaHref),
+    imageDesktop: bannerAsset(row.imageDesktop, row.title),
+    imageMobile: row.imageMobile
+      ? bannerAsset(row.imageMobile, row.title)
+      : undefined,
+    startsAt: row.startsAt?.toISOString(),
+    endsAt: row.endsAt?.toISOString(),
+    order: row.order,
+  };
 }
 
 function isMissingSchemaError(error: unknown) {
@@ -42,21 +72,14 @@ export const getActiveBanners = cache(async (): Promise<Banner[]> => {
       orderBy: [{ order: "asc" }, { createdAt: "desc" }],
     });
 
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle ?? undefined,
-      badgeLabel: row.ctaLabel ?? undefined,
-      ctaLabel: row.ctaLabel ?? undefined,
-      ctaHref: row.ctaHref ?? undefined,
-      imageDesktop: bannerAsset(row.imageDesktop, row.title),
-      imageMobile: row.imageMobile
-        ? bannerAsset(row.imageMobile, row.title)
-        : undefined,
-      startsAt: row.startsAt?.toISOString(),
-      endsAt: row.endsAt?.toISOString(),
-      order: row.order,
-    }));
+    if (!rows.length) {
+      const configuredCount = await db.banner.count({
+        where: { placement: BannerPlacement.HERO },
+      });
+      return configuredCount === 0 ? heroBanners : [];
+    }
+
+    return rows.map(mapBanner);
   } catch (error) {
     if (!isMissingSchemaError(error)) {
       console.error("Failed to load active banners", error);
@@ -84,7 +107,13 @@ export async function getSectionBanner(sectionId: string): Promise<Banner | null
       orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
     });
 
-    if (!row) return null;
+    if (!row && fallback?.ctaHref) {
+      const configuredCount = await db.banner.count({
+        where: { ctaHref: fallback.ctaHref },
+      });
+      return configuredCount === 0 ? fallback : null;
+    }
+    if (!row) return fallback;
 
     return {
       id: row.id,
@@ -92,7 +121,7 @@ export async function getSectionBanner(sectionId: string): Promise<Banner | null
       subtitle: row.subtitle ?? undefined,
       badgeLabel: fallback?.badgeLabel ?? row.ctaLabel ?? undefined,
       ctaLabel: row.ctaLabel ?? fallback?.ctaLabel,
-      ctaHref: row.ctaHref ?? fallback?.ctaHref,
+      ctaHref: normalizeStorefrontHref(row.ctaHref) ?? fallback?.ctaHref,
       imageDesktop: bannerAsset(row.imageDesktop, row.title),
       imageMobile: row.imageMobile
         ? bannerAsset(row.imageMobile, row.title)
@@ -128,7 +157,7 @@ export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
       subtitle: row.subtitle ?? undefined,
       badgeLabel: protectedPricesBanner.badgeLabel,
       ctaLabel: row.ctaLabel ?? protectedPricesBanner.ctaLabel,
-      ctaHref: row.ctaHref ?? protectedPricesBanner.ctaHref,
+      ctaHref: normalizeStorefrontHref(row.ctaHref) ?? protectedPricesBanner.ctaHref,
       imageDesktop: protectedPricesBanner.imageDesktop,
       imageMobile: protectedPricesBanner.imageMobile,
       startsAt: row.startsAt?.toISOString(),
@@ -159,7 +188,7 @@ export const getActivePromoBar = cache(async (): Promise<PromoBar | null> => {
       id: row.id,
       enabled: row.enabled,
       text: row.text,
-      href: row.href ?? undefined,
+      href: normalizeStorefrontHref(row.href),
       startsAt: row.startsAt?.toISOString(),
       endsAt: row.endsAt?.toISOString(),
     };
@@ -178,10 +207,15 @@ export const getActiveTabs = cache(async (): Promise<Tab[]> => {
       orderBy: [{ order: "asc" }, { label: "asc" }],
     });
 
+    if (!rows.length) {
+      const configuredCount = await db.tab.count();
+      return configuredCount === 0 ? headerTabs : [];
+    }
+
     return rows.map((row) => ({
       id: row.id,
       label: row.label,
-      href: row.href,
+      href: normalizeStorefrontHref(row.href) ?? row.href,
       order: row.order,
       icon: row.icon ?? undefined,
     }));

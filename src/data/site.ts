@@ -3,6 +3,7 @@
  * Will be replaced by admin-driven CMS data in Phase 5.
  */
 import type { PromoBar, Tab } from "@/types";
+import { BRAND } from "@/lib/brand";
 
 export const promoBar: PromoBar = {
   id: "promo-1",
@@ -104,7 +105,7 @@ export const primaryNav: NavNode[] = [
 
 export const footerColumns: { title: string; links: { label: string; href: string }[] }[] = [
   {
-    title: "Svet Akcija",
+    title: BRAND.name,
     links: [
       { label: "O nama", href: "/o-nama" },
       { label: "Kontakt", href: "/kontakt" },
@@ -152,7 +153,7 @@ export const paymentMethods = [
 ] as const;
 
 export const socials = [
-  { id: "fb", label: "Facebook", href: "https://facebook.com/svetakcija" },
-  { id: "ig", label: "Instagram", href: "https://instagram.com/svetakcija" },
-  { id: "tt", label: "TikTok", href: "https://tiktok.com/@svetakcija" },
+  { id: "fb", label: "Facebook", href: `https://facebook.com/${BRAND.socialHandle}` },
+  { id: "ig", label: "Instagram", href: `https://instagram.com/${BRAND.socialHandle}` },
+  { id: "tt", label: "TikTok", href: `https://tiktok.com/@${BRAND.socialHandle}` },
 ] as const;

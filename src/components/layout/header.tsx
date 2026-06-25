@@ -12,6 +12,7 @@ import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
 import { DesktopMenu } from "./desktop-menu";
+import { BRAND } from "@/lib/brand";
 
 const SCROLL_THRESHOLD = 16;
 
@@ -46,11 +47,11 @@ export function Header({
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-2 md:flex">
         <DesktopMenu tabs={tabs} />
-        <Link href="/" aria-label="Svet Akcija — početna">
+        <Link href="/" aria-label={`${BRAND.name} — početna`}>
           <div className="shrink-0 rounded-lg px-2 py-0">
             <Image
               src="/logo.webp"
-              alt="Svet Akcija"
+              alt={BRAND.name}
               width={1600}
               height={382}
               priority
@@ -109,13 +110,13 @@ export function Header({
         <MobileNav tabs={tabs} isCustomerLoggedIn={isCustomerLoggedIn} />
         <Link
           href="/"
-          aria-label="Svet Akcija — početna"
+          aria-label={`${BRAND.name} — početna`}
           className="flex min-w-0 flex-1 justify-center"
         >
           <div className="min-w-0 rounded-md px-1.5 py-0.5">
             <Image
               src="/logo.webp"
-              alt="Svet Akcija"
+              alt={BRAND.name}
               width={1600}
               height={382}
               priority

@@ -17,6 +17,7 @@ import {
   sourceValue,
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
+import { isRenderableImageUrl } from "@/lib/media";
 
 type SortKey = "source" | "price-asc" | "price-desc" | "category";
 
@@ -234,12 +235,15 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
 }
 
 function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const salePrice = sourceValue(product, "Akcijska MPC");
   const regularPrice = sourceValue(product, "MPC redovna");
   const brand = sourceValue(product, "Kolekcija (brend)");
   const primaryColor = sourceValue(product, "Boja 1");
   const secondaryColor = sourceValue(product, "Boja 2");
   const image = primaryImage(product);
+  const renderableImage =
+    image && !imageFailed && isRenderableImageUrl(image.url) ? image : null;
 
   return (
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">
@@ -248,12 +252,13 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
         className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         aria-label={`${sourceValue(product, "Kratki naziv")} detalji`}
       >
-        {image ? (
+        {renderableImage ? (
           <Image
-            src={image.url}
-            alt={image.alt ?? sourceValue(product, "Kratki naziv")}
+            src={renderableImage.url}
+            alt={renderableImage.alt ?? sourceValue(product, "Kratki naziv")}
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            onError={() => setImageFailed(true)}
             className="object-contain p-4 transition duration-300"
           />
         ) : (

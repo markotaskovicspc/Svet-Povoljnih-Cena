@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminError, AdminLoginForm } from "./form";
 import { signIn } from "@/lib/auth/auth";
 import { AuthError } from "next-auth";
+import { BRAND } from "@/lib/brand";
 
 export const metadata = {
   title: "Admin prijava",
@@ -46,7 +47,7 @@ export default async function AdminLoginPage({
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-md rounded-2xl border border-border/60 bg-surface p-8 shadow-sm">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-500">
-          Svet Akcija
+          {BRAND.name}
         </p>
         <h1 className="mt-1 font-display text-2xl tracking-tight">
           Admin prijava

@@ -5,6 +5,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { BRAND } from "@/lib/brand";
 
 export interface EmailConfirmationProps {
   confirmUrl: string;
@@ -20,11 +21,11 @@ export function EmailConfirmation({
   marketingUnsubscribeUrl,
 }: EmailConfirmationProps) {
   return (
-    <EmailLayout preview="Potvrdite e-poštu za Svet Akcija nalog">
+    <EmailLayout preview={`Potvrdite e-poštu za ${BRAND.name} nalog`}>
       <EmailHeading>Potvrdite e-poštu</EmailHeading>
       <EmailParagraph>
         Hvala na registraciji. Kliknite na dugme ispod da potvrdite e-poštu za
-        svoj Svet Akcija nalog. Link važi {expiresInHours} sata.
+        svoj {BRAND.name} nalog. Link važi {expiresInHours} sata.
       </EmailParagraph>
       <EmailButton href={confirmUrl}>Potvrdi e-poštu</EmailButton>
       {includeFirstPurchaseOffer ? (

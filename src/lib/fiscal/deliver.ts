@@ -8,6 +8,7 @@ import {
   type FiscalIssueOutcome,
 } from "./issue";
 import { getFiscalConfig } from "./config";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 /**
  * Phase 4F — End-to-end pipeline triggered from the warehouse pickup
@@ -51,7 +52,7 @@ export async function issueAndDeliverFiscalReceipt(
     receiptNumber: outcome.receipt.receiptNumber,
     fiscalizedAt: outcome.receipt.fiscalizedAt,
     merchant: {
-      name: "Svet Akcija d.o.o.",
+      name: MERCHANT_LEGAL_INFO.name,
       tin: cfg.tin,
       locationId: cfg.locationId,
     },

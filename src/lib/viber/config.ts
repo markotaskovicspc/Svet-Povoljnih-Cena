@@ -1,4 +1,5 @@
 import "server-only";
+import { BRAND } from "@/lib/brand";
 
 /**
  * Phase 4E — Viber Business Messages configuration.
@@ -41,7 +42,7 @@ export function getViberConfig(): ViberConfig {
   cached = {
     provider,
     apiKey: provider === "viber" ? process.env.VIBER_API_TOKEN ?? null : null,
-    sender: process.env.VIBER_SENDER_NAME ?? "Svet Akcija",
+    sender: process.env.VIBER_SENDER_NAME ?? BRAND.name,
     senderAvatar: process.env.VIBER_SENDER_AVATAR ?? null,
     endpoint:
       process.env.VIBER_ENDPOINT ?? "https://chatapi.viber.com/pa/send_message",

@@ -15,7 +15,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { useCheckout } from "@/lib/checkout/store";
-import { formatRsd } from "@/lib/format";
+import { formatDateTime, formatRsd } from "@/lib/format";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
@@ -290,10 +290,7 @@ function IpsPaymentReceipt({
         ? "Neizvršeno"
         : "U obradi";
   const paidAt = payment?.paidAt
-    ? new Intl.DateTimeFormat("sr-Latn-RS", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(payment.paidAt))
+    ? formatDateTime(payment.paidAt)
     : "—";
   const customerAddress = order.billingAddress ?? order.shippingAddress;
 
@@ -419,7 +416,7 @@ function Uplatnica({ order }: { order: Order }) {
         <span className="text-ink-900">Porudžbina {order.id}</span>
         <span className="mt-2 text-ink-500">PRIMALAC</span>
         <span className="text-ink-900">
-          Svet Akcija d.o.o.
+          {MERCHANT_LEGAL_INFO.name}
           <br />
           Beograd, Srbija
         </span>
@@ -545,10 +542,7 @@ function OrderRecap({ order }: { order: Order }) {
           {order.payment.paidAt ? (
             <Row
               label="Datum uplate"
-              value={new Intl.DateTimeFormat("sr-Latn-RS", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }).format(new Date(order.payment.paidAt))}
+              value={formatDateTime(order.payment.paidAt)}
             />
           ) : null}
         </dl>

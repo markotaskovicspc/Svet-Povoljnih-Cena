@@ -134,7 +134,7 @@ async function postReservation(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "User-Agent": "SvetAkcija-Reservation/1.0",
+      "User-Agent": "SvetPovoljnihCena-Reservation/1.0",
     },
     body: JSON.stringify(body),
     cache: "no-store",

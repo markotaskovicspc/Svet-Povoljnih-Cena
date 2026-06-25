@@ -7,12 +7,13 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { BRAND } from "@/lib/brand";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const metadata: Metadata = {
   title: "Uslovi kupovine",
   description:
-    "Pravila kupovine, načini plaćanja, povraćaj i odustanak od ugovora — Svet Akcija.",
+    `Pravila kupovine, načini plaćanja, povraćaj i odustanak od ugovora — ${BRAND.name}.`,
 };
 
 export default async function UsloviKupovinePage() {
@@ -96,7 +97,7 @@ export default async function UsloviKupovinePage() {
           <p>
             U slučaju vraćanja robe i povraćaja sredstava kupcu koji je
             prethodno platio IPS Skeniraj metodom, bez obzira na razlog
-            vraćanja, Svet Akcija d.o.o. je u obavezi da povraćaj vrši
+            vraćanja, {MERCHANT_LEGAL_INFO.name} je u obavezi da povraćaj vrši
             isključivo preko IPS sistema.
           </p>
         </ContentSection>

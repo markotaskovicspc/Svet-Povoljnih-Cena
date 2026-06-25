@@ -4,6 +4,7 @@ import {
   Heart,
   LifeBuoy,
   LogOut,
+  MapPin,
   PackageCheck,
   ShoppingBag,
 } from "lucide-react";
@@ -39,6 +40,12 @@ const quickLinks = [
     title: "Lista želja",
     description: "Pogledajte sačuvane proizvode i favorite.",
     icon: Heart,
+  },
+  {
+    href: "/nalog/adrese",
+    title: "Adrese",
+    description: "Upravljajte podacima za bržu isporuku.",
+    icon: MapPin,
   },
   {
     href: "/korpa",
@@ -97,7 +104,7 @@ export default async function AccountPage() {
         </div>
       ) : null}
 
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
+      <div className="mt-8 grid gap-4 md:grid-cols-5">
         {quickLinks.map((item) => {
           const Icon = item.icon;
           return (

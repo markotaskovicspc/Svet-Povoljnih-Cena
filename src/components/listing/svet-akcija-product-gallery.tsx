@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { PackageSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isRenderableImageUrl } from "@/lib/media";
 
 interface GalleryImage {
   url: string;
@@ -30,24 +31,38 @@ export function SvetAkcijaProductGallery({
     didDrag: false,
   });
   const [active, setActive] = useState(0);
+  const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
+  const safeImages = useMemo(
+    () =>
+      images.filter(
+        (image) =>
+          isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
+      ),
+    [failedImageUrls, images],
+  );
+  const markImageFailed = useCallback((url: string) => {
+    setFailedImageUrls((current) =>
+      current.includes(url) ? current : [...current, url],
+    );
+  }, []);
 
   const syncActive = useCallback(() => {
     const track = trackRef.current;
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-    setActive(Math.max(0, Math.min(index, images.length - 1)));
-  }, [images.length]);
+    setActive(Math.max(0, Math.min(index, safeImages.length - 1)));
+  }, [safeImages.length]);
 
   const goTo = useCallback(
     (index: number) => {
-      if (!images.length) return;
-      const nextIndex = Math.max(0, Math.min(index, images.length - 1));
+      if (!safeImages.length) return;
+      const nextIndex = Math.max(0, Math.min(index, safeImages.length - 1));
       setActive(nextIndex);
       trackRef.current
         ?.querySelector<HTMLElement>(`[data-gallery-slide="${nextIndex}"]`)
         ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     },
-    [images.length],
+    [safeImages.length],
   );
 
   const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -88,7 +103,7 @@ export function SvetAkcijaProductGallery({
     [syncActive],
   );
 
-  if (!images.length) {
+  if (!safeImages.length) {
     return (
       <section
         aria-label="Galerija proizvoda"
@@ -117,7 +132,7 @@ export function SvetAkcijaProductGallery({
         className="flex cursor-grab touch-pan-x snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain bg-white active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-roledescription="carousel"
       >
-        {images.map((image, index) => (
+        {safeImages.map((image, index) => (
           <div
             key={`${image.url}-${index}`}
             data-gallery-slide={index}
@@ -130,16 +145,17 @@ export function SvetAkcijaProductGallery({
               priority={index === 0}
               draggable={false}
               sizes="(min-width: 1024px) 48vw, 100vw"
+              onError={() => markImageFailed(image.url)}
               className="object-contain p-4"
             />
           </div>
         ))}
       </div>
 
-      {images.length > 1 ? (
+      {safeImages.length > 1 ? (
         <>
           <div className="flex justify-center gap-1.5 px-3 pt-3 md:hidden">
-            {images.map((_, index) => (
+            {safeImages.map((_, index) => (
               <button
                 key={index}
                 type="button"
@@ -155,7 +171,7 @@ export function SvetAkcijaProductGallery({
           </div>
 
           <div className="grid grid-cols-4 gap-2 p-2 sm:grid-cols-5">
-            {images.map((item, index) => (
+            {safeImages.map((item, index) => (
               <button
                 key={`${item.url}-${index}`}
                 type="button"
@@ -173,6 +189,7 @@ export function SvetAkcijaProductGallery({
                   fill
                   draggable={false}
                   sizes="96px"
+                  onError={() => markImageFailed(item.url)}
                   className="object-contain p-1.5"
                 />
               </button>
