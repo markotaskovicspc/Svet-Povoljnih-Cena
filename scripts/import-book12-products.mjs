@@ -88,6 +88,9 @@ async function ensureDatabaseSchema(prisma) {
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "sizeLabel" TEXT`);
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "colorPrimary" TEXT`);
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "colorSecondary" TEXT`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "ProductMedia" ADD COLUMN IF NOT EXISTS "thumbUrl" TEXT`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "ProductMedia" ADD COLUMN IF NOT EXISTS "cardUrl" TEXT`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "ProductMedia" ADD COLUMN IF NOT EXISTS "pdpUrl" TEXT`);
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Product_barcode_key" ON "Product"("barcode")`);
 }
 

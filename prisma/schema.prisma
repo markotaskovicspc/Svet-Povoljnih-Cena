@@ -402,6 +402,9 @@ model ProductMedia {
   productId   String
   kind        MediaKind @default(IMAGE)
   url         String
+  thumbUrl    String?
+  cardUrl     String?
+  pdpUrl      String?
   alt         String?
   width       Int?
   height      Int?

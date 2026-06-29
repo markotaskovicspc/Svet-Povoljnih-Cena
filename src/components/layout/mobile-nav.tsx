@@ -200,11 +200,11 @@ export function MobileNav({
                 className="min-w-0 justify-self-center"
               >
                 <Image
-                  src="/logo.webp"
+                  src="/logo.svg"
                   alt={BRAND.name}
-                  width={1600}
-                  height={382}
-                  priority
+                  width={1193}
+                  height={198}
+                  preload
                   className="h-auto w-[min(45vw,190px)] max-w-full object-contain"
                 />
               </Link>

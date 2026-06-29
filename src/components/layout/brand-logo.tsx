@@ -11,11 +11,11 @@ export function BrandLogo({ className, imageClassName }: BrandLogoProps) {
   return (
     <span className={cn("inline-flex items-center", className)}>
       <Image
-        src="/logo.webp"
+        src="/logo.svg"
         alt={BRAND.name}
-        width={1600}
-        height={382}
-        priority
+        width={1193}
+        height={198}
+        preload
         className={cn("block h-auto w-full", imageClassName)}
       />
     </span>

@@ -19,10 +19,10 @@ export function Footer() {
             <div className="flex items-center gap-3 sm:gap-4">
               <Link href="/" aria-label={`${BRAND.name} — početna`} className="inline-block shrink-0">
                 <Image
-                  src="/logo.webp"
+                  src="/logo.svg"
                   alt={BRAND.name}
-                  width={1600}
-                  height={382}
+                  width={1193}
+                  height={198}
                   className="h-auto w-[160px] object-contain min-[390px]:w-[180px] md:w-[328px] md:max-w-[30vw]"
                 />
               </Link>

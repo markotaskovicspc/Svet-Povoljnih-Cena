@@ -50,11 +50,11 @@ export function Header({
         <Link href="/" aria-label={`${BRAND.name} — početna`}>
           <div className="shrink-0 rounded-lg px-2 py-0">
             <Image
-              src="/logo.webp"
+              src="/logo.svg"
               alt={BRAND.name}
-              width={1600}
-              height={382}
-              priority
+              width={1193}
+              height={198}
+              preload
               className="h-auto w-[286px] max-w-[24vw] object-contain"
             />
           </div>
@@ -115,11 +115,11 @@ export function Header({
         >
           <div className="min-w-0 rounded-md px-1.5 py-0.5">
             <Image
-              src="/logo.webp"
+              src="/logo.svg"
               alt={BRAND.name}
-              width={1600}
-              height={382}
-              priority
+              width={1193}
+              height={198}
+              preload
               className="mx-auto h-auto w-[min(52vw,228px)] max-w-full object-contain"
             />
           </div>
