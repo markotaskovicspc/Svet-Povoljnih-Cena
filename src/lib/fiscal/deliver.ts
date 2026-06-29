@@ -1,28 +1,20 @@
 import "server-only";
 
+import { type FiscalDocumentSource, type PaymentMethod } from "@prisma/client";
+import { db } from "@/lib/db";
 import { loadOrderForEmail, sendFiscalReceipt } from "@/lib/email";
+import { buildWithdrawalFormPdf } from "@/lib/email/pdf";
+import { num } from "@/lib/api/_helpers";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { buildFiscalReceiptPdf } from "./pdf";
 import {
+  getIssuedSaleDocumentsForOrder,
+  isOrderFullyFiscalized,
+  issueFiscalSale,
   paymentMethodLabel,
-  tryIssueFiscalReceipt,
   type FiscalIssueOutcome,
 } from "./issue";
 import { getFiscalConfig } from "./config";
-import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
-
-/**
- * Phase 4F — End-to-end pipeline triggered from the warehouse pickup
- * event (courier `PICKED_UP` webhook or admin "mark picked up" action):
- *
- *   1. Idempotently call the SUF gateway to mint the fiscal receipt.
- *   2. Render the PDF slip.
- *   3. Email the customer with the slip attached.
- *
- * Failures of step 2/3 do NOT roll back step 1 — once the gateway has
- * fiscalized the sale we own the obligation regardless of whether the
- * email landed. We log and surface the error to the caller so the admin
- * dashboard can show a "resend" button later.
- */
 
 export interface DeliverResult {
   outcome: FiscalIssueOutcome;
@@ -32,81 +24,144 @@ export interface DeliverResult {
 
 export async function issueAndDeliverFiscalReceipt(
   orderId: string,
-  opts: { forceEmail?: boolean } = {},
+  opts: {
+    forceEmail?: boolean;
+    source?: Exclude<FiscalDocumentSource, "REFUND">;
+    paymentMethod?: PaymentMethod;
+    orderItemIds?: string[];
+  } = {},
 ): Promise<DeliverResult> {
-  const outcome = await tryIssueFiscalReceipt(orderId);
-  if (!outcome.ok) {
+  let outcome: FiscalIssueOutcome;
+  try {
+    outcome = await issueFiscalSale({
+      orderId,
+      orderItemIds: opts.orderItemIds,
+      source: opts.source ?? "AUTO_PICKUP",
+      paymentMethod: opts.paymentMethod,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[fiscal] issue threw for ${orderId}: ${message}`);
+    outcome = { ok: false, reason: "gateway_failure", error: message };
+  }
+  if (!outcome.ok) return { outcome, emailed: false };
+
+  if (!opts.forceEmail && !outcome.created) {
     return { outcome, emailed: false };
   }
 
-  // Reload via the email adapter so the template gets the canonical
-  // `Order` shape with lower-cased enums + decimal coercion.
+  const fullyFiscalized = await isOrderFullyFiscalized(orderId);
+  if (!fullyFiscalized && !opts.forceEmail) {
+    return { outcome, emailed: false };
+  }
+
   const loaded = await loadOrderForEmail(orderId);
   if (!loaded?.recipient) {
     return { outcome, emailed: false, emailError: "no_recipient" };
   }
 
+  const documents = await getIssuedSaleDocumentsForOrder(orderId);
+  const receiptDocuments = documents.filter((document) => document.receiptNumber && document.issuedAt);
+  if (!receiptDocuments.length) {
+    return { outcome, emailed: false, emailError: "no_fiscal_documents" };
+  }
+
   const cfg = getFiscalConfig();
-  const pdf = buildFiscalReceiptPdf({
-    orderNumber: loaded.order.id,
-    receiptNumber: outcome.receipt.receiptNumber,
-    fiscalizedAt: outcome.receipt.fiscalizedAt,
-    merchant: {
-      name: MERCHANT_LEGAL_INFO.name,
-      tin: cfg.tin,
-      locationId: cfg.locationId,
-    },
-    buyer: loaded.order.billingAddress
-      ? {
-          name:
-            loaded.order.billingAddress.companyName ??
-            `${loaded.order.billingAddress.firstName} ${loaded.order.billingAddress.lastName}`,
-          tin: loaded.order.billingAddress.pib,
-          address: `${loaded.order.billingAddress.street}, ${loaded.order.billingAddress.postalCode} ${loaded.order.billingAddress.city}`,
-        }
-      : undefined,
-    items: loaded.order.items.map((i) => ({
-      sku: i.sku,
-      name: i.name,
-      qty: i.qty,
-      unitPrice:
-        i.unitPriceSale + (i.withAssembly && i.assemblyPrice ? i.assemblyPrice : 0),
-    })),
-    total: loaded.order.total,
-    paymentMethodLabel: paymentMethodLabel(
-      // Reverse the lower-cased enum back to the Prisma value the helper expects.
-      mapBackPaymentMethod(loaded.order.paymentMethod),
-    ),
-    qrUrl: outcome.receipt.qrUrl,
+  const attachments = receiptDocuments.map((document) => {
+    const pdf = buildFiscalReceiptPdf({
+      orderNumber: loaded.order.id,
+      receiptNumber: document.receiptNumber!,
+      fiscalizedAt: document.issuedAt!,
+      merchant: {
+        name: MERCHANT_LEGAL_INFO.name,
+        tin: cfg.tin,
+        locationId: cfg.locationId,
+      },
+      buyer: loaded.order.billingAddress
+        ? {
+            name:
+              loaded.order.billingAddress.companyName ??
+              `${loaded.order.billingAddress.firstName} ${loaded.order.billingAddress.lastName}`,
+            tin: loaded.order.billingAddress.pib,
+            address: `${loaded.order.billingAddress.street}, ${loaded.order.billingAddress.postalCode} ${loaded.order.billingAddress.city}`,
+          }
+        : undefined,
+      items: document.lines.map((line) => ({
+        sku: line.sku,
+        name: line.shortName,
+        qty: line.qty,
+        unitPrice: num(line.unitPriceGross),
+      })),
+      total: document.lines.reduce((sum, line) => sum + num(line.totalGross), 0),
+      paymentMethodLabel: paymentMethodLabel(
+        document.paymentMethod ?? mapBackPaymentMethod(loaded.order.paymentMethod),
+      ),
+      qrUrl: document.qrUrl,
+    });
+    return {
+      filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
+      content: pdf.toString("base64"),
+      contentType: "application/pdf",
+    };
   });
 
+  const withdrawalForm = buildWithdrawalFormPdf({
+    number: loaded.order.id,
+    createdAt: new Date(loaded.order.createdAt),
+    items: loaded.order.items.map((item) => ({
+      sku: item.sku,
+      name: item.name,
+      qty: item.qty,
+      unitPriceSale: item.unitPriceSale,
+      assemblyPrice: item.assemblyPrice ?? null,
+    })),
+    subtotal: loaded.order.subtotal,
+    shipping: loaded.order.shipping,
+    assemblyTotal: loaded.order.assemblyTotal,
+    voucherCode: loaded.order.voucherCode ?? null,
+    voucherDiscount: loaded.order.voucherDiscount ?? null,
+    total: loaded.order.total,
+    paymentMethod: loaded.order.paymentMethod,
+    shipping_address: {
+      firstName: loaded.order.shippingAddress.firstName,
+      lastName: loaded.order.shippingAddress.lastName,
+      street: loaded.order.shippingAddress.street,
+      postalCode: loaded.order.shippingAddress.postalCode,
+      city: loaded.order.shippingAddress.city,
+    },
+  });
+
+  const receiptNumbers = receiptDocuments.map((document) => document.receiptNumber).join(", ");
   const send = await sendFiscalReceipt({
     order: loaded.order,
     to: loaded.recipient,
-    receiptNumber: outcome.receipt.receiptNumber,
-    qrUrl: outcome.receipt.qrUrl,
-    pdf,
+    receiptNumber: receiptNumbers,
+    qrUrl: receiptDocuments[0]?.qrUrl,
+    attachments,
+    withdrawalForm,
     idempotencyKey: opts.forceEmail
-      ? `fiscal:${outcome.receipt.receiptNumber}:resend:${Date.now()}`
-      : undefined,
+      ? `fiscal:${orderId}:final:resend:${Date.now()}`
+      : `fiscal:${orderId}:final`,
   });
 
   if (!send.ok) {
+    await markEmailStatus(receiptDocuments.map((document) => document.id), null, send.error);
     return { outcome, emailed: false, emailError: send.error };
   }
+
+  await markEmailStatus(receiptDocuments.map((document) => document.id), new Date(), null);
   return { outcome, emailed: true };
 }
 
-function mapBackPaymentMethod(
-  m: string,
-):
-  | "POUZECE_GOTOVINA"
-  | "POUZECE_KARTICA"
-  | "KARTICA"
-  | "GOOGLE_PAY"
-  | "APPLE_PAY"
-  | "IPS"
-  | "UPLATA_NA_RACUN" {
+async function markEmailStatus(documentIds: string[], emailedAt: Date | null, emailError: string | null) {
+  if (!documentIds.length) return;
+  await db.fiscalDocument.updateMany({
+    where: { id: { in: documentIds } },
+    data: { emailedAt, emailError },
+  });
+}
+
+function mapBackPaymentMethod(m: string): PaymentMethod {
   switch (m) {
     case "pouzece_gotovina":
       return "POUZECE_GOTOVINA";

@@ -47,11 +47,16 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
     include: { items: true, fiscal: true },
   });
   if (byNumber) return byNumber;
-  const fiscal = await db.fiscalReceipt.findUnique({
+  const fiscalDocument = await db.fiscalDocument.findFirst({
+    where: { receiptNumber: orderNumberOrFiscal, kind: "SALE", status: "ISSUED" },
+    include: { order: { include: { items: true, fiscal: true } } },
+  });
+  if (fiscalDocument) return fiscalDocument.order;
+  const legacyFiscal = await db.fiscalReceipt.findUnique({
     where: { receiptNumber: orderNumberOrFiscal },
     include: { order: { include: { items: true, fiscal: true } } },
   });
-  return fiscal?.order ?? null;
+  return legacyFiscal?.order ?? null;
 }
 
 export async function createReclamation(

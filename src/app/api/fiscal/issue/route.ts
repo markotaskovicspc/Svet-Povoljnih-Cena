@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PaymentMethod } from "@prisma/client";
 import { z } from "zod";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 
@@ -28,6 +29,8 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   orderId: z.string().min(1),
+  orderItemIds: z.array(z.string().min(1)).optional(),
+  paymentMethod: z.enum(PaymentMethod).optional(),
 });
 
 function isAuthorized(req: Request): boolean {
@@ -53,6 +56,9 @@ export async function POST(req: Request) {
   const url = new URL(req.url);
   const result = await issueAndDeliverFiscalReceipt(parsed.data.orderId, {
     forceEmail: url.searchParams.get("resend") === "1",
+    source: "MANUAL",
+    paymentMethod: parsed.data.paymentMethod,
+    orderItemIds: parsed.data.orderItemIds,
   });
   if (!result.outcome.ok) {
     const status = result.outcome.reason === "not_found" ? 404 : 502;

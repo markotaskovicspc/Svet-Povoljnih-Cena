@@ -4,6 +4,7 @@ import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { loadOrderForEmail, sendIpsPaymentConfirmation } from "@/lib/email";
+import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import type {
   CreatePaymentResult,
   PaymentProviderAdapter,
@@ -413,8 +414,12 @@ async function applyIpsResult(
             to: loaded.recipient,
           });
         }
+        await issueAndDeliverFiscalReceipt(order.id, {
+          source: "AUTO_ADVANCE",
+          paymentMethod: "IPS",
+        });
       } catch (err) {
-        console.error("[email] ips-payment-confirmation failed", err);
+        console.error("[payment] IPS confirmation side-effect failed", err);
       }
     })();
   }

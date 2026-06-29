@@ -144,7 +144,9 @@ export async function sendFiscalReceipt(args: {
   to: string;
   receiptNumber: string;
   qrUrl?: string | null;
-  pdf: Buffer;
+  pdf?: Buffer;
+  attachments?: EmailAttachment[];
+  withdrawalForm?: Buffer;
   idempotencyKey?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
@@ -157,6 +159,24 @@ export async function sendFiscalReceipt(args: {
       baseUrl: cfg.baseUrl,
     }),
   );
+  const attachments: EmailAttachment[] = args.attachments
+    ? [...args.attachments]
+    : args.pdf
+      ? [
+          {
+            filename: `fiskalni-racun-${args.receiptNumber}.pdf`,
+            content: args.pdf.toString("base64"),
+            contentType: "application/pdf",
+          },
+        ]
+      : [];
+  if (args.withdrawalForm) {
+    attachments.push({
+      filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
+      content: args.withdrawalForm.toString("base64"),
+      contentType: "application/pdf",
+    });
+  }
   return trackedDispatch({
     kind: "fiscal_receipt",
     to: args.to,
@@ -164,13 +184,7 @@ export async function sendFiscalReceipt(args: {
     html,
     text,
     bcc: cfg.orderBcc,
-    attachments: [
-      {
-        filename: `fiskalni-racun-${args.receiptNumber}.pdf`,
-        content: args.pdf.toString("base64"),
-        contentType: "application/pdf",
-      },
-    ],
+    attachments,
     tags: { kind: "fiscal_receipt", order: args.order.id, receipt: args.receiptNumber },
     idempotencyKey: args.idempotencyKey ?? `fiscal:${args.receiptNumber}`,
   });

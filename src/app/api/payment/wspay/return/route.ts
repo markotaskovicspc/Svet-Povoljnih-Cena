@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma, type PaymentStatus } from "@prisma/client";
+import { Prisma, type PaymentMethod, type PaymentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   parseReturnFields,
@@ -9,6 +9,7 @@ import {
   type WsPayReturnFields,
 } from "@/lib/wspay";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { rotateOrderAccessToken } from "@/lib/api/order-access";
 
 export const runtime = "nodejs";
@@ -74,6 +75,7 @@ async function handle(params: URLSearchParams) {
       number: true,
       userId: true,
       total: true,
+      paymentMethod: true,
       payments: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -120,6 +122,7 @@ async function handle(params: URLSearchParams) {
     orderId: order.id,
     paymentId: order.payments[0]?.id ?? null,
     amount: Number(order.total),
+    paymentMethod: order.paymentMethod,
     fields,
   });
 
@@ -138,9 +141,10 @@ export async function applyPaymentResult(args: {
   orderId: string;
   paymentId: string | null;
   amount: number;
+  paymentMethod: PaymentMethod;
   fields: WsPayReturnFields;
 }) {
-  const { orderId, paymentId, amount, fields } = args;
+  const { orderId, paymentId, amount, paymentMethod, fields } = args;
   const status: PaymentStatus = fields.success ? "PAID" : "FAILED";
   const raw = serializeFields(fields);
 
@@ -166,7 +170,7 @@ export async function applyPaymentResult(args: {
       await tx.payment.create({
         data: {
           orderId,
-          method: "KARTICA",
+          method: paymentMethod,
           provider: "WSPAY",
           status,
           amount: new Prisma.Decimal(amount),
@@ -207,8 +211,12 @@ export async function applyPaymentResult(args: {
             to: loaded.recipient,
           });
         }
+        await issueAndDeliverFiscalReceipt(orderId, {
+          source: "AUTO_ADVANCE",
+          paymentMethod,
+        });
       } catch (err) {
-        console.error("[email] order-status (potvrdjeno) failed", err);
+        console.error("[payment] WSPay return side-effect failed", err);
       }
     })();
   }

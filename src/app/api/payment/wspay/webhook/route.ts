@@ -7,6 +7,7 @@ import {
   WsPayConfigError,
 } from "@/lib/wspay";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
     select: {
       id: true,
       total: true,
+      paymentMethod: true,
       payments: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -157,8 +159,14 @@ export async function POST(req: Request) {
             to: loaded.recipient,
           });
         }
+        if (sideEffect === "potvrdjeno") {
+          await issueAndDeliverFiscalReceipt(order.id, {
+            source: "AUTO_ADVANCE",
+            paymentMethod: order.paymentMethod,
+          });
+        }
       } catch (err) {
-        console.error("[email] order-status (wspay webhook) failed", err);
+        console.error("[payment] WSPay webhook side-effect failed", err);
       }
     })();
   }

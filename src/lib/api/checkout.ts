@@ -171,6 +171,10 @@ export async function createOrder(
       id: true,
       sku: true,
       name: true,
+      shortDescription: true,
+      sizeLabel: true,
+      colorPrimary: true,
+      colorSecondary: true,
       isActive: true,
       stock: true,
       fullPrice: true,
@@ -178,6 +182,13 @@ export async function createOrder(
       discountPct: true,
       allowsAssembly: true,
       action: { select: { startsAt: true, endsAt: true, name: true } },
+      supplier: { select: { name: true } },
+      group: { select: { name: true } },
+      collection: { select: { name: true } },
+      categories: {
+        take: 1,
+        select: { category: { select: { name: true, path: true } } },
+      },
       media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" }, take: 1 },
     },
   });
@@ -260,6 +271,7 @@ export async function createOrder(
   const itemsForCreate: Prisma.OrderItemCreateManyOrderInput[] = pricing.lines.map((r) => {
     const p = bySku.get(r.sku)!;
     const assemblyPrice = assemblyBySku.get(r.sku) ?? null;
+    const primaryCategory = p.categories[0]?.category ?? null;
     return {
       productId: p.id,
       sku: p.sku,
@@ -270,6 +282,20 @@ export async function createOrder(
       withAssembly: assemblyPrice != null,
       assemblyPrice: assemblyPrice ? new Prisma.Decimal(assemblyPrice) : null,
       thumbnailUrl: resolveSupabaseStorageUrl(p.media[0]?.url) || null,
+      supplierName: p.supplier?.name ?? null,
+      categoryName: primaryCategory?.name ?? null,
+      categoryPath: primaryCategory?.path ?? null,
+      groupName: p.group?.name ?? null,
+      subgroupName: primaryCategory?.path ?? null,
+      collectionName: p.collection?.name ?? null,
+      shortDescriptionSnapshot: p.shortDescription ?? null,
+      shortNameSnapshot: p.name,
+      attribute1: p.sizeLabel ?? null,
+      attribute2: p.colorPrimary ?? null,
+      attribute3: p.colorSecondary ?? null,
+      attribute4: null,
+      color1: p.colorPrimary ?? null,
+      color2: p.colorSecondary ?? null,
     };
   });
 

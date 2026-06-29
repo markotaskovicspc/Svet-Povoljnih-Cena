@@ -20,9 +20,15 @@ export {
 } from "./pdf";
 export {
   issueFiscalReceiptForOrder,
+  issueFiscalSale,
+  issueFiscalRefund,
   tryIssueFiscalReceipt,
+  isOrderFullyFiscalized,
+  getIssuedSaleDocumentsForOrder,
+  ensureDefaultWarehouse,
   paymentMethodLabel,
   type FiscalIssueOutcome,
+  type FiscalRefundOutcome,
 } from "./issue";
 export {
   issueAndDeliverFiscalReceipt,

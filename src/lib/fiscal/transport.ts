@@ -31,6 +31,14 @@ export interface FiscalInvoiceLine {
 export interface FiscalInvoiceInput {
   /** Stable idempotency key (we use `Order.number`). */
   invoiceRef: string;
+  /** Defaults to SALE; REFUND maps to a Taxcore refund/storno payload. */
+  transactionType?: "SALE" | "REFUND";
+  /** Gateway-specific invoice type. Defaults to the configured NORMAL type. */
+  invoiceType?: "NORMAL" | "ADVANCE" | "REFUND";
+  /** Original fiscal receipt number required for refund documents. */
+  originalReceiptNumber?: string | null;
+  /** Optional explicit idempotency key; falls back to invoiceRef. */
+  idempotencyKey?: string;
   /** Total gross amount in RSD; redundant with `lines` but verified by gateway. */
   total: number;
   paymentMethod: "CASH" | "CARD" | "TRANSFER" | "OTHER";
@@ -71,15 +79,17 @@ export async function fiscalize(
   if (cfg.provider === "none" || !cfg.apiKey) {
     // Deterministic dev stub: the receipt number is derived from the
     // invoice ref so retries collapse to the same value.
-    const hash = createHash("sha1").update(input.invoiceRef).digest("hex");
-    const receiptNumber = `DEV-${hash.slice(0, 8).toUpperCase()}-${hash
+    const key = input.idempotencyKey ?? input.invoiceRef;
+    const hash = createHash("sha1").update(key).digest("hex");
+    const prefix = input.transactionType === "REFUND" ? "DEV-R" : "DEV";
+    const receiptNumber = `${prefix}-${hash.slice(0, 8).toUpperCase()}-${hash
       .slice(8, 12)
       .toUpperCase()}`;
     const qrUrl = `${cfg.baseUrl}/api/fiscal/qr?ref=${encodeURIComponent(
-      input.invoiceRef,
+      key,
     )}`;
     console.info(
-      `[fiscal:dev] ref=${input.invoiceRef} total=${input.total} → ${receiptNumber}`,
+      `[fiscal:dev] ref=${key} type=${input.transactionType ?? "SALE"} total=${input.total} → ${receiptNumber}`,
     );
     return {
       ok: true,
@@ -88,7 +98,12 @@ export async function fiscalize(
         receiptNumber,
         qrUrl,
         fiscalizedAt: new Date().toISOString(),
-        raw: { dev: true, ref: input.invoiceRef },
+        raw: {
+          dev: true,
+          ref: key,
+          transactionType: input.transactionType ?? "SALE",
+          originalReceiptNumber: input.originalReceiptNumber ?? null,
+        },
       },
     };
   }
@@ -98,7 +113,9 @@ export async function fiscalize(
     tin: cfg.tin,
     location: cfg.locationId,
     cashier: cfg.cashier,
-    invoiceType: cfg.defaultInvoiceType,
+    invoiceType: input.invoiceType ?? cfg.defaultInvoiceType,
+    transactionType: input.transactionType ?? "SALE",
+    originalReceiptNumber: input.originalReceiptNumber ?? null,
     paymentMethod: input.paymentMethod,
     buyer: input.buyer ?? null,
     total: input.total,
@@ -118,7 +135,7 @@ export async function fiscalize(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${cfg.apiKey}`,
-        "Idempotency-Key": input.invoiceRef,
+        "Idempotency-Key": input.idempotencyKey ?? input.invoiceRef,
       },
       body: JSON.stringify(body),
     });

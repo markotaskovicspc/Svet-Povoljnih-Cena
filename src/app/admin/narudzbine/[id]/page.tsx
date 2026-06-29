@@ -167,12 +167,13 @@ async function issueFiscalReceiptAction(_state: AdminActionState, formData: Form
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
-      const existing = await db.fiscalReceipt.findUnique({
-        where: { orderId: id },
+      const existing = await db.fiscalDocument.findFirst({
+        where: { orderId: id, kind: "SALE", status: "ISSUED" },
         select: { id: true },
       });
       const result = await issueAndDeliverFiscalReceipt(id, {
         forceEmail: Boolean(existing),
+        source: "MANUAL",
       });
       revalidatePath(`/admin/narudzbine/${id}`);
       if (!result.outcome.ok) {
@@ -354,6 +355,11 @@ export default async function OrderDetail({
       shipments: { include: { events: { orderBy: { occurredAt: "desc" } } } },
       invoices: true,
       fiscal: true,
+      fiscalDocuments: {
+        where: { kind: "SALE", status: "ISSUED" },
+        orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+        select: { id: true, receiptNumber: true, issuedAt: true, emailedAt: true, emailError: true },
+      },
       reclamations: { select: { id: true, number: true, status: true } },
     },
   });
@@ -366,6 +372,7 @@ export default async function OrderDetail({
     order.paymentMethod === "IPS" && latestIpsPayment?.status === "PAID";
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
+  const latestFiscal = order.fiscalDocuments[0] ?? null;
 
   return (
     <>
@@ -737,21 +744,31 @@ export default async function OrderDetail({
           </Card>
 
           <Card>
-            <CardTitle description={order.fiscal?.receiptNumber ?? "Nije fiskalizovano"}>
+            <CardTitle description={latestFiscal?.receiptNumber ?? order.fiscal?.receiptNumber ?? "Nije fiskalizovano"}>
               Fiskalizacija
             </CardTitle>
             <AdminActionForm action={issueFiscalReceiptAction} className="mb-4">
               <input type="hidden" name="id" value={order.id} />
               <SubmitButton size="sm">
-                {order.fiscal ? "Ponovo pošalji fiskalni račun" : "Izdaj fiskalni račun"}
+                {latestFiscal ? "Ponovo pošalji fiskalni račun" : "Izdaj fiskalni račun"}
               </SubmitButton>
             </AdminActionForm>
+            {order.fiscalDocuments.length ? (
+              <dl className="mb-4 space-y-1 text-sm">
+                <Row k="Broj dokumenata" v={order.fiscalDocuments.length} />
+                <Row
+                  k="Poslato"
+                  v={latestFiscal?.emailedAt ? latestFiscal.emailedAt.toLocaleString("sr-Latn-RS") : "—"}
+                />
+                <Row k="Email greška" v={latestFiscal?.emailError ?? "—"} />
+              </dl>
+            ) : null}
             <AdminActionForm action={markFiscalized} className="space-y-2">
               <input type="hidden" name="id" value={order.id} />
               <Field label="Broj fiskalnog računa">
                 <input
                   name="receiptNumber"
-                  defaultValue={order.fiscal?.receiptNumber ?? ""}
+                  defaultValue={latestFiscal?.receiptNumber ?? order.fiscal?.receiptNumber ?? ""}
                   required
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 font-mono text-sm"
                 />
