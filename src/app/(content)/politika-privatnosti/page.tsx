@@ -25,7 +25,7 @@ export default function PrivatnostPage() {
         eyebrow="GDPR & ZZPL"
         title="Politika privatnosti."
         lead="Vaše podatke koristimo isključivo za realizaciju porudžbine, podršku i — ako date pristanak — za informisanje o akcijama."
-        meta={<>Poslednje izmene: 1. maj 2026.</>}
+        meta={<>Poslednje izmene: 30. jun 2026.</>}
       />
       <ContentBody>
         <ContentSection id="rukovalac" title="Rukovalac podacima">
@@ -45,6 +45,10 @@ export default function PrivatnostPage() {
             <li>Podaci o porudžbinama, plaćanju i isporuci.</li>
             <li>
               Tehnički podaci o uređaju i poseti (IP, kolačići, statistika).
+            </li>
+            <li>
+              Podaci iz društvene prijave, uključujući Facebook login, kada ga
+              sami izaberete za prijavu ili registraciju.
             </li>
             <li>
               Komunikacija sa podrškom (pošta, Viber, telefonski razgovori —
@@ -77,6 +81,20 @@ export default function PrivatnostPage() {
             Koristimo nužne kolačiće (sesija, korpa) i — uz vaš pristanak —
             analitičke i marketinške. Pristanak možete povući u svakom trenutku
             kroz banner ili podešavanja u nalogu.
+          </p>
+        </ContentSection>
+
+        <ContentSection id="drustvene-prijave" title="Društvene prijave">
+          <p>
+            Kada koristite Facebook, Google ili Apple prijavu, obrađujemo podatke
+            koje nam provajder dostavi u skladu sa dozvolama koje ste odobrili,
+            najčešće ime, e-poštu i javni identifikator naloga. Te podatke
+            koristimo za prijavu, povezivanje naloga i zaštitu od zloupotrebe.
+          </p>
+          <p>
+            Zahtev za brisanje ili odvajanje društvene prijave možete poslati
+            prema uputstvu na stranici{" "}
+            <Link href="/brisanje-podataka">Brisanje podataka</Link>.
           </p>
         </ContentSection>
 

@@ -127,9 +127,11 @@ export const footerColumns: { title: string; links: { label: string; href: strin
   {
     title: "Uslovi",
     links: [
+      { label: "Uslovi korišćenja", href: "/uslovi-koriscenja" },
       { label: "Uslovi isporuke", href: "/uslovi-isporuke" },
       { label: "Uslovi kupovine", href: "/uslovi-kupovine" },
       { label: "Politika privatnosti", href: "/politika-privatnosti" },
+      { label: "Brisanje podataka", href: "/brisanje-podataka" },
     ],
   },
   {
