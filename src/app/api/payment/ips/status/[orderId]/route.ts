@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
 import { db } from "@/lib/db";
 import { canAccessOrder, readOrderAccessToken } from "@/lib/api/order-access";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,10 +50,14 @@ export async function GET(
       return NextResponse.json({ ok: false, error: "not_configured" }, { status: 503 });
     }
     if (err instanceof IpsGatewayError) {
-      console.error("[ips] status check failed", err);
+      logOperationalError("payment.ips.status_gateway_failed", err, {
+        orderNumber: order.number,
+      });
       return NextResponse.json({ ok: false, error: "gateway_error" }, { status: 502 });
     }
-    console.error("[ips] status failed", err);
+    logOperationalError("payment.ips.status_failed", err, {
+      orderNumber: order.number,
+    });
     return NextResponse.json({ ok: false, error: "status_failed" }, { status: 400 });
   }
 }

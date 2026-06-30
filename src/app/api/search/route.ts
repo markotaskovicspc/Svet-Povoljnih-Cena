@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchProducts } from "@/lib/api/search";
+import { logOperationalError } from "@/lib/monitoring";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -22,7 +23,10 @@ export async function GET(req: Request) {
     const hits = await searchProducts(q, limit, offset);
     return NextResponse.json({ ok: true, hits });
   } catch (err) {
-    console.error("[search]", err);
-    return NextResponse.json({ ok: true, hits: [] }, { status: 200 });
+    logOperationalError("api.search.failed", err, { q, limit, offset });
+    return NextResponse.json(
+      { ok: false, error: "search_unavailable", hits: [] },
+      { status: 503 },
+    );
   }
 }

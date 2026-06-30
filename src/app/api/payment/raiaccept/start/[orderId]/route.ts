@@ -13,6 +13,7 @@ import {
   RaiAcceptConfigError,
   requireRaiAcceptConfigured,
 } from "@/lib/payments/raiaccept";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +76,10 @@ export async function GET(
     requireRaiAcceptConfigured();
   } catch (err) {
     if (err instanceof RaiAcceptConfigError) {
+      logOperationalError("payment.raiaccept.start_not_configured", err, {
+        orderId: order.id,
+        orderNumber: order.number,
+      });
       return errorPage(err.message, 503);
     }
     throw err;

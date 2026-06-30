@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ipsPaymentProvider, getIpsConfig } from "@/lib/payments";
 import { rotateOrderAccessToken } from "@/lib/api/order-access";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
         status: status.paid ? "paid" : result === "success" ? "checking" : "failed",
       });
     } catch (err) {
-      console.error("[ips] return status check failed", err);
+      logOperationalError("payment.ips.return_status_failed", err, { order });
       return await redirectFinal({
         order,
         status: result === "fail" ? "failed" : result === "cancel" ? "cancel" : "checking",
@@ -45,7 +46,9 @@ async function redirectFinal(args: {
   if (args.order) {
     target.searchParams.set("order", args.order);
     const token = await rotateOrderAccessToken(args.order).catch((err) => {
-      console.error("[order-access] IPS return token rotation failed", err);
+      logOperationalError("payment.ips.return_token_rotation_failed", err, {
+        order: args.order,
+      });
       return null;
     });
     if (token) target.searchParams.set("token", token);

@@ -980,6 +980,12 @@ model Order {
   @@index([createdAt])
 }
 
+model OrderSequence {
+  year      Int      @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model CheckoutSession {
   id             String                @id
   userId         String?

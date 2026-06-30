@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { suggest } from "@/lib/api/search";
+import { logOperationalError } from "@/lib/monitoring";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -19,9 +20,12 @@ export async function GET(req: Request) {
   const limit = Number(searchParams.get("limit") ?? 8);
   try {
     const hits = await suggest(q, limit);
-    return NextResponse.json({ hits });
+    return NextResponse.json({ ok: true, hits });
   } catch (err) {
-    console.error("[search/suggest]", err);
-    return NextResponse.json({ hits: [] }, { status: 200 });
+    logOperationalError("api.search_suggest.failed", err, { q, limit });
+    return NextResponse.json(
+      { ok: false, error: "search_unavailable", hits: [] },
+      { status: 503 },
+    );
   }
 }

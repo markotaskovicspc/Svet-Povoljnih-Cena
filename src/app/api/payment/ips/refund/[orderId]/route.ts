@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { requireAdminAction } from "@/lib/admin";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,11 +39,21 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "not_configured" }, { status: 503 });
     }
     if (err instanceof IpsGatewayError) {
+      logOperationalError("payment.ips.refund_gateway_failed", err, {
+        orderId: order.id,
+        orderNumber: order.number,
+        amount,
+      });
       return NextResponse.json(
         { ok: false, error: "gateway_error", detail: err.raw },
         { status: 502 },
       );
     }
+    logOperationalError("payment.ips.refund_failed", err, {
+      orderId: order.id,
+      orderNumber: order.number,
+      amount,
+    });
     const message = err instanceof Error ? err.message : "refund_failed";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCartRecommendationsForSkus } from "@/lib/api/catalog";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,12 @@ export async function POST(request: Request) {
         ? Math.min(Math.max(Math.round(body.limit), 1), 12)
         : 6;
     const products = await getCartRecommendationsForSkus(skus, limit);
-    return NextResponse.json({ products });
+    return NextResponse.json({ ok: true, products });
   } catch (error) {
-    console.error("[cart/recommendations]", error);
-    return NextResponse.json({ products: [] }, { status: 200 });
+    logOperationalError("api.cart_recommendations.failed", error);
+    return NextResponse.json(
+      { ok: false, error: "recommendations_unavailable", products: [] },
+      { status: 503 },
+    );
   }
 }

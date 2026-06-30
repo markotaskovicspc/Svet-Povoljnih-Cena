@@ -4,6 +4,7 @@ import {
   IpsConfigError,
   verifyIpsCallbackRequest,
 } from "@/lib/payments";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
     if (err instanceof IpsConfigError) {
       return NextResponse.json({ ok: false, error: "not_configured" }, { status: 503 });
     }
-    console.error("[ips] callback rejected", err);
+    logOperationalError("payment.ips.callback_rejected", err, {
+      contentType: req.headers.get("content-type") ?? null,
+    });
     return NextResponse.json({ ok: false, error: "invalid_callback" }, { status: 400 });
   }
 }

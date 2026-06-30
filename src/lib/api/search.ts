@@ -33,12 +33,21 @@ interface SuggestRow {
 
 const MIN_QUERY_LEN = 3;
 
+export class SearchUnavailableError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "SearchUnavailableError";
+  }
+}
+
 export async function suggest(query: string, limit = 8, offset = 0): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 96);
   const safeOffset = Math.max(0, Math.round(offset));
-  if (!hasDatabaseConnection()) return [];
+  if (!hasDatabaseConnection()) {
+    throw new SearchUnavailableError("Database connection string is not configured.");
+  }
 
   let rows: SuggestRow[] = [];
   try {
@@ -101,8 +110,7 @@ export async function suggest(query: string, limit = 8, offset = 0): Promise<Sea
        OFFSET ${safeOffset}
     `;
   } catch (err) {
-    console.warn("[search] Real catalog search is unavailable.", err);
-    return [];
+    throw new SearchUnavailableError("Real catalog search is unavailable.", err);
   }
 
   return rows.map((r) => ({

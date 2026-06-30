@@ -13,6 +13,7 @@ import {
   readOrderAccessToken,
   rotateOrderAccessToken,
 } from "@/lib/api/order-access";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +77,10 @@ export async function GET(
     );
   } catch (err) {
     if (err instanceof IpsConfigError || err instanceof IpsGatewayError) {
-      console.error("[ips] start failed", err);
+      logOperationalError("payment.ips.start_failed", err, {
+        orderId: order.id,
+        orderNumber: order.number,
+      });
       return errorPage(
         "IPS plaćanje trenutno nije moguće. Pokušajte kasnije ili izaberite drugi način plaćanja.",
         err instanceof IpsGatewayError ? 502 : 503,

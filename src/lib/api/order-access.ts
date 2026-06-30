@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -9,6 +9,19 @@ const TOKEN_BYTES = 32;
 
 export function createOrderAccessToken() {
   return randomBytes(TOKEN_BYTES).toString("base64url");
+}
+
+export function createCheckoutOrderAccessToken(checkoutSessionId: string) {
+  const secret =
+    process.env.ORDER_ACCESS_TOKEN_SECRET?.trim() ||
+    process.env.AUTH_SECRET?.trim() ||
+    process.env.NEXTAUTH_SECRET?.trim() ||
+    "spc-local-checkout-order-access-token-secret";
+
+  return createHmac("sha256", secret)
+    .update("checkout-order-access:")
+    .update(checkoutSessionId, "utf8")
+    .digest("base64url");
 }
 
 export function hashOrderAccessToken(token: string) {

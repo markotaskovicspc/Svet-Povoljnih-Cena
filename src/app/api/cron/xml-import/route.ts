@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { importAllSuppliers, importSupplier } from "@/lib/xml";
 import { hasBearerSecret } from "@/lib/security/bearer";
+import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ async function run(req: Request) {
     const summaries = await importAllSuppliers({ dryRun });
     return NextResponse.json({ ok: true, summaries });
   } catch (err) {
+    logOperationalError("import.xml.failed", err, { supplierId, dryRun });
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

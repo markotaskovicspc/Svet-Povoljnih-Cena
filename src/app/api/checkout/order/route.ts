@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createOrder, createOrderSchema } from "@/lib/api/checkout";
+import { logOperationalError } from "@/lib/monitoring";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -29,6 +30,18 @@ export async function POST(req: Request) {
   }
   const user = await getCurrentUser();
   const userId = user?.userType === "customer" ? user.id : null;
-  const result = await createOrder(parsed.data, userId);
-  return NextResponse.json(result, { status: result.ok ? 201 : 422 });
+  try {
+    const result = await createOrder(parsed.data, userId);
+    return NextResponse.json(result, { status: result.ok ? 201 : 422 });
+  } catch (err) {
+    logOperationalError("checkout.order.create_failed", err, {
+      userId,
+      checkoutSessionId: parsed.data.checkoutSessionId ?? null,
+      skus: parsed.data.lines.map((line) => line.sku),
+    });
+    return NextResponse.json(
+      { ok: false, error: { code: "INTERNAL" } },
+      { status: 500 },
+    );
+  }
 }

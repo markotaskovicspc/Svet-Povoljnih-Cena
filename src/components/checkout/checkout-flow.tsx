@@ -441,6 +441,7 @@ export function CheckoutFlow({
     });
     setLastOrder(order);
     clearCart();
+    clearCheckoutSessionId();
     setStep("identity"); // ready for next purchase
     const accessQuery = `?token=${encodeURIComponent(result.data.accessToken)}`;
     if (data.paymentMethod === "ips") {
@@ -958,6 +959,11 @@ function getCheckoutSessionId() {
   return id;
 }
 
+function clearCheckoutSessionId() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(CHECKOUT_SESSION_KEY);
+}
+
 async function trackCheckoutSession({
   sessionId,
   step,
@@ -1040,6 +1046,8 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
       return "Izabrani način isporuke trenutno nije dostupan za uneti grad.";
     case "EMPTY_CART":
       return "Korpa je prazna.";
+    case "INTERNAL":
+      return "Porudžbinu trenutno nije moguće kreirati zbog tehničke greške. Pokušajte ponovo kasnije.";
     default:
       return "Porudžbinu trenutno nije moguće kreirati. Proverite podatke i pokušajte ponovo.";
   }

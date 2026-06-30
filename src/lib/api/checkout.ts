@@ -3,12 +3,17 @@ import { Prisma, type PaymentMethod, type ShippingMethod } from "@prisma/client"
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
-import { validateVoucher } from "@/lib/api/vouchers";
+import { validateVoucher, validateVoucherForCheckout } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
 import { notifySuppliersOfReservation } from "@/lib/xml";
 import { providerForPaymentMethod } from "@/lib/payments";
-import { createOrderAccessToken, hashOrderAccessToken } from "@/lib/api/order-access";
+import {
+  createCheckoutOrderAccessToken,
+  createOrderAccessToken,
+  hashOrderAccessToken,
+} from "@/lib/api/order-access";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
+import { logOperationalError } from "@/lib/monitoring";
 import {
   computeOrderPricing,
   type PricingLine,
@@ -126,6 +131,20 @@ class StockReservationError extends Error {
   }
 }
 
+class VoucherReservationError extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+  }
+}
+
+type CreatedOrder = {
+  id: string;
+  number: string;
+  total: Prisma.Decimal;
+  paymentMethod: PaymentMethod;
+  shippingMethod: ShippingMethod;
+};
+
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `SPC-${year}-`;
@@ -134,8 +153,78 @@ async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
     orderBy: { number: "desc" },
     select: { number: true },
   });
-  const seq = last ? Number(last.number.slice(prefix.length)) + 1 : 1;
+  const existingMax = last
+    ? Number.parseInt(last.number.slice(prefix.length), 10) || 0
+    : 0;
+  const rows = await tx.$queryRaw<Array<{ seq: number }>>`
+    INSERT INTO "OrderSequence" ("year", "lastValue", "updatedAt")
+    VALUES (${year}, ${existingMax + 1}, NOW())
+    ON CONFLICT ("year") DO UPDATE
+    SET
+      "lastValue" = GREATEST("OrderSequence"."lastValue", ${existingMax}) + 1,
+      "updatedAt" = NOW()
+    RETURNING "lastValue" AS seq
+  `;
+  const seq = Number(rows[0]?.seq ?? existingMax + 1);
   return `${prefix}${String(seq).padStart(6, "0")}`;
+}
+
+async function ensureCheckoutSessionForOrder(args: {
+  tx: Prisma.TransactionClient;
+  input: CreateOrderInput;
+  userId: string | null;
+  total: number;
+}) {
+  const { tx, input, userId, total } = args;
+  if (!input.checkoutSessionId) return;
+
+  await tx.checkoutSession.upsert({
+    where: { id: input.checkoutSessionId },
+    create: {
+      id: input.checkoutSessionId,
+      userId,
+      guestEmail: userId ? null : input.guestEmail ?? null,
+      identity: userId ? "login" : "guest",
+      step: "review",
+      status: "ACTIVE",
+      lineCount: input.lines.length,
+      itemQty: input.lines.reduce((sum, line) => sum + line.qty, 0),
+      cartTotal: new Prisma.Decimal(total),
+      shippingCity: input.shipping.city,
+      shippingMethod: input.shippingMethod,
+      paymentMethod: input.paymentMethod,
+    },
+    update: {
+      userId,
+      guestEmail: userId ? null : input.guestEmail ?? null,
+      identity: userId ? "login" : "guest",
+    },
+  });
+}
+
+async function findLockedCheckoutSessionOrder(
+  tx: Prisma.TransactionClient,
+  checkoutSessionId: string,
+): Promise<CreatedOrder | null> {
+  const rows = await tx.$queryRaw<Array<{ orderId: string | null }>>`
+    SELECT "orderId" AS "orderId"
+    FROM "CheckoutSession"
+    WHERE id = ${checkoutSessionId}
+    FOR UPDATE
+  `;
+  const orderId = rows[0]?.orderId;
+  if (!orderId) return null;
+
+  return tx.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      number: true,
+      total: true,
+      paymentMethod: true,
+      shippingMethod: true,
+    },
+  });
 }
 
 function isOnlinePayment(method: PaymentMethod) {
@@ -381,12 +470,49 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
   }
 
-  const accessToken = createOrderAccessToken();
+  const accessToken = input.checkoutSessionId
+    ? createCheckoutOrderAccessToken(input.checkoutSessionId)
+    : createOrderAccessToken();
   const expiresAt = paymentExpiresAt(input.paymentMethod);
 
-  let created: { id: string; number: string; total: Prisma.Decimal };
+  let created: CreatedOrder & { reusedExisting: boolean };
   try {
     created = await db.$transaction(async (tx) => {
+      if (input.checkoutSessionId) {
+        await ensureCheckoutSessionForOrder({ tx, input, userId, total });
+        const existingOrder = await findLockedCheckoutSessionOrder(
+          tx,
+          input.checkoutSessionId,
+        );
+        if (existingOrder) {
+          await tx.order.update({
+            where: { id: existingOrder.id },
+            data: {
+              publicAccessTokenHash: hashOrderAccessToken(accessToken),
+              publicAccessTokenCreatedAt: new Date(),
+            },
+          });
+          return { ...existingOrder, reusedExisting: true };
+        }
+      }
+
+      if (voucherInput) {
+        const lockedVoucher = await validateVoucherForCheckout(
+          tx,
+          voucherInput.code,
+          preDiscountSubtotal,
+          userId,
+        );
+        if (!lockedVoucher.ok) {
+          throw new VoucherReservationError(lockedVoucher.reason);
+        }
+        if (lockedVoucher.discountRsd !== voucherInput.discountRsd) {
+          throw new VoucherReservationError(
+            "Vaučer je promenjen. Proverite kod i pokušajte ponovo.",
+          );
+        }
+      }
+
       const number = await nextOrderNumber(tx);
 
       for (const line of input.lines) {
@@ -463,7 +589,13 @@ export async function createOrder(
             },
           },
         },
-        select: { id: true, number: true, total: true },
+        select: {
+          id: true,
+          number: true,
+          total: true,
+          paymentMethod: true,
+          shippingMethod: true,
+        },
       });
 
       if (voucherCode) {
@@ -512,38 +644,56 @@ export async function createOrder(
         });
       }
 
-      return order;
+      return { ...order, reusedExisting: false };
     });
   } catch (err) {
     if (err instanceof StockReservationError) {
       return { ok: false, error: { code: "OUT_OF_STOCK", sku: err.sku } };
     }
+    if (err instanceof VoucherReservationError) {
+      return { ok: false, error: { code: "VOUCHER_INVALID", reason: err.reason } };
+    }
     throw err;
   }
 
-  if (userId) await clearServerCart(userId).catch(() => undefined);
+  if (userId) {
+    await clearServerCart(userId).catch((err) => {
+      logOperationalError("checkout.cart.clear_failed", err, {
+        orderId: created.id,
+        orderNumber: created.number,
+        userId,
+      });
+    });
+  }
 
   // Phase 4A: notify each supplier that owns one of the ordered SKUs so
   // they can hold the units against their warehouse stock. Fire-and-
   // forget — checkout has already committed and supplier divergences are
   // reconciled by the next feed snapshot.
-  void notifySuppliersOfReservation({
-    orderNumber: created.number,
-    lines: input.lines.map((line) => ({
-      productId: bySku.get(line.sku)!.id,
-      qty: line.qty,
-    })),
-  });
+  if (!created.reusedExisting) {
+    void notifySuppliersOfReservation({
+      orderNumber: created.number,
+      lines: input.lines.map((line) => ({
+        productId: bySku.get(line.sku)!.id,
+        qty: line.qty,
+      })),
+    });
+  }
 
   // Buyer receipt/proforma: create the durable Invoice row, upload/regenerate
   // the PDF as available, and send the tracked customer confirmation.
-  void (async () => {
-    try {
-      await issueBuyerReceiptForOrder(created.id);
-    } catch (err) {
-      console.error("[receipt] buyer receipt failed", err);
-    }
-  })();
+  if (!created.reusedExisting) {
+    void (async () => {
+      try {
+        await issueBuyerReceiptForOrder(created.id);
+      } catch (err) {
+        logOperationalError("email.buyer_receipt.failed", err, {
+          orderId: created.id,
+          orderNumber: created.number,
+        });
+      }
+    })();
+  }
 
   return {
     ok: true,
@@ -552,8 +702,8 @@ export async function createOrder(
       number: created.number,
       accessToken,
       total: num(created.total),
-      paymentMethod: input.paymentMethod,
-      shippingMethod: input.shippingMethod,
+      paymentMethod: created.paymentMethod,
+      shippingMethod: created.shippingMethod,
     },
   };
 }
