@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
@@ -32,6 +33,10 @@ interface IpsConfig {
   failUrl: string;
   cancelUrl: string;
   callbackUrl: string;
+  callbackSecret: string | null;
+  callbackSignatureHeader: string;
+  callbackTimestampHeader: string;
+  callbackReplayWindowSeconds: number;
 }
 
 interface IpsToken {
@@ -82,7 +87,66 @@ export function getIpsConfig(): IpsConfig {
     failUrl: process.env.IPS_FAIL_URL ?? `${publicBaseUrl}/api/payment/ips/return?result=fail`,
     cancelUrl: process.env.IPS_CANCEL_URL ?? `${publicBaseUrl}/api/payment/ips/return?result=cancel`,
     callbackUrl: process.env.IPS_CALLBACK_URL ?? `${publicBaseUrl}/api/payment/ips/callback`,
+    callbackSecret: process.env.IPS_CALLBACK_SECRET?.trim() || null,
+    callbackSignatureHeader:
+      process.env.IPS_CALLBACK_SIGNATURE_HEADER?.trim().toLowerCase() ||
+      "x-ips-signature",
+    callbackTimestampHeader:
+      process.env.IPS_CALLBACK_TIMESTAMP_HEADER?.trim().toLowerCase() ||
+      "x-ips-timestamp",
+    callbackReplayWindowSeconds: Math.min(
+      Math.max(Number(process.env.IPS_CALLBACK_REPLAY_WINDOW_SECONDS ?? 300) || 300, 30),
+      3600,
+    ),
   };
+}
+
+export function verifyIpsCallbackRequest(req: Request, rawBody: string) {
+  const cfg = getIpsConfig();
+  if (!cfg.callbackSecret) {
+    throw new IpsConfigError(
+      "IPS callback verifikacija nije konfigurisana (IPS_CALLBACK_SECRET).",
+    );
+  }
+
+  const signature = req.headers.get(cfg.callbackSignatureHeader);
+  const timestamp = req.headers.get(cfg.callbackTimestampHeader);
+  if (!signature || !timestamp) {
+    throw new Error("missing_callback_signature");
+  }
+
+  const timestampMs = parseCallbackTimestamp(timestamp);
+  const ageMs = Math.abs(Date.now() - timestampMs);
+  if (ageMs > cfg.callbackReplayWindowSeconds * 1000) {
+    throw new Error("stale_callback_signature");
+  }
+
+  const signedPayload = `${timestamp}.${rawBody}`;
+  const expected = createHmac("sha256", cfg.callbackSecret)
+    .update(signedPayload, "utf8")
+    .digest();
+  const provided = signature.trim().replace(/^sha256=/i, "");
+  const matches =
+    safeEqual(provided, expected.toString("hex")) ||
+    safeEqual(provided, expected.toString("base64"));
+  if (!matches) throw new Error("invalid_callback_signature");
+}
+
+function parseCallbackTimestamp(value: string) {
+  const trimmed = value.trim();
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) throw new Error("invalid_callback_timestamp");
+  return parsed;
+}
+
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export function formatIpsAmount(amount: number | Prisma.Decimal): string {

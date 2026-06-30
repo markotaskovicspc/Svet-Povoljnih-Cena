@@ -136,7 +136,7 @@ begin
     select 1 from pg_type t join pg_namespace n on n.oid = t.typnamespace
     where n.nspname = 'public' and t.typname = 'PaymentProvider'
   ) then
-    create type public."PaymentProvider" as enum ('IPS', 'RAIFFEISEN_CARD', 'WSPAY', 'MANUAL', 'COD');
+    create type public."PaymentProvider" as enum ('IPS', 'RAIFFEISEN_CARD', 'MANUAL', 'COD');
   end if;
 end $$;
 
@@ -151,7 +151,7 @@ alter table public."Payment"
 update public."Payment"
 set "provider" = case
   when "method"::text = 'IPS' then 'IPS'::public."PaymentProvider"
-  when "method"::text in ('KARTICA', 'GOOGLE_PAY', 'APPLE_PAY') then 'WSPAY'::public."PaymentProvider"
+  when "method"::text in ('KARTICA', 'GOOGLE_PAY', 'APPLE_PAY') then 'RAIFFEISEN_CARD'::public."PaymentProvider"
   when "method"::text in ('POUZECE_GOTOVINA', 'POUZECE_KARTICA') then 'COD'::public."PaymentProvider"
   else 'MANUAL'::public."PaymentProvider"
 end

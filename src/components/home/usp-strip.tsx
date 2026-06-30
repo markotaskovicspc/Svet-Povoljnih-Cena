@@ -35,7 +35,7 @@ const items: UspItem[] = [
     id: "payment",
     icon: ShieldCheck,
     title: "Bezbedno plaćanje",
-    body: "Raiffeisen IPS za QR plaćanje, WSPay za kartice i novčanike.",
+    body: "Raiffeisen IPS za QR plaćanje, RaiAccept za kartice i novčanike.",
   },
   {
     id: "support",

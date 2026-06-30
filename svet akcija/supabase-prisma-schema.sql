@@ -150,7 +150,7 @@ CREATE TABLE "SavedCard" (
     "expMonth" INTEGER NOT NULL,
     "expYear" INTEGER NOT NULL,
     "holderName" TEXT,
-    "wsPayToken" TEXT NOT NULL,
+    "providerToken" TEXT NOT NULL,
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -897,7 +897,7 @@ CREATE INDEX "Address_userId_idx" ON "Address"("userId");
 CREATE INDEX "Address_city_idx" ON "Address"("city");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SavedCard_wsPayToken_key" ON "SavedCard"("wsPayToken");
+CREATE UNIQUE INDEX "SavedCard_providerToken_key" ON "SavedCard"("providerToken");
 
 -- CreateIndex
 CREATE INDEX "SavedCard_userId_idx" ON "SavedCard"("userId");

@@ -44,7 +44,7 @@ export function providerForPaymentMethod(method: PaymentMethod): PaymentProvider
     case "KARTICA":
     case "GOOGLE_PAY":
     case "APPLE_PAY":
-      return "WSPAY";
+      return "RAIFFEISEN_CARD";
     case "POUZECE_GOTOVINA":
     case "POUZECE_KARTICA":
       return "COD";

@@ -62,7 +62,7 @@ set
 insert into "PaymentMethodConfig" ("method", "enabled", "label", "note", "updatedAt")
 values
   ('IPS', true, 'IPS NBS', null, now()),
-  ('KARTICA', false, 'Platna kartica', 'Kartično plaćanje aktivira se nakon WSPay/Raiffeisen podešavanja.', now()),
+  ('KARTICA', false, 'Platna kartica', 'Kartično plaćanje aktivira se nakon RaiAccept podešavanja.', now()),
   ('GOOGLE_PAY', false, 'Google Pay', 'Google Pay se aktivira zajedno sa kartičnim plaćanjem.', now()),
   ('APPLE_PAY', false, 'Apple Pay', 'Apple Pay se aktivira zajedno sa kartičnim plaćanjem.', now()),
   ('UPLATA_NA_RACUN', true, 'Uplata na račun', null, now()),

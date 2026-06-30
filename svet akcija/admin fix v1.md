@@ -14,7 +14,7 @@
 
 - Remove plaintext admin password guidance from `svet akcija/supabase-bootstrap.sql`; keep only placeholder instructions and use `scripts/create-admin.mjs` for admin creation/reset.
 - Rotate any Supabase service-role/JWT/database/admin credentials that appeared in local files before going live.
-- Create a canonical `.env.example` matching actual code names: `POSTGRES_PRISMA_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`, `SUPABASE_SERVICE_ROLE_KEY`, `WSPAY_SECRET`, `EMAIL_PROVIDER`, `CRON_SECRET`, `ADMIN_API_SECRET`, etc.
+- Create a canonical `.env.example` matching actual code names: `POSTGRES_PRISMA_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`, `SUPABASE_SERVICE_ROLE_KEY`, `RAIACCEPT_CALLBACK_SECRET`, `EMAIL_PROVIDER`, `CRON_SECRET`, `ADMIN_API_SECRET`, etc.
 - Add Prisma migrations from `prisma/schema.prisma` and keep Supabase SQL bootstrap as seed-only operational data, not schema source of truth.
 
 ### 2. Admin action reliability

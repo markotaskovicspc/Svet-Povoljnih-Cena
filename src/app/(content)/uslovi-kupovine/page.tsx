@@ -66,9 +66,9 @@ export default async function UsloviKupovinePage() {
 
         <ContentSection id="kartice" title="Načini plaćanja">
           <ul>
-            <li>Platnim karticama (Visa, Mastercard, DinaCard) — WSPay 3D Secure.</li>
+            <li>Platnim karticama (Visa, Mastercard, DinaCard) — RaiAccept 3D Secure.</li>
             <li>Raiffeisen IPS QR kodom, odvojeno od kartičnog plaćanja.</li>
-            <li>Apple Pay i Google Pay kroz kartični WSPay tok kada su aktivni.</li>
+            <li>Apple Pay i Google Pay kroz kartični RaiAccept tok kada su aktivni.</li>
             <li>Pouzeće — gotovinski ili karticom kod kurira.</li>
             <li>Uplatom na račun — predračun stiže e-poštom.</li>
           </ul>

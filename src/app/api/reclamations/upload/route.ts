@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { presignSchema, presignUpload } from "@/lib/api/uploads";
+import { canAccessOrder, readOrderAccessToken } from "@/lib/api/order-access";
+import { lookupOrderForReclamation } from "@/lib/api/reclamations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +13,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid", issues: parsed.error.flatten() }, { status: 400 });
   }
   try {
-    return NextResponse.json(await presignUpload(parsed.data));
+    const order = await lookupOrderForReclamation(parsed.data.orderNumberOrFiscal);
+    if (!order) {
+      return NextResponse.json({ error: "unknown_order" }, { status: 404 });
+    }
+    const item = order.items.find((i) => i.sku === parsed.data.sku);
+    if (!item) {
+      return NextResponse.json({ error: "unknown_item" }, { status: 422 });
+    }
+    if (
+      !(await canAccessOrder({
+        order,
+        token: parsed.data.accessToken ?? readOrderAccessToken(req),
+      }))
+    ) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    return NextResponse.json(
+      await presignUpload(parsed.data, {
+        orderNumber: order.number,
+        sku: item.sku,
+      }),
+    );
   } catch (err) {
     return NextResponse.json(
       {

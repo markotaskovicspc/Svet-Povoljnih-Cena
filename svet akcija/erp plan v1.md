@@ -278,7 +278,7 @@ Plan pokriva samo admin panel, backend, bazu, XML podatke, checkout logiku, Raif
 ### 9. Raiffeisen kartično plaćanje
 
 - Implementirati adapter prema stvarnom Raiffeisen ugovoru.
-- Postojeći WSPay kod koristiti samo ako je to zvanični procesor iz Raiffeisen konfiguracije.
+- Stari kartični gateway kod ukloniti; kartično plaćanje ide preko RaiAccept konfiguracije iz Raiffeisen ugovora.
 - Payment flow mora pokriti:
   - create order
   - start payment

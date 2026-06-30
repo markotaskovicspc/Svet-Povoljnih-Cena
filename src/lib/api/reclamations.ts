@@ -1,6 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { canAccessOrder } from "@/lib/api/order-access";
+import { isAllowedReclamationPhotoUrl } from "@/lib/api/uploads";
 import { loadReclamationForEmail, sendReclamationReceipt } from "@/lib/email";
 
 /**
@@ -15,7 +17,9 @@ import { loadReclamationForEmail, sendReclamationReceipt } from "@/lib/email";
  */
 
 const photoSchema = z.object({
-  url: z.string().url(),
+  url: z.string().url().refine(isAllowedReclamationPhotoUrl, {
+    message: "Fotografija mora biti poslata kroz zaštićeni upload tok.",
+  }),
   width: z.int().positive().optional(),
   height: z.int().positive().optional(),
   bytes: z.int().positive().max(5 * 1024 * 1024).optional(),
@@ -32,13 +36,17 @@ export const createReclamationSchema = z.object({
   description: z.string().trim().min(5).max(250),
   notifyVia: z.enum(["EMAIL", "PHONE"]),
   photos: z.array(photoSchema).max(5).default([]),
+  accessToken: z.string().min(16).max(256).optional(),
 });
 
 export type CreateReclamationInput = z.infer<typeof createReclamationSchema>;
 
 export type CreateReclamationResult =
   | { ok: true; number: string; id: string }
-  | { ok: false; reason: "ORDER_NOT_FOUND" | "ITEM_NOT_FOUND" | "MISSING_CONTACT" };
+  | {
+      ok: false;
+      reason: "ORDER_NOT_FOUND" | "ITEM_NOT_FOUND" | "MISSING_CONTACT" | "UNAUTHORIZED";
+    };
 
 export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
   // Try order number first, then fiscal receipt number.
@@ -75,6 +83,9 @@ export async function createReclamation(
 
   const item = order.items.find((i) => i.sku === input.sku);
   if (!item) return { ok: false, reason: "ITEM_NOT_FOUND" };
+  if (!(await canAccessOrder({ order, token: input.accessToken }))) {
+    return { ok: false, reason: "UNAUTHORIZED" };
+  }
 
   const result = await db.$transaction(async (tx) => {
     const updated = await tx.orderItem.update({

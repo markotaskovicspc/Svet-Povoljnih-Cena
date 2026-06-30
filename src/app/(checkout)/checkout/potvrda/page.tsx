@@ -22,6 +22,7 @@ export default async function CheckoutPotvrdaPage({
     <div className="mx-auto max-w-[var(--container-content)] px-4 pt-6 pb-24 md:px-6">
       <ConfirmationView
         initialOrder={initialOrder}
+        accessToken={params.token}
         paymentStatus={params.status}
         paymentMessage={params.err}
       />

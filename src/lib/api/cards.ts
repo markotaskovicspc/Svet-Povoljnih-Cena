@@ -4,9 +4,10 @@ import { db } from "@/lib/db";
 /**
  * Saved card management for `/nalog/kartice` (Phase 3C — item 4).
  *
- * Cards themselves live tokenized on WSPay (Phase 4B). We store only the brand
- * + last4 + token, never the PAN. Adding a new card happens via the WSPay
- * tokenization redirect; this module exposes only list / setDefault / delete.
+ * Cards themselves live tokenized at the active card acquirer. We store only
+ * the brand + last4 + token, never the PAN. Adding a new card happens via the
+ * acquirer tokenization redirect; this module exposes only list / setDefault /
+ * delete.
  */
 
 export async function listSavedCards(userId: string) {

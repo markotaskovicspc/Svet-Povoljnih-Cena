@@ -15,8 +15,8 @@ INSERT INTO "PaymentMethodConfig" ("method", "enabled", "label", "note", "update
 VALUES
   ('IPS', true, 'IPS QR', null, now()),
   ('KARTICA', true, 'Kartica', null, now()),
-  ('GOOGLE_PAY', false, 'Google Pay', 'Enable after WSPay wallet setup is complete.', now()),
-  ('APPLE_PAY', false, 'Apple Pay', 'Enable after WSPay wallet setup is complete.', now()),
+  ('GOOGLE_PAY', false, 'Google Pay', 'Enable after RaiAccept wallet setup is complete.', now()),
+  ('APPLE_PAY', false, 'Apple Pay', 'Enable after RaiAccept wallet setup is complete.', now()),
   ('UPLATA_NA_RACUN', true, 'Uplata na racun', null, now()),
   ('POUZECE_GOTOVINA', true, 'Pouzece - gotovina', null, now()),
   ('POUZECE_KARTICA', true, 'Pouzece - kartica', null, now())

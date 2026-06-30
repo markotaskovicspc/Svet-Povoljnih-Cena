@@ -4,8 +4,8 @@
  * Visual placeholder for an IPS NBS / generic payment QR code.
  * Renders a deterministic noise grid keyed off the payload string so different
  * orders produce visually different "QR codes" without pulling a heavy QR
- * library in Phase 2. The real `qrcode` lib is wired in Phase 4 once the WSPay
- * + IPS issuer string lands.
+ * library in Phase 2. The real `qrcode` lib is wired once the IPS issuer string
+ * lands.
  */
 export function FauxQrCode({
   payload,

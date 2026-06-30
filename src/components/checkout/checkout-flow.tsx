@@ -442,8 +442,9 @@ export function CheckoutFlow({
     setLastOrder(order);
     clearCart();
     setStep("identity"); // ready for next purchase
+    const accessQuery = `?token=${encodeURIComponent(result.data.accessToken)}`;
     if (data.paymentMethod === "ips") {
-      router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}`);
+      router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}${accessQuery}`);
       return;
     }
     if (
@@ -451,7 +452,9 @@ export function CheckoutFlow({
       data.paymentMethod === "google_pay" ||
       data.paymentMethod === "apple_pay"
     ) {
-      router.push(`/api/payment/wspay/start/${encodeURIComponent(result.data.number)}`);
+      router.push(
+        `/api/payment/raiaccept/start/${encodeURIComponent(result.data.number)}${accessQuery}`,
+      );
       return;
     }
     router.push(

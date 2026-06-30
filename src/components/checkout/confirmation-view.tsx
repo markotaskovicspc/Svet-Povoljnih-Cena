@@ -27,10 +27,12 @@ import type { Order, PaymentMethod } from "@/types";
  */
 export function ConfirmationView({
   initialOrder,
+  accessToken,
   paymentStatus,
   paymentMessage,
 }: {
   initialOrder?: Order | null;
+  accessToken?: string;
   paymentStatus?: string;
   paymentMessage?: string;
 }) {
@@ -50,7 +52,7 @@ export function ConfirmationView({
       <PaymentNotice status={paymentStatus} message={paymentMessage} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-6">
-          <PaymentBlock order={order} />
+          <PaymentBlock order={order} accessToken={accessToken} />
           <IpsPaymentReceipt order={order} paymentStatus={paymentStatus} />
           <StatusTimeline />
           <NotesBlock order={order} />
@@ -146,12 +148,22 @@ function PaymentNotice({
   );
 }
 
-function PaymentBlock({ order }: { order: Order }) {
+function PaymentBlock({
+  order,
+  accessToken,
+}: {
+  order: Order;
+  accessToken?: string;
+}) {
   return (
     <section className="bg-surface ring-border/60 rounded-2xl p-5 ring-1">
       <h2 className="font-display text-lg text-ink-900">Plaćanje</h2>
       <div className="mt-4">
-        <PaymentMethodView order={order} method={order.paymentMethod} />
+        <PaymentMethodView
+          order={order}
+          method={order.paymentMethod}
+          accessToken={accessToken}
+        />
       </div>
     </section>
   );
@@ -160,13 +172,18 @@ function PaymentBlock({ order }: { order: Order }) {
 function PaymentMethodView({
   order,
   method,
+  accessToken,
 }: {
   order: Order;
   method: PaymentMethod;
+  accessToken?: string;
 }) {
+  const accessQuery = accessToken
+    ? `?token=${encodeURIComponent(accessToken)}`
+    : "";
   if (method === "ips") {
-    const startUrl = `/api/payment/ips/start/${encodeURIComponent(order.id)}`;
-    const statusUrl = `/api/payment/ips/status/${encodeURIComponent(order.id)}`;
+    const startUrl = `/api/payment/ips/start/${encodeURIComponent(order.id)}${accessQuery}`;
+    const statusUrl = `/api/payment/ips/status/${encodeURIComponent(order.id)}${accessQuery}`;
     return (
       <div className="bg-canvas ring-border/60 flex flex-col gap-3 rounded-xl p-5 ring-1">
         <div className="flex items-center justify-between gap-3">
@@ -226,14 +243,14 @@ function PaymentMethodView({
   }
 
   if (method === "kartica" || method === "google_pay" || method === "apple_pay") {
-    const startUrl = `/api/payment/wspay/start/${encodeURIComponent(order.id)}`;
+    const startUrl = `/api/payment/raiaccept/start/${encodeURIComponent(order.id)}${accessQuery}`;
     return (
       <div className="bg-canvas ring-border/60 flex flex-col gap-3 rounded-xl p-5 ring-1">
         <p className="text-ink-900 text-sm font-medium">
           Preusmeravanje na sigurno plaćanje
         </p>
         <p className="text-sm text-ink-700">
-          U sledećem koraku otvoriće se WSPay strana sa 3-D Secure
+          U sledećem koraku otvoriće se RaiAccept strana sa 3-D Secure
           validacijom. Po završetku se vraćate ovde sa potvrdom uplate.
         </p>
         <div className="bg-muted-bg/60 flex items-center justify-between rounded-lg px-3 py-2">
@@ -246,7 +263,7 @@ function PaymentMethodView({
           href={startUrl}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex w-fit items-center rounded-full px-4 py-2 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
-          Nastavi na WSPay
+          Nastavi na RaiAccept
         </a>
       </div>
     );

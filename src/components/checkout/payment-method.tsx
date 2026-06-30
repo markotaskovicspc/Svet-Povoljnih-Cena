@@ -48,10 +48,10 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
   kartica: {
     id: "kartica",
     icon: CreditCard,
-    short: "Visa, Mastercard, DinaCard — kartično plaćanje preko WSPay-a.",
+    short: "Visa, Mastercard, DinaCard — kartično plaćanje preko RaiAccept-a.",
     details: (
       <p>
-        Kartično plaćanje ide odvojeno od IPS-a, preko WSPay hosted strane i
+        Kartično plaćanje ide odvojeno od IPS-a, preko RaiAccept hosted strane i
         3-D Secure provere.
       </p>
     ),
@@ -60,14 +60,14 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
     id: "google_pay",
     icon: Wallet,
     short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
-    details: <p>Google Pay radi kroz kartični WSPay tok kada je metod aktivan.</p>,
+    details: <p>Google Pay radi kroz kartični RaiAccept tok kada je metod aktivan.</p>,
   },
   apple_pay: {
     id: "apple_pay",
     icon: Apple,
     short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
     details: (
-      <p>Apple Pay radi kroz kartični WSPay tok kada je metod aktivan.</p>
+      <p>Apple Pay radi kroz kartični RaiAccept tok kada je metod aktivan.</p>
     ),
   },
   uplata_na_racun: {
@@ -104,7 +104,7 @@ const METHOD_META: Record<PaymentMethod, MethodMeta> = {
 
 /**
  * Step 5 — Payment method picker. Selecting a card expands a helpful detail
- * block. Real WSPay / wallet handoff arrives in Phase 4.
+ * block. Real RaiAccept / wallet handoff arrives when the bank contract lands.
  */
 export function PaymentMethodStep({
   methods,

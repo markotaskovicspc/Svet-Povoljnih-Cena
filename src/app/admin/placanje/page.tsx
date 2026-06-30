@@ -19,7 +19,7 @@ export const metadata = {
 
 const LABEL: Record<PaymentMethod, string> = {
   IPS: "Raiffeisen IPS QR",
-  KARTICA: "Kartica (WSPay)",
+  KARTICA: "Kartica (RaiAccept)",
   GOOGLE_PAY: "Google Pay",
   APPLE_PAY: "Apple Pay",
   UPLATA_NA_RACUN: "Uplata na račun",

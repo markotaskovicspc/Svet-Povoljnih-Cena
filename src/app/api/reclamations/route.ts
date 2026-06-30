@@ -30,7 +30,14 @@ export async function POST(req: Request) {
   const userId = user?.userType === "customer" ? user.id : null;
   const result = await createReclamation(parsed.data, userId);
   if (!result.ok) {
-    return NextResponse.json(result, { status: result.reason === "ORDER_NOT_FOUND" ? 404 : 422 });
+    return NextResponse.json(result, {
+      status:
+        result.reason === "ORDER_NOT_FOUND"
+          ? 404
+          : result.reason === "UNAUTHORIZED"
+            ? 403
+            : 422,
+    });
   }
   return NextResponse.json(result, { status: 201 });
 }

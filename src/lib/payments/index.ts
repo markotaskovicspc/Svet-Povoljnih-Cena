@@ -1,4 +1,10 @@
-export { ipsPaymentProvider, getIpsConfig, IpsConfigError, IpsGatewayError } from "./ips";
+export {
+  ipsPaymentProvider,
+  getIpsConfig,
+  verifyIpsCallbackRequest,
+  IpsConfigError,
+  IpsGatewayError,
+} from "./ips";
 export { providerForPaymentMethod } from "./types";
 export type {
   CreatePaymentResult,

@@ -130,7 +130,7 @@ model Address {
   @@index([city])
 }
 
-// WSPay tokenized card reference (no PAN stored)
+// Tokenized card reference from the active card acquirer (no PAN stored)
 model SavedCard {
   id         String   @id @default(cuid())
   userId     String
@@ -139,7 +139,7 @@ model SavedCard {
   expMonth   Int
   expYear    Int
   holderName String?
-  wsPayToken String   @unique
+  providerToken String @unique
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
@@ -866,7 +866,6 @@ enum PaymentStatus {
 enum PaymentProvider {
   IPS
   RAIFFEISEN_CARD
-  WSPAY
   MANUAL
   COD
 }
@@ -1067,7 +1066,7 @@ model Payment {
   status           PaymentStatus   @default(PENDING)
   amount           Decimal         @db.Decimal(12, 2)
   currency         String          @default("RSD")
-  /// External provider reference (WSPay approval, IPS transaction id, etc.)
+  /// External provider reference (RaiAccept approval, IPS transaction id, etc.)
   providerRef      String?
   paymentReference String?
   redirectUrl      String?         @db.Text

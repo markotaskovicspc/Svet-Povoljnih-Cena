@@ -8,13 +8,17 @@ import {
   IpsConfigError,
   IpsGatewayError,
 } from "@/lib/payments";
-import { rotateOrderAccessToken } from "@/lib/api/order-access";
+import {
+  canAccessOrder,
+  readOrderAccessToken,
+  rotateOrderAccessToken,
+} from "@/lib/api/order-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ orderId: string }> },
 ) {
   const { orderId } = await ctx.params;
@@ -24,6 +28,8 @@ export async function GET(
       id: true,
       number: true,
       total: true,
+      userId: true,
+      publicAccessTokenHash: true,
       paymentMethod: true,
       payments: {
         where: { provider: "IPS" },
@@ -34,6 +40,14 @@ export async function GET(
     },
   });
   if (!order) return notFound();
+  if (
+    !(await canAccessOrder({
+      order,
+      token: readOrderAccessToken(req),
+    }))
+  ) {
+    return errorPage("Link za plaćanje nije važeći.", 403);
+  }
   if (order.paymentMethod !== "IPS") {
     return errorPage("Ova porudžbina ne koristi IPS kao način plaćanja.", 400);
   }
@@ -62,7 +76,11 @@ export async function GET(
     );
   } catch (err) {
     if (err instanceof IpsConfigError || err instanceof IpsGatewayError) {
-      return errorPage(err.message, err instanceof IpsGatewayError ? 502 : 503);
+      console.error("[ips] start failed", err);
+      return errorPage(
+        "IPS plaćanje trenutno nije moguće. Pokušajte kasnije ili izaberite drugi način plaćanja.",
+        err instanceof IpsGatewayError ? 502 : 503,
+      );
     }
     throw err;
   }
