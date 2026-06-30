@@ -8,8 +8,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
   const limit = Number(searchParams.get("limit") ?? 48);
+  const offset = Number(searchParams.get("offset") ?? 0);
   try {
-    const hits = await searchProducts(q, limit);
+    const hits = await searchProducts(q, limit, offset);
     return NextResponse.json({ ok: true, hits });
   } catch (err) {
     console.error("[search]", err);

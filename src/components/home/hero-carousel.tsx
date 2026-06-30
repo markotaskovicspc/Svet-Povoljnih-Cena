@@ -93,7 +93,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               alt={(slide.imageMobile ?? slide.imageDesktop).alt ?? slide.title}
               fill
               sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
-              priority
+              preload
               className={cn(
                 "object-cover md:hidden",
                 !reduce && "will-change-transform",
@@ -104,7 +104,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               alt={slide.imageDesktop.alt ?? slide.title}
               fill
               sizes="(max-width: 1440px) calc(100vw - 32px), 1440px"
-              priority
+              preload
               className={cn(
                 "hidden object-cover md:block",
                 !reduce && "will-change-transform",

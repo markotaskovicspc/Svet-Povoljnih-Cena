@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { getCategoryByPath, listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 
 /**
@@ -54,9 +55,10 @@ export default async function CategoryPage({ params }: RouteProps) {
   const { slug } = await params;
   if (!slug?.length) notFound();
   const categoryPath = `/${slug.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
-  const [resolved, { items: products }] = await Promise.all([
+  const query = { categoryPath };
+  const [resolved, { items: products, nextCursor, total }] = await Promise.all([
     resolveTrailAndTitle(slug),
-    listProducts({ categoryPath, limit: 300 }),
+    listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
   ]);
   if (!resolved) notFound();
 
@@ -67,6 +69,9 @@ export default async function CategoryPage({ params }: RouteProps) {
       subtitle={resolved.subtitle}
       trail={resolved.trail}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

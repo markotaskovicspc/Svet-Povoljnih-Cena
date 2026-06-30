@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { listProducts } from "@/lib/api/catalog";
 import { herojiMesecaIcon } from "@/data/campaign-icons";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Heroji meseca — preporučena selekcija",
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function HerojiMesecaPage() {
-  const { items: products } = await listProducts({ heroOnly: true, limit: 300 });
+  const query = { heroOnly: true };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
+  });
   return (
     <ListingShell
       kind="heroji-meseca"
@@ -20,6 +25,9 @@ export default async function HerojiMesecaPage() {
       subtitle="Naša ekipa bira komade kojima verujemo — ovo su pobednici tekućeg meseca."
       trail={[{ label: "Heroji meseca" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

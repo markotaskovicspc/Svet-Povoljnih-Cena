@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Mesečna akcija — kuratirana selekcija po sniženim cenama",
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AkcijaPage() {
-  const { items: products } = await listProducts({ onSaleOnly: true, limit: 300 });
+  const query = { onSaleOnly: true };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
+  });
   // Pick the action that ends latest (umbrella period banner).
   const period = products
     .flatMap((p) => (p.action && !p.action.isPermanent ? [p.action] : []))
@@ -31,6 +36,9 @@ export default async function AkcijaPage() {
       periodPlacement="title-line"
       trail={[{ label: "Akcija" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

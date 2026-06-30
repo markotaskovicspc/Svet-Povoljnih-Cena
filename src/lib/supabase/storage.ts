@@ -26,3 +26,18 @@ export function resolveSupabaseStorageUrl(value: string | null | undefined) {
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   return `${baseUrl.replace(/\/+$/, "")}/storage/v1/object/public/${bucket}/${encodedPath}`;
 }
+
+export function resolveSupabaseStorageMedia<T extends {
+  url: string | null;
+  thumbUrl?: string | null;
+  cardUrl?: string | null;
+  pdpUrl?: string | null;
+}>(media: T) {
+  return {
+    ...media,
+    url: resolveSupabaseStorageUrl(media.url),
+    thumbUrl: resolveSupabaseStorageUrl(media.thumbUrl),
+    cardUrl: resolveSupabaseStorageUrl(media.cardUrl),
+    pdpUrl: resolveSupabaseStorageUrl(media.pdpUrl),
+  };
+}

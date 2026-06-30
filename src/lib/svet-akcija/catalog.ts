@@ -41,6 +41,9 @@ export interface SvetAkcijaProduct {
   media?: {
     images: {
       url: string;
+      thumbUrl?: string | null;
+      cardUrl?: string | null;
+      pdpUrl?: string | null;
       alt?: string | null;
       width?: number | null;
       height?: number | null;

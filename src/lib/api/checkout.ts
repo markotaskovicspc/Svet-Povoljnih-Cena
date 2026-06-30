@@ -13,6 +13,7 @@ import {
   computeOrderPricing,
   type PricingLine,
 } from "@/lib/pricing";
+import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { getSmallParcelProvider, MYGLS_PROVIDER } from "@/lib/mygls";
 import {
@@ -284,7 +285,9 @@ export async function createOrder(
       unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
       withAssembly: assemblyPrice != null,
       assemblyPrice: assemblyPrice ? new Prisma.Decimal(assemblyPrice) : null,
-      thumbnailUrl: resolveSupabaseStorageUrl(p.media[0]?.url) || null,
+      thumbnailUrl:
+        resolveSupabaseStorageUrl(getMediaVariantUrl(p.media[0], "thumb")) ||
+        null,
       supplierName: p.supplier?.name ?? null,
       categoryName: primaryCategory?.name ?? null,
       categoryPath: primaryCategory?.path ?? null,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProductBySku } from "@/lib/api/catalog";
+import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import type { Product, WishlistProductSnapshot } from "@/types";
 
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
       discountPct: product.discountPct,
       inStock: product.stock > 0,
       incoming: product.incomingStock > 0,
-      thumbnailUrl: product.media.images[0]?.url ?? null,
+      thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || null,
     };
   });
 

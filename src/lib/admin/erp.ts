@@ -20,6 +20,14 @@ export type ErpRow = {
 export type ErpCommand = {
   label: string;
   tone?: "primary" | "danger" | "neutral";
+  /** Server command key dispatched to POST /api/admin/erp/[module]/commands. */
+  action?: string;
+  /** If set, the button navigates to this href instead of dispatching. */
+  href?: string;
+  /** Command operates on the currently selected rows (button disabled until selection). */
+  needsSelection?: boolean;
+  /** Optional native confirm() text shown before the command runs. */
+  confirm?: string;
 };
 
 export type ErpModule = {
@@ -32,6 +40,8 @@ export type ErpModule = {
   columns: ErpColumn[];
   rows: ErpRow[];
   notes?: string[];
+  /** When set, each row gets an "Otvori" link to `${detailHrefBase}/${row.id}`. */
+  detailHrefBase?: string;
 };
 
 function asNumber(value: Prisma.Decimal | number | null | undefined) {
@@ -652,8 +662,14 @@ export const erpModules: ErpModule[] = [
       "Šifarnik dobavljača sa paritetom, valutom, rokovima isporuke, bankarskim podacima i kontaktima.",
     status: "ready",
     commands: [
-      { label: "Unos novog", tone: "primary" },
-      { label: "Brisanje", tone: "danger" },
+      { label: "Unos novog", tone: "primary", action: "supplier.create" },
+      {
+        label: "Brisanje",
+        tone: "danger",
+        action: "row.delete",
+        needsSelection: true,
+        confirm: "Obrisati izabrane dobavljače? Akcija je nepovratna.",
+      },
     ],
     columns: supplierColumns,
     rows: supplierRows,
@@ -667,9 +683,13 @@ export const erpModules: ErpModule[] = [
       "Više važećih cena za isti SKU, sa automatskim povlačenjem dobavljača, naziva, atributa, dezena, valute i pariteta.",
     status: "ready",
     commands: [
-      { label: "Unos nove", tone: "primary" },
-      { label: "Excel unos", tone: "neutral" },
-      { label: "Brisanje", tone: "danger" },
+      {
+        label: "Brisanje",
+        tone: "danger",
+        action: "row.delete",
+        needsSelection: true,
+        confirm: "Obrisati izabrane nabavne cene? Akcija je nepovratna.",
+      },
     ],
     columns: purchasePriceColumns,
     rows: purchasePriceRows,
@@ -683,14 +703,26 @@ export const erpModules: ErpModule[] = [
       "Pregled porudžbenica i pregled porudžbenica po artiklima, sa sumarnim vrednostima, statusima i komandama za slanje, PDF i Excel.",
     status: "ready",
     commands: [
-      { label: "Kreiraj novu", tone: "primary" },
-      { label: "Pošalji dobavljaču", tone: "neutral" },
-      { label: "Štampa PDF", tone: "neutral" },
-      { label: "Štampa Excel", tone: "neutral" },
-      { label: "Kreiraj prijemnicu", tone: "neutral" },
+      { label: "Kreiraj novu", tone: "primary", action: "po.create" },
+      {
+        label: "Pošalji dobavljaču",
+        tone: "neutral",
+        action: "po.send",
+        needsSelection: true,
+        confirm: "Označiti izabrane porudžbenice kao poslate dobavljaču?",
+      },
+      {
+        label: "Kreiraj prijemnicu",
+        tone: "neutral",
+        action: "po.receive",
+        needsSelection: true,
+        confirm:
+          "Proknjižiti prijem izabranih porudžbenica? Roba se dodaje na lager podrazumevanog magacina.",
+      },
     ],
     columns: purchaseOrderColumns,
     rows: purchaseOrderRows,
+    detailHrefBase: "/admin/erp/porudzbenice",
     notes: [
       "Statusi: U obradi, Poslata, Potvrđena, Primljena.",
       "Broj porudžbenice ide po rednom broju za tekuću godinu, npr. 1/26.",
@@ -724,8 +756,14 @@ export const erpModules: ErpModule[] = [
       "Scaffold za domaće fakture, ino fakture i COGS obračun. Dokument navodi oblast, ali detaljna pravila čekaju dopunu.",
     status: "scaffold",
     commands: [
-      { label: "Nova faktura", tone: "primary" },
-      { label: "COGS obračun", tone: "neutral" },
+      { label: "Nova faktura", tone: "primary", action: "invoice.create" },
+      {
+        label: "Proknjiži",
+        tone: "neutral",
+        action: "invoice.post",
+        needsSelection: true,
+        confirm: "Proknjižiti izabrane ulazne fakture?",
+      },
     ],
     columns: inboundInvoiceColumns,
     rows: inboundInvoiceRows,
@@ -739,8 +777,20 @@ export const erpModules: ErpModule[] = [
       "Scaffold za upravljanje maloprodajnim cenama. Detaljna pravila cena i odobravanja čekaju specifikaciju.",
     status: "scaffold",
     commands: [
-      { label: "Novi predlog cene", tone: "primary" },
-      { label: "Objavi cene", tone: "neutral" },
+      {
+        label: "Novi predlog cene",
+        tone: "primary",
+        action: "mp.proposal",
+        needsSelection: true,
+        confirm: "Kreirati predlog cene za izabrane artikle?",
+      },
+      {
+        label: "Objavi cene",
+        tone: "neutral",
+        action: "mp.publish",
+        needsSelection: true,
+        confirm: "Objaviti predložene cene za izabrane artikle? Cena na sajtu se menja.",
+      },
     ],
     columns: retailPriceColumns,
     rows: retailPriceRows,
@@ -804,6 +854,12 @@ async function getArticleRows(): Promise<ErpRow[]> {
       sizeLabel: true,
       colorPrimary: true,
       colorSecondary: true,
+      attribute1: true,
+      attribute2: true,
+      attribute3: true,
+      attribute4: true,
+      cogs: true,
+      customsRate: true,
       widthCm: true,
       depthCm: true,
       heightCm: true,
@@ -816,9 +872,9 @@ async function getArticleRows(): Promise<ErpRow[]> {
       isActive: true,
       isDtz: true,
       isLimited: true,
-      inGoogleMerchant: true,
-      inMetaCatalog: true,
-      inTiktokCatalog: true,
+      availableWebManual: true,
+      availableWholesaleManual: true,
+      availableExportManual: true,
       supplier: { select: { name: true } },
       group: { select: { name: true } },
       collection: { select: { name: true } },
@@ -865,9 +921,10 @@ async function getArticleRows(): Promise<ErpRow[]> {
         collection: product.collection?.name ?? null,
         shortDescription: product.shortDescription ?? null,
         shortName: product.name,
-        attribute1: product.sizeLabel ?? null,
-        attribute2: product.colorPrimary ?? null,
-        attribute3: product.colorSecondary ?? null,
+        attribute1: product.attribute1 ?? product.sizeLabel ?? null,
+        attribute2: product.attribute2 ?? null,
+        attribute3: product.attribute3 ?? null,
+        attribute4: product.attribute4 ?? null,
         color1: product.colorPrimary ?? null,
         color2: product.colorSecondary ?? null,
         siteDescription: product.description,
@@ -875,7 +932,7 @@ async function getArticleRows(): Promise<ErpRow[]> {
         stockDc: product.stock,
         availableTotal: Math.max(product.stock, 0),
         availableDc: Math.max(product.stock, 0),
-        cogs: lastPurchase ? asNumber(lastPurchase.price) : null,
+        cogs: asNumber(product.cogs) ?? (lastPurchase ? asNumber(lastPurchase.price) : null),
         incomingTotal: product.incomingStock,
         incomingAvailable: product.incomingStock,
         widthCm: width,
@@ -887,12 +944,13 @@ async function getArticleRows(): Promise<ErpRow[]> {
         material: product.materials.map((item) => item.material.label).join(", ") || null,
         barcode: product.barcode ?? null,
         siteLink: `/p/${product.slug}`,
-        webAuto: product.isActive,
-        webCheck: true,
-        wholesaleAuto: product.inMetaCatalog,
-        wholesaleCheck: product.inGoogleMerchant,
-        exportAuto: product.inTiktokCatalog,
-        exportCheck: product.allowsAssembly,
+        webAuto: product.stock > 0,
+        webCheck: product.availableWebManual,
+        wholesaleAuto: product.stock > 0,
+        wholesaleCheck: product.availableWholesaleManual,
+        exportAuto: product.stock > 0,
+        exportCheck: product.availableExportManual,
+        customsRate: asNumber(product.customsRate),
         parity: lastPurchase?.parity ?? null,
         deliveryDays: product.deliveryDaysMax,
         calcRetailPrice: asNumber(product.fullPrice),
@@ -906,34 +964,42 @@ async function getSupplierRows(): Promise<ErpRow[]> {
     orderBy: { name: "asc" },
     select: {
       id: true,
+      code: true,
       name: true,
-      enabled: true,
-      feedUrl: true,
-      notes: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: { select: { products: true, purchasePrices: true, purchaseOrders: true } },
+      address: true,
+      city: true,
+      country: true,
+      email: true,
+      phone: true,
+      currency: true,
+      parity: true,
+      paymentTerms: true,
+      deliveryDays: true,
+      transitDays: true,
+      bank: true,
+      swift: true,
+      iban: true,
     },
   });
 
   return suppliers.map((supplier, index) => ({
     id: supplier.id,
     values: {
-      code: `DOB-${String(index + 1).padStart(4, "0")}`,
+      code: supplier.code ?? `DOB-${String(index + 1).padStart(4, "0")}`,
       name: supplier.name,
-      address: supplier.feedUrl ?? null,
-      city: supplier.enabled ? "Aktivan" : "Neaktivan",
-      country: "RS",
-      email: null,
-      phone: null,
-      currency: "RSD",
-      parity: null,
-      paymentTerms: supplier.notes ?? null,
-      deliveryDays: null,
-      transitDays: null,
-      bank: `${supplier._count.products} artikala`,
-      swift: `${supplier._count.purchasePrices} nabavnih cena`,
-      iban: `${supplier._count.purchaseOrders} porudžbenica`,
+      address: supplier.address ?? null,
+      city: supplier.city ?? null,
+      country: supplier.country ?? "RS",
+      email: supplier.email ?? null,
+      phone: supplier.phone ?? null,
+      currency: currencyLabel(supplier.currency),
+      parity: supplier.parity ?? null,
+      paymentTerms: supplier.paymentTerms ?? null,
+      deliveryDays: supplier.deliveryDays ?? null,
+      transitDays: supplier.transitDays ?? null,
+      bank: supplier.bank ?? null,
+      swift: supplier.swift ?? null,
+      iban: supplier.iban ?? null,
     },
   }));
 }

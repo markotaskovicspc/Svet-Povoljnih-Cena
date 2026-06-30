@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { under999CampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Sve do 999",
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function SveDo999Page() {
-  const { items: products } = await listProducts({ maxPrice: 999, limit: 300 });
+  const query = { maxPrice: 999 };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
+  });
   return (
     <ListingShell
       kind="akcija"
@@ -21,6 +26,9 @@ export default async function SveDo999Page() {
       subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."
       trail={[{ label: "Sve do 999" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

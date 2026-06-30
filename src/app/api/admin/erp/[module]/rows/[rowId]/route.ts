@@ -159,22 +159,39 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
       data.description = optionalString(value) ?? "";
       break;
     case "attribute1":
-      data.sizeLabel = optionalString(value);
+      data.attribute1 = optionalString(value);
       break;
     case "attribute2":
+      data.attribute2 = optionalString(value);
+      break;
+    case "attribute3":
+      data.attribute3 = optionalString(value);
+      break;
+    case "attribute4":
+      data.attribute4 = optionalString(value);
+      break;
     case "color1":
       data.colorPrimary = optionalString(value);
       break;
-    case "attribute3":
     case "color2":
       data.colorSecondary = optionalString(value);
       break;
+    case "cogs":
+      data.cogs = value === null ? null : decimalValue(value, "COGS mora biti broj.");
+      break;
+    case "customsRate":
+      data.customsRate =
+        value === null ? null : decimalValue(value, "Carinska stopa mora biti broj.");
+      break;
     case "stockTotal":
+      data.stock = intValue(value, "Zalihe moraju biti ceo broj.");
+      break;
     case "stockDc":
     case "availableTotal":
     case "availableDc":
-      data.stock = intValue(value, "Zalihe moraju biti ceo broj.");
-      break;
+      throw new Error(
+        "Ova kolona je izračunata. Izmenite „Ukupne zalihe“ ili stanje po magacinu.",
+      );
     case "incomingTotal":
     case "incomingAvailable":
       data.incomingStock = intValue(value, "Količina u dolasku mora biti ceo broj.");
@@ -192,19 +209,19 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
       data.barcode = optionalString(value);
       break;
     case "webAuto":
-      data.isActive = Boolean(value);
-      break;
-    case "webCheck":
-      data.inGoogleMerchant = Boolean(value);
-      break;
     case "wholesaleAuto":
-      data.inMetaCatalog = Boolean(value);
-      break;
     case "exportAuto":
-      data.inTiktokCatalog = Boolean(value);
+      throw new Error(
+        "Auto status se izračunava iz zaliha. Menjajte ručni „check“ status.",
+      );
+    case "webCheck":
+      data.availableWebManual = Boolean(value);
+      break;
+    case "wholesaleCheck":
+      data.availableWholesaleManual = Boolean(value);
       break;
     case "exportCheck":
-      data.allowsAssembly = Boolean(value);
+      data.availableExportManual = Boolean(value);
       break;
     case "deliveryDays":
       data.deliveryDaysMax = intValue(value, "Rok isporuke mora biti ceo broj.");
@@ -230,17 +247,53 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
 async function persistSupplierCell(rowId: string, columnKey: string, value: CellValue) {
   const data: Prisma.SupplierUncheckedUpdateInput = {};
   switch (columnKey) {
+    case "code":
+      data.code = optionalString(value);
+      break;
     case "name":
       data.name = requiredString(value, "Naziv dobavljača je obavezan.");
       break;
     case "address":
-      data.feedUrl = optionalString(value);
+      data.address = optionalString(value);
       break;
     case "city":
-      data.enabled = !["neaktivan", "inactive", "false", "0"].includes(asString(value).toLowerCase());
+      data.city = optionalString(value);
+      break;
+    case "country":
+      data.country = optionalString(value);
+      break;
+    case "email": {
+      const email = optionalString(value);
+      if (email && !email.includes("@")) throw new Error("Kontakt mail mora da sadrži @.");
+      data.email = email;
+      break;
+    }
+    case "phone":
+      data.phone = optionalString(value);
+      break;
+    case "currency":
+      data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
+      break;
+    case "parity":
+      data.parity = optionalString(value);
       break;
     case "paymentTerms":
-      data.notes = optionalString(value);
+      data.paymentTerms = optionalString(value);
+      break;
+    case "deliveryDays":
+      data.deliveryDays = nullableInt(value, "Rok isporuke mora biti ceo broj.");
+      break;
+    case "transitDays":
+      data.transitDays = nullableInt(value, "Tranzitno vreme mora biti ceo broj.");
+      break;
+    case "bank":
+      data.bank = optionalString(value);
+      break;
+    case "swift":
+      data.swift = optionalString(value);
+      break;
+    case "iban":
+      data.iban = optionalString(value);
       break;
     default:
       return null;

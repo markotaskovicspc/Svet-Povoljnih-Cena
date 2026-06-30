@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { getCollectionBySlug, listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 interface RouteProps {
   params: Promise<{ slug: string }>;
@@ -25,9 +26,10 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 export default async function CollectionPage({ params }: RouteProps) {
   const { slug } = await params;
   const collectionSlug = normalizeSlug(slug);
-  const [collection, { items: products }] = await Promise.all([
+  const query = { collectionSlug };
+  const [collection, { items: products, nextCursor, total }] = await Promise.all([
     getCollectionBySlug(collectionSlug),
-    listProducts({ collectionSlug, limit: 300 }),
+    listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
   ]);
 
   if (!collection) notFound();
@@ -39,6 +41,9 @@ export default async function CollectionPage({ params }: RouteProps) {
       subtitle={`Svi proizvodi iz kolekcije ${collection.name}.`}
       trail={[{ label: "Kolekcije" }, { label: collection.name }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

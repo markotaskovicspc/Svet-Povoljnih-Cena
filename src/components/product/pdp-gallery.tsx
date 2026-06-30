@@ -24,7 +24,11 @@ import {
 } from "lucide-react";
 import type { MediaAsset, Product } from "@/types";
 import { cn } from "@/lib/utils";
-import { isRenderableImageUrl, isRenderableMediaUrl } from "@/lib/media";
+import {
+  getMediaVariantUrl,
+  isRenderableImageUrl,
+  isRenderableMediaUrl,
+} from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
 const FALLBACK_BLUR =
@@ -47,6 +51,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const slides = useMemo<Slide[]>(() => {
     const out: Slide[] = product.media.images
+      .map((asset) => ({
+        ...asset,
+        url: getMediaVariantUrl(asset, "pdp"),
+      }))
       .filter(
         (asset) =>
           isRenderableImageUrl(asset.url) && !failedImageUrls.includes(asset.url),
@@ -244,7 +252,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     src={s.asset.url}
                     alt={s.asset.alt ?? product.name}
                     fill
-                    priority={index === 0}
+                    preload={index === 0}
                     draggable={false}
                     sizes="100vw"
                     placeholder="blur"
@@ -339,7 +347,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                         src={s.asset.url}
                         alt={s.asset.alt ?? product.name}
                         fill
-                        priority={index === 0}
+                        preload={index === 0}
                         draggable={false}
                         sizes="(min-width: 1024px) 50vw, 100vw"
                         placeholder="blur"
@@ -462,7 +470,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                 >
                   {s.kind === "image" ? (
                     <Image
-                      src={s.asset.url}
+                      src={getMediaVariantUrl(s.asset, "thumb")}
                       alt=""
                       fill
                       sizes="80px"

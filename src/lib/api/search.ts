@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import type { SearchHit } from "@/types/search";
 
@@ -25,15 +26,18 @@ interface SuggestRow {
   discount_pct: number | null;
   is_hero: boolean;
   thumbnail: string | null;
+  thumbnail_thumb: string | null;
+  thumbnail_card: string | null;
   breadcrumb: string | null;
 }
 
 const MIN_QUERY_LEN = 3;
 
-export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
+export async function suggest(query: string, limit = 8, offset = 0): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 96);
+  const safeOffset = Math.max(0, Math.round(offset));
   if (!hasDatabaseConnection()) return [];
 
   let rows: SuggestRow[] = [];
@@ -51,6 +55,12 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
              (SELECT pm.url FROM "ProductMedia" pm
                 WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
                 ORDER BY pm."order" ASC LIMIT 1) AS thumbnail,
+             (SELECT pm."thumbUrl" FROM "ProductMedia" pm
+                WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
+                ORDER BY pm."order" ASC LIMIT 1) AS thumbnail_thumb,
+             (SELECT pm."cardUrl" FROM "ProductMedia" pm
+                WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
+                ORDER BY pm."order" ASC LIMIT 1) AS thumbnail_card,
              (SELECT string_agg(c.name, ' / ' ORDER BY c.level ASC)
                 FROM "ProductCategory" pc
                 JOIN "Category" c ON c.id = pc."categoryId"
@@ -88,6 +98,7 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
                 COALESCE(p."discountPct", 0) DESC,
                 COALESCE(p."salePrice", p."fullPrice") ASC
        LIMIT ${safeLimit}
+       OFFSET ${safeOffset}
     `;
   } catch (err) {
     console.warn("[search] Real catalog search is unavailable.", err);
@@ -99,7 +110,16 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
     slug: r.slug,
     name: r.name,
     breadcrumb: r.breadcrumb ?? "",
-    thumbnailUrl: resolveSupabaseStorageUrl(r.thumbnail),
+    thumbnailUrl: resolveSupabaseStorageUrl(
+      getMediaVariantUrl(
+        {
+          url: r.thumbnail,
+          thumbUrl: r.thumbnail_thumb,
+          cardUrl: r.thumbnail_card,
+        },
+        "thumb",
+      ),
+    ),
     fullPrice: num(r.full_price),
     salePrice: r.sale_price ? num(r.sale_price) : num(r.full_price),
     discountPct: r.discount_pct ?? 0,
@@ -107,6 +127,10 @@ export async function suggest(query: string, limit = 8): Promise<SearchHit[]> {
   }));
 }
 
-export async function searchProducts(query: string, limit = 48): Promise<SearchHit[]> {
-  return suggest(query, Math.min(Math.max(limit, 1), 120));
+export async function searchProducts(
+  query: string,
+  limit = 48,
+  offset = 0,
+): Promise<SearchHit[]> {
+  return suggest(query, Math.min(Math.max(limit, 1), 120), offset);
 }

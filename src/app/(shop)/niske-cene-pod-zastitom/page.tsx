@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { protectedPricesIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Niske cene pod trajnom zaštitom",
@@ -10,9 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function NiskeCenePodZastitomPage() {
-  const { items: products } = await listProducts({
-    actionSlug: "niske-cene-pod-zastitom",
-    limit: 300,
+  const query = { actionSlug: "niske-cene-pod-zastitom" };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
   });
 
   return (
@@ -23,6 +25,9 @@ export default async function NiskeCenePodZastitomPage() {
       headerVariant="promo"
       trail={[{ label: "Niske cene pod trajnom zaštitom" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

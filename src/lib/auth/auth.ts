@@ -27,6 +27,17 @@ const CREDENTIAL_PROVIDER_IDS = new Set([
   "admin-credentials",
 ]);
 
+function oauthCredentials(provider: "google" | "facebook" | "apple") {
+  const prefix = provider.toUpperCase();
+  const clientId =
+    process.env[`${prefix}_CLIENT_ID`] ?? process.env[`AUTH_${prefix}_ID`];
+  const clientSecret =
+    process.env[`${prefix}_CLIENT_SECRET`] ??
+    process.env[`AUTH_${prefix}_SECRET`];
+
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
 function maskEmail(email: string) {
   const [name, domain] = email.split("@");
   if (!domain) return "***";
@@ -35,29 +46,33 @@ function maskEmail(email: string) {
 
 const oauthProviders = (() => {
   const providers: NextAuthConfig["providers"] = [];
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const google = oauthCredentials("google");
+  const facebook = oauthCredentials("facebook");
+  const apple = oauthCredentials("apple");
+
+  if (google) {
     providers.push(
       Google({
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        clientId: google.clientId,
+        clientSecret: google.clientSecret,
         allowDangerousEmailAccountLinking: true,
       }),
     );
   }
-  if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
+  if (facebook) {
     providers.push(
       Facebook({
-        clientId: process.env.FACEBOOK_CLIENT_ID,
-        clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+        clientId: facebook.clientId,
+        clientSecret: facebook.clientSecret,
         allowDangerousEmailAccountLinking: true,
       }),
     );
   }
-  if (process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET) {
+  if (apple) {
     providers.push(
       Apple({
-        clientId: process.env.APPLE_CLIENT_ID,
-        clientSecret: process.env.APPLE_CLIENT_SECRET,
+        clientId: apple.clientId,
+        clientSecret: apple.clientSecret,
         allowDangerousEmailAccountLinking: true,
       }),
     );

@@ -55,6 +55,11 @@ SUSPICIOUS_FIELDS = [
     "DC (lager)",
 ]
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
+MEDIA_VARIANTS = {
+    "thumbUrl": ("thumb", 160),
+    "cardUrl": ("card", 640),
+    "pdpUrl": ("pdp", 1280),
+}
 
 
 def is_blank(value: Any) -> bool:
@@ -116,6 +121,15 @@ def slugify_storage_name(value: str) -> str:
     ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_text).strip("-").lower()
     return slug or "image"
+
+
+def variant_storage_paths(storage_path: str) -> dict[str, str]:
+    source = Path(storage_path)
+    source_base = str(source.with_suffix("")).replace("\\", "/")
+    return {
+        column: f"variants/{variant}/{source_base}-{width}.webp"
+        for column, (variant, width) in MEDIA_VARIANTS.items()
+    }
 
 
 def clean_docx_text(text: str) -> str:
@@ -238,6 +252,7 @@ def build_product_assets(product_skus: set[str]) -> tuple[dict[str, dict[str, An
                     "localPath": str(image_path.relative_to(ROOT)),
                     "absoluteLocalPath": str(image_path),
                     "storagePath": storage_path,
+                    **variant_storage_paths(storage_path),
                 }
             )
 
@@ -311,6 +326,9 @@ def render_supabase_import_sql(
                     "media_id": media["id"],
                     "media_order": media["order"],
                     "url": media["storagePath"],
+                    "thumb_url": media["thumbUrl"],
+                    "card_url": media["cardUrl"],
+                    "pdp_url": media["pdpUrl"],
                     "alt": f"{product_title} - slika {media['order'] + 1}",
                 }
             )
@@ -643,6 +661,9 @@ WITH media_rows AS (
     media_id TEXT,
     media_order INT,
     url TEXT,
+    thumb_url TEXT,
+    card_url TEXT,
+    pdp_url TEXT,
     alt TEXT
   )
 ), asset_skus AS (
@@ -661,15 +682,21 @@ WITH media_rows AS (
     media_id TEXT,
     media_order INT,
     url TEXT,
+    thumb_url TEXT,
+    card_url TEXT,
+    pdp_url TEXT,
     alt TEXT
   )
 )
-INSERT INTO public."ProductMedia" (id, "productId", kind, url, alt, width, height, "blurDataUrl", "order")
+INSERT INTO public."ProductMedia" (id, "productId", kind, url, "thumbUrl", "cardUrl", "pdpUrl", alt, width, height, "blurDataUrl", "order")
 SELECT
   media_rows.media_id,
   p.id,
   'IMAGE',
   media_rows.url,
+  media_rows.thumb_url,
+  media_rows.card_url,
+  media_rows.pdp_url,
   media_rows.alt,
   NULL,
   NULL,
@@ -681,6 +708,9 @@ ON CONFLICT (id) DO UPDATE SET
   "productId" = EXCLUDED."productId",
   kind = EXCLUDED.kind,
   url = EXCLUDED.url,
+  "thumbUrl" = EXCLUDED."thumbUrl",
+  "cardUrl" = EXCLUDED."cardUrl",
+  "pdpUrl" = EXCLUDED."pdpUrl",
   alt = EXCLUDED.alt,
   "order" = EXCLUDED."order";
 

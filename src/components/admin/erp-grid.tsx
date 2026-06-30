@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Download,
   Eye,
@@ -165,6 +166,11 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [savedCellCount, setSavedCellCount] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingCell, setSavingCell] = useState<EditingCell>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [commandMessage, setCommandMessage] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+  const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
   const visible = useMemo(
     () => {
@@ -225,6 +231,80 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       });
     });
   }, [filters, query, rows, visible]);
+
+  const allVisibleSelected =
+    filteredRows.length > 0 && filteredRows.every((row) => selectedIds.has(row.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (filteredRows.every((row) => next.has(row.id))) {
+        filteredRows.forEach((row) => next.delete(row.id));
+      } else {
+        filteredRows.forEach((row) => next.add(row.id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const runCommand = async (command: ErpCommand) => {
+    if (command.href) {
+      router.push(command.href);
+      return;
+    }
+    if (!command.action) {
+      setCommandMessage({ ok: false, text: "Komanda još nije povezana." });
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (command.needsSelection && ids.length === 0) {
+      setCommandMessage({ ok: false, text: "Izaberite bar jedan red." });
+      return;
+    }
+    if (command.confirm && !window.confirm(command.confirm)) return;
+
+    setRunningCommand(command.label);
+    setCommandMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/erp/${encodeURIComponent(module.slug)}/commands`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: command.action, ids }),
+        },
+      );
+      const payload = (await res.json().catch(() => null)) as
+        | { ok?: boolean; message?: string; error?: string; redirect?: string }
+        | null;
+      if (!res.ok || !payload?.ok) {
+        throw new Error(payload?.error ?? "Komanda nije izvršena.");
+      }
+      setSelectedIds(new Set());
+      if (payload.redirect) {
+        router.push(payload.redirect);
+        return;
+      }
+      setCommandMessage({ ok: true, text: payload.message ?? "Urađeno." });
+      router.refresh();
+    } catch (err) {
+      setCommandMessage({
+        ok: false,
+        text: err instanceof Error ? err.message : "Komanda nije izvršena.",
+      });
+    } finally {
+      setRunningCommand(null);
+    }
+  };
 
   const addFilter = () => {
     if (!newFilterColumn) return;
@@ -429,16 +509,26 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {module.commands.map((command) => (
-              <Button
-                key={command.label}
-                type="button"
-                variant={command.tone === "primary" ? "default" : "outline"}
-                className={commandClass(command.tone)}
-              >
-                {command.label}
-              </Button>
-            ))}
+            {module.commands.map((command) => {
+              const disabled =
+                runningCommand !== null ||
+                (command.needsSelection && selectedIds.size === 0);
+              return (
+                <Button
+                  key={command.label}
+                  type="button"
+                  variant={command.tone === "primary" ? "default" : "outline"}
+                  className={commandClass(command.tone)}
+                  disabled={disabled}
+                  onClick={() => runCommand(command)}
+                >
+                  {runningCommand === command.label ? "…" : command.label}
+                  {command.needsSelection && selectedIds.size > 0
+                    ? ` (${selectedIds.size})`
+                    : ""}
+                </Button>
+              );
+            })}
             <Button
               type="button"
               variant={isEditMode ? "default" : "outline"}
@@ -472,6 +562,20 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         </div>
       ) : null}
 
+      {commandMessage ? (
+        <div
+          role={commandMessage.ok ? "status" : "alert"}
+          className={cn(
+            "rounded-xl border px-4 py-3 text-sm",
+            commandMessage.ok
+              ? "border-success/20 bg-success/10 text-success"
+              : "border-danger/20 bg-danger/10 text-danger",
+          )}
+        >
+          {commandMessage.text}
+        </div>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
@@ -495,6 +599,14 @@ export function ErpGrid({ module }: { module: ErpModule }) {
             <table className="min-w-full text-sm">
               <thead className="bg-muted-bg/70 text-xs uppercase tracking-[0.12em] text-ink-500">
                 <tr>
+                  <th className="w-10 px-3 py-3 text-center">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Izaberi sve redove"
+                    />
+                  </th>
+                  {module.detailHrefBase ? <th className="w-16 px-3 py-3" /> : null}
                   {visible.map((column) => (
                     <th
                       key={column.key}
@@ -533,7 +645,30 @@ export function ErpGrid({ module }: { module: ErpModule }) {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {filteredRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-muted-bg/30">
+                  <tr
+                    key={row.id}
+                    className={cn(
+                      "hover:bg-muted-bg/30",
+                      selectedIds.has(row.id) && "bg-brand-blue-50/40",
+                    )}
+                  >
+                    <td className="px-3 py-2 text-center">
+                      <Checkbox
+                        checked={selectedIds.has(row.id)}
+                        onCheckedChange={() => toggleSelect(row.id)}
+                        aria-label={`Izaberi red ${row.id}`}
+                      />
+                    </td>
+                    {module.detailHrefBase ? (
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`${module.detailHrefBase}/${row.id}`}
+                          className="text-xs text-walnut hover:underline"
+                        >
+                          Otvori
+                        </Link>
+                      </td>
+                    ) : null}
                     {visible.map((column) => {
                       const value = row.values[column.key];
                       const selectOptions = getSelectOptions(column, value);

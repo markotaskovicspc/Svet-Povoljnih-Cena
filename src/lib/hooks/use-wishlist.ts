@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Product, SKU, WishlistProductSnapshot } from "@/types";
+import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 
 export interface WishlistEntry {
@@ -115,7 +116,7 @@ export function wishlistSnapshotFromProduct(product: Product): WishlistProductSn
     discountPct: product.discountPct,
     inStock: product.stock > 0,
     incoming: product.incomingStock > 0,
-    thumbnailUrl: product.media.images[0]?.url ?? null,
+    thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || null,
   };
 }
 

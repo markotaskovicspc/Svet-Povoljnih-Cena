@@ -4,10 +4,13 @@ import Image from "next/image";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { PackageSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isRenderableImageUrl } from "@/lib/media";
+import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
 
 interface GalleryImage {
   url: string;
+  thumbUrl?: string | null;
+  cardUrl?: string | null;
+  pdpUrl?: string | null;
   alt?: string | null;
   width?: number | null;
   height?: number | null;
@@ -34,10 +37,15 @@ export function SvetAkcijaProductGallery({
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const safeImages = useMemo(
     () =>
-      images.filter(
-        (image) =>
-          isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
-      ),
+      images
+        .map((image) => ({
+          ...image,
+          url: getMediaVariantUrl(image, "pdp"),
+        }))
+        .filter(
+          (image) =>
+            isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
+        ),
     [failedImageUrls, images],
   );
   const markImageFailed = useCallback((url: string) => {
@@ -142,7 +150,7 @@ export function SvetAkcijaProductGallery({
               src={image.url}
               alt={image.alt ?? productName}
               fill
-              priority={index === 0}
+              preload={index === 0}
               draggable={false}
               sizes="(min-width: 1024px) 48vw, 100vw"
               onError={() => markImageFailed(image.url)}
@@ -184,7 +192,7 @@ export function SvetAkcijaProductGallery({
                 )}
               >
                 <Image
-                  src={item.url}
+                  src={getMediaVariantUrl(item, "thumb")}
                   alt=""
                   fill
                   draggable={false}

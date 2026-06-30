@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { limitedCampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Dok traju zalihe",
@@ -10,9 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function OgranicenaPonudaPage() {
-  const { items: products } = await listProducts({
+  const query = { limitedOnly: true };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
     limitedOnly: true,
-    limit: 300,
+    limit: LISTING_PAGE_SIZE,
   });
   return (
     <ListingShell
@@ -23,6 +26,9 @@ export default async function OgranicenaPonudaPage() {
       headerVariant="promo"
       trail={[{ label: "Dok traju zalihe" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

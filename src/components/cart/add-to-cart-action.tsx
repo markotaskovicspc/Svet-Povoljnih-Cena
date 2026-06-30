@@ -8,6 +8,7 @@ import type { Product } from "@/types";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
+import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 
 /**
@@ -29,7 +30,7 @@ export function commitAddToCart(product: Product, qty = 1): number {
     name: product.name,
     unitPriceFull: price.full,
     unitPriceSale: sale,
-    thumbnailUrl: product.media.images[0]?.url,
+    thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
   };
   useCart.getState().add(line, qty);
 

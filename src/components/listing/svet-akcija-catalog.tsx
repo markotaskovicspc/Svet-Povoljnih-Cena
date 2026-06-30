@@ -17,15 +17,23 @@ import {
   sourceValue,
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
-import { isRenderableImageUrl } from "@/lib/media";
+import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
 
 type SortKey = "source" | "price-asc" | "price-desc" | "category";
 
 interface CatalogProps {
   products: SvetAkcijaProduct[];
+  totalProducts?: number;
+  page?: number;
+  pageSize?: number;
 }
 
-export function SvetAkcijaCatalog({ products }: CatalogProps) {
+export function SvetAkcijaCatalog({
+  products,
+  totalProducts = products.length,
+  page = 1,
+  pageSize = products.length || 1,
+}: CatalogProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [group, setGroup] = useState("all");
@@ -122,12 +130,12 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
               Proizvodi iz uvoznog fajla
             </h1>
             <p className="mt-3 text-sm leading-6 text-ink-700 md:text-base">
-              {products.length} artikala iz izvornog kataloga. Nazivi, opisi, šifre i cene
+              {totalProducts} artikala iz izvornog kataloga. Nazivi, opisi, šifre i cene
               prikazani su iz tabele bez prepravki.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center md:min-w-[330px]">
-            <Stat label="Artikala" value={products.length} />
+            <Stat label="Artikala" value={totalProducts} />
             <Stat label="Kategorije" value={facets.categories.length} />
             <Stat label="Grupe" value={facets.groups.length} />
           </div>
@@ -203,7 +211,7 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
 
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-ink-500" aria-live="polite">
-            Prikazano {filtered.length} od {products.length}
+            Prikazano {filtered.length} od {products.length} na strani {page}
           </p>
           <div className="inline-flex items-center gap-2 rounded-md bg-brand-blue-50 px-3 py-2 text-xs text-brand-blue">
             <SlidersHorizontal className="size-4" aria-hidden />
@@ -212,11 +220,18 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
         </div>
 
         {filtered.length ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((product) => (
-              <CatalogCard key={sourceValue(product, "Šifra")} product={product} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filtered.map((product) => (
+                <CatalogCard key={sourceValue(product, "Šifra")} product={product} />
+              ))}
+            </div>
+            <SvetAkcijaPagination
+              page={page}
+              pageSize={pageSize}
+              totalProducts={totalProducts}
+            />
+          </>
         ) : (
           <div className="rounded-md border border-border bg-white px-6 py-16 text-center">
             <p className="font-display text-2xl text-ink-900">Nema proizvoda za izabrane filtere</p>
@@ -234,6 +249,48 @@ export function SvetAkcijaCatalog({ products }: CatalogProps) {
   );
 }
 
+function SvetAkcijaPagination({
+  page,
+  pageSize,
+  totalProducts,
+}: {
+  page: number;
+  pageSize: number;
+  totalProducts: number;
+}) {
+  const pageCount = Math.max(1, Math.ceil(totalProducts / pageSize));
+  if (pageCount <= 1) return null;
+
+  return (
+    <nav
+      aria-label="Strane kataloga"
+      className="mt-8 flex items-center justify-center gap-3"
+    >
+      <Link
+        href={page > 1 ? pageHref(page - 1) : pageHref(1)}
+        aria-disabled={page <= 1}
+        className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-brand-blue hover:text-brand-blue aria-disabled:pointer-events-none aria-disabled:opacity-45"
+      >
+        Prethodna
+      </Link>
+      <span className="text-sm text-ink-500">
+        Strana {page} od {pageCount}
+      </span>
+      <Link
+        href={page < pageCount ? pageHref(page + 1) : pageHref(pageCount)}
+        aria-disabled={page >= pageCount}
+        className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-brand-blue hover:text-brand-blue aria-disabled:pointer-events-none aria-disabled:opacity-45"
+      >
+        Sledeća
+      </Link>
+    </nav>
+  );
+}
+
+function pageHref(page: number) {
+  return page <= 1 ? "/svet-akcija" : `/svet-akcija?page=${page}`;
+}
+
 function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
   const [imageFailed, setImageFailed] = useState(false);
   const salePrice = sourceValue(product, "Akcijska MPC");
@@ -242,8 +299,11 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
   const primaryColor = sourceValue(product, "Boja 1");
   const secondaryColor = sourceValue(product, "Boja 2");
   const image = primaryImage(product);
+  const imageUrl = getMediaVariantUrl(image, "card");
   const renderableImage =
-    image && !imageFailed && isRenderableImageUrl(image.url) ? image : null;
+    image && !imageFailed && isRenderableImageUrl(imageUrl)
+      ? { ...image, url: imageUrl }
+      : null;
 
   return (
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">

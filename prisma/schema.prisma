@@ -274,6 +274,12 @@ model Product {
   colorPrimary     String?
   colorSecondary   String?
 
+  // ERP article attributes (Atribut 1-4). Boja 1/2 = colorPrimary/colorSecondary.
+  attribute1 String?
+  attribute2 String?
+  attribute3 String?
+  attribute4 String?
+
   groupId      String?
   group        Group?      @relation(fields: [groupId], references: [id])
   collectionId String?
@@ -313,6 +319,16 @@ model Product {
   incomingStock Int  @default(0)
   supplierStock Int?
 
+  // ERP cost of goods sold (weighted-average, computed on goods receipt). Spec §5.1.
+  cogs        Decimal? @db.Decimal(12, 2)
+  // Customs rate used in purchase-order BM% calc (spec §4.1.1).
+  customsRate Decimal? @db.Decimal(8, 2)
+
+  // Manual sales-channel availability checks (auto status is derived from stock).
+  availableWebManual       Boolean @default(true)
+  availableWholesaleManual Boolean @default(true)
+  availableExportManual    Boolean @default(true)
+
   // Delivery / assembly
   deliveryDaysMin Int     @default(3)
   deliveryDaysMax Int     @default(5)
@@ -349,7 +365,8 @@ model Product {
   orderItems          OrderItem[]
   purchasePrices      PurchasePrice[]
   purchaseOrderItems  PurchaseOrderItem[]
-  inboundInvoiceItems InboundInvoiceItem[]
+  inboundInvoiceItems  InboundInvoiceItem[]
+  retailPriceProposals RetailPriceProposal[]
   wishlistItems       WishlistItem[]
   backInStockAlerts   BackInStockAlert[]
   onSaleAlerts        OnSaleAlert[]
@@ -666,6 +683,22 @@ model Supplier {
   authPass  String?
   enabled   Boolean  @default(true)
   notes     String?  @db.Text
+
+  // ERP supplier master data (spec §2 - Maticni podaci o dobavljacima).
+  code         String?     @unique
+  address      String?
+  city         String?
+  country      String?     @default("RS")
+  email        String?
+  phone        String?
+  currency     ErpCurrency @default(RSD)
+  parity       String?
+  paymentTerms String?
+  deliveryDays Int?
+  transitDays  Int?
+  bank         String?
+  swift        String?
+  iban         String?
   /// Phase 4A — per-supplier `SupplierFeedMapping` JSON. Defines the XML
   /// path expressions used by the importer to project vendor XML into the
   /// canonical `FeedItem` shape. Null = supplier not yet configured.
@@ -1713,6 +1746,37 @@ model InboundInvoiceItem {
   @@index([inboundInvoiceId])
   @@index([sku])
   @@index([productId])
+}
+
+enum RetailPriceProposalStatus {
+  PREDLOG
+  OBJAVLJENO
+  ARHIVA
+}
+
+/// Retail-price (MPC) management — spec §6/§7. A proposal carries a new MPC with
+/// optional validity window; publishing writes it onto the product and archives
+/// any previously published proposal for the same SKU.
+model RetailPriceProposal {
+  id          String                    @id @default(cuid())
+  productId   String?
+  sku         String
+  name        String?
+  currentMpc  Decimal?                  @db.Decimal(12, 2)
+  proposedMpc Decimal                   @db.Decimal(12, 2)
+  bmPct       Decimal?                  @db.Decimal(8, 2)
+  validFrom   DateTime?
+  validTo     DateTime?
+  status      RetailPriceProposalStatus @default(PREDLOG)
+  actorId     String?
+  publishedAt DateTime?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([sku])
+  @@index([status])
 }
 
 // ──────────────────────────────────────────────────────────────────────

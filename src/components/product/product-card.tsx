@@ -13,7 +13,7 @@ import { Heart, PackageSearch } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
-import { isRenderableImageUrl } from "@/lib/media";
+import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
@@ -34,8 +34,8 @@ import {
 interface ProductCardProps {
   product: Product;
   className?: string;
-  /** Preload the cover image for above-the-fold cards. */
-  priority?: boolean;
+  /** Preload the cover image only when the card image is the route LCP. */
+  preload?: boolean;
   /** Contextual promo sticker inherited from the current rail/listing. */
   campaignSticker?: CampaignStickerKey;
 }
@@ -57,7 +57,7 @@ const toneClasses: Record<BadgeTone, string> = {
 export function ProductCard({
   product,
   className,
-  priority,
+  preload,
 }: ProductCardProps) {
   const reduced = useReducedMotion();
   const wished = useIsWished(product.sku);
@@ -69,14 +69,22 @@ export function ProductCard({
   const visibleLineQty = cartHydrated ? lineQty : 0;
 
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
+  const [galleryActivated, setGalleryActivated] = useState(false);
   const images = useMemo(
     () =>
-      product.media.images.filter(
-        (image) =>
-          isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
-      ),
+      product.media.images
+        .map((image) => ({
+          ...image,
+          url: getMediaVariantUrl(image, "card"),
+        }))
+        .filter(
+          (image) =>
+            isRenderableImageUrl(image.url) && !failedImageUrls.includes(image.url),
+        ),
     [failedImageUrls, product.media.images],
   );
+  const visibleImages = galleryActivated ? images : images.slice(0, 1);
+  const activateGallery = useCallback(() => setGalleryActivated(true), []);
   const imageTrackRef = useRef<HTMLDivElement | null>(null);
   const imageDragRef = useRef({
     pointerId: -1,
@@ -103,14 +111,15 @@ export function ProductCard({
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
   const syncActiveImage = useCallback(() => {
-    if (!images.length) return;
+    if (!visibleImages.length) return;
     const track = imageTrackRef.current;
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-    setActiveImage(Math.max(0, Math.min(index, images.length - 1)));
-  }, [images.length]);
+    setActiveImage(Math.max(0, Math.min(index, visibleImages.length - 1)));
+  }, [visibleImages.length]);
 
   const handleImageDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    activateGallery();
     if (event.pointerType === "touch" || event.button !== 0) return;
 
     imageDragRef.current = {
@@ -120,7 +129,7 @@ export function ProductCard({
       didDrag: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
+  }, [activateGallery]);
 
   const handleImageDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = imageDragRef.current;
@@ -170,6 +179,9 @@ export function ProductCard({
       <Link
         href={`/p/${product.slug}`}
         aria-label={`${product.name} — pregled proizvoda`}
+        onMouseEnter={activateGallery}
+        onFocus={activateGallery}
+        onTouchStart={activateGallery}
         onClick={(event) => {
           if (imageDragRef.current.didDrag) event.preventDefault();
         }}
@@ -189,8 +201,8 @@ export function ProductCard({
           onPointerCancel={finishImageDrag}
           className="absolute inset-0 flex snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {images.length
-            ? images.map((image, index) => (
+          {visibleImages.length
+            ? visibleImages.map((image, index) => (
                 <div
                   key={`${image.url}-${index}`}
                   data-card-image={index}
@@ -207,7 +219,7 @@ export function ProductCard({
                         alt={image.alt ?? product.name}
                         fill
                         sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
-                        priority={priority}
+                        preload={preload}
                         draggable={false}
                         placeholder="blur"
                         blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
@@ -237,9 +249,9 @@ export function ProductCard({
               </div>
             )}
         </div>
-        {images.length > 1 ? (
+        {galleryActivated && visibleImages.length > 1 ? (
           <div className="absolute inset-x-0 bottom-1 z-10 flex flex-wrap justify-center gap-0.5 px-2">
-            {images.map((_, index) => (
+            {visibleImages.map((_, index) => (
               <span
                 key={index}
                 data-card-image-dot

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Nedeljna akcija — sedam dana posebnih ponuda",
@@ -10,9 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function NedeljnaAkcijaPage() {
-  const { items: products } = await listProducts({
-    actionSlug: "nedeljna-akcija",
-    limit: 300,
+  const query = { actionSlug: "nedeljna-akcija" };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
   });
   const period = products
     .flatMap((p) => (p.action ? [p.action] : []))
@@ -34,6 +36,9 @@ export default async function NedeljnaAkcijaPage() {
       }
       trail={[{ label: "Nedeljna akcija" }]}
       source={products}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

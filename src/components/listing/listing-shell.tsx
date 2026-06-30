@@ -10,7 +10,7 @@
  * Phase 1: pure client filtering over a pre-built product list. In Phase 4
  * `source` will be a server-paginated cursor — the same UI applies.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutGrid, ListFilter, RotateCcw, Rows3 } from "lucide-react";
 import Image from "next/image";
@@ -55,6 +55,19 @@ import {
   emptyFilterState,
 } from "@/lib/listing/filters";
 
+export interface ListingPageQuery {
+  categoryPath?: string;
+  actionSlug?: string;
+  onSaleOnly?: boolean;
+  heroOnly?: boolean;
+  newOnly?: boolean;
+  limitedOnly?: boolean;
+  outletOnly?: boolean;
+  groupSlug?: string;
+  collectionSlug?: string;
+  maxPrice?: number;
+}
+
 interface ListingShellProps {
   kind: ListingKind;
   title: string;
@@ -67,6 +80,9 @@ interface ListingShellProps {
   periodPlacement?: "below-title" | "title-line";
   trail: Crumb[];
   source: Product[];
+  initialNextCursor?: string | null;
+  total?: number;
+  pageQuery?: ListingPageQuery;
   /**
    * Optional sub-tabs row above the grid (used by /novo).
    * `matchKeyword` is matched (case-insensitive) against the product's `categoryPath`.
@@ -82,6 +98,33 @@ const VIEW_KEY = "spc:listing:view";
 const SCROLL_KEY = "spc:listing:scroll";
 
 export function ListingShell({
+  source,
+  initialNextCursor = null,
+  pageQuery,
+  ...props
+}: ListingShellProps) {
+  const pageQueryString = useMemo(() => buildPageQueryString(pageQuery), [pageQuery]);
+  const resetKey = `${props.kind}:${props.initialSubTab ?? ""}:${pageQueryString}:${
+    source[0]?.sku ?? ""
+  }:${source.at(-1)?.sku ?? ""}:${source.length}:${initialNextCursor ?? ""}`;
+
+  return (
+    <ListingShellInner
+      key={resetKey}
+      {...props}
+      source={source}
+      initialNextCursor={initialNextCursor}
+      pageQuery={pageQuery}
+      pageQueryString={pageQueryString}
+    />
+  );
+}
+
+interface ListingShellInnerProps extends ListingShellProps {
+  pageQueryString: string;
+}
+
+function ListingShellInner({
   kind,
   title,
   subtitle,
@@ -91,11 +134,18 @@ export function ListingShell({
   periodPlacement = "below-title",
   trail,
   source,
+  initialNextCursor = null,
+  total,
+  pageQueryString,
   subTabs,
   initialSubTab,
   featureBanner,
   featureBannerMobileOnly = false,
-}: ListingShellProps) {
+}: ListingShellInnerProps) {
+  const [items, setItems] = useState(source);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
   const [view, setView] = useState<3 | 5>(() => {
@@ -138,14 +188,14 @@ export function ListingShell({
   }, []);
 
   const subFiltered = useMemo(() => {
-    if (!subTabs?.length || !activeSub) return source;
+    if (!subTabs?.length || !activeSub) return items;
     const tab = subTabs.find((t) => t.id === activeSub);
-    if (!tab) return source;
+    if (!tab) return items;
     const needle = tab.matchKeyword.toLowerCase();
-    return source.filter((p) =>
+    return items.filter((p) =>
       p.categoryPath.some((seg) => seg.toLowerCase().includes(needle)),
     );
-  }, [source, subTabs, activeSub]);
+  }, [items, subTabs, activeSub]);
 
   const extents = useMemo(() => computeExtents(subFiltered), [subFiltered]);
 
@@ -164,7 +214,39 @@ export function ListingShell({
       : LISTING_PAGE_SIZE;
   const chips = useMemo(() => activeChips(state, extents), [state, extents]);
   const shown = filtered.slice(0, visible);
-  const hasMore = filtered.length > shown.length;
+  const hasLocalMore = filtered.length > shown.length;
+  const hasServerMore = Boolean(nextCursor);
+  const hasMore = hasLocalMore || hasServerMore;
+
+  const loadNextPage = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setLoadError(false);
+    try {
+      const params = new URLSearchParams(pageQueryString);
+      params.set("cursor", nextCursor);
+      params.set("limit", String(LISTING_PAGE_SIZE));
+      const response = await fetch(`/api/products?${params.toString()}`, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as {
+        items?: Product[];
+        nextCursor?: string | null;
+      };
+      setItems((current) => {
+        const seen = new Set(current.map((product) => product.sku));
+        const incoming = (data.items ?? []).filter((product) => !seen.has(product.sku));
+        return incoming.length ? [...current, ...incoming] : current;
+      });
+      setNextCursor(data.nextCursor ?? null);
+    } catch (error) {
+      console.error("[listing] Failed to load more products.", error);
+      setLoadError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, nextCursor, pageQueryString]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -173,20 +255,24 @@ export function ListingShell({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry?.isIntersecting) return;
-        setVisibleWindow((current) => ({
-          key: visibleKey,
-          count:
-            current.key === visibleKey
-              ? current.count + LISTING_PAGE_SIZE
-              : LISTING_PAGE_SIZE * 2,
-        }));
+        if (hasLocalMore) {
+          setVisibleWindow((current) => ({
+            key: visibleKey,
+            count:
+              current.key === visibleKey
+                ? current.count + LISTING_PAGE_SIZE
+                : LISTING_PAGE_SIZE * 2,
+          }));
+          return;
+        }
+        void loadNextPage();
       },
       { rootMargin: "900px 0px 900px" },
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, visibleKey]);
+  }, [hasLocalMore, hasMore, loadNextPage, visibleKey]);
 
   const sidebar = (
     <FilterSidebar
@@ -219,7 +305,7 @@ export function ListingShell({
                     height={displayTitleIcon.height ?? 96}
                     unoptimized={displayTitleIcon.url.endsWith(".svg")}
                     className="max-h-full max-w-full object-contain"
-                    priority
+                    preload
                   />
                 </span>
               ) : null}
@@ -321,6 +407,7 @@ export function ListingShell({
                   {filtered.length !== subFiltered.length
                     ? ` od ${subFiltered.length}`
                     : ""}
+                  {total && total > items.length ? ` (${items.length}/${total} učitano)` : ""}
                 </p>
               </div>
 
@@ -428,17 +515,33 @@ export function ListingShell({
             {hasMore ? (
               <div
                 ref={loadMoreRef}
-                className="h-16"
+                className="flex h-16 items-center justify-center text-xs text-ink-500"
                 role="status"
                 aria-live="polite"
-                aria-label="Učitavanje još proizvoda"
-              />
+                aria-label={loadingMore ? "Učitavanje još proizvoda" : "Još proizvoda dostupno"}
+              >
+                {loadingMore
+                  ? "Učitavam još proizvoda..."
+                  : loadError
+                    ? "Učitavanje nije uspelo. Skrolujte ili promenite filter za novi pokušaj."
+                    : null}
+              </div>
             ) : null}
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function buildPageQueryString(query: ListingPageQuery | undefined) {
+  const params = new URLSearchParams();
+  if (!query) return "";
+  for (const [key, value] of Object.entries(query)) {
+    if (value == null || value === false) continue;
+    params.set(key, String(value));
+  }
+  return params.toString();
 }
 
 function EmptyState({ onReset }: { onReset: () => void }) {

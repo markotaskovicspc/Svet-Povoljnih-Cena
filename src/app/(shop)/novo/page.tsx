@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { newCampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
+import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 
 export const metadata: Metadata = {
   title: "Novo u ponudi — najsvežiji komadi",
@@ -20,7 +21,11 @@ const ROOM_TABS = [
 ];
 
 export default async function NovoPage() {
-  const { items: products } = await listProducts({ newOnly: true, limit: 300 });
+  const query = { newOnly: true };
+  const { items: products, nextCursor, total } = await listProducts({
+    ...query,
+    limit: LISTING_PAGE_SIZE,
+  });
   return (
     <ListingShell
       kind="novo"
@@ -31,6 +36,9 @@ export default async function NovoPage() {
       trail={[{ label: "Novo" }]}
       source={products}
       subTabs={ROOM_TABS}
+      initialNextCursor={nextCursor}
+      total={total}
+      pageQuery={query}
     />
   );
 }

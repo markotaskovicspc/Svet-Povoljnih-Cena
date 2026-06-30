@@ -85,6 +85,9 @@ const mediaSchema = z.object({
         /^https?:\/\//.test(value),
       "URL mora biti puna adresa ili putanja koja počinje sa /.",
     ),
+  thumbUrl: optionalMediaUrlSchema(),
+  cardUrl: optionalMediaUrlSchema(),
+  pdpUrl: optionalMediaUrlSchema(),
   alt: z.string().max(200).optional().nullable(),
 });
 
@@ -99,9 +102,28 @@ const mediaUpdateSchema = z.object({
       (value) => value.startsWith("/") || /^https?:\/\//.test(value),
       "URL mora biti puna adresa ili putanja koja počinje sa /.",
     ),
+  thumbUrl: optionalMediaUrlSchema(),
+  cardUrl: optionalMediaUrlSchema(),
+  pdpUrl: optionalMediaUrlSchema(),
   alt: z.string().max(200).optional().nullable(),
   order: z.coerce.number().int().min(0).max(999),
 });
+
+function optionalMediaUrlSchema() {
+  return z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .nullable()
+    .refine(
+      (value) =>
+        !value ||
+        value.startsWith("/") ||
+        /^https?:\/\//.test(value),
+      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+    );
+}
 
 const mediaDeleteSchema = z.object({
   productId: z.string(),
@@ -288,7 +310,7 @@ async function addProductImage(formData: FormData) {
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
-      const { productId, alt } = parsed.data;
+      const { productId, alt, thumbUrl, cardUrl, pdpUrl } = parsed.data;
       const file = formData.get("file");
       let url = parsed.data.url?.trim() || "";
       if (file instanceof File && file.size > 0) {
@@ -312,6 +334,9 @@ async function addProductImage(formData: FormData) {
         data: {
           productId,
           url,
+          thumbUrl: thumbUrl?.trim() || null,
+          cardUrl: cardUrl?.trim() || null,
+          pdpUrl: pdpUrl?.trim() || null,
           alt: alt?.trim() || null,
           order: (last._max.order ?? -1) + 1,
         },
@@ -333,11 +358,14 @@ async function updateProductMedia(formData: FormData) {
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
-      const { productId, mediaId, url, alt, order } = parsed.data;
+      const { productId, mediaId, url, thumbUrl, cardUrl, pdpUrl, alt, order } = parsed.data;
       await db.productMedia.updateMany({
         where: { id: mediaId, productId },
         data: {
           url,
+          thumbUrl: thumbUrl?.trim() || null,
+          cardUrl: cardUrl?.trim() || null,
+          pdpUrl: pdpUrl?.trim() || null,
           alt: alt?.trim() || null,
           order,
         },
@@ -346,7 +374,7 @@ async function updateProductMedia(formData: FormData) {
       return {
         ok: true as const,
         entityId: mediaId,
-        diff: { productId, url, alt, order },
+        diff: { productId, url, thumbUrl, cardUrl, pdpUrl, alt, order },
       };
     },
   )(formData);
@@ -728,7 +756,7 @@ export default async function ProductDetail({
                   <div className="flex gap-3">
                     {m.kind === "IMAGE" ? (
                       <Image
-                        src={resolveSupabaseStorageUrl(m.url)}
+                        src={resolveSupabaseStorageUrl(m.thumbUrl ?? m.cardUrl ?? m.url)}
                         alt={m.alt ?? product.name}
                         width={64}
                         height={64}
@@ -751,6 +779,17 @@ export default async function ProductDetail({
                     <Field label="URL / storage putanja">
                       <Input name="url" defaultValue={m.url} required />
                     </Field>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <Field label="Thumb URL">
+                        <Input name="thumbUrl" defaultValue={m.thumbUrl ?? ""} />
+                      </Field>
+                      <Field label="Card URL">
+                        <Input name="cardUrl" defaultValue={m.cardUrl ?? ""} />
+                      </Field>
+                      <Field label="PDP URL">
+                        <Input name="pdpUrl" defaultValue={m.pdpUrl ?? ""} />
+                      </Field>
+                    </div>
                     <div className="grid grid-cols-[90px_1fr] gap-2">
                       <Field label="Redosled">
                         <Input
@@ -793,6 +832,17 @@ export default async function ProductDetail({
               <Field label="URL fotografije">
                 <Input name="url" placeholder="https://... ili /putanja/slika.jpg" />
               </Field>
+              <div className="grid gap-2 md:grid-cols-3">
+                <Field label="Thumb URL">
+                  <Input name="thumbUrl" placeholder="variants/thumb/..." />
+                </Field>
+                <Field label="Card URL">
+                  <Input name="cardUrl" placeholder="variants/card/..." />
+                </Field>
+                <Field label="PDP URL">
+                  <Input name="pdpUrl" placeholder="variants/pdp/..." />
+                </Field>
+              </div>
               <Field label="Alt tekst">
                 <Input name="alt" defaultValue={product.name} />
               </Field>

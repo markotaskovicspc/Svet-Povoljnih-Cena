@@ -18,6 +18,15 @@ const socialProviderLabels: Record<SocialAuthProvider["id"], string> = {
   apple: "Apple",
 };
 
+function hasProviderCredentials(provider: SocialAuthProvider["id"]) {
+  const prefix = provider.toUpperCase();
+  return Boolean(
+    (process.env[`${prefix}_CLIENT_ID`] ?? process.env[`AUTH_${prefix}_ID`]) &&
+      (process.env[`${prefix}_CLIENT_SECRET`] ??
+        process.env[`AUTH_${prefix}_SECRET`]),
+  );
+}
+
 export function getConfiguredSocialAuthProviders(
   actions: SocialAuthActions,
   options: { includeUnavailable?: boolean } = {},
@@ -33,20 +42,9 @@ export function getConfiguredSocialAuthProviders(
     });
   };
 
-  addProvider(
-    "google",
-    Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-  );
-  addProvider(
-    "apple",
-    Boolean(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET),
-  );
-  addProvider(
-    "facebook",
-    Boolean(
-      process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET,
-    ),
-  );
+  addProvider("google", hasProviderCredentials("google"));
+  addProvider("apple", hasProviderCredentials("apple"));
+  addProvider("facebook", hasProviderCredentials("facebook"));
 
   return providers;
 }

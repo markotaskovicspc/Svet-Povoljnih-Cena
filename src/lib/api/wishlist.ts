@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 /**
@@ -50,7 +51,9 @@ export async function listWishlist(userId: string) {
     inStock: w.product.stock > 0,
     incoming: w.product.incomingStock > 0,
     isActive: w.product.isActive,
-    thumbnailUrl: resolveSupabaseStorageUrl(w.product.media[0]?.url) || null,
+    thumbnailUrl:
+      resolveSupabaseStorageUrl(getMediaVariantUrl(w.product.media[0], "thumb")) ||
+      null,
     notifyOnSale: w.notifyOnSale,
     notifyOnRestock: w.notifyOnRestock,
     addedAt: w.addedAt.toISOString(),

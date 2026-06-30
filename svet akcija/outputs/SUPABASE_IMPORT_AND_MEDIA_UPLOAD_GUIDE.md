@@ -4,13 +4,16 @@ This guide is for loading the enriched Svet Akcija catalog into Supabase.
 
 You will do two big things:
 
-1. Upload all product images in one batch.
-2. Paste one SQL file into Supabase to create/update products, descriptions, and image records.
+1. Upload all original product images in one batch.
+2. Generate and upload optimized WebP variants for thumbnails, product cards, and PDP galleries.
+3. Paste one SQL file into Supabase to create/update products, descriptions, and image records.
 
 The important files are:
 
 - SQL to paste into Supabase: `outputs/Svet_akcija_supabase_import.sql`
 - Image upload manifest: `outputs/svet-akcija-product-media-upload-manifest.json`
+- Variant image manifest: `outputs/svet-akcija-product-media-variants.json`
+- Variant image folder: `outputs/product-media-variants`
 - Bulk image uploader: `outputs/upload-product-media-to-supabase.mjs`
 
 Current catalog numbers:
@@ -19,6 +22,7 @@ Current catalog numbers:
 - 116 products have image folders and DOCX descriptions
 - 93 products do not have matching image folders yet
 - 892 image files will be uploaded
+- 2,676 optimized variant files will be generated and uploaded after the originals
 
 ## Before You Start
 
@@ -90,7 +94,32 @@ Done. Uploaded: 892. Failed: 0.
 
 If it says some files failed, run the same command again. The uploader uses upsert, so re-running is okay.
 
-## Step 4: Check Images In Supabase
+## Step 4: Generate And Upload Optimized Variants
+
+Generate the three storefront variants:
+
+```bash
+npm run media:variants
+```
+
+This creates:
+
+- `thumb` variants at 160px for search, cart, wishlist, and admin previews.
+- `card` variants at 640px for product cards and listing grids.
+- `pdp` variants at 1280px for product detail galleries.
+
+Upload the generated variant manifest:
+
+```bash
+SUPABASE_URL="https://YOUR_PROJECT_ID.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY" \
+SUPABASE_STORAGE_BUCKET="product-media" \
+node outputs/upload-product-media-to-supabase.mjs outputs/svet-akcija-product-media-variants.json
+```
+
+If Terminal says `node: command not found`, use the bundled Node path from Step 3 and keep the same manifest argument.
+
+## Step 5: Check Images In Supabase
 
 1. Go back to Supabase.
 2. Click `Storage`.
@@ -103,10 +132,13 @@ Quick spot-check:
 - `products/1081/001-1.png`
 - `products/1144/001-1.png`
 - `products/210025/001-210-025.png`
+- `variants/thumb/products/1081/001-1-160.webp`
+- `variants/card/products/1081/001-1-640.webp`
+- `variants/pdp/products/1081/001-1-1280.webp`
 
 If those exist, the image upload worked.
 
-## Step 5: Paste The Catalog SQL Into Supabase
+## Step 6: Paste The Catalog SQL Into Supabase
 
 1. In Supabase, click `SQL Editor`.
 2. Click `New query`.
@@ -123,7 +155,7 @@ outputs/Svet_akcija_supabase_import.sql
 
 This SQL is idempotent. That means you can run it again later and it updates the same products instead of creating duplicates.
 
-## Step 6: Check The SQL Results
+## Step 7: Check The SQL Results
 
 After the SQL runs, Supabase should show result rows at the bottom.
 
@@ -136,7 +168,7 @@ You want to see roughly:
 
 There may also be a duplicate barcode review result. That is expected from the source catalog and is already handled by the import.
 
-## Step 7: What This Import Does
+## Step 8: What This Import Does
 
 The SQL does this:
 
@@ -144,12 +176,13 @@ The SQL does this:
 - Uses DOCX text as the full product description when available.
 - Keeps the original short product `Opis` as the short description.
 - Creates product image rows in `ProductMedia`.
-- Stores image paths like `products/1081/001-1.png`.
+- Stores original image paths like `products/1081/001-1.png`.
+- Stores variant paths in `thumbUrl`, `cardUrl`, and `pdpUrl`.
 - Replaces only generated image rows with IDs like `sa-media-1081-001`.
 
 It does not delete manually uploaded media unless the media ID starts with `sa-media-{sku}-`.
 
-## Step 8: If Something Goes Wrong
+## Step 9: If Something Goes Wrong
 
 If image upload fails:
 
@@ -158,6 +191,12 @@ If image upload fails:
 - Check that your `SUPABASE_URL` is correct.
 - Check that you used the `service_role` key, not the anonymous key.
 - Run the upload command again.
+
+If variant generation fails:
+
+- Check that dependencies are installed.
+- Re-run `npm run media:variants`.
+- Upload `outputs/svet-akcija-product-media-variants.json` again after generation succeeds.
 
 If SQL fails:
 
@@ -171,9 +210,11 @@ If SQL fails:
 Do it in this order:
 
 1. Create bucket `product-media`.
-2. Upload all images with the terminal command.
-3. Confirm images are visible in Storage.
-4. Paste and run `outputs/Svet_akcija_supabase_import.sql`.
-5. Check that Supabase reports 209 products and 892 media rows.
+2. Upload all original images with the terminal command.
+3. Run `npm run media:variants`.
+4. Upload `outputs/svet-akcija-product-media-variants.json`.
+5. Confirm originals and variants are visible in Storage.
+6. Paste and run `outputs/Svet_akcija_supabase_import.sql`.
+7. Check that Supabase reports 209 products and 892 media rows.
 
 That is the whole flow.

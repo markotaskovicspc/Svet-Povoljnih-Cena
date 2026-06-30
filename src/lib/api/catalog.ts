@@ -9,7 +9,7 @@ import type {
 import { BRAND } from "@/lib/brand";
 import { num, numOrNull } from "@/lib/api/_helpers";
 import { isRenderableImageUrl } from "@/lib/media";
-import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { resolveSupabaseStorageMedia } from "@/lib/supabase/storage";
 import {
   parseSourcePrice,
   sourceValue,
@@ -100,6 +100,29 @@ const productListSelect = {
 
 type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
 
+function mapImageMedia(m: {
+  url: string;
+  thumbUrl?: string | null;
+  cardUrl?: string | null;
+  pdpUrl?: string | null;
+  alt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  blurDataUrl?: string | null;
+}) {
+  const media = resolveSupabaseStorageMedia(m);
+  return {
+    url: media.url,
+    thumbUrl: media.thumbUrl || undefined,
+    cardUrl: media.cardUrl || undefined,
+    pdpUrl: media.pdpUrl || undefined,
+    alt: m.alt ?? undefined,
+    width: m.width ?? undefined,
+    height: m.height ?? undefined,
+    blurDataUrl: m.blurDataUrl ?? undefined,
+  };
+}
+
 function mapProduct(p: ProductRow): ProductDTO {
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
@@ -166,13 +189,7 @@ function mapProduct(p: ProductRow): ProductDTO {
     media: {
       images: p.media
         .filter((m) => m.kind === "IMAGE")
-        .map((m) => ({
-          url: resolveSupabaseStorageUrl(m.url),
-          alt: m.alt ?? undefined,
-          width: m.width ?? undefined,
-          height: m.height ?? undefined,
-          blurDataUrl: m.blurDataUrl ?? undefined,
-        }))
+        .map(mapImageMedia)
         .filter((m) => isRenderableImageUrl(m.url)),
       video: p.media.find((m) => m.kind === "VIDEO")
         ? { url: p.media.find((m) => m.kind === "VIDEO")!.url }
@@ -241,13 +258,24 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     media: {
       images:
         product.media?.images
-          .map((image) => ({
-            url: resolveSupabaseStorageUrl(image.url),
-            alt: image.alt ?? name,
-            width: image.width ?? undefined,
-            height: image.height ?? undefined,
-            blurDataUrl: image.blurDataUrl ?? undefined,
-          }))
+          .map((image) => {
+            const media = resolveSupabaseStorageMedia({
+              url: image.url,
+              thumbUrl: image.thumbUrl,
+              cardUrl: image.cardUrl,
+              pdpUrl: image.pdpUrl,
+            });
+            return {
+              url: media.url,
+              thumbUrl: media.thumbUrl || undefined,
+              cardUrl: media.cardUrl || undefined,
+              pdpUrl: media.pdpUrl || undefined,
+              alt: image.alt ?? name,
+              width: image.width ?? undefined,
+              height: image.height ?? undefined,
+              blurDataUrl: image.blurDataUrl ?? undefined,
+            };
+          })
           .filter((image) => isRenderableImageUrl(image.url)) ?? [],
     },
     recommendedSkus: [],
@@ -309,13 +337,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     assemblyCities: [],
     media: {
       images: p.media
-        .map((m) => ({
-          url: resolveSupabaseStorageUrl(m.url),
-          alt: m.alt ?? undefined,
-          width: m.width ?? undefined,
-          height: m.height ?? undefined,
-          blurDataUrl: m.blurDataUrl ?? undefined,
-        }))
+        .map(mapImageMedia)
         .filter((m) => isRenderableImageUrl(m.url)),
     },
     recommendedSkus: [],
@@ -495,6 +517,7 @@ export async function listProducts(
         return [{ isHero: "desc" }, { discountPct: "desc" }, { fullPrice: "asc" }];
     }
   })();
+  orderBy.push({ id: "asc" });
 
   const limit = Math.min(Math.max(input.limit ?? 24, 1), 300);
 
