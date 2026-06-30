@@ -10,6 +10,7 @@ import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
 import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
+import { getProductAvailability } from "@/lib/product-availability";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -24,6 +25,13 @@ import { effectiveUnitPrice } from "@/lib/pricing";
 export function commitAddToCart(product: Product, qty = 1): number {
   const price = effectiveUnitPrice(product);
   const sale = price.effective;
+  const availability = getProductAvailability(product);
+
+  if (!availability.canAddToCart) {
+    toast.error(availability.message);
+    return sale;
+  }
+
   const line: Omit<CartLine, "qty"> = {
     sku: product.sku,
     slug: product.slug,

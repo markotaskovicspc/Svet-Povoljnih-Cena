@@ -14,6 +14,7 @@ import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
 import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
+import { getProductAvailability } from "@/lib/product-availability";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
 import { useCart } from "@/lib/hooks/use-cart";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
@@ -107,6 +108,7 @@ export function ProductCard({
     : price.kind === "sale" && product.action?.endsAt
       ? `Akcija do ${formatDate(product.action.endsAt)}`
       : "";
+  const availability = getProductAvailability(product);
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
@@ -158,6 +160,7 @@ export function ProductCard({
   );
 
   function handleAdd() {
+    if (!availability.canAddToCart) return;
     commitAddToCart(product);
   }
 
@@ -336,18 +339,28 @@ export function ProductCard({
                 </span>
               )}
             </Link>
-            <CartQuantityControl
-              sku={product.sku}
-              quantity={visibleLineQty}
-              onAdd={handleAdd}
-              tone="dark"
-              addTone="dark"
-              fullWidth
-              className="w-full"
-            />
+            {availability.canAddToCart ? (
+              <CartQuantityControl
+                sku={product.sku}
+                quantity={visibleLineQty}
+                onAdd={handleAdd}
+                tone="dark"
+                addTone="dark"
+                fullWidth
+                className="w-full"
+              />
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-9 w-full cursor-not-allowed items-center justify-center rounded-full bg-muted-bg px-3 text-xs font-medium text-ink-500 ring-1 ring-border/60"
+              >
+                {availability.addLabel}
+              </button>
+            )}
           </div>
           <p className="mt-1 min-h-3.5 truncate text-[10px] leading-none text-ink-500 md:text-[11px]">
-            {promoLine}
+            {availability.canAddToCart ? promoLine : availability.message}
           </p>
         </div>
       </div>

@@ -16,6 +16,24 @@ export const metadata = {
 };
 
 const PAGE = 30;
+const lfsPointerPattern = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\b|oid sha256:/i;
+
+const ownerDataIssueFilter: Prisma.ProductWhereInput = {
+  OR: [
+    { stock: { lte: 0 } },
+    { media: { none: {} } },
+    { barcode: null },
+    { barcode: "" },
+    { collectionId: null },
+    { colorPrimary: null },
+    { colorPrimary: "" },
+    { colorSecondary: null },
+    { colorSecondary: "" },
+    { fullPrice: { lte: 1 } },
+    { description: { contains: "git-lfs", mode: "insensitive" } },
+    { description: { contains: "oid sha256", mode: "insensitive" } },
+  ],
+};
 
 export default async function ProductsPage({
   searchParams,
@@ -28,27 +46,39 @@ export default async function ProductsPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const status = sp.status ?? "";
 
+  const filters: Prisma.ProductWhereInput[] = [];
+  if (q) {
+    filters.push({
+      OR: [
+        { sku: { contains: q, mode: "insensitive" as const } },
+        { barcode: { contains: q, mode: "insensitive" as const } },
+        { name: { contains: q, mode: "insensitive" as const } },
+        { slug: { contains: q, mode: "insensitive" as const } },
+      ],
+    });
+  }
+  if (status === "inactive") filters.push({ isActive: false });
+  if (status === "needsqa") {
+    filters.push({ isActive: false, fullPrice: 1, media: { none: {} } });
+  }
+  if (status === "needsownerdata") filters.push(ownerDataIssueFilter);
+  if (status === "unavailable") filters.push({ stock: { lte: 0 } });
+  if (status === "hero") filters.push({ isHero: true });
+  if (status === "lowstock") filters.push({ stock: { gt: 0, lte: 2 } });
+
   const where: Prisma.ProductWhereInput = {
     deletedAt: null,
-    ...(q
-      ? {
-          OR: [
-            { sku: { contains: q, mode: "insensitive" as const } },
-            { barcode: { contains: q, mode: "insensitive" as const } },
-            { name: { contains: q, mode: "insensitive" as const } },
-            { slug: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-    ...(status === "inactive" ? { isActive: false } : {}),
-    ...(status === "needsqa"
-      ? { isActive: false, fullPrice: 1, media: { none: {} } }
-      : {}),
-    ...(status === "hero" ? { isHero: true } : {}),
-    ...(status === "lowstock" ? { stock: { lte: 2 } } : {}),
+    ...(filters.length ? { AND: filters } : {}),
   };
 
-  const [items, total] = await Promise.all([
+  const [
+    items,
+    total,
+    ownerDataIssueCount,
+    zeroStockCount,
+    missingMediaCount,
+    brokenDescriptionCount,
+  ] = await Promise.all([
     db.product.findMany({
       where,
       orderBy: { updatedAt: "desc" },
@@ -60,6 +90,10 @@ export default async function ProductsPage({
         barcode: true,
         name: true,
         slug: true,
+        description: true,
+        collectionId: true,
+        colorPrimary: true,
+        colorSecondary: true,
         fullPrice: true,
         salePrice: true,
         stock: true,
@@ -71,6 +105,18 @@ export default async function ProductsPage({
       },
     }),
     db.product.count({ where }),
+    db.product.count({ where: { deletedAt: null, ...ownerDataIssueFilter } }),
+    db.product.count({ where: { deletedAt: null, stock: { lte: 0 } } }),
+    db.product.count({ where: { deletedAt: null, media: { none: {} } } }),
+    db.product.count({
+      where: {
+        deletedAt: null,
+        OR: [
+          { description: { contains: "git-lfs", mode: "insensitive" } },
+          { description: { contains: "oid sha256", mode: "insensitive" } },
+        ],
+      },
+    }),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
@@ -111,6 +157,8 @@ export default async function ProductsPage({
                 <option value="">Svi</option>
                 <option value="inactive">Neaktivni</option>
                 <option value="needsqa">Uvoz QA</option>
+                <option value="needsownerdata">Za vlasnika</option>
+                <option value="unavailable">Bez zaliha</option>
                 <option value="hero">Hero meseca</option>
                 <option value="lowstock">Niske zalihe</option>
               </select>
@@ -124,6 +172,31 @@ export default async function ProductsPage({
           </form>
         </Card>
 
+        <Card>
+          <div className="grid gap-3 text-sm sm:grid-cols-4">
+            <LaunchReadinessMetric
+              label="Za vlasnika"
+              value={ownerDataIssueCount}
+              href={link({ status: "needsownerdata", page: 1 })}
+            />
+            <LaunchReadinessMetric
+              label="Bez zaliha"
+              value={zeroStockCount}
+              href={link({ status: "unavailable", page: 1 })}
+            />
+            <LaunchReadinessMetric
+              label="Bez media"
+              value={missingMediaCount}
+              href={link({ status: "needsownerdata", page: 1 })}
+            />
+            <LaunchReadinessMetric
+              label="LFS opisi"
+              value={brokenDescriptionCount}
+              href={link({ status: "needsownerdata", page: 1 })}
+            />
+          </div>
+        </Card>
+
         <DataTable
           columns={[
             { key: "sku", label: "SKU" },
@@ -133,73 +206,87 @@ export default async function ProductsPage({
             { key: "flags", label: "Oznake" },
             { key: "actions", label: "" },
           ]}
-          rows={items.map((p) => ({
-            id: p.id,
-            cells: {
-              sku: <span className="font-mono text-xs">{p.sku}</span>,
-              name: (
-                <div>
-                  <p className="font-medium text-ink-900">{p.name}</p>
-                  <p className="text-xs text-ink-500">/p/{p.slug}</p>
-                  {p.barcode ? (
-                    <p className="text-xs text-ink-500">Bar kod: {p.barcode}</p>
-                  ) : null}
-                </div>
-              ),
-              price: (
-                <div className="text-right">
-                  {p.salePrice ? (
-                    <>
-                      <p className="text-action">{formatRsd(num(p.salePrice))}</p>
-                      <p className="text-xs text-ink-500 line-through">
-                        {formatRsd(num(p.fullPrice))}
-                      </p>
-                    </>
-                  ) : (
-                    formatRsd(num(p.fullPrice))
-                  )}
-                </div>
-              ),
-              stock: (
-                <div className="text-right">
-                  <p className={p.stock === 0 ? "text-danger" : ""}>{p.stock}</p>
-                  {p.incomingStock > 0 ? (
-                    <p className="text-xs text-ink-500">+{p.incomingStock}</p>
-                  ) : null}
-                </div>
-              ),
-              flags: (
-                <div className="flex flex-wrap gap-1 text-[11px]">
-                  {!p.isActive ? (
-                    <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-destructive">
-                      Neaktivan
-                    </span>
-                  ) : null}
-                  {p.isHero ? (
-                    <span className="rounded bg-walnut/15 px-1.5 py-0.5 text-walnut">
-                      Hero
-                    </span>
-                  ) : null}
-                  {p.isNew ? (
-                    <span className="rounded bg-info/15 px-1.5 py-0.5 text-info">Novo</span>
-                  ) : null}
-                  {!p.isActive && num(p.fullPrice) === 1 && p._count.media === 0 ? (
-                    <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">
-                      Uvoz QA
-                    </span>
-                  ) : null}
-                </div>
-              ),
-              actions: (
-                <Link
-                  href={`/admin/proizvodi/${p.id}`}
-                  className="text-xs text-walnut hover:underline"
-                >
-                  Otvori →
-                </Link>
-              ),
-            },
-          }))}
+          rows={items.map((p) => {
+            const ownerIssues = productOwnerIssues(p);
+
+            return {
+              id: p.id,
+              cells: {
+                sku: <span className="font-mono text-xs">{p.sku}</span>,
+                name: (
+                  <div>
+                    <p className="font-medium text-ink-900">{p.name}</p>
+                    <p className="text-xs text-ink-500">/p/{p.slug}</p>
+                    {p.barcode ? (
+                      <p className="text-xs text-ink-500">Bar kod: {p.barcode}</p>
+                    ) : null}
+                  </div>
+                ),
+                price: (
+                  <div className="text-right">
+                    {p.salePrice ? (
+                      <>
+                        <p className="text-action">{formatRsd(num(p.salePrice))}</p>
+                        <p className="text-xs text-ink-500 line-through">
+                          {formatRsd(num(p.fullPrice))}
+                        </p>
+                      </>
+                    ) : (
+                      formatRsd(num(p.fullPrice))
+                    )}
+                  </div>
+                ),
+                stock: (
+                  <div className="text-right">
+                    <p className={p.stock === 0 ? "text-danger" : ""}>{p.stock}</p>
+                    {p.incomingStock > 0 ? (
+                      <p className="text-xs text-ink-500">+{p.incomingStock}</p>
+                    ) : null}
+                  </div>
+                ),
+                flags: (
+                  <div className="flex flex-wrap gap-1 text-[11px]">
+                    {!p.isActive ? (
+                      <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-destructive">
+                        Neaktivan
+                      </span>
+                    ) : null}
+                    {p.isHero ? (
+                      <span className="rounded bg-walnut/15 px-1.5 py-0.5 text-walnut">
+                        Hero
+                      </span>
+                    ) : null}
+                    {p.isNew ? (
+                      <span className="rounded bg-info/15 px-1.5 py-0.5 text-info">
+                        Novo
+                      </span>
+                    ) : null}
+                    {ownerIssues.map((issue) => (
+                      <span
+                        key={issue}
+                        className="rounded bg-warning/15 px-1.5 py-0.5 text-warning"
+                      >
+                        {issue}
+                      </span>
+                    ))}
+                    {!p.isActive && num(p.fullPrice) === 1 && p._count.media === 0 ? (
+                      <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">
+                        Uvoz QA
+                      </span>
+                    ) : null}
+                  </div>
+                ),
+                actions: (
+                  <Link
+                    href={`/admin/proizvodi/${p.id}`}
+                    className="text-xs text-walnut hover:underline"
+                  >
+                    Otvori →
+                  </Link>
+                ),
+              },
+            };
+          })}
           empty="Nema rezultata."
         />
 
@@ -231,4 +318,50 @@ export default async function ProductsPage({
       </div>
     </>
   );
+}
+
+function LaunchReadinessMetric({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: number;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-md border border-border px-3 py-2 transition hover:bg-muted-bg"
+    >
+      <p className="text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-semibold text-ink-900">
+        {value.toLocaleString("sr-Latn-RS")}
+      </p>
+    </Link>
+  );
+}
+
+function productOwnerIssues(product: {
+  stock: number;
+  barcode: string | null;
+  collectionId: string | null;
+  colorPrimary: string | null;
+  colorSecondary: string | null;
+  description: string;
+  fullPrice: Prisma.Decimal;
+  _count: { media: number };
+}) {
+  const issues: string[] = [];
+  if (product.stock <= 0) issues.push("Bez zaliha");
+  if (product._count.media === 0) issues.push("Bez media");
+  if (!product.barcode) issues.push("Bez barkoda");
+  if (!product.collectionId) issues.push("Bez brenda");
+  if (!product.colorPrimary) issues.push("Bez boje");
+  if (!product.colorSecondary) issues.push("Bez druge boje");
+  if (num(product.fullPrice) <= 1) issues.push("Cena");
+  if (lfsPointerPattern.test(product.description)) issues.push("LFS opis");
+  return issues;
 }

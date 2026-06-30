@@ -13,6 +13,7 @@ import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
+import { getProductAvailability } from "@/lib/product-availability";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 
@@ -28,23 +29,40 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
+  const availability = getProductAvailability(product);
 
   function handleAdd() {
+    if (!availability.canAddToCart) return;
     commitAddToCart(product, 1);
   }
 
   const ctas = (
     <div className="flex flex-1 items-center gap-2">
-      <CartQuantityControl
-        sku={product.sku}
-        quantity={lineQty}
-        onAdd={handleAdd}
-        size="md"
-        tone="light"
-        addTone="dark"
-        fullWidth
-        className="flex-1"
-      />
+      {availability.canAddToCart ? (
+        <CartQuantityControl
+          sku={product.sku}
+          quantity={lineQty}
+          onAdd={handleAdd}
+          size="md"
+          tone="light"
+          addTone="dark"
+          fullWidth
+          className="flex-1"
+        />
+      ) : (
+        <CartQuantityControl
+          sku={product.sku}
+          quantity={0}
+          onAdd={handleAdd}
+          size="md"
+          tone="light"
+          addTone="light"
+          fullWidth
+          addDisabled
+          addLabel={availability.addLabel}
+          className="flex-1"
+        />
+      )}
     </div>
   );
 
@@ -53,7 +71,9 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
       <div className="hidden flex-col gap-2 md:flex">
         {ctas}
         <p className="text-xs text-ink-500">
-          Isporuka {product.deliveryDays.min}–{product.deliveryDays.max} radnih dana
+          {availability.canAddToCart
+            ? `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
+            : availability.message}
         </p>
       </div>
     );

@@ -19,8 +19,10 @@ const COMMERCIAL_ALIASES = {
   salePrice: ["akcijska cena", "saleprice", "sale price", "popust cena", "snizena cena"],
   stock: ["lager", "stanje", "stock", "zaliha", "kolicina", "količina"],
   incomingStock: ["dolazeci lager", "dolazeći lager", "incomingstock", "incoming stock", "u dolasku"],
+  availability: ["dostupnost", "availability", "aktivan", "active", "objavi", "publish", "online", "prodaja"],
   imageUrls: ["fotografija", "slika", "slike", "image", "imageurl", "image urls", "imageurls", "url slike"],
 };
+const LFS_POINTER_RE = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\b|oid sha256:/i;
 
 const args = parseArgs(process.argv.slice(2));
 const sourceFile = path.resolve(args.file ?? DEFAULT_FILE);
@@ -301,6 +303,9 @@ function validateRows(rows) {
     }
     if (!normalized.supplierName) issues.push("Missing supplier");
     if (!normalized.description) issues.push("Missing description");
+    if (normalized.description && LFS_POINTER_RE.test(normalized.description)) {
+      issues.push("Broken Git LFS pointer description");
+    }
     if (!normalized.shortName) issues.push("Missing short name");
 
     if (issues.length) {
@@ -326,6 +331,7 @@ function validateRows(rows) {
     categories: countBy(accepted, "categoryName"),
     suppliers: countBy(accepted, "supplierName"),
     collections: countBy(accepted.filter((r) => r.collectionName), "collectionName"),
+    ownerDataWarnings: summarizeOwnerDataWarnings(accepted),
   };
 }
 
@@ -361,9 +367,11 @@ function validateCommercialRows(rows, acceptedRows) {
     const duplicate = duplicateSet.has(row.sku);
     const commercial = bySku.get(row.sku);
     const issues = [];
+    const warnings = [...(row.ownerDataWarnings ?? [])];
     if (duplicate) issues.push("Duplicate commercial SKU");
     if (!commercial) issues.push("Missing commercial row");
     if (commercial?.issues.length) issues.push(...commercial.issues);
+    if (commercial?.warnings.length) warnings.push(...commercial.warnings);
 
     if (issues.length) {
       if (!commercial && !duplicate) missing.push(row.sku);
@@ -372,6 +380,17 @@ function validateCommercialRows(rows, acceptedRows) {
         rowNumber: row.rowNumber,
         commercialRowNumber: commercial?.rowNumber ?? null,
         issues,
+        warnings,
+        blocking: true,
+      });
+    } else if (warnings.length) {
+      unpublishable.push({
+        sku: row.sku,
+        rowNumber: row.rowNumber,
+        commercialRowNumber: commercial?.rowNumber ?? null,
+        issues: [],
+        warnings,
+        blocking: false,
       });
     } else {
       publishable.push({
@@ -382,10 +401,12 @@ function validateCommercialRows(rows, acceptedRows) {
         salePrice: commercial.salePrice,
         stock: commercial.stock,
         incomingStock: commercial.incomingStock,
+        availableForSale: commercial.availableForSale,
         imageCount: commercial.imageUrls.length,
       });
     }
   }
+  const blockingUnpublishable = unpublishable.filter((row) => row.blocking);
 
   return {
     columns: {
@@ -394,12 +415,14 @@ function validateCommercialRows(rows, acceptedRows) {
       salePrice: columns.salePrice ?? null,
       stock: columns.stock ?? null,
       incomingStock: columns.incomingStock ?? null,
+      availability: columns.availability ?? null,
       imageUrls: columns.imageUrls,
     },
     matched: acceptedRows.length - missing.length,
     missing,
     publishable,
     unpublishable,
+    blockingUnpublishable,
     errors: schemaErrors,
     duplicateSkus,
     extraSkus,
@@ -408,7 +431,7 @@ function validateCommercialRows(rows, acceptedRows) {
       schemaErrors.length === 0 &&
       duplicateSkus.length === 0 &&
       missing.length === 0 &&
-      unpublishable.length === 0 &&
+      blockingUnpublishable.length === 0 &&
       acceptedRows.length > 0,
   };
 }
@@ -421,6 +444,7 @@ function missingCommercialValidation(acceptedRows, reason) {
       salePrice: null,
       stock: null,
       incomingStock: null,
+      availability: null,
       imageUrls: [],
     },
     matched: 0,
@@ -431,6 +455,16 @@ function missingCommercialValidation(acceptedRows, reason) {
       rowNumber: row.rowNumber,
       commercialRowNumber: null,
       issues: [reason],
+      warnings: row.ownerDataWarnings ?? [],
+      blocking: true,
+    })),
+    blockingUnpublishable: acceptedRows.map((row) => ({
+      sku: row.sku,
+      rowNumber: row.rowNumber,
+      commercialRowNumber: null,
+      issues: [reason],
+      warnings: row.ownerDataWarnings ?? [],
+      blocking: true,
     })),
     errors: [reason],
     duplicateSkus: [],
@@ -447,6 +481,7 @@ function attachCommercialReport(report, file, validation) {
   report.commercialMissing = validation.missing;
   report.publishable = validation.publishable;
   report.unpublishable = validation.unpublishable;
+  report.commercialBlockingUnpublishable = validation.blockingUnpublishable;
   report.commercialErrors = validation.errors;
   report.commercialDuplicateSkus = validation.duplicateSkus;
   report.commercialExtraSkus = validation.extraSkus;
@@ -476,6 +511,7 @@ function resolveCommercialColumns(row) {
 
 function parseCommercialRow(row, columns) {
   const issues = [];
+  const warnings = [];
   const sku = normalizeSku(readColumn(row, columns.sku));
   if (!sku) issues.push("Missing SKU");
 
@@ -483,6 +519,7 @@ function parseCommercialRow(row, columns) {
   const salePrice = parseOptionalMoney(readColumn(row, columns.salePrice), "sale price", issues);
   const stock = parseRequiredInteger(readColumn(row, columns.stock), "stock", issues);
   const incomingStock = parseOptionalInteger(readColumn(row, columns.incomingStock), "incoming stock", issues) ?? 0;
+  const availableForSale = parseOptionalAvailability(readColumn(row, columns.availability), "availability", issues);
   const imageUrls = parseImageUrls(columns.imageUrls.flatMap((column) => readColumn(row, column)));
 
   if (fullPrice != null && fullPrice <= 1) issues.push("Full price must be greater than 1 RSD");
@@ -490,10 +527,12 @@ function parseCommercialRow(row, columns) {
   if (salePrice != null && fullPrice != null && salePrice >= fullPrice) {
     issues.push("Sale price must be lower than full price");
   }
-  if (stock != null && stock <= 0) issues.push("Stock must be greater than 0");
+  if (stock != null && stock < 0) issues.push("Stock must not be negative");
+  if (stock === 0) warnings.push("Stock is zero; product will import as inactive");
   if (incomingStock < 0) issues.push("Incoming stock must not be negative");
-  if (columns.imageUrls.length > 0 && imageUrls.length === 0) {
-    issues.push("Missing image URL");
+  if (availableForSale === false) warnings.push("Owner marked product unavailable for sale");
+  if (imageUrls.length === 0) {
+    issues.push("Missing required product media URL");
   }
 
   return {
@@ -503,8 +542,10 @@ function parseCommercialRow(row, columns) {
     salePrice,
     stock,
     incomingStock,
+    availableForSale,
     imageUrls,
     issues,
+    warnings,
   };
 }
 
@@ -529,12 +570,40 @@ function normalizeRow(row) {
     colorPrimary: cleanText(row["Boja 1"]) || null,
     colorSecondary: cleanText(row["Boja 2"]) || null,
     slug: slugify(`${shortName}-${sku}`),
+    ownerDataWarnings: ownerDataWarnings({
+      barcode: normalizeBarcode(row["Bar kod"]),
+      collectionName: cleanText(row["Kolekcija (brend)"]) || null,
+      colorPrimary: cleanText(row["Boja 1"]) || null,
+      colorSecondary: cleanText(row["Boja 2"]) || null,
+    }),
   };
 }
 
 function normalizeBarcode(value) {
   const text = cleanText(value).replace(/\.0$/, "");
   return text || null;
+}
+
+function ownerDataWarnings(row) {
+  const warnings = [];
+  if (!row.barcode) warnings.push("Missing barcode");
+  if (!row.collectionName) warnings.push("Missing brand/collection");
+  if (!row.colorPrimary) warnings.push("Missing primary color");
+  if (!row.colorSecondary) warnings.push("Missing secondary color");
+  return warnings;
+}
+
+function summarizeOwnerDataWarnings(rows) {
+  const byIssue = {};
+  let rowsWithWarnings = 0;
+  for (const row of rows) {
+    if (!row.ownerDataWarnings?.length) continue;
+    rowsWithWarnings++;
+    for (const issue of row.ownerDataWarnings) {
+      byIssue[issue] = (byIssue[issue] ?? 0) + 1;
+    }
+  }
+  return { rowsWithWarnings, byIssue };
 }
 
 function normalizeSupplier(value) {
@@ -578,15 +647,17 @@ async function importRows(prisma, report, commercialBySku) {
 
   let created = 0;
   let updated = 0;
+  let importedUnavailable = 0;
   const errors = [];
 
   for (const row of report.accepted) {
     try {
-      const kind = await prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx) => {
         const commercial = commercialBySku.get(row.sku);
         if (!commercial || commercial.issues.length) {
           throw new Error(`Commercial data for SKU ${row.sku} is not publishable.`);
         }
+        const shouldPublish = commercial.stock > 0 && commercial.availableForSale !== false;
         const [categoryId, supplierId, collectionId] = await Promise.all([
           ensureCategory(tx, row.categoryName),
           ensureSupplier(tx, row.supplierName),
@@ -617,7 +688,8 @@ async function importRows(prisma, report, commercialBySku) {
           supplierStock: commercial.stock,
           supplierId,
           supplierExternalId: row.sku,
-          isActive: true,
+          availableWebManual: commercial.availableForSale ?? true,
+          isActive: shouldPublish,
         };
 
         let productId;
@@ -650,10 +722,11 @@ async function importRows(prisma, report, commercialBySku) {
             })),
           });
         }
-        return result;
+        return { result, shouldPublish };
       });
-      if (kind === "created") created++;
+      if (outcome.result === "created") created++;
       else updated++;
+      if (!outcome.shouldPublish) importedUnavailable++;
     } catch (err) {
       errors.push({
         rowNumber: row.rowNumber,
@@ -689,6 +762,7 @@ async function importRows(prisma, report, commercialBySku) {
     created,
     updated,
     skipped: report.recordsSkipped,
+    importedUnavailable,
     databaseErrors: errors,
   };
 }
@@ -849,6 +923,19 @@ function parseInteger(value) {
   const parsed = parseMoney(value);
   if (parsed == null) return null;
   return Number.isInteger(parsed) ? parsed : null;
+}
+
+function parseOptionalAvailability(value, label, issues) {
+  const text = normalizeHeader(value);
+  if (!text) return null;
+  if (["da", "yes", "y", "true", "1", "active", "aktivan", "objavi", "online", "dostupno"].includes(text)) {
+    return true;
+  }
+  if (["ne", "no", "n", "false", "0", "inactive", "neaktivan", "ne objavi", "offline", "nedostupno"].includes(text)) {
+    return false;
+  }
+  issues.push(`Invalid ${label}`);
+  return null;
 }
 
 function parseImageUrls(values) {
