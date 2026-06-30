@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveDeliveryQuote } from "@/lib/checkout/config";
+import {
+  checkRateLimitForRequest,
+  rateLimitJson,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +24,14 @@ const quoteSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const limited = checkRateLimitForRequest(
+    req,
+    "checkout-delivery-quote",
+    RATE_LIMITS.checkout,
+  );
+  if (!limited.ok) {
+    return rateLimitJson(limited);
+  }
   const body = await req.json().catch(() => null);
   const parsed = quoteSchema.safeParse(body);
   if (!parsed.success) {

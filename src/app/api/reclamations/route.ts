@@ -5,6 +5,11 @@ import {
   createReclamationSchema,
   listReclamationsForUser,
 } from "@/lib/api/reclamations";
+import {
+  checkRateLimitForRequest,
+  rateLimitJson,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +30,15 @@ export async function POST(req: Request) {
       { ok: false, error: "invalid", issues: parsed.error.flatten() },
       { status: 400 },
     );
+  }
+  const limited = checkRateLimitForRequest(
+    req,
+    "reclamation:create",
+    RATE_LIMITS.reclamation,
+    [parsed.data.orderNumberOrFiscal],
+  );
+  if (!limited.ok) {
+    return rateLimitJson(limited);
   }
   const user = await getCurrentUser();
   const userId = user?.userType === "customer" ? user.id : null;

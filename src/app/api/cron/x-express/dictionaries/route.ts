@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { getXExpressConfig } from "@/lib/x-express/config";
 import { syncXExpressDictionaries } from "@/lib/x-express/sync";
+import { hasBearerSecret } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
-  const expected = getXExpressConfig().statusCronSecret;
-  if (!expected) return false;
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${expected}`) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === expected;
+  return hasBearerSecret(req, getXExpressConfig().statusCronSecret);
 }
 
 async function run(req: Request) {

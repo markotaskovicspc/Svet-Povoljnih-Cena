@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { authConfig } from "@/lib/auth/auth.config";
+import { checkRateLimit, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -55,7 +56,6 @@ const oauthProviders = (() => {
       Google({
         clientId: google.clientId,
         clientSecret: google.clientSecret,
-        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -64,7 +64,6 @@ const oauthProviders = (() => {
       Facebook({
         clientId: facebook.clientId,
         clientSecret: facebook.clientSecret,
-        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -73,7 +72,6 @@ const oauthProviders = (() => {
       Apple({
         clientId: apple.clientId,
         clientSecret: apple.clientSecret,
-        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -99,8 +97,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const { email, password, remember } = parsed.data;
+        const normalizedEmail = email.trim().toLowerCase();
+        const limited = checkRateLimit(
+          rateLimitKey("auth:credentials", normalizedEmail),
+          RATE_LIMITS.login,
+        );
+        if (!limited.ok) return null;
         const user = await db.user.findUnique({
-          where: { email: email.toLowerCase() },
+          where: { email: normalizedEmail },
         });
         if (!user || !user.passwordHash || user.deletedAt) return null;
         const ok = await bcrypt.compare(password, user.passwordHash);
@@ -143,6 +147,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = schema.safeParse(raw);
         if (!parsed.success) return null;
         const phone = parsed.data.phone.replace(/\s+/g, "");
+        const limited = checkRateLimit(
+          rateLimitKey("auth:phone-otp", phone),
+          RATE_LIMITS.login,
+        );
+        if (!limited.ok) return null;
 
         const token = await db.verificationToken.findFirst({
           where: { identifier: `phone:${phone}`, token: parsed.data.code },
@@ -194,6 +203,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { email } = parsed.data;
         const password = parsed.data.password.trim();
         const normalizedEmail = email.trim().toLowerCase();
+        const limited = checkRateLimit(
+          rateLimitKey("auth:admin-credentials", normalizedEmail),
+          RATE_LIMITS.adminLogin,
+        );
+        if (!limited.ok) {
+          return null;
+        }
         try {
           const admin = await db.adminUser.findUnique({
             where: { email: normalizedEmail },

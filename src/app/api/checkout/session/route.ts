@@ -3,6 +3,11 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import {
+  checkRateLimitForRequest,
+  rateLimitJson,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +59,14 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const limited = checkRateLimitForRequest(
+    req,
+    "checkout-session",
+    RATE_LIMITS.checkout,
+  );
+  if (!limited.ok) {
+    return rateLimitJson(limited);
+  }
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {

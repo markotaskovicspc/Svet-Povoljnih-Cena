@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import type { AdminRoleName } from "@prisma/client";
+import { db } from "@/lib/db";
 
 /**
  * Thin wrappers around `auth()` for server components / route handlers.
@@ -33,8 +34,34 @@ export async function requireAdmin(roles?: AdminRoleName[]) {
   if (!user || user.userType !== "admin") {
     redirect("/admin/prijava");
   }
-  if (roles && (!user.role || !roles.includes(user.role))) {
+  const admin = await db.adminUser.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      enabled: true,
+    },
+  });
+  if (!admin?.enabled) {
+    redirect("/admin/prijava");
+  }
+  if (
+    roles &&
+    admin.role !== "SUPER" &&
+    !roles.includes(admin.role)
+  ) {
     redirect("/admin?forbidden=1");
   }
-  return user;
+  return {
+    ...user,
+    id: admin.id,
+    email: admin.email,
+    name:
+      [admin.firstName, admin.lastName].filter(Boolean).join(" ") ||
+      admin.email,
+    role: admin.role,
+  };
 }

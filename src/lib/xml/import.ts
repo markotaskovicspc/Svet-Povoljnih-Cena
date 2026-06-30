@@ -54,11 +54,35 @@ function toConfig(supplier: Supplier): SupplierConfig | null {
     id: supplier.id,
     name: supplier.name,
     feedUrl: supplier.feedUrl,
-    authUser: supplier.authUser,
-    authPass: supplier.authPass,
+    authUser: resolveSupplierSecret(supplier, "USER", supplier.authUser),
+    authPass: resolveSupplierSecret(supplier, "PASS", supplier.authPass),
     enabled: supplier.enabled,
     mapping: supplier.mapping,
   };
+}
+
+function resolveSupplierSecret(
+  supplier: Supplier,
+  suffix: "USER" | "PASS",
+  fallback: string | null,
+) {
+  const explicitEnv = fallback?.match(/^env:([A-Z0-9_]+)$/i)?.[1];
+  if (explicitEnv) return process.env[explicitEnv] ?? null;
+
+  const candidates = [
+    supplier.code,
+    supplier.name,
+    supplier.id,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).replace(/[^A-Za-z0-9]+/g, "_").toUpperCase())
+    .map((token) => `XML_SUPPLIER_${token}_${suffix}`);
+
+  for (const key of candidates) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return fallback;
 }
 
 /** Run imports for every enabled, fully-configured supplier. */

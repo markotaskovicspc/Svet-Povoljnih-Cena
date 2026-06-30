@@ -2,14 +2,28 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
+import {
+  checkRateLimitForRequest,
+  rateLimitJson,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(req: Request) {
   const sessionUser = await getCurrentUser();
   if (!sessionUser || sessionUser.userType !== "customer") {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+  const limited = checkRateLimitForRequest(
+    req,
+    "email-verification",
+    RATE_LIMITS.passwordReset,
+    [sessionUser.id],
+  );
+  if (!limited.ok) {
+    return rateLimitJson(limited);
   }
 
   const user = await db.user.findUnique({

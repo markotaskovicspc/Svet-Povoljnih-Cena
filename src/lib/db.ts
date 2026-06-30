@@ -12,18 +12,20 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function withSslNoVerify(connectionString: string) {
+function withVerifiedSsl(connectionString: string) {
   try {
     const url = new URL(connectionString);
     if (["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
       return connectionString;
     }
-    url.searchParams.set("sslmode", "no-verify");
+    url.searchParams.set("sslmode", process.env.DATABASE_SSLMODE ?? "verify-full");
     url.searchParams.delete("uselibpqcompat");
     return url.toString();
   } catch {
     const separator = connectionString.includes("?") ? "&" : "?";
-    return `${connectionString}${separator}sslmode=no-verify`;
+    return `${connectionString}${separator}sslmode=${
+      process.env.DATABASE_SSLMODE ?? "verify-full"
+    }`;
   }
 }
 
@@ -47,7 +49,7 @@ function createClient(): PrismaClient {
       "Database connection string is not set. Expected DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING.",
     );
   }
-  const adapter = new PrismaPg(withSslNoVerify(connectionString));
+  const adapter = new PrismaPg(withVerifiedSsl(connectionString));
   return new PrismaClient({
     adapter,
     log:

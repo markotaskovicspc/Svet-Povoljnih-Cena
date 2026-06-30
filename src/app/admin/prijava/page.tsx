@@ -1,9 +1,16 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminError, AdminLoginForm } from "./form";
 import { signIn } from "@/lib/auth/auth";
 import { AuthError } from "next-auth";
 import { BRAND } from "@/lib/brand";
+import {
+  checkRateLimit,
+  getClientIpFromHeaders,
+  rateLimitKey,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const metadata = {
   title: "Admin prijava",
@@ -17,6 +24,20 @@ async function loginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
   const callbackUrl = String(formData.get("callbackUrl") ?? "/admin/erp") || "/admin/erp";
+  const headersList = await headers();
+  const limited = checkRateLimit(
+    rateLimitKey(
+      "admin-login:action",
+      getClientIpFromHeaders(headersList),
+      email.toLowerCase(),
+    ),
+    RATE_LIMITS.adminLogin,
+  );
+  if (!limited.ok) {
+    redirect(
+      `/admin/prijava?error=1&callbackUrl=${encodeURIComponent(callbackUrl)}`,
+    );
+  }
   try {
     await signIn("admin-credentials", {
       email,

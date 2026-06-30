@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { importAllSuppliers, importSupplier } from "@/lib/xml";
+import { hasBearerSecret } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,16 +17,8 @@ export const dynamic = "force-dynamic";
  */
 
 function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    // Fail-closed: if the secret isn't configured the route is unusable.
-    return false;
-  }
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${expected}`) return true;
-  // Vercel cron also forwards the secret as a query string in some plans.
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === expected;
+  // Fail-closed: if the secret isn't configured the route is unusable.
+  return hasBearerSecret(req, process.env.CRON_SECRET);
 }
 
 async function run(req: Request) {

@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import { expirePendingPayments } from "@/lib/payments/expiry";
+import { hasBearerSecret } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
   const expected = process.env.PAYMENT_EXPIRY_CRON_SECRET ?? process.env.CRON_SECRET;
-  if (!expected) return false;
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${expected}`) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === expected;
+  return hasBearerSecret(req, expected);
 }
 
 async function run(req: Request) {

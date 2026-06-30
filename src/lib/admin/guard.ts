@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { AdminRoleName } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import {
   adminActionError,
   adminActionSuccess,
@@ -39,10 +40,32 @@ export async function requireAdminAction(allowed?: readonly AdminRoleName[]) {
   if (!user || user.userType !== "admin") {
     redirect("/admin/prijava");
   }
-  if (allowed && !isAuthorized(user.role, allowed)) {
+  const admin = await db.adminUser.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      enabled: true,
+    },
+  });
+  if (!admin?.enabled) {
+    redirect("/admin/prijava");
+  }
+  if (allowed && !isAuthorized(admin.role, allowed)) {
     redirect("/admin?forbidden=1");
   }
-  return user as typeof user & { role: AdminRoleName };
+  return {
+    ...user,
+    id: admin.id,
+    email: admin.email,
+    name:
+      [admin.firstName, admin.lastName].filter(Boolean).join(" ") ||
+      admin.email,
+    role: admin.role,
+  } as typeof user & { role: AdminRoleName };
 }
 
 type AdminActionMeta = {

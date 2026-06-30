@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
 import { getMyGlsConfig, syncMyGlsShipmentStatuses } from "@/lib/mygls";
+import { hasBearerSecret } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
-  const expected = getMyGlsConfig().statusCronSecret;
-  if (!expected) return false;
-  const header = req.headers.get("authorization");
-  if (header === `Bearer ${expected}`) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === expected;
+  return hasBearerSecret(req, getMyGlsConfig().statusCronSecret);
 }
 
 async function run(req: Request) {
