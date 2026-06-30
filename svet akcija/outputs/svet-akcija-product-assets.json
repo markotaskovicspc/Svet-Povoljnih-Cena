@@ -5591,8 +5591,8 @@
       "sourceFolder": "1083",
       "normalizedFolderSku": "1083",
       "docxFile": "1083.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b3275583e53569cfb6729719c0e6a9529c23abf6c9894eb02387819b927576b\nsize 14209",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1083-001",
@@ -5644,15 +5644,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1084",
       "sourceFolder": "1084",
       "normalizedFolderSku": "1084",
       "docxFile": "1084.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d02392775036fd247ed7f22a5d87ab1ed9ea1f50b4dbf4d29d9939a7726c90e4\nsize 15997",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1084-001",
@@ -5716,15 +5718,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1085",
       "sourceFolder": "1085",
       "normalizedFolderSku": "1085",
       "docxFile": "Konferencijska stolica Conference Master.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:31d2f2f87fdd16bedfaa24c801d1ffb2c8cdf5fb8e23c94db3a0a7033ac983c5\nsize 16306",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1085-001",
@@ -5788,15 +5792,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1086",
       "sourceFolder": "1086",
       "normalizedFolderSku": "1086",
       "docxFile": "1086.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9fbce4b3cd94f5d0116a593ea8626e0a243ee38efed8bc06ea17b9990ce97963\nsize 16493",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1086-001",
@@ -5872,15 +5878,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1088",
       "sourceFolder": "1088",
       "normalizedFolderSku": "1088",
       "docxFile": "1088.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2dec22ad31cfc9ebf441baedc6aaa8b48a8f23b68f9749956dde10143592b8f5\nsize 16601",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1088-001",
@@ -5956,15 +5964,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1089",
       "sourceFolder": "1089",
       "normalizedFolderSku": "1089",
       "docxFile": "1089.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b3275583e53569cfb6729719c0e6a9529c23abf6c9894eb02387819b927576b\nsize 14209",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1089-001",
@@ -6016,15 +6026,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1102",
       "sourceFolder": "1102",
       "normalizedFolderSku": "1102",
       "docxFile": "1102.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:7c14341ddbb78e21402682928776a6805805089e552df413d3177daab2569019\nsize 15735",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1102-001",
@@ -6064,15 +6076,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1103",
       "sourceFolder": "1103",
       "normalizedFolderSku": "1103",
       "docxFile": "1103.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:24fccaf31b2f3dc59b268580dc080c6b2c21961c7f0cbca9e7a0e5c9fcfba12f\nsize 14580",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1103-001",
@@ -6160,15 +6174,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1104",
       "sourceFolder": "1104",
       "normalizedFolderSku": "1104",
       "docxFile": "1104.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b93ee6c0137296a548f6cc5fcd179bf53b053a5302cf9be0f146e8fbc5440465\nsize 16286",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1104-001",
@@ -6244,15 +6260,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1105",
       "sourceFolder": "1105",
       "normalizedFolderSku": "1105",
       "docxFile": "1105.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:343938cb5fa83a335d82398fbac2f3b0cd931ed016da79f09ce3a5d1a0b76fe1\nsize 16033",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1105-001",
@@ -6328,15 +6346,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1106",
       "sourceFolder": "1106",
       "normalizedFolderSku": "1106",
       "docxFile": "Fen za kosu Iconic Style.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0a1b288a87c407614aab04360ac4db154f2efbf58286504bd91d969e1a19d23c\nsize 16874",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1106-001",
@@ -6412,15 +6432,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1107",
       "sourceFolder": "1107",
       "normalizedFolderSku": "1107",
       "docxFile": "1022.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:986c27ea51463a4567ba3bc5c10f5e6385db51f77fcdcfe0d26bc00a308f877f\nsize 28971",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1107-001",
@@ -6544,15 +6566,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1108",
       "sourceFolder": "1108",
       "normalizedFolderSku": "1108",
       "docxFile": "1026.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:03926a5bb17a864fe65b2a1b6630ebfaae5952d7efc68638c63468ccd3717939\nsize 16500",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1108-001",
@@ -6676,15 +6700,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1109",
       "sourceFolder": "1109",
       "normalizedFolderSku": "1109",
       "docxFile": "1109.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:379154715006b2c23a2f0d7c6bc308eeeaeed409315a2b0b61b7e54ad80c5c94\nsize 14351",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1109-001",
@@ -6748,15 +6774,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1110",
       "sourceFolder": "1110",
       "normalizedFolderSku": "1110",
       "docxFile": "1110.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:cf588de7c60165c7c6a62c0287f6ebdaf0ccdf0326b15ce7a39cb0b1a4869206\nsize 16212",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1110-001",
@@ -6844,15 +6872,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1111",
       "sourceFolder": "1111",
       "normalizedFolderSku": "1111",
       "docxFile": "1111.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:8195ecc78ff13fb28bc564cda83d77a21e4e267ba1629a86599effac4707e726\nsize 17177",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1111-001",
@@ -6942,15 +6972,17 @@
       "ignoredFiles": [
         "1111.zip"
       ],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1112",
       "sourceFolder": "1112",
       "normalizedFolderSku": "1112",
       "docxFile": "1112.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:1993a519eeea41c860e94382e4da3e1a872fb6f1e8d180a499ab92b4e18e1c66\nsize 17267",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1112-001",
@@ -7040,15 +7072,17 @@
       "ignoredFiles": [
         "1112.zip"
       ],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1114",
       "sourceFolder": "1114",
       "normalizedFolderSku": "1114",
       "docxFile": "Bežični usisivač Elegance, 120W, 600ml.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:59a3f3a87b33ba2344a199c70f952ffb79e632f26e6162a3b7347ad1f82553cf\nsize 16360",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1114-001",
@@ -7136,15 +7170,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1115",
       "sourceFolder": "1115",
       "normalizedFolderSku": "1115",
       "docxFile": "Stajler The Art Of Styling 5 u 1.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:f7b685673ca8dcab14ada01410d8445119cb243e21b682bd47d105ecee93929d\nsize 15614",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1115-001",
@@ -7256,15 +7292,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1116",
       "sourceFolder": "1116",
       "normalizedFolderSku": "1116",
       "docxFile": "1116.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:50a6ed090c1cb56d196b8b483ed12a45ef8f6093bb12ebcfba25dc5e9ed0999a\nsize 16943",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1116-001",
@@ -7328,15 +7366,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1117",
       "sourceFolder": "1117",
       "normalizedFolderSku": "1117",
       "docxFile": "1117.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2b6a803e1d1a16014134412c103bf0568882bcf0aa3a742d5509567b3d37cc0d\nsize 15748",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1117-001",
@@ -7388,15 +7428,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1118",
       "sourceFolder": "1118",
       "normalizedFolderSku": "1118",
       "docxFile": "1118.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:f7979fde762b3ac9777abf401e41c03d4cf1b21e174ce35e13729c0e411d3642\nsize 15740",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1118-001",
@@ -7460,15 +7502,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1119",
       "sourceFolder": "1119",
       "normalizedFolderSku": "1119",
       "docxFile": "1118.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e29130fe520b5490b7b56ec7dab41800e2483d4b4258e4d817ccda4a36da6ac3\nsize 15732",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1119-001",
@@ -7532,15 +7576,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1120",
       "sourceFolder": "1120",
       "normalizedFolderSku": "1120",
       "docxFile": "1120.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b40188df2452a2c77cba38b42665206ddce70bf3af87f48611873f7ac9ba2113\nsize 15736",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1120-001",
@@ -7556,15 +7602,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1121",
       "sourceFolder": "1121",
       "normalizedFolderSku": "1121",
       "docxFile": "1121.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b40188df2452a2c77cba38b42665206ddce70bf3af87f48611873f7ac9ba2113\nsize 15736",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1121-001",
@@ -7580,15 +7628,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1122",
       "sourceFolder": "1122",
       "normalizedFolderSku": "1122",
       "docxFile": "1122.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:a67331ce30976962d0f76036df94f138fb94fdafc1f615331a150cbeaf9f6c08\nsize 15938",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1122-001",
@@ -7604,15 +7654,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1123",
       "sourceFolder": "1123",
       "normalizedFolderSku": "1123",
       "docxFile": "1123.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e3da8925f40b36a298d86db0b2f4bb9ea296895c4b69247cc169b96f150b3578\nsize 15939",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1123-001",
@@ -7628,15 +7680,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1124",
       "sourceFolder": "1124",
       "normalizedFolderSku": "1124",
       "docxFile": "1124.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e839fd1c98162ea912a2443eeccd95958664a1c656241eddc9b13301a799c6f0\nsize 15803",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1124-001",
@@ -7652,15 +7706,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1125",
       "sourceFolder": "1125",
       "normalizedFolderSku": "1125",
       "docxFile": "1125.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1125-001",
@@ -7676,15 +7732,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1126",
       "sourceFolder": "1126",
       "normalizedFolderSku": "1126",
       "docxFile": "1126.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1126-001",
@@ -7700,15 +7758,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1127",
       "sourceFolder": "1127",
       "normalizedFolderSku": "1127",
       "docxFile": "1127.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1127-001",
@@ -7724,15 +7784,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1128",
       "sourceFolder": "1128",
       "normalizedFolderSku": "1128",
       "docxFile": "1128.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1128-001",
@@ -7748,15 +7810,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1129",
       "sourceFolder": "1129",
       "normalizedFolderSku": "1129",
       "docxFile": "1129.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1129-001",
@@ -7772,15 +7836,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1130",
       "sourceFolder": "1130",
       "normalizedFolderSku": "1130",
       "docxFile": "1130.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1130-001",
@@ -7796,15 +7862,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1131",
       "sourceFolder": "1131",
       "normalizedFolderSku": "1131",
       "docxFile": "1131.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:297aeb74bf5dbf8e722a7f3ce4783b1d4ea1aba7eff2a58df701584f2e55ae48\nsize 16275",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1131-001",
@@ -7928,15 +7996,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1132",
       "sourceFolder": "1132",
       "normalizedFolderSku": "1132",
       "docxFile": "1132.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:132cd9f51eaa32207cef9af7c68c1bd1108ce44e9a0369d692b7df23e4a07b91\nsize 16528",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1132-001",
@@ -8264,15 +8334,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1133",
       "sourceFolder": "1133",
       "normalizedFolderSku": "1133",
       "docxFile": "1133.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:542b7f19e6a00c31fbbadd94417820c238b84001eb4b719da238d0e31576e2ea\nsize 16079",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1133-001",
@@ -8420,15 +8492,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1134",
       "sourceFolder": "1134",
       "normalizedFolderSku": "1134",
       "docxFile": "1134.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9bf23d04a4375ba5996d8ffce4fe7a56ff904de74794ee1d0d495e63d1f5789d\nsize 16182",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1134-001",
@@ -8624,15 +8698,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1135",
       "sourceFolder": "1135",
       "normalizedFolderSku": "1135",
       "docxFile": "1135.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:55756c64a75f9aef3d9f2ba8b4e5b5cba023f63cabae61d91b313c246dcc6ba8\nsize 16316",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1135-001",
@@ -8756,15 +8832,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1136",
       "sourceFolder": "1136",
       "normalizedFolderSku": "1136",
       "docxFile": "1136.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4d5bb2d84fd6919a2ba78013f443b02589ca4ea822c540dcbab67975fd115ae6\nsize 16201",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1136-001",
@@ -8888,15 +8966,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1137",
       "sourceFolder": "1137",
       "normalizedFolderSku": "1137",
       "docxFile": "1137.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:ad382775e787ac77bf757ff4e4e1acc6ded13ddb64a7a047b98d96e78601e013\nsize 16196",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1137-001",
@@ -9080,15 +9160,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1138",
       "sourceFolder": "1138",
       "normalizedFolderSku": "1138",
       "docxFile": "1138.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:ba497b5e4a1d71c672e9235aa8be8a589ff18c234a2b8fa11ceea250483105b7\nsize 16266",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1138-001",
@@ -9164,15 +9246,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1139",
       "sourceFolder": "1139",
       "normalizedFolderSku": "1139",
       "docxFile": "1139.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:387f5c9fe11642000cd4e89aa6aadfb4785f96895dc2e61ee775783d3d605f47\nsize 16370",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1139-001",
@@ -9284,15 +9368,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1140",
       "sourceFolder": "1140",
       "normalizedFolderSku": "1140",
       "docxFile": "1140.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:27a8d11da1c674d914e1805c20b122dc1ec33e9945ff38291e3a6987a4e9350c\nsize 16984",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1140-001",
@@ -9416,15 +9502,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1141",
       "sourceFolder": "1141",
       "normalizedFolderSku": "1141",
       "docxFile": "1009.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:8b4d65bd3a3c5c6a1fa95c52c753d62edc9160e20c4e0c6e84e09b2bd59d2928\nsize 16395",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1141-001",
@@ -9548,15 +9636,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1142",
       "sourceFolder": "1142",
       "normalizedFolderSku": "1142",
       "docxFile": "1142.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:56ebc894f87db939fe6ceb444c3c97637b5490832f939f2ba1063b2df3977d17\nsize 17306",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1142-001",
@@ -9704,15 +9794,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1143",
       "sourceFolder": "1143",
       "normalizedFolderSku": "1143",
       "docxFile": "1143.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:a77be40728a4ee8591aa2f47aead17ef6c437ddb7a68929e9ceff35b62f04524\nsize 16291",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1143-001",
@@ -9992,15 +10084,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1144",
       "sourceFolder": "1144",
       "normalizedFolderSku": "1144",
       "docxFile": "1144.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b0c6d59d732bba7d56bdd3d49aae57a8881c9732a67b55856b400f219aae848\nsize 16295",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1144-001",
@@ -10280,15 +10374,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1145",
       "sourceFolder": "1145",
       "normalizedFolderSku": "1145",
       "docxFile": "1145.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:c8a9ffc61a3ea73e7307b08d0555424cec3ee3e7e3b16669de48c0d53ef677fc\nsize 16680",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1145-001",
@@ -10412,15 +10508,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1146",
       "sourceFolder": "1146",
       "normalizedFolderSku": "1146",
       "docxFile": "1146.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:23119d714e281b61d14e3ff98c5bd6303808ef51901c33b694624e7288213bf8\nsize 15892",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1146-001",
@@ -10508,15 +10606,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1147",
       "sourceFolder": "1147",
       "normalizedFolderSku": "1147",
       "docxFile": "1147.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d33a6af855f848a2a83fb8abd42202cdbe64abb0b1cb77e191e240f9164ae818\nsize 15998",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1147-001",
@@ -10640,15 +10740,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1148",
       "sourceFolder": "1148",
       "normalizedFolderSku": "1148",
       "docxFile": "1148.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:73b57c14fb95a12bca10a2d9d3f04d2700350416a14020232b6634b664f67048\nsize 16263",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1148-001",
@@ -10736,15 +10838,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1149",
       "sourceFolder": "1149",
       "normalizedFolderSku": "1149",
       "docxFile": "1149.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:5ed22a5528ab58b191c21ae4f01f72cac6552460bf7ce8fbed55664324d48fff\nsize 15992",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1149-001",
@@ -10810,15 +10914,17 @@
       "ignoredFiles": [
         "1149.xlsm"
       ],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1150",
       "sourceFolder": "1150",
       "normalizedFolderSku": "1150",
       "docxFile": "1150.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4236e618f2b0834066c29af123f00a15d33a7125bc4e6386eaf47ad14837784d\nsize 14561",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1150-001",
@@ -10894,15 +11000,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1151",
       "sourceFolder": "1151",
       "normalizedFolderSku": "1151",
       "docxFile": "1151.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:83ec4e0341424ead7c41dcf34f11d4ffdd31b1b024d00f3a48b1a6808f399d45\nsize 15964",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1151-001",
@@ -11026,15 +11134,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1160",
       "sourceFolder": "1160",
       "normalizedFolderSku": "1160",
       "docxFile": "1160.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:af657b5da698155f093f1952b678113bf3f56e4aa22bcceeeb138c5cdb919a12\nsize 16357",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1160-001",
@@ -11062,15 +11172,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1161",
       "sourceFolder": "1161",
       "normalizedFolderSku": "1161",
       "docxFile": "1161.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:43f2d2f4315ff5cb29851900f730bceda3155dc95a58b971219c3efa75a115c7\nsize 16090",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1161-001",
@@ -11134,15 +11246,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1162",
       "sourceFolder": "1162",
       "normalizedFolderSku": "1162",
       "docxFile": "1162.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:23a07d758d14dad9940d790aba8d7b05d2c712a708f505c8c9e3eb54febed39c\nsize 16004",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1162-001",
@@ -11182,15 +11296,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1163",
       "sourceFolder": "1163",
       "normalizedFolderSku": "1163",
       "docxFile": "1163.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4e68f1832e3229d8a15ec11b04636b8da4574102ccc32368d9f26860123de71e\nsize 16037",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1163-001",
@@ -11218,15 +11334,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1164",
       "sourceFolder": "1164",
       "normalizedFolderSku": "1164",
       "docxFile": "1164.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:dbc75485ff9a27aa896bb08450c5df148a302b9f2e1a570b054ee78a94c35cb7\nsize 15954",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1164-001",
@@ -11266,15 +11384,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1165",
       "sourceFolder": "1165",
       "normalizedFolderSku": "1165",
       "docxFile": "1165.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2f6afb7164b5bafab9a63853cb24c17e318a0fe8831386d276734d5b986cdd76\nsize 16184",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1165-001",
@@ -11314,15 +11434,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1166",
       "sourceFolder": "1166",
       "normalizedFolderSku": "1166",
       "docxFile": "1166.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9732860bce4f12d9cee1a7a6c0f527d2b9701f6d57b23d380372b68df2592ef0\nsize 15482",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1166-001",
@@ -11398,15 +11520,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1167",
       "sourceFolder": "1167",
       "normalizedFolderSku": "1167",
       "docxFile": "1167.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:658dae1fab12304d3acb9fe9ba944a9b60a3ec33b72e732856c61616b78dad39\nsize 15592",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1167-001",
@@ -11470,15 +11594,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1168",
       "sourceFolder": "1168",
       "normalizedFolderSku": "1168",
       "docxFile": "1168.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:70e90497bf243583cfbc341e9830a67474f34de253432d020a50effdcc92eb95\nsize 16081",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1168-001",
@@ -11554,15 +11680,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1169",
       "sourceFolder": "1169",
       "normalizedFolderSku": "1169",
       "docxFile": "1169.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d91d2feacf7dcd432101f0175eb161a906c6a46fb87711d1496b09eb933df324\nsize 16411",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1169-001",
@@ -11650,15 +11778,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1170",
       "sourceFolder": "1170",
       "normalizedFolderSku": "1170",
       "docxFile": "1170.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9edc8e98413395bea6fb9aae8bd9b85bb2a73be5e517942c9b094656302c0924\nsize 16152",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1170-001",
@@ -11734,15 +11864,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1171",
       "sourceFolder": "1171",
       "normalizedFolderSku": "1171",
       "docxFile": "1171.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0abd8ee6e14e06e4ba63da4f3a7d05620e9436f83cfead1c57e8bedea45846f4\nsize 16471",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1171-001",
@@ -11830,15 +11962,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1172",
       "sourceFolder": "1172",
       "normalizedFolderSku": "1172",
       "docxFile": "1172.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d9d333c23600fa84bf5bd9fc933ca6dae04222da0bc71ea061794495bdd962c7\nsize 16643",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1172-001",
@@ -12070,15 +12204,17 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "1173",
       "sourceFolder": "1173",
       "normalizedFolderSku": "1173",
       "docxFile": "1173.docx",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4e92c215fd8c7588a3095a05acba3f8d5f62d46f63bb5334b233f712c6882c21\nsize 16322",
-      "descriptionCharCount": 129,
+      "longDescription": "",
+      "descriptionCharCount": 0,
       "media": [
         {
           "id": "sa-media-1173-001",
@@ -12166,7 +12302,9 @@
         }
       ],
       "ignoredFiles": [],
-      "warnings": []
+      "warnings": [
+        "broken:lfs_pointer_description"
+      ]
     },
     {
       "sku": "210025",

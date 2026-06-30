@@ -38,7 +38,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -79,7 +80,8 @@
       "media": []
     },
     "flags": [
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -121,7 +123,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -164,7 +167,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -207,7 +211,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -234,8 +239,8 @@
       "id": "1114",
       "title": "ELEGANCE",
       "shortDescription": "Bežični usisivač 120 W",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:59a3f3a87b33ba2344a199c70f952ffb79e632f26e6162a3b7347ad1f82553cf\nsize 16360",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Bežični usisivač 120 W",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Usisivači",
       "regularPrice": "6000",
@@ -333,7 +338,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -360,8 +368,8 @@
       "id": "1116",
       "title": "NUTRI PRO X",
       "shortDescription": "Blender",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:50a6ed090c1cb56d196b8b483ed12a45ef8f6093bb12ebcfba25dc5e9ed0999a\nsize 16943",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Blender",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Priprema hrane",
       "regularPrice": "6000",
@@ -434,7 +442,11 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -475,7 +487,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -517,7 +530,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -559,7 +573,8 @@
     },
     "flags": [
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -602,7 +617,8 @@
     "flags": [
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -645,7 +661,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -688,7 +705,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -732,7 +750,8 @@
       "missing:Boja 1",
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -774,7 +793,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -816,7 +836,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -858,7 +879,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -900,7 +922,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -927,8 +950,8 @@
       "id": "1112",
       "title": "SILKY TOUCH",
       "shortDescription": "Električna mašinica za nokte",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:1993a519eeea41c860e94382e4da3e1a872fb6f1e8d180a499ab92b4e18e1c66\nsize 17267",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Električna mašinica za nokte",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Lepota i nega",
       "regularPrice": "5000",
@@ -1026,7 +1049,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -1068,7 +1094,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1110,7 +1137,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1153,7 +1181,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1196,7 +1225,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1239,7 +1269,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1282,7 +1313,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1324,7 +1356,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1366,7 +1399,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1409,7 +1443,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1436,8 +1471,8 @@
       "id": "1106",
       "title": "ICONIC STYLE",
       "shortDescription": "Fen za kosu",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0a1b288a87c407614aab04360ac4db154f2efbf58286504bd91d969e1a19d23c\nsize 16874",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Fen za kosu",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Lepota i nega",
       "regularPrice": "5000",
@@ -1523,7 +1558,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -1565,7 +1603,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1607,7 +1646,8 @@
     },
     "flags": [
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1650,7 +1690,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1677,8 +1718,8 @@
       "id": "1111",
       "title": "FRY SMART",
       "shortDescription": "Friteza",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:8195ecc78ff13fb28bc564cda83d77a21e4e267ba1629a86599effac4707e726\nsize 17177",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Friteza",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Priprema hrane",
       "regularPrice": "12000",
@@ -1776,7 +1817,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -1842,7 +1886,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -1884,7 +1929,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1926,7 +1972,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -1968,7 +2015,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2010,7 +2058,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2053,7 +2102,8 @@
     "flags": [
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2096,7 +2146,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2139,7 +2190,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2182,7 +2234,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2225,7 +2278,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2252,8 +2306,8 @@
       "id": "1109",
       "title": "POWER RELAX PRO",
       "shortDescription": "Masažer",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:379154715006b2c23a2f0d7c6bc308eeeaeed409315a2b0b61b7e54ad80c5c94\nsize 14351",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Masažer",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Lepota i nega",
       "regularPrice": "6000",
@@ -2327,7 +2381,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -2369,7 +2426,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2411,7 +2469,8 @@
     },
     "flags": [
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2453,7 +2512,8 @@
     },
     "flags": [
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2496,7 +2556,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2539,7 +2600,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2582,7 +2644,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2625,7 +2688,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2669,7 +2733,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2696,8 +2761,8 @@
       "id": "1110",
       "title": "FRESH SMILE",
       "shortDescription": "Oralni irigator",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:cf588de7c60165c7c6a62c0287f6ebdaf0ccdf0326b15ce7a39cb0b1a4869206\nsize 16212",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Oralni irigator",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Lepota i nega",
       "regularPrice": "5000",
@@ -2795,7 +2860,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -2836,7 +2904,8 @@
       "media": []
     },
     "flags": [
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2877,7 +2946,8 @@
       "media": []
     },
     "flags": [
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2920,7 +2990,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -2963,7 +3034,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3006,7 +3078,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3049,7 +3122,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3092,7 +3166,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3135,7 +3210,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3162,8 +3238,8 @@
       "id": "1107",
       "title": "TOWER FAN",
       "shortDescription": "Pokretna grejalica i klima sa daljinskim upravljačem",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:986c27ea51463a4567ba3bc5c10f5e6385db51f77fcdcfe0d26bc00a308f877f\nsize 28971",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Pokretna grejalica i klima sa daljinskim upravljačem",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Hlađenje i grejanje",
       "regularPrice": "12000",
@@ -3297,7 +3373,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -3484,7 +3563,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -3527,7 +3607,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3570,7 +3651,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3756,7 +3838,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -3894,7 +3977,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -3937,7 +4021,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -3979,7 +4064,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4093,7 +4179,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -4207,7 +4294,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -4250,7 +4338,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4293,7 +4382,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4320,8 +4410,8 @@
       "id": "1115",
       "title": "THE ART OF STYLING",
       "shortDescription": "Stajler",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:f7b685673ca8dcab14ada01410d8445119cb243e21b682bd47d105ecee93929d\nsize 15614",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Stajler",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Lepota i nega",
       "regularPrice": "6000",
@@ -4442,7 +4532,11 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -4484,7 +4578,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4526,7 +4621,8 @@
     },
     "flags": [
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4569,7 +4665,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4613,7 +4710,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4657,7 +4755,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4700,7 +4799,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4742,7 +4842,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -4868,7 +4969,8 @@
       ]
     },
     "flags": [
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5055,7 +5157,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5157,7 +5260,8 @@
       ]
     },
     "flags": [
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5184,8 +5288,8 @@
       "id": "1108",
       "title": "KLIMAX",
       "shortDescription": "Zidna klima i grejalica sa daljinskim upravljačem, 1800W",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:03926a5bb17a864fe65b2a1b6630ebfaae5952d7efc68638c63468ccd3717939\nsize 16500",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Zidna klima i grejalica sa daljinskim upravljačem, 1800W",
+      "descriptionSource": "source_opis",
       "category": "Kućni aparati i beauty oprema",
       "group": "Hlađenje i grejanje",
       "regularPrice": "12000",
@@ -5320,7 +5424,10 @@
     },
     "flags": [
       "missing:Boja 2",
-      "duplicate:Bar kod"
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "duplicate:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5363,7 +5470,8 @@
     "flags": [
       "missing:Boja 2",
       "missing:product_assets",
-      "duplicate:Bar kod"
+      "duplicate:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5478,7 +5586,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5581,7 +5690,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5696,7 +5806,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5799,7 +5910,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -5913,7 +6025,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -5940,8 +6053,8 @@
       "id": "1141",
       "title": "ADVENTURE",
       "shortDescription": "Kofer",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:8b4d65bd3a3c5c6a1fa95c52c753d62edc9160e20c4e0c6e84e09b2bd59d2928\nsize 16395",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Kofer",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Koferi",
       "regularPrice": "5000",
@@ -6075,7 +6188,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -6225,7 +6341,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -6340,7 +6457,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -6491,7 +6609,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -6606,7 +6725,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -6757,7 +6877,8 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -6871,7 +6992,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -6898,8 +7020,8 @@
       "id": "1139",
       "title": "TRAVEL MATE",
       "shortDescription": "Kofer",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:387f5c9fe11642000cd4e89aa6aadfb4785f96895dc2e61ee775783d3d605f47\nsize 16370",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Kofer",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Koferi",
       "regularPrice": "5000",
@@ -7021,7 +7143,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -7171,7 +7296,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -7357,7 +7483,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -7507,7 +7634,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -7534,8 +7662,8 @@
       "id": "1142",
       "title": "ADVENTURE",
       "shortDescription": "Set kofera",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:56ebc894f87db939fe6ceb444c3c97637b5490832f939f2ba1063b2df3977d17\nsize 17306",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set kofera",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Koferi",
       "regularPrice": "20000",
@@ -7693,7 +7821,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -7831,7 +7962,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -8089,7 +8221,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -8116,8 +8249,8 @@
       "id": "1140",
       "title": "TRAVEL MATE",
       "shortDescription": "Set kofera",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:27a8d11da1c674d914e1805c20b122dc1ec33e9945ff38291e3a6987a4e9350c\nsize 16984",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set kofera",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Koferi",
       "regularPrice": "20000",
@@ -8251,7 +8384,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8278,8 +8414,8 @@
       "id": "1122",
       "title": "LIGHT MASSAGE 20 DEN",
       "shortDescription": "Ženske  čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:a67331ce30976962d0f76036df94f138fb94fdafc1f615331a150cbeaf9f6c08\nsize 15938",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske  čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "500",
@@ -8305,7 +8441,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8332,8 +8471,8 @@
       "id": "1123",
       "title": "LIGHT MASSAGE 20 DEN",
       "shortDescription": "Ženske  čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e3da8925f40b36a298d86db0b2f4bb9ea296895c4b69247cc169b96f150b3578\nsize 15939",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske  čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "500",
@@ -8359,7 +8498,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8386,8 +8528,8 @@
       "id": "1120",
       "title": "EVERYWEAR REDUCTOR 40 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b40188df2452a2c77cba38b42665206ddce70bf3af87f48611873f7ac9ba2113\nsize 15736",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "600",
@@ -8413,7 +8555,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8440,8 +8585,8 @@
       "id": "1121",
       "title": "EVERYWEAR REDUCTOR 40 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b40188df2452a2c77cba38b42665206ddce70bf3af87f48611873f7ac9ba2113\nsize 15736",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "600",
@@ -8467,7 +8612,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8494,8 +8642,8 @@
       "id": "1124",
       "title": "FOOTY 100 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e839fd1c98162ea912a2443eeccd95958664a1c656241eddc9b13301a799c6f0\nsize 15803",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "500",
@@ -8521,7 +8669,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8548,8 +8699,8 @@
       "id": "1125",
       "title": "NANOTECH 40 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "700",
@@ -8575,7 +8726,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8602,8 +8756,8 @@
       "id": "1126",
       "title": "NANOTECH 40 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "700",
@@ -8629,7 +8783,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8656,8 +8813,8 @@
       "id": "1127",
       "title": "NANOTECH 40 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d05607ad8b0fb9882379a86059d866503982b32afbb8df6df159f93c9a35041c\nsize 15808",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "700",
@@ -8683,7 +8840,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8710,8 +8870,8 @@
       "id": "1128",
       "title": "NANOTECH 70 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "800",
@@ -8737,7 +8897,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8764,8 +8927,8 @@
       "id": "1129",
       "title": "NANOTECH 70 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "800",
@@ -8791,7 +8954,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8818,8 +8984,8 @@
       "id": "1130",
       "title": "NANOTECH 70 DEN",
       "shortDescription": "Ženske čarape",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0cc4ebbd9024129557e50b09d7b14d6dc3ed099d6f31e7072462db77cfcbef83\nsize 15697",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ženske čarape",
+      "descriptionSource": "source_opis",
       "category": "Moda i putovanja",
       "group": "Ženske čarape",
       "regularPrice": "800",
@@ -8845,7 +9011,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -8888,7 +9057,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -8915,8 +9085,8 @@
       "id": "1136",
       "title": "SWING",
       "shortDescription": "Baštenska ljuljaška",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4d5bb2d84fd6919a2ba78013f443b02589ca4ea822c540dcbab67975fd115ae6\nsize 16201",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenska ljuljaška",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "25000",
@@ -9051,7 +9221,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -9078,8 +9251,8 @@
       "id": "1131",
       "title": "CAFFEE",
       "shortDescription": "Baštenska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:297aeb74bf5dbf8e722a7f3ce4783b1d4ea1aba7eff2a58df701584f2e55ae48\nsize 16275",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "8000",
@@ -9214,7 +9387,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -9241,8 +9417,8 @@
       "id": "1133",
       "title": "RELAX",
       "shortDescription": "Baštenska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:542b7f19e6a00c31fbbadd94417820c238b84001eb4b719da238d0e31576e2ea\nsize 16079",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "10000",
@@ -9401,7 +9577,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -9428,8 +9607,8 @@
       "id": "1134",
       "title": "SUNSHINE",
       "shortDescription": "Baštenska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9bf23d04a4375ba5996d8ffce4fe7a56ff904de74794ee1d0d495e63d1f5789d\nsize 16182",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "12000",
@@ -9636,7 +9815,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -9663,8 +9845,8 @@
       "id": "1135",
       "title": "GAZEBO",
       "shortDescription": "Baštenski paviljon",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:55756c64a75f9aef3d9f2ba8b4e5b5cba023f63cabae61d91b313c246dcc6ba8\nsize 16316",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenski paviljon",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "15000",
@@ -9799,7 +9981,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -9826,8 +10011,8 @@
       "id": "1132",
       "title": "HARMONY",
       "shortDescription": "Baštenski set",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:132cd9f51eaa32207cef9af7c68c1bd1108ce44e9a0369d692b7df23e4a07b91\nsize 16528",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenski set",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "35000",
@@ -10166,7 +10351,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -10193,8 +10381,8 @@
       "id": "1137",
       "title": "CAFFEE",
       "shortDescription": "Baštenski sto",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:ad382775e787ac77bf757ff4e4e1acc6ded13ddb64a7a047b98d96e78601e013\nsize 16196",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Baštenski sto",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Baštenski nameštaj",
       "regularPrice": "10000",
@@ -10389,7 +10577,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -10416,8 +10607,8 @@
       "id": "1162",
       "title": "HOMESTYLE",
       "shortDescription": "Čiviluk",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:23a07d758d14dad9940d790aba8d7b05d2c712a708f505c8c9e3eb54febed39c\nsize 16004",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Čiviluk",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Predsoblje",
       "regularPrice": "6000",
@@ -10469,7 +10660,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -10512,7 +10706,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -10555,7 +10750,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -10599,7 +10795,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -10643,7 +10840,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -10686,7 +10884,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -10713,8 +10912,8 @@
       "id": "1083",
       "title": "GAME THRONE",
       "shortDescription": "Gejmerska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b3275583e53569cfb6729719c0e6a9529c23abf6c9894eb02387819b927576b\nsize 14209",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Gejmerska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Gejming",
       "regularPrice": "14000",
@@ -10776,7 +10975,10 @@
       ]
     },
     "flags": [
-      "missing:Kolekcija (brend)"
+      "missing:Kolekcija (brend)",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -10803,8 +11005,8 @@
       "id": "1089",
       "title": "GAME THRONE",
       "shortDescription": "Gejmerska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b3275583e53569cfb6729719c0e6a9529c23abf6c9894eb02387819b927576b\nsize 14209",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Gejmerska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Gejming",
       "regularPrice": "14000",
@@ -10867,7 +11069,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -11043,7 +11248,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "campaign:expired"
     ]
   },
   {
@@ -11158,7 +11364,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -11201,7 +11408,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -11228,8 +11436,8 @@
       "id": "1161",
       "title": "PIKNIK",
       "shortDescription": "Klub sto",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:43f2d2f4315ff5cb29851900f730bceda3155dc95a58b971219c3efa75a115c7\nsize 16090",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Klub sto",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "6000",
@@ -11305,7 +11513,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -11347,7 +11558,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -11389,7 +11601,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -11431,7 +11644,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -11458,8 +11672,8 @@
       "id": "1085",
       "title": "CONFERENCE MASTER",
       "shortDescription": "Konferencijska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:31d2f2f87fdd16bedfaa24c801d1ffb2c8cdf5fb8e23c94db3a0a7033ac983c5\nsize 16306",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Konferencijska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Kancelarija",
       "regularPrice": "9000",
@@ -11533,7 +11747,10 @@
       ]
     },
     "flags": [
-      "missing:Kolekcija (brend)"
+      "missing:Kolekcija (brend)",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -11560,8 +11777,8 @@
       "id": "1164",
       "title": "RELAXO",
       "shortDescription": "Ležaj",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:dbc75485ff9a27aa896bb08450c5df148a302b9f2e1a570b054ee78a94c35cb7\nsize 15954",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ležaj",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "40000",
@@ -11613,7 +11830,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -11640,8 +11860,8 @@
       "id": "1165",
       "title": "URBAN SLEEPER",
       "shortDescription": "Ležaj",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2f6afb7164b5bafab9a63853cb24c17e318a0fe8831386d276734d5b986cdd76\nsize 16184",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ležaj",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "40000",
@@ -11693,7 +11913,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -11720,8 +11943,8 @@
       "id": "1144",
       "title": "VENUS",
       "shortDescription": "Ležaj",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:6b0c6d59d732bba7d56bdd3d49aae57a8881c9732a67b55856b400f219aae848\nsize 16295",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ležaj",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "50000",
@@ -12012,7 +12235,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -12039,8 +12265,8 @@
       "id": "1143",
       "title": "VENUS",
       "shortDescription": "Ležaj",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:a77be40728a4ee8591aa2f47aead17ef6c437ddb7a68929e9ceff35b62f04524\nsize 16291",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Ležaj",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "50000",
@@ -12331,7 +12557,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -12374,7 +12603,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12401,8 +12631,8 @@
       "id": "1160",
       "title": "HOMESTYLE",
       "shortDescription": "Otvorena polica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:af657b5da698155f093f1952b678113bf3f56e4aa22bcceeeb138c5cdb919a12\nsize 16357",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Otvorena polica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "15000",
@@ -12442,7 +12672,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -12484,7 +12717,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12526,7 +12760,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12568,7 +12803,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12610,7 +12846,8 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12637,8 +12874,8 @@
       "id": "1138",
       "title": "COMFORT",
       "shortDescription": "Set od dve baštenske stolice",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:ba497b5e4a1d71c672e9235aa8be8a589ff18c234a2b8fa11ceea250483105b7\nsize 16266",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set od dve baštenske stolice",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "20000",
@@ -12725,7 +12962,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -12768,7 +13008,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -12795,8 +13036,8 @@
       "id": "1118",
       "title": "TRIO WOOD",
       "shortDescription": "Set stočića",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:f7979fde762b3ac9777abf401e41c03d4cf1b21e174ce35e13729c0e411d3642\nsize 15740",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set stočića",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "7000",
@@ -12871,7 +13112,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -12898,8 +13142,8 @@
       "id": "1119",
       "title": "TRIO WOOD",
       "shortDescription": "Set stočića",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:e29130fe520b5490b7b56ec7dab41800e2483d4b4258e4d817ccda4a36da6ac3\nsize 15732",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set stočića",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "7000",
@@ -12975,7 +13219,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13002,8 +13249,8 @@
       "id": "1117",
       "title": "TRIO WOOD",
       "shortDescription": "Set stočića",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2b6a803e1d1a16014134412c103bf0568882bcf0aa3a742d5509567b3d37cc0d\nsize 15748",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set stočića",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Dnevna soba",
       "regularPrice": "7000",
@@ -13067,7 +13314,10 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13110,7 +13360,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13153,7 +13404,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13196,7 +13448,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13223,8 +13476,8 @@
       "id": "1088",
       "title": "DIAMOND SEAT",
       "shortDescription": "Trpezarijska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:2dec22ad31cfc9ebf441baedc6aaa8b48a8f23b68f9749956dde10143592b8f5\nsize 16601",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Trpezarijska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Trpezarija",
       "regularPrice": "7000",
@@ -13311,7 +13564,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13338,8 +13594,8 @@
       "id": "1086",
       "title": "ELEGANCE SEAT",
       "shortDescription": "Trpezarijska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9fbce4b3cd94f5d0116a593ea8626e0a243ee38efed8bc06ea17b9990ce97963\nsize 16493",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Trpezarijska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Trpezarija",
       "regularPrice": "7000",
@@ -13426,7 +13682,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13470,7 +13729,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13497,8 +13757,8 @@
       "id": "1084",
       "title": "LUX SEAT",
       "shortDescription": "Trpezarijska stolica",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d02392775036fd247ed7f22a5d87ab1ed9ea1f50b4dbf4d29d9939a7726c90e4\nsize 15997",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Trpezarijska stolica",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Trpezarija",
       "regularPrice": "7000",
@@ -13573,7 +13833,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13616,7 +13879,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13660,7 +13924,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13704,7 +13969,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13748,7 +14014,8 @@
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
       "missing:Bar kod",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -13775,8 +14042,8 @@
       "id": "1163",
       "title": "XWOOD",
       "shortDescription": "Trpezarijski sto",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4e68f1832e3229d8a15ec11b04636b8da4574102ccc32368d9f26860123de71e\nsize 16037",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Trpezarijski sto",
+      "descriptionSource": "source_opis",
       "category": "Nameštaj",
       "group": "Trpezarija",
       "regularPrice": "20000",
@@ -13815,7 +14082,10 @@
     },
     "flags": [
       "missing:Kolekcija (brend)",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13842,8 +14112,8 @@
       "id": "1149",
       "title": "MOWER",
       "shortDescription": "Akumulatorska kosačica za travu 1800W, 48 V, 3Ah",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:5ed22a5528ab58b191c21ae4f01f72cac6552460bf7ce8fbed55664324d48fff\nsize 15992",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorska kosačica za travu 1800W, 48 V, 3Ah",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "10000",
@@ -13917,7 +14187,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -13944,8 +14217,8 @@
       "id": "1146",
       "title": "ULTRA CUT",
       "shortDescription": "Akumulatorska testera za rezanje drva i grana 4\"",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:23119d714e281b61d14e3ff98c5bd6303808ef51901c33b694624e7288213bf8\nsize 15892",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorska testera za rezanje drva i grana 4\"",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "7000",
@@ -14043,7 +14316,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14070,8 +14346,8 @@
       "id": "1103",
       "title": "SPEEED TORQUE",
       "shortDescription": "Akumulatorski odvijač set  3,6V, 1,3Ah",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:24fccaf31b2f3dc59b268580dc080c6b2c21961c7f0cbca9e7a0e5c9fcfba12f\nsize 14580",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorski odvijač set  3,6V, 1,3Ah",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "5000",
@@ -14170,7 +14446,10 @@
     },
     "flags": [
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14197,8 +14476,8 @@
       "id": "1145",
       "title": "BIT PRO",
       "shortDescription": "Akumulatorski odvijač set od 25 delova za odvijanje 21V, 2Ah, 35Nm",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:c8a9ffc61a3ea73e7307b08d0555424cec3ee3e7e3b16669de48c0d53ef677fc\nsize 16680",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorski odvijač set od 25 delova za odvijanje 21V, 2Ah, 35Nm",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "5000",
@@ -14331,7 +14610,11 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -14357,8 +14640,8 @@
       "id": "1148",
       "title": "DRILL X",
       "shortDescription": "Akumulatorski odvijač set od 47 delova",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:73b57c14fb95a12bca10a2d9d3f04d2700350416a14020232b6634b664f67048\nsize 16263",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorski odvijač set od 47 delova",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "3000",
@@ -14456,7 +14739,10 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14483,8 +14769,8 @@
       "id": "1102",
       "title": "POWER SCREW",
       "shortDescription": "Akumulatorski odvijač set od 49 delova -  3,7V, 1,3Ah",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:7c14341ddbb78e21402682928776a6805805089e552df413d3177daab2569019\nsize 15735",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Akumulatorski odvijač set od 49 delova -  3,7V, 1,3Ah",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "4000",
@@ -14536,7 +14822,10 @@
     "flags": [
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14563,8 +14852,8 @@
       "id": "1170",
       "title": "AQUA FUN",
       "shortDescription": "Bazen za dvorište",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9edc8e98413395bea6fb9aae8bd9b85bb2a73be5e517942c9b094656302c0924\nsize 16152",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Bazen za dvorište",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "8000",
@@ -14651,7 +14940,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14678,8 +14970,8 @@
       "id": "1171",
       "title": "AQUA FUN",
       "shortDescription": "Bazen za dvorište",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:0abd8ee6e14e06e4ba63da4f3a7d05620e9436f83cfead1c57e8bedea45846f4\nsize 16471",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Bazen za dvorište",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "10000",
@@ -14778,7 +15070,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -14856,7 +15151,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -15005,7 +15301,9 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -15031,8 +15329,8 @@
       "id": "1169",
       "title": "OCEAN WORLD",
       "shortDescription": "Dečiji bazen",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d91d2feacf7dcd432101f0175eb161a906c6a46fb87711d1496b09eb933df324\nsize 16411",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Dečiji bazen",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "9000",
@@ -15131,7 +15429,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -15269,7 +15570,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -15419,7 +15721,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -15446,8 +15749,8 @@
       "id": "1172",
       "title": "ZRAY ST.CROIX 360",
       "shortDescription": "Kajak za dve osobe",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d9d333c23600fa84bf5bd9fc933ca6dae04222da0bc71ea061794495bdd962c7\nsize 16643",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Kajak za dve osobe",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "40000",
@@ -15690,7 +15993,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -15717,8 +16023,8 @@
       "id": "1104",
       "title": "TURBO DRILL",
       "shortDescription": "Komplet od 29 delova za bušenje i odvijanje  21V, 2Ah, 35Nm",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:b93ee6c0137296a548f6cc5fcd179bf53b053a5302cf9be0f146e8fbc5440465\nsize 16286",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Komplet od 29 delova za bušenje i odvijanje  21V, 2Ah, 35Nm",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "8000",
@@ -15806,7 +16112,10 @@
     "flags": [
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -16028,7 +16337,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -16071,7 +16381,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -16114,7 +16425,8 @@
     "flags": [
       "missing:Kolekcija (brend)",
       "missing:Boja 2",
-      "missing:product_assets"
+      "missing:product_assets",
+      "campaign:expired"
     ]
   },
   {
@@ -16288,7 +16600,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -16426,7 +16739,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -16527,7 +16841,9 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -16652,7 +16968,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -16825,7 +17142,9 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -17033,7 +17352,9 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -17217,7 +17538,9 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -17342,7 +17665,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -17369,8 +17693,8 @@
       "id": "1168",
       "title": "METAL FRAME",
       "shortDescription": "Porodični bazen za dvorište",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:70e90497bf243583cfbc341e9830a67474f34de253432d020a50effdcc92eb95\nsize 16081",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Porodični bazen za dvorište",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "30000",
@@ -17457,7 +17781,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -17484,8 +17811,8 @@
       "id": "1166",
       "title": "RING",
       "shortDescription": "Porodični bazen za dvorište",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:9732860bce4f12d9cee1a7a6c0f527d2b9701f6d57b23d380372b68df2592ef0\nsize 15482",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Porodični bazen za dvorište",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "15000",
@@ -17572,7 +17899,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -17599,8 +17929,8 @@
       "id": "1167",
       "title": "RING",
       "shortDescription": "Porodični bazen za dvorište",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:658dae1fab12304d3acb9fe9ba944a9b60a3ec33b72e732856c61616b78dad39\nsize 15592",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Porodični bazen za dvorište",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "12000",
@@ -17675,7 +18005,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -17825,7 +18158,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -17852,8 +18186,8 @@
       "id": "1147",
       "title": "BIT ULTRA",
       "shortDescription": "Profesionalni akumulatorski odvijač set od od 118 delova, 21V, 2Ah, 35Nm",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:d33a6af855f848a2a83fb8abd42202cdbe64abb0b1cb77e191e240f9164ae818\nsize 15998",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Profesionalni akumulatorski odvijač set od od 118 delova, 21V, 2Ah, 35Nm",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "10000",
@@ -17986,7 +18320,11 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -18012,8 +18350,8 @@
       "id": "1105",
       "title": "DRILL MASTER",
       "shortDescription": "Profesionalni alat set od 83 delova, 21V, 2Ah, 35Nm",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:343938cb5fa83a335d82398fbac2f3b0cd931ed016da79f09ce3a5d1a0b76fe1\nsize 16033",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Profesionalni alat set od 83 delova, 21V, 2Ah, 35Nm",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "12000",
@@ -18101,7 +18439,10 @@
     "flags": [
       "missing:Boja 1",
       "missing:Boja 2",
-      "missing:Bar kod"
+      "missing:Bar kod",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -18128,8 +18469,8 @@
       "id": "1151",
       "title": "SOCKET X",
       "shortDescription": "Set gedora od 46 delova",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:83ec4e0341424ead7c41dcf34f11d4ffdd31b1b024d00f3a48b1a6808f399d45\nsize 15964",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Set gedora od 46 delova",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "4000",
@@ -18262,7 +18603,11 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   },
   {
     "source": {
@@ -18387,7 +18732,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -18597,7 +18943,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -18735,7 +19082,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -18933,7 +19281,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -19119,7 +19468,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -19146,8 +19496,8 @@
       "id": "1173",
       "title": "PATHFINDER",
       "shortDescription": "SUP daska ",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4e92c215fd8c7588a3095a05acba3f8d5f62d46f63bb5334b233f712c6882c21\nsize 16322",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "SUP daska ",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Bazeni",
       "regularPrice": "50000",
@@ -19246,7 +19596,10 @@
     },
     "flags": [
       "missing:Boja 1",
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
     ]
   },
   {
@@ -19468,7 +19821,8 @@
       ]
     },
     "flags": [
-      "missing:Boja 2"
+      "missing:Boja 2",
+      "campaign:expired"
     ]
   },
   {
@@ -19495,8 +19849,8 @@
       "id": "1150",
       "title": "MAX SCREW",
       "shortDescription": "Univerzalni set šrafcigera 115 u 1",
-      "longDescription": "version https://git-lfs.github.com/spec/v1\noid sha256:4236e618f2b0834066c29af123f00a15d33a7125bc4e6386eaf47ad14837784d\nsize 14561",
-      "descriptionSource": "product_assets_docx",
+      "longDescription": "Univerzalni set šrafcigera 115 u 1",
+      "descriptionSource": "source_opis",
       "category": "Sve za kuću",
       "group": "Alat",
       "regularPrice": "3000",
@@ -19581,6 +19935,10 @@
         }
       ]
     },
-    "flags": []
+    "flags": [
+      "missing:product_long_description",
+      "broken:lfs_pointer_description",
+      "campaign:expired"
+    ]
   }
 ]

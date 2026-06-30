@@ -1,5 +1,21 @@
 import rawProducts from "@/data/svet-akcija-products.json";
 
+interface SvetAkcijaMediaAsset {
+  url?: string | null;
+  storagePath?: string | null;
+  thumbUrl?: string | null;
+  cardUrl?: string | null;
+  pdpUrl?: string | null;
+  alt?: string | null;
+  width?: number | null;
+  height?: number | null;
+  blurDataUrl?: string | null;
+}
+
+type SvetAkcijaWebsiteMedia =
+  | SvetAkcijaMediaAsset[]
+  | { images: SvetAkcijaMediaAsset[] };
+
 export interface SvetAkcijaSource {
   "Šifra": string | null;
   "Kategorija": string | null;
@@ -26,6 +42,7 @@ export interface SvetAkcijaProduct {
     id: string | null;
     title: string | null;
     shortDescription: string | null;
+    longDescription?: string | null;
     category: string | null;
     group: string | null;
     regularPrice: string | null;
@@ -35,26 +52,19 @@ export interface SvetAkcijaProduct {
     colorSecondary: string | null;
     barcode: string | null;
     sku: string | null;
+    media?: SvetAkcijaWebsiteMedia;
   };
   flags: string[];
   longDescription?: string | null;
   media?: {
-    images: {
-      url: string;
-      thumbUrl?: string | null;
-      cardUrl?: string | null;
-      pdpUrl?: string | null;
-      alt?: string | null;
-      width?: number | null;
-      height?: number | null;
-      blurDataUrl?: string | null;
-    }[];
+    images: SvetAkcijaMediaAsset[];
   };
 }
 
 const PLACEHOLDER_VALUES = new Set(["9", "0", "/", "-", "N/A", "n/a", "NA", "na"]);
+const LFS_POINTER_RE = /^(version https:\/\/git-lfs\.github\.com\/spec\/v1\b|oid sha256:)/i;
 
-export const svetAkcijaProducts = rawProducts as SvetAkcijaProduct[];
+export const svetAkcijaProducts = rawProducts as unknown as SvetAkcijaProduct[];
 
 export function sourceValue(
   product: SvetAkcijaProduct,
@@ -72,6 +82,66 @@ export function parseSourcePrice(value: string | null | undefined): number | nul
   if (!isMeaningfulSourceValue(value)) return null;
   const parsed = Number(value.replace(/\./g, "").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function isLfsPointerText(value: string | null | undefined) {
+  return Boolean(value && LFS_POINTER_RE.test(value.trim()));
+}
+
+function parseSourceDate(value: string | null | undefined): Date | null {
+  if (!isMeaningfulSourceValue(value)) return null;
+  const date = new Date(value.replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function isSourceCampaignLive(
+  product: SvetAkcijaProduct,
+  now: Date = new Date(),
+) {
+  const startsAt = parseSourceDate(sourceValue(product, "Važenje akcijske cene od"));
+  const endsAt = parseSourceDate(sourceValue(product, "Važenje akcijske cene do"));
+  if (!startsAt || !endsAt) return false;
+  const time = now.getTime();
+  return startsAt.getTime() <= time && endsAt.getTime() >= time;
+}
+
+export function sourceLongDescription(product: SvetAkcijaProduct) {
+  const raw =
+    product.longDescription ??
+    product.website_mapping.longDescription ??
+    sourceValue(product, "Opis");
+  if (!raw || isLfsPointerText(raw)) return sourceValue(product, "Opis");
+  return raw;
+}
+
+export function sourceMediaImages(product: SvetAkcijaProduct) {
+  const media = product.media?.images ?? product.website_mapping.media;
+  const images = Array.isArray(media) ? media : media?.images;
+  return (images ?? []).map((image) => ({
+    ...image,
+    url: image.url ?? image.storagePath ?? "",
+  }));
+}
+
+export function effectiveSourcePrice(product: SvetAkcijaProduct) {
+  const fullPrice = parseSourcePrice(sourceValue(product, "MPC redovna"));
+  const rawSalePrice = parseSourcePrice(sourceValue(product, "Akcijska MPC"));
+  const salePrice =
+    fullPrice != null &&
+    rawSalePrice != null &&
+    rawSalePrice > 0 &&
+    rawSalePrice < fullPrice &&
+    isSourceCampaignLive(product)
+      ? rawSalePrice
+      : null;
+
+  return {
+    fullPrice,
+    salePrice,
+    effective: salePrice ?? fullPrice ?? rawSalePrice,
+    onSale: salePrice != null,
+    campaignLive: isSourceCampaignLive(product),
+  };
 }
 
 export function uniqueMeaningfulValues(
@@ -93,5 +163,5 @@ export function productHref(product: SvetAkcijaProduct): string {
 }
 
 export function primaryImage(product: SvetAkcijaProduct) {
-  return product.media?.images[0] ?? null;
+  return sourceMediaImages(product)[0] ?? null;
 }

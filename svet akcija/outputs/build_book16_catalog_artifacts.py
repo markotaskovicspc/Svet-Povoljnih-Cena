@@ -27,6 +27,12 @@ CHECKS_JSON_OUT = OUT_DIR / "svet-akcija-data-checks.json"
 PRODUCT_ASSETS_JSON_OUT = OUT_DIR / "svet-akcija-product-assets.json"
 MEDIA_UPLOAD_MANIFEST_JSON_OUT = OUT_DIR / "svet-akcija-product-media-upload-manifest.json"
 SUPABASE_SQL_OUT = OUT_DIR / "Svet_akcija_supabase_import.sql"
+IMPORT_BATCH = "book16_2026_05"
+PROMO_ACTION_ID = "action-svet-akcija-maj-2026"
+PROMO_ACTION_SLUG = "akcija"
+PROMO_ACTION_NAME = "Svet akcija - maj 2026"
+PROMO_ACTION_START = "2026-05-01 00:00:00"
+PROMO_ACTION_END = "2026-05-31 23:59:59"
 
 
 REQUIRED_CHECK_FIELDS = [
@@ -60,6 +66,7 @@ MEDIA_VARIANTS = {
     "cardUrl": ("card", 640),
     "pdpUrl": ("pdp", 1280),
 }
+LFS_POINTER_RE = re.compile(r"^(version https://git-lfs\.github\.com/spec/v1\b|oid sha256:)", re.IGNORECASE)
 
 
 def is_blank(value: Any) -> bool:
@@ -99,6 +106,41 @@ def safe_number(value: Any) -> float | None:
         return float(text)
     except ValueError:
         return None
+
+
+def safe_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text[: len(fmt)], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def campaign_status(starts_at: Any, ends_at: Any, today: date | None = None) -> str:
+    today = today or date.today()
+    start = safe_date(starts_at)
+    end = safe_date(ends_at)
+    if start is None or end is None:
+        return "invalid"
+    if end < today:
+        return "expired"
+    if start > today:
+        return "future"
+    return "current"
+
+
+def is_lfs_pointer_text(value: str | None) -> bool:
+    return bool(value and LFS_POINTER_RE.search(value.strip()))
 
 
 def normalize_sku(value: Any) -> str:
@@ -232,6 +274,9 @@ def build_product_assets(product_skus: set[str]) -> tuple[dict[str, dict[str, An
                 long_description = extract_docx_text(docx_file)
                 if not long_description:
                     warnings.append("empty:docx_text")
+                elif is_lfs_pointer_text(long_description):
+                    warnings.append("broken:lfs_pointer_description")
+                    long_description = ""
             except (subprocess.CalledProcessError, OSError) as exc:
                 warnings.append("failed:docx_extraction")
                 extraction_failures.append({"sku": sku, "folder": folder.name, "docxFile": docx_file.name, "error": str(exc)})
@@ -305,6 +350,13 @@ def render_supabase_import_sql(
                 flags.append("price:action_higher_than_regular")
             if sale == regular:
                 flags.append("price:regular_equals_action")
+            if sale < regular:
+                status = campaign_status(
+                    r.get("Važenje akcijske cene od"),
+                    r.get("Važenje akcijske cene do"),
+                )
+                if status != "current":
+                    flags.append(f"campaign:{status}")
         for field in headers:
             value = r.get(field)
             if value is not None and str(value).strip() in PLACEHOLDERS:
@@ -312,9 +364,12 @@ def render_supabase_import_sql(
         source_rows.append({"source_row": r["_source_row"], "flags": flags, **as_source_record(r, headers)})
 
     asset_rows = [
-        {"sku": sku, "longDescription": asset["longDescription"]}
+        {
+            "sku": sku,
+            "longDescription": asset["longDescription"],
+            "mediaCount": len(asset["media"]),
+        }
         for sku, asset in sorted(asset_by_sku.items(), key=lambda item: natural_key(item[0]))
-        if asset.get("longDescription")
     ]
     media_rows = []
     for sku, asset in sorted(asset_by_sku.items(), key=lambda item: natural_key(item[0])):
@@ -348,6 +403,12 @@ def render_supabase_import_sql(
 --
 -- ProductMedia.url stores Supabase Storage object paths such as products/1081/001-1.png.
 -- Upload local files according to outputs/svet-akcija-product-media-upload-manifest.json.
+--
+-- Launch-safety rules:
+-- 1) Stock comes only from owner source data in "DC (lager)" when it is a non-negative integer.
+--    Missing/invalid stock imports as stock=0 and isActive=false.
+-- 2) Products without generated media import as inactive until assets are provided.
+-- 3) Expired campaign prices are not mapped to Product.salePrice or Product.actionId.
 --
 -- Important preservation rule:
 -- 1) public.svet_akcija_product_import stores every original source column exactly as text.
@@ -397,7 +458,7 @@ ALTER TABLE public."Product" ADD COLUMN IF NOT EXISTS "colorSecondary" TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS "Product_barcode_key" ON public."Product"(barcode);
 
 CREATE TABLE IF NOT EXISTS public.svet_akcija_product_import (
-  import_batch TEXT NOT NULL DEFAULT 'book16_2026_05',
+  import_batch TEXT NOT NULL DEFAULT '{IMPORT_BATCH}',
   source_file TEXT NOT NULL DEFAULT 'Book16.numbers',
   source_row INT NOT NULL,
   flags JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -525,7 +586,7 @@ SELECT DISTINCT
   public.svet_akcija_slugify("Grupa"),
   "Grupa"
 FROM public.svet_akcija_product_import
-WHERE import_batch = 'book16_2026_05' AND nullif("Grupa", '') IS NOT NULL
+WHERE import_batch = '{IMPORT_BATCH}' AND nullif("Grupa", '') IS NOT NULL
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO public."Collection" (id, slug, name)
@@ -534,7 +595,7 @@ SELECT DISTINCT
   public.svet_akcija_slugify("Kolekcija (brend)"),
   "Kolekcija (brend)"
 FROM public.svet_akcija_product_import
-WHERE import_batch = 'book16_2026_05'
+WHERE import_batch = '{IMPORT_BATCH}'
   AND nullif("Kolekcija (brend)", '') IS NOT NULL
   AND trim("Kolekcija (brend)") NOT IN ('9','0','/','-','N/A','n/a','NA','na')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
@@ -547,25 +608,26 @@ SELECT DISTINCT
   now(),
   now()
 FROM public.svet_akcija_product_import
-WHERE import_batch = 'book16_2026_05' AND nullif("Dobavljač", '') IS NOT NULL
+WHERE import_batch = '{IMPORT_BATCH}' AND nullif("Dobavljač", '') IS NOT NULL
 ON CONFLICT (name) DO UPDATE SET
   name = EXCLUDED.name,
   enabled = true,
   "updatedAt" = now();
 
 INSERT INTO public."Action" (id, slug, name, kind, "startsAt", "endsAt", "isHero", "sortOrder", "createdAt", "updatedAt")
-VALUES (
-  'action-svet-akcija-maj-2026',
-  'akcija',
-  'Svet akcija - maj 2026',
+SELECT
+  '{PROMO_ACTION_ID}',
+  '{PROMO_ACTION_SLUG}',
+  '{PROMO_ACTION_NAME}',
   'AKCIJA',
-  TIMESTAMP '2026-05-01 00:00:00',
-  TIMESTAMP '2026-05-31 23:59:59',
+  TIMESTAMP '{PROMO_ACTION_START}',
+  TIMESTAMP '{PROMO_ACTION_END}',
   false,
   1,
   now(),
   now()
-)
+WHERE TIMESTAMP '{PROMO_ACTION_START}' <= CURRENT_TIMESTAMP
+  AND TIMESTAMP '{PROMO_ACTION_END}' >= CURRENT_TIMESTAMP
 ON CONFLICT (slug) DO UPDATE SET
   name = EXCLUDED.name,
   kind = EXCLUDED.kind,
@@ -578,14 +640,15 @@ WITH product_assets AS (
   SELECT *
   FROM jsonb_to_recordset($asset_json${asset_json}$asset_json$::jsonb) AS x(
     sku TEXT,
-    "longDescription" TEXT
+    "longDescription" TEXT,
+    "mediaCount" INT
   )
 ), raw AS (
   SELECT
     r.*,
     count(*) OVER (PARTITION BY nullif(r."Bar kod", '')) AS barcode_count
   FROM public.svet_akcija_product_import r
-  WHERE r.import_batch = 'book16_2026_05'
+  WHERE r.import_batch = '{IMPORT_BATCH}'
 ), mapped AS (
   SELECT
     'sa-prod-' || raw."Šifra" AS id,
@@ -608,10 +671,30 @@ WITH product_assets AS (
     (SELECT g.id FROM public."Group" g WHERE g.slug = public.svet_akcija_slugify(raw."Grupa") LIMIT 1) AS group_id,
     (SELECT c.id FROM public."Collection" c WHERE c.slug = public.svet_akcija_slugify(raw."Kolekcija (brend)") LIMIT 1) AS collection_id,
     NULLIF(raw."MPC redovna", '')::numeric(12,2) AS full_price,
-    NULLIF(raw."Akcijska MPC", '')::numeric(12,2) AS sale_price,
+    CASE
+      WHEN NULLIF(raw."Akcijska MPC", '') IS NOT NULL
+       AND NULLIF(raw."Akcijska MPC", '')::numeric(12,2) < NULLIF(raw."MPC redovna", '')::numeric(12,2)
+       AND raw."Važenje akcijske cene od" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}'
+       AND raw."Važenje akcijske cene do" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}'
+       AND raw."Važenje akcijske cene od"::timestamp <= CURRENT_TIMESTAMP
+       AND raw."Važenje akcijske cene do"::timestamp >= CURRENT_TIMESTAMP
+      THEN NULLIF(raw."Akcijska MPC", '')::numeric(12,2)
+      ELSE NULL
+    END AS sale_price,
+    CASE WHEN nullif(raw."DC (lager)", '') ~ '^[0-9]+$' THEN raw."DC (lager)"::int ELSE 0 END AS stock,
     CASE WHEN nullif(raw."DC (lager)", '') ~ '^[0-9]+$' THEN raw."DC (lager)"::int ELSE NULL END AS supplier_stock,
+    COALESCE(product_assets."mediaCount", 0) AS media_count,
     (SELECT s.id FROM public."Supplier" s WHERE s.name = raw."Dobavljač" LIMIT 1) AS supplier_id,
-    (SELECT a.id FROM public."Action" a WHERE a.slug = 'akcija' LIMIT 1) AS action_id
+    CASE
+      WHEN NULLIF(raw."Akcijska MPC", '') IS NOT NULL
+       AND NULLIF(raw."Akcijska MPC", '')::numeric(12,2) < NULLIF(raw."MPC redovna", '')::numeric(12,2)
+       AND raw."Važenje akcijske cene od" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}'
+       AND raw."Važenje akcijske cene do" ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}'
+       AND raw."Važenje akcijske cene od"::timestamp <= CURRENT_TIMESTAMP
+       AND raw."Važenje akcijske cene do"::timestamp >= CURRENT_TIMESTAMP
+      THEN (SELECT a.id FROM public."Action" a WHERE a.slug = '{PROMO_ACTION_SLUG}' LIMIT 1)
+      ELSE NULL
+    END AS action_id
   FROM raw
   LEFT JOIN product_assets ON product_assets.sku = raw."Šifra"
 )
@@ -627,10 +710,17 @@ INSERT INTO public."Product" (
 SELECT
   id, sku, barcode, slug, name, description, short_description,
   color_primary, color_secondary, group_id, collection_id,
-  full_price, sale_price, NULL, action_id,
-  0, 0, supplier_stock, 3, 5,
+  full_price,
+  sale_price,
+  CASE
+    WHEN sale_price IS NOT NULL AND full_price > 0
+    THEN round(((full_price - sale_price) / full_price) * 100)::int
+    ELSE NULL
+  END,
+  action_id,
+  stock, 0, supplier_stock, 3, 5,
   false, supplier_id, sku,
-  false, false, false, true,
+  false, false, false, stock > 0 AND media_count > 0,
   now(), now()
 FROM mapped
 ON CONFLICT (sku) DO UPDATE SET
@@ -647,6 +737,8 @@ ON CONFLICT (sku) DO UPDATE SET
   "salePrice" = EXCLUDED."salePrice",
   "discountPct" = EXCLUDED."discountPct",
   "actionId" = EXCLUDED."actionId",
+  stock = EXCLUDED.stock,
+  "incomingStock" = EXCLUDED."incomingStock",
   "supplierStock" = EXCLUDED."supplierStock",
   "supplierId" = EXCLUDED."supplierId",
   "supplierExternalId" = EXCLUDED."supplierExternalId",
@@ -719,10 +811,10 @@ DELETE FROM public."ProductCategory" pc
 USING public."Product" p, public.svet_akcija_product_import r
 WHERE pc."productId" = p.id
   AND p.sku = r."Šifra"
-  AND r.import_batch = 'book16_2026_05';
+  AND r.import_batch = '{IMPORT_BATCH}';
 
 WITH raw AS (
-  SELECT * FROM public.svet_akcija_product_import WHERE import_batch = 'book16_2026_05'
+  SELECT * FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}'
 ), mapped AS (
   SELECT
     p.id AS product_id,
@@ -739,16 +831,18 @@ ON CONFLICT ("productId", "categoryId") DO NOTHING;
 COMMIT;
 
 -- Post-import review queries. Run after paste, or inspect the Results panel.
-SELECT 'raw_rows' AS check_name, count(*) AS value FROM public.svet_akcija_product_import WHERE import_batch = 'book16_2026_05'
-UNION ALL SELECT 'products_seeded', count(*) FROM public."Product" WHERE sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = 'book16_2026_05')
+SELECT 'raw_rows' AS check_name, count(*) AS value FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}'
+UNION ALL SELECT 'products_seeded', count(*) FROM public."Product" WHERE sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}')
 UNION ALL SELECT 'products_with_generated_media', count(DISTINCT p.sku) FROM public."ProductMedia" pm JOIN public."Product" p ON p.id = pm."productId" WHERE pm.id LIKE 'sa-media-%'
 UNION ALL SELECT 'generated_media_rows', count(*) FROM public."ProductMedia" WHERE id LIKE 'sa-media-%'
 UNION ALL SELECT 'categories_total', count(*) FROM public."Category"
-UNION ALL SELECT 'product_category_links', count(*) FROM public."ProductCategory" pc JOIN public."Product" p ON p.id = pc."productId" WHERE p.sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = 'book16_2026_05');
+UNION ALL SELECT 'product_category_links', count(*) FROM public."ProductCategory" pc JOIN public."Product" p ON p.id = pc."productId" WHERE p.sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}')
+UNION ALL SELECT 'inactive_missing_stock_or_media', count(*) FROM public."Product" p WHERE p.sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}') AND p."isActive" = false
+UNION ALL SELECT 'active_expired_campaign_sale_prices', count(*) FROM public."Product" p WHERE p.sku IN (SELECT "Šifra" FROM public.svet_akcija_product_import WHERE import_batch = '{IMPORT_BATCH}') AND p."isActive" = true AND p."salePrice" IS NOT NULL AND p."actionId" IS NULL;
 
 SELECT "Bar kod", array_agg("Šifra" ORDER BY "Šifra") AS skus, count(*) AS duplicate_count
 FROM public.svet_akcija_product_import
-WHERE import_batch = 'book16_2026_05' AND nullif("Bar kod", '') IS NOT NULL
+WHERE import_batch = '{IMPORT_BATCH}' AND nullif("Bar kod", '') IS NOT NULL
 GROUP BY "Bar kod"
 HAVING count(*) > 1;
 """
@@ -847,18 +941,32 @@ def main() -> None:
             "Recommended action": "Fix or replace the DOCX file before publishing full product copy.",
         }
     )
+    lfs_description_skus = {
+        sku
+        for sku, asset in product_assets_by_sku.items()
+        if "broken:lfs_pointer_description" in asset.get("warnings", [])
+    }
+    add_check(
+        "Git LFS pointer long descriptions",
+        [r for r in products if normalize_sku(r.get("Šifra")) in lfs_description_skus],
+        "Product DOCX files that extracted as Git LFS pointer metadata instead of real description text.",
+        "Fetch the real LFS-backed DOCX files or replace them before publishing long product copy.",
+    )
 
     empty_dc = [r for r in products if is_blank(r.get("DC (lager)"))]
     add_check(
         "Empty stock/logistics fields",
         empty_dc,
         "Rows where 'DC (lager)' is empty/null.",
-        "Do not expose DC (lager) publicly; ask client if a separate public availability field will be provided.",
+        "Missing stock imports as unavailable; ask the client to provide launch-approved SKU-level availability before publishing.",
     )
 
     higher = []
     equal = []
     identical_or_missing_price = []
+    expired_campaign = []
+    invalid_campaign_dates = []
+    future_campaign = []
     for r in products:
         regular = safe_number(r.get("MPC redovna"))
         sale = safe_number(r.get("Akcijska MPC"))
@@ -867,6 +975,17 @@ def main() -> None:
                 higher.append(r)
             if sale == regular:
                 equal.append(r)
+            if sale < regular:
+                status = campaign_status(
+                    r.get("Važenje akcijske cene od"),
+                    r.get("Važenje akcijske cene do"),
+                )
+                if status == "expired":
+                    expired_campaign.append(r)
+                elif status == "invalid":
+                    invalid_campaign_dates.append(r)
+                elif status == "future":
+                    future_campaign.append(r)
         else:
             identical_or_missing_price.append(r)
     add_check(
@@ -880,6 +999,24 @@ def main() -> None:
         equal,
         "Rows where numeric Akcijska MPC equals numeric MPC redovna.",
         "Ask client whether these are truly action items or should display as regular-price products.",
+    )
+    add_check(
+        "Expired campaign price window",
+        expired_campaign,
+        "Rows with a discounted Akcijska MPC whose validity end date is before the report generation date.",
+        "Do not import these as sale prices; request current owner-approved campaign dates or publish regular price only.",
+    )
+    add_check(
+        "Invalid campaign date window",
+        invalid_campaign_dates,
+        "Rows with discounted Akcijska MPC but missing or unparsable campaign validity dates.",
+        "Fix campaign dates before importing a sale price.",
+    )
+    add_check(
+        "Future campaign price window",
+        future_campaign,
+        "Rows with discounted Akcijska MPC whose validity start date is after the report generation date.",
+        "Keep future sale prices inactive until the campaign starts.",
     )
 
     placeholder_rows = []
@@ -1048,6 +1185,13 @@ def main() -> None:
                 flags.append("price:action_higher_than_regular")
             if sale == regular:
                 flags.append("price:regular_equals_action")
+            if sale < regular:
+                status = campaign_status(
+                    r.get("Važenje akcijske cene od"),
+                    r.get("Važenje akcijske cene do"),
+                )
+                if status != "current":
+                    flags.append(f"campaign:{status}")
         for field in headers:
             value = r.get(field)
             if value is not None and str(value).strip() in PLACEHOLDERS:

@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  effectiveSourcePrice,
   isMeaningfulSourceValue,
   parseSourcePrice,
   primaryImage,
@@ -18,6 +19,7 @@ import {
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
 import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
+import { formatRsd } from "@/lib/format";
 
 type SortKey = "source" | "price-asc" | "price-desc" | "category";
 
@@ -76,8 +78,14 @@ export function SvetAkcijaCatalog({
       .map((product, index) => ({ product, index }))
       .sort((a, b) => {
         if (sort === "price-asc" || sort === "price-desc") {
-          const left = parseSourcePrice(sourceValue(a.product, "Akcijska MPC")) ?? Infinity;
-          const right = parseSourcePrice(sourceValue(b.product, "Akcijska MPC")) ?? Infinity;
+          const left =
+            effectiveSourcePrice(a.product).effective ??
+            parseSourcePrice(sourceValue(a.product, "Akcijska MPC")) ??
+            Infinity;
+          const right =
+            effectiveSourcePrice(b.product).effective ??
+            parseSourcePrice(sourceValue(b.product, "Akcijska MPC")) ??
+            Infinity;
           return sort === "price-asc" ? left - right : right - left;
         }
         if (sort === "category") {
@@ -293,8 +301,7 @@ function pageHref(page: number) {
 
 function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const salePrice = sourceValue(product, "Akcijska MPC");
-  const regularPrice = sourceValue(product, "MPC redovna");
+  const price = effectiveSourcePrice(product);
   const brand = sourceValue(product, "Kolekcija (brend)");
   const primaryColor = sourceValue(product, "Boja 1");
   const secondaryColor = sourceValue(product, "Boja 2");
@@ -344,10 +351,19 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
           </p>
         </div>
         <div className="mt-auto">
-          <p className="text-xs font-medium text-action">Akcijska MPC</p>
-          <p className="text-2xl font-bold text-action">{salePrice} RSD</p>
-          {isMeaningfulSourceValue(regularPrice) ? (
-            <p className="mt-0.5 text-xs text-ink-500">MPC redovna: {regularPrice} RSD</p>
+          <p className="text-xs font-medium text-action">
+            {price.onSale ? "Akcijska MPC" : "Cena"}
+          </p>
+          <p className="text-2xl font-bold text-action">
+            {price.effective != null ? formatRsd(price.effective) : "Cena nije dostupna"}
+          </p>
+          {price.onSale && price.fullPrice != null ? (
+            <p className="mt-0.5 text-xs text-ink-500">
+              MPC redovna: {formatRsd(price.fullPrice)}
+            </p>
+          ) : null}
+          {!price.onSale && !price.campaignLive && parseSourcePrice(sourceValue(product, "Akcijska MPC")) ? (
+            <p className="mt-0.5 text-xs text-ink-500">Akcija nije aktivna</p>
           ) : null}
         </div>
         <dl className="grid gap-1.5 text-xs text-ink-700">

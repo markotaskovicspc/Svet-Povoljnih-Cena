@@ -11,7 +11,10 @@ import { num, numOrNull } from "@/lib/api/_helpers";
 import { isRenderableImageUrl } from "@/lib/media";
 import { resolveSupabaseStorageMedia } from "@/lib/supabase/storage";
 import {
+  effectiveSourcePrice,
   parseSourcePrice,
+  sourceLongDescription,
+  sourceMediaImages,
   sourceValue,
   svetAkcijaProducts,
   type SvetAkcijaProduct,
@@ -214,11 +217,13 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
   const category = sourceValue(product, "Kategorija");
   const group = sourceValue(product, "Grupa");
   const fullPrice = parseSourcePrice(sourceValue(product, "MPC redovna")) ?? 0;
-  const salePrice = parseSourcePrice(sourceValue(product, "Akcijska MPC")) ?? undefined;
+  const sourcePrice = effectiveSourcePrice(product);
+  const salePrice = sourcePrice.salePrice ?? undefined;
   const discountPct =
     salePrice && fullPrice > salePrice
       ? Math.round(((fullPrice - salePrice) / fullPrice) * 100)
       : undefined;
+  const description = sourceLongDescription(product);
 
   return {
     sku,
@@ -227,14 +232,14 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     group: slugify(group),
     collection: slugify(sourceValue(product, "Kolekcija (brend)")),
     categoryPath: [category, group].filter(Boolean),
-    description: product.longDescription ?? sourceValue(product, "Opis"),
+    description,
     shortDescription: sourceValue(product, "Opis") || undefined,
     dimensionsCm: { w: 0, d: 0, h: 0 },
     colorPrimary: sourceValue(product, "Boja 1") || undefined,
     colorSecondary: sourceValue(product, "Boja 2") || undefined,
     materials: [],
     pictograms: [],
-    stock: 1,
+    stock: 0,
     incomingStock: 0,
     isHero: false,
     isNew: false,
@@ -246,7 +251,7 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     action: salePrice
       ? {
           id: "svet-akcija",
-          name: `${BRAND.name} - maj 2026`,
+          name: `${BRAND.name} akcija`,
           startsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene od")),
           endsAt: sourceDateToIso(sourceValue(product, "Važenje akcijske cene do")),
           isHero: false,
@@ -257,7 +262,7 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     assemblyCities: [],
     media: {
       images:
-        product.media?.images
+        sourceMediaImages(product)
           .map((image) => {
             const media = resolveSupabaseStorageMedia({
               url: image.url,
@@ -460,6 +465,30 @@ export interface ListProductsResult {
   total: number;
 }
 
+function liveActionWhere(now: Date): Prisma.ActionWhereInput {
+  return {
+    OR: [
+      { isPermanent: true },
+      { startsAt: { lte: now }, endsAt: { gte: now } },
+    ],
+  };
+}
+
+function liveSaleWhere(now: Date): Prisma.ProductWhereInput {
+  return {
+    salePrice: { not: null },
+    OR: [{ actionId: null }, { action: { is: liveActionWhere(now) } }],
+  };
+}
+
+function appendAnd(where: Prisma.ProductWhereInput, condition: Prisma.ProductWhereInput) {
+  const current = where.AND;
+  where.AND = [
+    ...(Array.isArray(current) ? current : current ? [current] : []),
+    condition,
+  ];
+}
+
 export async function listProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
@@ -468,6 +497,7 @@ export async function listProducts(
   }
 
   const where: Prisma.ProductWhereInput = { isActive: true };
+  const now = new Date();
 
   if (input.categoryPath) {
     where.categories = {
@@ -475,13 +505,15 @@ export async function listProducts(
     };
   }
   if (input.actionSlug) {
-    where.action = { slug: input.actionSlug };
+    where.action = { is: { slug: input.actionSlug, ...liveActionWhere(now) } };
   }
-  if (input.onSaleOnly) where.salePrice = { not: null };
+  if (input.onSaleOnly) appendAnd(where, liveSaleWhere(now));
   if (input.heroOnly) where.isHero = true;
   if (input.limitedOnly) where.isLimited = true;
-  if (input.newOnly) where.AND = [{ isNew: true }, { OR: [{ newUntil: null }, { newUntil: { gt: new Date() } }] }];
-  if (input.outletOnly) where.discountPct = { gte: 30 };
+  if (input.newOnly) appendAnd(where, { isNew: true, OR: [{ newUntil: null }, { newUntil: { gt: now } }] });
+  if (input.outletOnly) {
+    appendAnd(where, { discountPct: { gte: 30 }, ...liveSaleWhere(now) });
+  }
   if (input.groupSlug) where.group = { slug: input.groupSlug };
   if (input.collectionSlug) where.collection = { slug: input.collectionSlug };
   if (input.excludeSku) where.sku = { not: input.excludeSku };

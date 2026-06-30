@@ -4,8 +4,12 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { ArrowLeft } from "lucide-react";
 import {
+  effectiveSourcePrice,
   isMeaningfulSourceValue,
+  parseSourcePrice,
   productHref,
+  sourceLongDescription,
+  sourceMediaImages,
   sourceValue,
   svetAkcijaProducts,
 } from "@/lib/svet-akcija/catalog";
@@ -14,6 +18,7 @@ import {
   getSvetAkcijaProductBySku,
 } from "@/lib/svet-akcija/db";
 import { SvetAkcijaProductGallery } from "@/components/listing/svet-akcija-product-gallery";
+import { formatRsd } from "@/lib/format";
 
 interface RouteProps {
   params: Promise<{ sifra: string }>;
@@ -35,9 +40,11 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
   const product = await getSvetAkcijaProductBySku(sifra);
   if (!product) notFound();
 
-  const gallery = product.media?.images ?? [];
+  const gallery = sourceMediaImages(product);
   const related = await getRelatedSvetAkcijaProducts(product);
   const name = sourceValue(product, "Kratki naziv");
+  const price = effectiveSourcePrice(product);
+  const longDescription = sourceLongDescription(product);
 
   return (
     <main className="bg-canvas">
@@ -67,20 +74,24 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
 
             <div className="mt-6 rounded-md border border-border bg-white p-4">
               <p className="text-xs font-semibold tracking-[0.14em] text-action uppercase">
-                Akcijska MPC
+                {price.onSale ? "Akcijska MPC" : "Cena"}
               </p>
               <p className="mt-1 text-4xl font-bold text-action">
-                {sourceValue(product, "Akcijska MPC")} RSD
+                {price.effective != null ? formatRsd(price.effective) : "Cena nije dostupna"}
               </p>
-              {isMeaningfulSourceValue(sourceValue(product, "MPC redovna")) ? (
+              {price.onSale && price.fullPrice != null ? (
                 <p className="mt-1 text-sm text-ink-500">
-                  MPC redovna: {sourceValue(product, "MPC redovna")} RSD
+                  MPC redovna: {formatRsd(price.fullPrice)}
                 </p>
               ) : null}
-              <p className="mt-3 text-xs text-ink-500">
-                Važenje akcijske cene: {sourceValue(product, "Važenje akcijske cene od")} -{" "}
-                {sourceValue(product, "Važenje akcijske cene do")}
-              </p>
+              {price.onSale ? (
+                <p className="mt-3 text-xs text-ink-500">
+                  Važenje akcijske cene: {sourceValue(product, "Važenje akcijske cene od")} -{" "}
+                  {sourceValue(product, "Važenje akcijske cene do")}
+                </p>
+              ) : parseSourcePrice(sourceValue(product, "Akcijska MPC")) ? (
+                <p className="mt-3 text-xs text-ink-500">Akcija nije aktivna</p>
+              ) : null}
             </div>
 
             <div className="mt-6">
@@ -101,9 +112,9 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
 
             <div className="mt-6 rounded-md border border-dashed border-border bg-muted-bg/60 p-4">
               <p className="text-sm font-semibold text-ink-900">Dugi opis</p>
-              {product.longDescription ? (
+              {longDescription ? (
                 <div className="mt-3 whitespace-pre-line text-sm leading-6 text-ink-700">
-                  {product.longDescription}
+                  {longDescription}
                 </div>
               ) : (
                 <p className="mt-1 text-sm text-ink-500">
@@ -131,7 +142,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
                     {sourceValue(item, "Opis")}
                   </p>
                   <p className="mt-3 text-sm font-bold text-action">
-                    {sourceValue(item, "Akcijska MPC")} RSD
+                    {formatRelatedPrice(item)}
                   </p>
                 </Link>
               ))}
@@ -146,6 +157,11 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
 function findStaticProduct(sifra: string) {
   const decoded = decodeURIComponent(sifra);
   return svetAkcijaProducts.find((product) => sourceValue(product, "Šifra") === decoded);
+}
+
+function formatRelatedPrice(product: (typeof svetAkcijaProducts)[number]) {
+  const price = effectiveSourcePrice(product);
+  return price.effective != null ? formatRsd(price.effective) : "Cena nije dostupna";
 }
 
 function Badge({ children }: { children: string }) {
