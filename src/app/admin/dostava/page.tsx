@@ -148,7 +148,8 @@ export default async function DeliveryPage() {
     rules,
     cities,
     categories,
-    xLocations,
+    xTowns,
+    xStreets,
     xStatuses,
     xRuns,
     glsDeliveryPoints,
@@ -165,9 +166,8 @@ export default async function DeliveryPage() {
     }),
     db.deliveryCity.findMany({ orderBy: { name: "asc" } }),
     db.category.findMany({ orderBy: { path: "asc" }, select: { id: true, name: true, path: true } }),
-    db.courierLocationCode.count({
-      where: { provider: X_EXPRESS_PROVIDER, active: true },
-    }),
+    db.xExpressTown.count({ where: { active: true } }),
+    db.xExpressStreet.count({ where: { active: true, deleted: false } }),
     db.courierStatusCode.count({
       where: { provider: X_EXPRESS_PROVIDER, active: true },
     }),
@@ -301,7 +301,7 @@ export default async function DeliveryPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardTitle
-              description={`${xLocations} adresa · ${xStatuses} statusa u lokalnom kešu`}
+              description={`${xTowns} mesta · ${xStreets} ulica · ${xStatuses} statusa u lokalnom kešu`}
             >
               X Express šifarnici
             </CardTitle>

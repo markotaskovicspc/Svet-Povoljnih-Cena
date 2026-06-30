@@ -12,7 +12,38 @@ export function inferXExpressShipmentStatus(
   code: string | null | undefined,
   label: string | null | undefined,
 ): ShipmentStatus {
-  const joined = `${code ?? ""} ${label ?? ""}`;
+  const normalizedCode = String(code ?? "").trim().toUpperCase();
+  if (
+    normalizedCode === "CREATED" ||
+    normalizedCode === "REGISTERED" ||
+    normalizedCode === "ANNOUNCED"
+  ) {
+    return "CREATED";
+  }
+  if (normalizedCode === "PICKEDUP" || normalizedCode === "PICKED_UP") {
+    return "PICKED_UP";
+  }
+  if (normalizedCode === "DLV_ASSIGNED" || normalizedCode === "OUT_FOR_DELIVERY") {
+    return "OUT_FOR_DELIVERY";
+  }
+  if (normalizedCode === "DELIVERED") return "DELIVERED";
+  if (
+    normalizedCode === "RETURNED" ||
+    normalizedCode === "REFUSED" ||
+    normalizedCode === "REVERSE_DELIVERY"
+  ) {
+    return "RETURNED";
+  }
+  if (
+    normalizedCode.startsWith("PCK_FAIL") ||
+    normalizedCode.startsWith("DLV_FAIL") ||
+    normalizedCode.includes("CANCELED") ||
+    normalizedCode.includes("CANCELLED")
+  ) {
+    return "FAILED";
+  }
+
+  const joined = `${normalizedCode} ${label ?? ""}`;
   const text = normalize(joined);
 
   if (/(isporuc|delivered|urucen)/.test(text)) return "DELIVERED";

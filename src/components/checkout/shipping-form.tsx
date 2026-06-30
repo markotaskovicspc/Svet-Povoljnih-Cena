@@ -1,17 +1,25 @@
 "use client";
 
+import { useEffect, useId, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { CheckoutFormData } from "./checkout-flow";
-import { CityAutocomplete } from "@/components/forms/city-autocomplete";
+import {
+  CityAutocomplete,
+  type CityAutocompletePlace,
+} from "@/components/forms/city-autocomplete";
 
 /**
  * Step 2 — Shipping data.
  * Lice toggle (Fizičko / Pravno), required fields with mask-friendly phone,
  * optional second billing address that animates open/closed.
  */
-export function ShippingForm() {
+export function ShippingForm({
+  xExpressAddressEnabled = false,
+}: {
+  xExpressAddressEnabled?: boolean;
+}) {
   const {
     register,
     watch,
@@ -68,6 +76,7 @@ export function ShippingForm() {
         setValue={setValue}
         watch={watch}
         errors={errors}
+        xExpressAddressEnabled={xExpressAddressEnabled}
       />
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
@@ -101,6 +110,7 @@ export function ShippingForm() {
                 setValue={setValue}
                 watch={watch}
                 errors={errors}
+                xExpressAddressEnabled={false}
               />
             </div>
           </motion.div>
@@ -118,6 +128,7 @@ interface AddressFieldsetProps {
   setValue: ReturnType<typeof useFormContext<CheckoutFormData>>["setValue"];
   watch: ReturnType<typeof useFormContext<CheckoutFormData>>["watch"];
   errors: ReturnType<typeof useFormContext<CheckoutFormData>>["formState"]["errors"];
+  xExpressAddressEnabled: boolean;
 }
 
 function AddressFieldset({
@@ -128,6 +139,7 @@ function AddressFieldset({
   setValue,
   watch,
   errors,
+  xExpressAddressEnabled,
 }: AddressFieldsetProps) {
   const errAt = (path: string): string | undefined => {
     const seg = path.split(".");
@@ -215,16 +227,54 @@ function AddressFieldset({
           },
         })}
       />
-      <Field
-        label="Adresa"
-        required
-        className="sm:col-span-2"
-        error={showError("street")}
-        {...register(`${prefix}.street` as const, {
-          required: "Obavezno polje",
-          minLength: { value: 3, message: "Adresa je prekratka" },
-        })}
-      />
+      {xExpressAddressEnabled ? (
+        <>
+          <XExpressStreetAutocomplete
+            className="order-2 sm:col-span-2"
+            townId={watch(`${prefix}.xExpressTownId` as const) ?? null}
+            value={watch(`${prefix}.street` as const) ?? ""}
+            error={showError("street")}
+            onValueChange={(value) => {
+              setValue(`${prefix}.street` as const, value, {
+                shouldDirty: true,
+                shouldValidate: showSubmitErrors,
+              });
+              setValue(`${prefix}.xExpressStreetId` as const, null, {
+                shouldDirty: true,
+                shouldValidate: false,
+              });
+            }}
+            onSelect={(street) => {
+              setValue(`${prefix}.street` as const, street.name, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+              setValue(`${prefix}.xExpressStreetId` as const, street.id, {
+                shouldDirty: true,
+                shouldValidate: false,
+              });
+            }}
+          />
+          <input
+            type="hidden"
+            {...register(`${prefix}.street` as const, {
+              required: "Obavezno polje",
+              minLength: { value: 3, message: "Adresa je prekratka" },
+            })}
+          />
+        </>
+      ) : (
+        <Field
+          label="Adresa"
+          required
+          className="sm:col-span-2"
+          error={showError("street")}
+          {...register(`${prefix}.street` as const, {
+            required: "Obavezno polje",
+            minLength: { value: 3, message: "Adresa je prekratka" },
+          })}
+        />
+      )}
       {/*
        * City + postal-code linked autocomplete (spec §32–35):
        * after ≥3 chars the user sees a list of Serbian places + postal
@@ -234,16 +284,29 @@ function AddressFieldset({
        * just override the input via `setValue` on selection.
        */}
       <CityAutocomplete
+        className={xExpressAddressEnabled ? "order-1" : undefined}
         required
         value={watch(`${prefix}.city` as const) ?? ""}
         error={showError("city")}
-        onValueChange={(v) =>
+        strictRemote={xExpressAddressEnabled}
+        minChars={xExpressAddressEnabled ? 2 : 3}
+        onValueChange={(v) => {
           setValue(`${prefix}.city` as const, v, {
             shouldDirty: true,
             shouldValidate: showSubmitErrors,
-          })
-        }
-        onSelect={(place) => {
+          });
+          if (xExpressAddressEnabled) {
+            setValue(`${prefix}.xExpressTownId` as const, null, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+            setValue(`${prefix}.xExpressStreetId` as const, null, {
+              shouldDirty: true,
+              shouldValidate: false,
+            });
+          }
+        }}
+        onSelect={(place: CityAutocompletePlace) => {
           setValue(`${prefix}.city` as const, place.name, {
             shouldDirty: true,
             shouldValidate: true,
@@ -252,6 +315,16 @@ function AddressFieldset({
             shouldDirty: true,
             shouldValidate: true,
           });
+          if (xExpressAddressEnabled) {
+            setValue(`${prefix}.xExpressTownId` as const, place.townId ?? null, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+            setValue(`${prefix}.xExpressStreetId` as const, null, {
+              shouldDirty: true,
+              shouldValidate: false,
+            });
+          }
         }}
       />
       {/* Hidden `register` keeps the city field in the form schema so
@@ -262,9 +335,26 @@ function AddressFieldset({
           required: "Obavezno polje",
         })}
       />
+      <input
+        type="hidden"
+        {...register(`${prefix}.xExpressTownId` as const, {
+          valueAsNumber: true,
+          validate: (value) =>
+            !xExpressAddressEnabled ||
+            (Number.isInteger(Number(value)) && Number(value) > 0) ||
+            "Izaberite mesto iz liste",
+        })}
+      />
+      <input
+        type="hidden"
+        {...register(`${prefix}.xExpressStreetId` as const, {
+          valueAsNumber: true,
+        })}
+      />
       <Field
         label="Poštanski broj"
         required
+        className={xExpressAddressEnabled ? "order-3" : undefined}
         placeholder="11000"
         inputMode="numeric"
         error={showError("postalCode")}
@@ -274,6 +364,132 @@ function AddressFieldset({
         })}
       />
     </div>
+  );
+}
+
+type XExpressStreetSuggestion = {
+  id: number;
+  streetId?: number | null;
+  name: string;
+  simpleName?: string | null;
+  official: boolean;
+};
+
+function XExpressStreetAutocomplete({
+  townId,
+  value,
+  onValueChange,
+  onSelect,
+  error,
+  className,
+}: {
+  townId: number | null;
+  value: string;
+  onValueChange: (value: string) => void;
+  onSelect: (street: XExpressStreetSuggestion) => void;
+  error?: string;
+  className?: string;
+}) {
+  const id = useId();
+  const inputId = `street-${id}`;
+  const listboxId = `${inputId}-listbox`;
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<{
+    key: string;
+    items: XExpressStreetSuggestion[];
+  }>({ key: "", items: [] });
+  const query = value.trim();
+  const resultKey = townId && query.length >= 2 ? `${townId}:${query}` : "";
+
+  useEffect(() => {
+    if (!townId || query.length < 2) {
+      return;
+    }
+    const controller = new AbortController();
+    const key = `${townId}:${query}`;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/x-express/streets?townId=${townId}&q=${encodeURIComponent(query)}&limit=8`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as { items?: XExpressStreetSuggestion[] };
+        setResult({ key, items: json.items ?? [] });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setResult({ key, items: [] });
+      }
+    }, 180);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [query, townId]);
+
+  const items = result.key === resultKey ? result.items : [];
+  const showPanel = open && items.length > 0 && Boolean(resultKey);
+
+  return (
+    <label className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)} htmlFor={inputId}>
+      <span className="text-xs font-medium text-ink-700">
+        Adresa<span className="text-action ml-0.5">*</span>
+      </span>
+      <input
+        id={inputId}
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onValueChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        autoComplete="street-address"
+        role="combobox"
+        aria-expanded={showPanel}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? `${inputId}-err` : undefined}
+        placeholder={townId ? "Ulica i broj" : "Prvo izaberite mesto"}
+        className={cn(
+          "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 w-full rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm lg:h-10",
+          "focus-visible:ring-2 focus-visible:outline-none",
+          error && "ring-action/60 focus-visible:ring-action/40",
+        )}
+      />
+      {showPanel ? (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="absolute top-[calc(100%+6px)] right-0 left-0 z-30 max-h-[260px] overflow-y-auto rounded-2xl border border-border bg-surface py-1 shadow-soft-4"
+        >
+          {items.map((street) => (
+            <li key={street.id} role="option" aria-selected={false}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(street);
+                  setOpen(false);
+                }}
+                className="hover:bg-muted-bg/60 flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-ink-700 transition"
+              >
+                <span className="truncate">{street.name}</span>
+                {street.official ? (
+                  <span className="text-[11px] font-medium text-ink-500">službena</span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {error ? (
+        <span id={`${inputId}-err`} className="text-action text-[11px]">
+          {error}
+        </span>
+      ) : null}
+    </label>
   );
 }
 

@@ -14,7 +14,10 @@ import type {
   XExpressCreateOrderPayload,
   XExpressCreateOrderResponse,
   XExpressLocationCode,
+  XExpressMunicipality,
   XExpressStatusCode,
+  XExpressStreet,
+  XExpressTown,
   XExpressTrackingEvent,
 } from "./types";
 
@@ -27,9 +30,35 @@ export class XExpressClient {
   ) {}
 
   async fetchLocationCodes(): Promise<XExpressLocationCode[]> {
-    const path = requireXExpressPath(this.cfg, "locations");
+    return this.fetchTowns().then((towns) =>
+      towns.map((town) => ({
+        code: String(town.id),
+        name: town.displayName ?? town.name,
+        postalCode: town.postalCode ?? null,
+        municipality: town.municipalityId ? String(town.municipalityId) : null,
+        city: town.name,
+        settlement: town.name,
+        raw: town.raw,
+      })),
+    );
+  }
+
+  async fetchMunicipalities(): Promise<XExpressMunicipality[]> {
+    const path = requireXExpressPath(this.cfg, "municipalities");
     const raw = await this.request("GET", path);
-    return unwrapList(raw, ["locations", "places", "items", "data"]).map(parseLocation);
+    return unwrapList(raw, ["municipalities", "items", "data"]).map(parseMunicipality);
+  }
+
+  async fetchTowns(): Promise<XExpressTown[]> {
+    const path = requireXExpressPath(this.cfg, "towns");
+    const raw = await this.request("GET", path);
+    return unwrapList(raw, ["towns", "items", "data"]).map(parseTown);
+  }
+
+  async fetchStreets(): Promise<XExpressStreet[]> {
+    const path = requireXExpressPath(this.cfg, "streets");
+    const raw = await this.request("GET", path);
+    return unwrapList(raw, ["streets", "items", "data"]).map(parseStreet);
   }
 
   async fetchStatusCodes(): Promise<XExpressStatusCode[]> {
@@ -193,49 +222,148 @@ function pickString(record: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
-function parseLocation(value: unknown): XExpressLocationCode {
+function pickNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isInteger(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function pickBoolean(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string" && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes"].includes(normalized)) return true;
+      if (["false", "0", "no"].includes(normalized)) return false;
+    }
+  }
+  return null;
+}
+
+export function parseXExpressMunicipality(value: unknown): XExpressMunicipality {
+  return parseMunicipality(value);
+}
+
+export function parseXExpressTown(value: unknown): XExpressTown {
+  return parseTown(value);
+}
+
+export function parseXExpressStreet(value: unknown): XExpressStreet {
+  return parseStreet(value);
+}
+
+export function parseXExpressStatus(value: unknown): XExpressStatusCode {
+  return parseStatus(value);
+}
+
+function parseMunicipality(value: unknown): XExpressMunicipality {
   const record = unwrapRecord(value);
-  const code = pickString(record, [
-    "code",
-    "id",
-    "locationCode",
-    "placeCode",
-    "addressCode",
-    "sifra",
-  ]);
-  const name = pickString(record, [
-    "name",
-    "label",
-    "city",
-    "place",
-    "settlement",
-    "naziv",
-  ]);
-  if (!code || !name) {
-    throw new XExpressProviderError("X Express šifarnik adresa nema code/name.", undefined, value);
+  const id = pickNumber(record, ["id", "ID"]);
+  const name = pickString(record, ["name", "Name"]);
+  if (id == null || !name) {
+    throw new XExpressProviderError(
+      "X Express šifarnik opština nema id/name.",
+      undefined,
+      value,
+    );
   }
   return {
-    code,
+    id,
     name,
-    postalCode: pickString(record, ["postalCode", "zip", "postcode", "posta"]),
-    municipality: pickString(record, ["municipality", "opstina"]),
-    city: pickString(record, ["city", "grad"]),
-    settlement: pickString(record, ["settlement", "place", "naselje"]),
+    postalCode: pickString(record, ["postalCode", "PostalCode"]),
+    priority: pickNumber(record, ["priority", "Priority"]),
+    raw: value,
+  };
+}
+
+function parseTown(value: unknown): XExpressTown {
+  const record = unwrapRecord(value);
+  const id = pickNumber(record, ["id", "ID"]);
+  const name = pickString(record, ["name", "Name"]);
+  const municipalityId = pickNumber(record, ["municipalityId", "MunicipalityId"]);
+  if (id == null || !name) {
+    throw new XExpressProviderError(
+      "X Express šifarnik mesta nema id/name.",
+      undefined,
+      value,
+    );
+  }
+  return {
+    id,
+    name,
+    displayName: pickString(record, ["displayName", "DisplayName"]),
+    municipalityId,
+    postalCode: pickString(record, ["postalCode", "PostalCode"]),
+    priority: pickNumber(record, ["priority", "Priority"]),
+    cutOffPickupTime:
+      pickString(record, [
+        "cutOffPickupTime",
+        "CutOffPickupTime",
+        "cutoffPickupTime",
+      ]) ?? null,
+    raw: value,
+  };
+}
+
+function parseStreet(value: unknown): XExpressStreet {
+  const record = unwrapRecord(value);
+  const id = pickNumber(record, ["id", "ID"]);
+  const name = pickString(record, ["name", "Name"]);
+  const townId = pickNumber(record, ["townId", "TownId"]);
+  if (id == null || !name || townId == null) {
+    throw new XExpressProviderError(
+      "X Express šifarnik ulica nema id/name/townId.",
+      undefined,
+      value,
+    );
+  }
+  return {
+    id,
+    streetId: pickNumber(record, ["streetId", "StreetId"]),
+    name,
+    simpleName: pickString(record, ["simpleName", "SimpleName"]),
+    townId,
+    official: pickBoolean(record, ["official", "Official"]) ?? false,
+    deleted: pickBoolean(record, ["deleted", "Deleted"]) ?? false,
     raw: value,
   };
 }
 
 function parseStatus(value: unknown): XExpressStatusCode {
   const record = unwrapRecord(value);
-  const code = pickString(record, ["code", "id", "statusCode", "status", "sifra"]);
-  const label = pickString(record, ["label", "name", "description", "message", "naziv"]);
+  const code = pickString(record, [
+    "alphaId",
+    "ID",
+    "id",
+    "code",
+    "statusCode",
+    "status",
+    "sifra",
+  ]);
+  const label = pickString(record, [
+    "Name",
+    "name",
+    "label",
+    "description",
+    "message",
+    "naziv",
+  ]);
   if (!code || !label) {
     throw new XExpressProviderError("X Express šifarnik statusa nema code/label.", undefined, value);
   }
+  const labelEn = pickString(record, ["NameEn", "nameEn", "labelEn"]);
   const shipmentStatus = inferXExpressShipmentStatus(code, label);
   return {
     code,
     label,
+    labelEn,
     shipmentStatus,
     orderStatus: orderStatusForXExpressStatus(shipmentStatus),
     raw: value,

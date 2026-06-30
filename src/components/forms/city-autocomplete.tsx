@@ -20,7 +20,12 @@ import {
   type SerbianPlace,
 } from "@/data/serbian-places";
 
-type RemotePlace = SerbianPlace & { code?: string };
+export type CityAutocompletePlace = SerbianPlace & {
+  code?: string;
+  townId?: number;
+  municipalityId?: number | null;
+  displayName?: string | null;
+};
 
 interface CityAutocompleteProps {
   /** Currently typed city value (controlled). */
@@ -31,7 +36,7 @@ interface CityAutocompleteProps {
    * Called when the user picks a suggestion. The form should use this to
    * also update the postal-code field.
    */
-  onSelect: (place: SerbianPlace) => void;
+  onSelect: (place: CityAutocompletePlace) => void;
   /** Field-level error from react-hook-form. */
   error?: string;
   /** Visual label above the input. */
@@ -40,6 +45,7 @@ interface CityAutocompleteProps {
   required?: boolean;
   /** Minimum chars before suggestions appear (spec: 3). */
   minChars?: number;
+  strictRemote?: boolean;
   /** Native input id (used for label `htmlFor`). */
   id?: string;
   className?: string;
@@ -53,6 +59,7 @@ export function CityAutocomplete({
   label = "Grad / mesto",
   required,
   minChars = 3,
+  strictRemote = false,
   id,
   className,
 }: CityAutocompleteProps) {
@@ -64,17 +71,20 @@ export function CityAutocomplete({
   const [active, setActive] = useState(0);
   const [remoteSuggestions, setRemoteSuggestions] = useState<{
     query: string;
-    items: RemotePlace[];
+    items: CityAutocompletePlace[];
   }>({ query: "", items: [] });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const suggestions = useMemo(() => {
+  const suggestions = useMemo<CityAutocompletePlace[]>(() => {
     const q = value.trim();
     if (q.length < minChars) return [];
+    if (strictRemote) {
+      return remoteSuggestions.query === q ? remoteSuggestions.items : [];
+    }
     return remoteSuggestions.query === q && remoteSuggestions.items.length
       ? remoteSuggestions.items
       : searchSerbianPlaces(value, 8);
-  }, [remoteSuggestions, value, minChars]);
+  }, [remoteSuggestions, strictRemote, value, minChars]);
 
   useEffect(() => {
     const q = value.trim();
@@ -89,7 +99,7 @@ export function CityAutocomplete({
           { signal: controller.signal },
         );
         if (!res.ok) return;
-        const json = (await res.json()) as { items?: RemotePlace[] };
+        const json = (await res.json()) as { items?: CityAutocompletePlace[] };
         setRemoteSuggestions({
           query: q,
           items: (json.items ?? []).filter((item) => item.name && item.postalCode),
@@ -115,7 +125,7 @@ export function CityAutocomplete({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const pick = (place: SerbianPlace) => {
+  const pick = (place: CityAutocompletePlace) => {
     onValueChange(place.name);
     onSelect(place);
     setOpen(false);
@@ -219,7 +229,7 @@ export function CityAutocomplete({
                       : "text-ink-700 hover:bg-muted-bg/60",
                   )}
                 >
-                  <span className="truncate">{place.name}</span>
+                  <span className="truncate">{place.displayName ?? place.name}</span>
                   <span className="font-mono text-[11px] text-ink-500">
                     {place.postalCode}
                   </span>

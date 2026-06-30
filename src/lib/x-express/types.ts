@@ -10,9 +10,40 @@ export interface XExpressLocationCode {
   raw: unknown;
 }
 
+export interface XExpressMunicipality {
+  id: number;
+  name: string;
+  postalCode?: string | null;
+  priority?: number | null;
+  raw: unknown;
+}
+
+export interface XExpressTown {
+  id: number;
+  name: string;
+  displayName?: string | null;
+  municipalityId?: number | null;
+  postalCode?: string | null;
+  priority?: number | null;
+  cutOffPickupTime?: string | null;
+  raw: unknown;
+}
+
+export interface XExpressStreet {
+  id: number;
+  streetId?: number | null;
+  name: string;
+  simpleName?: string | null;
+  townId: number;
+  official: boolean;
+  deleted: boolean;
+  raw: unknown;
+}
+
 export interface XExpressStatusCode {
   code: string;
   label: string;
+  labelEn?: string | null;
   shipmentStatus: ShipmentStatus;
   orderStatus: OrderStatus | null;
   raw: unknown;
@@ -66,4 +97,14 @@ export interface XExpressTrackingEvent {
   occurredAt?: Date;
   providerEventId?: string | null;
   raw: unknown;
+}
+
+export interface XExpressNotifyData {
+  ContractId: string;
+  NotifyId: string;
+  OrderCode?: string | null;
+  ReferenceId: string;
+  ReferenceGuid?: string | null;
+  Status: string;
+  StatusTime: string;
 }

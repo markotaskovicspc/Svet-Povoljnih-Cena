@@ -43,6 +43,8 @@ function addressInputFromForm(formData: FormData): AddressInput | null {
     street: requiredText(formData.get("street")),
     city: requiredText(formData.get("city")),
     postalCode: requiredText(formData.get("postalCode")),
+    xExpressTownId: optionalNumber(formData.get("xExpressTownId")),
+    xExpressStreetId: optionalNumber(formData.get("xExpressStreetId")),
     country: "RS",
     companyName: optionalText(formData.get("companyName")),
     pib: optionalText(formData.get("pib")),
@@ -52,6 +54,13 @@ function addressInputFromForm(formData: FormData): AddressInput | null {
   });
 
   return parsed.success ? parsed.data : null;
+}
+
+function optionalNumber(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  const parsed = Number(text);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 async function createAddressAction(formData: FormData) {
@@ -92,6 +101,8 @@ async function setDefaultAddressAction(formData: FormData) {
     street: existing.street,
     city: existing.city,
     postalCode: existing.postalCode,
+    xExpressTownId: existing.xExpressTownId ?? undefined,
+    xExpressStreetId: existing.xExpressStreetId ?? undefined,
     country: existing.country,
     companyName: existing.companyName ?? undefined,
     pib: existing.pib ?? undefined,

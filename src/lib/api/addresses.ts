@@ -16,6 +16,8 @@ export const addressSchema = z.object({
   street: z.string().trim().min(3).max(200),
   city: z.string().trim().min(2).max(80),
   postalCode: z.string().trim().regex(/^\d{5}$/),
+  xExpressTownId: z.coerce.number().int().positive().optional().nullable(),
+  xExpressStreetId: z.coerce.number().int().positive().optional().nullable(),
   country: z.string().trim().length(2).default("RS"),
   companyName: z.string().trim().max(120).optional(),
   pib: z.string().trim().regex(/^\d{9}$/).optional(),

@@ -19,14 +19,18 @@ export interface XExpressConfig {
   baseUrl: string;
   apiUser: string;
   apiKey: string;
+  webhookApiKey: string;
   contractCode: string;
   codePrefix: string;
   codeRangeStart: number | null;
   codeRangeEnd: number | null;
   statusCronSecret: string;
   paths: {
-    locations: string;
+    municipalities: string;
+    towns: string;
+    streets: string;
     statuses: string;
+    checkAddress: string;
     createOrder: string;
     status: string;
   };
@@ -51,17 +55,28 @@ export function getXExpressConfig(): XExpressConfig {
   return {
     enabled: bool(process.env.X_EXPRESS_ENABLED),
     autoCreate: bool(process.env.X_EXPRESS_AUTO_CREATE),
-    baseUrl: trim(process.env.X_EXPRESS_BASE_URL).replace(/\/+$/, ""),
+    baseUrl:
+      trim(process.env.X_EXPRESS_BASE_URL).replace(/\/+$/, "") ||
+      "https://portal.pm.xexpress.rs",
     apiUser: trim(process.env.X_EXPRESS_API_USER),
     apiKey: trim(process.env.X_EXPRESS_API_KEY),
+    webhookApiKey: trim(process.env.X_EXPRESS_WEBHOOK_API_KEY),
     contractCode: trim(process.env.X_EXPRESS_CONTRACT_CODE),
     codePrefix: trim(process.env.X_EXPRESS_CODE_PREFIX) || "AAA",
     codeRangeStart: int(process.env.X_EXPRESS_CODE_RANGE_START),
     codeRangeEnd: int(process.env.X_EXPRESS_CODE_RANGE_END),
     statusCronSecret: trim(process.env.X_EXPRESS_STATUS_CRON_SECRET),
     paths: {
-      locations: trim(process.env.X_EXPRESS_LOCATIONS_PATH),
-      statuses: trim(process.env.X_EXPRESS_STATUSES_PATH),
+      municipalities:
+        trim(process.env.X_EXPRESS_MUNICIPALITIES_PATH) ||
+        trim(process.env.X_EXPRESS_LOCATIONS_PATH) ||
+        "/api/data/municipalities",
+      towns: trim(process.env.X_EXPRESS_TOWNS_PATH) || "/api/data/towns",
+      streets: trim(process.env.X_EXPRESS_STREETS_PATH) || "/api/data/streets",
+      statuses: trim(process.env.X_EXPRESS_STATUSES_PATH) || "/api/data/statuses",
+      checkAddress:
+        trim(process.env.X_EXPRESS_CHECK_ADDRESS_PATH) ||
+        "/api/order/check-address",
       createOrder: trim(process.env.X_EXPRESS_CREATE_ORDER_PATH),
       status: trim(process.env.X_EXPRESS_STATUS_PATH),
     },
@@ -96,10 +111,16 @@ export function requireXExpressPath(
 
 function envPathKey(key: keyof XExpressConfig["paths"]) {
   switch (key) {
-    case "locations":
-      return "LOCATIONS_PATH";
+    case "municipalities":
+      return "MUNICIPALITIES_PATH";
+    case "towns":
+      return "TOWNS_PATH";
+    case "streets":
+      return "STREETS_PATH";
     case "statuses":
       return "STATUSES_PATH";
+    case "checkAddress":
+      return "CHECK_ADDRESS_PATH";
     case "createOrder":
       return "CREATE_ORDER_PATH";
     case "status":

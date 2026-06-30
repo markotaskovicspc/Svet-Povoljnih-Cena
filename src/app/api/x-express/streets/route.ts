@@ -6,38 +6,42 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  const townId = Number(url.searchParams.get("townId"));
   const q = (url.searchParams.get("q") ?? "").trim();
-  if (q.length < 2) return NextResponse.json({ items: [] });
+  if (!Number.isInteger(townId) || townId <= 0 || q.length < 2) {
+    return NextResponse.json({ items: [] });
+  }
 
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8) || 8, 1), 20);
-  const items = await db.xExpressTown.findMany({
+  const normalized = q.toLocaleLowerCase("sr-Latn-RS");
+  const items = await db.xExpressStreet.findMany({
     where: {
+      townId,
       active: true,
+      deleted: false,
       OR: [
         { name: { contains: q, mode: "insensitive" } },
-        { displayName: { contains: q, mode: "insensitive" } },
-        { postalCode: { startsWith: q } },
+        { simpleName: { contains: normalized, mode: "insensitive" } },
       ],
     },
-    orderBy: [{ priority: "asc" }, { name: "asc" }],
+    orderBy: [{ official: "desc" }, { name: "asc" }],
     take: limit,
     select: {
       id: true,
+      streetId: true,
       name: true,
-      displayName: true,
-      postalCode: true,
-      municipalityId: true,
+      simpleName: true,
+      official: true,
     },
   });
 
   return NextResponse.json({
     items: items.map((item) => ({
-      code: String(item.id),
-      townId: item.id,
-      municipalityId: item.municipalityId,
+      id: item.id,
+      streetId: item.streetId,
       name: item.name,
-      displayName: item.displayName ?? item.name,
-      postalCode: item.postalCode ?? "",
+      simpleName: item.simpleName,
+      official: item.official,
     })),
   });
 }

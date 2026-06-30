@@ -50,6 +50,8 @@ const addressSchema = z.object({
   street: z.string().min(3),
   city: z.string().min(2),
   postalCode: z.string().regex(/^\d{5}$/),
+  xExpressTownId: z.coerce.number().int().positive().optional().nullable(),
+  xExpressStreetId: z.coerce.number().int().positive().optional().nullable(),
   country: z.string().default("RS"),
   companyName: z.string().optional(),
   pib: z.string().regex(/^\d{9}$/).optional(),
@@ -104,6 +106,7 @@ export type CreateOrderError =
   | { code: "VOUCHER_INVALID"; reason: string }
   | { code: "GUEST_REQUIRES_EMAIL" }
   | { code: "DELIVERY_POINT_INVALID" }
+  | { code: "DELIVERY_ADDRESS_INVALID" }
   | { code: "PAYMENT_UNAVAILABLE" }
   | { code: "DELIVERY_UNAVAILABLE" };
 
@@ -314,7 +317,41 @@ export async function createOrder(
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : input.billing ?? null;
-  const glsProviderActive = getSmallParcelProvider() === "MYGLS";
+  const smallParcelProvider = getSmallParcelProvider();
+  const glsProviderActive = smallParcelProvider === "MYGLS";
+  const xExpressProviderActive = smallParcelProvider === "X_EXPRESS";
+  const xExpressTown =
+    input.shippingMethod === "KURIR" && xExpressProviderActive
+      ? await db.xExpressTown.findFirst({
+          where: { id: ship.xExpressTownId ?? -1, active: true },
+          select: { id: true, name: true, postalCode: true },
+        })
+      : null;
+  if (input.shippingMethod === "KURIR" && xExpressProviderActive && !xExpressTown) {
+    return { ok: false, error: { code: "DELIVERY_ADDRESS_INVALID" } };
+  }
+  const xExpressStreet =
+    input.shippingMethod === "KURIR" &&
+    xExpressProviderActive &&
+    ship.xExpressStreetId
+      ? await db.xExpressStreet.findFirst({
+          where: {
+            id: ship.xExpressStreetId,
+            townId: xExpressTown?.id ?? -1,
+            active: true,
+            deleted: false,
+          },
+          select: { id: true },
+        })
+      : null;
+  if (
+    input.shippingMethod === "KURIR" &&
+    xExpressProviderActive &&
+    ship.xExpressStreetId &&
+    !xExpressStreet
+  ) {
+    return { ok: false, error: { code: "DELIVERY_ADDRESS_INVALID" } };
+  }
   const glsDeliveryPoint =
     input.shippingMethod === "KURIR" && glsProviderActive && input.glsDeliveryPoint?.code
       ? await db.courierDeliveryPoint.findFirst({
@@ -386,8 +423,10 @@ export async function createOrder(
           shipLastName: ship.lastName,
           shipPhone: ship.phone,
           shipStreet: ship.street,
-          shipCity: ship.city,
-          shipPostalCode: ship.postalCode,
+          shipCity: xExpressTown?.name ?? ship.city,
+          shipPostalCode: xExpressTown?.postalCode ?? ship.postalCode,
+          shipXExpressTownId: xExpressTown?.id ?? null,
+          shipXExpressStreetId: xExpressStreet?.id ?? null,
           shipCountry: ship.country,
           shipCompanyName: ship.companyName ?? null,
           shipPib: ship.pib ?? null,
@@ -402,6 +441,8 @@ export async function createOrder(
           billStreet: bill?.street ?? null,
           billCity: bill?.city ?? null,
           billPostalCode: bill?.postalCode ?? null,
+          billXExpressTownId: bill?.xExpressTownId ?? null,
+          billXExpressStreetId: bill?.xExpressStreetId ?? null,
           billCompanyName: bill?.companyName ?? null,
           billPib: bill?.pib ?? null,
           notes: input.notes ?? null,

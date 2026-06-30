@@ -106,21 +106,23 @@ model VerificationToken {
 }
 
 model Address {
-  id          String   @id @default(cuid())
-  userId      String
-  label       String?
-  firstName   String
-  lastName    String
-  phone       String
-  street      String
-  city        String
-  postalCode  String
-  country     String   @default("RS")
-  companyName String?
-  pib         String?
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String
+  label            String?
+  firstName        String
+  lastName         String
+  phone            String
+  street           String
+  city             String
+  postalCode       String
+  xExpressTownId   Int?
+  xExpressStreetId Int?
+  country          String   @default("RS")
+  companyName      String?
+  pib              String?
+  isDefault        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -336,25 +338,25 @@ model Product {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  categories        ProductCategory[]
-  media             ProductMedia[]
-  pictograms        ProductPictogram[]
-  materials         ProductMaterial[]
-  variants          Variant[]
-  assemblyCities    ProductAssemblyCity[]
-  deliveryRules     DeliveryPriceRule[]
-  recommendedBy     RecommendationRule[]    @relation("RecommendationRuleProducts")
-  orderItems        OrderItem[]
-  purchasePrices    PurchasePrice[]
-  purchaseOrderItems PurchaseOrderItem[]
+  categories          ProductCategory[]
+  media               ProductMedia[]
+  pictograms          ProductPictogram[]
+  materials           ProductMaterial[]
+  variants            Variant[]
+  assemblyCities      ProductAssemblyCity[]
+  deliveryRules       DeliveryPriceRule[]
+  recommendedBy       RecommendationRule[]    @relation("RecommendationRuleProducts")
+  orderItems          OrderItem[]
+  purchasePrices      PurchasePrice[]
+  purchaseOrderItems  PurchaseOrderItem[]
   inboundInvoiceItems InboundInvoiceItem[]
-  wishlistItems     WishlistItem[]
-  backInStockAlerts BackInStockAlert[]
-  onSaleAlerts      OnSaleAlert[]
-  reclamations      Reclamation[]
-  stockSnapshots    SupplierStockSnapshot[]
-  warehouseStocks   WarehouseStock[]
-  stockMovements    StockMovement[]
+  wishlistItems       WishlistItem[]
+  backInStockAlerts   BackInStockAlert[]
+  onSaleAlerts        OnSaleAlert[]
+  reclamations        Reclamation[]
+  stockSnapshots      SupplierStockSnapshot[]
+  warehouseStocks     WarehouseStock[]
+  stockMovements      StockMovement[]
   fiscalDocumentLines FiscalDocumentLine[]
 
   @@index([slug])
@@ -472,7 +474,7 @@ enum BannerPlacement {
 }
 
 model Banner {
-  id           String    @id @default(cuid())
+  id           String          @id @default(cuid())
   title        String
   subtitle     String?
   ctaLabel     String?
@@ -481,11 +483,11 @@ model Banner {
   imageMobile  String?
   startsAt     DateTime?
   endsAt       DateTime?
-  order        Int       @default(0)
-  enabled      Boolean   @default(true)
+  order        Int             @default(0)
+  enabled      Boolean         @default(true)
   placement    BannerPlacement @default(HERO)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   @@index([enabled, placement, order])
 }
@@ -535,22 +537,22 @@ enum ActionKind {
 }
 
 model Action {
-  id        String     @id @default(cuid())
-  slug      String     @unique
-  name      String
-  kind      ActionKind @default(CUSTOM)
-  startsAt  DateTime
-  endsAt    DateTime
-  isHero    Boolean    @default(false)
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  kind        ActionKind @default(CUSTOM)
+  startsAt    DateTime
+  endsAt      DateTime
+  isHero      Boolean    @default(false)
   /// Permanent protected-price campaign ("Trajno niska cena").
-  isPermanent Boolean  @default(false)
+  isPermanent Boolean    @default(false)
   /// Admin-controlled sort order override
-  sortOrder Int        @default(0)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  products Product[]
-  heroes   HeroOfMonth[]
+  products      Product[]
+  heroes        HeroOfMonth[]
   homepageSlots HomeSectionSlot[]
 
   @@index([startsAt, endsAt])
@@ -671,13 +673,13 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products    Product[]
-  purchasePrices PurchasePrice[]
-  purchaseOrders PurchaseOrder[]
+  products        Product[]
+  purchasePrices  PurchasePrice[]
+  purchaseOrders  PurchaseOrder[]
   inboundInvoices InboundInvoice[]
-  importRuns  ImportRun[]
-  snapshots   SupplierStockSnapshot[]
-  safetyRules SafetyStockRule[]
+  importRuns      ImportRun[]
+  snapshots       SupplierStockSnapshot[]
+  safetyRules     SafetyStockRule[]
 }
 
 model SupplierStockSnapshot {
@@ -865,62 +867,66 @@ enum CourierSyncStatus {
 }
 
 model Order {
-  id         String      @id @default(cuid())
+  id                         String      @id @default(cuid())
   /// Human-friendly number e.g. "SPC-2026-001234"
-  number     String      @unique
+  number                     String      @unique
   /// Hash of an opaque guest/public confirmation token.
-  publicAccessTokenHash String? @unique
+  publicAccessTokenHash      String?     @unique
   publicAccessTokenCreatedAt DateTime?
-  userId     String?
-  guestEmail String?
-  status     OrderStatus @default(KREIRANO)
+  userId                     String?
+  guestEmail                 String?
+  status                     OrderStatus @default(KREIRANO)
 
-  subtotal        Decimal  @db.Decimal(12, 2)
-  savings         Decimal  @default(0) @db.Decimal(12, 2)
-  shipping        Decimal  @default(0) @db.Decimal(12, 2)
-  assemblyTotal   Decimal  @default(0) @db.Decimal(12, 2)
-  voucherCode     String?
-  voucherDiscount Decimal? @db.Decimal(12, 2)
+  subtotal              Decimal  @db.Decimal(12, 2)
+  savings               Decimal  @default(0) @db.Decimal(12, 2)
+  shipping              Decimal  @default(0) @db.Decimal(12, 2)
+  assemblyTotal         Decimal  @default(0) @db.Decimal(12, 2)
+  voucherCode           String?
+  voucherDiscount       Decimal? @db.Decimal(12, 2)
   /// First-purchase 5% (Phase 3D pricing engine).
   firstPurchaseDiscount Decimal? @db.Decimal(12, 2)
   /// Saved-card 5% (Phase 3D pricing engine).
   savedCardDiscount     Decimal? @db.Decimal(12, 2)
-  total           Decimal  @db.Decimal(12, 2)
+  total                 Decimal  @db.Decimal(12, 2)
 
   shippingMethod ShippingMethod
   paymentMethod  PaymentMethod
 
   // Snapshot addresses (denormalized so future address edits don't mutate history)
-  shipFirstName         String
-  shipLastName          String
-  shipPhone             String
-  shipStreet            String
-  shipCity              String
-  shipPostalCode        String
-  shipCountry           String  @default("RS")
-  shipCompanyName       String?
-  shipPib               String?
-  glsDeliveryPointId    String?
-  glsDeliveryPointName  String?
-  glsDeliveryPointAddress String?
-  glsDeliveryPointCity  String?
+  shipFirstName              String
+  shipLastName               String
+  shipPhone                  String
+  shipStreet                 String
+  shipCity                   String
+  shipPostalCode             String
+  shipXExpressTownId         Int?
+  shipXExpressStreetId       Int?
+  shipCountry                String  @default("RS")
+  shipCompanyName            String?
+  shipPib                    String?
+  glsDeliveryPointId         String?
+  glsDeliveryPointName       String?
+  glsDeliveryPointAddress    String?
+  glsDeliveryPointCity       String?
   glsDeliveryPointPostalCode String?
-  billingSameAsShipping Boolean @default(true)
-  billFirstName         String?
-  billLastName          String?
-  billStreet            String?
-  billCity              String?
-  billPostalCode        String?
-  billCompanyName       String?
-  billPib               String?
+  billingSameAsShipping      Boolean @default(true)
+  billFirstName              String?
+  billLastName               String?
+  billStreet                 String?
+  billCity                   String?
+  billPostalCode             String?
+  billXExpressTownId         Int?
+  billXExpressStreetId       Int?
+  billCompanyName            String?
+  billPib                    String?
 
-  notes           String?  @db.Text
+  notes           String?   @db.Text
   termsAcceptedAt DateTime
   expiresAt       DateTime?
   stockRestoredAt DateTime?
   cancelledAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   user              User?              @relation(fields: [userId], references: [id])
   items             OrderItem[]
@@ -969,37 +975,37 @@ model CheckoutSession {
 }
 
 model OrderItem {
-  id               String   @id @default(cuid())
-  orderId          String
-  productId        String?
-  sku              String
-  name             String
-  qty              Int
-  unitPriceFull    Decimal  @db.Decimal(12, 2)
-  unitPriceSale    Decimal  @db.Decimal(12, 2)
-  withAssembly     Boolean  @default(false)
-  assemblyPrice    Decimal? @db.Decimal(12, 2)
-  thumbnailUrl     String?
-  supplierName     String?
-  categoryName     String?
-  categoryPath     String?
-  groupName        String?
-  subgroupName     String?
-  collectionName   String?
-  shortDescriptionSnapshot String? @db.Text
-  shortNameSnapshot String?
-  attribute1       String?
-  attribute2       String?
-  attribute3       String?
-  attribute4       String?
-  color1           String?
-  color2           String?
+  id                       String   @id @default(cuid())
+  orderId                  String
+  productId                String?
+  sku                      String
+  name                     String
+  qty                      Int
+  unitPriceFull            Decimal  @db.Decimal(12, 2)
+  unitPriceSale            Decimal  @db.Decimal(12, 2)
+  withAssembly             Boolean  @default(false)
+  assemblyPrice            Decimal? @db.Decimal(12, 2)
+  thumbnailUrl             String?
+  supplierName             String?
+  categoryName             String?
+  categoryPath             String?
+  groupName                String?
+  subgroupName             String?
+  collectionName           String?
+  shortDescriptionSnapshot String?  @db.Text
+  shortNameSnapshot        String?
+  attribute1               String?
+  attribute2               String?
+  attribute3               String?
+  attribute4               String?
+  color1                   String?
+  color2                   String?
   /// Tracks how many times this exact line was reclaimed (for R-{n}-{orderNo})
-  reclamationCount Int      @default(0)
+  reclamationCount         Int      @default(0)
 
-  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id])
-  fiscalLines FiscalDocumentLine[]
+  order          Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product?             @relation(fields: [productId], references: [id])
+  fiscalLines    FiscalDocumentLine[]
   stockMovements StockMovement[]
 
   @@index([orderId])
@@ -1021,23 +1027,23 @@ model OrderStatusEvent {
 }
 
 model Payment {
-  id          String        @id @default(cuid())
-  orderId     String
-  method      PaymentMethod
-  provider    PaymentProvider @default(MANUAL)
-  status      PaymentStatus @default(PENDING)
-  amount      Decimal       @db.Decimal(12, 2)
-  currency    String        @default("RSD")
+  id               String          @id @default(cuid())
+  orderId          String
+  method           PaymentMethod
+  provider         PaymentProvider @default(MANUAL)
+  status           PaymentStatus   @default(PENDING)
+  amount           Decimal         @db.Decimal(12, 2)
+  currency         String          @default("RSD")
   /// External provider reference (WSPay approval, IPS transaction id, etc.)
-  providerRef String?
+  providerRef      String?
   paymentReference String?
-  redirectUrl  String?       @db.Text
-  rawRequest   Json?
-  rawResponse Json?
-  paidAt      DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  redirectUrl      String?         @db.Text
+  rawRequest       Json?
+  rawResponse      Json?
+  paidAt           DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -1048,28 +1054,31 @@ model Payment {
 }
 
 model Shipment {
-  id                 String          @id @default(cuid())
-  orderId            String
-  service            ShipmentService
-  provider           String?
-  providerOrderId    String?
-  providerShipmentId String?
-  trackingNo         String?
-  labelUrl           String?
-  status             ShipmentStatus  @default(CREATED)
-  providerStatusCode String?
-  providerParcelId   String?
-  providerParcelIds  Json?
+  id                    String          @id @default(cuid())
+  orderId               String
+  service               ShipmentService
+  provider              String?
+  providerOrderId       String?
+  providerShipmentId    String?
+  trackingNo            String?
+  packageCount          Int             @default(1)
+  labelUrl              String?
+  status                ShipmentStatus  @default(CREATED)
+  providerStatusCode    String?
+  providerRouteCode     String?
+  providerRouteName     String?
+  providerParcelId      String?
+  providerParcelIds     Json?
   providerParcelNumbers Json?
-  lastStatusSyncAt   DateTime?
-  rawCreateResponse  Json?
-  syncError          String?         @db.Text
-  labelObjectKey     String?
-  labelMimeType      String?
-  shippedAt          DateTime?
-  deliveredAt        DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  lastStatusSyncAt      DateTime?
+  rawCreateResponse     Json?
+  syncError             String?         @db.Text
+  labelObjectKey        String?
+  labelMimeType         String?
+  shippedAt             DateTime?
+  deliveredAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   events ShipmentEvent[]
@@ -1158,15 +1167,70 @@ model CourierStatusCode {
   @@index([shipmentStatus])
 }
 
+model XExpressMunicipality {
+  id         Int      @id
+  name       String
+  postalCode String?
+  priority   Int?
+  active     Boolean  @default(true)
+  raw        Json?
+  syncedAt   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  towns XExpressTown[]
+
+  @@index([active, name])
+}
+
+model XExpressTown {
+  id               Int      @id
+  name             String
+  displayName      String?
+  municipalityId   Int?
+  postalCode       String?
+  priority         Int?
+  cutOffPickupTime String?
+  active           Boolean  @default(true)
+  raw              Json?
+  syncedAt         DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  municipality XExpressMunicipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  streets      XExpressStreet[]
+
+  @@index([active, name])
+  @@index([postalCode])
+  @@index([municipalityId])
+}
+
+model XExpressStreet {
+  id         Int      @id
+  streetId   Int?
+  name       String
+  simpleName String?
+  townId     Int
+  official   Boolean  @default(false)
+  deleted    Boolean  @default(false)
+  active     Boolean  @default(true)
+  raw        Json?
+  syncedAt   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  town XExpressTown @relation(fields: [townId], references: [id], onDelete: Cascade)
+
+  @@index([townId, active, simpleName])
+  @@index([streetId])
+}
+
 model CourierMasterDataCursor {
-  id           String   @id @default(cuid())
-  provider     String   @default("MYGLS")
+  id           String    @id @default(cuid())
+  provider     String    @default("MYGLS")
   kind         String
   cursor       String?
   etag         String?
   lastSyncedAt DateTime?
   raw          Json?
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
 
   @@unique([provider, kind])
   @@index([provider, updatedAt])
@@ -1200,6 +1264,28 @@ model CourierCodeSequence {
   updatedAt  DateTime @updatedAt
 
   @@unique([provider, prefix])
+}
+
+model XExpressWebhookEvent {
+  id            String    @id @default(cuid())
+  notifyId      String    @unique
+  contractId    String
+  orderCode     String?
+  referenceId   String
+  referenceGuid String?
+  statusCode    String
+  statusTime    DateTime
+  raw           Json
+  orderId       String?
+  shipmentId    String?
+  processedAt   DateTime?
+  processError  String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([referenceId])
+  @@index([statusCode])
+  @@index([processedAt])
 }
 
 enum InvoiceKind {
@@ -1320,51 +1406,51 @@ model FiscalDocument {
 }
 
 model FiscalDocumentLine {
-  id               String   @id @default(cuid())
-  fiscalDocumentId String
-  orderItemId      String
-  productId        String?
+  id                 String   @id @default(cuid())
+  fiscalDocumentId   String
+  orderItemId        String
+  productId          String?
   originalSaleLineId String?
-  priceList        String   @default("MP")
-  orderNumber      String
-  customerName     String
-  companyName      String?
-  pib              String?
-  address          String
-  city             String
-  postalCode       String
-  phone            String
-  email            String?
-  sku              String
-  supplierName     String?
-  categoryName     String?
-  categoryPath     String?
-  groupName        String?
-  subgroupName     String?
-  collectionName   String?
-  shortDescription String?  @db.Text
-  shortName        String
-  attribute1       String?
-  attribute2       String?
-  attribute3       String?
-  attribute4       String?
-  color1           String?
-  color2           String?
-  warehouseName    String?
-  qty              Int
-  refundedQty      Int      @default(0)
-  vatRate          Decimal  @default(20) @db.Decimal(5, 2)
-  unitPriceGross   Decimal  @db.Decimal(12, 2)
-  totalNet         Decimal  @db.Decimal(12, 2)
-  totalVat         Decimal  @db.Decimal(12, 2)
-  totalGross       Decimal  @db.Decimal(12, 2)
-  createdAt        DateTime @default(now())
+  priceList          String   @default("MP")
+  orderNumber        String
+  customerName       String
+  companyName        String?
+  pib                String?
+  address            String
+  city               String
+  postalCode         String
+  phone              String
+  email              String?
+  sku                String
+  supplierName       String?
+  categoryName       String?
+  categoryPath       String?
+  groupName          String?
+  subgroupName       String?
+  collectionName     String?
+  shortDescription   String?  @db.Text
+  shortName          String
+  attribute1         String?
+  attribute2         String?
+  attribute3         String?
+  attribute4         String?
+  color1             String?
+  color2             String?
+  warehouseName      String?
+  qty                Int
+  refundedQty        Int      @default(0)
+  vatRate            Decimal  @default(20) @db.Decimal(5, 2)
+  unitPriceGross     Decimal  @db.Decimal(12, 2)
+  totalNet           Decimal  @db.Decimal(12, 2)
+  totalVat           Decimal  @db.Decimal(12, 2)
+  totalGross         Decimal  @db.Decimal(12, 2)
+  createdAt          DateTime @default(now())
 
-  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Cascade)
-  orderItem      OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  product        Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
-  originalSaleLine FiscalDocumentLine? @relation("FiscalLineRefunds", fields: [originalSaleLineId], references: [id], onDelete: SetNull)
-  refundLines    FiscalDocumentLine[] @relation("FiscalLineRefunds")
+  fiscalDocument   FiscalDocument       @relation(fields: [fiscalDocumentId], references: [id], onDelete: Cascade)
+  orderItem        OrderItem            @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product          Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  originalSaleLine FiscalDocumentLine?  @relation("FiscalLineRefunds", fields: [originalSaleLineId], references: [id], onDelete: SetNull)
+  refundLines      FiscalDocumentLine[] @relation("FiscalLineRefunds")
 
   @@index([fiscalDocumentId])
   @@index([orderItemId])
@@ -1435,8 +1521,8 @@ model PaymentRefund {
   orderId          String
   fiscalDocumentId String?
   method           PaymentMethod
-  provider         PaymentProvider      @default(MANUAL)
-  status           PaymentRefundStatus  @default(PENDING)
+  provider         PaymentProvider     @default(MANUAL)
+  status           PaymentRefundStatus @default(PENDING)
   amount           Decimal             @db.Decimal(12, 2)
   currency         String              @default("RSD")
   providerRef      String?
@@ -1494,20 +1580,20 @@ enum CogsStatus {
 }
 
 model PurchasePrice {
-  id        String      @id @default(cuid())
-  productId String?
+  id         String      @id @default(cuid())
+  productId  String?
   supplierId String?
-  sku       String
-  name      String?
+  sku        String
+  name       String?
   attributes String?
-  pattern   String?
-  price     Decimal     @db.Decimal(12, 2)
-  currency  ErpCurrency @default(RSD)
-  parity    String?
-  validFrom DateTime
-  validTo   DateTime?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  pattern    String?
+  price      Decimal     @db.Decimal(12, 2)
+  currency   ErpCurrency @default(RSD)
+  parity     String?
+  validFrom  DateTime
+  validTo    DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   product  Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -1537,7 +1623,7 @@ model PurchaseOrder {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplier Supplier?                  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   items    PurchaseOrderItem[]
   events   PurchaseOrderStatusEvent[]
 
@@ -1546,27 +1632,27 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(cuid())
+  id              String      @id @default(cuid())
   purchaseOrderId String
   productId       String?
   sku             String
   name            String
   attributes      String?
   pattern         String?
-  purchasePrice   Decimal       @db.Decimal(12, 2)
-  currency        ErpCurrency   @default(RSD)
+  purchasePrice   Decimal     @db.Decimal(12, 2)
+  currency        ErpCurrency @default(RSD)
   parity          String?
   moq             Int?
   packQty         Int?
   qty             Int
-  receivedQty     Int           @default(0)
-  totalVolume     Decimal?      @db.Decimal(12, 3)
-  totalWeight     Decimal?      @db.Decimal(12, 3)
-  customsRate     Decimal?      @db.Decimal(8, 2)
-  calcRetailPrice Decimal?      @db.Decimal(12, 2)
-  bmPct           Decimal?      @db.Decimal(8, 2)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  receivedQty     Int         @default(0)
+  totalVolume     Decimal?    @db.Decimal(12, 3)
+  totalWeight     Decimal?    @db.Decimal(12, 3)
+  customsRate     Decimal?    @db.Decimal(8, 2)
+  calcRetailPrice Decimal?    @db.Decimal(12, 2)
+  bmPct           Decimal?    @db.Decimal(8, 2)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1603,7 +1689,7 @@ model InboundInvoice {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplier Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   items    InboundInvoiceItem[]
 
   @@index([supplierId, invoiceDate])
@@ -1880,9 +1966,9 @@ model AuditLog {
 /// `PaymentMethod` enum values; admin flips `enabled` to hide a method from
 /// the customer payment step without code changes.
 model PaymentMethodConfig {
-  method  PaymentMethod @id
-  enabled Boolean       @default(true)
-  label   String?
-  note    String?
-  updatedAt DateTime    @updatedAt
+  method    PaymentMethod @id
+  enabled   Boolean       @default(true)
+  label     String?
+  note      String?
+  updatedAt DateTime      @updatedAt
 }

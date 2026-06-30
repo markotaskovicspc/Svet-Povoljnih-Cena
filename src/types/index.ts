@@ -19,6 +19,9 @@ export interface Dimensions {
 
 export interface MediaAsset {
   url: string;
+  thumbUrl?: string;
+  cardUrl?: string;
+  pdpUrl?: string;
   alt?: string;
   /** Optional width/height for layout stability */
   width?: number;
@@ -170,6 +173,8 @@ export interface Address {
   street: string;
   city: CityName;
   postalCode: string;
+  xExpressTownId?: number | null;
+  xExpressStreetId?: number | null;
   country: string; // default "RS"
   isDefault?: boolean;
   /** Pravno lice fields */

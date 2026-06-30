@@ -38,6 +38,8 @@ const baseAddress = z.object({
     .string({ message: "Obavezno polje" })
     .trim()
     .regex(/^\d{5}$/, "Poštanski broj ima 5 cifara"),
+  xExpressTownId: z.coerce.number().int().positive().optional().nullable(),
+  xExpressStreetId: z.coerce.number().int().positive().optional().nullable(),
   country: z.string().default("RS"),
 });
 

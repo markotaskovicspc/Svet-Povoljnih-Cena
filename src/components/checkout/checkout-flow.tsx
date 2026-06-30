@@ -52,6 +52,8 @@ export interface CheckoutAddress {
   street: string;
   city: string;
   postalCode: string;
+  xExpressTownId?: number | null;
+  xExpressStreetId?: number | null;
   country: string;
   companyName?: string;
   pib?: string;
@@ -127,10 +129,12 @@ export function CheckoutFlow({
   checkoutConfig,
   initialCustomer,
   glsDeliveryPointsEnabled = false,
+  xExpressAddressEnabled = false,
 }: {
   checkoutConfig: CheckoutConfig;
   initialCustomer?: CheckoutInitialCustomer;
   glsDeliveryPointsEnabled?: boolean;
+  xExpressAddressEnabled?: boolean;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -164,6 +168,8 @@ export function CheckoutFlow({
         street: "",
         city: "",
         postalCode: "",
+        xExpressTownId: null,
+        xExpressStreetId: null,
         country: "RS",
       },
       shipToDifferent: false,
@@ -380,7 +386,13 @@ export function CheckoutFlow({
     if (isAdvancing) return;
     setIsAdvancing(true);
     try {
-      const ok = await validateStep(step, trigger, getValues, identity);
+      const ok = await validateStep(
+        step,
+        trigger,
+        getValues,
+        identity,
+        xExpressAddressEnabled,
+      );
       if (!ok) {
         focusFirstInvalidField();
         return;
@@ -527,7 +539,9 @@ export function CheckoutFlow({
                       onAuthenticatedContinue={next}
                     />
                   ) : null}
-                  {step === "shipping" ? <ShippingForm /> : null}
+                  {step === "shipping" ? (
+                    <ShippingForm xExpressAddressEnabled={xExpressAddressEnabled} />
+                  ) : null}
                   {step === "method" ? (
                     <div className="flex flex-col gap-5">
                       <ShippingMethodStep
@@ -780,6 +794,7 @@ async function validateStep(
   trigger: ReturnType<typeof useForm<CheckoutFormData>>["trigger"],
   getValues: ReturnType<typeof useForm<CheckoutFormData>>["getValues"],
   identity: IdentityChoice | null,
+  xExpressAddressEnabled: boolean,
 ): Promise<boolean> {
   switch (step) {
     case "identity":
@@ -787,9 +802,13 @@ async function validateStep(
     case "shipping":
       return trigger(
         [
-          ...addressFieldNames("shipping", getValues("shipping.liceType")),
+          ...addressFieldNames(
+            "shipping",
+            getValues("shipping.liceType"),
+            xExpressAddressEnabled,
+          ),
           ...(getValues("shipToDifferent")
-            ? addressFieldNames("billing", getValues("billing.liceType"))
+            ? addressFieldNames("billing", getValues("billing.liceType"), false)
             : []),
         ],
         { shouldFocus: true },
@@ -840,6 +859,8 @@ function rememberCheckoutFields(data: CheckoutFormData) {
     street: data.shipping.street,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
+    xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
+    xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
     companyName: data.shipping.companyName,
     pib: data.shipping.pib,
@@ -857,6 +878,7 @@ function rememberCheckoutFields(data: CheckoutFormData) {
 function addressFieldNames(
   prefix: "shipping" | "billing",
   liceType: CheckoutAddress["liceType"] | undefined,
+  requireXExpressTown = false,
 ) {
   const fields: Array<`shipping.${keyof CheckoutAddress}` | `billing.${keyof CheckoutAddress}`> = [
     `${prefix}.firstName`,
@@ -867,6 +889,7 @@ function addressFieldNames(
     `${prefix}.city`,
     `${prefix}.postalCode`,
   ];
+  if (requireXExpressTown) fields.push(`${prefix}.xExpressTownId`);
   if (liceType === "pravno") {
     fields.unshift(`${prefix}.companyName`, `${prefix}.pib`);
   }
@@ -979,10 +1002,16 @@ function addressForApi(address: CheckoutAddress) {
     street: address.street,
     city: address.city,
     postalCode: address.postalCode,
+    xExpressTownId: positiveIntOrUndefined(address.xExpressTownId),
+    xExpressStreetId: positiveIntOrUndefined(address.xExpressStreetId),
     country: address.country || "RS",
     companyName: address.companyName || undefined,
     pib: address.pib || undefined,
   };
+}
+
+function positiveIntOrUndefined(value: number | null | undefined) {
+  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : undefined;
 }
 
 function readCreateOrderError(result: CreateOrderApiResponse | null): string {
@@ -1000,6 +1029,8 @@ function readCreateOrderError(result: CreateOrderApiResponse | null): string {
       return "Unesite e-mail adresu za porudžbinu kao gost.";
     case "DELIVERY_POINT_INVALID":
       return "Izabrana MyGLS paket tačka više nije dostupna. Izaberite drugu lokaciju ili dostavu na adresu.";
+    case "DELIVERY_ADDRESS_INVALID":
+      return "Izaberite važeće X Express mesto za kurirsku isporuku.";
     case "PAYMENT_UNAVAILABLE":
       return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
     case "DELIVERY_UNAVAILABLE":
@@ -1060,6 +1091,8 @@ function buildOrder({
     street: data.shipping.street,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
+    xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
+    xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
     companyName: data.shipping.companyName,
     pib: data.shipping.pib,
@@ -1075,6 +1108,8 @@ function buildOrder({
           street: data.billing.street,
           city: data.billing.city,
           postalCode: data.billing.postalCode,
+          xExpressTownId: positiveIntOrUndefined(data.billing.xExpressTownId) ?? null,
+          xExpressStreetId: positiveIntOrUndefined(data.billing.xExpressStreetId) ?? null,
           country: data.billing.country || "RS",
           companyName: data.billing.companyName,
           pib: data.billing.pib,

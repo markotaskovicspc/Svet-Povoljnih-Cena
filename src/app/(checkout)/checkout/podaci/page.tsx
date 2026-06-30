@@ -33,7 +33,9 @@ export default async function CheckoutPodaciPage() {
     .filter(Boolean)
     .join(" ");
   const accountName = account?.name ?? (accountFullName || null);
-  const glsDeliveryPointsEnabled = getSmallParcelProvider() === "MYGLS";
+  const smallParcelProvider = getSmallParcelProvider();
+  const glsDeliveryPointsEnabled = smallParcelProvider === "MYGLS";
+  const xExpressAddressEnabled = smallParcelProvider === "X_EXPRESS";
   const checkoutConfig = await getCheckoutConfig();
 
   return (
@@ -60,6 +62,7 @@ export default async function CheckoutPodaciPage() {
         <CheckoutFlow
           checkoutConfig={checkoutConfig}
           glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
+          xExpressAddressEnabled={xExpressAddressEnabled}
           initialCustomer={
             user?.userType === "customer"
               ? {
@@ -74,6 +77,8 @@ export default async function CheckoutPodaciPage() {
                         street: defaultAddress.street,
                         city: defaultAddress.city,
                         postalCode: defaultAddress.postalCode,
+                        xExpressTownId: defaultAddress.xExpressTownId ?? undefined,
+                        xExpressStreetId: defaultAddress.xExpressStreetId ?? undefined,
                         country: defaultAddress.country,
                         companyName: defaultAddress.companyName ?? undefined,
                         pib: defaultAddress.pib ?? undefined,

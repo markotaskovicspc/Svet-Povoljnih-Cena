@@ -88,8 +88,12 @@ async function createCourierShipment(formData: FormData) {
     { allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
+      const packageCount = Math.max(
+        1,
+        Math.min(99, Number(formData.get("packageCount") ?? 1) || 1),
+      );
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
-      const shipment = await createShipmentForOrder(id);
+      const shipment = await createShipmentForOrder(id, { packageCount });
       revalidatePath(`/admin/narudzbine/${id}`);
       revalidatePath("/admin/narudzbine");
       return {
@@ -573,6 +577,15 @@ export default async function OrderDetail({
                           />
                           <Row k="Status" v={shipment.status} />
                           <Row k="Kurir status" v={shipment.providerStatusCode ?? "—"} />
+                          <Row k="Paketa" v={shipment.packageCount} />
+                          {shipment.providerRouteCode || shipment.providerRouteName ? (
+                            <Row
+                              k="Reon"
+                              v={[shipment.providerRouteCode, shipment.providerRouteName]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            />
+                          ) : null}
                           {shipment.providerParcelId ? (
                             <Row
                               k="Parcel ID"
@@ -663,8 +676,20 @@ export default async function OrderDetail({
                             </>
                           ) : null}
                           {shipment.status === "FAILED" ? (
-                            <form action={createCourierShipment}>
+                            <form action={createCourierShipment} className="flex items-end gap-2">
                               <input type="hidden" name="id" value={order.id} />
+                              {shipment.provider === X_EXPRESS_PROVIDER ? (
+                                <Field label="Paketa">
+                                  <input
+                                    name="packageCount"
+                                    type="number"
+                                    min={1}
+                                    max={99}
+                                    defaultValue={shipment.packageCount || 1}
+                                    className="h-7 w-20 rounded-md border border-input bg-transparent px-2 text-xs"
+                                  />
+                                </Field>
+                              ) : null}
                               <SubmitButton size="xs">Ponovi nalog</SubmitButton>
                             </form>
                           ) : null}
@@ -695,11 +720,23 @@ export default async function OrderDetail({
                   (shipment) =>
                     shipment.provider !== activeSmallProvider || shipment.status === "FAILED",
                 ) ? (
-                  <form action={createCourierShipment} className="flex justify-end">
-                    <input type="hidden" name="id" value={order.id} />
-                    <SubmitButton size="sm">
-                      Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
-                    </SubmitButton>
+                    <form action={createCourierShipment} className="flex items-end justify-end gap-2">
+                      <input type="hidden" name="id" value={order.id} />
+                      {activeSmallProvider === X_EXPRESS_PROVIDER ? (
+                        <Field label="Paketa">
+                          <input
+                            name="packageCount"
+                            type="number"
+                            min={1}
+                            max={99}
+                            defaultValue={Math.max(1, order.items.reduce((sum, item) => sum + item.qty, 0))}
+                            className="h-8 w-20 rounded-lg border border-input bg-transparent px-2 text-sm"
+                          />
+                        </Field>
+                      ) : null}
+                      <SubmitButton size="sm">
+                        Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
+                      </SubmitButton>
                   </form>
                 ) : null}
               </div>

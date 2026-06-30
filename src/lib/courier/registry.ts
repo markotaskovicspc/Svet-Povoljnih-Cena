@@ -80,7 +80,10 @@ export function routeService(order: RouteInput): ShipmentService {
  * `ShipmentEvent`. Idempotent on `orderId`: an existing CREATED/PICKED_UP
  * shipment is returned unchanged.
  */
-export async function createShipmentForOrder(orderId: string) {
+export async function createShipmentForOrder(
+  orderId: string,
+  options: { packageCount?: number } = {},
+) {
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
@@ -100,7 +103,7 @@ export async function createShipmentForOrder(orderId: string) {
   if (service === "COURIER_SMALL") {
     return getSmallParcelProvider() === "MYGLS"
       ? createMyGlsShipmentForOrder(order.id)
-      : createXExpressShipmentForOrder(order.id);
+      : createXExpressShipmentForOrder(order.id, options);
   }
 
   const adapter = getAdapter(service);

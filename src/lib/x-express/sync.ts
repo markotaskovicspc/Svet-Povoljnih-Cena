@@ -7,75 +7,47 @@ import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { XExpressClient } from "./client";
 import { X_EXPRESS_PROVIDER, requireXExpressEnabled } from "./config";
-import type { XExpressStatusCode, XExpressTrackingEvent } from "./types";
+import type {
+  XExpressMunicipality,
+  XExpressStatusCode,
+  XExpressStreet,
+  XExpressTown,
+  XExpressTrackingEvent,
+} from "./types";
 
 export async function syncXExpressDictionaries() {
   const cfg = requireXExpressEnabled();
   const client = new XExpressClient(cfg);
-  const [locations, statuses] = await Promise.all([
-    syncXExpressLocations(client),
+  const municipalities = await syncXExpressMunicipalities(client);
+  const [towns, statuses] = await Promise.all([
+    syncXExpressTowns(client),
     syncXExpressStatuses(client),
   ]);
-  return { locations, statuses };
+  const streets = await syncXExpressStreets(client);
+  return { municipalities, towns, streets, statuses };
 }
 
 export async function syncXExpressLocations(client = new XExpressClient()) {
+  return syncXExpressTowns(client);
+}
+
+export async function syncXExpressMunicipalities(client = new XExpressClient()) {
   const run = await db.courierSyncRun.create({
     data: { provider: X_EXPRESS_PROVIDER, kind: "LOCATIONS" },
   });
   try {
-    const locations = await client.fetchLocationCodes();
-    const seenCodes = locations.map((l) => l.code);
-    for (const location of locations) {
-      await db.courierLocationCode.upsert({
-        where: {
-          provider_code: {
-            provider: X_EXPRESS_PROVIDER,
-            code: location.code,
-          },
-        },
-        create: {
-          provider: X_EXPRESS_PROVIDER,
-          code: location.code,
-          name: location.name,
-          postalCode: location.postalCode ?? null,
-          municipality: location.municipality ?? null,
-          city: location.city ?? null,
-          settlement: location.settlement ?? null,
-          active: true,
-          raw: location.raw as Prisma.InputJsonValue,
-        },
-        update: {
-          name: location.name,
-          postalCode: location.postalCode ?? null,
-          municipality: location.municipality ?? null,
-          city: location.city ?? null,
-          settlement: location.settlement ?? null,
-          active: true,
-          raw: location.raw as Prisma.InputJsonValue,
-          syncedAt: new Date(),
-        },
-      });
-    }
-    if (seenCodes.length) {
-      await db.courierLocationCode.updateMany({
-        where: {
-          provider: X_EXPRESS_PROVIDER,
-          code: { notIn: seenCodes },
-        },
-        data: { active: false },
-      });
-    }
+    const municipalities = await client.fetchMunicipalities();
+    await upsertMunicipalities(municipalities);
     await db.courierSyncRun.update({
       where: { id: run.id },
       data: {
         status: "SUCCESS",
-        recordsRead: locations.length,
-        recordsOk: locations.length,
+        recordsRead: municipalities.length,
+        recordsOk: municipalities.length,
         finishedAt: new Date(),
       },
     });
-    return { ok: true as const, count: locations.length };
+    return { ok: true as const, count: municipalities.length };
   } catch (err) {
     await db.courierSyncRun.update({
       where: { id: run.id },
@@ -86,6 +58,216 @@ export async function syncXExpressLocations(client = new XExpressClient()) {
       },
     });
     throw err;
+  }
+}
+
+export async function syncXExpressTowns(client = new XExpressClient()) {
+  const run = await db.courierSyncRun.create({
+    data: { provider: X_EXPRESS_PROVIDER, kind: "LOCATIONS" },
+  });
+  try {
+    const towns = await client.fetchTowns();
+    await upsertTowns(towns);
+    await mirrorTownsToLegacyLocationCache(towns);
+    await db.courierSyncRun.update({
+      where: { id: run.id },
+      data: {
+        status: "SUCCESS",
+        recordsRead: towns.length,
+        recordsOk: towns.length,
+        finishedAt: new Date(),
+      },
+    });
+    return { ok: true as const, count: towns.length };
+  } catch (err) {
+    await db.courierSyncRun.update({
+      where: { id: run.id },
+      data: {
+        status: "FAILED",
+        errorMessage: err instanceof Error ? err.message : "Nepoznata greška.",
+        finishedAt: new Date(),
+      },
+    });
+    throw err;
+  }
+}
+
+export async function syncXExpressStreets(client = new XExpressClient()) {
+  const run = await db.courierSyncRun.create({
+    data: { provider: X_EXPRESS_PROVIDER, kind: "LOCATIONS" },
+  });
+  try {
+    const streets = await client.fetchStreets();
+    await upsertStreets(streets);
+    await db.courierSyncRun.update({
+      where: { id: run.id },
+      data: {
+        status: "SUCCESS",
+        recordsRead: streets.length,
+        recordsOk: streets.length,
+        finishedAt: new Date(),
+      },
+    });
+    return { ok: true as const, count: streets.length };
+  } catch (err) {
+    await db.courierSyncRun.update({
+      where: { id: run.id },
+      data: {
+        status: "FAILED",
+        errorMessage: err instanceof Error ? err.message : "Nepoznata greška.",
+        finishedAt: new Date(),
+      },
+    });
+    throw err;
+  }
+}
+
+async function upsertMunicipalities(municipalities: XExpressMunicipality[]) {
+  const seenIds = municipalities.map((m) => m.id);
+  for (const municipality of municipalities) {
+    await db.xExpressMunicipality.upsert({
+      where: { id: municipality.id },
+      create: {
+        id: municipality.id,
+        name: municipality.name,
+        postalCode: municipality.postalCode ?? null,
+        priority: municipality.priority ?? null,
+        active: true,
+        raw: municipality.raw as Prisma.InputJsonValue,
+      },
+      update: {
+        name: municipality.name,
+        postalCode: municipality.postalCode ?? null,
+        priority: municipality.priority ?? null,
+        active: true,
+        raw: municipality.raw as Prisma.InputJsonValue,
+        syncedAt: new Date(),
+      },
+    });
+  }
+  if (seenIds.length) {
+    await db.xExpressMunicipality.updateMany({
+      where: { id: { notIn: seenIds } },
+      data: { active: false },
+    });
+  }
+}
+
+async function upsertTowns(towns: XExpressTown[]) {
+  const seenIds = towns.map((t) => t.id);
+  for (const town of towns) {
+    await db.xExpressTown.upsert({
+      where: { id: town.id },
+      create: {
+        id: town.id,
+        name: town.name,
+        displayName: town.displayName ?? null,
+        municipalityId: town.municipalityId ?? null,
+        postalCode: town.postalCode ?? null,
+        priority: town.priority ?? null,
+        cutOffPickupTime: town.cutOffPickupTime ?? null,
+        active: true,
+        raw: town.raw as Prisma.InputJsonValue,
+      },
+      update: {
+        name: town.name,
+        displayName: town.displayName ?? null,
+        municipalityId: town.municipalityId ?? null,
+        postalCode: town.postalCode ?? null,
+        priority: town.priority ?? null,
+        cutOffPickupTime: town.cutOffPickupTime ?? null,
+        active: true,
+        raw: town.raw as Prisma.InputJsonValue,
+        syncedAt: new Date(),
+      },
+    });
+  }
+  if (seenIds.length) {
+    await db.xExpressTown.updateMany({
+      where: { id: { notIn: seenIds } },
+      data: { active: false },
+    });
+  }
+}
+
+async function upsertStreets(streets: XExpressStreet[]) {
+  const seenIds = streets.map((s) => s.id);
+  for (const street of streets) {
+    await db.xExpressStreet.upsert({
+      where: { id: street.id },
+      create: {
+        id: street.id,
+        streetId: street.streetId ?? null,
+        name: street.name,
+        simpleName: street.simpleName ?? null,
+        townId: street.townId,
+        official: street.official,
+        deleted: street.deleted,
+        active: !street.deleted,
+        raw: street.raw as Prisma.InputJsonValue,
+      },
+      update: {
+        streetId: street.streetId ?? null,
+        name: street.name,
+        simpleName: street.simpleName ?? null,
+        townId: street.townId,
+        official: street.official,
+        deleted: street.deleted,
+        active: !street.deleted,
+        raw: street.raw as Prisma.InputJsonValue,
+        syncedAt: new Date(),
+      },
+    });
+  }
+  if (seenIds.length) {
+    await db.xExpressStreet.updateMany({
+      where: { id: { notIn: seenIds } },
+      data: { active: false },
+    });
+  }
+}
+
+async function mirrorTownsToLegacyLocationCache(towns: XExpressTown[]) {
+  const seenCodes = towns.map((town) => String(town.id));
+  for (const town of towns) {
+    await db.courierLocationCode.upsert({
+      where: {
+        provider_code: {
+          provider: X_EXPRESS_PROVIDER,
+          code: String(town.id),
+        },
+      },
+      create: {
+        provider: X_EXPRESS_PROVIDER,
+        code: String(town.id),
+        name: town.displayName ?? town.name,
+        postalCode: town.postalCode ?? null,
+        municipality: town.municipalityId ? String(town.municipalityId) : null,
+        city: town.name,
+        settlement: town.name,
+        active: true,
+        raw: town.raw as Prisma.InputJsonValue,
+      },
+      update: {
+        name: town.displayName ?? town.name,
+        postalCode: town.postalCode ?? null,
+        municipality: town.municipalityId ? String(town.municipalityId) : null,
+        city: town.name,
+        settlement: town.name,
+        active: true,
+        raw: town.raw as Prisma.InputJsonValue,
+        syncedAt: new Date(),
+      },
+    });
+  }
+  if (seenCodes.length) {
+    await db.courierLocationCode.updateMany({
+      where: {
+        provider: X_EXPRESS_PROVIDER,
+        code: { notIn: seenCodes },
+      },
+      data: { active: false },
+    });
   }
 }
 
