@@ -60,7 +60,9 @@ export function getXExpressConfig(): XExpressConfig {
       "https://portal.pm.xexpress.rs",
     apiUser: trim(process.env.X_EXPRESS_API_USER),
     apiKey: trim(process.env.X_EXPRESS_API_KEY),
-    webhookApiKey: trim(process.env.X_EXPRESS_WEBHOOK_API_KEY),
+    webhookApiKey:
+      trim(process.env.X_EXPRESS_WEBHOOK_API_KEY) ||
+      trim(process.env.X_EXPRESS_WEBHOOK_SECRET),
     contractCode: trim(process.env.X_EXPRESS_CONTRACT_CODE),
     codePrefix: trim(process.env.X_EXPRESS_CODE_PREFIX) || "AAA",
     codeRangeStart: int(process.env.X_EXPRESS_CODE_RANGE_START),
@@ -69,9 +71,11 @@ export function getXExpressConfig(): XExpressConfig {
     paths: {
       municipalities:
         trim(process.env.X_EXPRESS_MUNICIPALITIES_PATH) ||
-        trim(process.env.X_EXPRESS_LOCATIONS_PATH) ||
         "/api/data/municipalities",
-      towns: trim(process.env.X_EXPRESS_TOWNS_PATH) || "/api/data/towns",
+      towns:
+        trim(process.env.X_EXPRESS_TOWNS_PATH) ||
+        trim(process.env.X_EXPRESS_LOCATIONS_PATH) ||
+        "/api/data/towns",
       streets: trim(process.env.X_EXPRESS_STREETS_PATH) || "/api/data/streets",
       statuses: trim(process.env.X_EXPRESS_STATUSES_PATH) || "/api/data/statuses",
       checkAddress:

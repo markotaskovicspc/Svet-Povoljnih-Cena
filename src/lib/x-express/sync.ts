@@ -414,6 +414,17 @@ export async function syncXExpressShipmentById(shipmentId: string) {
   if (!shipment?.trackingNo || shipment.provider !== X_EXPRESS_PROVIDER) {
     throw new Error("X Express pošiljka nije pronađena.");
   }
+  if (!cfg.paths.status) {
+    await db.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        lastStatusSyncAt: new Date(),
+        syncError:
+          "X Express status se prima preko webhook-a; poseban status endpoint nije podešen.",
+      },
+    });
+    return { events: 0, applied: 0, webhookOnly: true as const };
+  }
 
   const events = await new XExpressClient(cfg).fetchTrackingEvents(shipment.trackingNo);
   const mapped = await applyDictionaryMappings(events);

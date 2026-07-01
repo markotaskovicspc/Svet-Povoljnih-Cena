@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getXExpressConfig } from "@/lib/x-express/config";
 import { syncXExpressShipmentStatuses } from "@/lib/x-express/sync";
+import { processXExpressWebhookEvents } from "@/lib/x-express/webhook";
 import { hasBearerSecret } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
@@ -19,7 +20,10 @@ async function run(req: Request) {
     Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1),
     500,
   );
-  const summary = await syncXExpressShipmentStatuses(limit);
+  const cfg = getXExpressConfig();
+  const summary = cfg.paths.status
+    ? await syncXExpressShipmentStatuses(limit)
+    : await processXExpressWebhookEvents(limit);
   return NextResponse.json({ ok: true, summary });
 }
 

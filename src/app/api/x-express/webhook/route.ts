@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   parseXExpressWebhookBatch,
+  processXExpressWebhookNotifyIds,
   stageXExpressWebhookBatch,
   verifyXExpressWebhookHeaders,
 } from "@/lib/x-express/webhook";
@@ -22,5 +23,20 @@ export async function POST(req: Request) {
   }
 
   await stageXExpressWebhookBatch(batch);
-  return new NextResponse("", { status: 200 });
+  const summary = await processXExpressWebhookNotifyIds(
+    batch.map((item) => item.NotifyId),
+  );
+  return NextResponse.json({
+    ok: true,
+    received: batch.length,
+    processed: summary.processed,
+    failed: summary.failed,
+  });
+}
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    webhookUrl: "https://svetpovoljnihcena.rs/api/x-express/webhook",
+  });
 }

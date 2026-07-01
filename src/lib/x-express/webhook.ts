@@ -3,18 +3,37 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { applyShipmentEvent } from "@/lib/courier/registry";
+import {
+  applyShipmentEvent,
+  type ApplyEventResult,
+} from "@/lib/courier/registry";
+import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { X_EXPRESS_PROVIDER, getXExpressConfig } from "./config";
 import { inferXExpressShipmentStatus } from "./status";
+
+const optionalText = z.preprocess(
+  (value) => (typeof value === "string" && !value.trim() ? null : value),
+  z.string().trim().min(1).optional().nullable(),
+);
+
+const optionalUuid = z.preprocess(
+  (value) => (typeof value === "string" && !value.trim() ? null : value),
+  z.string().uuid().optional().nullable(),
+);
 
 const notifySchema = z.object({
   ContractId: z.string().trim().min(1),
   NotifyId: z.string().uuid(),
-  OrderCode: z.string().trim().min(1).optional().nullable(),
+  OrderCode: optionalText,
   ReferenceId: z.string().trim().min(1),
-  ReferenceGuid: z.string().uuid().optional().nullable(),
+  ReferenceGuid: optionalUuid,
   Status: z.string().trim().min(1),
-  StatusTime: z.string().datetime({ offset: true }),
+  StatusTime: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !Number.isNaN(new Date(value).getTime())),
 });
 
 const notifyBatchSchema = z.array(notifySchema).min(1).max(500);
@@ -24,14 +43,17 @@ export type XExpressWebhookNotify = z.infer<typeof notifySchema>;
 export function verifyXExpressWebhookHeaders(headers: Headers) {
   const cfg = getXExpressConfig();
   if (!cfg.webhookApiKey) return false;
+  const bearer = headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
   return (
-    headers.get("x-api-key") === cfg.webhookApiKey &&
+    (headers.get("x-api-key") === cfg.webhookApiKey ||
+      bearer === cfg.webhookApiKey) &&
     headers.get("x-api-sender") === "XExpress"
   );
 }
 
 export function parseXExpressWebhookBatch(value: unknown) {
-  return notifyBatchSchema.parse(value);
+  const payload = unwrapWebhookPayload(value);
+  return notifyBatchSchema.parse(Array.isArray(payload) ? payload : [payload]);
 }
 
 export async function stageXExpressWebhookBatch(batch: XExpressWebhookNotify[]) {
@@ -43,11 +65,33 @@ export async function stageXExpressWebhookBatch(batch: XExpressWebhookNotify[]) 
       referenceId: item.ReferenceId,
       referenceGuid: item.ReferenceGuid ?? null,
       statusCode: item.Status,
-      statusTime: new Date(item.StatusTime),
+      statusTime: parseStatusTime(item.StatusTime),
       raw: item as Prisma.InputJsonValue,
     })),
     skipDuplicates: true,
   });
+}
+
+function unwrapWebhookPayload(value: unknown) {
+  if (isRecord(value)) {
+    for (const key of ["notifications", "events", "items", "data", "result"]) {
+      const nested = value[key];
+      if (nested != null) return nested;
+    }
+  }
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseStatusTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`X Express StatusTime nije validan: ${value}`);
+  }
+  return parsed;
 }
 
 export async function processXExpressWebhookEvents(limit = 100) {
@@ -57,6 +101,27 @@ export async function processXExpressWebhookEvents(limit = 100) {
     take: Math.max(1, Math.min(limit, 500)),
   });
 
+  return processXExpressWebhookRows(events);
+}
+
+export async function processXExpressWebhookNotifyIds(notifyIds: string[]) {
+  const ids = [...new Set(notifyIds.filter(Boolean))];
+  if (!ids.length) {
+    return { read: 0, processed: 0, failed: 0 };
+  }
+
+  const events = await db.xExpressWebhookEvent.findMany({
+    where: {
+      notifyId: { in: ids },
+      processedAt: null,
+    },
+    orderBy: [{ statusTime: "asc" }, { createdAt: "asc" }],
+  });
+
+  return processXExpressWebhookRows(events);
+}
+
+async function processXExpressWebhookRows(events: XExpressWebhookEventRow[]) {
   let processed = 0;
   let failed = 0;
 
@@ -79,7 +144,7 @@ export async function processXExpressWebhookEvents(limit = 100) {
   return { read: events.length, processed, failed };
 }
 
-async function processXExpressWebhookEvent(event: {
+type XExpressWebhookEventRow = {
   id: string;
   notifyId: string;
   orderCode: string | null;
@@ -88,7 +153,9 @@ async function processXExpressWebhookEvent(event: {
   statusCode: string;
   statusTime: Date;
   raw: Prisma.JsonValue;
-}) {
+};
+
+async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
   const order = await db.order.findFirst({
     where: {
       OR: [{ number: event.referenceId }, { id: event.referenceId }],
@@ -132,6 +199,9 @@ async function processXExpressWebhookEvent(event: {
   if (!result) {
     throw new Error(`Pošiljka ${shipment.trackingNo} nije pronađena za X Express webhook.`);
   }
+  if (result.eventCreated) {
+    await notifyShipmentSideEffects(result);
+  }
 
   await db.xExpressWebhookEvent.update({
     where: { id: event.id },
@@ -142,4 +212,27 @@ async function processXExpressWebhookEvent(event: {
       processError: null,
     },
   });
+}
+
+async function notifyShipmentSideEffects(result: ApplyEventResult) {
+  if (result.customerEmail) {
+    try {
+      const loaded = await loadOrderForEmail(result.orderId);
+      if (loaded?.recipient) {
+        await sendOrderStatusChanged({
+          order: loaded.order,
+          status: loaded.order.status,
+          to: loaded.recipient,
+        });
+      }
+    } catch (err) {
+      console.error("[email] order-status (x-express webhook) failed", err);
+    }
+  }
+
+  if (result.status === "PICKED_UP") {
+    void issueAndDeliverFiscalReceipt(result.orderId).catch((err) => {
+      console.error("[fiscal] x-express webhook trigger failed", err);
+    });
+  }
 }
