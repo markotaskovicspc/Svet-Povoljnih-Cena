@@ -517,7 +517,7 @@ export function CheckoutFlow({
               {STEP_TITLES[step]}
             </h2>
             <div className={cn("mt-4", isCompactDesktopStep && "lg:mt-3")}>
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 <motion.div
                   key={step}
                   initial={{ opacity: 0, y: 8 }}

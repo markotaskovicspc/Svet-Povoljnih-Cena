@@ -6,6 +6,7 @@ import {
   myGlsAuthBase,
   redactMyGlsSecrets,
   requireMyGlsEnabled,
+  toMyGlsDate,
   type MyGlsConfig,
   MyGlsProviderError,
 } from "./config";
@@ -209,7 +210,7 @@ function delay(ms: number) {
 
 function serializeDate(value: string | Date | null | undefined) {
   if (!value) return null;
-  return value instanceof Date ? value.toISOString() : value;
+  return value instanceof Date ? toMyGlsDate(value) : value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

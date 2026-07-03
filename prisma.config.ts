@@ -1,5 +1,8 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { defineConfig } from "prisma/config";
+
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local" });
 
 function withDatabaseSsl(connectionString: string) {
   const configuredSslMode = process.env.DATABASE_SSLMODE?.trim();

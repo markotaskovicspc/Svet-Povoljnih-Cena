@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { num } from "@/lib/api/_helpers";
 import type { MyGlsConfig } from "./config";
-import { MyGlsConfigError } from "./config";
+import { MyGlsConfigError, toMyGlsDate } from "./config";
 import type { MyGlsAddress, MyGlsParcel, MyGlsService } from "./types";
 
 type OrderForMyGlsPayload = {
@@ -71,7 +71,7 @@ export function buildMyGlsParcelForOrder(args: {
     CODAmount: cod ? num(order.total) : 0,
     CODReference: cod ? order.number : undefined,
     CODCurrency: cod ? "RSD" : undefined,
-    PickupDate: (args.pickupDate ?? nextBusinessDay()).toISOString(),
+    PickupDate: toMyGlsDate(args.pickupDate ?? nextBusinessDay()),
     PickupAddress: addressFromPickup(cfg),
     DeliveryAddress: addressFromOrder(order, recipientName, contactEmail),
     ServiceList: services,

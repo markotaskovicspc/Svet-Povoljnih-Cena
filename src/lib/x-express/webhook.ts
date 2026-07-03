@@ -12,15 +12,24 @@ import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { X_EXPRESS_PROVIDER, getXExpressConfig } from "./config";
 import { inferXExpressShipmentStatus } from "./status";
 
-const optionalText = z.preprocess(
-  (value) => (typeof value === "string" && !value.trim() ? null : value),
-  z.string().trim().min(1).optional().nullable(),
-);
+// z.preprocess() in Zod v4 doesn't inherit .optional()/.nullable() from the
+// inner schema for a missing object key — it must be applied to the
+// preprocess result itself, or a payload omitting the key fails validation.
+const optionalText = z
+  .preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? null : value),
+    z.string().trim().min(1),
+  )
+  .optional()
+  .nullable();
 
-const optionalUuid = z.preprocess(
-  (value) => (typeof value === "string" && !value.trim() ? null : value),
-  z.string().uuid().optional().nullable(),
-);
+const optionalUuid = z
+  .preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? null : value),
+    z.string().uuid(),
+  )
+  .optional()
+  .nullable();
 
 const notifySchema = z.object({
   ContractId: z.string().trim().min(1),

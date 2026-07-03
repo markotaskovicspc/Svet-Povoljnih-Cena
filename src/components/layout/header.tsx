@@ -65,9 +65,10 @@ export function Header({
         <div className="flex items-center gap-1">
           <Link
             href="/nalog"
-          className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
+          className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold whitespace-nowrap text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
           >
-            <User2 className="size-4" aria-hidden /> Prijava
+            <User2 className="size-4" aria-hidden />{" "}
+            {isCustomerLoggedIn ? "Moj nalog" : "Prijava"}
           </Link>
           <WishlistButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />
           <CartButton className="text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40" />

@@ -15,6 +15,27 @@ import type {
   XExpressTrackingEvent,
 } from "./types";
 
+/**
+ * Number of upserts issued concurrently against the DB. The dictionary datasets
+ * are large (towns ~4.7k, streets far more) and issuing one awaited upsert per
+ * row serially made a full sync take ~27+ minutes — long past any serverless/
+ * cron timeout (Bug #11). Chunked concurrency keeps upsert semantics identical
+ * while collapsing the wall-clock time by roughly this factor. Kept modest so we
+ * don't exhaust the connection pool.
+ */
+const SYNC_UPSERT_CONCURRENCY = 20;
+
+async function runChunked<T>(
+  items: readonly T[],
+  worker: (item: T) => Promise<unknown>,
+  concurrency = SYNC_UPSERT_CONCURRENCY,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    const chunk = items.slice(i, i + concurrency);
+    await Promise.all(chunk.map(worker));
+  }
+}
+
 export async function syncXExpressDictionaries() {
   const cfg = requireXExpressEnabled();
   const client = new XExpressClient(cfg);
@@ -124,8 +145,8 @@ export async function syncXExpressStreets(client = new XExpressClient()) {
 
 async function upsertMunicipalities(municipalities: XExpressMunicipality[]) {
   const seenIds = municipalities.map((m) => m.id);
-  for (const municipality of municipalities) {
-    await db.xExpressMunicipality.upsert({
+  await runChunked(municipalities, (municipality) =>
+    db.xExpressMunicipality.upsert({
       where: { id: municipality.id },
       create: {
         id: municipality.id,
@@ -143,8 +164,8 @@ async function upsertMunicipalities(municipalities: XExpressMunicipality[]) {
         raw: municipality.raw as Prisma.InputJsonValue,
         syncedAt: new Date(),
       },
-    });
-  }
+    }),
+  );
   if (seenIds.length) {
     await db.xExpressMunicipality.updateMany({
       where: { id: { notIn: seenIds } },
@@ -155,8 +176,8 @@ async function upsertMunicipalities(municipalities: XExpressMunicipality[]) {
 
 async function upsertTowns(towns: XExpressTown[]) {
   const seenIds = towns.map((t) => t.id);
-  for (const town of towns) {
-    await db.xExpressTown.upsert({
+  await runChunked(towns, (town) =>
+    db.xExpressTown.upsert({
       where: { id: town.id },
       create: {
         id: town.id,
@@ -180,8 +201,8 @@ async function upsertTowns(towns: XExpressTown[]) {
         raw: town.raw as Prisma.InputJsonValue,
         syncedAt: new Date(),
       },
-    });
-  }
+    }),
+  );
   if (seenIds.length) {
     await db.xExpressTown.updateMany({
       where: { id: { notIn: seenIds } },
@@ -192,8 +213,8 @@ async function upsertTowns(towns: XExpressTown[]) {
 
 async function upsertStreets(streets: XExpressStreet[]) {
   const seenIds = streets.map((s) => s.id);
-  for (const street of streets) {
-    await db.xExpressStreet.upsert({
+  await runChunked(streets, (street) =>
+    db.xExpressStreet.upsert({
       where: { id: street.id },
       create: {
         id: street.id,
@@ -217,8 +238,8 @@ async function upsertStreets(streets: XExpressStreet[]) {
         raw: street.raw as Prisma.InputJsonValue,
         syncedAt: new Date(),
       },
-    });
-  }
+    }),
+  );
   if (seenIds.length) {
     await db.xExpressStreet.updateMany({
       where: { id: { notIn: seenIds } },
@@ -229,8 +250,8 @@ async function upsertStreets(streets: XExpressStreet[]) {
 
 async function mirrorTownsToLegacyLocationCache(towns: XExpressTown[]) {
   const seenCodes = towns.map((town) => String(town.id));
-  for (const town of towns) {
-    await db.courierLocationCode.upsert({
+  await runChunked(towns, (town) =>
+    db.courierLocationCode.upsert({
       where: {
         provider_code: {
           provider: X_EXPRESS_PROVIDER,
@@ -258,8 +279,8 @@ async function mirrorTownsToLegacyLocationCache(towns: XExpressTown[]) {
         raw: town.raw as Prisma.InputJsonValue,
         syncedAt: new Date(),
       },
-    });
-  }
+    }),
+  );
   if (seenCodes.length) {
     await db.courierLocationCode.updateMany({
       where: {
@@ -278,9 +299,7 @@ export async function syncXExpressStatuses(client = new XExpressClient()) {
   try {
     const statuses = await client.fetchStatusCodes();
     const seenCodes = statuses.map((s) => s.code);
-    for (const status of statuses) {
-      await upsertStatusCode(status);
-    }
+    await runChunked(statuses, (status) => upsertStatusCode(status));
     if (seenCodes.length) {
       await db.courierStatusCode.updateMany({
         where: {

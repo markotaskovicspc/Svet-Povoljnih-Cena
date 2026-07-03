@@ -128,6 +128,14 @@ export function passwordHashBytes(password: string) {
   return Array.from(createHash("sha512").update(password, "utf8").digest());
 }
 
+// MyGLS's JSON API is served by an older WCF endpoint that (de)serializes
+// DateTime fields using the ASP.NET AJAX format, not ISO 8601 — an ISO string
+// like PickupDate makes PrintLabels fail server-side with a deserialization
+// error instead of a normal API error.
+export function toMyGlsDate(date: Date): string {
+  return `/Date(${date.getTime()})/`;
+}
+
 export function buildMyGlsUrl(
   cfg: Pick<MyGlsConfig, "baseUrl">,
   serviceName: "ParcelService" | "MasterDataService",

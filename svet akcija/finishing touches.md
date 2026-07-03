@@ -328,3 +328,95 @@ Najbrži put do lansiranja je:
 2. Developer sređuje import, validaciju i zaštite.
 3. Sve se testira na staging okruženju.
 4. Tek onda se sajt pušta javno.
+
+## 18. Današnji završni blok: dostava, pravila, mejlovi, plaćanje i fiskalizacija
+
+Ovaj blok nije lista stvari koje treba samo tražiti od vlasnika. Ovo je operativni plan šta treba zatvoriti danas da bi aplikacija imala kompletan poslovno-tehnički tok: od kupovine, dostave i korisničke podrške do fiskalnog računa.
+
+### 18.1 Dostava, reklamacije i uslovi kupovine
+
+- Proveriti i završiti javne stranice za uslove kupovine, uslove isporuke, uslove korišćenja, politiku privatnosti, brisanje podataka i reklamacije.
+- Uskladiti tekstove sa stvarnim poslovnim pravilima: rokovi dostave, pravo na odustanak, reklamacije, garancija/saobraznost, povraćaj novca, način komunikacije sa kupcem i obaveze prodavca.
+- Proveriti da linkovi u footer-u, checkout-u, reklamacijama i potvrdi porudžbine vode na tačne stranice.
+- Proveriti da checkout jasno traži prihvatanje uslova kupovine i da se vreme prihvatanja čuva uz porudžbinu.
+- Proveriti reklamacioni tok: unos reklamacije, upload dokaza, statusi reklamacije, admin pregled i obaveštenje kupcu.
+- Zaključati upload reklamacija tako da prihvata samo dozvoljene slike/fajlove, uz dokaz porudžbine i ograničenje veličine.
+
+### 18.2 Podaci firme i korisnička služba
+
+- Zameniti placeholder podatke firme u aplikaciji stvarnim podacima: naziv firme, adresa, PIB, matični broj, telefon, email, banka, račun i PDV napomena.
+- Definisati finalne javne email adrese:
+  - `podrska@svetpovoljnihcena.rs` za opštu korisničku podršku.
+  - `reklamacije@svetpovoljnihcena.rs` za reklamacije.
+  - `dpo@svetpovoljnihcena.rs` za privatnost i brisanje podataka.
+  - `marketing@svetpovoljnihcena.rs` i `b2b@svetpovoljnihcena.rs` samo ako ostaju javno prikazane.
+- Proveriti da se isti kontakt podaci koriste na kontakt strani, uslovima, reklamacijama, email šablonima i footer-u.
+- Kada se DNS vrati na AdriaHost/cPanel, dodati potrebne email/DNS zapise za domen `svetpovoljnihcena.rs` ako se mejl šalje preko Resend/Postmark ili drugog provajdera.
+
+### 18.3 Email sistem i obaveštenja kupcima
+
+- Podesiti produkcioni email provider: `EMAIL_PROVIDER`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `EMAIL_ORDER_BCC`, `EMAIL_RECLAMATIONS_INBOX`, `EMAIL_COMMENTS_INBOX`, `EMAIL_INBOUND_SECRET`, `EMAIL_UNSUBSCRIBE_SECRET`, `EMAIL_ALERTS_CRON_SECRET`.
+- Podesiti provider ključeve i webhook: `RESEND_API_KEY` / `RESEND_WEBHOOK_SECRET` ili Postmark ekvivalente.
+- Testirati slanje:
+  - potvrda email adrese;
+  - reset lozinke;
+  - potvrda porudžbine;
+  - promena statusa porudžbine;
+  - potvrda prijema reklamacije;
+  - promena statusa reklamacije;
+  - slanje fiskalnog računa kupcu kada se fiskalizacija završi.
+- Proveriti da korisnik ne vidi lažnu potvrdu slanja ako provider nije podešen ili slanje nije uspelo.
+
+### 18.4 Plaćanja
+
+- Završiti produkciona podešavanja za RaiAccept kartično plaćanje i IPS: merchant podaci, terminali, public base URL, callback URL-ovi, success/fail/cancel URL-ovi i tajne za verifikaciju callback-a.
+- Proveriti da su stari WS Pay tokovi uklonjeni i da se kartice vode preko RaiAccept-a.
+- Proveriti da se plaćanje može pokrenuti samo za legitimnu porudžbinu, preko prijavljenog kupca ili validnog javnog tokena.
+- Testirati uspešno plaćanje, neuspešno plaćanje, otkazano plaćanje, ponovni pokušaj plaćanja i status plaćanja na potvrdi porudžbine.
+- Testirati povraćaj novca za IPS i pripremiti isti princip za kartično plaćanje prema RaiAccept dokumentaciji.
+
+### 18.5 Dostava i kurirske integracije
+
+- Podesiti X Express produkcione env vrednosti: base URL, API user, API key, contract code, prefiks/opseg brojeva pošiljki, webhook ključ i endpoint putanje.
+- Sinhronizovati šifarnike opština, mesta, ulica i statusa.
+- Testirati proveru adrese, kreiranje pošiljke, prikaz tracking broja, labelu i prijem statusa preko webhook-a.
+- Proveriti da promena statusa pošiljke ažurira porudžbinu i šalje kupcu odgovarajuće obaveštenje.
+- Proveriti pravila dostave u admin panelu: kurirska cena, gradovi, kamionska dostava, mala/bulky pošiljka i fallback kada kurir nije dostupan.
+
+### 18.6 Fiskalizacija
+
+- Podesiti fiskalni provider i produkcione vrednosti: `FISCAL_PROVIDER`, `FISCAL_ENDPOINT`, `FISCAL_API_KEY`, `FISCAL_TIN`, `FISCAL_LOCATION_ID`, `FISCAL_CASHIER`, `FISCAL_VAT_LABEL`.
+- Potvrditi koji servis se koristi za slanje na TaxCore/SUF/LPFR gateway i uskladiti payload sa tim ugovorom.
+- Proveriti automatske okidače fiskalizacije:
+  - kada kupac plati avansno online;
+  - kada roba bude preuzeta iz magacina/dobavljača i kurirski status potvrdi preuzimanje.
+- Proveriti ručnu fiskalizaciju u admin panelu: izbor porudžbine, izbor artikala, način plaćanja, magacin i izdavanje računa.
+- Proveriti refundaciju: izbor stavki, način povraćaja novca, vraćanje robe na magacin, slanje refundacije ka fiskalnom servisu i vezivanje refundacije za originalni račun.
+- Testirati PDF/attachment fiskalnog računa i automatsko slanje kupcu emailom.
+- Proveriti greške: ako fiskalni servis ne odgovara, sistem mora da zabeleži grešku, ne sme tiho da prikaže uspeh.
+
+### 18.7 Večerašnji redosled rada
+
+1. Završiti i proveriti pravne/kontakt stranice i poslovne tekstove.
+2. Zameniti placeholder podatke firme stvarnim produkcionim podacima.
+3. Podesiti email adrese i provider za korisničku službu.
+4. Podesiti DNS/email zapise čim domen bude vraćen na AdriaHost/cPanel.
+5. Završiti i testirati plaćanja: RaiAccept i IPS.
+6. Završiti i testirati X Express dostavu i status pošiljke.
+7. Završiti fiskalizaciju i refundaciju, uključujući slanje računa kupcu.
+8. Proći jedan kompletan test: proizvod -> korpa -> checkout -> plaćanje -> porudžbina -> dostava -> fiskalni račun -> email kupcu.
+
+
+Mare, samo da ti javim šta se dešava.
+
+Sajt je sada spreman za lokalni testing i krećem da je prolazim kao pravi kupac: od početne strane, kataloga i proizvoda, preko korpe i checkout-a, do porudžbina, admin panela,podešavanja u pozadini, itd...
+
+Dosta toga sam već sredio i poboljšao, posebno stabilnost i sigurnost aplikacije: nalozi, admin pristup, porudžbine, plaćanja, upload fajlova i javne rute. Suština je da ne gledamo samo da sajt “radi”, nego da bude spreman da izdrži realno korišćenje.
+
+Radio sam i deo oko slika, da se ubuduće bolje učitavaju, pogotovo kada bude više proizvoda. Plan je da sistem sam pravi manje verzije slika za kartice, korpu, pretragu i stranicu proizvoda, da sajt bude brži i lakši za korišćenje.
+
+Večeras radim celu noc tako da ako mi atreba jos nesto konkretno pisem ti pa ti odgovri kad stignes.
+
+Google Cloud Console mi i dalje izbacuje grešku kada pokušam da ti pošaljem zahtev za pristup, pa da probamo sutra ponovo. Fb takodje.
+
+Kad stigneš, piši podršci za stari domen(svetakcija.rs) da vrate DNS servere na originalne. Kad to vrate, onda idemo na svetpovoljnihcena.rs da ubacimo neke zapise.

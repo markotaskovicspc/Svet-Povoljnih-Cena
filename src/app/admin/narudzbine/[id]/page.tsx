@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
@@ -37,10 +37,10 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-async function updateStatus(formData: FormData) {
+async function updateStatus(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "order.statusUpdate", entity: "Order" },
     async (actorId, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
@@ -49,11 +49,37 @@ async function updateStatus(formData: FormData) {
         if (!id || !Object.values(OrderStatus).includes(status)) {
           return { ok: false as const, error: "Nedostaje ID ili status." };
         }
+        let restoreOps: ReturnType<typeof db.product.update>[] = [];
+        let orderData: { status: OrderStatus; cancelledAt?: Date; stockRestoredAt?: Date } = {
+          status,
+        };
+        if (status === "OTKAZANO") {
+          const existing = await db.order.findUnique({
+            where: { id },
+            select: {
+              stockRestoredAt: true,
+              items: { select: { productId: true, qty: true } },
+            },
+          });
+          if (existing && !existing.stockRestoredAt) {
+            const now = new Date();
+            orderData = { status, cancelledAt: now, stockRestoredAt: now };
+            restoreOps = existing.items
+              .filter((item): item is { productId: string; qty: number } => !!item.productId)
+              .map((item) =>
+                db.product.update({
+                  where: { id: item.productId },
+                  data: { stock: { increment: item.qty } },
+                }),
+              );
+          }
+        }
         await db.$transaction([
-          db.order.update({ where: { id }, data: { status } }),
+          db.order.update({ where: { id }, data: orderData }),
           db.orderStatusEvent.create({
             data: { orderId: id, status, note, actorId },
           }),
+          ...restoreOps,
         ]);
         void (async () => {
           try {
@@ -76,15 +102,20 @@ async function updateStatus(formData: FormData) {
         }
         revalidatePath(`/admin/narudzbine/${id}`);
         revalidatePath("/admin/narudzbine");
-        return { ok: true as const, entityId: id, diff: { status, note } };
+        return {
+          ok: true as const,
+          entityId: id,
+          diff: { status, note },
+          message: "Status porudžbine je ažuriran.",
+        };
       },
   )(formData);
 }
 
-async function createCourierShipment(formData: FormData) {
+async function createCourierShipment(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
@@ -93,22 +124,31 @@ async function createCourierShipment(formData: FormData) {
         Math.min(99, Number(formData.get("packageCount") ?? 1) || 1),
       );
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
-      const shipment = await createShipmentForOrder(id, { packageCount });
-      revalidatePath(`/admin/narudzbine/${id}`);
-      revalidatePath("/admin/narudzbine");
-      return {
-        ok: true as const,
-        entityId: shipment.id,
-        diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
-      };
+      // createShipmentForOrder throws on failure but still persists a FAILED
+      // shipment row — revalidate in `finally` so that row is visible without a
+      // hard reload, and surface the error instead of swallowing it (Bug #10).
+      try {
+        const shipment = await createShipmentForOrder(id, { packageCount });
+        return {
+          ok: true as const,
+          entityId: shipment.id,
+          diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
+          message: `Kurirski nalog je kreiran (${shipment.provider}${
+            shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""
+          }).`,
+        };
+      } finally {
+        revalidatePath(`/admin/narudzbine/${id}`);
+        revalidatePath("/admin/narudzbine");
+      }
     },
   )(formData);
 }
 
-async function syncCourierShipment(formData: FormData) {
+async function syncCourierShipment(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "order.courierStatusSync", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
@@ -116,18 +156,26 @@ async function syncCourierShipment(formData: FormData) {
       if (!shipmentId || !orderId) {
         return { ok: false as const, error: "Nedostaje ID pošiljke." };
       }
-      const result = await syncCourierShipmentById(shipmentId);
-      revalidatePath(`/admin/narudzbine/${orderId}`);
-      revalidatePath("/admin/narudzbine");
-      return { ok: true as const, entityId: shipmentId, diff: result };
+      try {
+        const result = await syncCourierShipmentById(shipmentId);
+        return {
+          ok: true as const,
+          entityId: shipmentId,
+          diff: result,
+          message: "Status pošiljke je sinhronizovan.",
+        };
+      } finally {
+        revalidatePath(`/admin/narudzbine/${orderId}`);
+        revalidatePath("/admin/narudzbine");
+      }
     },
   )(formData);
 }
 
-async function deleteMyGlsShipment(formData: FormData) {
+async function deleteMyGlsShipment(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "order.myGlsDeleteLabels", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
@@ -135,18 +183,26 @@ async function deleteMyGlsShipment(formData: FormData) {
       if (!shipmentId || !orderId) {
         return { ok: false as const, error: "Nedostaje ID pošiljke." };
       }
-      const result = await deleteMyGlsLabelsForShipment(shipmentId);
-      revalidatePath(`/admin/narudzbine/${orderId}`);
-      revalidatePath("/admin/narudzbine");
-      return { ok: true as const, entityId: shipmentId, diff: result };
+      try {
+        const result = await deleteMyGlsLabelsForShipment(shipmentId);
+        return {
+          ok: true as const,
+          entityId: shipmentId,
+          diff: result,
+          message: "MyGLS nalog je otkazan.",
+        };
+      } finally {
+        revalidatePath(`/admin/narudzbine/${orderId}`);
+        revalidatePath("/admin/narudzbine");
+      }
     },
   )(formData);
 }
 
-async function modifyMyGlsCOD(formData: FormData) {
+async function modifyMyGlsCOD(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["OPS"], action: "order.myGlsModifyCOD", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
@@ -155,10 +211,18 @@ async function modifyMyGlsCOD(formData: FormData) {
       if (!shipmentId || !orderId || !Number.isFinite(codAmount) || codAmount < 0) {
         return { ok: false as const, error: "Neispravan COD iznos." };
       }
-      const result = await modifyMyGlsCODForShipment(shipmentId, codAmount);
-      revalidatePath(`/admin/narudzbine/${orderId}`);
-      revalidatePath("/admin/narudzbine");
-      return { ok: true as const, entityId: shipmentId, diff: result };
+      try {
+        const result = await modifyMyGlsCODForShipment(shipmentId, codAmount);
+        return {
+          ok: true as const,
+          entityId: shipmentId,
+          diff: result,
+          message: "COD iznos je izmenjen.",
+        };
+      } finally {
+        revalidatePath(`/admin/narudzbine/${orderId}`);
+        revalidatePath("/admin/narudzbine");
+      }
     },
   )(formData);
 }
@@ -467,10 +531,11 @@ export default async function OrderDetail({
 
           <Card>
             <CardTitle>Promena statusa</CardTitle>
-            <form action={updateStatus} className="space-y-3">
+            <AdminActionForm action={updateStatus} className="space-y-3">
               <input type="hidden" name="id" value={order.id} />
               <Field label="Novi status">
                 <select
+                  key={order.status}
                   name="status"
                   defaultValue={order.status}
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -488,7 +553,7 @@ export default async function OrderDetail({
               <div className="flex justify-end">
                 <SubmitButton size="sm">Sačuvaj</SubmitButton>
               </div>
-            </form>
+            </AdminActionForm>
           </Card>
 
           {order.paymentMethod === "IPS" ? (
@@ -640,19 +705,19 @@ export default async function OrderDetail({
                         ) : null}
                         <div className="mt-3 flex flex-wrap justify-end gap-2">
                           {shipment.provider && shipment.trackingNo ? (
-                            <form action={syncCourierShipment}>
+                            <AdminActionForm action={syncCourierShipment}>
                               <input type="hidden" name="shipmentId" value={shipment.id} />
                               <input type="hidden" name="orderId" value={order.id} />
                               <SubmitButton variant="outline" size="xs">
                                 Osveži status
                               </SubmitButton>
-                            </form>
+                            </AdminActionForm>
                           ) : null}
                           {shipment.provider === MYGLS_PROVIDER &&
                           shipment.status !== "DELIVERED" &&
                           shipment.status !== "RETURNED" ? (
                             <>
-                              <form action={modifyMyGlsCOD} className="flex items-center gap-2">
+                              <AdminActionForm action={modifyMyGlsCOD} className="flex items-center gap-2">
                                 <input type="hidden" name="shipmentId" value={shipment.id} />
                                 <input type="hidden" name="orderId" value={order.id} />
                                 <input
@@ -665,18 +730,18 @@ export default async function OrderDetail({
                                 <SubmitButton variant="outline" size="xs">
                                   Izmeni COD
                                 </SubmitButton>
-                              </form>
-                              <form action={deleteMyGlsShipment}>
+                              </AdminActionForm>
+                              <AdminActionForm action={deleteMyGlsShipment}>
                                 <input type="hidden" name="shipmentId" value={shipment.id} />
                                 <input type="hidden" name="orderId" value={order.id} />
                                 <SubmitButton variant="destructive" size="xs">
                                   Obriši GLS
                                 </SubmitButton>
-                              </form>
+                              </AdminActionForm>
                             </>
                           ) : null}
                           {shipment.status === "FAILED" ? (
-                            <form action={createCourierShipment} className="flex items-end gap-2">
+                            <AdminActionForm action={createCourierShipment} className="flex items-end gap-2">
                               <input type="hidden" name="id" value={order.id} />
                               {shipment.provider === X_EXPRESS_PROVIDER ? (
                                 <Field label="Paketa">
@@ -691,7 +756,7 @@ export default async function OrderDetail({
                                 </Field>
                               ) : null}
                               <SubmitButton size="xs">Ponovi nalog</SubmitButton>
-                            </form>
+                            </AdminActionForm>
                           ) : null}
                         </div>
                         {shipment.events.length ? (
@@ -720,7 +785,7 @@ export default async function OrderDetail({
                   (shipment) =>
                     shipment.provider !== activeSmallProvider || shipment.status === "FAILED",
                 ) ? (
-                    <form action={createCourierShipment} className="flex items-end justify-end gap-2">
+                    <AdminActionForm action={createCourierShipment} className="flex items-end justify-end gap-2">
                       <input type="hidden" name="id" value={order.id} />
                       {activeSmallProvider === X_EXPRESS_PROVIDER ? (
                         <Field label="Paketa">
@@ -737,7 +802,7 @@ export default async function OrderDetail({
                       <SubmitButton size="sm">
                         Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
                       </SubmitButton>
-                  </form>
+                  </AdminActionForm>
                 ) : null}
               </div>
             )}

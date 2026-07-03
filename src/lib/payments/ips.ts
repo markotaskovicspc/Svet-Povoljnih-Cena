@@ -78,6 +78,18 @@ export function getIpsConfig(): IpsConfig {
     );
   }
 
+  // Presence alone isn't enough: placeholder values (e.g. an unfilled
+  // `GET_FROM_...`) pass the truthy check above but then blow up later inside
+  // `fetch()`/`new URL()` with a raw `ERR_INVALID_URL` TypeError that the route
+  // handler doesn't recognize as an IPS error (→ uncaught 500). Validate the
+  // URLs here so misconfigured values fail the same graceful way missing ones do.
+  if (!isValidHttpUrl(baseUrl)) {
+    throw new IpsConfigError(`IPS_BASE_URL nije ispravan URL: ${baseUrl}`);
+  }
+  if (!isValidHttpUrl(publicBaseUrl)) {
+    throw new IpsConfigError(`IPS_PUBLIC_BASE_URL nije ispravan URL: ${publicBaseUrl}`);
+  }
+
   return {
     baseUrl,
     userId,
@@ -99,6 +111,15 @@ export function getIpsConfig(): IpsConfig {
       3600,
     ),
   };
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function verifyIpsCallbackRequest(req: Request, rawBody: string) {
