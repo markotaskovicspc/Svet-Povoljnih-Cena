@@ -1,5 +1,6 @@
 import "server-only";
 import { BRAND } from "@/lib/brand";
+import { envValue } from "@/lib/env";
 
 /**
  * Phase 4D — central email configuration.
@@ -49,9 +50,9 @@ export function getEmailConfig(): EmailConfig {
         : "none",
     apiKey:
       provider === "resend"
-        ? process.env.RESEND_API_KEY ?? null
+        ? envValue("RESEND_API_KEY")
         : provider === "postmark"
-          ? process.env.POSTMARK_SERVER_TOKEN ?? null
+          ? envValue("POSTMARK_SERVER_TOKEN")
           : null,
     from:
       process.env.EMAIL_FROM ??
@@ -67,9 +68,9 @@ export function getEmailConfig(): EmailConfig {
     commentsInbox:
       process.env.EMAIL_COMMENTS_INBOX ?? "komentar@svetpovoljnihcena.rs",
     inboundSecret: process.env.EMAIL_INBOUND_SECRET ?? null,
-    resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET ?? null,
-    promotionsTopicId: process.env.RESEND_TOPIC_PROMOTIONS_ID ?? null,
-    newsletterSegmentId: process.env.RESEND_SEGMENT_NEWSLETTER_ID ?? null,
+    resendWebhookSecret: envValue("RESEND_WEBHOOK_SECRET"),
+    promotionsTopicId: envValue("RESEND_TOPIC_PROMOTIONS_ID"),
+    newsletterSegmentId: envValue("RESEND_SEGMENT_NEWSLETTER_ID"),
     unsubscribeSecret:
       process.env.EMAIL_UNSUBSCRIBE_SECRET ??
       process.env.AUTH_SECRET ??

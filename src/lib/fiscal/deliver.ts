@@ -7,6 +7,7 @@ import { buildWithdrawalFormPdf } from "@/lib/email/pdf";
 import { num } from "@/lib/api/_helpers";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { buildFiscalReceiptPdf } from "./pdf";
+import { downloadFiscalPdf } from "./pdf-storage";
 import {
   getIssuedSaleDocumentsForOrder,
   isOrderFullyFiscalized,
@@ -67,7 +68,24 @@ export async function issueAndDeliverFiscalReceipt(
   }
 
   const cfg = getFiscalConfig();
-  const attachments = receiptDocuments.map((document) => {
+  const attachments = await Promise.all(receiptDocuments.map(async (document) => {
+    // Prefer the provider-issued official PDF (QR + Tax Authority
+    // signature); the locally rendered slip is the fallback.
+    if (document.pdfObjectKey) {
+      try {
+        const official = await downloadFiscalPdf(document.pdfObjectKey);
+        if (official) {
+          return {
+            filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
+            content: official.toString("base64"),
+            contentType: "application/pdf",
+          };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[fiscal] official PDF download failed for ${document.id}: ${message}`);
+      }
+    }
     const pdf = buildFiscalReceiptPdf({
       orderNumber: loaded.order.id,
       receiptNumber: document.receiptNumber!,
@@ -103,7 +121,7 @@ export async function issueAndDeliverFiscalReceipt(
       content: pdf.toString("base64"),
       contentType: "application/pdf",
     };
-  });
+  }));
 
   const withdrawalForm = buildWithdrawalFormPdf({
     number: loaded.order.id,

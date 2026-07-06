@@ -1417,6 +1417,7 @@ model FiscalDocument {
   qrUrl          String?
   pdfUrl         String?
   pdfObjectKey   String?
+  buyerId        String?
   recipientEmail String?
   emailedAt      DateTime?
   emailError     String?              @db.Text
@@ -1424,6 +1425,9 @@ model FiscalDocument {
   rawResponse    Json?
   error          String?              @db.Text
   idempotencyKey String               @unique
+  dispatchedAt   DateTime?
+  attemptCount   Int                  @default(0)
+  lastAttemptAt  DateTime?
   totalNet       Decimal              @default(0) @db.Decimal(12, 2)
   totalVat       Decimal              @default(0) @db.Decimal(12, 2)
   totalGross     Decimal              @default(0) @db.Decimal(12, 2)
@@ -1446,7 +1450,7 @@ model FiscalDocument {
 model FiscalDocumentLine {
   id                 String   @id @default(cuid())
   fiscalDocumentId   String
-  orderItemId        String
+  orderItemId        String?
   productId          String?
   originalSaleLineId String?
   priceList          String   @default("MP")
@@ -1485,7 +1489,7 @@ model FiscalDocumentLine {
   createdAt          DateTime @default(now())
 
   fiscalDocument   FiscalDocument       @relation(fields: [fiscalDocumentId], references: [id], onDelete: Cascade)
-  orderItem        OrderItem            @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItem        OrderItem?           @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   product          Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
   originalSaleLine FiscalDocumentLine?  @relation("FiscalLineRefunds", fields: [originalSaleLineId], references: [id], onDelete: SetNull)
   refundLines      FiscalDocumentLine[] @relation("FiscalLineRefunds")
@@ -1494,6 +1498,21 @@ model FiscalDocumentLine {
   @@index([orderItemId])
   @@index([productId])
   @@index([originalSaleLineId])
+  @@index([sku])
+}
+
+model FiscalProductSync {
+  id           String   @id @default(cuid())
+  provider     String   @default("badi")
+  sku          String
+  name         String
+  taxRateLabel String   @default("Ђ")
+  isService    Boolean  @default(false)
+  providerId   String?
+  syncedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([provider, sku])
   @@index([sku])
 }
 

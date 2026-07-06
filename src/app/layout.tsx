@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Playfair_Display, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { PromoBar } from "@/components/layout/promo-bar";
@@ -56,6 +57,11 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
+// `.env` may hold an unfilled `GET_FROM_...` placeholder instead of a real
+// measurement ID (truthy but not a valid ID) — only load GA when it looks real.
+const gaId = process.env.NEXT_PUBLIC_GA4_ID;
+const isGaConfigured = !!gaId && gaId.startsWith("G-");
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -103,6 +109,7 @@ export default async function RootLayout({
             </>
           )}
         </Providers>
+        {isGaConfigured ? <GoogleAnalytics gaId={gaId!} /> : null}
       </body>
     </html>
   );

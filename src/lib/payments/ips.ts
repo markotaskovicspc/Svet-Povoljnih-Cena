@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { envValue } from "@/lib/env";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
@@ -62,9 +63,9 @@ export const ipsPaymentProvider: PaymentProviderAdapter = {
 };
 
 export function getIpsConfig(): IpsConfig {
-  const baseUrl = process.env.IPS_BASE_URL?.replace(/\/$/, "");
-  const userId = process.env.IPS_USER_ID;
-  const tid = process.env.IPS_TID;
+  const baseUrl = envValue("IPS_BASE_URL")?.replace(/\/$/, "");
+  const userId = envValue("IPS_USER_ID");
+  const tid = envValue("IPS_TID");
   const publicBaseUrl = (
     process.env.IPS_PUBLIC_BASE_URL ??
     process.env.NEXT_PUBLIC_BASE_URL ??

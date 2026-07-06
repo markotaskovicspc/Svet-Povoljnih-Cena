@@ -319,6 +319,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             update: {},
           })
           .catch(() => undefined);
+
+        // This event only fires for users created via the Auth.js adapter,
+        // i.e. OAuth sign-ups (credentials signup writes the User row itself
+        // in registerCustomer and never hits this path). Auth.js's core
+        // always persists new OAuth users with emailVerified: null, so we
+        // correct it here — Google/Facebook/Apple only ever hand back
+        // already-verified emails, unlike our own credentials signup.
+        await db.user
+          .update({ where: { id: user.id }, data: { emailVerified: new Date() } })
+          .catch(() => undefined);
       }
     },
   },

@@ -249,6 +249,7 @@ export function FiscalizationClient({
         open={refundOpen}
         onOpenChange={setRefundOpen}
         selectedIds={selectedRefundable}
+        suggestedBuyerId={suggestBuyerId(rows, selectedRefundable)}
         warehouses={warehouses}
         paymentMethods={paymentMethods}
         action={refundAction}
@@ -356,10 +357,16 @@ function ManualFiscalizationDialog({
   );
 }
 
+function suggestBuyerId(rows: FiscalizationRow[], selectedIds: string[]): string {
+  const withPib = rows.find((row) => selectedIds.includes(row.id) && row.pib !== "-");
+  return withPib ? `10:${withPib.pib}` : "";
+}
+
 function RefundDialog({
   open,
   onOpenChange,
   selectedIds,
+  suggestedBuyerId,
   warehouses,
   paymentMethods,
   action,
@@ -367,6 +374,7 @@ function RefundDialog({
   open: boolean;
   onOpenChange: (value: boolean) => void;
   selectedIds: string[];
+  suggestedBuyerId: string;
   warehouses: WarehouseOption[];
   paymentMethods: string[];
   action: AdminFormAction;
@@ -412,6 +420,21 @@ function RefundDialog({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-ink-700">Identifikacija kupca</span>
+            <input
+              name="buyerId"
+              required
+              pattern="\d{1,2}:.+"
+              defaultValue={suggestedBuyerId}
+              placeholder="10:PIB / 11:JMBG / 20:broj lične karte"
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+            />
+            <span className="block text-xs text-ink-500">
+              Poreska uprava zahteva identifikaciju kupca na refundacionom računu (prefiks 10 = PIB,
+              11 = JMBG, 20 = lična karta).
+            </span>
           </label>
           <DialogFooter>
             <SubmitButton variant="destructive" size="sm" pendingLabel="Refundacija…">

@@ -71,14 +71,19 @@ async function refundFiscalLinesAction(_state: AdminActionState, formData: FormD
       const fiscalLineIds = formData.getAll("fiscalLineIds").map(String).filter(Boolean);
       const paymentReturnMethod = enumValue(PaymentMethod, String(formData.get("paymentReturnMethod") ?? ""));
       const warehouseId = String(formData.get("warehouseId") ?? "");
+      const buyerId = String(formData.get("buyerId") ?? "").trim();
       if (!fiscalLineIds.length || !paymentReturnMethod || !warehouseId) {
         return { ok: false as const, error: "Izaberite redove, način vraćanja novca i magacin." };
+      }
+      if (!buyerId) {
+        return { ok: false as const, error: "Unesite identifikaciju kupca (npr. 10:PIB ili 11:JMBG) — obavezna je za refundaciju." };
       }
 
       const result = await issueFiscalRefund({
         fiscalLineIds,
         paymentReturnMethod,
         warehouseId,
+        buyerId,
         actorId,
       });
       revalidatePath("/admin/fiskalizacija");
@@ -89,6 +94,7 @@ async function refundFiscalLinesAction(_state: AdminActionState, formData: FormD
           fiscalLineIds,
           paymentReturnMethod,
           warehouseId,
+          buyerId,
           documents: result.documents.map((document) => document.receiptNumber),
           paymentErrors: result.paymentErrors,
         },

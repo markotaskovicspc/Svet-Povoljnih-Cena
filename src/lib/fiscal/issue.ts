@@ -15,6 +15,7 @@ import { num } from "@/lib/api/_helpers";
 import { ipsPaymentProvider } from "@/lib/payments";
 import { providerForPaymentMethod } from "@/lib/payments/types";
 import { fiscalize, type FiscalDispatchResult } from "./transport";
+import { uploadFiscalPdf } from "./pdf-storage";
 
 export type FiscalIssueOutcome =
   | {
@@ -39,6 +40,13 @@ type OrderWithItems = Order & { items: OrderItem[] };
 const VAT_RATE = 20;
 const VAT_FACTOR = 1 + VAT_RATE / 100;
 
+/** Reserved SKU for the delivery-fee service line (no OrderItem behind it). */
+export const SHIPPING_SKU = "DOSTAVA";
+const SHIPPING_NAME = "Dostava";
+
+/** Tax Authority buyer identification, e.g. `10:123456789` (10 = PIB). */
+const BUYER_ID_PATTERN = /^\d{1,2}:\S+$/;
+
 const PAYMENT_METHOD_GATEWAY: Record<PaymentMethod, "CASH" | "CARD" | "TRANSFER" | "OTHER"> = {
   POUZECE_GOTOVINA: "CASH",
   POUZECE_KARTICA: "CARD",
@@ -53,7 +61,8 @@ type FiscalOrder = NonNullable<Awaited<ReturnType<typeof loadOrderForFiscal>>>;
 type FiscalOrderItem = FiscalOrder["items"][number];
 
 type SaleLineDraft = {
-  item: FiscalOrderItem;
+  /** null → shipping service line (SKU DOSTAVA). */
+  item: FiscalOrderItem | null;
   qty: number;
   unitPriceGross: number;
   totalGross: number;
@@ -81,12 +90,22 @@ export async function issueFiscalSale(input: {
   }
 
   const existingQty = await getIssuedSaleQuantities(candidates.map((item) => item.id));
-  const drafts = candidates
-    .map((item) => {
-      const remaining = item.qty - (existingQty.get(item.id) ?? 0);
-      return remaining > 0 ? buildSaleLineDraft(item, remaining) : null;
-    })
-    .filter((item): item is SaleLineDraft => Boolean(item));
+  const drafts = buildSaleDrafts(order, candidates, existingQty);
+
+  // Delivery fee rides along with the first fiscalized batch so that
+  // the fiscal total matches what the customer actually paid.
+  const shippingCents = Math.round(num(order.shipping) * 100);
+  if (drafts.length && shippingCents > 0) {
+    const shippingLines = await db.fiscalDocumentLine.count({
+      where: {
+        sku: SHIPPING_SKU,
+        fiscalDocument: {
+          is: { orderId: order.id, kind: "SALE", status: { in: ["PENDING", "ISSUED"] } },
+        },
+      },
+    });
+    if (!shippingLines) drafts.push(draftFromCents(null, 1, shippingCents));
+  }
 
   if (!drafts.length) {
     const existing = await db.fiscalDocument.findFirst({
@@ -107,7 +126,10 @@ export async function issueFiscalSale(input: {
     order.number,
     source,
     paymentMethod,
-    drafts.map((line) => `${line.item.id}:${line.qty}`).sort().join("|"),
+    drafts
+      .map((line) => `${line.item?.id ?? "shipping"}:${line.qty}@${Math.round(line.unitPriceGross * 100)}`)
+      .sort()
+      .join("|"),
   );
   const warehouse = await ensureDefaultWarehouse();
 
@@ -120,6 +142,7 @@ export async function issueFiscalSale(input: {
   }
 
   const totals = sumDrafts(drafts);
+  const buyerId = buyerIdForFiscal(order);
   const rawRequest = buildFiscalRequestPreview({
     idempotencyKey,
     order,
@@ -127,8 +150,8 @@ export async function issueFiscalSale(input: {
     transactionType: "SALE",
     totalGross: totals.totalGross,
     lines: drafts.map((line) => ({
-      sku: line.item.sku,
-      name: line.item.name,
+      sku: line.item?.sku ?? SHIPPING_SKU,
+      name: line.item?.name ?? SHIPPING_NAME,
       qty: line.qty,
       unitPrice: line.unitPriceGross,
     })),
@@ -141,6 +164,7 @@ export async function issueFiscalSale(input: {
       status: "PENDING",
       source,
       paymentMethod,
+      buyerId,
       idempotencyKey,
       totalGross: decimal(totals.totalGross),
       totalNet: decimal(totals.totalNet),
@@ -153,6 +177,7 @@ export async function issueFiscalSale(input: {
     include: { lines: true },
   }));
 
+  await markDocumentDispatched(document.id);
   const dispatch = await fiscalize({
     invoiceRef: idempotencyKey,
     idempotencyKey,
@@ -160,11 +185,13 @@ export async function issueFiscalSale(input: {
     total: totals.totalGross,
     paymentMethod: PAYMENT_METHOD_GATEWAY[paymentMethod],
     buyer: buyerForFiscal(order),
+    buyerId,
     lines: document.lines.map((line) => ({
       sku: line.sku,
       name: line.shortName,
       qty: line.qty,
       unitPrice: num(line.unitPriceGross),
+      isService: line.orderItemId === null,
     })),
   });
 
@@ -173,6 +200,7 @@ export async function issueFiscalSale(input: {
     return { ok: false, reason: "gateway_failure", error: dispatch.error };
   }
 
+  const pdfStored = await storeOfficialPdf(order.number, dispatch);
   const issuedAt = new Date(dispatch.receipt.fiscalizedAt);
   const issued = await db.fiscalDocument.update({
     where: { id: document.id },
@@ -183,6 +211,7 @@ export async function issueFiscalSale(input: {
       rawResponse: dispatch.receipt.raw as Prisma.InputJsonValue,
       error: null,
       issuedAt,
+      ...(pdfStored ? { pdfUrl: pdfStored.publicUrl, pdfObjectKey: pdfStored.objectKey } : {}),
     },
     include: { lines: true },
   });
@@ -194,11 +223,22 @@ export async function issueFiscalRefund(input: {
   fiscalLineIds: string[];
   paymentReturnMethod: PaymentMethod;
   warehouseId: string;
+  /** Tax Authority buyer identification (`10:PIB`, `11:JMBG`, `20:lična karta`), mandatory for refund receipts. */
+  buyerId: string;
   actorId?: string | null;
 }): Promise<FiscalRefundOutcome> {
   const uniqueLineIds = Array.from(new Set(input.fiscalLineIds.filter(Boolean)));
   if (!uniqueLineIds.length) {
     return { ok: false, reason: "invalid_request", error: "Izaberite bar jedan fiskalni red." };
+  }
+
+  const buyerId = input.buyerId?.trim() ?? "";
+  if (!BUYER_ID_PATTERN.test(buyerId)) {
+    return {
+      ok: false,
+      reason: "invalid_request",
+      error: "Identifikacija kupca mora biti u formatu Poreske uprave, npr. 10:PIB ili 11:JMBG.",
+    };
   }
 
   const warehouse = await db.warehouse.findFirst({
@@ -287,6 +327,7 @@ export async function issueFiscalRefund(input: {
         source: "REFUND",
         paymentMethod: input.paymentReturnMethod,
         warehouseId: warehouse.id,
+        buyerId,
         idempotencyKey,
         totalGross: decimal(totals.totalGross),
         totalNet: decimal(totals.totalNet),
@@ -299,12 +340,14 @@ export async function issueFiscalRefund(input: {
       include: { lines: true },
     }));
 
+    await markDocumentDispatched(document.id);
     const dispatch = await fiscalize({
       invoiceRef: idempotencyKey,
       idempotencyKey,
       transactionType: "REFUND",
       invoiceType: "REFUND",
       originalReceiptNumber,
+      buyerId,
       total: totals.totalGross,
       paymentMethod: PAYMENT_METHOD_GATEWAY[input.paymentReturnMethod],
       lines: document.lines.map((line) => ({
@@ -312,6 +355,7 @@ export async function issueFiscalRefund(input: {
         name: line.shortName,
         qty: line.qty,
         unitPrice: num(line.unitPriceGross),
+        isService: line.orderItemId === null,
       })),
     });
 
@@ -320,6 +364,7 @@ export async function issueFiscalRefund(input: {
       return { ok: false, reason: "gateway_failure", error: dispatch.error };
     }
 
+    const pdfStored = await storeOfficialPdf(order.number, dispatch);
     const issuedAt = new Date(dispatch.receipt.fiscalizedAt);
     await db.$transaction(async (tx) => {
       await tx.fiscalDocument.update({
@@ -331,6 +376,7 @@ export async function issueFiscalRefund(input: {
           rawResponse: dispatch.receipt.raw as Prisma.InputJsonValue,
           error: null,
           issuedAt,
+          ...(pdfStored ? { pdfUrl: pdfStored.publicUrl, pdfObjectKey: pdfStored.objectKey } : {}),
         },
       });
 
@@ -499,13 +545,98 @@ async function getIssuedSaleQuantities(orderItemIds: string[]) {
     select: { orderItemId: true, qty: true },
   });
   const byItem = new Map<string, number>();
-  for (const line of lines) byItem.set(line.orderItemId, (byItem.get(line.orderItemId) ?? 0) + line.qty);
+  for (const line of lines) {
+    if (!line.orderItemId) continue;
+    byItem.set(line.orderItemId, (byItem.get(line.orderItemId) ?? 0) + line.qty);
+  }
   return byItem;
 }
 
-function buildSaleLineDraft(item: FiscalOrderItem, qty: number): SaleLineDraft {
-  const unitPriceGross = money(num(item.unitPriceSale) + (item.withAssembly && item.assemblyPrice ? num(item.assemblyPrice) : 0));
-  const totalGross = money(unitPriceGross * qty);
+type UnitPriceTier = {
+  /** First `highQty` units of the item cost one cent more than `lowPriceCents`. */
+  highQty: number;
+  highPriceCents: number;
+  lowPriceCents: number;
+};
+
+/**
+ * Per-item unit prices with order-level discounts (voucher, first
+ * purchase, saved card) distributed proportionally across all item
+ * lines. Everything is computed in integer cents with largest-remainder
+ * rounding so Σ fiscal line totals + shipping == Order.total exactly.
+ * When a discounted line total does not divide evenly by qty, the item
+ * splits into two price tiers differing by one cent; the split is
+ * deterministic so partial fiscalization consumes tiers in stable order.
+ */
+function buildUnitPriceSchedule(order: FiscalOrder): Map<string, UnitPriceTier> {
+  const items = order.items.map((item) => {
+    const unitCents =
+      Math.round(num(item.unitPriceSale) * 100) +
+      (item.withAssembly && item.assemblyPrice ? Math.round(num(item.assemblyPrice) * 100) : 0);
+    return { id: item.id, qty: item.qty, baseCents: unitCents * item.qty, unitCents };
+  });
+
+  const discountCents = Math.round(
+    (num(order.voucherDiscount ?? 0) +
+      num(order.firstPurchaseDiscount ?? 0) +
+      num(order.savedCardDiscount ?? 0)) * 100,
+  );
+  const baseTotal = items.reduce((sum, item) => sum + item.baseCents, 0);
+
+  const schedule = new Map<string, UnitPriceTier>();
+  if (discountCents <= 0 || baseTotal <= 0) {
+    for (const item of items) {
+      schedule.set(item.id, { highQty: 0, highPriceCents: item.unitCents, lowPriceCents: item.unitCents });
+    }
+    return schedule;
+  }
+
+  const applied = Math.min(discountCents, baseTotal);
+  const shares = items.map((item) => {
+    const exact = (applied * item.baseCents) / baseTotal;
+    const floor = Math.floor(exact);
+    return { item, allocated: floor, fraction: exact - floor };
+  });
+  let leftover = applied - shares.reduce((sum, share) => sum + share.allocated, 0);
+  for (const share of [...shares].sort((a, b) => b.fraction - a.fraction)) {
+    if (leftover <= 0) break;
+    share.allocated += 1;
+    leftover -= 1;
+  }
+
+  for (const share of shares) {
+    const targetCents = share.item.baseCents - share.allocated;
+    const low = share.item.qty > 0 ? Math.floor(targetCents / share.item.qty) : 0;
+    const highQty = targetCents - low * share.item.qty;
+    schedule.set(share.item.id, { highQty, highPriceCents: low + 1, lowPriceCents: low });
+  }
+  return schedule;
+}
+
+function buildSaleDrafts(
+  order: FiscalOrder,
+  candidates: FiscalOrderItem[],
+  issuedQty: Map<string, number>,
+): SaleLineDraft[] {
+  const schedule = buildUnitPriceSchedule(order);
+  const drafts: SaleLineDraft[] = [];
+  for (const item of candidates) {
+    const issued = issuedQty.get(item.id) ?? 0;
+    const remaining = item.qty - issued;
+    if (remaining <= 0) continue;
+    const tier = schedule.get(item.id);
+    if (!tier) continue;
+    const takeHigh = Math.min(remaining, Math.max(0, tier.highQty - issued));
+    const takeLow = remaining - takeHigh;
+    if (takeHigh > 0) drafts.push(draftFromCents(item, takeHigh, tier.highPriceCents));
+    if (takeLow > 0) drafts.push(draftFromCents(item, takeLow, tier.lowPriceCents));
+  }
+  return drafts;
+}
+
+function draftFromCents(item: FiscalOrderItem | null, qty: number, unitPriceCents: number): SaleLineDraft {
+  const unitPriceGross = unitPriceCents / 100;
+  const totalGross = money((unitPriceCents * qty) / 100);
   const totalNet = money(totalGross / VAT_FACTOR);
   return {
     item,
@@ -518,17 +649,13 @@ function buildSaleLineDraft(item: FiscalOrderItem, qty: number): SaleLineDraft {
 }
 
 function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: string) {
-  const product = line.item.product;
-  const category = product?.categories[0]?.category ?? null;
   const companyName = order.billCompanyName ?? order.shipCompanyName ?? null;
   const firstName = order.billFirstName ?? order.shipFirstName;
   const lastName = order.billLastName ?? order.shipLastName;
   const street = order.billStreet ?? order.shipStreet;
   const city = order.billCity ?? order.shipCity;
   const postalCode = order.billPostalCode ?? order.shipPostalCode;
-  return {
-    orderItemId: line.item.id,
-    productId: line.item.productId,
+  const customer = {
     priceList: "MP",
     orderNumber: order.number,
     customerName: companyName ?? `${firstName} ${lastName}`,
@@ -539,6 +666,35 @@ function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: 
     postalCode,
     phone: order.shipPhone,
     email: order.guestEmail ?? order.user?.email ?? null,
+  };
+  const amounts = {
+    qty: line.qty,
+    vatRate: decimal(VAT_RATE),
+    unitPriceGross: decimal(line.unitPriceGross),
+    totalGross: decimal(line.totalGross),
+    totalNet: decimal(line.totalNet),
+    totalVat: decimal(line.totalVat),
+  };
+
+  if (!line.item) {
+    return {
+      ...customer,
+      ...amounts,
+      orderItemId: null,
+      productId: null,
+      sku: SHIPPING_SKU,
+      shortName: SHIPPING_NAME,
+      warehouseName,
+    };
+  }
+
+  const product = line.item.product;
+  const category = product?.categories[0]?.category ?? null;
+  return {
+    ...customer,
+    ...amounts,
+    orderItemId: line.item.id,
+    productId: line.item.productId,
     sku: line.item.sku,
     supplierName: line.item.supplierName ?? product?.supplier?.name ?? null,
     categoryName: line.item.categoryName ?? category?.name ?? null,
@@ -555,12 +711,6 @@ function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: 
     color1: line.item.color1 ?? product?.colorPrimary ?? null,
     color2: line.item.color2 ?? product?.colorSecondary ?? null,
     warehouseName,
-    qty: line.qty,
-    vatRate: decimal(VAT_RATE),
-    unitPriceGross: decimal(line.unitPriceGross),
-    totalGross: decimal(line.totalGross),
-    totalNet: decimal(line.totalNet),
-    totalVat: decimal(line.totalVat),
   };
 }
 
@@ -654,6 +804,44 @@ function buyerForFiscal(order: FiscalOrder) {
     tin,
     name: order.billCompanyName ?? order.shipCompanyName ?? `${order.shipFirstName} ${order.shipLastName}`,
   };
+}
+
+/** `10:` is the Tax Authority prefix for a PIB (B2B receipts). */
+function buyerIdForFiscal(order: FiscalOrder): string | null {
+  const tin = order.billPib ?? order.shipPib;
+  return tin ? `10:${tin}` : null;
+}
+
+async function markDocumentDispatched(documentId: string) {
+  const now = new Date();
+  await db.fiscalDocument.update({
+    where: { id: documentId },
+    data: { dispatchedAt: now, lastAttemptAt: now, attemptCount: { increment: 1 } },
+  });
+}
+
+/**
+ * Persist the provider's official PDF. Failure here is non-fatal: the
+ * receipt is fiscally issued either way and email delivery falls back
+ * to the locally rendered slip.
+ */
+async function storeOfficialPdf(
+  orderNumber: string,
+  dispatch: Extract<FiscalDispatchResult, { ok: true }>,
+): Promise<{ objectKey: string; publicUrl: string } | null> {
+  const pdfBase64 = dispatch.receipt.pdfBase64;
+  if (!pdfBase64) return null;
+  try {
+    return await uploadFiscalPdf({
+      orderNumber,
+      receiptNumber: dispatch.receipt.receiptNumber,
+      bytes: Buffer.from(pdfBase64, "base64"),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[fiscal] official PDF upload failed for ${orderNumber}: ${message}`);
+    return null;
+  }
 }
 
 function buildFiscalRequestPreview(args: {

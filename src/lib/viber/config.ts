@@ -1,5 +1,6 @@
 import "server-only";
 import { BRAND } from "@/lib/brand";
+import { envValue } from "@/lib/env";
 
 /**
  * Phase 4E — Viber Business Messages configuration.
@@ -41,7 +42,7 @@ export function getViberConfig(): ViberConfig {
 
   cached = {
     provider,
-    apiKey: provider === "viber" ? process.env.VIBER_API_TOKEN ?? null : null,
+    apiKey: provider === "viber" ? envValue("VIBER_API_TOKEN") : null,
     sender: process.env.VIBER_SENDER_NAME ?? BRAND.name,
     senderAvatar: process.env.VIBER_SENDER_AVATAR ?? null,
     endpoint:

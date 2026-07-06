@@ -9,7 +9,7 @@ QA-REPORT.md's bug table.
 - [ ] NEEDS-USER: obtain valid MyGLS test credentials (current ones return "Unauthorized." on every call — blocks label print/status sync end-to-end; storage side already verified working). Then re-run the QA Phase 4 MyGLS pass.
 - [ ] NEEDS-USER: get a real RESEND_API_KEY (or empty the placeholder) — order emails currently fail silently against the real API (bug #4).
 - [ ] NEEDS-USER: uncheck "Aktivan" for "Kartica (RaiAccept)" at /admin/placanje — card payment is enabled in DB with no gateway configured (bug #6).
-- [ ] [build] Harden env config checks: treat any env value starting with `GET_FROM_` as unconfigured in every provider fallback (Resend, IPS, courier), so placeholder secrets degrade to dev-mode instead of firing real failing API calls. Accept: with `.env.local` placeholders in place, order flow logs email to console instead of calling Resend, and `npm run build` passes.
+- [x] [build] Harden env config checks: treat any env value starting with `GET_FROM_` as unconfigured in every provider fallback (Resend, IPS, courier), so placeholder secrets degrade to dev-mode instead of firing real failing API calls. Accept: with `.env.local` placeholders in place, order flow logs email to console instead of calling Resend, and `npm run build` passes. *(2026-07-06: shared `envValue()` in `src/lib/env.ts`, wired into email/fiscal/IPS/bulky/viber configs; verified at runtime — dispatch logged `[email:dev]` instead of calling Resend; build+lint clean.)*
 - [ ] [build] Convert the `proizvodi` and `kategorije` admin bare forms to `AdminActionForm`/`useActionState` so rejected submissions show user-facing feedback, matching the order-detail pattern (bug #8 remainder). Accept: submitting an invalid product/category form shows an inline error; `npm run build` passes.
 
 ## Phase 2 — customer-facing gaps
@@ -20,7 +20,7 @@ QA-REPORT.md's bug table.
 ## Phase 3 — fiscalization go-live (badi.rs)
 
 - [ ] NEEDS-USER: create badi.rs account and set BADI_API_KEY / BADI_API_SECRET / BADI_CLIENT_ID in .env.local (dev stub in use until then; badi.rs was emailed for full API docs).
-- [ ] NEEDS-USER: create the `fiscal-receipts` Supabase bucket.
+- [x] NEEDS-USER: create the `fiscal-receipts` Supabase bucket. *(2026-07-06: created — public, PDF-only, matching `order-receipts`; upload/public-fetch/delete round-trip verified.)*
 - [ ] NEEDS-USER: point an external cron scheduler at `/api/cron/fiscal-retry` every ~15 min with bearer CRON_SECRET.
 - [ ] NEEDS-USER: ask the accountant whether IPS prepayment legally requires an "advance" receipt + close-at-delivery instead of `normal` at payment time.
 - [ ] [build] badi sandbox spike (after creds land): verify `receiptDelivery` response shape, the product-must-preexist assumption, and duplicate-product error text against the real sandbox; fix `src/lib/fiscal/badi.ts` where reality differs. Accept: a sandbox receipt issues successfully and the official PDF lands in the `fiscal-receipts` bucket.

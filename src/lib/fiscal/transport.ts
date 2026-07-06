@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { getFiscalConfig } from "./config";
+import { getFiscalConfig, type FiscalProvider } from "./config";
+import { fiscalizeWithBadi, isBadiConfigured } from "./badi";
 
 /**
  * Phase 4F — provider-agnostic dispatcher for the eFiskal gateway.
@@ -26,6 +27,8 @@ export interface FiscalInvoiceLine {
   /** Per-unit gross price in RSD (incl. VAT). */
   unitPrice: number;
   vatLabel?: string;
+  /** Service lines (shipping) are registered as `type: "service"` articles. */
+  isService?: boolean;
 }
 
 export interface FiscalInvoiceInput {
@@ -47,6 +50,12 @@ export interface FiscalInvoiceInput {
     tin?: string;
     name?: string;
   };
+  /**
+   * Buyer identification in Tax Authority format (e.g. `10:<PIB>`,
+   * `11:<JMBG>`). Mandatory for refunds; derived from `buyer.tin` for
+   * B2B sales when absent.
+   */
+  buyerId?: string | null;
   lines: FiscalInvoiceLine[];
 }
 
@@ -57,13 +66,15 @@ export interface FiscalReceiptResponse {
   qrUrl: string | null;
   /** ISO timestamp of fiscalization. */
   fiscalizedAt: string;
+  /** Official receipt PDF (QR + signature) when the provider returns one. */
+  pdfBase64?: string | null;
   /** Provider raw payload (stored verbatim for audit). */
   raw: unknown;
 }
 
 export type FiscalDispatchResult =
-  | { ok: true; provider: "efiskal" | "none"; receipt: FiscalReceiptResponse }
-  | { ok: false; provider: "efiskal" | "none"; error: string };
+  | { ok: true; provider: FiscalProvider; receipt: FiscalReceiptResponse }
+  | { ok: false; provider: FiscalProvider; error: string };
 
 /**
  * Submit a fiscal invoice to the configured gateway.
@@ -76,7 +87,10 @@ export async function fiscalize(
 ): Promise<FiscalDispatchResult> {
   const cfg = getFiscalConfig();
 
-  if (cfg.provider === "none" || !cfg.apiKey) {
+  const badiReady = cfg.provider === "badi" && isBadiConfigured(cfg.badi);
+  const efiskalReady = cfg.provider === "efiskal" && Boolean(cfg.apiKey);
+
+  if (!badiReady && !efiskalReady) {
     // Deterministic dev stub: the receipt number is derived from the
     // invoice ref so retries collapse to the same value.
     const key = input.idempotencyKey ?? input.invoiceRef;
@@ -106,6 +120,10 @@ export async function fiscalize(
         },
       },
     };
+  }
+
+  if (cfg.provider === "badi") {
+    return fiscalizeWithBadi(input);
   }
 
   const body = {

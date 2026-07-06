@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { envValue } from "@/lib/env";
 import {
   CourierConfigError,
   CourierProviderError,
@@ -36,10 +37,10 @@ interface BulkyConfig {
 class DryRunMarker extends Error {}
 
 function readConfig(): BulkyConfig | DryRunMarker {
-  const apiBase = process.env.BULKY_API_BASE;
-  const apiKey = process.env.BULKY_API_KEY;
-  const webhookSecret = process.env.BULKY_WEBHOOK_SECRET;
-  const fleetId = process.env.BULKY_FLEET_ID;
+  const apiBase = envValue("BULKY_API_BASE");
+  const apiKey = envValue("BULKY_API_KEY");
+  const webhookSecret = envValue("BULKY_WEBHOOK_SECRET");
+  const fleetId = envValue("BULKY_FLEET_ID");
   if (!apiBase || !apiKey || !webhookSecret || !fleetId) {
     return new DryRunMarker(
       "Bulky dispatcher not configured — using dry-run waybills.",

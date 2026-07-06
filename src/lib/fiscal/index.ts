@@ -34,3 +34,11 @@ export {
   issueAndDeliverFiscalReceipt,
   type DeliverResult,
 } from "./deliver";
+export {
+  retryPendingFiscalDocuments,
+  type FiscalRetrySummary,
+} from "./retry";
+export {
+  uploadFiscalPdf,
+  downloadFiscalPdf,
+} from "./pdf-storage";
