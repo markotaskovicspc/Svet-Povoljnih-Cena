@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# generated media-variant artifacts (variants are uploaded to Supabase, not committed)
+/svet akcija/outputs/product-media-variants/
+/svet akcija/outputs/svet-akcija-product-media-variants.json
+/svet akcija/media-variant-backfill-report.json
+/svet akcija/media-variant-url-report.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -25,6 +25,9 @@ const supabaseImagePattern = getSupabaseImagePattern();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  // `sharp` is a native module used by the media-variant backfill route; keep
+  // it external so it is required at runtime instead of bundled/traced.
+  serverExternalPackages: ["sharp"],
   images: {
     // Keep storefront media on direct CDN URLs so Vercel does not spend
     // Image Optimization transformations on every product thumbnail variant.

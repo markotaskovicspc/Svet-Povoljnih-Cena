@@ -1,13 +1,10 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-
-const IMAGE_EXTENSIONS = new Set([".avif", ".jpg", ".jpeg", ".png", ".webp"]);
-const VARIANTS = [
-  { name: "thumb", width: 160, quality: 76 },
-  { name: "card", width: 640, quality: 78 },
-  { name: "pdp", width: 1280, quality: 82 },
-];
+import {
+  IMAGE_EXTENSIONS,
+  VARIANTS,
+} from "../../scripts/lib/media-variants.mjs";
 
 const manifestPath =
   process.argv[2] || "outputs/svet-akcija-product-media-upload-manifest.json";

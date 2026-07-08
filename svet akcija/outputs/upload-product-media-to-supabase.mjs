@@ -2,14 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
-const MIME_TYPES = new Map([
-  [".avif", "image/avif"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".png", "image/png"],
-  [".webp", "image/webp"],
-]);
+import { mimeTypeForExtension } from "../../scripts/lib/media-variants.mjs";
 
 const manifestPath = process.argv[2] || "outputs/svet-akcija-product-media-upload-manifest.json";
 const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
@@ -49,7 +42,7 @@ console.log(`Uploading ${entries.length} files to bucket "${bucket}"...`);
 
 for (const entry of entries) {
   const ext = path.extname(entry.localSourcePath).toLowerCase();
-  const contentType = MIME_TYPES.get(ext) || "application/octet-stream";
+  const contentType = mimeTypeForExtension(ext);
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${entry.storagePath}`;
 
   let lastError = null;
