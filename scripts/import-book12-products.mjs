@@ -70,15 +70,35 @@ if (apply) {
     fail(`Commercial validation failed. Report written to ${reportPath}`);
   }
   const prisma = createPrismaClient();
+  let mediaChanged = 0;
   try {
     await ensureDatabaseSchema(prisma);
     const result = await importRows(prisma, report, commercialValidation.bySku);
     report.importResult = result;
+    mediaChanged = (result.created ?? 0) + (result.updated ?? 0);
     console.log(
       `Imported ${result.created} created, ${result.updated} updated, ${result.skipped} skipped. ImportRun ${result.importRunId}.`,
     );
   } finally {
     await prisma.$disconnect();
+  }
+
+  // Event-driven variant generation: a bulk Excel import that added/changed
+  // products leaves their ProductMedia rows with no variants. Run the worker
+  // to completion right here (a local Node process has no serverless time
+  // limit, so it fully drains). Opt out with --no-variants.
+  if (mediaChanged > 0 && !args.noVariants) {
+    console.log(`Generating image variants for imported products...`);
+    const variantRun = spawnSync(
+      process.execPath,
+      ["scripts/backfill-media-variants.mjs", "--limit", "100000"],
+      { stdio: "inherit" },
+    );
+    if (variantRun.status !== 0) {
+      console.error(
+        `Variant generation exited with code ${variantRun.status}. Re-run 'npm run media:backfill' to finish.`,
+      );
+    }
   }
 }
 
@@ -102,6 +122,8 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === "--apply") {
       parsed.apply = true;
+    } else if (arg === "--no-variants") {
+      parsed.noVariants = true;
     } else if (arg === "--file") {
       parsed.file = argv[++i];
     } else if (arg.startsWith("--file=")) {
