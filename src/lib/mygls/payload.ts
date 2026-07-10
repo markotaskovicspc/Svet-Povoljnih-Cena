@@ -81,6 +81,12 @@ export function buildMyGlsParcelForOrder(args: {
         Content: content,
         PackageType: 2,
         Weight: Math.max(1, packageCount(order.items) * 3),
+        // Production PrintLabels rejects parcels without dimensions
+        // (ErrorCode 13 "Invalid data in 'Height'/'Width'/'Length'",
+        // verified live 2026-07-10). Default box in cm.
+        Height: 30,
+        Width: 40,
+        Length: 50,
       },
     ],
   };

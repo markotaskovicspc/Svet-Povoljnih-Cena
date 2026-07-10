@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { importAllSuppliers, importSupplier } from "@/lib/xml";
-import { hasBearerSecret } from "@/lib/security/bearer";
+import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
@@ -18,8 +18,11 @@ export const dynamic = "force-dynamic";
  */
 
 function isAuthorized(req: Request): boolean {
-  // Fail-closed: if the secret isn't configured the route is unusable.
-  return hasBearerSecret(req, process.env.CRON_SECRET);
+  // Fail-closed: if no secret is configured the route is unusable. This
+  // route has no dedicated secret, so the dedicated slot is left empty and
+  // only the global CRON_SECRET is checked (via isAuthorizedCronRequest's
+  // CRON_SECRET fallback).
+  return isAuthorizedCronRequest(req, null);
 }
 
 async function run(req: Request) {

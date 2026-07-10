@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ClipboardList,
   Heart,
   LifeBuoy,
   LogOut,
@@ -46,6 +47,12 @@ const quickLinks = [
     title: "Adrese",
     description: "Upravljajte podacima za bržu isporuku.",
     icon: MapPin,
+  },
+  {
+    href: "/nalog/reklamacije",
+    title: "Reklamacije",
+    description: "Prijavite reklamaciju i pratite status rešavanja.",
+    icon: ClipboardList,
   },
   {
     href: "/korpa",
@@ -104,7 +111,7 @@ export default async function AccountPage() {
         </div>
       ) : null}
 
-      <div className="mt-8 grid gap-4 md:grid-cols-5">
+      <div className="mt-8 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         {quickLinks.map((item) => {
           const Icon = item.icon;
           return (

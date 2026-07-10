@@ -70,6 +70,8 @@ export interface MyGlsPrintDataInfo {
 export interface MyGlsPrintLabelsResponse {
   Labels?: number[] | string | null;
   PrintLabelsErrorList?: MyGlsErrorInfo[];
+  /** Field name confirmed against production 2026-07-10; older docs said PrintDataInfoList. */
+  PrintLabelsInfoList?: MyGlsPrintDataInfo[];
   PrintDataInfoList?: MyGlsPrintDataInfo[];
   [key: string]: unknown;
 }

@@ -438,3 +438,64 @@ User created the `order-receipts` Supabase bucket (Public, 5MB limit, MIME restr
 - Left in place (not deleted, mirrors this session's established pattern of leaving small harmless linked test artifacts rather than creating dangling references): the uploaded receipt PDF and reclamation photo in Supabase Storage (both are referenced by DB rows — `Invoice.pdfUrl`, `ReclamationPhoto.url` — deleting the files without deleting those rows would create broken links, which is worse than leaving tiny, clearly QA-path-prefixed test files); reclamation `R-1-SPC-2026-000004`; QA customer `qa-phase5b@example.com`.
 - `qa-admin-test@svetpovoljnihcena.local` was temporarily re-enabled (`enabled: true`) to perform the order cancellation above (browser-driven login to the disabled account correctly failed — confirms the Phase 5 disable is enforced), then **disabled again** at the end of this phase. Final state: disabled, matching end-of-Phase-5.
 - All scratch verification scripts created and deleted within this phase — none left in the repo. `git status` confirms only `.claude/`, `QA-FINDINGS.md`, `QA-REPORT.md`, `leadgen-plan/` remain untracked; no stray files.
+
+## 2026-07-10 — Partner-integration push: IPS test PGW readiness, MyGLS production attempt
+**Model used:** Fable 5 (orchestrator) + Opus 4.8 (payment build/review) + Sonnet 5 (compliance, MyGLS QA)
+**Date:** 2026-07-10
+
+### IPS / Payten PGW (test credentials received 2026-07-01)
+
+- **Critical pre-existing bug (fixed):** `/api/payment/ips/callback` required HMAC signature headers (`x-ips-signature`, `x-ips-timestamp`) that Payten never sends — per IPS PGW Service Specification 1.5 §4.1 the callback is a plain unsigned JSON POST. Every real callback would have been rejected 400. Rewritten: callback body is treated as an untrusted wake-up ping — per-IP + per-order rate limits, DB gate (order must have an IPS Payment row), already-PAID short-circuit, then server→gateway `/ips/v2/checkStatus` round-trip whose result (not the body) is applied; route always answers 200 per spec. (`src/app/api/payment/ips/callback/route.ts`, `src/lib/payments/ips.ts`, `src/lib/security/rate-limit.ts`.)
+- **Release review (Opus) round 1: BLOCK** — found that mapping any non-"00" checkStatus response to `FAILED` let an unauthenticated forged callback flip an in-flight payment PENDING→FAILED, removing the order from `expirePendingPayments` and stranding reserved stock forever (inventory DoS). Fixed: non-"00" now updates audit fields only, payment stays PENDING, `expiry.ts` remains the sole FAILED writer. Also fixed on review: `/ips/v2/refund` excluded from the 401 auto-retry (double-refund risk), and payment confirmation made exactly-once via a `updateMany({status: {not: "PAID"}})` + `count===1` guard inside the transaction (concurrent callback + return-URL race could double-fire fiscal receipt + email). **Round 2 verdict: SHIP.**
+- Verified already-correct: orderId consistency (gateway always gets `order.number`), port-9092 base URL handling, no fake QR in the live path (customer is redirected to Payten's hosted `qrCodeURL`), amounts always server-derived.
+- Hardening added: token-lifetime clamp [60s, 24h] (spec's `tokenExpiryTime` units ambiguous) + single 401 token-refresh retry for eCommerce/checkStatus.
+- Env: real test parameters wired into `.env.local` (`IPS_BASE_URL=https://ips.pgw.payten.com:9092`, `IPS_TID=SVETPOV1`, 64-char `IPS_USER_ID`); obsolete `IPS_CALLBACK_*` signature vars removed from `.env.example`.
+- **Still blocked on Payten:** IP whitelist (178.221.225.75) + merchant logo must be sent on the email thread before any call will go through. Live E2E pass (order → QR → pay → PAID → fiscal/email, negative paths, refunds) is a backlog item pending whitelist.
+
+### IPS site compliance (Uputstvo za rad IPS internet prodajnog mesta)
+
+- **Fake legal data found and fixed:** `src/lib/merchant.ts` had placeholder matični broj `20000000` → corrected to real MB `22112597`; `src/lib/brand.ts` legalName → registered form "SVET POVOLJNIH CENA DOO BEOGRAD (NOVI BEOGRAD)"; added šifra delatnosti 4791.
+- **Open NEEDS-USER:** PIB is still placeholder `100000000` in `src/lib/merchant.ts` (feeds fiscal receipts, order emails, legal pages — single constant); bank account/name also placeholder (`160-000000-00` / "Banca Intesa"; Payten email says račun 265331031000537534, Raiffeisen).
+- Added: "Kada se zadužuje vaš račun" section on `/uslovi-isporuke`; IPS-exclusive-refund statement on `/reklamacije`. Verified OK: PDV note in checkout, privacy page, IPS Skeniraj logo on homepage footer + payment selection + QR confirmation block, itemized order spec before payment.
+
+### MyGLS production attempt (per Saša Vujičić: no test env; production creds valid; labels inert until najava)
+
+- `MYGLS_ENV=production` set in `.env.local`. Controlled create→verify→delete pass **attempted, blocked before reaching MyGLS**:
+  1. **Runtime DB hang:** with `DATABASE_URL` empty, `src/lib/db.ts` fell through to the transaction-pooler URL (port 6543) and the first Prisma call hung indefinitely (0% CPU, 8 min) — same TLS failure class as the known `prisma migrate` hang, contradicting the earlier "runtime unaffected" note (Phase 1 had verified the pg-driver fixup worked; on 2026-07-10 it did not). **Remedy applied:** `DATABASE_URL` now set to the `POSTGRES_URL_NON_POOLING` value (port 5432); AGENTS.md note corrected.
+  2. **Pickup address is placeholder** ("Test ulica 1" / test@example.com) — agent correctly refused to write a fabricated address into MyGLS production shipment history. Real `MYGLS_PICKUP_*` values required (NEEDS-USER) before the pass re-runs.
+- MyGLS production credential validity therefore remains **unverified**; the code path itself raised no red flags (Phase-4 date-format bug already fixed). Nothing was created in MyGLS production; no cleanup needed.
+
+### Fiscalization decision closed
+
+- Tax authority/accountant answer: final receipt (promet-prodaja) immediately at payment for IPS prepayment; refundacioni račun on returns. Matches current implementation exactly (`invoiceType: "normal"` at IPS confirmation; refunds via /admin/fiskalizacija). No code change; backlog item ticked.
+
+### Verdict
+
+IPS integration is code-ready for the test PGW (SHIP after two-round payment review); externally blocked on Payten whitelist. MyGLS blocked on real pickup address (env fixed for the DB hang). Badi sandbox spike blocked on Luka pasting the new account's API creds. X Express unchanged (waiting on their reply).
+
+## 2026-07-10 (afternoon) — badi live spike + MyGLS production round-trip
+**Model used:** Fable 5 (orchestrator, live API probes) + Opus 4.8 (badi adapter rewrite)
+**Date:** 2026-07-10
+
+### badi.rs — production API verified, adapter fixed, receipts blocked on PFR
+
+- First pasted API key 401-ed everywhere — root cause: the key was **never saved** in the badi dashboard (the "Sačuvaj" step). Second key authenticates (Basic auth confirmed; GET/POST/DELETE /products verified live; catalog left empty).
+- Real contract vs adapter assumptions (all fixed in `src/lib/fiscal/badi.ts`, migration `0017_badi_provider_sku`): `sku` must be a NUMBER (auto-assigned when omitted; persisted per internal SKU in `FiscalProductSync.providerSku`; receipts reference the numeric badi sku); `productType` REQUIRED ("product"/"service"); receipts need `storeId` (= dashboard "ID klijenta"); `clientId` is REJECTED on /products; errorCode 40090001 is badi's GENERIC validation code (force-resync heuristic tightened accordingly).
+- Receipt issuance (attempted with legally-safe `invoiceType: "training"`) fails 400/40080001 "No client with the given storeId or clientId is connected" — badi relays receipts to a connected fiscal processor. **Solution chosen: V-PFR certificate mode** (Tax Authority cloud PFR; badi api-docs `pfx`/`password`/`pac` receipt headers) so no always-on machine is needed; adapter support shipped (`BADI_VPFR_PFX/PASSWORD/PAC`), `BADI_INVOICE_TYPE` env added for the eventual training E2E. Waits on the client: PGJO prijava ("internet prodaja") + bezbednosni element u elektronskom obliku.
+
+### MyGLS — production credentials CONFIRMED, full label round-trip PASSED
+
+Direct API round-trip against api.mygls.rs (after the earlier DB-hang fix; no dev server needed):
+1. `GetParcelStatuses` (dummy) → authenticated business response, not "Unauthorized" — **production creds valid**, matching Saša Vujičić's statement.
+2. `PrintLabels` with COD 1000 RSD, real pickup address (Vojvođanska 401): first rejected with ErrorCode 56 "Webshop engine is required!" (root-body `WebshopEngine` — app client already sends it), then **ErrorCode 13 "Invalid data in Height/Width/Length" — REAL BUG: `buildMyGlsParcelForOrder` sent no dimensions; production requires them.** Fixed in `src/lib/mygls/payload.ts` (default 30/40/50 cm box). With dimensions: SUCCESS — ParcelId 507053635, ParcelNumber 9002486576, 113 KB PDF label, COD accepted, zero errors.
+3. `GetParcelStatuses` on the fresh parcel → ErrorCode 26 "Parcel not found with current settings" — expected (parcels enter GLS ops only after pickup scan); `sync.ts` tolerates it (empty `ParcelStatusList` → zero events, no false failure).
+4. **Cleanup verified**: `DeleteLabels` → `SuccessfullyDeletedList` contains ParcelId 507053635. Nothing dangling in MyGLS production; no DB rows created (direct API test, deliberately outside the app).
+- Residual cosmetic artifact: one stale `CourierSyncRun` row (id `cmrevooxs00016hgodt88t21n`, status RUNNING) from the earlier killed dev-server attempt.
+
+### IPS — live gateway probe
+
+- `POST /res/v1/generateToken` on ips.pgw.payten.com:9092 answers (TLS + routing fine — not network-blocked): HTTP 401 `{"sessionToken":null,"tokenExpiriyTime":null}` pending Payten's IP whitelist. **Real API misspells the expiry field (`tokenExpiriyTime`)** — parser fixed to accept both spellings (`src/lib/payments/ips.ts`).
+
+### Verdict
+
+MyGLS: **production-ready** (creds + label print + COD + delete all verified live; dimension bug fixed) — remaining: real pickup-address confirmation and the najava-prikupa process answer from MyGLS. badi: adapter contract-ready; blocked solely on bezbednosni element / V-PFR from the client's side. IPS: blocked solely on Payten whitelist.

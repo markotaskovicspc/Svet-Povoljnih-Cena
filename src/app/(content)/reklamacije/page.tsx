@@ -6,6 +6,7 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const metadata: Metadata = {
   title: "Reklamacije",
@@ -83,6 +84,17 @@ export default function ReklamacijePage() {
             Mehanička oštećenja nastala neispravnim sklapanjem ili upotrebom
             van uputstva, kao i normalno habanje, nisu predmet saobraznosti.
             U tim slučajevima nudimo plaćeni servis i rezervne delove.
+          </p>
+        </ContentSection>
+
+        <ContentSection id="povracaj-ips" title="Povraćaj sredstava — IPS Skeniraj">
+          <p>
+            U slučaju vraćanja robe i povraćaja sredstava kupcu koji je
+            prethodno platio IPS Skeniraj metodom, a bez obzira na razlog
+            vraćanja, {MERCHANT_LEGAL_INFO.name} je u obavezi da povraćaj vrši
+            isključivo preko IPS sistema. Za ostale načine plaćanja povraćaj se
+            vrši na način opisan u{" "}
+            <Link href="/uslovi-kupovine#povracaj">Uslovima kupovine</Link>.
           </p>
         </ContentSection>
       </ContentBody>

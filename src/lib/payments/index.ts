@@ -1,7 +1,6 @@
 export {
   ipsPaymentProvider,
   getIpsConfig,
-  verifyIpsCallbackRequest,
   IpsConfigError,
   IpsGatewayError,
 } from "./ips";

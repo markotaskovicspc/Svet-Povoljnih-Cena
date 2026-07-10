@@ -52,7 +52,7 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
 
   try {
     const response = await new MyGlsClient(cfg).printLabels({ parcelList: [parcel] });
-    const printData = response.PrintDataInfoList ?? [];
+    const printData = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
     const first = printData[0] ?? {};
     const parcelIds = printData.map((item) => item.ParcelId).filter(isNumber);
     const parcelNumbers = printData

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { envValue } from "@/lib/env";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -34,10 +33,6 @@ interface IpsConfig {
   failUrl: string;
   cancelUrl: string;
   callbackUrl: string;
-  callbackSecret: string | null;
-  callbackSignatureHeader: string;
-  callbackTimestampHeader: string;
-  callbackReplayWindowSeconds: number;
 }
 
 interface IpsToken {
@@ -100,17 +95,6 @@ export function getIpsConfig(): IpsConfig {
     failUrl: process.env.IPS_FAIL_URL ?? `${publicBaseUrl}/api/payment/ips/return?result=fail`,
     cancelUrl: process.env.IPS_CANCEL_URL ?? `${publicBaseUrl}/api/payment/ips/return?result=cancel`,
     callbackUrl: process.env.IPS_CALLBACK_URL ?? `${publicBaseUrl}/api/payment/ips/callback`,
-    callbackSecret: process.env.IPS_CALLBACK_SECRET?.trim() || null,
-    callbackSignatureHeader:
-      process.env.IPS_CALLBACK_SIGNATURE_HEADER?.trim().toLowerCase() ||
-      "x-ips-signature",
-    callbackTimestampHeader:
-      process.env.IPS_CALLBACK_TIMESTAMP_HEADER?.trim().toLowerCase() ||
-      "x-ips-timestamp",
-    callbackReplayWindowSeconds: Math.min(
-      Math.max(Number(process.env.IPS_CALLBACK_REPLAY_WINDOW_SECONDS ?? 300) || 300, 30),
-      3600,
-    ),
   };
 }
 
@@ -121,54 +105,6 @@ function isValidHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-export function verifyIpsCallbackRequest(req: Request, rawBody: string) {
-  const cfg = getIpsConfig();
-  if (!cfg.callbackSecret) {
-    throw new IpsConfigError(
-      "IPS callback verifikacija nije konfigurisana (IPS_CALLBACK_SECRET).",
-    );
-  }
-
-  const signature = req.headers.get(cfg.callbackSignatureHeader);
-  const timestamp = req.headers.get(cfg.callbackTimestampHeader);
-  if (!signature || !timestamp) {
-    throw new Error("missing_callback_signature");
-  }
-
-  const timestampMs = parseCallbackTimestamp(timestamp);
-  const ageMs = Math.abs(Date.now() - timestampMs);
-  if (ageMs > cfg.callbackReplayWindowSeconds * 1000) {
-    throw new Error("stale_callback_signature");
-  }
-
-  const signedPayload = `${timestamp}.${rawBody}`;
-  const expected = createHmac("sha256", cfg.callbackSecret)
-    .update(signedPayload, "utf8")
-    .digest();
-  const provided = signature.trim().replace(/^sha256=/i, "");
-  const matches =
-    safeEqual(provided, expected.toString("hex")) ||
-    safeEqual(provided, expected.toString("base64"));
-  if (!matches) throw new Error("invalid_callback_signature");
-}
-
-function parseCallbackTimestamp(value: string) {
-  const trimmed = value.trim();
-  const numeric = Number(trimmed);
-  if (Number.isFinite(numeric)) {
-    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
-  }
-  const parsed = Date.parse(trimmed);
-  if (!Number.isFinite(parsed)) throw new Error("invalid_callback_timestamp");
-  return parsed;
-}
-
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export function formatIpsAmount(amount: number | Prisma.Decimal): string {
@@ -186,7 +122,6 @@ async function createPayment(
 ): Promise<CreatePaymentResult> {
   if (method !== "IPS") throw new Error("IPS provider podržava samo IPS plaćanje.");
   const cfg = getIpsConfig();
-  const token = await getSessionToken(cfg);
   const amountText = formatIpsAmount(amount);
   const urls = returnUrlsForOrder(cfg, orderId);
   const rawRequest = {
@@ -198,11 +133,10 @@ async function createPayment(
     cancelSiteURL: urls.cancel,
     callbackURL: cfg.callbackUrl,
   };
-  const rawResponse = await postJson<Record<string, unknown>>(
+  const rawResponse = await authedPostJson<Record<string, unknown>>(
     cfg,
     "/ips/v2/eCommerce",
     rawRequest,
-    token,
   );
   const redirectUrl =
     typeof rawResponse.qrCodeURL === "string" ? rawResponse.qrCodeURL : null;
@@ -217,7 +151,7 @@ async function createPayment(
     redirectUrl,
     rawRequest,
     rawResponse,
-    expiresAt: token.expiresAt ? new Date(token.expiresAt) : null,
+    expiresAt: cachedToken ? new Date(cachedToken.expiresAt) : null,
   };
 }
 
@@ -235,17 +169,15 @@ async function checkPaymentStatus(orderId: string): Promise<PaymentStatusResult>
   if (!order) throw new Error(`Porudžbina ${orderId} ne postoji.`);
 
   const cfg = getIpsConfig();
-  const token = await getSessionToken(cfg);
   const rawRequest = {
     tid: cfg.tid,
     amount: formatIpsAmount(num(order.total)),
     orderId: order.number,
   };
-  const rawResponse = await postJson<Record<string, unknown>>(
+  const rawResponse = await authedPostJson<Record<string, unknown>>(
     cfg,
     "/ips/v2/checkStatus",
     rawRequest,
-    token,
   );
   const payload = parseIpsPayload({
     ...rawResponse,
@@ -267,7 +199,6 @@ async function refundPayment(
   if (!order) throw new Error(`Porudžbina ${orderId} ne postoji.`);
 
   const cfg = getIpsConfig();
-  const token = await getSessionToken(cfg);
   const orderTotal = num(order.total);
   if (amount > orderTotal) {
     throw new Error("IPS povraćaj ne može biti veći od iznosa porudžbine.");
@@ -278,11 +209,11 @@ async function refundPayment(
     amount: formatIpsAmount(amount),
     orderId: order.number,
   };
-  const rawResponse = await postJson<Record<string, unknown>>(
+  const rawResponse = await authedPostJson<Record<string, unknown>>(
     cfg,
     "/ips/v2/refund",
     rawRequest,
-    token,
+    { retryOn401: false },
   );
   const responseCode = String(rawResponse.responseCode ?? "");
   const refunded = responseCode === "00";
@@ -336,12 +267,48 @@ async function getSessionToken(cfg: IpsConfig): Promise<IpsToken> {
   const value = typeof raw.sessionToken === "string" ? raw.sessionToken : null;
   if (!value) throw new IpsGatewayError("IPS token nije vraćen.", 502, raw);
 
-  const seconds = Number(raw.tokenExpiryTime);
+  // The spec's tokenExpiryTime unit is ambiguous ("4n", default 1h), so we can't
+  // trust its magnitude. Fall back to 1h when absent/invalid, then clamp the
+  // computed lifetime to a sane window so a wildly small/large value can't make
+  // us re-auth on every call or hold a stale token for days.
+  // The live test PGW misspells the field as "tokenExpiriyTime" (observed
+  // 2026-07-10), so accept both spellings.
+  const seconds = Number(raw.tokenExpiryTime ?? raw.tokenExpiriyTime);
+  const lifetimeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 3600;
+  const clampedSeconds = Math.min(Math.max(lifetimeSeconds, 60), 24 * 3600);
   cachedToken = {
     value,
-    expiresAt: now + (Number.isFinite(seconds) && seconds > 0 ? seconds : 3600) * 1000,
+    expiresAt: now + clampedSeconds * 1000,
   };
   return cachedToken;
+}
+
+function clearCachedToken() {
+  cachedToken = null;
+}
+
+// Token-authenticated POST used by all gateway calls. If the gateway rejects the
+// token (401), the cached token is stale/revoked: clear it and retry exactly once
+// with a freshly minted one before giving up. Callers that can't prove a 401 is
+// pre-execution (refunds) must pass retryOn401: false — a blind retry there
+// risks firing the same refund twice.
+async function authedPostJson<T>(
+  cfg: IpsConfig,
+  path: string,
+  body: Record<string, unknown>,
+  opts: { retryOn401: boolean } = { retryOn401: true },
+): Promise<T> {
+  const token = await getSessionToken(cfg);
+  try {
+    return await postJson<T>(cfg, path, body, token);
+  } catch (err) {
+    if (opts.retryOn401 && err instanceof IpsGatewayError && err.status === 401) {
+      clearCachedToken();
+      const fresh = await getSessionToken(cfg);
+      return await postJson<T>(cfg, path, body, fresh);
+    }
+    throw err;
+  }
 }
 
 async function postJson<T>(
@@ -432,7 +399,6 @@ async function applyIpsResult(
   }
 
   const paid = payload.responseCode === "00";
-  const status = paid ? "PAID" : "FAILED";
   const raw = (rawResponse ?? payload) as Prisma.InputJsonValue;
   const request = (rawRequest ?? {
     tid: payload.tid,
@@ -441,38 +407,63 @@ async function applyIpsResult(
   }) as Prisma.InputJsonValue;
   let didConfirm = false;
 
+  // Payten has given us no enumerated terminal-decline code table, so a non-"00"
+  // response is NOT proof the payment has failed — it may just mean "not yet
+  // paid", and this whole call can be forged (the callback route calls us with
+  // an unauthenticated tid/orderId/amount, and checkStatus can be probed too).
+  // Writing FAILED here would pull the order out of expirePendingPayments'
+  // PENDING-only match (src/lib/payments/expiry.ts) and permanently strand its
+  // reserved stock. So: on paid, confirm as usual; otherwise only refresh audit
+  // fields and leave the payment PENDING — expiry.ts is what times it out and
+  // restores stock.
   await db.$transaction(async (tx) => {
     const existing = order.payments[0] ?? null;
     if (existing?.status === "PAID") return;
 
     if (existing) {
-      await tx.payment.update({
-        where: { id: existing.id },
-        data: {
-          status,
-          providerRef: payload.paymentReference ?? undefined,
-          paymentReference: payload.paymentReference ?? undefined,
-          rawRequest: request,
-          rawResponse: raw,
-          paidAt: paid ? new Date() : undefined,
-        },
-      });
-    } else {
+      if (paid) {
+        const updated = await tx.payment.updateMany({
+          where: { id: existing.id, status: { not: "PAID" } },
+          data: {
+            status: "PAID",
+            providerRef: payload.paymentReference ?? undefined,
+            paymentReference: payload.paymentReference ?? undefined,
+            rawRequest: request,
+            rawResponse: raw,
+            paidAt: new Date(),
+          },
+        });
+        // Concurrent caller (callback + return-URL checkStatus) already won the
+        // race and confirmed this payment — don't double-fire side effects.
+        if (updated.count !== 1) return;
+      } else {
+        await tx.payment.update({
+          where: { id: existing.id },
+          data: {
+            rawRequest: request,
+            rawResponse: raw,
+          },
+        });
+      }
+    } else if (paid) {
       await tx.payment.create({
         data: {
           orderId: order.id,
           method: "IPS",
           provider: "IPS",
-          status,
+          status: "PAID",
           amount: new Prisma.Decimal(payload.amount),
           providerRef: payload.paymentReference ?? null,
           paymentReference: payload.paymentReference ?? null,
           rawRequest: request,
           rawResponse: raw,
-          paidAt: paid ? new Date() : null,
+          paidAt: new Date(),
         },
       });
     }
+    // No existing payment and not paid: nothing to persist — the start route is
+    // the only creator of PENDING IPS payments, so there's no PENDING row to
+    // touch and no FAILED status to invent.
 
     if (paid) {
       await tx.order.update({
