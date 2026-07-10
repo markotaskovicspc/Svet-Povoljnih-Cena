@@ -271,7 +271,9 @@ async function getSessionToken(cfg: IpsConfig): Promise<IpsToken> {
   // trust its magnitude. Fall back to 1h when absent/invalid, then clamp the
   // computed lifetime to a sane window so a wildly small/large value can't make
   // us re-auth on every call or hold a stale token for days.
-  const seconds = Number(raw.tokenExpiryTime);
+  // The live test PGW misspells the field as "tokenExpiriyTime" (observed
+  // 2026-07-10), so accept both spellings.
+  const seconds = Number(raw.tokenExpiryTime ?? raw.tokenExpiriyTime);
   const lifetimeSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 3600;
   const clampedSeconds = Math.min(Math.max(lifetimeSeconds, 60), 24 * 3600);
   cachedToken = {

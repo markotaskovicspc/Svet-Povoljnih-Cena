@@ -30,6 +30,13 @@ export interface BadiConfig {
   clientId: string | null;
   /** Tax rate label registered with badi products ("Ђ" = 20 % standard). */
   taxRateLabel: string;
+  /**
+   * VPFR certificate mode (badi api-docs: optional `pfx`/`password`/`pac`
+   * headers on receipt endpoints) — routes fiscalization through the Tax
+   * Authority's cloud V-PFR instead of a locally connected LPFR, so no
+   * always-on machine is needed. Set all three or none.
+   */
+  vpfr: { pfx: string; password: string; pac: string } | null;
 }
 
 export interface FiscalConfig {
@@ -93,9 +100,17 @@ export function getFiscalConfig(): FiscalConfig {
         BADI_BASE_URLS.sandbox!,
       clientId: envValue("BADI_CLIENT_ID"),
       taxRateLabel: envValue("BADI_TAX_RATE_LABEL") ?? "Ђ",
+      vpfr: badiVpfrFromEnv(),
     },
   };
   return cached;
+}
+
+function badiVpfrFromEnv(): BadiConfig["vpfr"] {
+  const pfx = envValue("BADI_VPFR_PFX");
+  const password = envValue("BADI_VPFR_PASSWORD");
+  const pac = envValue("BADI_VPFR_PAC");
+  return pfx && password && pac ? { pfx, password, pac } : null;
 }
 
 /** Test-only helper: reset the cached config so env changes take effect. */

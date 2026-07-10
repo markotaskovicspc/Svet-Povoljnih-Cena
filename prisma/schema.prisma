@@ -1509,6 +1509,8 @@ model FiscalProductSync {
   taxRateLabel String   @default("Ђ")
   isService    Boolean  @default(false)
   providerId   String?
+  /// badi-assigned NUMERIC sku; receipt items must reference this, not the internal string `sku`.
+  providerSku  Int?
   syncedAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

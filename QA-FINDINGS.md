@@ -472,3 +472,30 @@ User created the `order-receipts` Supabase bucket (Public, 5MB limit, MIME restr
 ### Verdict
 
 IPS integration is code-ready for the test PGW (SHIP after two-round payment review); externally blocked on Payten whitelist. MyGLS blocked on real pickup address (env fixed for the DB hang). Badi sandbox spike blocked on Luka pasting the new account's API creds. X Express unchanged (waiting on their reply).
+
+## 2026-07-10 (afternoon) — badi live spike + MyGLS production round-trip
+**Model used:** Fable 5 (orchestrator, live API probes) + Opus 4.8 (badi adapter rewrite)
+**Date:** 2026-07-10
+
+### badi.rs — production API verified, adapter fixed, receipts blocked on PFR
+
+- First pasted API key 401-ed everywhere — root cause: the key was **never saved** in the badi dashboard (the "Sačuvaj" step). Second key authenticates (Basic auth confirmed; GET/POST/DELETE /products verified live; catalog left empty).
+- Real contract vs adapter assumptions (all fixed in `src/lib/fiscal/badi.ts`, migration `0017_badi_provider_sku`): `sku` must be a NUMBER (auto-assigned when omitted; persisted per internal SKU in `FiscalProductSync.providerSku`; receipts reference the numeric badi sku); `productType` REQUIRED ("product"/"service"); receipts need `storeId` (= dashboard "ID klijenta"); `clientId` is REJECTED on /products; errorCode 40090001 is badi's GENERIC validation code (force-resync heuristic tightened accordingly).
+- Receipt issuance (attempted with legally-safe `invoiceType: "training"`) fails 400/40080001 "No client with the given storeId or clientId is connected" — badi relays receipts to a connected fiscal processor. **Solution chosen: V-PFR certificate mode** (Tax Authority cloud PFR; badi api-docs `pfx`/`password`/`pac` receipt headers) so no always-on machine is needed; adapter support shipped (`BADI_VPFR_PFX/PASSWORD/PAC`), `BADI_INVOICE_TYPE` env added for the eventual training E2E. Waits on the client: PGJO prijava ("internet prodaja") + bezbednosni element u elektronskom obliku.
+
+### MyGLS — production credentials CONFIRMED, full label round-trip PASSED
+
+Direct API round-trip against api.mygls.rs (after the earlier DB-hang fix; no dev server needed):
+1. `GetParcelStatuses` (dummy) → authenticated business response, not "Unauthorized" — **production creds valid**, matching Saša Vujičić's statement.
+2. `PrintLabels` with COD 1000 RSD, real pickup address (Vojvođanska 401): first rejected with ErrorCode 56 "Webshop engine is required!" (root-body `WebshopEngine` — app client already sends it), then **ErrorCode 13 "Invalid data in Height/Width/Length" — REAL BUG: `buildMyGlsParcelForOrder` sent no dimensions; production requires them.** Fixed in `src/lib/mygls/payload.ts` (default 30/40/50 cm box). With dimensions: SUCCESS — ParcelId 507053635, ParcelNumber 9002486576, 113 KB PDF label, COD accepted, zero errors.
+3. `GetParcelStatuses` on the fresh parcel → ErrorCode 26 "Parcel not found with current settings" — expected (parcels enter GLS ops only after pickup scan); `sync.ts` tolerates it (empty `ParcelStatusList` → zero events, no false failure).
+4. **Cleanup verified**: `DeleteLabels` → `SuccessfullyDeletedList` contains ParcelId 507053635. Nothing dangling in MyGLS production; no DB rows created (direct API test, deliberately outside the app).
+- Residual cosmetic artifact: one stale `CourierSyncRun` row (id `cmrevooxs00016hgodt88t21n`, status RUNNING) from the earlier killed dev-server attempt.
+
+### IPS — live gateway probe
+
+- `POST /res/v1/generateToken` on ips.pgw.payten.com:9092 answers (TLS + routing fine — not network-blocked): HTTP 401 `{"sessionToken":null,"tokenExpiriyTime":null}` pending Payten's IP whitelist. **Real API misspells the expiry field (`tokenExpiriyTime`)** — parser fixed to accept both spellings (`src/lib/payments/ips.ts`).
+
+### Verdict
+
+MyGLS: **production-ready** (creds + label print + COD + delete all verified live; dimension bug fixed) — remaining: real pickup-address confirmation and the najava-prikupa process answer from MyGLS. badi: adapter contract-ready; blocked solely on bezbednosni element / V-PFR from the client's side. IPS: blocked solely on Payten whitelist.
