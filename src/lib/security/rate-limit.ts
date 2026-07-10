@@ -30,6 +30,8 @@ export const RATE_LIMITS = {
   passwordReset: { limit: 5, windowMs: HOUR },
   checkout: { limit: 60, windowMs: MINUTE },
   checkoutOrder: { limit: 10, windowMs: 10 * MINUTE },
+  ipsCallback: { limit: 60, windowMs: MINUTE },
+  ipsCallbackOrder: { limit: 6, windowMs: 10 * MINUTE },
   voucher: { limit: 20, windowMs: 10 * MINUTE },
   newsletter: { limit: 10, windowMs: HOUR },
   search: { limit: 120, windowMs: MINUTE },

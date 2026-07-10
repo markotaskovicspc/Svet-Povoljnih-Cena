@@ -1,6 +1,6 @@
 export const BRAND = {
   name: "Svet Povoljnih Cena",
-  legalName: "Svet Povoljnih Cena d.o.o.",
+  legalName: "SVET POVOLJNIH CENA DOO BEOGRAD (NOVI BEOGRAD)",
   domain: "www.svetpovoljnihcena.rs",
   url: "https://www.svetpovoljnihcena.rs",
   socialHandle: "svetpovoljnihcena",

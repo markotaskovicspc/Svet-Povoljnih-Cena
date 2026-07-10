@@ -77,6 +77,25 @@ export default function UsloviIsporukePage() {
           </p>
         </ContentSection>
 
+        <ContentSection id="naplata" title="Kada se zadužuje vaš račun">
+          <ul>
+            <li>
+              <strong>IPS Skeniraj i platne kartice (RaiAccept):</strong> račun
+              se zadužuje odmah po uspešnoj autorizaciji plaćanja, pre nego što
+              porudžbina krene u pripremu za isporuku.
+            </li>
+            <li>
+              <strong>Uplata na račun:</strong> sredstva se prenose kada vi
+              izvršite uplatu po dobijenoj uplatnici; porudžbinu puštamo u
+              pripremu tek po evidentiranju uplate na našem računu.
+            </li>
+            <li>
+              <strong>Pouzeće (gotovina ili kartica kod kurira):</strong> iznos
+              se naplaćuje tek pri preuzimanju pošiljke, na adresi isporuke.
+            </li>
+          </ul>
+        </ContentSection>
+
         <ContentSection id="gradovi" title="Gradovi sa montažom">
           <p>
             Montažu trenutno radimo u: Beogradu, Novom Sadu, Nišu, Kragujevcu,
