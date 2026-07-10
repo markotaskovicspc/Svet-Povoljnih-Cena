@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getMyGlsConfig, syncMyGlsMasterData } from "@/lib/mygls";
-import { hasBearerSecret } from "@/lib/security/bearer";
+import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
-  return hasBearerSecret(req, getMyGlsConfig().statusCronSecret);
+  return isAuthorizedCronRequest(req, getMyGlsConfig().statusCronSecret);
 }
 
 async function run(req: Request) {

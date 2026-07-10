@@ -1,0 +1,33 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/fiscal-retry",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/payment-expiry",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/mygls/status-sync",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/x-express/status-sync",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/mygls/master-data",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/x-express/dictionaries",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/email-alerts",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

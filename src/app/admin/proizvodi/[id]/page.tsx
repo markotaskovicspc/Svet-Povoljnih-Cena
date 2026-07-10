@@ -5,7 +5,8 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { num } from "@/lib/api/_helpers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -18,6 +19,7 @@ import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -204,10 +206,10 @@ async function uploadProductImage(productId: string, file: File) {
   return key;
 }
 
-async function updateProduct(formData: FormData) {
+async function updateProduct(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
     async (_a, formData: FormData) => {
         const raw = Object.fromEntries(formData);
@@ -274,15 +276,20 @@ async function updateProduct(formData: FormData) {
           select: { slug: true },
         });
         await revalidateProductSurfaces(d.id, updated.slug);
-        return { ok: true as const, entityId: d.id, diff: data };
+        return {
+          ok: true as const,
+          entityId: d.id,
+          diff: data,
+          message: "Proizvod je sačuvan.",
+        };
       },
   )(formData);
 }
 
-async function updateProductCategory(formData: FormData) {
+async function updateProductCategory(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.category.update", entity: "Product" },
     async (_a, formData: FormData) => {
       const parsed = categorySchema.safeParse(Object.fromEntries(formData));
@@ -295,15 +302,20 @@ async function updateProductCategory(formData: FormData) {
         await tx.productCategory.create({ data: { productId, categoryId } });
       });
       await revalidateProductSurfaces(productId);
-      return { ok: true as const, entityId: productId, diff: { categoryId } };
+      return {
+        ok: true as const,
+        entityId: productId,
+        diff: { categoryId },
+        message: "Kategorija proizvoda je sačuvana.",
+      };
     },
   )(formData);
 }
 
-async function addProductImage(formData: FormData) {
+async function addProductImage(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.create", entity: "ProductMedia" },
     async (_a, formData: FormData) => {
       const parsed = mediaSchema.safeParse(Object.fromEntries(formData));
@@ -343,15 +355,20 @@ async function addProductImage(formData: FormData) {
         select: { id: true },
       });
       await revalidateProductSurfaces(productId);
-      return { ok: true as const, entityId: media.id, diff: { productId, url } };
+      return {
+        ok: true as const,
+        entityId: media.id,
+        diff: { productId, url },
+        message: "Fotografija je dodata.",
+      };
     },
   )(formData);
 }
 
-async function updateProductMedia(formData: FormData) {
+async function updateProductMedia(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.update", entity: "ProductMedia" },
     async (_a, formData: FormData) => {
       const parsed = mediaUpdateSchema.safeParse(Object.fromEntries(formData));
@@ -375,15 +392,16 @@ async function updateProductMedia(formData: FormData) {
         ok: true as const,
         entityId: mediaId,
         diff: { productId, url, thumbUrl, cardUrl, pdpUrl, alt, order },
+        message: "Medij je sačuvan.",
       };
     },
   )(formData);
 }
 
-async function deleteProductMedia(formData: FormData) {
+async function deleteProductMedia(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.delete", entity: "ProductMedia" },
     async (_a, formData: FormData) => {
       const parsed = mediaDeleteSchema.safeParse(Object.fromEntries(formData));
@@ -393,15 +411,20 @@ async function deleteProductMedia(formData: FormData) {
       const { productId, mediaId } = parsed.data;
       await db.productMedia.deleteMany({ where: { id: mediaId, productId } });
       await revalidateProductSurfaces(productId);
-      return { ok: true as const, entityId: mediaId, diff: { productId } };
+      return {
+        ok: true as const,
+        entityId: mediaId,
+        diff: { productId },
+        message: "Fotografija je obrisana.",
+      };
     },
   )(formData);
 }
 
-async function updateProductSyncOverrides(formData: FormData) {
+async function updateProductSyncOverrides(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.xml-overrides.update", entity: "Product" },
     async (actorId, formData: FormData) => {
       const productId = String(formData.get("productId") ?? "");
@@ -432,6 +455,7 @@ async function updateProductSyncOverrides(formData: FormData) {
         ok: true as const,
         entityId: productId,
         diff: { fields: uniqueFields },
+        message: "XML zaštita je sačuvana.",
       };
     },
   )(formData);
@@ -483,7 +507,7 @@ export default async function ProductDetail({
           <CardTitle description="Override-i preko XML feed-a — ovo polje sledeći import može da prepiše ako je polje označeno kao auto-sync.">
             Osnovni podaci
           </CardTitle>
-          <form action={updateProduct} className="space-y-4">
+          <AdminActionForm action={updateProduct} className="space-y-4">
             <input type="hidden" name="id" value={product.id} />
             <Field label="Naziv">
               <Input name="name" required defaultValue={product.name} />
@@ -659,7 +683,7 @@ export default async function ProductDetail({
             <div className="flex justify-end">
               <SubmitButton>Sačuvaj izmene</SubmitButton>
             </div>
-          </form>
+          </AdminActionForm>
         </Card>
 
         <div className="space-y-4">
@@ -675,7 +699,7 @@ export default async function ProductDetail({
                 <li className="text-sm text-ink-500">Bez kategorija.</li>
               ) : null}
             </ul>
-            <form action={updateProductCategory} className="mt-4 space-y-3">
+            <AdminActionForm action={updateProductCategory} className="mt-4 space-y-3">
               <input type="hidden" name="productId" value={product.id} />
               <Field label="Promeni kategoriju">
                 <select
@@ -695,7 +719,7 @@ export default async function ProductDetail({
                 </select>
               </Field>
               <SubmitButton>Sačuvaj kategoriju</SubmitButton>
-            </form>
+            </AdminActionForm>
           </Card>
 
           <Card>
@@ -728,7 +752,7 @@ export default async function ProductDetail({
             <CardTitle description="Označena polja XML import neće prepisivati.">
               XML zaštita polja
             </CardTitle>
-            <form action={updateProductSyncOverrides} className="space-y-3">
+            <AdminActionForm action={updateProductSyncOverrides} className="space-y-3">
               <input type="hidden" name="productId" value={product.id} />
               <div className="grid grid-cols-1 gap-2 text-sm">
                 {XML_OVERRIDE_OPTIONS.map((option) => (
@@ -745,7 +769,7 @@ export default async function ProductDetail({
                 ))}
               </div>
               <SubmitButton>Sačuvaj XML zaštitu</SubmitButton>
-            </form>
+            </AdminActionForm>
           </Card>
 
           <Card>
@@ -773,7 +797,7 @@ export default async function ProductDetail({
                       </p>
                     </div>
                   </div>
-                  <form action={updateProductMedia} className="mt-3 space-y-2">
+                  <AdminActionForm action={updateProductMedia} className="mt-3 space-y-2">
                     <input type="hidden" name="productId" value={product.id} />
                     <input type="hidden" name="mediaId" value={m.id} />
                     <Field label="URL / storage putanja">
@@ -806,21 +830,21 @@ export default async function ProductDetail({
                     <div className="flex items-center justify-between gap-2">
                       <SubmitButton>Sačuvaj medij</SubmitButton>
                     </div>
-                  </form>
-                  <form action={deleteProductMedia} className="mt-2">
+                  </AdminActionForm>
+                  <AdminActionForm action={deleteProductMedia} className="mt-2">
                     <input type="hidden" name="productId" value={product.id} />
                     <input type="hidden" name="mediaId" value={m.id} />
-                    <button type="submit" className="text-danger hover:underline">
+                    <SubmitButton variant="destructive" size="xs">
                       Obriši
-                    </button>
-                  </form>
+                    </SubmitButton>
+                  </AdminActionForm>
                 </li>
               ))}
               {product.media.length === 0 ? (
                 <li className="text-sm text-ink-500">Nema fotografija.</li>
               ) : null}
             </ul>
-            <form
+            <AdminActionForm
               action={addProductImage}
               className="mt-4 space-y-3"
               encType="multipart/form-data"
@@ -847,7 +871,7 @@ export default async function ProductDetail({
                 <Input name="alt" defaultValue={product.name} />
               </Field>
               <SubmitButton>Dodaj fotografiju</SubmitButton>
-            </form>
+            </AdminActionForm>
           </Card>
         </div>
       </div>

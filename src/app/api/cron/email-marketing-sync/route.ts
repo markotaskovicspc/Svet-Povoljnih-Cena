@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getEmailConfig, syncResendMarketingContacts } from "@/lib/email";
-import { hasBearerSecret } from "@/lib/security/bearer";
+import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
-  return hasBearerSecret(req, getEmailConfig().alertsCronSecret);
+  return isAuthorizedCronRequest(req, getEmailConfig().alertsCronSecret);
 }
 
 async function run(req: Request) {

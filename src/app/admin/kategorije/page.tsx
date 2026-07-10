@@ -1,13 +1,15 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -34,10 +36,10 @@ const schema = z.object({
   description: z.string().max(2000).optional().nullable(),
 });
 
-async function upsert(formData: FormData) {
+async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
     async (_a, formData: FormData) => {
         const parsed = schema.safeParse(Object.fromEntries(formData));
@@ -49,6 +51,17 @@ async function upsert(formData: FormData) {
           : null;
         const level = parent ? parent.level + 1 : 0;
         const path = parent ? `${parent.path}/${slug}` : `/${slug}`;
+
+        const existing = await db.category.findFirst({
+          where: { slug, path, NOT: data.id ? { id: data.id } : undefined },
+          select: { id: true },
+        });
+        if (existing) {
+          return {
+            ok: false as const,
+            error: "Kategorija sa ovim slug-om već postoji u okviru istog roditelja.",
+          };
+        }
 
         const payload = {
           name: data.name,
@@ -65,15 +78,20 @@ async function upsert(formData: FormData) {
           : await db.category.create({ data: payload });
         revalidatePath("/admin/kategorije");
         revalidatePath("/");
-        return { ok: true as const, entityId: saved.id, diff: payload };
+        return {
+          ok: true as const,
+          entityId: saved.id,
+          diff: payload,
+          message: data.id ? "Kategorija je sačuvana." : "Kategorija je dodata.",
+        };
       },
   )(formData);
 }
 
-async function remove(formData: FormData) {
+async function remove(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT"], action: "category.delete", entity: "Category" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
@@ -84,7 +102,7 @@ async function remove(formData: FormData) {
         }
         await db.category.delete({ where: { id } });
         revalidatePath("/admin/kategorije");
-        return { ok: true as const, entityId: id };
+        return { ok: true as const, entityId: id, message: "Kategorija je obrisana." };
       },
   )(formData);
 }
@@ -123,12 +141,12 @@ export default async function CategoriesPage() {
                     {c.name}{" "}
                     <span className="ml-1 font-mono text-[11px] text-ink-300">{c.path}</span>
                   </a>
-                  <form action={remove}>
+                  <AdminActionForm action={remove}>
                     <input type="hidden" name="id" value={c.id} />
                     <SubmitButton variant="destructive" size="xs" pendingLabel="…">
                       ×
                     </SubmitButton>
-                  </form>
+                  </AdminActionForm>
                 </li>
               ))}
             </ul>
@@ -156,7 +174,10 @@ function CategoryForm({
   parents,
   values,
 }: {
-  action: (fd: FormData) => Promise<void>;
+  action: (
+    state: AdminActionState,
+    formData: FormData,
+  ) => Promise<AdminActionState>;
   parents: { id: string; name: string; path: string; level: number }[];
   values?: {
     id?: string;
@@ -169,7 +190,7 @@ function CategoryForm({
   };
 }) {
   return (
-    <form action={action} className="space-y-3">
+    <AdminActionForm action={action} className="space-y-3">
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <Field label="Naziv">
         <Input name="name" required defaultValue={values?.name ?? ""} />
@@ -208,6 +229,6 @@ function CategoryForm({
       <div className="flex justify-end">
         <SubmitButton>{values?.id ? "Sačuvaj" : "Dodaj"}</SubmitButton>
       </div>
-    </form>
+    </AdminActionForm>
   );
 }

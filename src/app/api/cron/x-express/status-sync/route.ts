@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { getXExpressConfig } from "@/lib/x-express/config";
 import { syncXExpressShipmentStatuses } from "@/lib/x-express/sync";
 import { processXExpressWebhookEvents } from "@/lib/x-express/webhook";
-import { hasBearerSecret } from "@/lib/security/bearer";
+import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: Request) {
-  return hasBearerSecret(req, getXExpressConfig().statusCronSecret);
+  return isAuthorizedCronRequest(req, getXExpressConfig().statusCronSecret);
 }
 
 async function run(req: Request) {
