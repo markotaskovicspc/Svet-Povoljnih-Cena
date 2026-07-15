@@ -38,6 +38,12 @@ const nextConfig: NextConfig = {
         hostname: "**.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
+      // Signed URLs for private buckets (reclamation photos).
+      {
+        protocol: "https",
+        hostname: "**.supabase.co",
+        pathname: "/storage/v1/object/sign/**",
+      },
       ...(supabaseImagePattern ? [supabaseImagePattern] : []),
     ],
     // placehold.co serves image/svg+xml; required so the optimizer accepts it.

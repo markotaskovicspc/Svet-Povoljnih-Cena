@@ -3,6 +3,7 @@ import "server-only";
 import type { Order, Reclamation } from "@/types";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
+import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 
 /**
  * Phase 4D — adapt Prisma rows into the canonical `@/types` Order /
@@ -151,6 +152,12 @@ export async function loadReclamationForEmail(
   });
   if (!row) return null;
 
+  // Photo bucket is private; emails may sit unread, so sign for 7 days.
+  const signedPhotoUrls = await signReclamationPhotoUrls(
+    row.photos.map((p) => p.url),
+    7 * 24 * 3600,
+  );
+
   const reclamation: Reclamation = {
     id: row.number,
     orderId: row.order.number,
@@ -163,7 +170,7 @@ export async function loadReclamationForEmail(
     },
     description: row.description,
     photos: row.photos.map((p) => ({
-      url: p.url,
+      url: signedPhotoUrls.get(p.url) ?? p.url,
       width: p.width ?? undefined,
       height: p.height ?? undefined,
     })),

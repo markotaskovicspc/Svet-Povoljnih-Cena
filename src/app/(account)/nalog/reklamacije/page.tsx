@@ -5,6 +5,7 @@ import { ClipboardList } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
 import { listOrders } from "@/lib/api/orders";
 import { listReclamationsForUser } from "@/lib/api/reclamations";
+import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { db } from "@/lib/db";
 import { ReclamationForm } from "./reclamation-form";
 
@@ -40,6 +41,11 @@ export default async function AccountReclamationsPage() {
       select: { firstName: true, lastName: true, name: true, email: true, phone: true },
     }),
   ]);
+
+  // Photo bucket is private — swap stored canonical URLs for signed ones.
+  const signedPhotoUrls = await signReclamationPhotoUrls(
+    reclamations.flatMap((r) => r.photos.map((p) => p.url)),
+  );
 
   const [fallbackFirst, ...fallbackLastParts] = (account?.name ?? "").split(" ");
   const defaults = {
@@ -140,13 +146,13 @@ export default async function AccountReclamationsPage() {
                           {r.photos.map((photo) => (
                             <a
                               key={photo.id}
-                              href={photo.url}
+                              href={signedPhotoUrls.get(photo.url) ?? photo.url}
                               target="_blank"
                               rel="noreferrer"
                               className="relative block size-16 overflow-hidden rounded-md border border-border/60"
                             >
                               <Image
-                                src={photo.url}
+                                src={signedPhotoUrls.get(photo.url) ?? photo.url}
                                 alt=""
                                 fill
                                 sizes="64px"

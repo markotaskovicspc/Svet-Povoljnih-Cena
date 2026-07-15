@@ -211,7 +211,8 @@ export async function issueFiscalSale(input: {
       rawResponse: dispatch.receipt.raw as Prisma.InputJsonValue,
       error: null,
       issuedAt,
-      ...(pdfStored ? { pdfUrl: pdfStored.publicUrl, pdfObjectKey: pdfStored.objectKey } : {}),
+      // Bucket is private: keep the object key, clear any legacy public URL.
+      ...(pdfStored ? { pdfUrl: null, pdfObjectKey: pdfStored.objectKey } : {}),
     },
     include: { lines: true },
   });
@@ -376,7 +377,7 @@ export async function issueFiscalRefund(input: {
           rawResponse: dispatch.receipt.raw as Prisma.InputJsonValue,
           error: null,
           issuedAt,
-          ...(pdfStored ? { pdfUrl: pdfStored.publicUrl, pdfObjectKey: pdfStored.objectKey } : {}),
+          ...(pdfStored ? { pdfUrl: null, pdfObjectKey: pdfStored.objectKey } : {}),
         },
       });
 
@@ -828,7 +829,7 @@ async function markDocumentDispatched(documentId: string) {
 async function storeOfficialPdf(
   orderNumber: string,
   dispatch: Extract<FiscalDispatchResult, { ok: true }>,
-): Promise<{ objectKey: string; publicUrl: string } | null> {
+): Promise<{ objectKey: string } | null> {
   const pdfBase64 = dispatch.receipt.pdfBase64;
   if (!pdfBase64) return null;
   try {

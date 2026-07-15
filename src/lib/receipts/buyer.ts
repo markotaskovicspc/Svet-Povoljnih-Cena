@@ -16,7 +16,6 @@ export type BuyerReceiptResult =
       invoiceId: string;
       number: string;
       emailed: boolean;
-      pdfUrl: string | null;
       emailError?: string | null;
     }
   | { ok: false; error: string };
@@ -57,14 +56,15 @@ export async function issueBuyerReceiptForOrder(
       kind: "PROFORMA",
       status: "ISSUED",
       number,
-      pdfUrl: uploaded?.publicUrl ?? null,
+      // Bucket is private: only the object key is stored; bytes are
+      // fetched server-side when attaching to email.
       pdfObjectKey: uploaded?.objectKey ?? null,
       recipientEmail: recipient,
       snapshot: snapshot as Prisma.InputJsonValue,
       total: row.total,
     },
     update: {
-      pdfUrl: uploaded?.publicUrl ?? row.invoices[0]?.pdfUrl ?? null,
+      pdfUrl: null,
       pdfObjectKey: uploaded?.objectKey ?? row.invoices[0]?.pdfObjectKey ?? null,
       recipientEmail: recipient,
       snapshot: snapshot as Prisma.InputJsonValue,
@@ -73,7 +73,6 @@ export async function issueBuyerReceiptForOrder(
     select: {
       id: true,
       number: true,
-      pdfUrl: true,
       emailedAt: true,
       status: true,
     },
@@ -87,7 +86,6 @@ export async function issueBuyerReceiptForOrder(
       invoiceId: invoice.id,
       number: invoice.number,
       emailed: false,
-      pdfUrl: invoice.pdfUrl,
     };
   }
 
@@ -102,7 +100,6 @@ export async function issueBuyerReceiptForOrder(
       invoiceId: invoice.id,
       number: invoice.number,
       emailed: false,
-      pdfUrl: invoice.pdfUrl,
       emailError: "no_recipient",
     };
   }
@@ -126,7 +123,6 @@ export async function issueBuyerReceiptForOrder(
     invoiceId: invoice.id,
     number: invoice.number,
     emailed: send.ok,
-    pdfUrl: invoice.pdfUrl,
     emailError: send.ok ? null : send.error,
   };
 }
@@ -248,6 +244,5 @@ async function uploadReceiptPdf(args: {
     cacheControl: "3600",
   });
   if (error) throw error;
-  const publicUrl = storage.getPublicUrl(objectKey).data.publicUrl;
-  return { objectKey, publicUrl };
+  return { objectKey };
 }

@@ -39,6 +39,11 @@ export type PresignInput = z.infer<typeof presignSchema>;
 
 export interface PresignResult {
   uploadUrl: string;
+  /**
+   * Canonical object URL submitted back on reclamation creation and stored
+   * in ReclamationPhoto.url. The bucket is private, so this is an
+   * identifier — display goes through signReclamationPhotoUrls().
+   */
   publicUrl: string;
   /** Echoed back so clients can correlate. */
   key: string;
@@ -77,14 +82,25 @@ export async function presignUpload(
 }
 
 export function isAllowedReclamationPhotoUrl(value: string) {
+  const key = reclamationObjectKeyFromUrl(value);
+  return key !== null && isAllowedReclamationObjectKey(key);
+}
+
+/**
+ * Extract the storage object key from a stored reclamation photo URL.
+ * Stored values are canonical public-shaped URLs — the bucket is private,
+ * so they act as identifiers, not fetchable links. Signed URLs are
+ * accepted too so values round-trip through re-submission.
+ */
+export function reclamationObjectKeyFromUrl(value: string): string | null {
   const bucket = reclamationUploadBucket();
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    return false;
+    return null;
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   const markerPublic = `/storage/v1/object/public/${bucket}/`;
   const markerSigned = `/storage/v1/object/sign/${bucket}/`;
   const path = decodeURIComponent(url.pathname);
@@ -93,7 +109,52 @@ export function isAllowedReclamationPhotoUrl(value: string) {
     : path.includes(markerSigned)
       ? path.slice(path.indexOf(markerSigned) + markerSigned.length)
       : "";
-  return isAllowedReclamationObjectKey(key);
+  return key || null;
+}
+
+/**
+ * Map stored photo URLs to time-limited signed URLs for display. The
+ * reclamation bucket is private; callers render `map.get(url) ?? url`.
+ * Returns an empty map when storage is unconfigured or signing fails —
+ * the stored URL then 403s, which is still safer than a public bucket.
+ */
+export async function signReclamationPhotoUrls(
+  urls: string[],
+  expiresInSec = 3600,
+): Promise<Map<string, string>> {
+  const signed = new Map<string, string>();
+  const keyByUrl = new Map<string, string>();
+  for (const url of urls) {
+    const key = reclamationObjectKeyFromUrl(url);
+    if (key) keyByUrl.set(url, key);
+  }
+  if (!keyByUrl.size) return signed;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return signed;
+  }
+  try {
+    const storage = createAdminClient().storage.from(reclamationUploadBucket());
+    const { data, error } = await storage.createSignedUrls(
+      [...new Set(keyByUrl.values())],
+      expiresInSec,
+    );
+    if (error || !data) {
+      console.error("[uploads] signing reclamation photo URLs failed", error);
+      return signed;
+    }
+    const signedByKey = new Map(
+      data
+        .filter((item) => item.path && item.signedUrl)
+        .map((item) => [item.path as string, item.signedUrl as string]),
+    );
+    for (const [url, key] of keyByUrl) {
+      const signedUrl = signedByKey.get(key);
+      if (signedUrl) signed.set(url, signedUrl);
+    }
+  } catch (err) {
+    console.error("[uploads] signing reclamation photo URLs failed", err);
+  }
+  return signed;
 }
 
 export function isAllowedReclamationObjectKey(key: string) {

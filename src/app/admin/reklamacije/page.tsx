@@ -9,6 +9,7 @@ import {
   lowerReclamationStatus,
   sendReclamationStatusChanged,
 } from "@/lib/email";
+import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -86,6 +87,11 @@ export default async function ReclamationsPage({
     },
   });
 
+  // Photo bucket is private — swap stored canonical URLs for signed ones.
+  const signedPhotoUrls = await signReclamationPhotoUrls(
+    items.flatMap((r) => r.photos.map((p) => p.url)),
+  );
+
   return (
     <>
       <PageHeader
@@ -138,13 +144,13 @@ export default async function ReclamationsPage({
                     {r.photos.map((p) => (
                       <a
                         key={p.id}
-                        href={p.url}
+                        href={signedPhotoUrls.get(p.url) ?? p.url}
                         target="_blank"
                         rel="noreferrer"
                         className="relative block size-20 overflow-hidden rounded-md border border-border/60"
                       >
                         <Image
-                          src={p.url}
+                          src={signedPhotoUrls.get(p.url) ?? p.url}
                           alt=""
                           fill
                           sizes="80px"

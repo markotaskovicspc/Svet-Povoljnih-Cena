@@ -13,12 +13,15 @@ function fiscalBucket() {
  * Returns null when Supabase storage is not configured so issuance
  * never fails on a missing bucket — the receipt itself is already
  * fiscalized at this point.
+ *
+ * The bucket is private (receipts hold buyer PII and order numbers are
+ * sequential/enumerable); consumers fetch bytes via downloadFiscalPdf.
  */
 export async function uploadFiscalPdf(args: {
   orderNumber: string;
   receiptNumber: string;
   bytes: Buffer;
-}): Promise<{ objectKey: string; publicUrl: string } | null> {
+}): Promise<{ objectKey: string } | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return null;
   }
@@ -30,8 +33,7 @@ export async function uploadFiscalPdf(args: {
     cacheControl: "3600",
   });
   if (error) throw error;
-  const publicUrl = storage.getPublicUrl(objectKey).data.publicUrl;
-  return { objectKey, publicUrl };
+  return { objectKey };
 }
 
 /** Fetch a previously stored official PDF; null if missing/unconfigured. */
