@@ -446,7 +446,7 @@ function Uplatnica({ order }: { order: Order }) {
         <span className="text-ink-500">IZNOS</span>
         <span className="text-ink-900 text-base">{formatRsd(order.total)}</span>
         <span className="text-ink-500">RAČUN PRIMAOCA</span>
-        <span className="text-ink-900">265-1000000000000-00</span>
+        <span className="text-ink-900">{MERCHANT_LEGAL_INFO.bankAccount}</span>
         <span className="text-ink-500">POZIV NA BROJ</span>
         <span className="text-ink-900">{order.id}</span>
       </div>
