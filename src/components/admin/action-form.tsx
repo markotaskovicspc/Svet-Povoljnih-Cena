@@ -16,12 +16,10 @@ export function AdminActionForm({
   action,
   children,
   className,
-  encType,
 }: {
   action: AdminFormAction;
   children: React.ReactNode | ((state: AdminActionState) => React.ReactNode);
   className?: string;
-  encType?: string;
 }) {
   const [state, formAction] = useActionState(
     action,
@@ -30,7 +28,7 @@ export function AdminActionForm({
   const hasMessage = Boolean(state.message);
 
   return (
-    <form action={formAction} className={className} encType={encType}>
+    <form action={formAction} className={className}>
       {hasMessage ? (
         <p
           role={state.ok ? "status" : "alert"}

@@ -40,12 +40,13 @@ export const adminNav: AdminNavGroup[] = [
     ],
   },
   {
-    label: "Katalog",
+    label: "ERP",
     items: [
-      { href: "/admin/proizvodi", label: "Proizvodi", allowed: CO },
-      { href: "/admin/akcije", label: "Akcije", allowed: C },
+      { href: "/admin/erp", label: "ERP radni prostor", allowed: ALL },
+      { href: "/admin/proizvodi", label: "Artikli", allowed: CO },
+      { href: "/admin/akcije", label: "Akcije i cene", allowed: C },
       { href: "/admin/heroji", label: "Heroji meseca", allowed: C },
-      { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
+      { href: "/admin/narudzbine", label: "Narudžbine", allowed: O },
     ],
   },
   {
@@ -59,12 +60,9 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Operativa",
     items: [
-      { href: "/admin/erp", label: "ERP sistem", allowed: ALL },
-      { href: "/admin/narudzbine", label: "Narudžbine", allowed: O },
       { href: "/admin/fiskalizacija", label: "Fiskalizacija", allowed: O },
       { href: "/admin/checkouti", label: "Checkouti", allowed: O },
       { href: "/admin/reklamacije", label: "Reklamacije", allowed: O },
-      { href: "/admin/komentari", label: "Komentari", allowed: CO },
       { href: "/admin/xml-import", label: "XML feed", allowed: O },
     ],
   },
@@ -79,6 +77,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Analitika",
     items: [
+      { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
       { href: "/admin/izvestaji", label: "Izveštaji", allowed: ALL },
       { href: "/admin/audit-log", label: "Audit log", allowed: [] },
     ],

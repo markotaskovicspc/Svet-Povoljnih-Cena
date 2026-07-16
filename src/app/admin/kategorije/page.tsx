@@ -29,10 +29,15 @@ const slugify = (s: string) =>
 const schema = z.object({
   id: z.string().optional().nullable(),
   name: z.string().min(1).max(80),
-  slug: z.string().min(1).max(80).optional(),
+  slug: z
+    .union([z.literal("").transform(() => undefined), z.string().min(1).max(80)])
+    .optional(),
   parentId: z.string().optional().nullable(),
   order: z.coerce.number().int().min(0).default(0),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z
+    .union([z.string().url(), z.literal("").transform(() => null)])
+    .optional()
+    .nullable(),
   description: z.string().max(2000).optional().nullable(),
 });
 
@@ -107,11 +112,19 @@ async function remove(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-export default async function CategoriesPage() {
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string; new?: string }>;
+}) {
   await requireAdminAction(["CONTENT"]);
+  const params = await searchParams;
   const cats = await db.category.findMany({
     orderBy: [{ path: "asc" }],
   });
+  const selected = params.new === "1"
+    ? undefined
+    : cats.find((category) => category.id === params.edit) ?? cats[0];
   const flat = cats.map((c) => ({
     ...c,
     indent: c.level,
@@ -124,9 +137,17 @@ export default async function CategoriesPage() {
         description="Hijerarhijska struktura kategorija. Putanja se izračunava iz slug-a roditelja."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Kategorije" }]}
       />
-      <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_400px]">
-        <Card>
-          <CardTitle description="Klikom na ime otvarate izmenu.">Stablo</CardTitle>
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <Card className="max-h-[calc(100vh-11rem)] overflow-y-auto">
+          <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-start justify-between gap-3 bg-white px-1 pb-3">
+            <CardTitle description="Klikom na kategoriju otvarate izmenu u desnom editoru.">Stablo</CardTitle>
+            <a
+              href="/admin/kategorije?new=1"
+              className="shrink-0 rounded-lg bg-walnut px-3 py-1.5 text-xs font-semibold text-white hover:bg-walnut/90"
+            >
+              Nova kategorija
+            </a>
+          </div>
           {flat.length === 0 ? (
             <p className="text-sm text-ink-500">Još nema kategorija.</p>
           ) : (
@@ -134,10 +155,10 @@ export default async function CategoriesPage() {
               {flat.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-muted-bg/50"
+                  className={`flex items-center justify-between rounded-md px-2 py-1.5 ${selected?.id === c.id ? "bg-walnut/10" : "hover:bg-muted-bg/50"}`}
                   style={{ paddingLeft: `${c.indent * 16 + 8}px` }}
                 >
-                  <a href={`#edit-${c.id}`} className="text-ink-900 hover:text-walnut">
+                  <a href={`/admin/kategorije?edit=${c.id}`} className={`text-ink-900 hover:text-walnut ${c.level === 0 ? "text-base font-bold" : "font-medium"}`}>
                     {c.name}{" "}
                     <span className="ml-1 font-mono text-[11px] text-ink-300">{c.path}</span>
                   </a>
@@ -152,18 +173,10 @@ export default async function CategoriesPage() {
             </ul>
           )}
         </Card>
-        <div className="space-y-6">
-          <Card>
-            <CardTitle>Nova kategorija</CardTitle>
-            <CategoryForm action={upsert} parents={cats} />
-          </Card>
-          {cats.map((c) => (
-            <Card key={c.id} id={`edit-${c.id}`} className="scroll-mt-24">
-              <CardTitle>Izmena: {c.name}</CardTitle>
-              <CategoryForm action={upsert} parents={cats} values={c} />
-            </Card>
-          ))}
-        </div>
+        <Card className="xl:sticky xl:top-6">
+          <CardTitle>{selected ? `Izmena: ${selected.name}` : "Nova kategorija"}</CardTitle>
+          <CategoryForm key={selected?.id ?? "new"} action={upsert} parents={cats} values={selected} />
+        </Card>
       </div>
     </>
   );

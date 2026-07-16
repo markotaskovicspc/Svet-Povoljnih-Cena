@@ -317,61 +317,63 @@ export default async function PurchaseOrderEditorPage({
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[420px_1fr]">
         <Card>
           <CardTitle description="Sumarni podaci porudžbenice.">Zaglavlje</CardTitle>
-          <AdminActionForm action={saveHeader} className="space-y-4">
-            <input type="hidden" name="poId" value={order.id} />
-            <Field label="Dobavljač">
-              <select
-                name="supplierId"
-                defaultValue={order.supplierId ?? ""}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-              >
-                <option value="">— bez dobavljača —</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Datum porudžbine">
-                <Input name="orderDate" type="date" defaultValue={dtLocal(order.orderDate)} />
-              </Field>
-              <Field label="Datum utovara">
-                <Input name="loadingDate" type="date" defaultValue={dtLocal(order.loadingDate)} />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Datum isporuke">
-                <Input name="deliveryDate" type="date" defaultValue={dtLocal(order.deliveryDate)} />
-              </Field>
-              <Field label="Valuta">
+          <AdminActionForm action={saveHeader}>
+            <div key={order.updatedAt.getTime()} className="space-y-4">
+              <input type="hidden" name="poId" value={order.id} />
+              <Field label="Dobavljač">
                 <select
-                  name="currency"
-                  defaultValue={order.currency}
+                  name="supplierId"
+                  defaultValue={order.supplierId ?? ""}
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
                 >
-                  {currencyOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  <option value="">— bez dobavljača —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
                     </option>
                   ))}
                 </select>
               </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Tip transporta">
-                <Input name="transportType" defaultValue={order.transportType ?? ""} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Datum porudžbine">
+                  <Input name="orderDate" type="date" defaultValue={dtLocal(order.orderDate)} />
+                </Field>
+                <Field label="Datum utovara">
+                  <Input name="loadingDate" type="date" defaultValue={dtLocal(order.loadingDate)} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Datum isporuke">
+                  <Input name="deliveryDate" type="date" defaultValue={dtLocal(order.deliveryDate)} />
+                </Field>
+                <Field label="Valuta">
+                  <select
+                    name="currency"
+                    defaultValue={order.currency}
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  >
+                    {currencyOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Tip transporta">
+                  <Input name="transportType" defaultValue={order.transportType ?? ""} />
+                </Field>
+                <Field label="Paritet">
+                  <Input name="parity" defaultValue={order.parity ?? ""} />
+                </Field>
+              </div>
+              <Field label="Napomena">
+                <Textarea name="notes" rows={2} defaultValue={order.notes ?? ""} />
               </Field>
-              <Field label="Paritet">
-                <Input name="parity" defaultValue={order.parity ?? ""} />
-              </Field>
-            </div>
-            <Field label="Napomena">
-              <Textarea name="notes" rows={2} defaultValue={order.notes ?? ""} />
-            </Field>
-            <div className="flex justify-end">
-              <SubmitButton>Sačuvaj zaglavlje</SubmitButton>
+              <div className="flex justify-end">
+                <SubmitButton>Sačuvaj zaglavlje</SubmitButton>
+              </div>
             </div>
           </AdminActionForm>
 

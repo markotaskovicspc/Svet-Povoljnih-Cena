@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { signOut } from "@/lib/auth/auth";
 import { getCurrentUser } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { headers } from "next/headers";
 import { AdminSidebar, AdminMobileNav } from "@/components/admin/sidebar";
 import { allowedNavFor, ADMIN_ROLE_LABEL } from "@/lib/admin";
@@ -21,10 +22,36 @@ export default async function AdminLayout({
     return <div className="min-h-screen bg-canvas">{children}</div>;
   }
 
-  const user = await getCurrentUser();
-  if (!user || user.userType !== "admin") {
+  const sessionUser = await getCurrentUser();
+  if (!sessionUser || sessionUser.userType !== "admin") {
     redirect(`/admin/prijava?callbackUrl=${encodeURIComponent(pathname)}`);
   }
+
+  // JWT sessions can outlive an admin account being disabled, deleted, or
+  // assigned a different role. Revalidate the authoritative record for every
+  // admin route so pages without their own action guard cannot use stale access.
+  const admin = await db.adminUser.findUnique({
+    where: { id: sessionUser.id },
+    select: {
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      enabled: true,
+    },
+  });
+  if (!admin?.enabled) {
+    redirect(`/admin/prijava?callbackUrl=${encodeURIComponent(pathname)}`);
+  }
+
+  const user = {
+    ...sessionUser,
+    email: admin.email,
+    name:
+      [admin.firstName, admin.lastName].filter(Boolean).join(" ") ||
+      admin.email,
+    role: admin.role,
+  };
 
   const nav = allowedNavFor(user.role);
 

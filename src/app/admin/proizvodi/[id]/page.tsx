@@ -847,7 +847,6 @@ export default async function ProductDetail({
             <AdminActionForm
               action={addProductImage}
               className="mt-4 space-y-3"
-              encType="multipart/form-data"
             >
               <input type="hidden" name="productId" value={product.id} />
               <Field label="Upload fotografije">

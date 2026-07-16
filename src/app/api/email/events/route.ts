@@ -15,6 +15,14 @@ export async function POST(req: Request) {
     );
   }
 
+  const eventId = req.headers.get("svix-id");
+  if (!eventId) {
+    return NextResponse.json(
+      { ok: false, error: "missing_event_id" },
+      { status: 400 },
+    );
+  }
+
   const rawBody = await req.text();
   if (!verifySvixSignature(req.headers, rawBody, cfg.resendWebhookSecret)) {
     return NextResponse.json(
@@ -23,18 +31,23 @@ export async function POST(req: Request) {
     );
   }
 
-  const payload = JSON.parse(rawBody) as ResendWebhookEvent;
-  if (!payload.type) {
+  let payload: ResendWebhookEvent;
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new SyntaxError("Webhook body must be a JSON object.");
+    }
+    payload = parsed as ResendWebhookEvent;
+  } catch {
     return NextResponse.json(
       { ok: false, error: "invalid_payload" },
       { status: 400 },
     );
   }
 
-  const eventId = req.headers.get("svix-id");
-  if (!eventId) {
+  if (!payload.type) {
     return NextResponse.json(
-      { ok: false, error: "missing_event_id" },
+      { ok: false, error: "invalid_payload" },
       { status: 400 },
     );
   }

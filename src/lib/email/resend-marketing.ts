@@ -56,15 +56,29 @@ export async function syncResendContact(input: SyncContactInput) {
     body.topics = topics;
   }
 
-  const created = await resendRequest("POST", "/contacts", body, cfg.apiKey);
+  const bodyWithoutProperties = { ...body };
+  delete bodyWithoutProperties.properties;
+
+  let created = await resendRequest("POST", "/contacts", body, cfg.apiKey);
+  if (!created.ok && missingResendProperties(created.error)) {
+    created = await resendRequest("POST", "/contacts", bodyWithoutProperties, cfg.apiKey);
+  }
   if (created.ok) return created;
 
-  const updated = await resendRequest(
+  let updated = await resendRequest(
     "PATCH",
     `/contacts/${encodeURIComponent(email)}`,
     body,
     cfg.apiKey,
   );
+  if (!updated.ok && missingResendProperties(updated.error)) {
+    updated = await resendRequest(
+      "PATCH",
+      `/contacts/${encodeURIComponent(email)}`,
+      bodyWithoutProperties,
+      cfg.apiKey,
+    );
+  }
   if (updated.ok) {
     if (topics) {
       await resendRequest(
@@ -92,6 +106,7 @@ export async function syncNewsletterSubscriberToResend(emailRaw: string) {
   return syncResendContact({
     email: sub.email,
     unsubscribed: !sub.consent || Boolean(sub.unsubscribedAt),
+    promotionalAudience: true,
     source: sub.source ?? "newsletter",
     properties: {
       consent_source: sub.source ?? "newsletter",
@@ -194,4 +209,8 @@ function pruneProperties(input: Record<string, string | null | undefined>) {
       .filter(([, value]) => value != null && value !== "")
       .map(([key, value]) => [key, String(value)]),
   );
+}
+
+function missingResendProperties(error: string) {
+  return error.includes("One or more properties do not exist");
 }

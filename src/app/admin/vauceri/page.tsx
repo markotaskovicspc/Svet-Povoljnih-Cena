@@ -23,7 +23,7 @@ const schema = z.object({
   kind: z.nativeEnum(VoucherKind),
   amount: z.coerce.number().nonnegative(),
   minSubtotal: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
+    .union([z.literal("").transform(() => null), z.coerce.number().nonnegative()])
     .nullable()
     .optional(),
   startsAt: z.string().optional().nullable(),
@@ -94,12 +94,20 @@ const dt = (d?: Date | null) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-export default async function VouchersPage() {
+export default async function VouchersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string; new?: string }>;
+}) {
   await requireAdminAction(["OPS"]);
+  const params = await searchParams;
   const vouchers = await db.voucher.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { redemptions: true } } },
   });
+  const selected = params.new === "1"
+    ? undefined
+    : vouchers.find((voucher) => voucher.code === params.edit) ?? vouchers[0];
 
   return (
     <>
@@ -108,33 +116,43 @@ export default async function VouchersPage() {
         description="Promo kodovi — procenat ili fiksni iznos, sa minimumom narudžbine i limitima upotrebe."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Vaučeri" }]}
       />
-      <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_400px]">
-        <Card className="p-0">
+      <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <Card className="max-h-[calc(100vh-11rem)] overflow-y-auto p-0">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-4 py-3">
+            <div>
+              <p className="font-display text-lg font-semibold text-ink-900">Lista vaučera</p>
+              <p className="text-xs text-ink-500">Izaberite vaučer za izmenu.</p>
+            </div>
+            <a href="/admin/vauceri?new=1" className="rounded-lg bg-walnut px-3 py-1.5 text-xs font-semibold text-white hover:bg-walnut/90">
+              Novi vaučer
+            </a>
+          </div>
           <DataTable
             columns={[
-              { key: "code", label: "Kod" },
-              { key: "kind", label: "Tip" },
+              { key: "code", label: "Vaučer" },
               { key: "amount", label: "Vrednost", align: "right" },
-              { key: "min", label: "Min. narudžbina", align: "right" },
               { key: "used", label: "Korišćen", align: "right" },
-              { key: "active", label: "Aktivan", align: "center" },
               { key: "actions", label: "" },
             ]}
             rows={vouchers.map((v) => ({
               id: v.code,
               cells: {
-                code: <span className="font-mono">{v.code}</span>,
-                kind: v.kind,
-                amount:
-                  v.kind === "PERCENT"
-                    ? `${num(v.amount)}%`
-                    : formatRsd(num(v.amount)),
-                min: v.minSubtotal ? formatRsd(num(v.minSubtotal)) : "—",
+                code: (
+                  <div>
+                    <p className="font-mono font-medium">{v.code}</p>
+                    <p className="text-[11px] text-ink-500">{v.kind} · {v.active ? "Aktivan" : "Neaktivan"}</p>
+                  </div>
+                ),
+                amount: (
+                  <div>
+                    <p>{v.kind === "PERCENT" ? `${num(v.amount)}%` : formatRsd(num(v.amount))}</p>
+                    <p className="text-[11px] text-ink-500">min. {v.minSubtotal ? formatRsd(num(v.minSubtotal)) : "bez minimuma"}</p>
+                  </div>
+                ),
                 used: `${v._count.redemptions}${v.usageLimit ? ` / ${v.usageLimit}` : ""}`,
-                active: v.active ? "✓" : "—",
                 actions: (
                   <div className="flex justify-end gap-2">
-                    <a href={`#edit-${v.code}`} className="text-xs text-walnut hover:underline">
+                    <a href={`/admin/vauceri?edit=${encodeURIComponent(v.code)}`} className="text-xs text-walnut hover:underline">
                       Izmeni
                     </a>
                     <form action={remove}>
@@ -150,32 +168,25 @@ export default async function VouchersPage() {
             empty="Nema vaučera."
           />
         </Card>
-        <div className="space-y-6">
-          <Card>
-            <CardTitle>Novi vaučer</CardTitle>
-            <VoucherForm action={upsert} />
-          </Card>
-          {vouchers.map((v) => (
-            <Card key={v.code} id={`edit-${v.code}`} className="scroll-mt-24">
-              <CardTitle>Izmena: {v.code}</CardTitle>
-              <VoucherForm
-                action={upsert}
-                values={{
-                  code: v.code,
-                  kind: v.kind,
-                  amount: num(v.amount),
-                  minSubtotal: v.minSubtotal ? num(v.minSubtotal) : "",
-                  startsAt: dt(v.startsAt),
-                  endsAt: dt(v.endsAt),
-                  usageLimit: v.usageLimit ?? "",
-                  perUserLimit: v.perUserLimit ?? "",
-                  active: v.active,
-                }}
-                lockCode
-              />
-            </Card>
-          ))}
-        </div>
+        <Card className="xl:sticky xl:top-6">
+          <CardTitle>{selected ? `Izmena: ${selected.code}` : "Novi vaučer"}</CardTitle>
+          <VoucherForm
+            key={selected?.code ?? "new"}
+            action={upsert}
+            values={selected ? {
+              code: selected.code,
+              kind: selected.kind,
+              amount: num(selected.amount),
+              minSubtotal: selected.minSubtotal ? num(selected.minSubtotal) : "",
+              startsAt: dt(selected.startsAt),
+              endsAt: dt(selected.endsAt),
+              usageLimit: selected.usageLimit ?? "",
+              perUserLimit: selected.perUserLimit ?? "",
+              active: selected.active,
+            } : undefined}
+            lockCode={Boolean(selected)}
+          />
+        </Card>
       </div>
     </>
   );
