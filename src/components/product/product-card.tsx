@@ -9,7 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Heart, PackageSearch } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, PackageSearch } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
@@ -70,7 +70,6 @@ export function ProductCard({
   const visibleLineQty = cartHydrated ? lineQty : 0;
 
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
-  const [galleryActivated, setGalleryActivated] = useState(false);
   const images = useMemo(
     () =>
       product.media.images
@@ -84,8 +83,6 @@ export function ProductCard({
         ),
     [failedImageUrls, product.media.images],
   );
-  const visibleImages = galleryActivated ? images : images.slice(0, 1);
-  const activateGallery = useCallback(() => setGalleryActivated(true), []);
   const imageTrackRef = useRef<HTMLDivElement | null>(null);
   const imageDragRef = useRef({
     pointerId: -1,
@@ -113,16 +110,29 @@ export function ProductCard({
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
   const syncActiveImage = useCallback(() => {
-    if (!visibleImages.length) return;
+    if (!images.length) return;
     const track = imageTrackRef.current;
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
-    setActiveImage(Math.max(0, Math.min(index, visibleImages.length - 1)));
-  }, [visibleImages.length]);
+    setActiveImage(Math.max(0, Math.min(index, images.length - 1)));
+  }, [images.length]);
+
+  const showImage = useCallback(
+    (index: number) => {
+      const track = imageTrackRef.current;
+      if (!track || !images.length) return;
+      const nextIndex = Math.max(0, Math.min(index, images.length - 1));
+      track.scrollTo({
+        left: nextIndex * track.clientWidth,
+        behavior: reduced ? "auto" : "smooth",
+      });
+      setActiveImage(nextIndex);
+    },
+    [images.length, reduced],
+  );
 
   const handleImageDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    activateGallery();
-    if (event.pointerType === "touch" || event.button !== 0) return;
+    if (event.pointerType !== "touch" && event.button !== 0) return;
 
     imageDragRef.current = {
       pointerId: event.pointerId,
@@ -130,8 +140,10 @@ export function ProductCard({
       scrollLeft: event.currentTarget.scrollLeft,
       didDrag: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, [activateGallery]);
+    if (event.pointerType !== "touch") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }, []);
 
   const handleImageDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = imageDragRef.current;
@@ -139,7 +151,7 @@ export function ProductCard({
 
     const distance = event.clientX - drag.startX;
     if (Math.abs(distance) > 4) drag.didDrag = true;
-    if (drag.didDrag) {
+    if (drag.didDrag && event.pointerType !== "touch") {
       event.preventDefault();
       event.currentTarget.scrollLeft = drag.scrollLeft - distance;
     }
@@ -179,17 +191,15 @@ export function ProductCard({
         className,
       )}
     >
-      <Link
-        href={`/p/${product.slug}`}
-        aria-label={`${product.name} — pregled proizvoda`}
-        onMouseEnter={activateGallery}
-        onFocus={activateGallery}
-        onTouchStart={activateGallery}
-        onClick={(event) => {
-          if (imageDragRef.current.didDrag) event.preventDefault();
-        }}
-        className="focus-visible:ring-walnut/40 relative block aspect-square overflow-hidden bg-white focus-visible:ring-2 focus-visible:outline-none"
-      >
+      <div className="relative aspect-square overflow-hidden bg-white">
+        <Link
+          href={`/p/${product.slug}`}
+          aria-label={`${product.name} — pregled proizvoda`}
+          onClick={(event) => {
+            if (imageDragRef.current.didDrag) event.preventDefault();
+          }}
+          className="focus-visible:ring-walnut/40 absolute inset-0 block focus-visible:ring-2 focus-visible:outline-none"
+        >
         {/*
          * `layoutId` bridges this image to the PDP hero image (Phase 1H.2).
          * Framer Motion morphs between the two when navigating to /p/[slug],
@@ -204,8 +214,8 @@ export function ProductCard({
           onPointerCancel={finishImageDrag}
           className="absolute inset-0 flex snap-x snap-mandatory select-none overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {visibleImages.length
-            ? visibleImages.map((image, index) => (
+          {images.length
+            ? images.map((image, index) => (
                 <div
                   key={`${image.url}-${index}`}
                   data-card-image={index}
@@ -252,23 +262,6 @@ export function ProductCard({
               </div>
             )}
         </div>
-        {galleryActivated && visibleImages.length > 1 ? (
-          <div className="absolute inset-x-0 bottom-1 z-10 flex flex-wrap justify-center gap-0.5 px-2">
-            {visibleImages.map((_, index) => (
-              <span
-                key={index}
-                data-card-image-dot
-                aria-current={index === activeImage ? "true" : undefined}
-                className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  index === activeImage
-                    ? "w-4 bg-ink-900"
-                    : "w-1.5 bg-white/85 ring-1 ring-border/70",
-                )}
-              />
-            ))}
-          </div>
-        ) : null}
         {topLeftBadges.length ? (
           <div className="pointer-events-none absolute top-0 left-0 flex max-w-[78%] flex-col items-start gap-1">
             {topLeftBadges.slice(0, 2).map((b) => (
@@ -283,7 +276,49 @@ export function ProductCard({
             ))}
           </div>
         ) : null}
-      </Link>
+        </Link>
+
+        {images.length > 1 ? (
+          <>
+            <button
+              type="button"
+              aria-label="Prethodna fotografija"
+              disabled={activeImage === 0}
+              onClick={() => showImage(activeImage - 1)}
+              className="focus-visible:ring-walnut/40 absolute top-1/2 left-2 z-20 hidden size-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-soft-1 ring-1 ring-border/60 transition hover:bg-white focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-0 md:inline-flex"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label="Sledeća fotografija"
+              disabled={activeImage === images.length - 1}
+              onClick={() => showImage(activeImage + 1)}
+              className="focus-visible:ring-walnut/40 absolute top-1/2 right-2 z-20 hidden size-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-soft-1 ring-1 ring-border/60 transition hover:bg-white focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-0 md:inline-flex"
+            >
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+            <div className="absolute inset-x-0 bottom-1 z-20 flex flex-wrap justify-center gap-0.5 px-2">
+              {images.map((_, index) => (
+                <button
+                  type="button"
+                  key={index}
+                  data-card-image-dot
+                  aria-label={`Prikaži fotografiju ${index + 1} od ${images.length}`}
+                  aria-current={index === activeImage ? "true" : undefined}
+                  onClick={() => showImage(index)}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
+                    index === activeImage
+                      ? "w-4 bg-ink-900"
+                      : "w-1.5 bg-white/85 ring-1 ring-border/70",
+                  )}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
 
       {/* Wishlist heart */}
       <button
