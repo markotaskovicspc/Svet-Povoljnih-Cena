@@ -1,4 +1,5 @@
 import "server-only";
+import { isProviderAccepted } from "@/lib/provider-acceptance";
 
 export const X_EXPRESS_PROVIDER = "X_EXPRESS";
 
@@ -53,7 +54,9 @@ function int(value: string | undefined) {
 
 export function getXExpressConfig(): XExpressConfig {
   return {
-    enabled: bool(process.env.X_EXPRESS_ENABLED),
+    enabled:
+      bool(process.env.X_EXPRESS_ENABLED) &&
+      isProviderAccepted("X_EXPRESS_PRODUCTION_ACCEPTED"),
     autoCreate: bool(process.env.X_EXPRESS_AUTO_CREATE),
     baseUrl:
       trim(process.env.X_EXPRESS_BASE_URL).replace(/\/+$/, "") ||

@@ -146,12 +146,9 @@ export const footerColumns: { title: string; links: { label: string; href: strin
 ];
 
 export const paymentMethods = [
-  { id: "visa", label: "Visa", href: "/uslovi-kupovine#kartice" },
-  { id: "master", label: "Mastercard", href: "/uslovi-kupovine#kartice" },
-  { id: "dina", label: "DinaCard", href: "/uslovi-kupovine#kartice" },
-  { id: "ips", label: "IPS NBS", href: "/uslovi-kupovine#ips" },
-  { id: "applepay", label: "Apple Pay", href: "/uslovi-kupovine#wallet" },
-  { id: "googlepay", label: "Google Pay", href: "/uslovi-kupovine#wallet" },
+  { id: "bank", label: "Uplata na račun", href: "/uslovi-kupovine#kartice" },
+  { id: "cod-cash", label: "Pouzeće — gotovina", href: "/uslovi-kupovine#kartice" },
+  { id: "cod-card", label: "Pouzeće — kartica", href: "/uslovi-kupovine#kartice" },
 ] as const;
 
 export const socials = [

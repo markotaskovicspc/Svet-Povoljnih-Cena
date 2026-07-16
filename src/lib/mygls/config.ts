@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { isProviderAccepted } from "@/lib/provider-acceptance";
 
 export const MYGLS_PROVIDER = "MYGLS";
 export const MYGLS_TEST_BASE_URL = "https://api.test.mygls.rs";
@@ -76,7 +77,9 @@ export function getMyGlsConfig(): MyGlsConfig {
     (env === "production" ? MYGLS_PROD_BASE_URL : MYGLS_TEST_BASE_URL);
 
   return {
-    enabled: bool(process.env.MYGLS_ENABLED),
+    enabled:
+      bool(process.env.MYGLS_ENABLED) &&
+      (env === "test" || isProviderAccepted("MYGLS_PRODUCTION_ACCEPTED")),
     autoCreate: bool(process.env.MYGLS_AUTO_CREATE),
     env,
     baseUrl,

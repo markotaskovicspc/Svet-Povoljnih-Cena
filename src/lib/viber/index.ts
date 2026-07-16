@@ -27,6 +27,7 @@ export {
 export {
   inboundEventSchema,
   parseTracking,
+  getInboundEventId,
   applyInboundEvent,
   type InboundEvent,
   type CampaignAttribution,

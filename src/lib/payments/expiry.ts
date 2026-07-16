@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { adjustInventory } from "@/lib/inventory";
 
 const EXPIRABLE_PAYMENT_METHODS = [
   "IPS",
@@ -23,7 +24,7 @@ export async function expirePendingPayments(limit = 100) {
     take: Math.min(Math.max(limit, 1), 500),
     orderBy: { expiresAt: "asc" },
     include: {
-      items: { select: { productId: true, qty: true, sku: true } },
+      items: { select: { id: true, productId: true, qty: true, sku: true } },
       payments: {
         where: { status: "PENDING" },
         select: { id: true, expiresAt: true },
@@ -62,9 +63,14 @@ export async function expirePendingPayments(limit = 100) {
 
       for (const item of order.items) {
         if (!item.productId) continue;
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } },
+        await adjustInventory(tx, {
+          idempotencyKey: `order:${order.id}:payment-expiry:${item.id}`,
+          productId: item.productId,
+          sku: item.sku,
+          qtyDelta: item.qty,
+          kind: "ADJUSTMENT",
+          orderId: order.id,
+          note: `Istek plaćanja za porudžbinu ${order.number}`,
         });
         restoredLines += 1;
       }

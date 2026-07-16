@@ -10,6 +10,7 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { getPaymentMethodAcceptance } from "@/lib/provider-acceptance";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -38,6 +39,13 @@ async function updateMethod(_state: AdminActionState, formData: FormData) {
           return { ok: false as const, error: "Nepoznat metod." };
         }
         const enabled = formData.get("enabled") === "on" || formData.get("enabled") === "true";
+        const acceptance = getPaymentMethodAcceptance(method);
+        if (enabled && !acceptance.accepted) {
+          return {
+            ok: false as const,
+            error: `${acceptance.requirement} nije potvrđen. Tek nakon acceptance testa postavite ${acceptance.env}=true.`,
+          };
+        }
         const label = String(formData.get("label") ?? "").trim() || null;
         const note = String(formData.get("note") ?? "").trim() || null;
         await db.paymentMethodConfig.upsert({
@@ -73,6 +81,7 @@ export default async function PaymentsPage() {
       <div className="grid grid-cols-1 gap-4 px-8 py-6 md:grid-cols-2">
         {Object.values(PaymentMethod).map((method) => {
           const cfg = map.get(method);
+          const acceptance = getPaymentMethodAcceptance(method);
           return (
             <Card key={method}>
               <CardTitle description={method}>{LABEL[method]}</CardTitle>
@@ -84,10 +93,17 @@ export default async function PaymentsPage() {
                       type="checkbox"
                       name="enabled"
                       defaultChecked={cfg?.enabled ?? true}
+                      disabled={!acceptance.accepted}
                       className="size-4 accent-walnut"
                     />
                     Prikaži u checkout-u
                   </label>
+                  {!acceptance.accepted ? (
+                    <p className="text-xs text-warning">
+                      Zaključano: {acceptance.requirement}. Aktivira se tek kada je
+                      {` ${acceptance.env}=true`} u produkciji.
+                    </p>
+                  ) : null}
                 </Field>
                 <Field label="Custom labela (opciono)">
                   <Input name="label" defaultValue={cfg?.label ?? ""} placeholder={LABEL[method]} />

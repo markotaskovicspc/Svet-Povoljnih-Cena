@@ -48,7 +48,7 @@ export type CheckoutConfig = {
 };
 
 export const DEFAULT_PAYMENT_METHOD_CONFIG: CheckoutPaymentMethodConfig[] = [
-  { id: "ips", label: PAYMENT_LABELS.ips, note: null, enabled: true },
+  { id: "ips", label: PAYMENT_LABELS.ips, note: null, enabled: false },
   { id: "kartica", label: PAYMENT_LABELS.kartica, note: null, enabled: false },
   { id: "google_pay", label: PAYMENT_LABELS.google_pay, note: null, enabled: false },
   { id: "apple_pay", label: PAYMENT_LABELS.apple_pay, note: null, enabled: false },

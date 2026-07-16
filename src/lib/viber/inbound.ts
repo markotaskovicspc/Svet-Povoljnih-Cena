@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 
@@ -52,6 +54,22 @@ export interface ReportResult {
   ok: boolean;
   attributed: boolean;
   applied?: "delivered" | "failed" | "ignored";
+  duplicate?: boolean;
+}
+
+export function getInboundEventId(event: InboundEvent, suppliedId?: string | null) {
+  if (suppliedId?.trim()) return suppliedId.trim();
+
+  return createHash("sha256")
+    .update(
+      [
+        String(event.message_token ?? ""),
+        event.event.toLowerCase(),
+        event.tracking_data ?? "",
+        event.user_id ?? "",
+      ].join("\u001f"),
+    )
+    .digest("hex");
 }
 
 /**
@@ -60,26 +78,77 @@ export interface ReportResult {
  */
 export async function applyInboundEvent(
   event: InboundEvent,
+  suppliedEventId?: string | null,
 ): Promise<ReportResult> {
   const attribution = parseTracking(event.tracking_data);
-  if (!attribution) {
-    return { ok: true, attributed: false, applied: "ignored" };
-  }
-
   const norm = event.event.toLowerCase();
-  if (norm === "delivered") {
-    // Already counted optimistically — nothing to reconcile in v1.
-    return { ok: true, attributed: true, applied: "delivered" };
-  }
-  if (norm === "failed") {
-    await db.viberCampaign.updateMany({
-      where: { id: attribution.campaignId },
-      data: {
-        delivered: { decrement: 1 },
-        failed: { increment: 1 },
-      },
+  const eventId = getInboundEventId(event, suppliedEventId);
+
+  try {
+    return await db.$transaction(async (tx) => {
+      const stored = await tx.viberWebhookEvent.create({
+        data: {
+          eventId,
+          event: norm,
+          messageToken:
+            event.message_token === undefined
+              ? null
+              : String(event.message_token),
+          campaignId: attribution?.campaignId ?? null,
+          recipientUserId: attribution?.recipientUserId ?? null,
+          payload: event as Prisma.InputJsonValue,
+        },
+      });
+
+      let applied: ReportResult["applied"] = "ignored";
+      if (attribution && norm === "delivered") {
+        // The transport counts accepted sends optimistically. Delivery is
+        // persisted for reporting but does not change the counter again.
+        applied = "delivered";
+      } else if (attribution && norm === "failed") {
+        const reconciled = await tx.viberCampaign.updateMany({
+          where: {
+            id: attribution.campaignId,
+            delivered: { gt: 0 },
+          },
+          data: {
+            delivered: { decrement: 1 },
+            failed: { increment: 1 },
+          },
+        });
+        if (reconciled.count === 0) {
+          await tx.viberCampaign.updateMany({
+            where: { id: attribution.campaignId },
+            data: { failed: { increment: 1 } },
+          });
+        }
+        applied = "failed";
+      }
+
+      await tx.viberWebhookEvent.update({
+        where: { id: stored.id },
+        data: { appliedAt: new Date() },
+      });
+
+      return {
+        ok: true,
+        attributed: Boolean(attribution),
+        applied,
+        duplicate: false,
+      };
     });
-    return { ok: true, attributed: true, applied: "failed" };
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return {
+        ok: true,
+        attributed: Boolean(attribution),
+        applied: "ignored",
+        duplicate: true,
+      };
+    }
+    throw error;
   }
-  return { ok: true, attributed: true, applied: "ignored" };
 }

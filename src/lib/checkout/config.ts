@@ -9,6 +9,7 @@ import {
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import type { PaymentMethod as ClientPaymentMethod, SKU } from "@/types";
+import { getPaymentMethodAcceptance } from "@/lib/provider-acceptance";
 import {
   ASSEMBLY_PRICE_DEFAULT,
   DEFAULT_DELIVERY_QUOTE,
@@ -77,11 +78,17 @@ export async function getCheckoutPaymentMethods({
   const byMethod = new Map(rows.map((row) => [paymentMethodToClient(row.method), row]));
   const methods = DEFAULT_PAYMENT_METHOD_CONFIG.map((fallback) => {
     const row = byMethod.get(fallback.id);
+    const dbMethod = clientPaymentMethodToDb(fallback.id);
+    const acceptance = getPaymentMethodAcceptance(dbMethod);
     return {
       id: fallback.id,
-      enabled: row?.enabled ?? fallback.enabled,
+      enabled: (row?.enabled ?? fallback.enabled) && acceptance.accepted,
       label: row?.label?.trim() || fallback.label,
-      note: row?.note ?? fallback.note,
+      note:
+        row?.note ??
+        (acceptance.accepted
+          ? fallback.note
+          : `${acceptance.requirement} još nije potvrđen.`),
     };
   });
 

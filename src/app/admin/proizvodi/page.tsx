@@ -8,6 +8,10 @@ import { PageHeader } from "@/components/admin/page-header";
 import { DataTable } from "@/components/admin/data-table";
 import { Card } from "@/components/admin/card";
 import { Input } from "@/components/ui/input";
+import {
+  CATALOG_READINESS_LABEL,
+  getCatalogReadiness,
+} from "@/lib/catalog-readiness";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -30,8 +34,29 @@ const ownerDataIssueFilter: Prisma.ProductWhereInput = {
     { colorSecondary: null },
     { colorSecondary: "" },
     { fullPrice: { lte: 1 } },
+    { widthCm: null },
+    { widthCm: { lte: 0 } },
+    { depthCm: null },
+    { depthCm: { lte: 0 } },
+    { heightCm: null },
+    { heightCm: { lte: 0 } },
     { description: { contains: "git-lfs", mode: "insensitive" } },
     { description: { contains: "oid sha256", mode: "insensitive" } },
+  ],
+};
+
+const catalogNotReadyFilter: Prisma.ProductWhereInput = {
+  OR: [
+    { fullPrice: { lte: 0 } },
+    { salePrice: { lte: 0 } },
+    { widthCm: null },
+    { widthCm: { lte: 0 } },
+    { depthCm: null },
+    { depthCm: { lte: 0 } },
+    { heightCm: null },
+    { heightCm: { lte: 0 } },
+    { media: { none: {} } },
+    { deliveryDaysMin: { lt: 0 } },
   ],
 };
 
@@ -65,6 +90,7 @@ export default async function ProductsPage({
   if (status === "unavailable") filters.push({ stock: { lte: 0 } });
   if (status === "hero") filters.push({ isHero: true });
   if (status === "lowstock") filters.push({ stock: { gt: 0, lte: 2 } });
+  if (status === "notready") filters.push(catalogNotReadyFilter);
 
   const where: Prisma.ProductWhereInput = {
     deletedAt: null,
@@ -78,6 +104,7 @@ export default async function ProductsPage({
     zeroStockCount,
     missingMediaCount,
     brokenDescriptionCount,
+    catalogNotReadyCount,
   ] = await Promise.all([
     db.product.findMany({
       where,
@@ -98,6 +125,11 @@ export default async function ProductsPage({
         salePrice: true,
         stock: true,
         incomingStock: true,
+        widthCm: true,
+        depthCm: true,
+        heightCm: true,
+        deliveryDaysMin: true,
+        deliveryDaysMax: true,
         isActive: true,
         isHero: true,
         isNew: true,
@@ -115,6 +147,13 @@ export default async function ProductsPage({
           { description: { contains: "git-lfs", mode: "insensitive" } },
           { description: { contains: "oid sha256", mode: "insensitive" } },
         ],
+      },
+    }),
+    db.product.count({
+      where: {
+        deletedAt: null,
+        isActive: true,
+        ...catalogNotReadyFilter,
       },
     }),
   ]);
@@ -161,6 +200,7 @@ export default async function ProductsPage({
                 <option value="unavailable">Bez zaliha</option>
                 <option value="hero">Hero meseca</option>
                 <option value="lowstock">Niske zalihe</option>
+                <option value="notready">Nije spremno za prodaju</option>
               </select>
             </div>
             <button
@@ -173,7 +213,12 @@ export default async function ProductsPage({
         </Card>
 
         <Card>
-          <div className="grid gap-3 text-sm sm:grid-cols-4">
+          <div className="grid gap-3 text-sm sm:grid-cols-5">
+            <LaunchReadinessMetric
+              label="Nije za prodaju"
+              value={catalogNotReadyCount}
+              href={link({ status: "notready", page: 1 })}
+            />
             <LaunchReadinessMetric
               label="Za vlasnika"
               value={ownerDataIssueCount}
@@ -208,6 +253,20 @@ export default async function ProductsPage({
           ]}
           rows={items.map((p) => {
             const ownerIssues = productOwnerIssues(p);
+            const readiness = getCatalogReadiness({
+              fullPrice: num(p.fullPrice),
+              salePrice: p.salePrice === null ? null : num(p.salePrice),
+              dimensionsCm: {
+                w: p.widthCm === null ? 0 : num(p.widthCm),
+                d: p.depthCm === null ? 0 : num(p.depthCm),
+                h: p.heightCm === null ? 0 : num(p.heightCm),
+              },
+              media: { images: Array(p._count.media).fill(null) },
+              deliveryDays: {
+                min: p.deliveryDaysMin,
+                max: p.deliveryDaysMax,
+              },
+            });
 
             return {
               id: p.id,
@@ -267,6 +326,14 @@ export default async function ProductsPage({
                         className="rounded bg-warning/15 px-1.5 py-0.5 text-warning"
                       >
                         {issue}
+                      </span>
+                    ))}
+                    {readiness.reasons.map((reason) => (
+                      <span
+                        key={`readiness-${reason}`}
+                        className="rounded bg-danger/15 px-1.5 py-0.5 text-danger"
+                      >
+                        {CATALOG_READINESS_LABEL[reason]}
                       </span>
                     ))}
                     {!p.isActive && num(p.fullPrice) === 1 && p._count.media === 0 ? (
@@ -352,6 +419,9 @@ function productOwnerIssues(product: {
   colorSecondary: string | null;
   description: string;
   fullPrice: Prisma.Decimal;
+  widthCm: Prisma.Decimal | null;
+  depthCm: Prisma.Decimal | null;
+  heightCm: Prisma.Decimal | null;
   _count: { media: number };
 }) {
   const issues: string[] = [];
@@ -362,6 +432,16 @@ function productOwnerIssues(product: {
   if (!product.colorPrimary) issues.push("Bez boje");
   if (!product.colorSecondary) issues.push("Bez druge boje");
   if (num(product.fullPrice) <= 1) issues.push("Cena");
+  if (
+    product.widthCm === null ||
+    product.depthCm === null ||
+    product.heightCm === null ||
+    num(product.widthCm) <= 0 ||
+    num(product.depthCm) <= 0 ||
+    num(product.heightCm) <= 0
+  ) {
+    issues.push("Bez dimenzija");
+  }
   if (lfsPointerPattern.test(product.description)) issues.push("LFS opis");
   return issues;
 }

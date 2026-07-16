@@ -23,6 +23,7 @@ import {
 } from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
+import { adjustInventory } from "@/lib/inventory";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -49,38 +50,48 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         if (!id || !Object.values(OrderStatus).includes(status)) {
           return { ok: false as const, error: "Nedostaje ID ili status." };
         }
-        let restoreOps: ReturnType<typeof db.product.update>[] = [];
-        let orderData: { status: OrderStatus; cancelledAt?: Date; stockRestoredAt?: Date } = {
-          status,
-        };
-        if (status === "OTKAZANO") {
-          const existing = await db.order.findUnique({
+        await db.$transaction(async (tx) => {
+          const existing = await tx.order.findUnique({
             where: { id },
             select: {
+              number: true,
               stockRestoredAt: true,
-              items: { select: { productId: true, qty: true } },
+              items: { select: { id: true, productId: true, qty: true, sku: true } },
             },
           });
-          if (existing && !existing.stockRestoredAt) {
-            const now = new Date();
-            orderData = { status, cancelledAt: now, stockRestoredAt: now };
-            restoreOps = existing.items
-              .filter((item): item is { productId: string; qty: number } => !!item.productId)
-              .map((item) =>
-                db.product.update({
-                  where: { id: item.productId },
-                  data: { stock: { increment: item.qty } },
-                }),
-              );
+          if (!existing) throw new Error("Porudžbina ne postoji.");
+          const shouldRestore = status === "OTKAZANO" && !existing.stockRestoredAt;
+          const now = new Date();
+          const updated = await tx.order.updateMany({
+            where: {
+              id,
+              ...(shouldRestore ? { stockRestoredAt: null } : {}),
+            },
+            data: {
+              status,
+              ...(shouldRestore ? { cancelledAt: now, stockRestoredAt: now } : {}),
+            },
+          });
+          if (updated.count !== 1) return;
+          if (shouldRestore) {
+            for (const item of existing.items) {
+              if (!item.productId) continue;
+              await adjustInventory(tx, {
+                idempotencyKey: `order:${id}:cancel:${item.id}`,
+                productId: item.productId,
+                sku: item.sku,
+                qtyDelta: item.qty,
+                kind: "ADJUSTMENT",
+                orderId: id,
+                actorId,
+                note: `Otkazivanje porudžbine ${existing.number}`,
+              });
+            }
           }
-        }
-        await db.$transaction([
-          db.order.update({ where: { id }, data: orderData }),
-          db.orderStatusEvent.create({
+          await tx.orderStatusEvent.create({
             data: { orderId: id, status, note, actorId },
-          }),
-          ...restoreOps,
-        ]);
+          });
+        });
         void (async () => {
           try {
             const loaded = await loadOrderForEmail(id);

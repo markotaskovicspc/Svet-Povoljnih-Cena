@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { num } from "@/lib/api/_helpers";
+import { setDefaultWarehouseStock } from "@/lib/inventory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getProductMediaBucket,
@@ -29,6 +30,7 @@ export const metadata = {
 
 const overrideSchema = z.object({
   id: z.string(),
+  operationId: z.string().min(16),
   name: z.string().min(1).max(200),
   barcode: z.string().max(80).optional().nullable(),
   sizeLabel: z.string().max(80).optional().nullable(),
@@ -55,6 +57,9 @@ const overrideSchema = z.object({
   maintenance: z.string().max(10000).optional().nullable(),
   stock: z.coerce.number().int().min(0),
   incomingStock: z.coerce.number().int().min(0),
+  widthCm: z.coerce.number().positive().max(10000),
+  depthCm: z.coerce.number().positive().max(10000),
+  heightCm: z.coerce.number().positive().max(10000),
   deliveryDaysMin: z.coerce.number().int().min(0).max(60),
   deliveryDaysMax: z.coerce.number().int().min(0).max(60),
   allowsAssembly: z.coerce.boolean().default(false),
@@ -211,7 +216,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
 
   return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
         const raw = Object.fromEntries(formData);
         const bool = (k: string) =>
           formData.get(k) === "on" || formData.get(k) === "true";
@@ -257,8 +262,10 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           declaration: d.declaration?.trim() || null,
           assemblyInstructions: d.assemblyInstructions?.trim() || null,
           maintenance: d.maintenance?.trim() || null,
-          stock: d.stock,
           incomingStock: d.incomingStock,
+          widthCm: d.widthCm,
+          depthCm: d.depthCm,
+          heightCm: d.heightCm,
           deliveryDaysMin: d.deliveryDaysMin,
           deliveryDaysMax: d.deliveryDaysMax,
           allowsAssembly: d.allowsAssembly,
@@ -270,10 +277,20 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           inGoogleMerchant: d.inGoogleMerchant,
           inMetaCatalog: d.inMetaCatalog,
         };
-        const updated = await db.product.update({
-          where: { id: d.id },
-          data,
-          select: { slug: true },
+        const updated = await db.$transaction(async (tx) => {
+          const saved = await tx.product.update({
+            where: { id: d.id },
+            data,
+            select: { slug: true },
+          });
+          await setDefaultWarehouseStock(tx, {
+            idempotencyKey: `product-edit:${d.operationId}:stock`,
+            productId: d.id,
+            targetQty: d.stock,
+            actorId,
+            note: "Ručno usklađivanje iz administracije proizvoda",
+          });
+          return saved;
         });
         await revalidateProductSurfaces(d.id, updated.slug);
         return {
@@ -509,6 +526,11 @@ export default async function ProductDetail({
           </CardTitle>
           <AdminActionForm action={updateProduct} className="space-y-4">
             <input type="hidden" name="id" value={product.id} />
+            <input
+              type="hidden"
+              name="operationId"
+              value={randomBytes(16).toString("hex")}
+            />
             <Field label="Naziv">
               <Input name="name" required defaultValue={product.name} />
             </Field>
@@ -604,6 +626,18 @@ export default async function ProductDetail({
                   required
                   defaultValue={product.stock}
                 />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Širina (cm)">
+                <Input name="widthCm" type="number" min={0.01} step="0.01" required defaultValue={product.widthCm ? num(product.widthCm) : ""} />
+              </Field>
+              <Field label="Dubina (cm)">
+                <Input name="depthCm" type="number" min={0.01} step="0.01" required defaultValue={product.depthCm ? num(product.depthCm) : ""} />
+              </Field>
+              <Field label="Visina (cm)">
+                <Input name="heightCm" type="number" min={0.01} step="0.01" required defaultValue={product.heightCm ? num(product.heightCm) : ""} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

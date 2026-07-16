@@ -1,7 +1,6 @@
 "use client";
 
 /** USP strip — delivery, returns, secure pay, support. Sits above newsletter/footer. */
-import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Truck,
@@ -35,7 +34,7 @@ const items: UspItem[] = [
     id: "payment",
     icon: ShieldCheck,
     title: "Bezbedno plaćanje",
-    body: "Raiffeisen IPS za QR plaćanje, RaiAccept za kartice i novčanike.",
+    body: "Uplata na račun i plaćanje pouzećem. Online metode prikazujemo tek nakon produkcione provere.",
   },
   {
     id: "support",
@@ -71,15 +70,6 @@ export function UspStrip() {
             <div>
               <p className="text-sm font-medium text-ink-900">{item.title}</p>
               <p className="mt-1 text-xs text-ink-500">{item.body}</p>
-              {item.id === "payment" ? (
-                <Image
-                  src="/icons/ips-skeniraj.svg"
-                  alt="IPS Skeniraj"
-                  width={100}
-                  height={33}
-                  className="mt-2 h-7 w-auto"
-                />
-              ) : null}
             </div>
           </motion.div>
         ))}

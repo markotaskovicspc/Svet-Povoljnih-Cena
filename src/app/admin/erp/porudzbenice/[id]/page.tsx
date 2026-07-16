@@ -61,6 +61,7 @@ const headerSchema = z.object({
   transportType: z.string().max(120).optional().nullable(),
   parity: z.string().max(60).optional().nullable(),
   currency: z.nativeEnum(ErpCurrency).default(ErpCurrency.RSD),
+  freightCost: z.coerce.number().nonnegative().max(100_000_000),
   notes: z.string().max(2000).optional().nullable(),
 });
 
@@ -84,6 +85,7 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           transportType: d.transportType || null,
           parity: d.parity || null,
           currency: d.currency,
+          freightCost: d.freightCost,
           notes: d.notes || null,
         },
       });
@@ -294,6 +296,12 @@ export default async function PurchaseOrderEditorPage({
         ]}
         actions={
           <div className="flex gap-2">
+            <Link
+              href={`/api/admin/purchase-orders/${order.id}/pdf`}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Preuzmi PDF
+            </Link>
             <form action={sendAction}>
               <input type="hidden" name="poId" value={order.id} />
               <SubmitButton variant="outline" pendingLabel="…">
@@ -342,6 +350,16 @@ export default async function PurchaseOrderEditorPage({
                   <Input name="loadingDate" type="date" defaultValue={dtLocal(order.loadingDate)} />
                 </Field>
               </div>
+              <Field label="Trošak transporta">
+                <Input
+                  name="freightCost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  required
+                  defaultValue={num(order.freightCost) ?? 0}
+                />
+              </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Datum isporuke">
                   <Input name="deliveryDate" type="date" defaultValue={dtLocal(order.deliveryDate)} />
@@ -385,6 +403,10 @@ export default async function PurchaseOrderEditorPage({
             <dt className="text-ink-500">Ukupna cena</dt>
             <dd className="text-right tabular-nums">
               {fmt(num(order.totalPrice))} {order.currency}
+            </dd>
+            <dt className="text-ink-500">Transport za COGS</dt>
+            <dd className="text-right tabular-nums">
+              {fmt(num(order.freightCost))} {order.currency}
             </dd>
             <dt className="text-ink-500">Ukupna BM%</dt>
             <dd className="text-right tabular-nums">{fmt(num(order.bmPct))}%</dd>

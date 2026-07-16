@@ -1550,6 +1550,7 @@ model WarehouseStock {
 
 model StockMovement {
   id               String            @id @default(cuid())
+  idempotencyKey   String?           @unique
   warehouseId      String
   productId        String?
   orderId          String?
@@ -1673,6 +1674,7 @@ model PurchaseOrder {
   totalVolume   Decimal?            @db.Decimal(12, 3)
   totalWeight   Decimal?            @db.Decimal(12, 3)
   totalPrice    Decimal             @default(0) @db.Decimal(12, 2)
+  freightCost   Decimal             @default(0) @db.Decimal(12, 2)
   currency      ErpCurrency         @default(RSD)
   transportType String?
   parity        String?
@@ -1710,6 +1712,7 @@ model PurchaseOrderItem {
   customsRate     Decimal?    @db.Decimal(8, 2)
   calcRetailPrice Decimal?    @db.Decimal(12, 2)
   bmPct           Decimal?    @db.Decimal(8, 2)
+  freightAllocated Decimal?   @db.Decimal(12, 2)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -1939,6 +1942,21 @@ model ViberCampaign {
   audience ViberAudienceQuery @relation(fields: [audienceId], references: [id])
 
   @@index([status, scheduledAt])
+}
+
+model ViberWebhookEvent {
+  id              String   @id @default(cuid())
+  eventId         String   @unique
+  event           String
+  messageToken    String?
+  campaignId      String?
+  recipientUserId String?
+  payload         Json
+  receivedAt      DateTime @default(now())
+  appliedAt       DateTime?
+
+  @@index([campaignId, receivedAt])
+  @@index([event, receivedAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import "server-only";
 import { BRAND } from "@/lib/brand";
 import { envValue } from "@/lib/env";
+import { isProviderAccepted } from "@/lib/provider-acceptance";
 
 /**
  * Phase 4E — Viber Business Messages configuration.
@@ -38,7 +39,10 @@ let cached: ViberConfig | null = null;
 export function getViberConfig(): ViberConfig {
   if (cached) return cached;
   const raw = (process.env.VIBER_PROVIDER ?? "none").toLowerCase();
-  const provider: ViberProvider = raw === "viber" ? "viber" : "none";
+  const provider: ViberProvider =
+    raw === "viber" && isProviderAccepted("VIBER_PRODUCTION_ACCEPTED")
+      ? "viber"
+      : "none";
 
   cached = {
     provider,

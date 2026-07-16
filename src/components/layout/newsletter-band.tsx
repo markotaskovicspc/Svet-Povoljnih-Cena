@@ -21,9 +21,32 @@ export function NewsletterBand({ className }: { className?: string }) {
     }
     setError(null);
     setState("submitting");
-    // Phase 1 mock: just delay. Real submit lands in Phase 5 (Resend).
-    await new Promise((r) => setTimeout(r, 600));
-    setState("success");
+    try {
+      const response = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: trimmed, source: "footer" }),
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!response.ok || !result?.ok) {
+        throw new Error(
+          response.status === 429
+            ? "Previše pokušaja. Sačekajte malo i pokušajte ponovo."
+            : "Prijava trenutno nije moguća. Pokušajte ponovo.",
+        );
+      }
+      setEmail("");
+      setState("success");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Prijava trenutno nije moguća. Pokušajte ponovo.",
+      );
+      setState("error");
+    }
   };
 
   return (
@@ -54,7 +77,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                 <span className="inline-flex size-8 items-center justify-center rounded-full bg-success/20 text-success">
                   <Check className="size-4" aria-hidden />
                 </span>
-                Hvala! Potvrdite prijavu na vašoj email adresi.
+                Hvala! Uspešno ste prijavljeni na newsletter.
               </motion.div>
             ) : (
               <motion.div

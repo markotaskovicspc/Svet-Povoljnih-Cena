@@ -108,6 +108,7 @@ export default async function ProductPage({ params }: RouteProps) {
     ? [...pictograms, { code: "limited", label: "Dok traju zalihe" }]
     : pictograms;
   const materials = product.materials;
+  const dimensionsLabel = formatDimensions(product.dimensionsCm);
 
   return (
     <article className="bg-canvas pb-32 md:pb-16">
@@ -139,9 +140,11 @@ export default async function ProductPage({ params }: RouteProps) {
             <h1 className="font-display text-xl font-bold text-ink-900 md:text-3xl">
               {product.name}
             </h1>
-            <p className="mt-1 font-mono text-[11px] tracking-tight text-ink-500 md:text-xs">
-              {formatDimensions(product.dimensionsCm)}
-            </p>
+            {dimensionsLabel ? (
+              <p className="mt-1 font-mono text-[11px] tracking-tight text-ink-500 md:text-xs">
+                {dimensionsLabel}
+              </p>
+            ) : null}
             <ProductColorOptions
               product={product}
               selectable

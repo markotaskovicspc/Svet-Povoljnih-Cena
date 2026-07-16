@@ -101,4 +101,7 @@ export const formatDimensions = ({
   w: number;
   d: number;
   h: number;
-}) => `${w} × ${d} × ${h} cm`;
+}) =>
+  [w, d, h].every((value) => Number.isFinite(value) && value > 0)
+    ? `${w} × ${d} × ${h} cm`
+    : null;

@@ -25,6 +25,10 @@ const supabaseImagePattern = getSupabaseImagePattern();
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  experimental: {
+    staticGenerationMaxConcurrency: 2,
+    staticGenerationMinPagesPerWorker: 50,
+  },
   images: {
     // Keep storefront media on direct CDN URLs so Vercel does not spend
     // Image Optimization transformations on every product thumbnail variant.

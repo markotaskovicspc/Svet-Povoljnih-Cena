@@ -72,6 +72,12 @@ const PROVIDER_SKU_FLOOR = 900001;
  * anything else (incl. unset) falls back to "normal".
  */
 function saleInvoiceType(): "normal" | "training" {
+  const productionAccepted = ["1", "true", "yes", "on"].includes(
+    (process.env.BADI_PRODUCTION_ACCEPTED ?? "").trim().toLowerCase(),
+  );
+  if (envValue("BADI_ENV") === "production" && !productionAccepted) {
+    return "training";
+  }
   return envValue("BADI_INVOICE_TYPE") === "training" ? "training" : "normal";
 }
 

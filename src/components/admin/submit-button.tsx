@@ -10,12 +10,16 @@ export function SubmitButton({
   className,
   variant,
   size,
+  name,
+  value,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
   className?: string;
   variant?: React.ComponentProps<typeof Button>["variant"];
   size?: React.ComponentProps<typeof Button>["size"];
+  name?: string;
+  value?: string;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -25,6 +29,8 @@ export function SubmitButton({
       variant={variant}
       size={size}
       className={cn(className)}
+      name={name}
+      value={value}
     >
       {pending ? (pendingLabel ?? "Čuvanje…") : children}
     </Button>

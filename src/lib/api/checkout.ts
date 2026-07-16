@@ -13,6 +13,7 @@ import {
   hashOrderAccessToken,
 } from "@/lib/api/order-access";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
+import { adjustInventory, InsufficientInventoryError } from "@/lib/inventory";
 import { logOperationalError } from "@/lib/monitoring";
 import {
   computeOrderPricing,
@@ -515,17 +516,6 @@ export async function createOrder(
 
       const number = await nextOrderNumber(tx);
 
-      for (const line of input.lines) {
-        const p = bySku.get(line.sku)!;
-        const updated = await tx.product.updateMany({
-          where: { id: p.id, isActive: true, stock: { gte: line.qty } },
-          data: { stock: { decrement: line.qty } },
-        });
-        if (updated.count !== 1) {
-          throw new StockReservationError(line.sku);
-        }
-      }
-
       const order = await tx.order.create({
         data: {
           number,
@@ -597,6 +587,26 @@ export async function createOrder(
           shippingMethod: true,
         },
       });
+
+      for (const line of input.lines) {
+        const product = bySku.get(line.sku)!;
+        try {
+          await adjustInventory(tx, {
+            idempotencyKey: `checkout:${order.id}:reservation:${product.id}`,
+            productId: product.id,
+            sku: line.sku,
+            qtyDelta: -line.qty,
+            kind: "SALE_RESERVATION",
+            orderId: order.id,
+            note: `Rezervacija za porudžbinu ${order.number}`,
+          });
+        } catch (err) {
+          if (err instanceof InsufficientInventoryError) {
+            throw new StockReservationError(line.sku);
+          }
+          throw err;
+        }
+      }
 
       if (voucherCode) {
         await tx.voucherRedemption.create({

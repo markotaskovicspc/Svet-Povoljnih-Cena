@@ -329,9 +329,11 @@ async function upsertFeedItem(
       newUntil: item.newUntil ?? null,
       isLimited: item.isLimited ?? false,
       isDtz: item.isDtz ?? false,
-      stock: item.stock,
+      // Owned warehouse stock is authoritative and is never sourced from a
+      // supplier availability feed. New products start with no owned stock.
+      stock: 0,
       incomingStock: item.incomingStock ?? 0,
-      supplierStock: item.supplierStock ?? null,
+      supplierStock: item.supplierStock ?? item.stock,
       deliveryDaysMin: item.deliveryDaysMin ?? 3,
       deliveryDaysMax: item.deliveryDaysMax ?? 5,
       allowsAssembly: item.allowsAssembly ?? false,
@@ -349,6 +351,7 @@ async function upsertFeedItem(
     const productData = existing ? applyProductOverrides(data, overrides) : data;
 
     if (existing) {
+      delete (productData as Record<string, unknown>).stock;
       await tx.product.update({ where: { id: existing.id }, data: productData });
       productId = existing.id;
       kind = "updated";
@@ -546,6 +549,7 @@ async function applyAutoDisable(supplierId: string): Promise<number> {
       id: true,
       stock: true,
       incomingStock: true,
+      supplierStock: true,
       isActive: true,
       categories: { select: { category: { select: { path: true } } } },
     },
@@ -553,7 +557,11 @@ async function applyAutoDisable(supplierId: string): Promise<number> {
 
   let changed = 0;
   for (const p of products) {
-    let shouldBeActive = !(p.stock === 0 && p.incomingStock === 0);
+    let shouldBeActive = !(
+      p.stock === 0 &&
+      p.incomingStock === 0 &&
+      (p.supplierStock ?? 0) === 0
+    );
     if (shouldBeActive) {
       for (const rule of rules) {
         if (rule.categoryPath) {

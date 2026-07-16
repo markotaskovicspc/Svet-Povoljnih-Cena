@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   applyInboundEvent,
   getViberConfig,
@@ -21,25 +21,41 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   const cfg = getViberConfig();
-  if (!cfg.webhookSecret) {
+  if (!cfg.webhookSecret && !cfg.apiKey) {
     return NextResponse.json(
       { ok: false, error: "not_configured" },
       { status: 503 },
     );
   }
 
+  const rawBody = await req.text();
+  const officialSignature = req.headers.get("x-viber-content-signature");
   const provided =
     req.headers.get("x-webhook-secret") ??
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
     "";
-  if (!safeEqual(provided, cfg.webhookSecret)) {
+  const officialValid =
+    Boolean(officialSignature && cfg.apiKey) &&
+    safeEqual(
+      officialSignature ?? "",
+      createHmac("sha256", cfg.apiKey ?? "").update(rawBody).digest("hex"),
+    );
+  const sharedSecretValid = Boolean(cfg.webhookSecret) &&
+    safeEqual(provided, cfg.webhookSecret ?? "");
+  if (!officialValid && !sharedSecretValid) {
     return NextResponse.json(
       { ok: false, error: "invalid_secret" },
       { status: 401 },
     );
   }
 
-  const body = (await req.json().catch(() => null)) as unknown;
+  const body = (() => {
+    try {
+      return JSON.parse(rawBody) as unknown;
+    } catch {
+      return null;
+    }
+  })();
   const parsed = inboundEventSchema.safeParse(body);
   if (!parsed.success) {
     // 200 so Viber doesn't retry malformed payloads forever.
@@ -49,7 +65,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await applyInboundEvent(parsed.data);
+  const result = await applyInboundEvent(
+    parsed.data,
+    req.headers.get("x-viber-event-id"),
+  );
   return NextResponse.json(result, { status: 200 });
 }
 

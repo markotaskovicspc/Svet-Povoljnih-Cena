@@ -11,6 +11,7 @@ import {
   type PaymentMethod,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { adjustInventory } from "@/lib/inventory";
 import { num } from "@/lib/api/_helpers";
 import { ipsPaymentProvider } from "@/lib/payments";
 import { providerForPaymentMethod } from "@/lib/payments/types";
@@ -392,31 +393,38 @@ export async function issueFiscalRefund(input: {
         }
 
         if (line.productId) {
-          await tx.product.update({
-            where: { id: line.productId },
-            data: { stock: { increment: item.qty }, isActive: true },
-          });
-          await tx.warehouseStock.upsert({
-            where: { warehouseId_productId: { warehouseId: warehouse.id, productId: line.productId } },
-            create: { warehouseId: warehouse.id, productId: line.productId, qty: item.qty },
-            update: { qty: { increment: item.qty } },
-          });
-        }
-
-        await tx.stockMovement.create({
-          data: {
+          await adjustInventory(tx, {
+            idempotencyKey: `fiscal-refund:${document.id}:${line.id}`,
             warehouseId: warehouse.id,
             productId: line.productId,
+            sku: line.sku,
+            qtyDelta: item.qty,
+            kind: "REFUND_RETURN",
             orderId: order.id,
             orderItemId: line.orderItemId,
             fiscalDocumentId: document.id,
-            kind: "REFUND_RETURN",
-            sku: line.sku,
-            qty: item.qty,
             actorId: input.actorId ?? null,
             note: `Refundacija fiskalnog računa ${originalReceiptNumber}`,
-          },
-        });
+          });
+        }
+
+        if (!line.productId) {
+          await tx.stockMovement.create({
+            data: {
+              idempotencyKey: `fiscal-refund:${document.id}:${line.id}:service`,
+              warehouseId: warehouse.id,
+              productId: null,
+              orderId: order.id,
+              orderItemId: line.orderItemId,
+              fiscalDocumentId: document.id,
+              kind: "REFUND_RETURN",
+              sku: line.sku,
+              qty: item.qty,
+              actorId: input.actorId ?? null,
+              note: `Refundacija fiskalnog računa ${originalReceiptNumber}`,
+            },
+          });
+        }
       }
     });
 

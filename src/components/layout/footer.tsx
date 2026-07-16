@@ -102,15 +102,6 @@ export function Footer() {
                   aria-label={p.label}
                   className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-muted-bg px-3 font-mono text-[11px] tracking-wide text-ink-700 transition hover:border-brand-blue hover:text-brand-blue"
                 >
-                  {p.id === "ips" ? (
-                    <Image
-                      src="/icons/ips-skeniraj.svg"
-                      alt=""
-                      width={55}
-                      height={18}
-                      className="h-[18px] w-auto"
-                    />
-                  ) : null}
                   <span>{p.label}</span>
                 </Link>
               ))}

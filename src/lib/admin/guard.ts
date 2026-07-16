@@ -9,6 +9,9 @@ import {
   type AdminActionFieldErrors,
   type AdminActionState,
 } from "./action-state";
+import { isAuthorized } from "./authorization";
+
+export { isAuthorized } from "./authorization";
 
 export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
   SUPER: "Super admin",
@@ -22,15 +25,6 @@ export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
  * allow-list. Pure function so it can be reused on the client (nav filtering)
  * via a server-resolved session payload.
  */
-export function isAuthorized(
-  role: AdminRoleName | null | undefined,
-  allowed: readonly AdminRoleName[],
-) {
-  if (!role) return false;
-  if (role === "SUPER") return true;
-  return allowed.includes(role);
-}
-
 /**
  * Server-component / route-handler guard. Returns the admin session or
  * redirects. Never returns null on success.
