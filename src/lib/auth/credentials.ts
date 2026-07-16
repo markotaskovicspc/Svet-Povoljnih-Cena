@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
@@ -21,6 +21,14 @@ const EMAIL_CONFIRM_TTL_MS = 24 * 60 * 60 * 1000;
 
 function secureUrlToken() {
   return randomBytes(32).toString("base64url");
+}
+
+function tokenDigest(token: string) {
+  return `sha256:${createHash("sha256").update(token, "utf8").digest("base64url")}`;
+}
+
+function isSecureUrlToken(token: string) {
+  return /^[A-Za-z0-9_-]{43}$/.test(token);
 }
 
 export async function registerCustomer(input: {
@@ -112,7 +120,7 @@ export async function createPasswordResetToken(emailRaw: string) {
   await db.verificationToken.create({
     data: {
       identifier,
-      token,
+      token: tokenDigest(token),
       expires: new Date(Date.now() + RESET_TTL_MS),
     },
   });
@@ -132,7 +140,7 @@ export async function createEmailConfirmationToken(userId: string) {
   await db.verificationToken.create({
     data: {
       identifier,
-      token,
+      token: tokenDigest(token),
       expires: new Date(Date.now() + EMAIL_CONFIRM_TTL_MS),
     },
   });
@@ -140,40 +148,63 @@ export async function createEmailConfirmationToken(userId: string) {
 }
 
 export async function consumePasswordResetToken(token: string, newPassword: string) {
-  const record = await db.verificationToken.findUnique({ where: { token } });
+  if (!isSecureUrlToken(token)) return false;
+  const digest = tokenDigest(token);
+  const record = await db.verificationToken.findFirst({
+    where: { token: { in: [digest, token] } },
+  });
   if (!record || !record.identifier.startsWith("pwreset:")) return false;
   if (record.expires < new Date()) {
-    await db.verificationToken.delete({ where: { token } });
+    await db.verificationToken.delete({ where: { token: record.token } });
     return false;
   }
+  // Claim the single-use token before the expensive password hash. Only one
+  // concurrent request can delete it and proceed.
+  const claimed = await db.verificationToken.deleteMany({
+    where: {
+      token: record.token,
+      identifier: record.identifier,
+      expires: { gte: new Date() },
+    },
+  });
+  if (claimed.count !== 1) return false;
   const userId = record.identifier.slice("pwreset:".length);
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await db.$transaction([
-    db.user.update({ where: { id: userId }, data: { passwordHash } }),
-    db.verificationToken.delete({ where: { token } }),
+    db.user.update({
+      where: { id: userId },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    }),
+    db.session.deleteMany({ where: { userId } }),
   ]);
   return true;
 }
 
 export async function consumeEmailConfirmationToken(token: string) {
-  const record = await db.verificationToken.findUnique({ where: { token } });
+  if (!isSecureUrlToken(token)) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
+  const record = await db.verificationToken.findFirst({
+    where: { token: { in: [tokenDigest(token), token] } },
+  });
   if (!record || !record.identifier.startsWith("email-confirm:")) {
     return { ok: false as const, reason: "invalid" as const };
   }
   if (record.expires < new Date()) {
-    await db.verificationToken.delete({ where: { token } });
+    await db.verificationToken.delete({ where: { token: record.token } });
     return { ok: false as const, reason: "expired" as const };
   }
 
   const userId = record.identifier.slice("email-confirm:".length);
-  await db.$transaction([
-    db.user.update({
-      where: { id: userId },
-      data: { emailVerified: new Date() },
-    }),
-    db.verificationToken.deleteMany({
-      where: { identifier: record.identifier },
-    }),
-  ]);
+  const claimed = await db.verificationToken.deleteMany({
+    where: { token: record.token, identifier: record.identifier, expires: { gte: new Date() } },
+  });
+  if (claimed.count !== 1) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
+  await db.user.update({
+    where: { id: userId },
+    data: { emailVerified: new Date() },
+  });
   return { ok: true as const, userId };
 }

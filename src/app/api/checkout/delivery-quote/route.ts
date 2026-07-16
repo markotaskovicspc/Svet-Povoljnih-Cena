@@ -24,7 +24,7 @@ const quoteSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "checkout-delivery-quote",
     RATE_LIMITS.checkout,

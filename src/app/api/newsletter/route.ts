@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid", issues: parsed.error.flatten() }, { status: 400 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "newsletter:subscribe",
     RATE_LIMITS.newsletter,
@@ -37,7 +37,7 @@ export async function DELETE(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "newsletter:unsubscribe",
     RATE_LIMITS.newsletter,

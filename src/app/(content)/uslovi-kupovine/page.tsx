@@ -47,8 +47,7 @@ export default async function UsloviKupovinePage() {
             {MERCHANT_LEGAL_INFO.address}, PIB {MERCHANT_LEGAL_INFO.pib}, MB{" "}
             {MERCHANT_LEGAL_INFO.registrationNumber}. Pretežna delatnost je
             trgovina na malo posredstvom pošte ili interneta, šifra delatnosti
-            4791. Web adresa je www.svetpovoljnihcena.rs, kontakt telefon{" "}
-            {MERCHANT_LEGAL_INFO.phone}, a kontakt e-pošta{" "}
+            4791. Web adresa je www.svetpovoljnihcena.rs, a kontakt e-pošta{" "}
             <Link href={`mailto:${MERCHANT_LEGAL_INFO.email}`}>
               {MERCHANT_LEGAL_INFO.email}
             </Link>
@@ -58,19 +57,21 @@ export default async function UsloviKupovinePage() {
 
         <ContentSection id="cene" title="Cene i porezi">
           <p>
-            Cene su izražene u dinarima i sadrže PDV. Akcijska cena je istaknuta
-            crvenom bojom uz prethodnu najnižu cenu u poslednjih 30 dana, u
-            skladu sa Zakonom o zaštiti potrošača.
+            Cene su izražene u dinarima i sadrže PDV. Konačna cena proizvoda,
+            dostave i izabranih dodatnih usluga prikazuje se pre potvrde
+            porudžbine. Oznaku najniže cene u prethodnih 30 dana ne prikazujemo
+            dok ne postoji potpuna i proverljiva istorija cena.
           </p>
         </ContentSection>
 
         <ContentSection id="kartice" title="Načini plaćanja">
           <ul>
-            <li>Platnim karticama (Visa, Mastercard, DinaCard) — RaiAccept 3D Secure.</li>
-            <li>Raiffeisen IPS QR kodom, odvojeno od kartičnog plaćanja.</li>
-            <li>Apple Pay i Google Pay kroz kartični RaiAccept tok kada su aktivni.</li>
             <li>Pouzeće — gotovinski ili karticom kod kurira.</li>
             <li>Uplatom na račun — predračun stiže e-poštom.</li>
+            <li>
+              IPS, kartice i digitalni novčanici prikazuju se u checkout-u tek
+              nakon produkcione verifikacije odgovarajućeg provajdera.
+            </li>
           </ul>
         </ContentSection>
 
@@ -85,7 +86,7 @@ export default async function UsloviKupovinePage() {
           </p>
         </ContentSection>
 
-        <ContentSection id="ips" title="IPS plaćanje">
+        <ContentSection id="ips" title="IPS plaćanje (kada je dostupno)">
           <p>
             Nakon potvrde porudžbine preusmeravamo vas na Raiffeisen IPS stranu,
             gde se prikazuje IPS QR kod ili deep link za m-banking.
@@ -102,7 +103,7 @@ export default async function UsloviKupovinePage() {
           </p>
         </ContentSection>
 
-        <ContentSection id="wallet" title="Apple Pay & Google Pay">
+        <ContentSection id="wallet" title="Apple Pay & Google Pay (kada su dostupni)">
           <p>
             Plaćanje iz novčanika telefona ili sata — bez deljenja kartičnih
             podataka. Zahteva podržan uređaj i karticu povezanu sa novčanikom.

@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { authConfig } from "@/lib/auth/auth.config";
+import { envValue } from "@/lib/env";
 import { checkRateLimit, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
 
 const credentialsSchema = z.object({
@@ -31,10 +32,10 @@ const CREDENTIAL_PROVIDER_IDS = new Set([
 function oauthCredentials(provider: "google" | "facebook" | "apple") {
   const prefix = provider.toUpperCase();
   const clientId =
-    process.env[`${prefix}_CLIENT_ID`] ?? process.env[`AUTH_${prefix}_ID`];
+    envValue(`${prefix}_CLIENT_ID`) ?? envValue(`AUTH_${prefix}_ID`);
   const clientSecret =
-    process.env[`${prefix}_CLIENT_SECRET`] ??
-    process.env[`AUTH_${prefix}_SECRET`];
+    envValue(`${prefix}_CLIENT_SECRET`) ??
+    envValue(`AUTH_${prefix}_SECRET`);
 
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
@@ -98,7 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
         const { email, password, remember } = parsed.data;
         const normalizedEmail = email.trim().toLowerCase();
-        const limited = checkRateLimit(
+        const limited = await checkRateLimit(
           rateLimitKey("auth:credentials", normalizedEmail),
           RATE_LIMITS.login,
         );
@@ -147,7 +148,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = schema.safeParse(raw);
         if (!parsed.success) return null;
         const phone = parsed.data.phone.replace(/\s+/g, "");
-        const limited = checkRateLimit(
+        const limited = await checkRateLimit(
           rateLimitKey("auth:phone-otp", phone),
           RATE_LIMITS.login,
         );
@@ -203,7 +204,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { email } = parsed.data;
         const password = parsed.data.password.trim();
         const normalizedEmail = email.trim().toLowerCase();
-        const limited = checkRateLimit(
+        const limited = await checkRateLimit(
           rateLimitKey("auth:admin-credentials", normalizedEmail),
           RATE_LIMITS.adminLogin,
         );
@@ -280,6 +281,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const remember = (user as { remember?: boolean }).remember;
         if (remember !== undefined) token.remember = !!remember;
       }
+      if (token.userType === "customer" && token.uid) {
+        const current = await db.user.findUnique({
+          where: { id: token.uid },
+          select: { deletedAt: true, sessionVersion: true },
+        });
+        if (user && current) token.sessionVersion = current.sessionVersion;
+        token.invalidated =
+          !current ||
+          Boolean(current.deletedAt) ||
+          (token.sessionVersion !== undefined &&
+            token.sessionVersion !== current.sessionVersion);
+      }
       if (trigger === "update" && session) {
         // Allow client to refresh select fields after profile update.
         if (typeof session.isBusiness === "boolean")
@@ -292,6 +305,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.userType = token.userType ?? "customer";
       session.user.role = token.role;
       session.user.isBusiness = token.isBusiness;
+      session.user.invalidated = token.invalidated;
       return session;
     },
   },

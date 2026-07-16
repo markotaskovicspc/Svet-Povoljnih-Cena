@@ -13,38 +13,51 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 export const metadata: Metadata = {
   title: "Kontakt",
   description:
-    `Kontaktirajte ${BRAND.name} tim — telefon, e-pošta, radno vreme, Viber i adresa skladišta.`,
+    `Kontakt podaci i podaci o trgovcu — ${BRAND.name}.`,
 };
 
 const channels = [
-  {
-    icon: Phone,
-    label: "Telefon",
-    value: "+381 11 4444 555",
-    href: "tel:+381114444555",
-    note: "Pon–Sub 09:00–20:00",
-  },
-  {
-    icon: MessageSquare,
-    label: "Viber & WhatsApp",
-    value: "+381 64 4444 555",
-    href: "viber://chat?number=%2B381644444555",
-    note: "Najbrži odgovor u toku dana",
-  },
+  ...(MERCHANT_LEGAL_INFO.phone
+    ? [{
+        icon: Phone,
+        label: "Telefon",
+        value: MERCHANT_LEGAL_INFO.phone,
+        href: `tel:${MERCHANT_LEGAL_INFO.phone.replace(/\s/g, "")}`,
+        note: MERCHANT_LEGAL_INFO.supportHours ?? "Radno vreme biće objavljeno nakon potvrde.",
+      }]
+    : []),
+  ...(MERCHANT_LEGAL_INFO.viber
+    ? [{
+        icon: MessageSquare,
+        label: "Viber",
+        value: MERCHANT_LEGAL_INFO.viber,
+        href: `viber://chat?number=${encodeURIComponent(MERCHANT_LEGAL_INFO.viber.replace(/\s/g, ""))}`,
+        note: MERCHANT_LEGAL_INFO.supportHours ?? "Odgovaramo u okviru objavljenog radnog vremena.",
+      }]
+    : []),
   {
     icon: Mail,
     label: "E-pošta",
-    value: "podrska@svetpovoljnihcena.rs",
-    href: "mailto:podrska@svetpovoljnihcena.rs",
-    note: "Odgovor u roku od 24h radnim danima",
+    value: MERCHANT_LEGAL_INFO.email,
+    href: `mailto:${MERCHANT_LEGAL_INFO.email}`,
+    note: "Za pitanja o porudžbinama, proizvodima i reklamacijama",
   },
   {
     icon: MapPin,
-    label: "Skladište i pickup",
-    value: "Beograd, Vojvođanska 401",
+    label: "Sedište trgovca",
+    value: MERCHANT_LEGAL_INFO.shortAddress,
     href: "https://maps.google.com/?q=Vojvođanska+401+Beograd",
-    note: "Pon–Pet 08:00–16:00",
+    note: "Ovo nije mesto za preuzimanje bez prethodne potvrde",
   },
+  ...(MERCHANT_LEGAL_INFO.warehouseAddress
+    ? [{
+        icon: MapPin,
+        label: "Skladište / preuzimanje",
+        value: MERCHANT_LEGAL_INFO.warehouseAddress,
+        href: `https://maps.google.com/?q=${encodeURIComponent(MERCHANT_LEGAL_INFO.warehouseAddress)}`,
+        note: "Dolazak isključivo nakon potvrde podrške",
+      }]
+    : []),
 ];
 
 export default function KontaktPage() {
@@ -56,7 +69,7 @@ export default function KontaktPage() {
       <ContentHero
         eyebrow="Tu smo za vas"
         title="Razgovarajmo."
-        lead="Saveti pri izboru, status porudžbine, montaža, reklamacije — javite se na bilo koji od kanala ispod. Trudimo se da odgovorimo isti dan."
+        lead="Za pitanja o proizvodima, porudžbinama i reklamacijama koristite potvrđene kanale ispod."
       />
       <ContentBody>
         <ul className="not-prose grid gap-4 sm:grid-cols-2">

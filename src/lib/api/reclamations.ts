@@ -2,8 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { canAccessOrder } from "@/lib/api/order-access";
-import { isAllowedReclamationPhotoUrl } from "@/lib/api/uploads";
-import { loadReclamationForEmail, sendReclamationReceipt } from "@/lib/email";
+import {
+  isAllowedReclamationPhotoUrl,
+  verifyReclamationUploads,
+} from "@/lib/api/uploads";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 /**
  * Reclamation flow (Phase 3C — item 5; spec §4.1).
@@ -17,7 +20,7 @@ import { loadReclamationForEmail, sendReclamationReceipt } from "@/lib/email";
  */
 
 const photoSchema = z.object({
-  url: z.string().url().refine(isAllowedReclamationPhotoUrl, {
+  url: z.string().min(1).max(1000).refine(isAllowedReclamationPhotoUrl, {
     message: "Fotografija mora biti poslata kroz zaštićeni upload tok.",
   }),
   width: z.int().positive().optional(),
@@ -45,7 +48,7 @@ export type CreateReclamationResult =
   | { ok: true; number: string; id: string }
   | {
       ok: false;
-      reason: "ORDER_NOT_FOUND" | "ITEM_NOT_FOUND" | "MISSING_CONTACT" | "UNAUTHORIZED";
+      reason: "ORDER_NOT_FOUND" | "ITEM_NOT_FOUND" | "MISSING_CONTACT" | "UNAUTHORIZED" | "INVALID_PHOTO";
     };
 
 export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
@@ -85,6 +88,14 @@ export async function createReclamation(
   if (!item) return { ok: false, reason: "ITEM_NOT_FOUND" };
   if (!(await canAccessOrder({ order, token: input.accessToken }))) {
     return { ok: false, reason: "UNAUTHORIZED" };
+  }
+  try {
+    await verifyReclamationUploads(input.photos, {
+      orderNumber: order.number,
+      sku: item.sku,
+    });
+  } catch {
+    return { ok: false, reason: "INVALID_PHOTO" };
   }
 
   const result = await db.$transaction(async (tx) => {
@@ -134,19 +145,11 @@ export async function createReclamation(
   // Phase 4D: confirm receipt to the customer (only when they opted into
   // the email channel). BCC to the admin inbox is added by the sender.
   if (input.notifyVia === "EMAIL" && input.customerEmail) {
-    void (async () => {
-      try {
-        const loaded = await loadReclamationForEmail(result.id);
-        if (loaded?.recipient) {
-          await sendReclamationReceipt({
-            reclamation: loaded.reclamation,
-            to: loaded.recipient,
-          });
-        }
-      } catch (err) {
-        console.error("[email] reclamation-receipt failed", err);
-      }
-    })();
+    await enqueueBackgroundJob({
+      kind: "RECLAMATION_RECEIPT",
+      payload: { reclamationId: result.id },
+      idempotencyKey: `reclamation-receipt:${result.id}`,
+    });
   }
 
   return { ok: true, id: result.id, number: result.number };

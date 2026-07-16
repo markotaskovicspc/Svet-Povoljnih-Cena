@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { syncNewsletterSubscriberToResend } from "@/lib/email/resend-marketing";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 /**
  * Newsletter subscribe / unsubscribe (Phase 3C — item 7).
@@ -25,8 +25,10 @@ export async function subscribeNewsletter(input: SubscribeInput) {
     update: { consent: true, unsubscribedAt: null, source: input.source ?? undefined },
     select: { id: true, email: true, createdAt: true },
   });
-  void syncNewsletterSubscriberToResend(email).catch((err) => {
-    console.error("[email] newsletter Resend sync failed", err);
+  await enqueueBackgroundJob({
+    kind: "NEWSLETTER_SYNC",
+    payload: { email },
+    idempotencyKey: `newsletter-sync:${email}:${Date.now()}`,
   });
   return sub;
 }
@@ -37,8 +39,10 @@ export async function unsubscribeNewsletter(email: string) {
     where: { email: normalized },
     data: { unsubscribedAt: new Date(), consent: false },
   });
-  void syncNewsletterSubscriberToResend(normalized).catch((err) => {
-    console.error("[email] newsletter Resend unsubscribe sync failed", err);
+  await enqueueBackgroundJob({
+    kind: "NEWSLETTER_SYNC",
+    payload: { email: normalized },
+    idempotencyKey: `newsletter-sync:${normalized}:${Date.now()}`,
   });
   return sub;
 }

@@ -25,7 +25,7 @@ async function loginAction(formData: FormData) {
   const password = String(formData.get("password") ?? "").trim();
   const callbackUrl = String(formData.get("callbackUrl") ?? "/admin/erp") || "/admin/erp";
   const headersList = await headers();
-  const limited = checkRateLimit(
+  const limited = await checkRateLimit(
     rateLimitKey(
       "admin-login:action",
       getClientIpFromHeaders(headersList),

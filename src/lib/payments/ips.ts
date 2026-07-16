@@ -1,11 +1,11 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { envValue } from "@/lib/env";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
-import { loadOrderForEmail, sendIpsPaymentConfirmation } from "@/lib/email";
-import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import type {
   CreatePaymentResult,
   PaymentProviderAdapter,
@@ -191,54 +191,167 @@ async function checkPaymentStatus(orderId: string): Promise<PaymentStatusResult>
 async function refundPayment(
   orderId: string,
   amount: number,
+  options: { idempotencyKey?: string; actorId?: string; fiscalDocumentId?: string } = {},
 ): Promise<RefundPaymentResult> {
   const order = await db.order.findFirst({
     where: { OR: [{ id: orderId }, { number: orderId }] },
-    select: { id: true, number: true, total: true },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      fiscalDocuments: {
+        where: { kind: "SALE", status: "ISSUED" },
+        take: 1,
+        select: { id: true },
+      },
+    },
   });
   if (!order) throw new Error(`Porudžbina ${orderId} ne postoji.`);
 
-  const cfg = getIpsConfig();
-  const orderTotal = num(order.total);
-  if (amount > orderTotal) {
-    throw new Error("IPS povraćaj ne može biti veći od iznosa porudžbine.");
+  if (order.fiscalDocuments.length > 0) {
+    if (!options.fiscalDocumentId) {
+      throw new Error(
+        "Porudžbina je fiskalizovana. Povraćaj mora biti pokrenut kroz fiskalnu refundaciju.",
+      );
+    }
+    const fiscalRefund = await db.fiscalDocument.findFirst({
+      where: {
+        id: options.fiscalDocumentId,
+        orderId: order.id,
+        kind: "REFUND",
+        status: "ISSUED",
+      },
+      select: { id: true },
+    });
+    if (!fiscalRefund) {
+      throw new Error("IPS povraćaj nije povezan sa izdatom fiskalnom refundacijom.");
+    }
   }
-  const refundStatus = amount < orderTotal ? "PARTIAL_REFUND" : "REFUNDED";
+
+  const cfg = getIpsConfig();
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("IPS iznos za povraćaj nije ispravan.");
+  }
+  const idempotencyKey = (options.idempotencyKey ?? `ips-refund:${randomUUID()}`).slice(0, 200);
+  const existing = await db.paymentRefund.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    if (existing.status === "COMPLETED" || existing.status === "FAILED") {
+      return {
+        refundId: existing.id,
+        refunded: existing.status === "COMPLETED",
+        responseCode: existing.providerRef ?? "",
+        rawRequest: (existing.rawRequest ?? {}) as Record<string, unknown>,
+        rawResponse: existing.rawResponse ?? {},
+      };
+    }
+    throw new Error("IPS povraćaj sa ovim ključem čeka obradu ili ručnu proveru.");
+  }
+
+  const reservation = await db.$transaction(async (tx) => {
+    const payment = await tx.payment.findFirst({
+      where: { orderId: order.id, provider: "IPS" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, amount: true, status: true },
+    });
+    if (!payment || !["PAID", "PARTIAL_REFUND"].includes(payment.status)) {
+      throw new Error("IPS povraćaj je moguć samo za potvrđenu uplatu.");
+    }
+    const reserved = await tx.paymentRefund.aggregate({
+      where: {
+        orderId: order.id,
+        method: "IPS",
+        status: { in: ["PENDING", "COMPLETED", "NEEDS_REVIEW"] },
+      },
+      _sum: { amount: true },
+    });
+    const remaining = num(payment.amount) - num(reserved._sum.amount ?? 0);
+    if (amount > remaining + 0.0001) {
+      throw new Error(`IPS povraćaj premašuje preostali iznos (${remaining.toFixed(2)} RSD).`);
+    }
+    const refund = await tx.paymentRefund.create({
+      data: {
+        orderId: order.id,
+        fiscalDocumentId: options.fiscalDocumentId ?? null,
+        idempotencyKey,
+        method: "IPS",
+        provider: "IPS",
+        status: "PENDING",
+        amount: new Prisma.Decimal(amount),
+        actorId: options.actorId ?? null,
+      },
+      select: { id: true },
+    });
+    return { refundId: refund.id, paymentId: payment.id, paymentAmount: num(payment.amount) };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
   const rawRequest = {
     tid: cfg.tid,
     amount: formatIpsAmount(amount),
     orderId: order.number,
   };
-  const rawResponse = await authedPostJson<Record<string, unknown>>(
-    cfg,
-    "/ips/v2/refund",
-    rawRequest,
-    { retryOn401: false },
-  );
+  await db.paymentRefund.update({
+    where: { id: reservation.refundId },
+    data: { rawRequest: rawRequest as Prisma.InputJsonValue },
+  });
+
+  let rawResponse: Record<string, unknown>;
+  try {
+    rawResponse = await authedPostJson<Record<string, unknown>>(
+      cfg,
+      "/ips/v2/refund",
+      rawRequest,
+      { retryOn401: false },
+    );
+  } catch (error) {
+    await db.paymentRefund.update({
+      where: { id: reservation.refundId },
+      data: {
+        status: "NEEDS_REVIEW",
+        error: error instanceof Error ? error.message.slice(0, 1000) : "ambiguous_gateway_error",
+      },
+    });
+    throw error;
+  }
   const responseCode = String(rawResponse.responseCode ?? "");
   const refunded = responseCode === "00";
 
   if (refunded) {
     await db.$transaction(async (tx) => {
-      const payment = await tx.payment.findFirst({
-        where: { orderId: order.id, provider: "IPS" },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
+      await tx.paymentRefund.update({
+        where: { id: reservation.refundId },
+        data: {
+          status: "COMPLETED",
+          providerRef: responseCode,
+          rawResponse: rawResponse as Prisma.InputJsonValue,
+          completedAt: new Date(),
+          error: null,
+        },
       });
-      if (payment) {
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: refundStatus,
-            rawRequest: rawRequest as Prisma.InputJsonValue,
-            rawResponse: rawResponse as Prisma.InputJsonValue,
-          },
+      const completed = await tx.paymentRefund.aggregate({
+        where: { orderId: order.id, method: "IPS", status: "COMPLETED" },
+        _sum: { amount: true },
+      });
+      const refundStatus = num(completed._sum.amount ?? 0) >= reservation.paymentAmount
+        ? "REFUNDED"
+        : "PARTIAL_REFUND";
+      await tx.payment.update({
+        where: { id: reservation.paymentId },
+        data: {
+          status: refundStatus,
+          rawRequest: rawRequest as Prisma.InputJsonValue,
+          rawResponse: rawResponse as Prisma.InputJsonValue,
+        },
+      });
+      if (refundStatus === "REFUNDED") {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "VRACENO" },
         });
       }
       await tx.orderStatusEvent.create({
         data: {
           orderId: order.id,
-          status: "VRACENO",
+          status: refundStatus === "REFUNDED" ? "VRACENO" : order.status,
           note:
             refundStatus === "PARTIAL_REFUND"
               ? `Delimičan povraćaj sredstava izvršen preko IPS sistema (${rawRequest.amount} RSD).`
@@ -246,9 +359,20 @@ async function refundPayment(
         },
       });
     });
+  } else {
+    await db.paymentRefund.update({
+      where: { id: reservation.refundId },
+      data: {
+        status: "FAILED",
+        providerRef: responseCode,
+        rawResponse: rawResponse as Prisma.InputJsonValue,
+        error: `IPS response code ${responseCode || "missing"}`,
+      },
+    });
   }
 
   return {
+    refundId: reservation.refundId,
     refunded,
     responseCode,
     rawRequest,
@@ -482,23 +606,18 @@ async function applyIpsResult(
   });
 
   if (didConfirm) {
-    void (async () => {
-      try {
-        const loaded = await loadOrderForEmail(order.id);
-        if (loaded?.recipient) {
-          await sendIpsPaymentConfirmation({
-            order: loaded.order,
-            to: loaded.recipient,
-          });
-        }
-        await issueAndDeliverFiscalReceipt(order.id, {
-          source: "AUTO_ADVANCE",
-          paymentMethod: "IPS",
-        });
-      } catch (err) {
-        console.error("[payment] IPS confirmation side-effect failed", err);
-      }
-    })();
+    await Promise.all([
+      enqueueBackgroundJob({
+        kind: "IPS_PAYMENT_EMAIL",
+        payload: { orderId: order.id },
+        idempotencyKey: `ips-payment-email:${order.id}`,
+      }),
+      enqueueBackgroundJob({
+        kind: "FISCAL_RECEIPT",
+        payload: { orderId: order.id, source: "AUTO_ADVANCE", paymentMethod: "IPS" },
+        idempotencyKey: `fiscal-advance:${order.id}`,
+      }),
+    ]);
   }
 
   return {

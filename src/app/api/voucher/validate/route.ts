@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, reason: "Neispravan zahtev" }, { status: 400 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "voucher",
     RATE_LIMITS.voucher,

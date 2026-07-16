@@ -26,6 +26,7 @@ declare module "next-auth" {
       userType: "customer" | "admin";
       role?: AdminRoleName;
       isBusiness?: boolean;
+      invalidated?: boolean;
     };
   }
 
@@ -43,6 +44,8 @@ declare module "next-auth/jwt" {
     role?: AdminRoleName;
     isBusiness?: boolean;
     remember?: boolean;
+    sessionVersion?: number;
+    invalidated?: boolean;
   }
 }
 
@@ -68,6 +71,7 @@ export const authConfig = {
       session.user.userType = token.userType ?? "customer";
       session.user.role = token.role;
       session.user.isBusiness = token.isBusiness;
+      session.user.invalidated = token.invalidated;
       return session;
     },
   },

@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([{
+    name: "spc_cookie_consent",
+    value: "essential",
+    url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+  }]);
+});
+
 test("newsletter only shows success after the API accepts the signup", async ({ page }) => {
   let releaseResponse: (() => void) | undefined;
   await page.route("**/api/newsletter", async (route) => {

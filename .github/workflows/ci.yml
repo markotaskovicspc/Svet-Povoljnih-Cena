@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: spc_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d spc_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: "true"
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/spc_test?schema=public
+      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/spc_test?schema=public
+      NEXT_PUBLIC_BASE_URL: http://127.0.0.1:3000
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
+      CRON_SECRET: ci-only-cron-secret-at-least-32-characters
+      E2E_ADMIN_SUPER_EMAIL: e2e-super@example.test
+      E2E_ADMIN_SUPER_PASSWORD: E2e-Only-Strong-2026
+      E2E_ADMIN_CONTENT_EMAIL: e2e-content@example.test
+      E2E_ADMIN_CONTENT_PASSWORD: E2e-Only-Strong-2026
+      E2E_ADMIN_OPS_EMAIL: e2e-ops@example.test
+      E2E_ADMIN_OPS_PASSWORD: E2e-Only-Strong-2026
+      E2E_ADMIN_ADS_EMAIL: e2e-ads@example.test
+      E2E_ADMIN_ADS_PASSWORD: E2e-Only-Strong-2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:deploy
+      - name: Seed isolated role fixtures
+        run: |
+          ADMIN_EMAIL="$E2E_ADMIN_SUPER_EMAIL" ADMIN_PASSWORD="$E2E_ADMIN_SUPER_PASSWORD" ADMIN_ROLE=SUPER npm run admin:create
+          ADMIN_EMAIL="$E2E_ADMIN_CONTENT_EMAIL" ADMIN_PASSWORD="$E2E_ADMIN_CONTENT_PASSWORD" ADMIN_ROLE=CONTENT npm run admin:create
+          ADMIN_EMAIL="$E2E_ADMIN_OPS_EMAIL" ADMIN_PASSWORD="$E2E_ADMIN_OPS_PASSWORD" ADMIN_ROLE=OPS npm run admin:create
+          ADMIN_EMAIL="$E2E_ADMIN_ADS_EMAIL" ADMIN_PASSWORD="$E2E_ADMIN_ADS_PASSWORD" ADMIN_ROLE=ADS npm run admin:create
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

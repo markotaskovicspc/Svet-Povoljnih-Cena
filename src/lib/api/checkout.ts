@@ -5,14 +5,13 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { validateVoucher, validateVoucherForCheckout } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
-import { notifySuppliersOfReservation } from "@/lib/xml";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { providerForPaymentMethod } from "@/lib/payments";
 import {
   createCheckoutOrderAccessToken,
   createOrderAccessToken,
   hashOrderAccessToken,
 } from "@/lib/api/order-access";
-import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { adjustInventory, InsufficientInventoryError } from "@/lib/inventory";
 import { logOperationalError } from "@/lib/monitoring";
 import {
@@ -676,34 +675,26 @@ export async function createOrder(
     });
   }
 
-  // Phase 4A: notify each supplier that owns one of the ordered SKUs so
-  // they can hold the units against their warehouse stock. Fire-and-
-  // forget — checkout has already committed and supplier divergences are
-  // reconciled by the next feed snapshot.
-  if (!created.reusedExisting) {
-    void notifySuppliersOfReservation({
-      orderNumber: created.number,
-      lines: input.lines.map((line) => ({
-        productId: bySku.get(line.sku)!.id,
-        qty: line.qty,
-      })),
-    });
-  }
-
-  // Buyer receipt/proforma: create the durable Invoice row, upload/regenerate
-  // the PDF as available, and send the tracked customer confirmation.
-  if (!created.reusedExisting) {
-    void (async () => {
-      try {
-        await issueBuyerReceiptForOrder(created.id);
-      } catch (err) {
-        logOperationalError("email.buyer_receipt.failed", err, {
-          orderId: created.id,
-          orderNumber: created.number,
-        });
-      }
-    })();
-  }
+  // Upserts are intentional even when an idempotent checkout request reuses
+  // the order: if the first response lost one queue write, the retry repairs it.
+  await Promise.all([
+    enqueueBackgroundJob({
+      kind: "SUPPLIER_RESERVATION",
+      payload: {
+        orderNumber: created.number,
+        lines: input.lines.map((line) => ({
+          productId: bySku.get(line.sku)!.id,
+          qty: line.qty,
+        })),
+      },
+      idempotencyKey: `supplier-reservation:${created.id}`,
+    }),
+    enqueueBackgroundJob({
+      kind: "BUYER_RECEIPT",
+      payload: { orderId: created.id },
+      idempotencyKey: `buyer-receipt:${created.id}`,
+    }),
+  ]);
 
   return {
     ok: true,

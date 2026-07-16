@@ -4,7 +4,7 @@ import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { applyShipmentEvent } from "@/lib/courier/registry";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
-import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { MyGlsClient, decompressMyGlsJson } from "./client";
 import { MYGLS_PROVIDER, requireMyGlsEnabled } from "./config";
 import { orderStatusForMyGlsStatus, inferMyGlsShipmentStatus } from "./status";
@@ -387,8 +387,10 @@ async function notifyShipmentSideEffects(
   }
 
   if (status === "PICKED_UP") {
-    void issueAndDeliverFiscalReceipt(orderId).catch((err) => {
-      console.error("[fiscal] mygls sync trigger failed", err);
+    await enqueueBackgroundJob({
+      kind: "FISCAL_RECEIPT",
+      payload: { orderId },
+      idempotencyKey: `fiscal-pickup:${orderId}`,
     });
   }
 }

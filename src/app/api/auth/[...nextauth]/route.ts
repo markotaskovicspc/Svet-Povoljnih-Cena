@@ -9,7 +9,7 @@ import {
 export const GET = handlers.GET;
 
 export async function POST(req: NextRequest) {
-  const limited = checkRateLimitForRequest(req, "auth:post", RATE_LIMITS.login);
+  const limited = await checkRateLimitForRequest(req, "auth:post", RATE_LIMITS.login);
   if (!limited.ok) {
     return rateLimitJson(limited, "Previše pokušaja prijave. Pokušajte kasnije.");
   }

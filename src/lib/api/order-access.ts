@@ -12,11 +12,14 @@ export function createOrderAccessToken() {
 }
 
 export function createCheckoutOrderAccessToken(checkoutSessionId: string) {
-  const secret =
+  const configuredSecret =
     process.env.ORDER_ACCESS_TOKEN_SECRET?.trim() ||
     process.env.AUTH_SECRET?.trim() ||
-    process.env.NEXTAUTH_SECRET?.trim() ||
-    "spc-local-checkout-order-access-token-secret";
+    process.env.NEXTAUTH_SECRET?.trim();
+  if (!configuredSecret && process.env.NODE_ENV === "production") {
+    throw new Error("ORDER_ACCESS_TOKEN_SECRET ili AUTH_SECRET mora biti podešen u produkciji.");
+  }
+  const secret = configuredSecret || "spc-local-checkout-order-access-token-secret";
 
   return createHmac("sha256", secret)
     .update("checkout-order-access:")

@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 // so Payten treats the callback as delivered and does not enter a retry storm.
 export async function POST(req: Request) {
   // Per-IP throttle: cap how fast any single source can poke the endpoint.
-  const ipLimit = checkRateLimitForRequest(req, "ipsCallback", RATE_LIMITS.ipsCallback);
+  const ipLimit = await checkRateLimitForRequest(req, "ipsCallback", RATE_LIMITS.ipsCallback);
   if (!ipLimit.ok) return rateLimitJson(ipLimit);
 
   try {
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
 
     // Per-order throttle keyed on the internal id. On breach we still return 200
     // (not 429) so the gateway doesn't escalate into a retry storm.
-    const orderLimit = checkRateLimit(
+    const orderLimit = await checkRateLimit(
       rateLimitKey("ipsCallbackOrder", order.id),
       RATE_LIMITS.ipsCallbackOrder,
     );

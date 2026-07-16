@@ -6,6 +6,7 @@ import {
   ContentSection,
 } from "@/components/layout/content-shell";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { CommentForm } from "./form";
 
 export const metadata: Metadata = {
   title: "Komentari i sugestije",
@@ -30,39 +31,22 @@ export default function KomentariPage() {
         lead="Kuratiramo sledeću kolekciju na osnovu povratnih informacija. Pošaljite nam šta nedostaje, šta da popravimo, ili šta vas je oduševilo."
       />
       <ContentBody>
-        <ContentSection id="kanali" title="Kako da nas dosegnete">
-          <ul>
-            <li>
-              E-pošta:{" "}
-              <Link href="mailto:hello@svetpovoljnihcena.rs">
-                hello@svetpovoljnihcena.rs
-              </Link>
-            </li>
-            <li>
-              Viber & WhatsApp:{" "}
-              <Link href="viber://chat?number=%2B381644444555">+381 64 4444 555</Link>
-            </li>
-            <li>
-              Anonimna anketa nakon isporuke (link stiže e-poštom 7 dana posle
-              prijema artikla).
-            </li>
-          </ul>
+        <ContentSection id="poruka" title="Pošaljite poruku">
+          <p>
+            Poruka se čuva u našem sistemu za podršku. Za podatke o konkretnoj
+            porudžbini koristite e-poštu sa koje je porudžbina poslata.
+          </p>
+          <CommentForm />
         </ContentSection>
 
         <ContentSection id="odgovor" title="Šta očekivati od nas">
           <p>
-            Sve poruke čita osnivač lično. Na konkretne predloge odgovaramo u
-            roku od 7 dana. Najbolje sugestije ulaze u <em>changelog</em> sajta
-            i u plan razvoja kolekcija.
-          </p>
-        </ContentSection>
-
-        <ContentSection id="recenzije" title="Pišite recenziju proizvoda">
-          <p>
-            Recenzije ostavljate sa stranice proizvoda nakon kupovine — bilo
-            preko e-mail poziva za ocenjivanje, bilo iz sekcije{" "}
-            <em>Moje porudžbine</em> u nalogu. Recenzije objavljujemo bez
-            cenzure (osim govora mržnje i ličnih podataka trećih lica).
+            Poruke pregleda tim za podršku. Ako želite odgovor, javićemo se na
+            adresu e-pošte koju ste naveli. Alternativno pišite na{" "}
+            <Link href="mailto:podrska@svetpovoljnihcena.rs">
+              podrska@svetpovoljnihcena.rs
+            </Link>
+            .
           </p>
         </ContentSection>
       </ContentBody>

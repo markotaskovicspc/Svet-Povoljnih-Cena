@@ -95,18 +95,11 @@ export async function notifySuppliersOfReservation(
     bySupplier.set(product.supplier.id, bucket);
   }
 
-  await Promise.allSettled(
+  await Promise.all(
     [...bySupplier.values()].map((bucket) =>
-      postReservation(bucket.url, {
+      postReservation(bucket.url, req.orderNumber, {
         orderNumber: req.orderNumber,
         items: bucket.lines,
-      }).catch((err) => {
-        // Logged for the admin XML import dashboard; we deliberately do
-        // NOT rethrow — checkout has already committed.
-        console.error(
-          `[supplier-reservation] ${bucket.supplierName} failed:`,
-          err instanceof Error ? err.message : err,
-        );
       }),
     ),
   );
@@ -128,6 +121,7 @@ function deriveReservationUrl(feedUrl: string): string {
 
 async function postReservation(
   url: string,
+  idempotencyKey: string,
   body: { orderNumber: string; items: SupplierReservationPayload[] },
 ): Promise<void> {
   const res = await fetch(url, {
@@ -135,6 +129,7 @@ async function postReservation(
     headers: {
       "Content-Type": "application/json",
       "User-Agent": "SvetPovoljnihCena-Reservation/1.0",
+      "Idempotency-Key": `spc-reservation-${idempotencyKey}`,
     },
     body: JSON.stringify(body),
     cache: "no-store",

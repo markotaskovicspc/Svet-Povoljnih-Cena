@@ -4,7 +4,7 @@ import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { applyShipmentEvent } from "@/lib/courier/registry";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
-import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { XExpressClient } from "./client";
 import { X_EXPRESS_PROVIDER, requireXExpressEnabled } from "./config";
 import type {
@@ -520,8 +520,10 @@ async function notifyShipmentSideEffects(
   }
 
   if (status === "PICKED_UP") {
-    void issueAndDeliverFiscalReceipt(orderId).catch((err) => {
-      console.error("[fiscal] x-express sync trigger failed", err);
+    await enqueueBackgroundJob({
+      kind: "FISCAL_RECEIPT",
+      payload: { orderId },
+      idempotencyKey: `fiscal-pickup:${orderId}`,
     });
   }
 }

@@ -11,7 +11,11 @@ for (const roleCase of cases) {
   test(`${roleCase.role} admin access matrix`, async ({ page }) => {
     const email = process.env[`E2E_ADMIN_${roleCase.role}_EMAIL`];
     const password = process.env[`E2E_ADMIN_${roleCase.role}_PASSWORD`];
-    test.skip(!email || !password, `Missing tagged ${roleCase.role} E2E credentials.`);
+    const missingCredentials = !email || !password;
+    test.skip(!process.env.CI && missingCredentials, `Missing tagged ${roleCase.role} E2E credentials.`);
+    if (missingCredentials) {
+      throw new Error(`CI requires ${roleCase.role} E2E credentials.`);
+    }
 
     await page.goto(`/admin/prijava?callbackUrl=${encodeURIComponent(roleCase.allowed)}`);
     await page.getByLabel("E-pošta").fill(email!);

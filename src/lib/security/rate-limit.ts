@@ -2,15 +2,12 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
 
 type RateLimitConfig = {
   limit: number;
   windowMs: number;
-};
-
-type Bucket = {
-  count: number;
-  resetAt: number;
 };
 
 export type RateLimitResult = {
@@ -37,43 +34,52 @@ export const RATE_LIMITS = {
   search: { limit: 120, windowMs: MINUTE },
   upload: { limit: 10, windowMs: HOUR },
   reclamation: { limit: 10, windowMs: HOUR },
+  registration: { limit: 5, windowMs: HOUR },
+  comments: { limit: 5, windowMs: HOUR },
+  accountMutation: { limit: 20, windowMs: HOUR },
 } satisfies Record<string, RateLimitConfig>;
 
-const globalForRateLimit = globalThis as unknown as {
-  spcRateLimitBuckets?: Map<string, Bucket>;
-  spcRateLimitLastSweep?: number;
-};
-
-const buckets =
-  globalForRateLimit.spcRateLimitBuckets ??
-  (globalForRateLimit.spcRateLimitBuckets = new Map<string, Bucket>());
-
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   config: RateLimitConfig,
   now = Date.now(),
-): RateLimitResult {
-  sweepExpiredBuckets(now);
-  const current = buckets.get(key);
-  const bucket =
-    current && current.resetAt > now
-      ? current
-      : { count: 0, resetAt: now + config.windowMs };
+): Promise<RateLimitResult> {
+  const currentTime = new Date(now);
+  const nextReset = new Date(now + config.windowMs);
+  const rows = await db.$queryRaw<Array<{ count: number; resetAt: Date }>>(
+    Prisma.sql`
+      INSERT INTO "RateLimitBucket" ("key", "count", "resetAt", "updatedAt")
+      VALUES (${key}, 1, ${nextReset}, ${currentTime})
+      ON CONFLICT ("key") DO UPDATE SET
+        "count" = CASE
+          WHEN "RateLimitBucket"."resetAt" <= ${currentTime} THEN 1
+          ELSE "RateLimitBucket"."count" + 1
+        END,
+        "resetAt" = CASE
+          WHEN "RateLimitBucket"."resetAt" <= ${currentTime} THEN ${nextReset}
+          ELSE "RateLimitBucket"."resetAt"
+        END,
+        "updatedAt" = ${currentTime}
+      RETURNING "count", "resetAt"
+    `,
+  );
+  const bucket = rows[0];
+  if (!bucket) throw new Error("Rate-limit state was not persisted.");
 
-  bucket.count += 1;
-  buckets.set(key, bucket);
-
-  const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+  const retryAfterSec = Math.max(
+    1,
+    Math.ceil((bucket.resetAt.getTime() - now) / 1000),
+  );
   return {
     ok: bucket.count <= config.limit,
     limit: config.limit,
     remaining: Math.max(0, config.limit - bucket.count),
-    resetAt: bucket.resetAt,
+    resetAt: bucket.resetAt.getTime(),
     retryAfterSec,
   };
 }
 
-export function checkRateLimitForRequest(
+export async function checkRateLimitForRequest(
   req: Request,
   scope: string,
   config: RateLimitConfig,
@@ -130,11 +136,6 @@ function rateLimitHeaders(result: RateLimitResult): HeadersInit {
   };
 }
 
-function sweepExpiredBuckets(now: number) {
-  const lastSweep = globalForRateLimit.spcRateLimitLastSweep ?? 0;
-  if (now - lastSweep < MINUTE) return;
-  globalForRateLimit.spcRateLimitLastSweep = now;
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
-  }
+export async function deleteExpiredRateLimitBuckets(now = new Date()) {
+  return db.rateLimitBucket.deleteMany({ where: { resetAt: { lt: now } } });
 }

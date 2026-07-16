@@ -105,7 +105,7 @@ function renderLabel(
   const note = order.notes?.trim() || "";
   return `<section class="label">
     <div class="topline">${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}</div>
-    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone)}</div>
+    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
     <div class="recipient">Primalac:<strong>${escapeHtml(`${order.shipFirstName} ${order.shipLastName}`.trim())},<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>

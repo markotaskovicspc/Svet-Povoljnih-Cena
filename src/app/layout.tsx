@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Playfair_Display, Inter, JetBrains_Mono, Bebas_Neue } from "next/font/google";
-import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { PromoBar } from "@/components/layout/promo-bar";
@@ -12,6 +11,7 @@ import { FirstPurchaseCta } from "@/components/layout/first-purchase-cta";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCurrentUser } from "@/lib/auth/session";
 import { BRAND } from "@/lib/brand";
+import { CookieConsent } from "@/components/privacy/cookie-consent";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -109,7 +109,7 @@ export default async function RootLayout({
             </>
           )}
         </Providers>
-        {isGaConfigured ? <GoogleAnalytics gaId={gaId!} /> : null}
+        <CookieConsent gaId={isGaConfigured ? gaId : undefined} />
       </body>
     </html>
   );

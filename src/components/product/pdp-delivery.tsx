@@ -5,8 +5,7 @@
  * - Shows the global delivery window
  * - City picker (datalist autocomplete) — when chosen, indicates whether
  *   truck delivery and assembly are available
- * - Pricelist (kurirska / kamionska / montaža) — Phase 1 mock values, will
- *   be sourced from DeliveryRule rows in Phase 4
+ * - Optional verified price list. No fallback prices are advertised.
  */
 import { useId, useState } from "react";
 import { Check, Truck, Wrench, X } from "lucide-react";
@@ -21,12 +20,10 @@ interface PdpDeliveryProps {
   pricelist?: { courier: number; truck: number; assembly: number };
 }
 
-const DEFAULT_PRICELIST = { courier: 990, truck: 4990, assembly: 5990 };
-
 export function PdpDelivery({
   product,
   knownCities,
-  pricelist = DEFAULT_PRICELIST,
+  pricelist,
 }: PdpDeliveryProps) {
   const inputId = useId();
   const listId = `${inputId}-cities`;
@@ -104,7 +101,7 @@ export function PdpDelivery({
 
       <div className="bg-muted-bg/60 ring-border/60 rounded-2xl p-5 ring-1">
         <h3 className="font-display text-lg text-ink-900">Cenovnik</h3>
-        <ul className="mt-3 divide-y divide-border/60 text-sm">
+        {pricelist ? <ul className="mt-3 divide-y divide-border/60 text-sm">
           <PriceRow
             icon={<Truck className="size-4" aria-hidden />}
             label="Kurirska dostava"
@@ -123,7 +120,12 @@ export function PdpDelivery({
             }
             muted={!product.allowsAssembly}
           />
-        </ul>
+        </ul> : (
+          <p className="mt-3 text-sm text-ink-700">
+            Cena dostave i eventualne montaže računa se za konkretnu adresu i
+            prikazuje se u korpi pre potvrde porudžbine.
+          </p>
+        )}
         <p className="mt-3 text-[11px] text-ink-500">
           Konačna cena dostave i montaže potvrđuje se u koraku plaćanja.
         </p>

@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "reclamation:create",
     RATE_LIMITS.reclamation,

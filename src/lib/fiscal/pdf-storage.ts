@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { envValue } from "@/lib/env";
 
 const DEFAULT_FISCAL_BUCKET = "fiscal-receipts";
 
@@ -22,7 +23,7 @@ export async function uploadFiscalPdf(args: {
   receiptNumber: string;
   bytes: Buffer;
 }): Promise<{ objectKey: string } | null> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!envValue("NEXT_PUBLIC_SUPABASE_URL") || !envValue("SUPABASE_SERVICE_ROLE_KEY")) {
     return null;
   }
   const objectKey = `${args.orderNumber}/${sanitize(args.receiptNumber)}.pdf`;
@@ -38,7 +39,7 @@ export async function uploadFiscalPdf(args: {
 
 /** Fetch a previously stored official PDF; null if missing/unconfigured. */
 export async function downloadFiscalPdf(objectKey: string): Promise<Buffer | null> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!envValue("NEXT_PUBLIC_SUPABASE_URL") || !envValue("SUPABASE_SERVICE_ROLE_KEY")) {
     return null;
   }
   const storage = createAdminClient().storage.from(fiscalBucket());

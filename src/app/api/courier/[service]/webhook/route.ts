@@ -5,8 +5,7 @@ import {
   CourierConfigError,
 } from "@/lib/courier";
 import { CourierProviderError } from "@/lib/courier/types";
-import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
-import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,28 +76,21 @@ export async function POST(
 
   // Phase 4D — let the customer know about the new shipment status.
   if (result.eventCreated && result.customerEmail) {
-    void (async () => {
-      try {
-        const loaded = await loadOrderForEmail(result.orderId);
-        if (loaded?.recipient) {
-          await sendOrderStatusChanged({
-            order: loaded.order,
-            status: loaded.order.status,
-            to: loaded.recipient,
-          });
-        }
-      } catch (err) {
-        console.error("[email] order-status (courier) failed", err);
-      }
-    })();
+    await enqueueBackgroundJob({
+      kind: "ORDER_STATUS_EMAIL",
+      payload: { orderId: result.orderId },
+      idempotencyKey: `order-status-email:${result.orderId}:${result.status}`,
+    });
   }
 
   // Phase 4F — warehouse pickup is the legal trigger for the fiscal
   // receipt (Zakon o fiskalizaciji). Fire-and-forget so a transient
   // gateway error doesn't break the shipment webhook.
   if (result.eventCreated && result.status === "PICKED_UP") {
-    void issueAndDeliverFiscalReceipt(result.orderId).catch((err) => {
-      console.error("[fiscal] courier-trigger failed", err);
+    await enqueueBackgroundJob({
+      kind: "FISCAL_RECEIPT",
+      payload: { orderId: result.orderId },
+      idempotencyKey: `fiscal-pickup:${result.orderId}`,
     });
   }
 

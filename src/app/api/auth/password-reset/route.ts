@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createPasswordResetToken } from "@/lib/auth/credentials";
-import { sendPasswordReset } from "@/lib/email";
+import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "invalid" }, { status: 400 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "password-reset",
     RATE_LIMITS.passwordReset,
@@ -38,13 +38,16 @@ export async function POST(req: Request) {
 
   const issued = await createPasswordResetToken(parsed.data.email);
   if (issued) {
-    void sendPasswordReset({
-      to: parsed.data.email,
-      token: issued.token,
-      expiresInMinutes: 60,
-    }).catch((err) => {
-      console.error("[email] password-reset send failed", err);
-    });
+    try {
+      const job = await enqueueBackgroundJob({
+        kind: "PASSWORD_RESET_EMAIL",
+        payload: { to: parsed.data.email, token: issued.token },
+        idempotencyKey: `password-reset:${issued.token}`,
+      });
+      await processBackgroundJob(job.id);
+    } catch (err) {
+      console.error("[email] password-reset enqueue/send failed", err);
+    }
   }
   return NextResponse.json({ ok: true });
 }

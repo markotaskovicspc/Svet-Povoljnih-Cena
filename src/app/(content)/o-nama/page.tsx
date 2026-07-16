@@ -12,13 +12,6 @@ export const metadata: Metadata = {
     "Priča o Svetu povoljnih cena — kuratiranoj selekciji nameštaja po poštenim cenama, sa fokusom na materijal, izradu i isporuku.",
 };
 
-const numbers = [
-  { value: "12+", label: "godina iskustva" },
-  { value: "30.000", label: "isporučenih komada" },
-  { value: "120", label: "kolekcija u ponudi" },
-  { value: "4.8/5", label: "prosečna ocena kupaca" },
-];
-
 export default function ONamaPage() {
   return (
     <>
@@ -28,54 +21,38 @@ export default function ONamaPage() {
       <ContentHero
         eyebrow="Naša priča"
         title="Pošten nameštaj, poštena cena."
-        lead="Verujemo da kvalitetan komad ne mora da bude luksuz. Biramo proizvođače čije materijale i izradu lično proveravamo, pa cenu držimo niskom uklanjajući sve što kupcu ne donosi vrednost."
+        lead="Gradimo preglednu internet prodavnicu nameštaja i opreme za dom, sa jasnim informacijama o ceni, dostupnosti i isporuci."
       />
       <ContentBody>
-        <ul className="not-prose -mx-6 mt-2 grid grid-cols-2 gap-4 px-6 sm:grid-cols-4">
-          {numbers.map((n) => (
-            <li
-              key={n.label}
-              className="bg-muted-bg/60 ring-border/60 rounded-2xl p-5 ring-1"
-            >
-              <p className="font-display text-3xl text-ink-900">{n.value}</p>
-              <p className="mt-1 text-xs tracking-wide text-ink-500 uppercase">
-                {n.label}
-              </p>
-            </li>
-          ))}
-        </ul>
-
         <ContentSection id="misija" title="Misija">
           <p>
-            Da svaki dom u Srbiji može da priušti nameštaj koji izgleda dobro,
-            traje godinama i lako se sklapa. Uskraćivanjem svega suvišnog —
-            preplaćenih marži, šarenila reklama, kompliciranih lanaca — držimo
-            cene niže i dostupnije.
+            Želimo da kupac pre poručivanja dobije proverljive podatke o
+            proizvodu i sve troškove vidi pre konačne potvrde porudžbine.
           </p>
         </ContentSection>
 
         <ContentSection id="kako" title="Kako biramo proizvode">
           <ul>
             <li>
-              <strong>Materijal pre dizajna.</strong> Svaki komad mora da prođe
-              probu drveta, kvačila, šina i okova.
+              <strong>Jasan opis.</strong> Objavljujemo specifikacije koje smo
+              dobili i proverili sa dobavljačem.
             </li>
             <li>
-              <strong>Lokalna proizvodnja kad god je moguće.</strong> Kraći
-              transport — niži CO₂ i niža cena.
+              <strong>Vidljiva dostupnost.</strong> Status zaliha i procenjeni
+              rok prikazujemo tamo gde imamo pouzdan podatak.
             </li>
             <li>
-              <strong>Ponavljajuće porudžbine.</strong> Kolekcije se proširuju
-              postupno; odustajemo od onoga što kupci ne vole.
+              <strong>Povratna informacija.</strong> Primedbe kupaca koristimo
+              za ispravke kataloga i procesa.
             </li>
           </ul>
         </ContentSection>
 
-        <ContentSection id="tim" title="Naš tim">
+        <ContentSection id="tim" title="Kako radimo">
           <p>
-            Tridesetoro nas radi između Beograda i Novog Sada — od dizajnera i
-            nabavljača do montera i podrške. Ako vidite naš kombi pred zgradom
-            — to su Marko, Stefan i Aleksa.
+            Porudžbine obrađujemo kroz mrežu dobavljača, kurirskih službi i
+            servisa koji se aktiviraju tek nakon tehničke i poslovne provere.
+            Dostupne opcije uvek prikazujemo u korpi pre slanja porudžbine.
           </p>
         </ContentSection>
       </ContentBody>

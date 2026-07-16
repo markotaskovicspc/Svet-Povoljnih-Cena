@@ -11,12 +11,12 @@ import { db } from "@/lib/db";
  */
 
 export const profileSchema = z.object({
-  firstName: z.string().trim().min(2).max(80).optional(),
-  lastName: z.string().trim().min(2).max(80).optional(),
-  phone: z.string().trim().min(8).max(32).optional(),
+  firstName: z.string().trim().min(2).max(80).nullable().optional(),
+  lastName: z.string().trim().min(2).max(80).nullable().optional(),
+  phone: z.string().trim().min(8).max(32).nullable().optional(),
   isBusiness: z.boolean().optional(),
-  companyName: z.string().trim().max(120).optional(),
-  pib: z.string().trim().regex(/^\d{9}$/).optional(),
+  companyName: z.string().trim().max(120).nullable().optional(),
+  pib: z.string().trim().regex(/^\d{9}$/).nullable().optional(),
   language: z.enum(["sr-Latn", "sr-Cyrl"]).optional(),
 });
 
@@ -44,15 +44,14 @@ export async function getProfile(userId: string) {
 
 export async function updateProfile(userId: string, input: ProfileInput) {
   const data = profileSchema.parse(input);
-  const name =
-    data.firstName || data.lastName
-      ? [data.firstName, data.lastName].filter(Boolean).join(" ")
-      : undefined;
+  const name = data.firstName !== undefined || data.lastName !== undefined
+    ? [data.firstName, data.lastName].filter(Boolean).join(" ") || null
+    : undefined;
   return db.user.update({
     where: { id: userId },
     data: {
       ...data,
-      ...(name ? { name } : {}),
+      ...(name !== undefined ? { name } : {}),
     },
   });
 }

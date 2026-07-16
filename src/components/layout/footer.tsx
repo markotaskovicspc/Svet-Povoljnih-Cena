@@ -110,6 +110,10 @@ export function Footer() {
         </div>
       </div>
 
+      <div className="border-t border-border/60 px-6 py-4 text-center text-xs text-ink-500">
+        <Link href="/podesavanja-kolacica" className="hover:text-brand-blue hover:underline">Podešavanja kolačića</Link>
+      </div>
+
     </footer>
   );
 }

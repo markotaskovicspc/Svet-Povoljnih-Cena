@@ -10,6 +10,7 @@
     "test": "npm run test:unit",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "check:production-env": "node scripts/check-production-env.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev && npm run db:harden",
     "db:deploy": "prisma migrate deploy && npm run db:harden",
@@ -67,5 +68,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@hono/node-server": "^1.19.13",
+    "postcss": "^8.5.10"
   }
 }

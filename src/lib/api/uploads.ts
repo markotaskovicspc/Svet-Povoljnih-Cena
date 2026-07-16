@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { envValue } from "@/lib/env";
 
 const DEFAULT_RECLAMATION_UPLOAD_BUCKET = "reclamation-uploads";
 const ALLOWED_IMAGE_TYPES = {
@@ -72,10 +73,11 @@ export async function presignUpload(
   if (error || !data?.signedUrl) {
     throw new Error(error?.message ?? "Upload URL nije moguće kreirati.");
   }
-  const publicUrl = storage.getPublicUrl(key).data.publicUrl;
   return {
     uploadUrl: data.signedUrl,
-    publicUrl,
+    // Legacy response property name retained for the client. This is an
+    // opaque private-bucket object key, never a public URL.
+    publicUrl: key,
     key,
     expiresInSec: 600,
   };
@@ -93,6 +95,7 @@ export function isAllowedReclamationPhotoUrl(value: string) {
  * accepted too so values round-trip through re-submission.
  */
 export function reclamationObjectKeyFromUrl(value: string): string | null {
+  if (isAllowedReclamationObjectKey(value)) return value;
   const bucket = reclamationUploadBucket();
   let url: URL;
   try {
@@ -101,6 +104,8 @@ export function reclamationObjectKeyFromUrl(value: string): string | null {
     return null;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl || url.host !== new URL(supabaseUrl).host) return null;
   const markerPublic = `/storage/v1/object/public/${bucket}/`;
   const markerSigned = `/storage/v1/object/sign/${bucket}/`;
   const path = decodeURIComponent(url.pathname);
@@ -110,6 +115,38 @@ export function reclamationObjectKeyFromUrl(value: string): string | null {
       ? path.slice(path.indexOf(markerSigned) + markerSigned.length)
       : "";
   return key || null;
+}
+
+export async function verifyReclamationUploads(
+  photos: Array<{ url: string; bytes?: number }>,
+  scope: { orderNumber: string; sku: string },
+) {
+  if (!photos.length) return;
+  const storage = createAdminClient().storage.from(reclamationUploadBucket());
+  for (const photo of photos) {
+    const key = reclamationObjectKeyFromUrl(photo.url);
+    if (!key || !isAllowedReclamationObjectKey(key)) {
+      throw new Error("invalid_reclamation_photo_key");
+    }
+    const parts = key.split("/");
+    if (parts[1] !== safeSegment(scope.orderNumber) || parts[2] !== safeSegment(scope.sku)) {
+      throw new Error("reclamation_photo_scope_mismatch");
+    }
+    const { data, error } = await storage.download(key);
+    if (error || !data) throw new Error("reclamation_photo_not_found");
+    if (data.size <= 0 || data.size > 5 * 1024 * 1024) {
+      throw new Error("invalid_reclamation_photo_size");
+    }
+    if (photo.bytes && photo.bytes !== data.size) {
+      throw new Error("reclamation_photo_size_mismatch");
+    }
+    const bytes = new Uint8Array(await data.slice(0, 16).arrayBuffer());
+    const detected = detectImageType(bytes);
+    const extension = fileExtension(key);
+    if (!detected || !extension || !ALLOWED_IMAGE_TYPES[detected].includes(extension as never)) {
+      throw new Error("invalid_reclamation_photo_content");
+    }
+  }
 }
 
 /**
@@ -129,7 +166,7 @@ export async function signReclamationPhotoUrls(
     if (key) keyByUrl.set(url, key);
   }
   if (!keyByUrl.size) return signed;
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!envValue("NEXT_PUBLIC_SUPABASE_URL") || !envValue("SUPABASE_SERVICE_ROLE_KEY")) {
     return signed;
   }
   try {
@@ -178,6 +215,19 @@ function reclamationUploadBucket() {
 
 function fileExtension(filename: string) {
   return filename.match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase() ?? null;
+}
+
+function detectImageType(bytes: Uint8Array): keyof typeof ALLOWED_IMAGE_TYPES | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) return "image/png";
+  if (
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  ) return "image/webp";
+  return null;
 }
 
 function safeSegment(value: string) {

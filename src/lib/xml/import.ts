@@ -1,4 +1,5 @@
 import "server-only";
+import { envValue } from "@/lib/env";
 
 import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -67,7 +68,7 @@ function resolveSupplierSecret(
   fallback: string | null,
 ) {
   const explicitEnv = fallback?.match(/^env:([A-Z0-9_]+)$/i)?.[1];
-  if (explicitEnv) return process.env[explicitEnv] ?? null;
+  if (explicitEnv) return envValue(explicitEnv);
 
   const candidates = [
     supplier.code,
@@ -79,7 +80,7 @@ function resolveSupplierSecret(
     .map((token) => `XML_SUPPLIER_${token}_${suffix}`);
 
   for (const key of candidates) {
-    const value = process.env[key]?.trim();
+    const value = envValue(key);
     if (value) return value;
   }
   return fallback;

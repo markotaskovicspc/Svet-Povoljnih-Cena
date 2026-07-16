@@ -1,18 +1,15 @@
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
-import {
-  loadOrderForEmail,
-  lowerOrderStatus,
-  sendOrderStatusChanged,
-} from "@/lib/email";
 import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import {
   deleteMyGlsLabelsForShipment,
@@ -92,24 +89,13 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
             data: { orderId: id, status, note, actorId },
           });
         });
-        void (async () => {
-          try {
-            const loaded = await loadOrderForEmail(id);
-            if (loaded?.recipient) {
-              await sendOrderStatusChanged({
-                order: loaded.order,
-                status: lowerOrderStatus(status),
-                to: loaded.recipient,
-              });
-            }
-          } catch (err) {
-            console.error("[email] admin order-status failed", err);
-          }
-        })();
+        await enqueueBackgroundJob({
+          kind: "ORDER_STATUS_EMAIL",
+          payload: { orderId: id },
+          idempotencyKey: `order-status-email:${id}:${status}`,
+        });
         if (status === "SPREMNO_ZA_ISPORUKU" && smallParcelAutoCreateEnabled()) {
-          void createShipmentForOrder(id).catch((err) => {
-            console.error("[courier] auto-create failed", err);
-          });
+          await createShipmentForOrder(id);
         }
         revalidatePath(`/admin/narudzbine/${id}`);
         revalidatePath("/admin/narudzbine");
@@ -336,10 +322,11 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
 
   return withAdminState(
     { allowed: ["OPS"], action: "order.ipsRefund", entity: "Payment" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const amount = Number(formData.get("amount") ?? "");
-      if (!id || !Number.isFinite(amount) || amount <= 0) {
+      const requestId = String(formData.get("refundRequestId") ?? "");
+      if (!id || !requestId || !Number.isFinite(amount) || amount <= 0) {
         return { ok: false as const, error: "Unesite ispravan iznos za IPS povraćaj." };
       }
 
@@ -372,7 +359,7 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
       }
 
       const latestPayment = order.payments[0] ?? null;
-      if (!latestPayment || latestPayment.status !== "PAID") {
+      if (!latestPayment || !["PAID", "PARTIAL_REFUND"].includes(latestPayment.status)) {
         return {
           ok: false as const,
           error: "IPS povraćaj je moguć samo za plaćenu IPS transakciju.",
@@ -380,7 +367,10 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
       }
 
       try {
-        const result = await ipsPaymentProvider.refundPayment(order.number, amount);
+        const result = await ipsPaymentProvider.refundPayment(order.number, amount, {
+          idempotencyKey: `admin:${requestId}`,
+          actorId,
+        });
         if (!result.refunded) {
           return {
             ok: false as const,
@@ -431,6 +421,7 @@ export default async function OrderDetail({
       items: true,
       events: { orderBy: { createdAt: "desc" } },
       payments: { orderBy: { createdAt: "desc" } },
+      paymentRefunds: { orderBy: { createdAt: "desc" } },
       shipments: { include: { events: { orderBy: { occurredAt: "desc" } } } },
       invoices: true,
       fiscal: true,
@@ -447,8 +438,19 @@ export default async function OrderDetail({
     getSmallParcelProvider() === "MYGLS" ? MYGLS_PROVIDER : X_EXPRESS_PROVIDER;
   const latestIpsPayment =
     order.payments.find((payment) => payment.provider === "IPS") ?? null;
+  const reservedRefundTotal = order.paymentRefunds
+    .filter((refund) => ["PENDING", "COMPLETED", "NEEDS_REVIEW"].includes(refund.status))
+    .reduce((sum, refund) => sum + num(refund.amount), 0);
+  const refundableIpsAmount = Math.max(
+    0,
+    num(latestIpsPayment?.amount ?? order.total) - reservedRefundTotal,
+  );
   const canRefundIps =
-    order.paymentMethod === "IPS" && latestIpsPayment?.status === "PAID";
+    order.paymentMethod === "IPS" &&
+    latestIpsPayment != null &&
+    ["PAID", "PARTIAL_REFUND"].includes(latestIpsPayment.status) &&
+    refundableIpsAmount > 0;
+  const refundRequestId = randomUUID();
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
   const latestFiscal = order.fiscalDocuments[0] ?? null;
@@ -589,10 +591,22 @@ export default async function OrderDetail({
                   }
                 />
                 <Row k="Ukupno" v={formatRsd(num(order.total))} />
+                <Row k="Preostalo za povraćaj" v={formatRsd(refundableIpsAmount)} />
               </dl>
+              {order.paymentRefunds.length ? (
+                <ul className="mb-4 space-y-2 text-xs">
+                  {order.paymentRefunds.map((refund) => (
+                    <li key={refund.id} className="rounded-lg border border-border p-2">
+                      <span className="font-mono">{refund.status}</span> · {formatRsd(num(refund.amount))}
+                      {refund.status === "NEEDS_REVIEW" ? " · ručno usaglašavanje obavezno" : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               {canRefundIps ? (
                 <AdminActionForm action={refundIpsPaymentAction} className="space-y-3">
                   <input type="hidden" name="id" value={order.id} />
+                  <input type="hidden" name="refundRequestId" value={refundRequestId} />
                   <Field
                     label="Iznos za povraćaj"
                     hint="Podrazumevano je pun iznos porudžbine; unesite manji iznos za delimičan povraćaj."
@@ -601,9 +615,9 @@ export default async function OrderDetail({
                       name="amount"
                       type="number"
                       min="0.01"
-                      max={num(order.total).toFixed(2)}
+                      max={refundableIpsAmount.toFixed(2)}
                       step="0.01"
-                      defaultValue={num(order.total).toFixed(2)}
+                      defaultValue={refundableIpsAmount.toFixed(2)}
                       className="h-8 w-full rounded-lg border border-input bg-transparent px-2 font-mono text-sm"
                     />
                   </Field>
@@ -615,7 +629,7 @@ export default async function OrderDetail({
                 </AdminActionForm>
               ) : (
                 <p className="text-sm text-ink-500">
-                  Povraćaj je dostupan samo dok je poslednja IPS uplata u statusu PAID.
+                  Povraćaj je dostupan samo za potvrđenu IPS uplatu sa preostalim iznosom.
                 </p>
               )}
             </Card>

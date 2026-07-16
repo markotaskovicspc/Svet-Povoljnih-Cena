@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "Koliko traje isporuka?",
-    a: "Za artikle sa stanja 3–5 radnih dana. Kada se artikal dovozi po porudžbini, rok je 10–20 radnih dana i jasno je naveden na stranici proizvoda.",
+    a: "Rok zavisi od potvrđene zalihe, adrese i izabrane dostave. Procena za konkretnu porudžbinu prikazuje se pre potvrde.",
   },
   {
     q: "Kako da pratim porudžbinu?",
@@ -25,11 +25,11 @@ const faqs = [
   },
   {
     q: "Mogu li da poručim bez registracije?",
-    a: 'Da, na checkoutu izaberite "Nastavi kao gost". Za 5% popusta na prvu porudžbinu potrebno je da napravite nalog.',
+    a: 'Da, ako je opcija „Nastavi kao gost” ponuđena u checkout-u. Eventualni popust važi samo kada je izričito prikazan i obračunat pre potvrde.',
   },
   {
     q: "Da li sklapate nameštaj?",
-    a: "Da, u glavnim gradovima (Beograd, Novi Sad, Niš, Kragujevac, Subotica, Pančevo, Čačak, Kraljevo). Cena montaže je oko 10% vrednosti artikla.",
+    a: "Montaža se nudi samo kada je dostupna za konkretan artikal i adresu. Cena se prikazuje u checkout-u pre potvrde.",
   },
   {
     q: "Kako da iskoristim vaučer?",

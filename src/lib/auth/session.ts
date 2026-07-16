@@ -15,7 +15,7 @@ export async function getSession() {
 
 export async function getCurrentUser() {
   const session = await auth();
-  return session?.user ?? null;
+  return session?.user && !session.user.invalidated ? session.user : null;
 }
 
 export async function requireUser(returnTo?: string) {

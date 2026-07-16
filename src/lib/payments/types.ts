@@ -20,6 +20,7 @@ export interface PaymentStatusResult {
 }
 
 export interface RefundPaymentResult {
+  refundId: string;
   refunded: boolean;
   responseCode: string;
   rawRequest: Record<string, unknown>;
@@ -34,7 +35,11 @@ export interface PaymentProviderAdapter {
   ): Promise<CreatePaymentResult>;
   handleCallback(providerPayload: unknown): Promise<PaymentStatusResult>;
   checkPaymentStatus(orderId: string): Promise<PaymentStatusResult>;
-  refundPayment(orderId: string, amount: number): Promise<RefundPaymentResult>;
+  refundPayment(
+    orderId: string,
+    amount: number,
+    options?: { idempotencyKey?: string; actorId?: string; fiscalDocumentId?: string },
+  ): Promise<RefundPaymentResult>;
 }
 
 export function providerForPaymentMethod(method: PaymentMethod): PaymentProvider {

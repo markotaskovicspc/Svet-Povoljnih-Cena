@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid", issues: parsed.error.flatten() }, { status: 400 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "reclamation:upload",
     RATE_LIMITS.upload,

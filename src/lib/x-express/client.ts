@@ -13,6 +13,8 @@ import { inferXExpressShipmentStatus, orderStatusForXExpressStatus } from "./sta
 import type {
   XExpressCreateOrderPayload,
   XExpressCreateOrderResponse,
+  XExpressAddressCheckPayload,
+  XExpressAddressCheckResponse,
   XExpressLocationCode,
   XExpressMunicipality,
   XExpressStatusCode,
@@ -103,6 +105,27 @@ export class XExpressClient {
       providerOrderId,
       providerShipmentId,
       providerStatusCode,
+      raw,
+    };
+  }
+
+  async checkAddress(
+    payload: XExpressAddressCheckPayload,
+  ): Promise<XExpressAddressCheckResponse> {
+    const path = requireXExpressPath(this.cfg, "checkAddress");
+    const raw = await this.request("POST", path, payload);
+    const record = unwrapRecord(raw);
+    const valid = pickBoolean(record, ["valid", "isValid", "success", "addressValid"]);
+    if (valid == null) {
+      throw new XExpressProviderError(
+        "X Express provera adrese nije vratila prepoznatljiv rezultat.",
+        pickString(record, ["code", "errorCode"]) ?? undefined,
+        redactXExpressSecrets(raw),
+      );
+    }
+    return {
+      valid,
+      message: pickString(record, ["message", "description", "reason", "error"]),
       raw,
     };
   }

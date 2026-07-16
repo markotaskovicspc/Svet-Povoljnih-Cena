@@ -79,8 +79,10 @@ export default function PrivatnostPage() {
         <ContentSection id="kolacici" title="Kolačići">
           <p>
             Koristimo nužne kolačiće (sesija, korpa) i — uz vaš pristanak —
-            analitičke i marketinške. Pristanak možete povući u svakom trenutku
-            kroz banner ili podešavanja u nalogu.
+            analitičke kolačiće. Analitika se ne učitava pre pristanka.
+            Pristanak možete promeniti u svakom trenutku na stranici{" "}
+            <Link href="/podesavanja-kolacica">Podešavanja kolačića</Link> ili
+            kroz podešavanja naloga.
           </p>
         </ContentSection>
 

@@ -8,6 +8,7 @@ import {
   MapPin,
   PackageCheck,
   ShoppingBag,
+  Settings,
 } from "lucide-react";
 import { signOut } from "@/lib/auth/auth";
 import { requireUser } from "@/lib/auth/session";
@@ -53,6 +54,12 @@ const quickLinks = [
     title: "Reklamacije",
     description: "Prijavite reklamaciju i pratite status rešavanja.",
     icon: ClipboardList,
+  },
+  {
+    href: "/nalog/podesavanja",
+    title: "Podešavanja",
+    description: "Profil, saglasnosti, izvoz i brisanje podataka.",
+    icon: Settings,
   },
   {
     href: "/korpa",
@@ -111,7 +118,7 @@ export default async function AccountPage() {
         </div>
       ) : null}
 
-      <div className="mt-8 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="mt-8 grid gap-4 md:grid-cols-3 lg:grid-cols-4">
         {quickLinks.map((item) => {
           const Icon = item.icon;
           return (

@@ -29,6 +29,10 @@ export default function BrisanjePodatakaPage() {
       />
       <ContentBody>
         <ContentSection id="zahtev" title="Kako da pošaljete zahtev">
+          <p>
+            Ako ste prijavljeni, nalog možete odmah obrisati u{" "}
+            <Link href="/nalog/podesavanja">podešavanjima naloga</Link>.
+          </p>
           <ol>
             <li>
               Pošaljite e-poštu na{" "}

@@ -889,25 +889,25 @@ async function recordPaymentRefund(args: {
   actorId: string | null;
 }): Promise<string | null> {
   const provider = providerForPaymentMethod(args.method);
-  let status: "COMPLETED" | "FAILED" = "COMPLETED";
-  let rawRequest: Prisma.InputJsonValue | undefined;
-  let rawResponse: Prisma.InputJsonValue | undefined;
-  let providerRef: string | null = null;
-  let error: string | null = null;
+  const status = "COMPLETED" as const;
+  const rawRequest: Prisma.InputJsonValue | undefined = undefined;
+  const rawResponse: Prisma.InputJsonValue | undefined = undefined;
+  const providerRef: string | null = null;
+  const error: string | null = null;
 
   if (args.method === "IPS") {
     try {
-      const result = await ipsPaymentProvider.refundPayment(args.orderNumber, args.amount);
-      rawRequest = result.rawRequest as Prisma.InputJsonValue;
-      rawResponse = result.rawResponse as Prisma.InputJsonValue;
-      providerRef = result.responseCode;
+      const result = await ipsPaymentProvider.refundPayment(args.orderNumber, args.amount, {
+        idempotencyKey: `fiscal-refund:${args.fiscalDocumentId}:IPS`,
+        actorId: args.actorId ?? undefined,
+        fiscalDocumentId: args.fiscalDocumentId,
+      });
       if (!result.refunded) {
-        status = "FAILED";
-        error = `IPS nije potvrdio povraćaj (kod ${result.responseCode || "-"}).`;
+        return `IPS nije potvrdio povraćaj (kod ${result.responseCode || "-"}).`;
       }
+      return null;
     } catch (err) {
-      status = "FAILED";
-      error = err instanceof Error ? err.message : String(err);
+      return err instanceof Error ? err.message : String(err);
     }
   }
 

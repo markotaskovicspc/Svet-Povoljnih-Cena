@@ -7,6 +7,7 @@ import { loadOrderForEmail, sendOrderConfirmation } from "@/lib/email";
 import { buildInvoicePdf, type InvoiceOrderInput } from "@/lib/email/pdf";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { envValue } from "@/lib/env";
 
 const DEFAULT_RECEIPT_BUCKET = "order-receipts";
 
@@ -231,7 +232,7 @@ async function uploadReceiptPdf(args: {
   receiptNumber: string;
   bytes: Buffer;
 }) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!envValue("NEXT_PUBLIC_SUPABASE_URL") || !envValue("SUPABASE_SERVICE_ROLE_KEY")) {
     return null;
   }
   const bucket = process.env.SUPABASE_RECEIPT_BUCKET ?? DEFAULT_RECEIPT_BUCKET;

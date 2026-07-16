@@ -38,6 +38,8 @@ model User {
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
   lastLoginAt   DateTime?
+  /// Incremented when every previously issued JWT must become invalid.
+  sessionVersion Int      @default(0)
 
   accounts           Account[]
   sessions           Session[]
@@ -55,6 +57,38 @@ model User {
   checkoutSessions   CheckoutSession[]
 
   @@index([createdAt])
+}
+
+/// Shared, database-backed limiter state. Unlike an in-memory Map this is
+/// authoritative across every serverless instance.
+model RateLimitBucket {
+  key       String   @id @db.VarChar(200)
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+/// Durable outbox for post-commit work. Jobs are claimed with an atomic update
+/// and retried by the background-jobs cron until they succeed or exhaust attempts.
+model BackgroundJob {
+  id             String   @id @default(cuid())
+  kind           String   @db.VarChar(80)
+  payload        Json
+  idempotencyKey String   @unique @db.VarChar(200)
+  status         String   @default("QUEUED") @db.VarChar(20)
+  attempts       Int      @default(0)
+  maxAttempts    Int      @default(8)
+  availableAt    DateTime @default(now())
+  lockedAt       DateTime?
+  lastError      String?  @db.Text
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@index([lockedAt])
 }
 
 /// Server-side mirror of the Zustand cart for logged-in users.
@@ -1403,6 +1437,7 @@ enum PaymentRefundStatus {
   PENDING
   COMPLETED
   FAILED
+  NEEDS_REVIEW
 }
 
 model FiscalDocument {
@@ -1578,6 +1613,7 @@ model StockMovement {
 
 model PaymentRefund {
   id               String              @id @default(cuid())
+  idempotencyKey   String?             @unique @db.VarChar(200)
   orderId          String
   fiscalDocumentId String?
   method           PaymentMethod

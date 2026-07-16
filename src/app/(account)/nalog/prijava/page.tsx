@@ -4,10 +4,8 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { ShieldCheck } from "lucide-react";
 import { CustomerLoginFields, LoginError, type LoginErrorCode } from "./form";
-import {
-  getConfiguredSocialAuthProviders,
-  SocialAuthButtons,
-} from "@/components/account/social-auth-buttons";
+import { SocialAuthButtons } from "@/components/account/social-auth-buttons";
+import { getConfiguredSocialAuthProviders } from "@/lib/auth/social-providers";
 import { getCurrentUser } from "@/lib/auth/session";
 import { signIn } from "@/lib/auth/auth";
 import { customerCallback } from "@/lib/auth/customer-callback";
@@ -57,7 +55,7 @@ async function loginAction(formData: FormData) {
 export default async function CustomerLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: LoginErrorCode; callbackUrl?: string }>;
+  searchParams: Promise<{ error?: LoginErrorCode; callbackUrl?: string; reset?: string }>;
 }) {
   const sp = await searchParams;
   const callbackUrl = customerCallback(sp.callbackUrl);
@@ -108,6 +106,11 @@ export default async function CustomerLoginPage({
         </p>
 
         <div className="mt-3 md:mt-5">
+          {sp.reset === "success" ? (
+            <p role="status" className="mb-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+              Lozinka je promenjena. Prijavite se novom lozinkom.
+            </p>
+          ) : null}
           <LoginError error={sp.error} />
         </div>
 
@@ -128,6 +131,13 @@ export default async function CustomerLoginPage({
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <CustomerLoginFields />
         </form>
+
+        <Link
+          href="/nalog/lozinka/zaboravljena"
+          className="mt-3 inline-flex w-full justify-center text-sm font-medium text-walnut hover:underline"
+        >
+          Zaboravili ste lozinku?
+        </Link>
 
         <p className="mt-4 text-center text-sm text-ink-500 md:mt-6">
           Nemate nalog?{" "}

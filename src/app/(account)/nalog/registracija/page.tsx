@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { AuthError } from "next-auth";
 import { Heart, PackageCheck, ShieldCheck, Sparkles } from "lucide-react";
 
@@ -9,10 +10,8 @@ import {
   RegistrationError,
   type RegistrationErrorCode,
 } from "./form";
-import {
-  getConfiguredSocialAuthProviders,
-  SocialAuthButtons,
-} from "@/components/account/social-auth-buttons";
+import { SocialAuthButtons } from "@/components/account/social-auth-buttons";
+import { getConfiguredSocialAuthProviders } from "@/lib/auth/social-providers";
 import { getCurrentUser } from "@/lib/auth/session";
 import { signIn } from "@/lib/auth/auth";
 import { registerCustomer } from "@/lib/auth/credentials";
@@ -21,6 +20,12 @@ import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
 import { customerCallback } from "@/lib/auth/customer-callback";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
 import { BRAND } from "@/lib/brand";
+import {
+  checkRateLimit,
+  getClientIpFromHeaders,
+  rateLimitKey,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const metadata: Metadata = {
   title: "Registracija",
@@ -52,6 +57,15 @@ async function registerAction(formData: FormData) {
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const marketingEmailConsent =
     formData.get("marketingEmailConsent") === "true";
+
+  const requestHeaders = await headers();
+  const limited = await checkRateLimit(
+    rateLimitKey("registration", getClientIpFromHeaders(requestHeaders), email),
+    RATE_LIMITS.registration,
+  );
+  if (!limited.ok) {
+    redirect(registrationUrl("rate_limited", callbackUrl));
+  }
 
   if (!emailPattern.test(email)) {
     redirect(registrationUrl("invalid_email", callbackUrl));

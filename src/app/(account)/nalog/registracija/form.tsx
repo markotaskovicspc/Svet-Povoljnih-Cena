@@ -12,6 +12,7 @@ export type RegistrationErrorCode =
   | "invalid_email"
   | "password_mismatch"
   | "weak_password"
+  | "rate_limited"
   | "generic";
 
 const errorMessages: Record<RegistrationErrorCode, string> = {
@@ -19,6 +20,7 @@ const errorMessages: Record<RegistrationErrorCode, string> = {
   invalid_email: "Unesite ispravnu e-poštu.",
   password_mismatch: "Lozinke se ne poklapaju.",
   weak_password: "Lozinka mora imati najmanje 8 karaktera.",
+  rate_limited: "Previše pokušaja registracije. Pokušajte ponovo kasnije.",
   generic: "Registracija trenutno nije uspela. Pokušajte ponovo.",
 };
 

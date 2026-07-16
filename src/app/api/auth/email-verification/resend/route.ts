@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!sessionUser || sessionUser.userType !== "customer") {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "email-verification",
     RATE_LIMITS.passwordReset,

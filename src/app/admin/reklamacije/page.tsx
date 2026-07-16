@@ -1,14 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { db } from "@/lib/db";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { revalidatePath } from "next/cache";
 import { ReclamationStatus } from "@prisma/client";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
-import {
-  loadReclamationForEmail,
-  lowerReclamationStatus,
-  sendReclamationStatusChanged,
-} from "@/lib/email";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card } from "@/components/admin/card";
@@ -44,20 +40,11 @@ async function updateStatus(formData: FormData) {
             data: { reclamationId: id, status, note, actorId },
           }),
         ]);
-        void (async () => {
-          try {
-            const loaded = await loadReclamationForEmail(id);
-            if (loaded?.recipient) {
-              await sendReclamationStatusChanged({
-                reclamation: loaded.reclamation,
-                status: lowerReclamationStatus(status),
-                to: loaded.recipient,
-              });
-            }
-          } catch (err) {
-            console.error("[email] admin reclamation-status failed", err);
-          }
-        })();
+        await enqueueBackgroundJob({
+          kind: "RECLAMATION_STATUS_EMAIL",
+          payload: { reclamationId: id },
+          idempotencyKey: `reclamation-status-email:${id}:${status}`,
+        });
         revalidatePath("/admin/reklamacije");
         return { ok: true as const, entityId: id, diff: { status, note } };
       },

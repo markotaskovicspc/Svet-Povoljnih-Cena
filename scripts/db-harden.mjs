@@ -70,18 +70,23 @@ try {
   // Belt and braces: even an RLS-off table leaks nothing if the API roles
   // hold no grants. Revoke existing grants and the default-privilege
   // entries that would grant them on future tables.
-  await db.$executeRawUnsafe(
-    "revoke all on all tables in schema public from anon, authenticated",
-  );
-  await db.$executeRawUnsafe(
-    "revoke all on all sequences in schema public from anon, authenticated",
-  );
-  await db.$executeRawUnsafe(
-    "alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated",
-  );
-  await db.$executeRawUnsafe(
-    "alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated",
-  );
+  // Plain PostgreSQL (CI/local) does not define Supabase's API roles. Keep the
+  // hardener portable while still applying every revoke when those roles exist.
+  await db.$executeRawUnsafe(`
+    do $$
+    declare role_name text;
+    begin
+      foreach role_name in array array['anon', 'authenticated'] loop
+        if exists (select 1 from pg_roles where rolname = role_name) then
+          execute format('revoke all on all tables in schema public from %I', role_name);
+          execute format('revoke all on all sequences in schema public from %I', role_name);
+          execute format('alter default privileges for role postgres in schema public revoke all on tables from %I', role_name);
+          execute format('alter default privileges for role postgres in schema public revoke all on sequences from %I', role_name);
+        end if;
+      end loop;
+    end
+    $$;
+  `);
 
   console.log(
     `db-harden: enabled RLS on ${before[0].n} table(s); revoked anon/authenticated grants on public schema.`,

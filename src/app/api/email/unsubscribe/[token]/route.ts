@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import {
   applyEmailUnsubscribe,
-  syncNewsletterSubscriberToResend,
-  syncUserMarketingConsentToResend,
   verifyEmailUnsubscribeToken,
 } from "@/lib/email";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,13 +36,17 @@ export async function POST(
 
   const result = await applyEmailUnsubscribe(payload);
   if (payload.purpose === "newsletter") {
-    void syncNewsletterSubscriberToResend(payload.email).catch((err) => {
-      console.error("[email] Resend unsubscribe sync failed", err);
+    await enqueueBackgroundJob({
+      kind: "NEWSLETTER_SYNC",
+      payload: { email: payload.email },
+      idempotencyKey: `newsletter-unsubscribe:${payload.email}:${Date.now()}`,
     });
   }
   if (payload.purpose === "marketing") {
-    void syncUserMarketingConsentToResend(payload.userId).catch((err) => {
-      console.error("[email] Resend marketing unsubscribe sync failed", err);
+    await enqueueBackgroundJob({
+      kind: "MARKETING_SYNC",
+      payload: { userId: payload.userId },
+      idempotencyKey: `marketing-unsubscribe:${payload.userId}:${Date.now()}`,
     });
   }
 

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const limited = checkRateLimitForRequest(req, "search:suggest", RATE_LIMITS.search);
+  const limited = await checkRateLimitForRequest(req, "search:suggest", RATE_LIMITS.search);
   if (!limited.ok) {
     return rateLimitJson(limited);
   }

@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { syncUserMarketingConsentToResend } from "@/lib/email/resend-marketing";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 /**
  * GDPR / data-portability helpers (per Phase 6 requirements, surfaced from
@@ -16,7 +16,7 @@ import { syncUserMarketingConsentToResend } from "@/lib/email/resend-marketing";
  */
 
 export async function exportUserData(userId: string) {
-  const [user, addresses, orders, wishlist, reclamations, consent, alerts] =
+  const [user, addresses, orders, wishlist, reclamations, comments, consent, alerts] =
     await Promise.all([
       db.user.findUnique({
         where: { id: userId },
@@ -42,6 +42,7 @@ export async function exportUserData(userId: string) {
       }),
       db.wishlistItem.findMany({ where: { userId } }),
       db.reclamation.findMany({ where: { userId } }),
+      db.comment.findMany({ where: { userId } }),
       db.marketingConsent.findUnique({ where: { userId } }),
       Promise.all([
         db.backInStockAlert.findMany({ where: { userId } }),
@@ -56,6 +57,7 @@ export async function exportUserData(userId: string) {
     orders,
     wishlist,
     reclamations,
+    comments,
     consent,
     alerts,
   };
@@ -64,8 +66,9 @@ export async function exportUserData(userId: string) {
 export async function softDeleteAccount(userId: string) {
   // Strip PII while keeping financial / legal records for the retention
   // window required by Serbian commerce law.
-  await db.$transaction([
-    db.user.update({
+  const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id: userId },
       data: {
         deletedAt: new Date(),
@@ -78,17 +81,45 @@ export async function softDeleteAccount(userId: string) {
         image: null,
         companyName: null,
         pib: null,
+        sessionVersion: { increment: 1 },
       },
-    }),
-    db.session.deleteMany({ where: { userId } }),
-    db.account.deleteMany({ where: { userId } }),
-    db.address.deleteMany({ where: { userId } }),
-    db.savedCard.deleteMany({ where: { userId } }),
-    db.wishlistItem.deleteMany({ where: { userId } }),
-    db.backInStockAlert.deleteMany({ where: { userId } }),
-    db.onSaleAlert.deleteMany({ where: { userId } }),
-    db.marketingConsent.deleteMany({ where: { userId } }),
-  ]);
+    });
+    await Promise.all([
+      tx.session.deleteMany({ where: { userId } }),
+      tx.account.deleteMany({ where: { userId } }),
+      tx.address.deleteMany({ where: { userId } }),
+      tx.savedCard.deleteMany({ where: { userId } }),
+      tx.wishlistItem.deleteMany({ where: { userId } }),
+      tx.backInStockAlert.deleteMany({ where: { userId } }),
+      tx.onSaleAlert.deleteMany({ where: { userId } }),
+      tx.marketingConsent.deleteMany({ where: { userId } }),
+      tx.comment.deleteMany({ where: { userId } }),
+      tx.reclamation.updateMany({
+        where: { userId },
+        data: {
+          userId: null,
+          customerFirst: "Obrisan",
+          customerLast: "korisnik",
+          customerEmail: null,
+          customerPhone: null,
+        },
+      }),
+      user?.email
+        ? tx.newsletterSubscriber.deleteMany({ where: { email: user.email } })
+        : Promise.resolve(),
+    ]);
+    if (user?.email) {
+      await tx.backgroundJob.upsert({
+        where: { idempotencyKey: `account-deletion-unsubscribe:${userId}` },
+        create: {
+          kind: "RESEND_CONTACT_UNSUBSCRIBE",
+          payload: { email: user.email },
+          idempotencyKey: `account-deletion-unsubscribe:${userId}`,
+        },
+        update: {},
+      });
+    }
+  });
 }
 
 export async function setMarketingConsent(
@@ -110,8 +141,10 @@ export async function setMarketingConsent(
     },
   });
   if (channels.email !== undefined) {
-    void syncUserMarketingConsentToResend(userId).catch((err) => {
-      console.error("[email] marketing consent Resend sync failed", err);
+    await enqueueBackgroundJob({
+      kind: "MARKETING_SYNC",
+      payload: { userId },
+      idempotencyKey: `marketing-sync:${userId}:${consent.updatedAt.toISOString()}`,
     });
   }
   return consent;

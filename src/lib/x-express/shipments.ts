@@ -9,8 +9,12 @@ import {
   XExpressProviderError,
   requireXExpressEnabled,
 } from "./config";
+import { XExpressClient } from "./client";
 import { allocateXExpressTrackingCode } from "./code";
-import { isXExpressCashOnDelivery } from "./payload";
+import {
+  buildXExpressCreateOrderPayload,
+  isXExpressCashOnDelivery,
+} from "./payload";
 
 const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
@@ -77,35 +81,55 @@ export async function createXExpressShipmentForOrder(
   );
   const shipmentId =
     existing?.provider === X_EXPRESS_PROVIDER ? existing.id : randomUUID();
-  const labelUrl = `/api/admin/shipments/${shipmentId}/label`;
-  const rawCreateResponse = {
-    localLabelOnly: true,
-    docsRequired: true,
-    reason:
-      "X Express final order-submit/check-address payload was not implemented because the exact portal docs were not provided.",
-    contractCode: cfg.contractCode,
-    referenceId: order.number,
-    townId: order.shipXExpressTownId ?? location?.code ?? null,
-    packageCount,
-    trackingCodes: allocated,
-  };
 
   try {
+    const townId = order.shipXExpressTownId ?? Number(location?.code);
+    if (!Number.isInteger(townId) || townId <= 0) {
+      throw new XExpressConfigError("X Express mesto isporuke nije potvrđeno u šifarniku.");
+    }
+    const client = new XExpressClient(cfg);
+    const addressCheck = await client.checkAddress({
+      townId,
+      streetId: order.shipXExpressStreetId,
+      street: order.shipStreet,
+      city: order.shipCity,
+      postalCode: order.shipPostalCode,
+    });
+    if (!addressCheck.valid) {
+      throw new XExpressProviderError(
+        addressCheck.message ?? "X Express nije potvrdio adresu isporuke.",
+        "INVALID_ADDRESS",
+        addressCheck.raw,
+      );
+    }
+    const payload = buildXExpressCreateOrderPayload({
+      contractCode: cfg.contractCode,
+      trackingNo,
+      order,
+      location,
+    });
+    payload.parcels.count = packageCount;
+    const providerResult = await client.createOrder(payload);
+    const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;
+    const rawCreateResponse = {
+      addressCheck: addressCheck.raw,
+      createOrder: providerResult.raw,
+      trackingCodes: allocated,
+    };
     const data = {
       provider: X_EXPRESS_PROVIDER,
-      providerOrderId: null,
-      providerShipmentId: null,
-      trackingNo,
+      providerOrderId: providerResult.providerOrderId ?? null,
+      providerShipmentId: providerResult.providerShipmentId ?? null,
+      trackingNo: providerResult.trackingNo,
       packageCount,
       labelUrl,
       status: "CREATED" as const,
-      providerStatusCode: null,
+      providerStatusCode: providerResult.providerStatusCode ?? null,
       providerParcelNumbers: allocated as Prisma.InputJsonValue,
       providerRouteCode: null,
       providerRouteName: null,
       rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
-      syncError:
-        "Lokalne X Express etikete su kreirane. Finalna najava API-jem čeka tačnu Shipment API dokumentaciju iz portala.",
+      syncError: null,
     };
 
     if (existing?.provider === X_EXPRESS_PROVIDER) {
@@ -116,7 +140,7 @@ export async function createXExpressShipmentForOrder(
           events: {
             create: {
               status: "CREATED",
-              message: "X Express lokalne etikete kreirane",
+              message: "X Express nalog kreiran i adresa potvrđena",
               raw: rawCreateResponse as Prisma.InputJsonValue,
             },
           },
@@ -133,7 +157,7 @@ export async function createXExpressShipmentForOrder(
         events: {
           create: {
             status: "CREATED",
-            message: "X Express lokalne etikete kreirane",
+            message: "X Express nalog kreiran i adresa potvrđena",
             raw: rawCreateResponse as Prisma.InputJsonValue,
           },
         },

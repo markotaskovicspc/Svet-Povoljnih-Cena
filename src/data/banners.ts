@@ -1,6 +1,5 @@
 /**
- * Phase 1 mock banners for the home hero carousel + editorial inserts.
- * Replaced by admin-driven CMS data in Phase 5.
+ * Truth-safe fallback banners used only when admin-managed content is absent.
  */
 import type { Banner } from "@/types";
 
@@ -8,8 +7,7 @@ const day = 24 * 3600 * 1000;
 const now = Date.now();
 
 /**
- * Real, hotlinkable Unsplash photos used as Phase 1 hero/editorial imagery.
- * Replaced by admin-driven CMS data in Phase 5. Photos are CC0 / Unsplash license.
+ * Hotlinkable fallback imagery. Production should use approved owned media.
  */
 const heroImage = (photoId: string, alt: string, w: number, h: number) => ({
   url: `https://images.unsplash.com/photo-${photoId}?auto=format&fit=crop&w=${w}&h=${h}&q=80`,
@@ -21,13 +19,13 @@ const heroImage = (photoId: string, alt: string, w: number, h: number) => ({
 export const heroBanners: Banner[] = [
   {
     id: "hero-1",
-    title: "Mesečna akcija — do 30% popusta",
-    subtitle: "Kuratirana selekcija nameštaja za ceo dom. Akcija traje do kraja meseca.",
-    badgeLabel: "Mesečna akcija",
-    ctaLabel: "Pogledaj akciju",
-    ctaHref: "/akcija",
-    imageDesktop: heroImage("1586023492125-27b2c045efd7", "Mesečna akcija", 2400, 1350),
-    imageMobile: heroImage("1586023492125-27b2c045efd7", "Mesečna akcija", 1080, 1350),
+    title: "Izdvojena ponuda",
+    subtitle: "Pogledajte proizvode sa trenutno objavljenom cenom i dostupnošću.",
+    badgeLabel: "Izdvojeno",
+    ctaLabel: "Pogledaj ponudu",
+    ctaHref: "/novo",
+    imageDesktop: heroImage("1586023492125-27b2c045efd7", "Izdvojena ponuda", 2400, 1350),
+    imageMobile: heroImage("1586023492125-27b2c045efd7", "Izdvojena ponuda", 1080, 1350),
     startsAt: new Date(now - 5 * day).toISOString(),
     endsAt: new Date(now + 25 * day).toISOString(),
     order: 1,
@@ -45,13 +43,13 @@ export const heroBanners: Banner[] = [
   },
   {
     id: "hero-3",
-    title: "Black Friday — dok traju zalihe",
-    subtitle: "Kratko traje, brzo nestaje. Dok traju zalihe.",
-    badgeLabel: "Dok traju zalihe",
-    ctaLabel: "Pogledaj ponudu",
-    ctaHref: "/ogranicena-ponuda",
-    imageDesktop: heroImage("1567016432779-094069958ea5", "Black Friday", 2400, 1350),
-    imageMobile: heroImage("1567016432779-094069958ea5", "Black Friday", 1080, 1350),
+    title: "Ponuda na jednom mestu",
+    subtitle: "Cena, zaliha i uslovi za konkretan proizvod prikazani su pre poručivanja.",
+    badgeLabel: "Ponuda",
+    ctaLabel: "Pretraži proizvode",
+    ctaHref: "/pretraga",
+    imageDesktop: heroImage("1567016432779-094069958ea5", "Ponuda proizvoda", 2400, 1350),
+    imageMobile: heroImage("1567016432779-094069958ea5", "Ponuda proizvoda", 1080, 1350),
     startsAt: new Date(now - 1 * day).toISOString(),
     endsAt: new Date(now + 4 * day).toISOString(),
     order: 3,

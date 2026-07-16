@@ -21,8 +21,8 @@ const items: UspItem[] = [
   {
     id: "delivery",
     icon: Truck,
-    title: "Brza isporuka",
-    body: "Isporuka 3–10 dana širom Srbije. Besplatno preko 30.000 RSD.",
+    title: "Jasna isporuka",
+    body: "Dostupne opcije, rok i cena prikazuju se pre potvrde porudžbine.",
   },
   {
     id: "returns",
@@ -39,8 +39,8 @@ const items: UspItem[] = [
   {
     id: "support",
     icon: Headphones,
-    title: "Podrška svaki dan",
-    body: "Tim za korisnike dostupan radnim danom 9–20h, vikendom 10–16h.",
+    title: "Podrška kupcima",
+    body: "Pitanja o proizvodima, porudžbinama i reklamacijama primamo e-poštom.",
   },
 ];
 

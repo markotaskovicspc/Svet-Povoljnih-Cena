@@ -10,15 +10,8 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 export const metadata: Metadata = {
   title: "Uslovi isporuke",
   description:
-    "Rokovi, cene i način isporuke — kurirska služba, kamionska dostava i montaža u glavnim gradovima.",
+    "Način obračuna rokova, cena i uslova isporuke porudžbine.",
 };
-
-const tarifa = [
-  { tip: "Kurirska služba (do 30 kg)", cena: "590 RSD", napomena: "1–3 radna dana" },
-  { tip: "Kamionska dostava do ulaza", cena: "od 2.490 RSD", napomena: "3–5 radnih dana" },
-  { tip: "Unos u stan / sobu", cena: "+ 990 RSD po komadu", napomena: "po dogovoru sa vozačem" },
-  { tip: "Montaža", cena: "10% vrednosti komada", napomena: "min. 2.500 RSD" },
-];
 
 export default function UsloviIsporukePage() {
   return (
@@ -34,53 +27,29 @@ export default function UsloviIsporukePage() {
       <ContentBody>
         <ContentSection id="rokovi" title="Rokovi isporuke">
           <p>
-            Standardni rok je <strong>3–5 radnih dana</strong> za artikle sa
-            stanja, odnosno <strong>10–20 radnih dana</strong> kada se artikal
-            dovozi po porudžbini (oznaka „dostupno za isporuku za …&quot; na
-            stranici proizvoda).
+            Procenjeni rok zavisi od potvrđene zalihe, vrste robe, adrese i
+            izabrane službe. Rok koji važi za konkretnu porudžbinu prikazuje se
+            pre njene potvrde i ponavlja u potvrdi porudžbine.
           </p>
           <p>
-            Tačan datum potvrđujemo telefonom ili Viber porukom, dan pre
-            dolaska. Vozač zove ~30 minuta unapred.
+            Kurirska služba može naknadno najaviti termin kroz kanal koji sama
+            podržava. Takva najava ne menja podatke o adresi bez potvrde kupca.
           </p>
         </ContentSection>
 
-        <ContentSection id="tarifa" title="Cenovnik">
-          <div className="not-prose mt-4 overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-border/60 border-b text-left">
-                  <th className="py-3 pr-4 font-mono text-[11px] tracking-wider text-ink-500 uppercase">
-                    Tip isporuke
-                  </th>
-                  <th className="py-3 pr-4 font-mono text-[11px] tracking-wider text-ink-500 uppercase">
-                    Cena
-                  </th>
-                  <th className="py-3 font-mono text-[11px] tracking-wider text-ink-500 uppercase">
-                    Napomena
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {tarifa.map((r) => (
-                  <tr key={r.tip} className="border-border/40 border-b last:border-0">
-                    <td className="py-3 pr-4 text-ink-900">{r.tip}</td>
-                    <td className="py-3 pr-4 font-mono text-ink-900">{r.cena}</td>
-                    <td className="py-3 text-ink-700">{r.napomena}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-4 text-sm text-ink-500">
-            Besplatna kurirska isporuka za porudžbine preko 30.000 RSD.
+        <ContentSection id="tarifa" title="Cena isporuke i dodatnih usluga">
+          <p>
+            Cena se računa za konkretnu korpu i adresu. Dostava, unos i montaža
+            nude se samo kada ih aktivni logistički partner podržava, a svaki
+            iznos je prikazan odvojeno pre slanja porudžbine. Ne postoji opšti
+            prag za besplatnu dostavu dok nije izričito prikazan u checkout-u.
           </p>
         </ContentSection>
 
         <ContentSection id="naplata" title="Kada se zadužuje vaš račun">
           <ul>
             <li>
-              <strong>IPS Skeniraj i platne kartice (RaiAccept):</strong> račun
+              <strong>IPS Skeniraj i platne kartice (kada su dostupni):</strong> račun
               se zadužuje odmah po uspešnoj autorizaciji plaćanja, pre nego što
               porudžbina krene u pripremu za isporuku.
             </li>
@@ -96,12 +65,11 @@ export default function UsloviIsporukePage() {
           </ul>
         </ContentSection>
 
-        <ContentSection id="gradovi" title="Gradovi sa montažom">
+        <ContentSection id="gradovi" title="Dostupnost montaže">
           <p>
-            Montažu trenutno radimo u: Beogradu, Novom Sadu, Nišu, Kragujevcu,
-            Subotici, Pančevu, Čačku i Kraljevu. Listu redovno proširujemo —
-            ako vaš grad nije na listi, javite se{" "}
-            <Link href="/kontakt">podršci</Link>.
+            Montaža se ne podrazumeva. Ako je dostupna za artikal i adresu,
+            biće ponuđena sa cenom pre potvrde porudžbine. Za proveru posebnih
+            uslova kontaktirajte <Link href="/kontakt">podršku</Link>.
           </p>
         </ContentSection>
 
@@ -113,7 +81,7 @@ export default function UsloviIsporukePage() {
               napomenu na otpremnicu.
             </li>
             <li>
-              Skrivena oštećenja prijavite u roku od 48 sati na{" "}
+              Skrivena oštećenja prijavite bez odlaganja na stranici{" "}
               <Link href="/reklamacije">reklamacije</Link>.
             </li>
           </ul>

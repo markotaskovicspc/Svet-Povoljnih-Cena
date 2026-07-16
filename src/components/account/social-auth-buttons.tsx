@@ -2,52 +2,13 @@ import Image from "next/image";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type SocialAuthAction = (formData: FormData) => Promise<void>;
+export type SocialAuthAction = (formData: FormData) => Promise<void>;
 
-type SocialAuthProvider = {
+export type SocialAuthProvider = {
   id: "google" | "facebook" | "apple";
   label: string;
   action?: SocialAuthAction;
 };
-
-type SocialAuthActions = Record<SocialAuthProvider["id"], SocialAuthAction>;
-
-const socialProviderLabels: Record<SocialAuthProvider["id"], string> = {
-  google: "Google",
-  facebook: "Facebook",
-  apple: "Apple",
-};
-
-function hasProviderCredentials(provider: SocialAuthProvider["id"]) {
-  const prefix = provider.toUpperCase();
-  return Boolean(
-    (process.env[`${prefix}_CLIENT_ID`] ?? process.env[`AUTH_${prefix}_ID`]) &&
-      (process.env[`${prefix}_CLIENT_SECRET`] ??
-        process.env[`AUTH_${prefix}_SECRET`]),
-  );
-}
-
-export function getConfiguredSocialAuthProviders(
-  actions: SocialAuthActions,
-  options: { includeUnavailable?: boolean } = {},
-): SocialAuthProvider[] {
-  const providers: SocialAuthProvider[] = [];
-
-  const addProvider = (id: SocialAuthProvider["id"], configured: boolean) => {
-    if (!configured && !options.includeUnavailable) return;
-    providers.push({
-      id,
-      label: socialProviderLabels[id],
-      action: configured ? actions[id] : undefined,
-    });
-  };
-
-  addProvider("google", hasProviderCredentials("google"));
-  addProvider("apple", hasProviderCredentials("apple"));
-  addProvider("facebook", hasProviderCredentials("facebook"));
-
-  return providers;
-}
 
 export function SocialProviderMark({ id }: { id: SocialAuthProvider["id"] }) {
   return (

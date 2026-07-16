@@ -89,6 +89,20 @@ export interface XExpressCreateOrderResponse {
   raw: unknown;
 }
 
+export interface XExpressAddressCheckPayload {
+  townId: number;
+  streetId?: number | null;
+  street: string;
+  city: string;
+  postalCode: string;
+}
+
+export interface XExpressAddressCheckResponse {
+  valid: boolean;
+  message?: string | null;
+  raw: unknown;
+}
+
 export interface XExpressTrackingEvent {
   trackingNo: string;
   providerStatusCode: string;

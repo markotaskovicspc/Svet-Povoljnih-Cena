@@ -8,7 +8,7 @@ import {
   type ApplyEventResult,
 } from "@/lib/courier/registry";
 import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
-import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER, getXExpressConfig } from "./config";
 import { inferXExpressShipmentStatus } from "./status";
 
@@ -240,8 +240,10 @@ async function notifyShipmentSideEffects(result: ApplyEventResult) {
   }
 
   if (result.status === "PICKED_UP") {
-    void issueAndDeliverFiscalReceipt(result.orderId).catch((err) => {
-      console.error("[fiscal] x-express webhook trigger failed", err);
+    await enqueueBackgroundJob({
+      kind: "FISCAL_RECEIPT",
+      payload: { orderId: result.orderId },
+      idempotencyKey: `fiscal-pickup:${result.orderId}`,
     });
   }
 }

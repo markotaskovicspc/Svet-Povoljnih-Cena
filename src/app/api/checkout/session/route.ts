@@ -59,7 +59,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const limited = checkRateLimitForRequest(
+  const limited = await checkRateLimitForRequest(
     req,
     "checkout-session",
     RATE_LIMITS.checkout,
