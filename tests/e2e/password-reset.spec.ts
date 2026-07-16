@@ -10,7 +10,9 @@ test("password reset consumes the link, revokes sessions and accepts the new pas
   const db = new Client({ connectionString });
   await db.connect();
   const id = randomUUID();
-  const suffix = testInfo.project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const suffix = `${testInfo.project.name}-${testInfo.retry}`
+    .replace(/[^a-z0-9]+/gi, "-")
+    .toLowerCase();
   const email = `password-reset-${suffix}@example.test`;
   const oldPassword = "Old-E2e-Password-2026";
   const newPassword = "New-E2e-Password-2026";
@@ -53,7 +55,8 @@ test("password reset consumes the link, revokes sessions and accepts the new pas
     await page.getByLabel("Potvrdite novu lozinku").fill(newPassword);
     await page.getByRole("button", { name: "Sačuvaj novu lozinku" }).click();
     await expect(page).toHaveURL(/\/nalog\/prijava\?reset=success/);
-    await expect(page.getByRole("status")).toContainText("Lozinka je promenjena");
+    const login = page.getByRole("main");
+    await expect(login.getByRole("status").first()).toContainText("Lozinka je promenjena");
 
     const state = await db.query<{ passwordHash: string; sessionVersion: number; sessions: number }>(
       `SELECT u."passwordHash", u."sessionVersion", COUNT(s."id")::int AS sessions
@@ -67,7 +70,7 @@ test("password reset consumes the link, revokes sessions and accepts the new pas
 
     await page.getByLabel("E-pošta").fill(email);
     await page.getByLabel("Lozinka").fill(newPassword);
-    await page.getByRole("button", { name: "Prijavi se" }).click();
+    await login.getByRole("button", { name: "Prijavi se" }).click();
     await expect(page).toHaveURL(/\/nalog(?:\?|$)/);
   } finally {
     await db.query(`DELETE FROM "VerificationToken" WHERE "identifier" = $1`, [`pwreset:${id}`]);
