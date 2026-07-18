@@ -21,21 +21,16 @@ import { mapXExpressStatus } from "./status";
  */
 
 async function createWaybill(
-  input: CourierOrderInput,
+  _input: CourierOrderInput,
 ): Promise<CourierShipmentResult> {
   if (process.env.X_EXPRESS_ENABLED === "true") {
     throw new CourierConfigError(
       "X Express nalog se kreira kroz createShipmentForOrder zbog opsega kodova.",
     );
   }
-  const trackingNo = `XEX-${input.orderNumber}`;
-  return {
-    trackingNo,
-    labelUrl: `data:text/plain;base64,${Buffer.from(
-      `Dry-run X Express nalog za ${input.orderNumber}`,
-    ).toString("base64")}`,
-    raw: { dryRun: true },
-  };
+  throw new CourierConfigError(
+    "X Express nije konfigurisan; testna pošiljka nije kreirana.",
+  );
 }
 
 function verifyWebhookSignature(req: {

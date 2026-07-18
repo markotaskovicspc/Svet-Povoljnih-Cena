@@ -11,6 +11,7 @@ import { formatRsd } from "@/lib/format";
 import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import { getProductAvailability } from "@/lib/product-availability";
+import { recordFirstPartyEvent } from "@/components/analytics/first-party-analytics";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -41,6 +42,12 @@ export function commitAddToCart(product: Product, qty = 1): number {
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
   };
   useCart.getState().add(line, qty);
+  recordFirstPartyEvent({
+    type: "ADD_TO_CART",
+    productId: product.id,
+    quantity: qty,
+    value: sale * qty,
+  });
 
   toast.custom((id) => <AddToast id={id} line={line} qty={qty} />, {
     duration: 4500,

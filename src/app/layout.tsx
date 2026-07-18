@@ -12,6 +12,7 @@ import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCurrentUser } from "@/lib/auth/session";
 import { BRAND } from "@/lib/brand";
 import { CookieConsent } from "@/components/privacy/cookie-consent";
+import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytics";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -110,6 +111,7 @@ export default async function RootLayout({
           )}
         </Providers>
         <CookieConsent gaId={isGaConfigured ? gaId : undefined} />
+        {!isAdmin ? <FirstPartyAnalytics /> : null}
       </body>
     </html>
   );

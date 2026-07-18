@@ -60,6 +60,8 @@ export interface Material {
 }
 
 export interface Product {
+  /** Database id when the product originates from the canonical catalog. */
+  id?: string;
   sku: SKU;
   slug: Slug;
   name: string;
@@ -91,6 +93,13 @@ export interface Product {
   discountPct?: number;
   loyaltyPrice?: number;
   loyaltyDiscountPct?: number;
+  actionPrices?: Array<{
+    price: number;
+    priority: number;
+    startsAt: ISODate;
+    endsAt: ISODate;
+    isPermanent?: boolean;
+  }>;
   action?: PromoAction;
   pdpInfo?: {
     deliveryTerms?: string;

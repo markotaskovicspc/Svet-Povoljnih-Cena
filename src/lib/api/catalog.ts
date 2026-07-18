@@ -31,6 +31,7 @@ const productInclude = {
   group: true,
   collection: true,
   action: true,
+  actionPrices: { include: { action: true } },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   media: { orderBy: { order: "asc" } },
   pictograms: { include: { pictogram: true } },
@@ -96,6 +97,7 @@ const productListSelect = {
   group: true,
   collection: true,
   action: true,
+  actionPrices: { include: { action: true } },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" } },
   materials: { include: { material: true } },
@@ -131,6 +133,7 @@ function mapProduct(p: ProductRow): ProductDTO {
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
   return {
+    id: p.id,
     sku: p.sku,
     slug: p.slug,
     name: p.name,
@@ -180,6 +183,13 @@ function mapProduct(p: ProductRow): ProductDTO {
           isPermanent: p.action.isPermanent,
         }
       : undefined,
+    actionPrices: p.actionPrices.map((entry) => ({
+      price: num(entry.salePrice),
+      priority: entry.action.priority,
+      startsAt: entry.action.startsAt.toISOString(),
+      endsAt: entry.action.endsAt.toISOString(),
+      isPermanent: entry.action.isPermanent,
+    })),
     pdpInfo: {
       deliveryTerms: p.pdpDeliveryTerms ?? undefined,
       declaration: p.declaration ?? undefined,
@@ -293,6 +303,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
   return {
+    id: p.id,
     sku: p.sku,
     slug: p.slug,
     name: p.name,
@@ -337,6 +348,13 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
           isPermanent: p.action.isPermanent,
         }
       : undefined,
+    actionPrices: p.actionPrices.map((entry) => ({
+      price: num(entry.salePrice),
+      priority: entry.action.priority,
+      startsAt: entry.action.startsAt.toISOString(),
+      endsAt: entry.action.endsAt.toISOString(),
+      isPermanent: entry.action.isPermanent,
+    })),
     deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
     allowsAssembly: p.allowsAssembly,
     assemblyCities: [],

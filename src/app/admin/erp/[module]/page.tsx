@@ -3,6 +3,8 @@ import Link from "next/link";
 import { erpModules, getErpModule, getErpModuleDefinition } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { ErpGrid } from "@/components/admin/erp-grid";
+import { requireAdminAction } from "@/lib/admin";
+import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,7 @@ export default async function ErpModulePage({
   params: Promise<{ module: string }>;
 }) {
   const { module: slug } = await params;
+  await requireAdminAction(allowedRolesForErpModule(slug));
   const erpModule = await getErpModule(slug);
   if (!erpModule) notFound();
 

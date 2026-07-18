@@ -54,14 +54,7 @@ async function createWaybill(
 ): Promise<CourierShipmentResult> {
   const cfg = readConfig();
   if (cfg instanceof DryRunMarker) {
-    const trackingNo = `KAM-${input.orderNumber}`;
-    return {
-      trackingNo,
-      labelUrl: `data:text/plain;base64,${Buffer.from(
-        `Dry-run kamionska otpremnica za ${input.orderNumber}`,
-      ).toString("base64")}`,
-      raw: { dryRun: true },
-    };
+    throw new CourierConfigError(cfg.message);
   }
 
   const body = {

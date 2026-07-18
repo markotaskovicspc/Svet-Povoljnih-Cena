@@ -123,6 +123,22 @@ export async function adjustInventory(
     ]);
   }
 
+  const [warehouseBalance, productBalance] = await Promise.all([
+    tx.warehouseStock.findUnique({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: input.productId,
+        },
+      },
+      select: { qty: true },
+    }),
+    tx.product.findUnique({
+      where: { id: input.productId },
+      select: { stock: true },
+    }),
+  ]);
+
   return tx.stockMovement.create({
     data: {
       idempotencyKey: input.idempotencyKey,
@@ -136,6 +152,8 @@ export async function adjustInventory(
       qty: input.qtyDelta,
       note: input.note,
       actorId: input.actorId ?? null,
+      balanceAfterWarehouse: warehouseBalance?.qty ?? null,
+      balanceAfterTotal: productBalance?.stock ?? null,
     },
   });
 }

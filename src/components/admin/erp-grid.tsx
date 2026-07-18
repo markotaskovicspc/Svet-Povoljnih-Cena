@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   GripVertical,
@@ -19,19 +21,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { ErpColumn, ErpCommand, ErpModule, ErpRow, ErpValue } from "@/lib/admin/erp";
-
-type FilterCriterion = {
-  id: string;
-  columnKey: string;
-  value: string;
-};
+import type {
+  AdminGridFilter,
+  AdminGridSort,
+  ErpColumn,
+  ErpCommand,
+  ErpModule,
+  ErpRow,
+  ErpValue,
+} from "@/lib/admin/erp";
 
 type SavedView = {
+  id?: string;
   name: string;
   visibleColumns: string[];
   columnOrder: string[];
-  filters: FilterCriterion[];
+  columnWidths: Record<string, number>;
+  filters: AdminGridFilter[];
+  sorting: AdminGridSort[];
   query: string;
 };
 
@@ -142,6 +149,59 @@ function inputType(column: ErpColumn) {
   return "text";
 }
 
+const FILTER_OPERATOR_LABELS: Record<AdminGridFilter["operator"], string> = {
+  contains: "sadrži",
+  equals: "jednako",
+  not_equals: "nije jednako",
+  gt: "veće od",
+  gte: "veće ili jednako",
+  lt: "manje od",
+  lte: "manje ili jednako",
+  before: "pre",
+  after: "posle",
+};
+
+function operatorsFor(column: ErpColumn): AdminGridFilter["operator"][] {
+  if (column.type === "number" || column.type === "money") {
+    return ["equals", "not_equals", "gt", "gte", "lt", "lte"];
+  }
+  if (column.type === "date") {
+    return ["equals", "before", "after"];
+  }
+  if (column.type === "status" || column.type === "boolean" || column.options?.length) {
+    return ["equals", "not_equals"];
+  }
+  return ["contains", "equals", "not_equals"];
+}
+
+function matchesFilter(value: ErpValue, filter: AdminGridFilter) {
+  const actualText = textValue(value).trim().toLowerCase();
+  const expectedText = filter.value.trim().toLowerCase();
+  if (!expectedText) return true;
+  const actualNumber = Number(actualText.replace(",", "."));
+  const expectedNumber = Number(expectedText.replace(",", "."));
+  switch (filter.operator) {
+    case "contains":
+      return actualText.includes(expectedText);
+    case "equals":
+      return actualText === expectedText;
+    case "not_equals":
+      return actualText !== expectedText;
+    case "gt":
+      return actualNumber > expectedNumber;
+    case "gte":
+      return actualNumber >= expectedNumber;
+    case "lt":
+      return actualNumber < expectedNumber;
+    case "lte":
+      return actualNumber <= expectedNumber;
+    case "before":
+      return new Date(actualText).getTime() < new Date(expectedText).getTime();
+    case "after":
+      return new Date(actualText).getTime() > new Date(expectedText).getTime();
+  }
+}
+
 export function ErpGrid({ module }: { module: ErpModule }) {
   const router = useRouter();
   const defaultColumns = useMemo(
@@ -152,13 +212,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     [module.columns],
   );
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<FilterCriterion[]>([]);
+  const [filters, setFilters] = useState<AdminGridFilter[]>([]);
+  const [sorting, setSorting] = useState<AdminGridSort[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
   const [cellEdits, setCellEdits] = useState<Record<string, Record<string, ErpValue>>>({});
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     readColumnOrder(module.slug, module.columns),
   );
   const [views, setViews] = useState<SavedView[]>(() => readViews(module.slug));
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
@@ -171,6 +233,93 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     null,
   );
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
+  const [serverRows, setServerRows] = useState<ErpRow[]>(module.rows);
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [totalRows, setTotalRows] = useState(module.rows.length);
+  const [loadingRows, setLoadingRows] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const canEditColumn = (columnKey: string) =>
+    Boolean(module.editableColumns?.includes(columnKey));
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/saved-views?module=${encodeURIComponent(module.slug)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Pogledi nisu učitani.");
+        return response.json() as Promise<{ views?: SavedView[] }>;
+      })
+      .then((payload) => {
+        if (!cancelled && payload.views) setViews(payload.views);
+      })
+      .catch(() => {
+        // Local views remain a read-only migration fallback until the first DB save.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [module.slug]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLoadingRows(true);
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: "100",
+          q: query,
+          filters: JSON.stringify(filters),
+          sorting: JSON.stringify(sorting),
+          columns: JSON.stringify(visibleColumns),
+        });
+        const response = await fetch(
+          `/api/admin/erp/${encodeURIComponent(module.slug)}/rows?${params}`,
+          { signal: controller.signal },
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              rows?: ErpRow[];
+              page?: number;
+              pageCount?: number;
+              total?: number;
+              error?: string;
+            }
+          | null;
+        if (!response.ok || !payload?.rows) {
+          throw new Error(payload?.error ?? "Redovi nisu učitani.");
+        }
+        setServerRows(payload.rows);
+        setPageCount(payload.pageCount ?? 1);
+        setTotalRows(payload.total ?? payload.rows.length);
+        setSelectedIds(new Set());
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setCommandMessage({
+          ok: false,
+          text: error instanceof Error ? error.message : "Redovi nisu učitani.",
+        });
+      } finally {
+        if (!controller.signal.aborted) setLoadingRows(false);
+      }
+    }, 180);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    filters,
+    module.slug,
+    page,
+    query,
+    reloadToken,
+    sorting,
+    visibleColumns,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, module.slug, query, sorting, visibleColumns]);
 
   const visible = useMemo(
     () => {
@@ -185,14 +334,14 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   const rows = useMemo<ErpRow[]>(
     () =>
-      module.rows.map((row) => ({
+      serverRows.map((row) => ({
         ...row,
         values: {
           ...row.values,
           ...(cellEdits[row.id] ?? {}),
         },
       })),
-    [cellEdits, module.rows],
+    [cellEdits, serverRows],
   );
 
   const getSelectOptions = (column: ErpColumn, currentValue: ErpValue) => {
@@ -216,7 +365,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       if (q) {
         const hay = visible
           .map((c) => textValue(row.values[c.key]))
@@ -225,12 +374,25 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         if (!hay.includes(q)) return false;
       }
       return filters.every((filter) => {
-        const needle = filter.value.trim().toLowerCase();
-        if (!needle) return true;
-        return textValue(row.values[filter.columnKey]).toLowerCase().includes(needle);
+        return matchesFilter(row.values[filter.columnKey], filter);
       });
     });
-  }, [filters, query, rows, visible]);
+    if (!sorting.length) return filtered;
+    return [...filtered].sort((a, b) => {
+      for (const sort of sorting) {
+        const left = a.values[sort.columnKey];
+        const right = b.values[sort.columnKey];
+        const leftNumber = typeof left === "number" ? left : Number.NaN;
+        const rightNumber = typeof right === "number" ? right : Number.NaN;
+        const comparison =
+          Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+            ? leftNumber - rightNumber
+            : textValue(left).localeCompare(textValue(right), "sr-Latn");
+        if (comparison !== 0) return sort.direction === "asc" ? comparison : -comparison;
+      }
+      return 0;
+    });
+  }, [filters, query, rows, sorting, visible]);
 
   const allVisibleSelected =
     filteredRows.length > 0 && filteredRows.every((row) => selectedIds.has(row.id));
@@ -295,6 +457,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         return;
       }
       setCommandMessage({ ok: true, text: payload.message ?? "Urađeno." });
+      setReloadToken((token) => token + 1);
       router.refresh();
     } catch (err) {
       setCommandMessage({
@@ -308,9 +471,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   const addFilter = () => {
     if (!newFilterColumn) return;
+    const column = module.columns.find((item) => item.key === newFilterColumn);
     setFilters((current) => [
       ...current,
-      { id: crypto.randomUUID(), columnKey: newFilterColumn, value: "" },
+      {
+        id: crypto.randomUUID(),
+        columnKey: newFilterColumn,
+        operator: column ? operatorsFor(column)[0] : "contains",
+        value: "",
+      },
     ]);
   };
 
@@ -322,15 +491,45 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     );
   };
 
-  const saveView = () => {
+  const saveView = async () => {
     const name = window.prompt("Naziv pogleda");
     if (!name?.trim()) return;
-    const next = [
-      ...views.filter((v) => v.name !== name.trim()),
-      { name: name.trim(), visibleColumns, columnOrder, filters, query },
-    ];
-    setViews(next);
-    writeViews(module.slug, next);
+    const view: SavedView = {
+      name: name.trim(),
+      visibleColumns,
+      columnOrder,
+      columnWidths,
+      filters,
+      sorting,
+      query,
+    };
+    try {
+      const response = await fetch("/api/admin/saved-views", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ module: module.slug, ...view }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { view?: SavedView; error?: string }
+        | null;
+      if (!response.ok || !payload?.view) {
+        throw new Error(payload?.error ?? "Pogled nije snimljen.");
+      }
+      setViews((current) => [
+        ...current.filter((item) => item.name !== view.name),
+        payload.view!,
+      ]);
+      writeViews(module.slug, [
+        ...views.filter((item) => item.name !== view.name),
+        payload.view,
+      ]);
+      setCommandMessage({ ok: true, text: `Pogled „${view.name}” je snimljen u bazu.` });
+    } catch (error) {
+      setCommandMessage({
+        ok: false,
+        text: error instanceof Error ? error.message : "Pogled nije snimljen.",
+      });
+    }
   };
 
   const applyView = (view: SavedView) => {
@@ -339,12 +538,19 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       setColumnOrder(view.columnOrder);
       writeColumnOrder(module.slug, view.columnOrder);
     }
-    setFilters(view.filters);
+    setColumnWidths(view.columnWidths ?? {});
+    setFilters(
+      view.filters.map((filter) => ({
+        ...filter,
+        operator: filter.operator ?? "contains",
+      })),
+    );
+    setSorting(view.sorting ?? []);
     setQuery(view.query);
   };
 
   const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
-    if (!isEditMode) return;
+    if (!isEditMode || !canEditColumn(column.key)) return;
     setEditingCell(null);
     setSaveError(null);
     setSavingCell({ rowId: row.id, columnKey: column.key });
@@ -383,6 +589,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     setSavedCellCount(0);
     setCellEdits({});
     setSaveError(null);
+    setReloadToken((token) => token + 1);
     router.refresh();
   };
 
@@ -390,6 +597,8 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     const defaultOrder = module.columns.map((column) => column.key);
     setVisibleColumns(defaultColumns);
     setColumnOrder(defaultOrder);
+    setColumnWidths({});
+    setSorting([]);
     writeColumnOrder(module.slug, defaultOrder);
   };
 
@@ -412,25 +621,48 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     setIsEditMode((current) => !current);
   };
 
-  const exportCsv = () => {
-    const rows = [
-      visible.map((c) => c.label),
-      ...filteredRows.map((row) => visible.map((c) => textValue(row.values[c.key]))),
-    ];
-    const csv = rows
-      .map((row) =>
-        row
-          .map((cell) => `"${cell.replaceAll('"', '""')}"`)
-          .join(","),
-      )
-      .join("\n");
-    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+  const toggleSort = (columnKey: string) => {
+    setSorting((current) => {
+      const existing = current.find((item) => item.columnKey === columnKey);
+      if (!existing) return [{ columnKey, direction: "asc" }];
+      if (existing.direction === "asc") return [{ columnKey, direction: "desc" }];
+      return [];
+    });
+  };
+
+  const startResize = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    columnKey: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[columnKey] ?? 160;
+    const onMove = (moveEvent: PointerEvent) => {
+      setColumnWidths((current) => ({
+        ...current,
+        [columnKey]: Math.max(88, Math.min(520, startWidth + moveEvent.clientX - startX)),
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const exportXlsx = () => {
+    const params = new URLSearchParams({
+      q: query,
+      filters: JSON.stringify(filters),
+      sorting: JSON.stringify(sorting),
+      columns: JSON.stringify(visible.map((column) => column.key)),
+    });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `${module.slug}.csv`;
+    a.href = `/api/admin/erp/${encodeURIComponent(module.slug)}/export?${params}`;
+    a.download = `${module.slug}.xlsx`;
     a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -479,18 +711,71 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       <span className="text-xs text-ink-500">
                         {column?.label ?? filter.columnKey}
                       </span>
-                      <input
-                        value={filter.value}
-                        onChange={(e) =>
+                      <select
+                        value={filter.operator}
+                        onChange={(event) =>
                           setFilters((current) =>
-                            current.map((f) =>
-                              f.id === filter.id ? { ...f, value: e.target.value } : f,
+                            current.map((item) =>
+                              item.id === filter.id
+                                ? {
+                                    ...item,
+                                    operator:
+                                      event.target.value as AdminGridFilter["operator"],
+                                  }
+                                : item,
                             ),
                           )
                         }
-                        className="h-7 w-40 rounded-md border border-input bg-surface px-2 text-xs outline-none focus:border-ring"
-                        aria-label={`Filter ${column?.label ?? filter.columnKey}`}
-                      />
+                        className="h-7 rounded-md border border-input bg-surface px-1 text-xs"
+                        aria-label={`Operator ${column?.label ?? filter.columnKey}`}
+                      >
+                        {(
+                          column
+                            ? operatorsFor(column)
+                            : (["contains"] as AdminGridFilter["operator"][])
+                        ).map((operator) => (
+                          <option key={operator} value={operator}>
+                            {FILTER_OPERATOR_LABELS[operator]}
+                          </option>
+                        ))}
+                      </select>
+                      {column?.options?.length ? (
+                        <select
+                          value={filter.value}
+                          onChange={(event) =>
+                            setFilters((current) =>
+                              current.map((item) =>
+                                item.id === filter.id
+                                  ? { ...item, value: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="h-7 w-40 rounded-md border border-input bg-surface px-2 text-xs"
+                          aria-label={`Filter ${column.label}`}
+                        >
+                          <option value="">Sve</option>
+                          {column.options.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={inputType(column ?? { key: "", label: "" })}
+                          value={filter.value}
+                          onChange={(e) =>
+                            setFilters((current) =>
+                              current.map((f) =>
+                                f.id === filter.id ? { ...f, value: e.target.value } : f,
+                              ),
+                            )
+                          }
+                          className="h-7 w-40 rounded-md border border-input bg-surface px-2 text-xs outline-none focus:border-ring"
+                          aria-label={`Filter ${column?.label ?? filter.columnKey}`}
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() =>
@@ -512,6 +797,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
             {module.commands.map((command) => {
               const disabled =
                 runningCommand !== null ||
+                Boolean(command.disabledReason) ||
                 (command.needsSelection && selectedIds.size === 0);
               return (
                 <Button
@@ -521,6 +807,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                   className={commandClass(command.tone)}
                   disabled={disabled}
                   onClick={() => runCommand(command)}
+                  title={command.disabledReason}
                 >
                   {runningCommand === command.label ? "…" : command.label}
                   {command.needsSelection && selectedIds.size > 0
@@ -529,20 +816,22 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 </Button>
               );
             })}
-            <Button
-              type="button"
-              variant={isEditMode ? "default" : "outline"}
-              onClick={toggleEditMode}
-              className={isEditMode ? "bg-ink-900 text-canvas hover:bg-walnut" : ""}
-            >
-              {isEditMode ? (
-                <Lock className="size-4" aria-hidden />
-              ) : (
-                <Pencil className="size-4" aria-hidden />
-              )}
-              {isEditMode ? "Završi uređivanje" : "Uredi"}
-            </Button>
-            <Button type="button" variant="outline" onClick={exportCsv}>
+            {module.editableColumns?.length ? (
+              <Button
+                type="button"
+                variant={isEditMode ? "default" : "outline"}
+                onClick={toggleEditMode}
+                className={isEditMode ? "bg-ink-900 text-canvas hover:bg-walnut" : ""}
+              >
+                {isEditMode ? (
+                  <Lock className="size-4" aria-hidden />
+                ) : (
+                  <Pencil className="size-4" aria-hidden />
+                )}
+                {isEditMode ? "Završi uređivanje" : "Uredi podržana polja"}
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={exportXlsx}>
               <Download className="size-4" aria-hidden />
               Excel
             </Button>
@@ -559,6 +848,24 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       {saveError ? (
         <div className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
           {saveError}
+        </div>
+      ) : null}
+
+      {module.blockedReason ? (
+        <div className="rounded-xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
+          Konfiguracija je obavezna: {module.blockedReason}
+        </div>
+      ) : null}
+
+      {module.commands.some((command) => command.disabledReason) ? (
+        <div className="rounded-xl border border-border/60 bg-muted-bg/40 px-4 py-3 text-sm text-ink-600">
+          {module.commands
+            .filter((command) => command.disabledReason)
+            .map((command) => (
+              <p key={command.label}>
+                {command.label}: {command.disabledReason}
+              </p>
+            ))}
         </div>
       ) : null}
 
@@ -580,7 +887,11 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <p className="text-sm text-ink-500">
-              {filteredRows.length} redova · {visible.length} vidljivih kolona
+              {loadingRows
+                ? "Učitavanje…"
+                : `${filteredRows.length} na strani · ${totalRows} ukupno`}
+              {" · "}
+              {visible.length} vidljivih kolona
               {savedCellCount ? ` · ${savedCellCount} snimljenih izmena` : ""}
               {isEditMode ? " · uređivanje uključeno" : ""}
             </p>
@@ -611,6 +922,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                     <th
                       key={column.key}
                       draggable
+                      style={{
+                        width: columnWidths[column.key],
+                        minWidth: columnWidths[column.key] ?? 120,
+                      }}
                       onDragStart={() => setDraggedColumn(column.key)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
@@ -620,25 +935,39 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       }}
                       onDragEnd={() => setDraggedColumn(null)}
                       className={cn(
-                        "group whitespace-nowrap px-3 py-3 text-left font-medium transition",
+                        "group relative whitespace-nowrap px-3 py-3 text-left font-medium transition",
                         draggedColumn === column.key && "opacity-40",
                         column.align === "right" && "text-right",
                         column.align === "center" && "text-center",
                       )}
                     >
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(column.key)}
                         className={cn(
                           "inline-flex items-center gap-2",
                           column.align === "right" && "justify-end",
                           column.align === "center" && "justify-center",
                         )}
+                        title="Sortiraj po ovoj koloni"
                       >
                         <GripVertical
                           className="size-3.5 cursor-grab text-ink-300 opacity-0 transition group-hover:opacity-100"
                           aria-hidden
                         />
                         {column.label}
-                      </span>
+                        {sorting[0]?.columnKey === column.key
+                          ? sorting[0].direction === "asc"
+                            ? " ↑"
+                            : " ↓"
+                          : null}
+                      </button>
+                      <button
+                        type="button"
+                        onPointerDown={(event) => startResize(event, column.key)}
+                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-walnut/30"
+                        aria-label={`Promeni širinu kolone ${column.label}`}
+                      />
                     </th>
                   ))}
                 </tr>
@@ -682,6 +1011,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       return (
                         <td
                           key={column.key}
+                          style={{
+                            width: columnWidths[column.key],
+                            maxWidth: columnWidths[column.key],
+                          }}
                           className={cn(
                             "whitespace-nowrap px-3 py-2 text-ink-700",
                             isSaving && "bg-warning/5",
@@ -694,7 +1027,11 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               <input
                                 type="checkbox"
                                 checked={Boolean(value)}
-                                disabled={!isEditMode || Boolean(savingCell)}
+                                disabled={
+                                  !isEditMode ||
+                                  !canEditColumn(column.key) ||
+                                  Boolean(savingCell)
+                                }
                                 onChange={(event) =>
                                   commitCell(row, column, event.target.checked)
                                 }
@@ -760,22 +1097,27 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               tabIndex={0}
                               onClick={() =>
                                 isEditMode &&
+                                canEditColumn(column.key) &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
                               onKeyDown={(event) => {
-                                if (isEditMode && (event.key === "Enter" || event.key === " ")) {
+                                if (
+                                  isEditMode &&
+                                  canEditColumn(column.key) &&
+                                  (event.key === "Enter" || event.key === " ")
+                                ) {
                                   setEditingCell({ rowId: row.id, columnKey: column.key });
                                 }
                               }}
                               className={cn(
                                 "inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1",
-                                isEditMode && "cursor-text",
+                                isEditMode && canEditColumn(column.key) && "cursor-text",
                                 statusClass(value),
                               )}
                               title={
-                                isEditMode
+                                isEditMode && canEditColumn(column.key)
                                   ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Kliknite Uredi da biste menjali podatke"
+                                  : "Polje je samo za čitanje"
                               }
                             >
                               {formatValue(value, column)}
@@ -785,14 +1127,19 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               type="button"
                               onClick={() =>
                                 isEditMode &&
+                                canEditColumn(column.key) &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
-                              disabled={!isEditMode || Boolean(savingCell)}
+                              disabled={
+                                !isEditMode ||
+                                !canEditColumn(column.key) ||
+                                Boolean(savingCell)
+                              }
                               className="inline-flex size-8 items-center justify-center rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:bg-surface hover:text-ink-900 disabled:cursor-default disabled:hover:bg-muted-bg disabled:hover:text-ink-500"
                               title={
-                                isEditMode
+                                isEditMode && canEditColumn(column.key)
                                   ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Kliknite Uredi da biste menjali podatke"
+                                  : "Polje je samo za čitanje"
                               }
                             >
                               IMG
@@ -802,9 +1149,14 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               type="button"
                               onClick={() =>
                                 isEditMode &&
+                                canEditColumn(column.key) &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
-                              disabled={!isEditMode || Boolean(savingCell)}
+                              disabled={
+                                !isEditMode ||
+                                !canEditColumn(column.key) ||
+                                Boolean(savingCell)
+                              }
                               className={cn(
                                 "group inline-flex min-h-8 max-w-[360px] items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-muted-bg",
                                 !isEditMode && "cursor-default hover:bg-transparent",
@@ -812,9 +1164,9 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                                 column.align === "center" && "justify-center text-center",
                               )}
                               title={
-                                isEditMode
+                                isEditMode && canEditColumn(column.key)
                                   ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Kliknite Uredi da biste menjali podatke"
+                                  : "Polje je samo za čitanje"
                               }
                             >
                               <span className="truncate">{formatValue(value, column)}</span>
@@ -833,6 +1185,33 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+            <p className="text-sm text-ink-500">
+              Strana {page} od {pageCount}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page <= 1 || loadingRows}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                aria-label="Prethodna strana"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+                Prethodna
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page >= pageCount || loadingRows}
+                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                aria-label="Sledeća strana"
+              >
+                Sledeća
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
           </div>
         </div>
 

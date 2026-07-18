@@ -17,7 +17,6 @@ const C: AdminRoleName[] = ["CONTENT"];
 const O: AdminRoleName[] = ["OPS"];
 const A: AdminRoleName[] = ["ADS"];
 const CO: AdminRoleName[] = ["CONTENT", "OPS"];
-const AO: AdminRoleName[] = ["ADS", "OPS"];
 const ALL: AdminRoleName[] = ["CONTENT", "OPS", "ADS"];
 
 export const adminNav: AdminNavGroup[] = [
@@ -37,17 +36,20 @@ export const adminNav: AdminNavGroup[] = [
       { href: "/admin/tabovi", label: "Navigacija", allowed: C },
       { href: "/admin/kategorije", label: "Kategorije", allowed: C },
       { href: "/admin/piktogrami", label: "Piktogrami", allowed: C },
+      { href: "/admin/erp/landing-strane", label: "Landing strane", allowed: C },
+      { href: "/admin/erp/mobilni-tabovi", label: "Mobilni tabovi", allowed: C },
     ],
   },
   {
     label: "ERP",
     items: [
       { href: "/admin/erp", label: "ERP radni prostor", allowed: ALL },
-      { href: "/admin/lager", label: "Lager i kretanja", allowed: O },
-      { href: "/admin/proizvodi", label: "Artikli", allowed: CO },
-      { href: "/admin/akcije", label: "Akcije i cene", allowed: C },
-      { href: "/admin/heroji", label: "Heroji meseca", allowed: C },
-      { href: "/admin/narudzbine", label: "Narudžbine", allowed: O },
+      { href: "/admin/erp/artikli", label: "Artikli", allowed: CO },
+      { href: "/admin/erp/dobavljaci", label: "Dobavljači i nabavka", allowed: O },
+      { href: "/admin/erp/mp-cene", label: "Cene i promocije", allowed: C },
+      { href: "/admin/erp/stanje-po-magacinima", label: "Zalihe i magacini", allowed: O },
+      { href: "/admin/erp/prodajni-nalozi", label: "Prodajni nalozi", allowed: O },
+      { href: "/admin/erp/kupci", label: "Kupci i partneri", allowed: O },
     ],
   },
   {
@@ -70,7 +72,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Marketing",
     items: [
-      { href: "/admin/newsletter", label: "Newsletter", allowed: AO },
+      { href: "/admin/erp/newsletter-kampanje", label: "Newsletter", allowed: A },
       { href: "/admin/viber", label: "Viber kampanje", allowed: A },
       { href: "/admin/oglasi", label: "Oglasi (GMC/Meta)", allowed: A },
     ],
@@ -80,6 +82,9 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
       { href: "/admin/izvestaji", label: "Izveštaji", allowed: ALL },
+      { href: "/admin/erp/posete-konverzije", label: "Posete i konverzije", allowed: A },
+      { href: "/admin/erp/neobjavljeni-artikli", label: "QA objave", allowed: C },
+      { href: "/admin/erp/matrica-zahteva", label: "Matrica ERP zahteva", allowed: ALL },
       { href: "/admin/audit-log", label: "Audit log", allowed: [] },
     ],
   },

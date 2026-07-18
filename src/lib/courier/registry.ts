@@ -24,6 +24,7 @@ import {
   type CourierWebhookEvent,
 } from "./types";
 import { SHIPMENT_STATUS_LABEL } from "./status";
+import { routeService } from "./routing";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -58,23 +59,6 @@ export function adapterFromSlug(slug: string): CourierAdapter | null {
   return null;
 }
 
-interface RouteInput {
-  shippingMethod: "KURIR" | "KAMION";
-  items: { withAssembly: boolean }[];
-}
-
-/**
- * Auto-route per spec §4C-2: if any item is bulky → bulky service.
- *
- * Heuristic in v1 (no per-product bulky flag yet): KAMION shipping method
- * OR any item that ships with assembly is treated as bulky.
- */
-export function routeService(order: RouteInput): ShipmentService {
-  if (order.shippingMethod === "KAMION") return "COURIER_BULKY";
-  if (order.items.some((i) => i.withAssembly)) return "COURIER_BULKY";
-  return "COURIER_SMALL";
-}
-
 /**
  * Create a waybill at the provider and persist the `Shipment` + initial
  * `ShipmentEvent`. Idempotent on `orderId`: an existing CREATED/PICKED_UP
@@ -87,7 +71,21 @@ export async function createShipmentForOrder(
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
-      items: { select: { withAssembly: true } },
+      items: {
+        select: {
+          withAssembly: true,
+          qty: true,
+          product: {
+            select: {
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              packGrossWeightKg: true,
+            },
+          },
+        },
+      },
       shipments: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -98,7 +96,15 @@ export async function createShipmentForOrder(
 
   const service = routeService({
     shippingMethod: order.shippingMethod,
-    items: order.items,
+    items: order.items.map((item) => ({
+      withAssembly: item.withAssembly,
+      qty: item.qty,
+      packQty: item.product?.packQty,
+      packWidthCm: Number(item.product?.packWidthCm ?? 0),
+      packDepthCm: Number(item.product?.packDepthCm ?? 0),
+      packHeightCm: Number(item.product?.packHeightCm ?? 0),
+      packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
+    })),
   });
   if (service === "COURIER_SMALL") {
     return getSmallParcelProvider() === "MYGLS"
@@ -127,7 +133,11 @@ export async function createShipmentForOrder(
       companyName: order.shipCompanyName,
     },
     notes: order.notes,
-    packageCount: order.items.length,
+    packageCount: order.items.reduce(
+      (sum, item) =>
+        sum + Math.max(1, Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1))),
+      0,
+    ),
   });
 
   return db.shipment.create({

@@ -3,6 +3,8 @@ import { Boxes, ChevronRight, FileSpreadsheet, Package, Truck } from "lucide-rea
 import { erpModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
+import { requireAdminAction, isAuthorized } from "@/lib/admin";
+import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +16,18 @@ export const metadata = {
 const ICONS = [Package, Truck, FileSpreadsheet, Boxes, FileSpreadsheet, FileSpreadsheet];
 
 export default async function ErpDashboardPage() {
-  const ready = erpModules.filter((m) => m.status === "ready");
-  const scaffold = erpModules.filter((m) => m.status === "scaffold");
+  const admin = await requireAdminAction();
+  const visibleModules = erpModules.filter((module) =>
+    isAuthorized(admin.role, allowedRolesForErpModule(module.slug)),
+  );
+  const ready = visibleModules.filter((m) => m.status === "ready");
+  const blocked = visibleModules.filter((m) => m.status === "blocked_external");
 
   return (
     <>
       <PageHeader
         title="ERP sistem"
-        description="Radni ERP sloj prema specifikaciji iz dokumenta: matični podaci, dobavljači, nabavne cene, porudžbenice i scaffold za sledeće module."
+        description="Jedinstven operativni admin prostor za katalog, nabavku, cene, zalihe, prodaju, logistiku, kupce, sadržaj i izveštavanje."
         actions={
           <Link
             href="/admin/erp/artikli"
@@ -33,9 +39,9 @@ export default async function ErpDashboardPage() {
       />
       <div className="space-y-8 px-8 py-6">
         <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Moduli" value={String(erpModules.length)} hint="Do tačke 6 iz specifikacije" />
-          <StatCard label="Detaljno spremno" value={String(ready.length)} hint="Artikli, dobavljači, cene, porudžbenice" tone="success" />
-          <StatCard label="Scaffold" value={String(scaffold.length)} hint="Čeka dopunu poslovnih pravila" tone="warning" />
+          <StatCard label="Moduli" value={String(visibleModules.length)} hint="Dostupno vašoj ulozi" />
+          <StatCard label="Operativno" value={String(ready.length)} hint="Podaci, filteri, pogledi i export" tone="success" />
+          <StatCard label="Spoljne blokade" value={String(blocked.length)} hint="Vidljiv tačan razlog konfiguracije" tone="warning" />
         </div>
 
         <Card>
@@ -43,7 +49,7 @@ export default async function ErpDashboardPage() {
             ERP moduli
           </CardTitle>
           <div className="grid gap-3 lg:grid-cols-2">
-            {erpModules.map((module, index) => {
+            {visibleModules.map((module, index) => {
               const Icon = ICONS[index] ?? FileSpreadsheet;
               return (
                 <Link
@@ -76,7 +82,7 @@ export default async function ErpDashboardPage() {
                             : "rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning"
                         }
                       >
-                        {module.status === "ready" ? "Spremno" : "Scaffold"}
+                        {module.status === "ready" ? "Operativno" : "Spoljna konfiguracija"}
                       </span>
                       <ChevronRight className="size-4 text-ink-300 transition group-hover:translate-x-0.5 group-hover:text-walnut" />
                     </div>

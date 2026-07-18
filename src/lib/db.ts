@@ -43,6 +43,11 @@ function usesLibpqCompatibleSsl(sslMode: string) {
   return ["prefer", "require", "verify-ca"].includes(sslMode.toLowerCase());
 }
 
+function databasePoolMax() {
+  const configured = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10);
+  return Number.isFinite(configured) ? Math.max(1, Math.min(configured, 10)) : 1;
+}
+
 export function getDatabaseConnectionString() {
   return [
     process.env.DATABASE_URL,
@@ -63,7 +68,15 @@ function createClient(): PrismaClient {
       "Database connection string is not set. Expected DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING.",
     );
   }
-  const adapter = new PrismaPg(withDatabaseSsl(connectionString));
+  const adapter = new PrismaPg({
+    connectionString: withDatabaseSsl(connectionString),
+    // Next.js build workers and serverless instances each create a process-local
+    // pool. Keep the default at one so Supabase's session-mode limit is not
+    // multiplied by the worker count; deployments may raise it explicitly.
+    max: databasePoolMax(),
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 15_000,
+  });
   return new PrismaClient({
     adapter,
     log:

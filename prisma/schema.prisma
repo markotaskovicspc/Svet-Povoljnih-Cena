@@ -18,28 +18,28 @@ datasource db {
 // ──────────────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  email         String?   @unique
-  emailVerified DateTime?
-  phone         String?   @unique
-  phoneVerified DateTime?
-  passwordHash  String?
+  id             String    @id @default(cuid())
+  email          String?   @unique
+  emailVerified  DateTime?
+  phone          String?   @unique
+  phoneVerified  DateTime?
+  passwordHash   String?
   /// Combined display name (kept in sync with firstName + lastName).
   /// Required by the Auth.js Prisma adapter for OAuth user creation.
-  name          String?
-  firstName     String?
-  lastName      String?
-  isBusiness    Boolean   @default(false)
-  companyName   String?
-  pib           String?
-  language      String    @default("sr-Latn")
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  lastLoginAt   DateTime?
+  name           String?
+  firstName      String?
+  lastName       String?
+  isBusiness     Boolean   @default(false)
+  companyName    String?
+  pib            String?
+  language       String    @default("sr-Latn")
+  image          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  lastLoginAt    DateTime?
   /// Incremented when every previously issued JWT must become invalid.
-  sessionVersion Int      @default(0)
+  sessionVersion Int       @default(0)
 
   accounts           Account[]
   sessions           Session[]
@@ -55,6 +55,7 @@ model User {
   voucherRedemptions VoucherRedemption[]
   cart               Cart?
   checkoutSessions   CheckoutSession[]
+  customer           Customer?
 
   @@index([createdAt])
 }
@@ -73,19 +74,19 @@ model RateLimitBucket {
 /// Durable outbox for post-commit work. Jobs are claimed with an atomic update
 /// and retried by the background-jobs cron until they succeed or exhaust attempts.
 model BackgroundJob {
-  id             String   @id @default(cuid())
-  kind           String   @db.VarChar(80)
+  id             String    @id @default(cuid())
+  kind           String    @db.VarChar(80)
   payload        Json
-  idempotencyKey String   @unique @db.VarChar(200)
-  status         String   @default("QUEUED") @db.VarChar(20)
-  attempts       Int      @default(0)
-  maxAttempts    Int      @default(8)
-  availableAt    DateTime @default(now())
+  idempotencyKey String    @unique @db.VarChar(200)
+  status         String    @default("QUEUED") @db.VarChar(20)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(8)
+  availableAt    DateTime  @default(now())
   lockedAt       DateTime?
-  lastError      String?  @db.Text
+  lastError      String?   @db.Text
   completedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([status, availableAt])
   @@index([lockedAt])
@@ -166,16 +167,16 @@ model Address {
 
 // Tokenized card reference from the active card acquirer (no PAN stored)
 model SavedCard {
-  id         String   @id @default(cuid())
-  userId     String
-  brand      String // visa, master, dina, amex
-  last4      String
-  expMonth   Int
-  expYear    Int
-  holderName String?
-  providerToken String @unique
-  isDefault  Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String
+  brand         String // visa, master, dina, amex
+  last4         String
+  expMonth      Int
+  expYear       Int
+  holderName    String?
+  providerToken String   @unique
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -275,18 +276,20 @@ model Category {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  products      ProductCategory[]
-  deliveryRules DeliveryPriceRule[]
+  products         ProductCategory[]
+  deliveryRules    DeliveryPriceRule[]
+  linearPromotions LinearPromotionCategory[]
 
   @@index([parentId, order])
 }
 
 model Group {
-  id                  String               @id @default(cuid())
-  slug                String               @unique
+  id                  String                 @id @default(cuid())
+  slug                String                 @unique
   name                String
   products            Product[]
   recommendationRules RecommendationRule[]
+  linearPromotions    LinearPromotionGroup[]
 }
 
 model Collection {
@@ -296,17 +299,27 @@ model Collection {
   products Product[]
 }
 
+enum ArticleStatus {
+  SP
+  IT
+  DTZ
+  DOB
+  ARH
+  UZ
+}
+
 model Product {
-  id               String  @id @default(cuid())
-  sku              String  @unique
-  barcode          String? @unique
-  slug             String  @unique
+  id               String        @id @default(cuid())
+  sku              String        @unique
+  barcode          String?       @unique
+  slug             String        @unique
   name             String
-  description      String  @db.Text
-  shortDescription String? @db.Text
+  description      String        @db.Text
+  shortDescription String?       @db.Text
   sizeLabel        String?
   colorPrimary     String?
   colorSecondary   String?
+  articleStatus    ArticleStatus @default(SP)
 
   // ERP article attributes (Atribut 1-4). Boja 1/2 = colorPrimary/colorSecondary.
   attribute1 String?
@@ -320,9 +333,24 @@ model Product {
   collection   Collection? @relation(fields: [collectionId], references: [id])
 
   // Dimensions ŠxDxV (cm)
-  widthCm  Decimal? @db.Decimal(8, 2)
-  depthCm  Decimal? @db.Decimal(8, 2)
-  heightCm Decimal? @db.Decimal(8, 2)
+  widthCm             Decimal?  @db.Decimal(8, 2)
+  depthCm             Decimal?  @db.Decimal(8, 2)
+  heightCm            Decimal?  @db.Decimal(8, 2)
+  weightKg            Decimal?  @db.Decimal(10, 3)
+  grossWeightKg       Decimal?  @db.Decimal(10, 3)
+  packQty             Int?
+  packWidthCm         Decimal?  @db.Decimal(8, 2)
+  packDepthCm         Decimal?  @db.Decimal(8, 2)
+  packHeightCm        Decimal?  @db.Decimal(8, 2)
+  packGrossWeightKg   Decimal?  @db.Decimal(10, 3)
+  supplierProductName String?
+  hsCode              String?
+  moq                 Int?
+  tncFrom             DateTime?
+  tncUntil            DateTime?
+  ananasBrokeragePct  Decimal?  @db.Decimal(8, 2)
+  ananasStoragePct    Decimal?  @db.Decimal(8, 2)
+  ananasDeliveryPct   Decimal?  @db.Decimal(8, 2)
 
   // Pricing in RSD
   fullPrice          Decimal  @db.Decimal(12, 2)
@@ -388,27 +416,35 @@ model Product {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  categories          ProductCategory[]
-  media               ProductMedia[]
-  pictograms          ProductPictogram[]
-  materials           ProductMaterial[]
-  variants            Variant[]
-  assemblyCities      ProductAssemblyCity[]
-  deliveryRules       DeliveryPriceRule[]
-  recommendedBy       RecommendationRule[]    @relation("RecommendationRuleProducts")
-  orderItems          OrderItem[]
-  purchasePrices      PurchasePrice[]
-  purchaseOrderItems  PurchaseOrderItem[]
+  categories           ProductCategory[]
+  media                ProductMedia[]
+  pictograms           ProductPictogram[]
+  materials            ProductMaterial[]
+  variants             Variant[]
+  assemblyCities       ProductAssemblyCity[]
+  deliveryRules        DeliveryPriceRule[]
+  recommendedBy        RecommendationRule[]      @relation("RecommendationRuleProducts")
+  orderItems           OrderItem[]
+  purchasePrices       PurchasePrice[]
+  purchaseOrderItems   PurchaseOrderItem[]
   inboundInvoiceItems  InboundInvoiceItem[]
   retailPriceProposals RetailPriceProposal[]
-  wishlistItems       WishlistItem[]
-  backInStockAlerts   BackInStockAlert[]
-  onSaleAlerts        OnSaleAlert[]
-  reclamations        Reclamation[]
-  stockSnapshots      SupplierStockSnapshot[]
-  warehouseStocks     WarehouseStock[]
-  stockMovements      StockMovement[]
-  fiscalDocumentLines FiscalDocumentLine[]
+  wishlistItems        WishlistItem[]
+  backInStockAlerts    BackInStockAlert[]
+  onSaleAlerts         OnSaleAlert[]
+  reclamations         Reclamation[]
+  stockSnapshots       SupplierStockSnapshot[]
+  warehouseStocks      WarehouseStock[]
+  stockMovements       StockMovement[]
+  fiscalDocumentLines  FiscalDocumentLine[]
+  lookupAssignments    ProductLookupAssignment[]
+  priceListEntries     PriceListEntry[]
+  actionPrices         ActionProduct[]
+  loyaltyPriceHistory  LoyaltyPriceHistory[]
+  dispatchNoteItems    DispatchNoteItem[]
+  partnerReservations  PartnerReservation[]
+  stockCountItems      StockCountItem[]
+  analyticsEvents      AnalyticsEvent[]
 
   @@index([slug])
   @@index([sku])
@@ -475,7 +511,8 @@ model Pictogram {
   label   String
   iconUrl String
 
-  products ProductPictogram[]
+  products   ProductPictogram[]
+  placements PictogramPlacement[]
 }
 
 model ProductPictogram {
@@ -599,12 +636,16 @@ model Action {
   isPermanent Boolean    @default(false)
   /// Admin-controlled sort order override
   sortOrder   Int        @default(0)
+  priority    Int        @default(0)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  products      Product[]
-  heroes        HeroOfMonth[]
-  homepageSlots HomeSectionSlot[]
+  products            Product[]
+  heroes              HeroOfMonth[]
+  homepageSlots       HomeSectionSlot[]
+  actionPrices        ActionProduct[]
+  pictogramPlacements PictogramPlacement[]
+  mobileTabs          MobileTab[]
 
   @@index([startsAt, endsAt])
 }
@@ -710,43 +751,46 @@ model RecommendationRule {
 // ──────────────────────────────────────────────────────────────────────
 
 model Supplier {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  feedUrl   String?
-  authUser  String?
-  authPass  String?
-  enabled   Boolean  @default(true)
-  notes     String?  @db.Text
+  id       String  @id @default(cuid())
+  name     String  @unique
+  feedUrl  String?
+  authUser String?
+  authPass String?
+  enabled  Boolean @default(true)
+  notes    String? @db.Text
 
   // ERP supplier master data (spec §2 - Maticni podaci o dobavljacima).
-  code         String?     @unique
-  address      String?
-  city         String?
-  country      String?     @default("RS")
-  email        String?
-  phone        String?
-  currency     ErpCurrency @default(RSD)
-  parity       String?
-  paymentTerms String?
-  deliveryDays Int?
-  transitDays  Int?
-  bank         String?
-  swift        String?
-  iban         String?
+  code               String?     @unique
+  address            String?
+  city               String?
+  country            String?     @default("RS")
+  email              String?
+  phone              String?
+  currency           ErpCurrency @default(RSD)
+  parity             String?
+  paymentTerms       String?
+  deliveryDays       Int?
+  transitDays        Int?
+  bank               String?
+  swift              String?
+  iban               String?
+  defaultPriceListId String?
   /// Phase 4A — per-supplier `SupplierFeedMapping` JSON. Defines the XML
   /// path expressions used by the importer to project vendor XML into the
   /// canonical `FeedItem` shape. Null = supplier not yet configured.
-  mapping   Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  mapping            Json?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  products        Product[]
-  purchasePrices  PurchasePrice[]
-  purchaseOrders  PurchaseOrder[]
-  inboundInvoices InboundInvoice[]
-  importRuns      ImportRun[]
-  snapshots       SupplierStockSnapshot[]
-  safetyRules     SafetyStockRule[]
+  products         Product[]
+  purchasePrices   PurchasePrice[]
+  purchaseOrders   PurchaseOrder[]
+  inboundInvoices  InboundInvoice[]
+  importRuns       ImportRun[]
+  snapshots        SupplierStockSnapshot[]
+  safetyRules      SafetyStockRule[]
+  loadingLocations SupplierLoadingLocation[]
+  defaultPriceList PriceList?                @relation("SupplierDefaultPriceList", fields: [defaultPriceListId], references: [id], onDelete: SetNull)
 }
 
 model SupplierStockSnapshot {
@@ -867,6 +911,13 @@ enum OrderStatus {
   VRACENO
 }
 
+enum SalesChannel {
+  WEB
+  ANANAS
+  VP
+  INO
+}
+
 enum PaymentMethod {
   IPS
   KARTICA
@@ -933,15 +984,19 @@ enum CourierSyncStatus {
 }
 
 model Order {
-  id                         String      @id @default(cuid())
+  id                         String       @id @default(cuid())
   /// Human-friendly number e.g. "SPC-2026-001234"
-  number                     String      @unique
+  number                     String       @unique
   /// Hash of an opaque guest/public confirmation token.
-  publicAccessTokenHash      String?     @unique
+  publicAccessTokenHash      String?      @unique
   publicAccessTokenCreatedAt DateTime?
   userId                     String?
   guestEmail                 String?
-  status                     OrderStatus @default(KREIRANO)
+  status                     OrderStatus  @default(KREIRANO)
+  channel                    SalesChannel @default(WEB)
+  customerId                 String?
+  priceListId                String?
+  externalOrderNo            String?
 
   subtotal              Decimal  @db.Decimal(12, 2)
   savings               Decimal  @default(0) @db.Decimal(12, 2)
@@ -995,6 +1050,8 @@ model Order {
   updatedAt       DateTime  @updatedAt
 
   user              User?              @relation(fields: [userId], references: [id])
+  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  priceList         PriceList?         @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   items             OrderItem[]
   events            OrderStatusEvent[]
   payments          Payment[]
@@ -1007,11 +1064,16 @@ model Order {
   reclamations      Reclamation[]
   voucherRedemption VoucherRedemption?
   checkoutSessions  CheckoutSession[]
+  dispatchNotes     DispatchNote[]
+  pickupBatchLines  PickupBatchLine[]
+  analyticsEvents   AnalyticsEvent[]
 
   @@index([userId, createdAt])
   @@index([status])
   @@index([expiresAt])
   @@index([createdAt])
+  @@index([channel, createdAt])
+  @@index([customerId, createdAt])
 }
 
 model OrderSequence {
@@ -1074,14 +1136,20 @@ model OrderItem {
   color2                   String?
   /// Tracks how many times this exact line was reclaimed (for R-{n}-{orderNo})
   reclamationCount         Int      @default(0)
+  warehouseId              String?
 
-  order          Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product        Product?             @relation(fields: [productId], references: [id])
-  fiscalLines    FiscalDocumentLine[]
-  stockMovements StockMovement[]
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product?             @relation(fields: [productId], references: [id])
+  fiscalLines       FiscalDocumentLine[]
+  stockMovements    StockMovement[]
+  warehouse         Warehouse?           @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  pickupBatchLines  PickupBatchLine[]
+  dispatchNoteItems DispatchNoteItem[]
+  reclamations      Reclamation[]
 
   @@index([orderId])
   @@index([sku])
+  @@index([warehouseId])
 }
 
 model OrderStatusEvent {
@@ -1431,6 +1499,13 @@ enum StockMovementKind {
   SALE_RESERVATION
   REFUND_RETURN
   ADJUSTMENT
+  OPENING_BALANCE
+  PURCHASE_RECEIPT
+  DISPATCH
+  INTERNAL_TRANSFER_OUT
+  INTERNAL_TRANSFER_IN
+  STOCK_COUNT
+  PARTNER_RESERVATION
 }
 
 enum PaymentRefundStatus {
@@ -1559,12 +1634,21 @@ model Warehouse {
   name      String
   isDefault Boolean  @default(false)
   active    Boolean  @default(true)
+  address   String?
+  city      String?
+  email     String?
+  phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stocks          WarehouseStock[]
-  movements       StockMovement[]
-  fiscalDocuments FiscalDocument[]
+  stocks                  WarehouseStock[]
+  movements               StockMovement[]
+  fiscalDocuments         FiscalDocument[]
+  orderItems              OrderItem[]
+  purchaseOrdersReceiving PurchaseOrder[]  @relation("PurchaseOrderReceivingWarehouse")
+  outgoingDispatchNotes   DispatchNote[]   @relation("DispatchSourceWarehouse")
+  incomingDispatchNotes   DispatchNote[]   @relation("DispatchDestinationWarehouse")
+  stockCounts             StockCount[]
 
   @@index([active, isDefault])
 }
@@ -1584,19 +1668,21 @@ model WarehouseStock {
 }
 
 model StockMovement {
-  id               String            @id @default(cuid())
-  idempotencyKey   String?           @unique
-  warehouseId      String
-  productId        String?
-  orderId          String?
-  orderItemId      String?
-  fiscalDocumentId String?
-  kind             StockMovementKind
-  sku              String
-  qty              Int
-  note             String?           @db.Text
-  actorId          String?
-  createdAt        DateTime          @default(now())
+  id                    String            @id @default(cuid())
+  idempotencyKey        String?           @unique
+  warehouseId           String
+  productId             String?
+  orderId               String?
+  orderItemId           String?
+  fiscalDocumentId      String?
+  kind                  StockMovementKind
+  sku                   String
+  qty                   Int
+  note                  String?           @db.Text
+  actorId               String?
+  balanceAfterWarehouse Int?
+  balanceAfterTotal     Int?
+  createdAt             DateTime          @default(now())
 
   warehouse      Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   product        Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1700,57 +1786,75 @@ model PurchasePrice {
 }
 
 model PurchaseOrder {
-  id            String              @id @default(cuid())
-  number        String              @unique
-  status        PurchaseOrderStatus @default(DRAFT)
-  supplierId    String?
-  orderDate     DateTime?
-  loadingDate   DateTime?
-  deliveryDate  DateTime?
-  totalVolume   Decimal?            @db.Decimal(12, 3)
-  totalWeight   Decimal?            @db.Decimal(12, 3)
-  totalPrice    Decimal             @default(0) @db.Decimal(12, 2)
-  freightCost   Decimal             @default(0) @db.Decimal(12, 2)
-  currency      ErpCurrency         @default(RSD)
-  transportType String?
-  parity        String?
-  bmPct         Decimal?            @db.Decimal(8, 2)
-  pdfUrl        String?
-  notes         String?             @db.Text
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  id                   String              @id @default(cuid())
+  number               String              @unique
+  status               PurchaseOrderStatus @default(DRAFT)
+  supplierId           String?
+  loadingLocationId    String?
+  receivingWarehouseId String?
+  transportTypeId      String?
+  orderDate            DateTime?
+  loadingDate          DateTime?
+  deliveryDate         DateTime?
+  totalVolume          Decimal?            @db.Decimal(12, 3)
+  totalWeight          Decimal?            @db.Decimal(12, 3)
+  totalPrice           Decimal             @default(0) @db.Decimal(12, 2)
+  freightCost          Decimal             @default(0) @db.Decimal(12, 2)
+  currency             ErpCurrency         @default(RSD)
+  exchangeRate         Decimal             @default(1) @db.Decimal(14, 6)
+  freightCurrency      ErpCurrency         @default(RSD)
+  freightExchangeRate  Decimal             @default(1) @db.Decimal(14, 6)
+  allocationBasis      AllocationBasis     @default(AUTO_UTILIZATION)
+  transportType        String?
+  parity               String?
+  bmPct                Decimal?            @db.Decimal(8, 2)
+  pdfUrl               String?
+  notes                String?             @db.Text
+  lockedAt             DateTime?
+  postedAt             DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  supplier Supplier?                  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  items    PurchaseOrderItem[]
-  events   PurchaseOrderStatusEvent[]
+  supplier            Supplier?                  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  loadingLocation     SupplierLoadingLocation?   @relation(fields: [loadingLocationId], references: [id], onDelete: SetNull)
+  receivingWarehouse  Warehouse?                 @relation("PurchaseOrderReceivingWarehouse", fields: [receivingWarehouseId], references: [id], onDelete: SetNull)
+  transportDefinition TransportType?             @relation(fields: [transportTypeId], references: [id], onDelete: SetNull)
+  items               PurchaseOrderItem[]
+  events              PurchaseOrderStatusEvent[]
+  inboundInvoices     InboundInvoice[]
 
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
 }
 
 model PurchaseOrderItem {
-  id              String      @id @default(cuid())
-  purchaseOrderId String
-  productId       String?
-  sku             String
-  name            String
-  attributes      String?
-  pattern         String?
-  purchasePrice   Decimal     @db.Decimal(12, 2)
-  currency        ErpCurrency @default(RSD)
-  parity          String?
-  moq             Int?
-  packQty         Int?
-  qty             Int
-  receivedQty     Int         @default(0)
-  totalVolume     Decimal?    @db.Decimal(12, 3)
-  totalWeight     Decimal?    @db.Decimal(12, 3)
-  customsRate     Decimal?    @db.Decimal(8, 2)
-  calcRetailPrice Decimal?    @db.Decimal(12, 2)
-  bmPct           Decimal?    @db.Decimal(8, 2)
-  freightAllocated Decimal?   @db.Decimal(12, 2)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                      String      @id @default(cuid())
+  purchaseOrderId         String
+  productId               String?
+  sku                     String
+  name                    String
+  attributes              String?
+  pattern                 String?
+  purchasePrice           Decimal     @db.Decimal(12, 2)
+  currency                ErpCurrency @default(RSD)
+  parity                  String?
+  moq                     Int?
+  packQty                 Int?
+  qty                     Int
+  receivedQty             Int         @default(0)
+  totalVolume             Decimal?    @db.Decimal(12, 3)
+  totalWeight             Decimal?    @db.Decimal(12, 3)
+  customsRate             Decimal?    @db.Decimal(8, 2)
+  calcRetailPrice         Decimal?    @db.Decimal(12, 2)
+  bmPct                   Decimal?    @db.Decimal(8, 2)
+  freightAllocated        Decimal?    @db.Decimal(12, 2)
+  additionalCostAllocated Decimal?    @db.Decimal(12, 2)
+  priceValidFrom          DateTime?
+  supplierProductName     String?
+  certificates            String?
+  barcode                 String?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1774,24 +1878,33 @@ model PurchaseOrderStatusEvent {
 }
 
 model InboundInvoice {
-  id          String               @id @default(cuid())
-  number      String               @unique
-  type        InboundInvoiceType
-  supplierId  String?
-  status      InboundInvoiceStatus @default(DRAFT)
-  invoiceDate DateTime?
-  currency    ErpCurrency          @default(RSD)
-  value       Decimal              @default(0) @db.Decimal(12, 2)
-  cogsStatus  CogsStatus           @default(PENDING)
-  notes       String?              @db.Text
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id              String               @id @default(cuid())
+  number          String               @unique
+  type            InboundInvoiceType
+  supplierId      String?
+  purchaseOrderId String?
+  status          InboundInvoiceStatus @default(DRAFT)
+  invoiceDate     DateTime?
+  currency        ErpCurrency          @default(RSD)
+  exchangeRate    Decimal              @default(1) @db.Decimal(14, 6)
+  value           Decimal              @default(0) @db.Decimal(12, 2)
+  netValue        Decimal              @default(0) @db.Decimal(12, 2)
+  vatValue        Decimal              @default(0) @db.Decimal(12, 2)
+  grossValue      Decimal              @default(0) @db.Decimal(12, 2)
+  allocationBasis AllocationBasis      @default(AUTO_UTILIZATION)
+  cogsStatus      CogsStatus           @default(PENDING)
+  notes           String?              @db.Text
+  lockedAt        DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  supplier Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  items    InboundInvoiceItem[]
+  supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  items         InboundInvoiceItem[]
 
   @@index([supplierId, invoiceDate])
   @@index([status, invoiceDate])
+  @@index([purchaseOrderId])
 }
 
 model InboundInvoiceItem {
@@ -1845,6 +1958,568 @@ model RetailPriceProposal {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// 6c. ERP master data, pricing, logistics, partners and analytics
+// ──────────────────────────────────────────────────────────────────────
+
+enum ProductLookupKind {
+  ATTRIBUTE
+  COLOR
+  BENEFIT
+  CERTIFICATE
+}
+
+model ProductLookupValue {
+  id        String            @id @default(cuid())
+  kind      ProductLookupKind
+  value     String
+  slug      String
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  assignments ProductLookupAssignment[]
+
+  @@unique([kind, value])
+  @@unique([kind, slug])
+  @@index([kind, active, value])
+}
+
+model ProductLookupAssignment {
+  productId     String
+  lookupValueId String
+  product       Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lookupValue   ProductLookupValue @relation(fields: [lookupValueId], references: [id], onDelete: Cascade)
+
+  @@id([productId, lookupValueId])
+  @@index([lookupValueId])
+}
+
+model SupplierLoadingLocation {
+  id         String   @id @default(cuid())
+  supplierId String
+  name       String
+  address    String?
+  city       String?
+  country    String   @default("RS")
+  position   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  supplier       Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([supplierId, position])
+  @@index([supplierId, name])
+}
+
+model TransportType {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  payloadKg Decimal? @db.Decimal(12, 3)
+  payloadM3 Decimal? @db.Decimal(12, 3)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model ExchangeRateSnapshot {
+  id            String      @id @default(cuid())
+  baseCurrency  ErpCurrency @default(RSD)
+  quoteCurrency ErpCurrency
+  rate          Decimal     @db.Decimal(14, 6)
+  validAt       DateTime
+  source        String
+  createdAt     DateTime    @default(now())
+
+  @@unique([baseCurrency, quoteCurrency, validAt, source])
+  @@index([quoteCurrency, validAt])
+}
+
+enum AllocationBasis {
+  AUTO_UTILIZATION
+  VALUE
+  WEIGHT
+  VOLUME
+  MANUAL
+}
+
+enum PriceListKind {
+  RETAIL
+  PURCHASE
+  WHOLESALE
+  EXPORT
+}
+
+model PriceList {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  name      String
+  kind      PriceListKind
+  currency  ErpCurrency   @default(RSD)
+  active    Boolean       @default(true)
+  validFrom DateTime?
+  validTo   DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  entries             PriceListEntry[]
+  orders              Order[]
+  defaultForSuppliers Supplier[]       @relation("SupplierDefaultPriceList")
+
+  @@index([kind, active, validFrom])
+}
+
+model PriceListEntry {
+  id          String    @id @default(cuid())
+  priceListId String
+  productId   String
+  price       Decimal   @db.Decimal(12, 2)
+  validFrom   DateTime
+  validTo     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, productId, validFrom])
+  @@index([productId, validFrom, validTo])
+}
+
+model ActionProduct {
+  actionId  String
+  productId String
+  salePrice Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  action  Action  @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([actionId, productId])
+  @@index([productId])
+}
+
+model LoyaltyRule {
+  id          String    @id @default(cuid())
+  name        String
+  discountPct Decimal   @db.Decimal(8, 2)
+  priority    Int       @default(0)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([active, priority, startsAt, endsAt])
+}
+
+model LoyaltyPriceHistory {
+  id        String   @id @default(cuid())
+  productId String
+  oldPrice  Decimal? @db.Decimal(12, 2)
+  newPrice  Decimal? @db.Decimal(12, 2)
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, createdAt])
+}
+
+enum DiscountTarget {
+  ALL
+  CATEGORY
+  GROUP
+}
+
+model LinearPromotion {
+  id          String         @id @default(cuid())
+  name        String
+  discountPct Decimal        @db.Decimal(8, 2)
+  target      DiscountTarget @default(ALL)
+  priority    Int            @default(0)
+  startsAt    DateTime
+  endsAt      DateTime
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  categories LinearPromotionCategory[]
+  groups     LinearPromotionGroup[]
+
+  @@index([active, priority, startsAt, endsAt])
+}
+
+model LinearPromotionCategory {
+  promotionId String
+  categoryId  String
+  promotion   LinearPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  category    Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, categoryId])
+  @@index([categoryId])
+}
+
+model LinearPromotionGroup {
+  promotionId String
+  groupId     String
+  promotion   LinearPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  group       Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, groupId])
+  @@index([groupId])
+}
+
+enum CustomerGender {
+  NEPOZNATO
+  ZENSKI
+  MUSKI
+}
+
+model Customer {
+  id          String         @id @default(cuid())
+  userId      String?        @unique
+  firstName   String?
+  lastName    String?
+  companyName String?
+  pib         String?
+  address     String?
+  city        String?
+  postalCode  String?
+  country     String         @default("RS")
+  phone       String?
+  email       String?
+  gender      CustomerGender @default(NEPOZNATO)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orders Order[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([pib])
+  @@index([createdAt])
+}
+
+enum DispatchNoteType {
+  CUSTOMER
+  INTERNAL
+  STOCKTAKE
+}
+
+enum DocumentPostingStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+model DispatchNote {
+  id                     String                @id @default(cuid())
+  number                 String                @unique
+  type                   DispatchNoteType      @default(CUSTOMER)
+  status                 DocumentPostingStatus @default(DRAFT)
+  orderId                String?
+  sourceWarehouseId      String
+  destinationWarehouseId String?
+  destinationName        String?
+  destinationAddress     String?
+  destinationCity        String?
+  notes                  String?               @db.Text
+  postedAt               DateTime?
+  actorId                String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  order                Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  sourceWarehouse      Warehouse          @relation("DispatchSourceWarehouse", fields: [sourceWarehouseId], references: [id])
+  destinationWarehouse Warehouse?         @relation("DispatchDestinationWarehouse", fields: [destinationWarehouseId], references: [id], onDelete: SetNull)
+  items                DispatchNoteItem[]
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@index([sourceWarehouseId, createdAt])
+}
+
+model DispatchNoteItem {
+  id             String  @id @default(cuid())
+  dispatchNoteId String
+  orderItemId    String?
+  productId      String?
+  sku            String
+  name           String
+  qty            Int
+
+  dispatchNote DispatchNote @relation(fields: [dispatchNoteId], references: [id], onDelete: Cascade)
+  orderItem    OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([dispatchNoteId])
+  @@index([orderItemId])
+  @@index([productId])
+}
+
+enum PickupBatchStatus {
+  DRAFT
+  BOOKED
+  PICKED_UP
+  CANCELLED
+}
+
+model PickupBatch {
+  id                 String            @id @default(cuid())
+  number             String            @unique
+  courier            ShipmentService?
+  status             PickupBatchStatus @default(DRAFT)
+  manifestRef        String?
+  pickupDate         DateTime?
+  configurationIssue String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  lines PickupBatchLine[]
+
+  @@index([status, pickupDate])
+}
+
+model PickupBatchLine {
+  id          String   @id @default(cuid())
+  batchId     String
+  orderId     String
+  orderItemId String?
+  packageNo   Int      @default(1)
+  weightKg    Decimal? @db.Decimal(10, 3)
+  widthCm     Decimal? @db.Decimal(8, 2)
+  depthCm     Decimal? @db.Decimal(8, 2)
+  heightCm    Decimal? @db.Decimal(8, 2)
+
+  batch     PickupBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, orderId, packageNo])
+  @@index([orderId])
+  @@index([orderItemId])
+}
+
+model PartnerApiClient {
+  id         String    @id @default(cuid())
+  name       String
+  keyPrefix  String    @unique
+  keyHash    String
+  scopes     String[]
+  rateLimit  Int       @default(120)
+  enabled    Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  reservations PartnerReservation[]
+}
+
+enum PartnerReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+  CANCELLED
+}
+
+model PartnerReservation {
+  id             String                   @id @default(cuid())
+  clientId       String
+  productId      String
+  externalRef    String
+  idempotencyKey String
+  qty            Int
+  status         PartnerReservationStatus @default(ACTIVE)
+  expiresAt      DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  client  PartnerApiClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [productId], references: [id])
+
+  @@unique([clientId, idempotencyKey])
+  @@unique([clientId, externalRef])
+  @@index([productId, status])
+}
+
+model StockCount {
+  id          String                @id @default(cuid())
+  number      String                @unique
+  warehouseId String
+  status      DocumentPostingStatus @default(DRAFT)
+  countedAt   DateTime?
+  postedAt    DateTime?
+  notes       String?               @db.Text
+  actorId     String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  items     StockCountItem[]
+
+  @@index([warehouseId, status, createdAt])
+}
+
+model StockCountItem {
+  id            String @id @default(cuid())
+  stockCountId  String
+  productId     String
+  expectedQty   Int
+  countedQty    Int
+  differenceQty Int
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@unique([stockCountId, productId])
+  @@index([productId])
+}
+
+enum LandingPageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model LandingPage {
+  id             String            @id @default(cuid())
+  slug           String            @unique
+  title          String
+  lead           String?           @db.Text
+  heroImageUrl   String?
+  seoTitle       String?
+  seoDescription String?           @db.Text
+  status         LandingPageStatus @default(DRAFT)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  publishedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  sections            LandingPageSection[]
+  pictogramPlacements PictogramPlacement[]
+  mobileTabs          MobileTab[]
+
+  @@index([status, publishedAt])
+}
+
+model LandingPageSection {
+  id            String   @id @default(cuid())
+  landingPageId String
+  title         String?
+  body          String?  @db.Text
+  imageUrl      String?
+  productSkus   String[]
+  position      Int
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@unique([landingPageId, position])
+}
+
+enum PictogramSlot {
+  TOP_LEFT_1
+  TOP_LEFT_2
+  BOTTOM_RIGHT_1
+  BOTTOM_RIGHT_2
+}
+
+model PictogramPlacement {
+  id            String        @id @default(cuid())
+  pictogramId   String
+  actionId      String?
+  landingPageId String?
+  slot          PictogramSlot
+  createdAt     DateTime      @default(now())
+
+  pictogram   Pictogram    @relation(fields: [pictogramId], references: [id], onDelete: Cascade)
+  action      Action?      @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@index([actionId, slot])
+  @@index([landingPageId, slot])
+}
+
+model MobileTab {
+  id            String   @id @default(cuid())
+  label         String
+  icon          String?
+  position      Int      @unique
+  enabled       Boolean  @default(true)
+  actionId      String?
+  landingPageId String?
+  href          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  action      Action?      @relation(fields: [actionId], references: [id], onDelete: SetNull)
+  landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+
+  @@index([enabled, position])
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  PRODUCT_VIEW
+  ADD_TO_CART
+  CHECKOUT_STARTED
+  CHECKOUT_COMPLETED
+}
+
+model AnalyticsEvent {
+  id             String             @id @default(cuid())
+  type           AnalyticsEventType
+  anonymousId    String
+  sessionId      String?
+  path           String?
+  productId      String?
+  orderId        String?
+  quantity       Int?
+  value          Decimal?           @db.Decimal(12, 2)
+  consentVersion String
+  metadata       Json?
+  occurredAt     DateTime           @default(now())
+  expiresAt      DateTime
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([type, occurredAt])
+  @@index([anonymousId, occurredAt])
+  @@index([productId, occurredAt])
+  @@index([orderId])
+  @@index([expiresAt])
+}
+
+enum IntegrationStatus {
+  NOT_CONFIGURED
+  UNHEALTHY
+  HEALTHY
+}
+
+model IntegrationHealth {
+  provider    String            @id
+  status      IntegrationStatus @default(NOT_CONFIGURED)
+  missingKeys String[]
+  message     String?
+  checkedAt   DateTime?
+  updatedAt   DateTime          @updatedAt
+}
+
+model AdminSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // 7. Service (reclamations, comments, newsletter, viber)
 // ──────────────────────────────────────────────────────────────────────
 
@@ -1862,33 +2537,71 @@ enum NotifyChannel {
   VIBER
 }
 
-model Reclamation {
-  id            String            @id @default(cuid())
-  /// Public identifier R-{n}-{orderNo}
-  number        String            @unique
-  orderId       String
-  productId     String?
-  sku           String
-  customerFirst String
-  customerLast  String
-  customerEmail String?
-  customerPhone String?
-  description   String            @db.VarChar(250)
-  notifyVia     NotifyChannel
-  status        ReclamationStatus @default(PRIMLJENO)
-  userId        String?
-  createdAt     DateTime          @default(now())
-  resolvedAt    DateTime?
+enum ReclamationType {
+  FIZICKO_OSTECENJE
+  KVAR
+}
 
-  order   Order                    @relation(fields: [orderId], references: [id])
-  product Product?                 @relation(fields: [productId], references: [id])
-  user    User?                    @relation(fields: [userId], references: [id])
-  photos  ReclamationPhoto[]
-  events  ReclamationStatusEvent[]
+enum ReclamationRequest {
+  POPRAVKA
+  ZAMENA
+  POVRACAJ_NOVCA
+  UMANJENJE_CENE
+}
+
+enum ReclamationDecision {
+  CEKA
+  PRIHVACENA
+  ODBIJENA
+}
+
+enum ReclamationResolution {
+  POVRAT_NOVCA
+  ZAMENA_ARTIKLA
+  ZAMENA_DELA
+  POPUST
+}
+
+model Reclamation {
+  id                   String                 @id @default(cuid())
+  /// Public identifier R-{n}-{orderNo}
+  number               String                 @unique
+  orderId              String
+  orderItemId          String?
+  productId            String?
+  sku                  String
+  customerFirst        String
+  customerLast         String
+  customerEmail        String?
+  customerPhone        String?
+  description          String                 @db.VarChar(250)
+  notifyVia            NotifyChannel
+  status               ReclamationStatus      @default(PRIMLJENO)
+  purchaseDate         DateTime?
+  type                 ReclamationType?
+  request              ReclamationRequest?
+  decision             ReclamationDecision    @default(CEKA)
+  respondedAt          DateTime?
+  resolution           ReclamationResolution?
+  resolutionNote       String?                @db.Text
+  adminNote            String?                @db.Text
+  courierRequestedAt   DateTime?
+  warehouseRequestedAt DateTime?
+  userId               String?
+  createdAt            DateTime               @default(now())
+  resolvedAt           DateTime?
+
+  order     Order                    @relation(fields: [orderId], references: [id])
+  orderItem OrderItem?               @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  product   Product?                 @relation(fields: [productId], references: [id])
+  user      User?                    @relation(fields: [userId], references: [id])
+  photos    ReclamationPhoto[]
+  events    ReclamationStatusEvent[]
 
   @@index([orderId])
   @@index([userId])
   @@index([status, resolvedAt])
+  @@index([orderItemId])
 }
 
 model ReclamationPhoto {
@@ -1941,6 +2654,23 @@ model NewsletterSubscriber {
   unsubscribedAt DateTime?
 }
 
+model NewsletterCampaign {
+  id          String         @id @default(cuid())
+  title       String
+  subject     String
+  body        String         @db.Text
+  status      CampaignStatus @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  recipients  Int?
+  delivered   Int?
+  failed      Int?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status, scheduledAt])
+}
+
 model ViberAudienceQuery {
   id        String   @id @default(cuid())
   name      String
@@ -1981,14 +2711,14 @@ model ViberCampaign {
 }
 
 model ViberWebhookEvent {
-  id              String   @id @default(cuid())
-  eventId         String   @unique
+  id              String    @id @default(cuid())
+  eventId         String    @unique
   event           String
   messageToken    String?
   campaignId      String?
   recipientUserId String?
   payload         Json
-  receivedAt      DateTime @default(now())
+  receivedAt      DateTime  @default(now())
   appliedAt       DateTime?
 
   @@index([campaignId, receivedAt])
@@ -2086,7 +2816,28 @@ model AdminUser {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  auditLogs AuditLog[]
+  auditLogs  AuditLog[]
+  savedViews AdminSavedView[]
+}
+
+model AdminSavedView {
+  id          String   @id @default(cuid())
+  adminUserId String
+  module      String
+  name        String
+  query       Json
+  filters     Json
+  sorting     Json
+  columns     Json
+  pageSize    Int      @default(100)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, module, name])
+  @@index([adminUserId, module, isDefault])
 }
 
 model AuditLog {

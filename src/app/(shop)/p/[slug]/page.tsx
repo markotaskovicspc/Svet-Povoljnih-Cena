@@ -26,6 +26,7 @@ import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
+import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -112,6 +113,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
   return (
     <article className="bg-canvas pb-32 md:pb-16">
+      <ProductViewAnalytics productId={product.id} />
       {/* Row I — Breadcrumbs */}
       <div className="mx-auto w-full max-w-[var(--container-page)] px-4 pt-6 md:px-6">
         <Breadcrumbs trail={trail} />

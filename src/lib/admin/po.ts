@@ -1,4 +1,8 @@
-import { PurchaseOrderStatus, StockMovementKind } from "@prisma/client";
+import {
+  AllocationBasis,
+  PurchaseOrderStatus,
+  StockMovementKind,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
@@ -19,6 +23,98 @@ export function allocateFreight(
   );
 }
 
+export function weightedAverageUnitCost(input: {
+  existingQty: number;
+  existingUnitCost: number;
+  incomingQty: number;
+  incomingUnitCost: number;
+}) {
+  if (
+    Object.values(input).some(
+      (value) => !Number.isFinite(value) || value < 0,
+    )
+  ) {
+    throw new Error("Količine i jedinični troškovi moraju biti nenegativni brojevi.");
+  }
+  const totalQty = input.existingQty + input.incomingQty;
+  if (totalQty === 0) return 0;
+  return (
+    (input.existingQty * input.existingUnitCost +
+      input.incomingQty * input.incomingUnitCost) /
+    totalQty
+  );
+}
+
+type LandedCostLine = {
+  id: string;
+  purchasePrice: number;
+  qty: number;
+  totalWeight?: number | null;
+  totalVolume?: number | null;
+  manualAmount?: number | null;
+};
+
+/**
+ * Allocates an order-level landed cost and reconciles exactly to cents.
+ * AUTO_UTILIZATION uses the greater of each line's normalised weight/volume
+ * utilisation, then normalises those weights back to 100%.
+ */
+export function allocateLandedCost(
+  totalCost: number,
+  lines: LandedCostLine[],
+  basis: AllocationBasis = "AUTO_UTILIZATION",
+) {
+  if (!Number.isFinite(totalCost) || totalCost < 0) {
+    throw new Error("Trošak za raspodelu mora biti nenegativan broj.");
+  }
+  if (!lines.length) return new Map<string, number>();
+  if (basis === "MANUAL") {
+    const manualTotal = lines.reduce((sum, line) => sum + (line.manualAmount ?? 0), 0);
+    if (Math.abs(manualTotal - totalCost) > 0.009) {
+      throw new Error("Ručna raspodela mora tačno da se usaglasi sa ukupnim troškom.");
+    }
+    return new Map(lines.map((line) => [line.id, Number((line.manualAmount ?? 0).toFixed(2))]));
+  }
+
+  const totalValue = lines.reduce(
+    (sum, line) => sum + Math.max(line.purchasePrice * line.qty, 0),
+    0,
+  );
+  const totalWeight = lines.reduce(
+    (sum, line) => sum + Math.max(line.totalWeight ?? 0, 0),
+    0,
+  );
+  const totalVolume = lines.reduce(
+    (sum, line) => sum + Math.max(line.totalVolume ?? 0, 0),
+    0,
+  );
+  const weights = lines.map((line) => {
+    const valueShare =
+      totalValue > 0 ? Math.max(line.purchasePrice * line.qty, 0) / totalValue : 0;
+    const weightShare =
+      totalWeight > 0 ? Math.max(line.totalWeight ?? 0, 0) / totalWeight : 0;
+    const volumeShare =
+      totalVolume > 0 ? Math.max(line.totalVolume ?? 0, 0) / totalVolume : 0;
+    if (basis === "VALUE") return valueShare;
+    if (basis === "WEIGHT") return weightShare || valueShare;
+    if (basis === "VOLUME") return volumeShare || valueShare;
+    return Math.max(weightShare, volumeShare) || valueShare;
+  });
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  const cents = Math.round(totalCost * 100);
+  let assignedCents = 0;
+  const result = new Map<string, number>();
+  lines.forEach((line, index) => {
+    const lineCents =
+      index === lines.length - 1
+        ? cents - assignedCents
+        : Math.round(cents * (weightTotal > 0 ? weights[index] / weightTotal : 1 / lines.length));
+    assignedCents += lineCents;
+    result.set(line.id, lineCents / 100);
+  });
+  return result;
+}
+
 /** Mark a purchase order as sent to the supplier (spec §4.1.3). */
 export async function sendPurchaseOrder(id: string, actorId: string) {
   const order = await db.purchaseOrder.findUnique({
@@ -28,6 +124,33 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
   if (!order) throw new Error("Porudžbenica ne postoji.");
   if (!order.supplier?.email) {
     throw new Error("Dobavljač mora imati kontakt email pre slanja porudžbenice.");
+  }
+  const invalidPacks = order.items.filter(
+    (item) => item.packQty && item.packQty > 0 && item.qty % item.packQty !== 0,
+  );
+  if (invalidPacks.length) {
+    throw new Error(
+      `Količina nije deljiva pakovanjem: ${invalidPacks.map((item) => item.sku).join(", ")}.`,
+    );
+  }
+  if (order.transportTypeId) {
+    const transport = await db.transportType.findUnique({
+      where: { id: order.transportTypeId },
+    });
+    if (
+      transport?.payloadKg &&
+      order.totalWeight &&
+      Number(order.totalWeight) > Number(transport.payloadKg)
+    ) {
+      throw new Error(`Ukupna težina prelazi kapacitet transporta ${transport.name}.`);
+    }
+    if (
+      transport?.payloadM3 &&
+      order.totalVolume &&
+      Number(order.totalVolume) > Number(transport.payloadM3)
+    ) {
+      throw new Error(`Ukupna zapremina prelazi kapacitet transporta ${transport.name}.`);
+    }
   }
   const pdf = buildPurchaseOrderPdf({
     ...order,
@@ -41,9 +164,9 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
   const result = await trackedDispatch({
     kind: "purchase_order",
     to: order.supplier.email,
-    subject: `Porudžbenica ${order.number}`,
-    html: `<p>Poštovani,</p><p>u prilogu je porudžbenica <strong>${escapeHtml(order.number)}</strong>.</p><p>Srdačan pozdrav,<br>Svet povoljnih cena</p>`,
-    text: `Poštovani, u prilogu je porudžbenica ${order.number}.`,
+    subject: `Purchase order ${order.number}`,
+    html: `<p>Dear Supplier,</p><p>Please find purchase order <strong>${escapeHtml(order.number)}</strong> attached.</p><p>Please confirm availability and the expected loading date.</p><p>Kind regards,<br>Svet povoljnih cena</p>`,
+    text: `Dear Supplier, please find purchase order ${order.number} attached. Please confirm availability and the expected loading date. Kind regards, Svet povoljnih cena.`,
     attachments: [
       {
         filename: `porudzbenica-${order.number.replaceAll("/", "-")}.pdf`,
@@ -63,6 +186,7 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
         status: PurchaseOrderStatus.SENT,
         orderDate: order.orderDate ?? new Date(),
         pdfUrl: `/api/admin/purchase-orders/${order.id}/pdf`,
+        lockedAt: new Date(),
       },
     }),
     db.purchaseOrderStatusEvent.create({
@@ -97,7 +221,10 @@ export async function receivePurchaseOrder(
 ): Promise<{ received: boolean; postedLines: number; warehouseName: string | null }> {
   const order = await db.purchaseOrder.findUnique({
     where: { id },
-    include: { items: { include: { product: { select: { id: true, cogs: true } } } } },
+    include: {
+      items: { include: { product: { select: { id: true, cogs: true } } } },
+      receivingWarehouse: true,
+    },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
   if (order.status === PurchaseOrderStatus.RECEIVED) {
@@ -112,15 +239,23 @@ export async function receivePurchaseOrder(
       data: { status: PurchaseOrderStatus.RECEIVED },
     });
     if (locked.count !== 1) return false;
-    const warehouse = await ensureDefaultWarehouse(tx);
+    const warehouse =
+      order.receivingWarehouse?.active
+        ? order.receivingWarehouse
+        : await ensureDefaultWarehouse(tx);
     warehouseName = warehouse.name;
-    const allocations = allocateFreight(
-      Number(order.freightCost),
+    const freightRsd = Number(order.freightCost) * Number(order.freightExchangeRate);
+    const allocations = allocateLandedCost(
+      freightRsd,
       order.items.map((item) => ({
         id: item.id,
         purchasePrice: Number(item.purchasePrice),
         qty: item.qty,
+        totalWeight: Number(item.totalWeight ?? 0),
+        totalVolume: Number(item.totalVolume ?? 0),
+        manualAmount: Number(item.freightAllocated ?? 0),
       })),
+      order.allocationBasis,
     );
     for (const item of order.items) {
       const freightAllocated = allocations.get(item.id) ?? 0;
@@ -134,11 +269,18 @@ export async function receivePurchaseOrder(
           where: { productId: item.productId },
         });
         const oldQty = onHand._sum.qty ?? 0;
-        const newCogs = Number(item.purchasePrice) + freightAllocated / item.qty;
+        const purchaseRsd = Number(item.purchasePrice) * Number(order.exchangeRate);
+        const customsRsd = purchaseRsd * (Number(item.customsRate ?? 0) / 100);
+        const additionalPerUnit = Number(item.additionalCostAllocated ?? 0) / item.qty;
+        const newCogs =
+          purchaseRsd + customsRsd + freightAllocated / item.qty + additionalPerUnit;
         const oldCogs = item.product?.cogs != null ? Number(item.product.cogs) : newCogs;
-        const denominator = oldQty + item.qty;
-        const finalCogs =
-          denominator > 0 ? (oldQty * oldCogs + item.qty * newCogs) / denominator : newCogs;
+        const finalCogs = weightedAverageUnitCost({
+          existingQty: oldQty,
+          existingUnitCost: oldCogs,
+          incomingQty: item.qty,
+          incomingUnitCost: newCogs,
+        });
         await tx.product.update({
           where: { id: item.productId },
           data: { cogs: Number(finalCogs.toFixed(2)) },
@@ -149,7 +291,7 @@ export async function receivePurchaseOrder(
           productId: item.productId,
           sku: item.sku,
           qtyDelta: item.qty,
-          kind: StockMovementKind.ADJUSTMENT,
+          kind: StockMovementKind.PURCHASE_RECEIPT,
           note: `Prijem po porudžbenici ${order.number}`,
           actorId,
         });
@@ -163,6 +305,10 @@ export async function receivePurchaseOrder(
         note: `Prijem proknjižen na magacin ${warehouse.name}; transport ${Number(order.freightCost).toFixed(2)} ${order.currency} raspoređen u COGS`,
         actorId,
       },
+    });
+    await tx.purchaseOrder.update({
+      where: { id },
+      data: { lockedAt: order.lockedAt ?? new Date(), postedAt: new Date() },
     });
     return true;
   });

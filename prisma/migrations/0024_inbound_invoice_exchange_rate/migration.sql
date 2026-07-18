@@ -1,0 +1,2 @@
+ALTER TABLE "InboundInvoice"
+ADD COLUMN "exchangeRate" DECIMAL(14,6) NOT NULL DEFAULT 1;

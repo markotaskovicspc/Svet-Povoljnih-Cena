@@ -103,6 +103,48 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Neispravan unos." };
       }
       const data = parsed.data;
+      const startsAt = data.startsAt ? new Date(data.startsAt) : null;
+      const endsAt = data.endsAt ? new Date(data.endsAt) : null;
+      if (
+        (startsAt && Number.isNaN(startsAt.getTime())) ||
+        (endsAt && Number.isNaN(endsAt.getTime())) ||
+        (startsAt && endsAt && startsAt >= endsAt)
+      ) {
+        return {
+          ok: false as const,
+          error: "Period nije ispravan; kraj mora biti posle početka.",
+        };
+      }
+      if (data.enabled && data.placement !== BannerPlacement.HERO) {
+        const overlap = await db.banner.findFirst({
+          where: {
+            placement: data.placement,
+            enabled: true,
+            NOT: data.id ? { id: data.id } : undefined,
+            AND: [
+              {
+                OR: [
+                  { startsAt: null },
+                  { startsAt: { lte: endsAt ?? new Date("9999-12-31") } },
+                ],
+              },
+              {
+                OR: [
+                  { endsAt: null },
+                  { endsAt: { gte: startsAt ?? new Date("1900-01-01") } },
+                ],
+              },
+            ],
+          },
+          select: { title: true },
+        });
+        if (overlap) {
+          return {
+            ok: false as const,
+            error: `Period se preklapa sa aktivnim banerom „${overlap.title}“.`,
+          };
+        }
+      }
       const payload = {
         title: data.title,
         subtitle: data.subtitle || null,
@@ -110,8 +152,8 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
         ctaHref: data.ctaHref || null,
         imageDesktop: data.imageDesktop,
         imageMobile: data.imageMobile || null,
-        startsAt: data.startsAt ? new Date(data.startsAt) : null,
-        endsAt: data.endsAt ? new Date(data.endsAt) : null,
+        startsAt,
+        endsAt,
         order: data.order,
         enabled: data.enabled,
         placement: data.placement,

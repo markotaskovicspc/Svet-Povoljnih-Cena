@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import {
+  getOperationalErpRows,
+  operationalErpModules,
+} from "@/lib/admin/erp-operations";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -10,6 +14,40 @@ export type ErpColumn = {
   options?: string[];
   defaultVisible?: boolean;
   align?: "left" | "right" | "center";
+};
+
+export type AdminGridOperator =
+  | "contains"
+  | "equals"
+  | "not_equals"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "before"
+  | "after";
+
+export type AdminGridFilter = {
+  id: string;
+  columnKey: string;
+  operator: AdminGridOperator;
+  value: string;
+};
+
+export type AdminGridSort = {
+  columnKey: string;
+  direction: "asc" | "desc";
+};
+
+export type AdminGridQuery = {
+  page: number;
+  pageSize: number;
+  query: string;
+  filters: AdminGridFilter[];
+  sorting: AdminGridSort[];
+  visibleColumns: string[];
+  columnOrder: string[];
+  columnWidths: Record<string, number>;
 };
 
 export type ErpRow = {
@@ -28,6 +66,8 @@ export type ErpCommand = {
   needsSelection?: boolean;
   /** Optional native confirm() text shown before the command runs. */
   confirm?: string;
+  /** Why a provider or business command cannot currently run. */
+  disabledReason?: string;
 };
 
 export type ErpModule = {
@@ -35,11 +75,14 @@ export type ErpModule = {
   number: string;
   title: string;
   description: string;
-  status: "ready" | "scaffold";
+  status: "ready" | "blocked_external";
   commands: ErpCommand[];
   columns: ErpColumn[];
   rows: ErpRow[];
   notes?: string[];
+  blockedReason?: string;
+  /** Only columns with a complete server-side write mapping may enter edit mode. */
+  editableColumns?: string[];
   /** When set, each row gets an "Otvori" link to `${detailHrefBase}/${row.id}`. */
   detailHrefBase?: string;
 };
@@ -58,17 +101,6 @@ function currencyLabel(value: string | null | undefined) {
   if (value === "EUR") return "€";
   if (value === "USD") return "$";
   return "RSD";
-}
-
-function articleStatus(product: {
-  isActive: boolean;
-  isDtz: boolean;
-  isLimited: boolean;
-}) {
-  if (!product.isActive) return "ARH";
-  if (product.isDtz) return "DTZ";
-  if (product.isLimited) return "IT";
-  return "SP";
 }
 
 function purchaseOrderStatusLabel(status: string) {
@@ -103,7 +135,7 @@ function cogsStatusLabel(status: string) {
 
 const articleColumns: ErpColumn[] = [
   { key: "photo", label: "Foto", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", options: ["SP", "DTZ", "IT", "ARH"], defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"], defaultVisible: true },
   { key: "sku", label: "Šifra", defaultVisible: true },
   { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
   { key: "category", label: "Kategorija", options: ["Nameštaj", "Trpezarije", "Spavaće sobe"], defaultVisible: true },
@@ -334,6 +366,7 @@ const supplierColumns: ErpColumn[] = [
   { key: "email", label: "Kontakt mail", defaultVisible: true },
   { key: "phone", label: "Telefon", defaultVisible: true },
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
+  { key: "exchangeRate", label: "Kurs", type: "number", align: "right", defaultVisible: true },
   { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
   { key: "paymentTerms", label: "Uslovi plaćanja" },
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right", defaultVisible: true },
@@ -341,6 +374,10 @@ const supplierColumns: ErpColumn[] = [
   { key: "bank", label: "Banka" },
   { key: "swift", label: "SWIFT" },
   { key: "iban", label: "IBAN" },
+  { key: "defaultPriceList", label: "Podrazumevani cenovnik" },
+  { key: "loading1", label: "Mesto utovara 1" },
+  { key: "loading2", label: "Mesto utovara 2" },
+  { key: "loading3", label: "Mesto utovara 3" },
 ];
 
 const supplierRows: ErpRow[] = [
@@ -585,11 +622,22 @@ const inboundInvoiceColumns: ErpColumn[] = [
   { key: "number", label: "Broj fakture", defaultVisible: true },
   { key: "type", label: "Tip", options: ["DOM", "INO", "COGS"], defaultVisible: true },
   { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "purchaseOrder", label: "Porudžbenica", defaultVisible: true },
   { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Proknjižena", "Storno"], defaultVisible: true },
   { key: "invoiceDate", label: "Datum fakture", type: "date", defaultVisible: true },
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
-  { key: "value", label: "Vrednost", type: "money", align: "right", defaultVisible: true },
+  { key: "netValue", label: "Neto", type: "money", align: "right", defaultVisible: true },
+  { key: "vatValue", label: "PDV", type: "money", align: "right", defaultVisible: true },
+  { key: "grossValue", label: "Bruto", type: "money", align: "right", defaultVisible: true },
+  {
+    key: "allocationBasis",
+    label: "Raspodela",
+    type: "status",
+    options: ["AUTO_UTILIZATION", "VALUE", "WEIGHT", "VOLUME", "MANUAL"],
+    defaultVisible: true,
+  },
   { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"], defaultVisible: true },
+  { key: "locked", label: "Zaključano", type: "boolean", defaultVisible: true },
 ];
 
 const inboundInvoiceRows: ErpRow[] = [
@@ -602,8 +650,12 @@ const inboundInvoiceRows: ErpRow[] = [
       status: "U pripremi",
       invoiceDate: "2026-05-13",
       currency: "€",
-      value: 18420,
+      netValue: 18420,
+      vatValue: 0,
+      grossValue: 18420,
+      allocationBasis: "AUTO_UTILIZATION",
       cogsStatus: "Čeka razradu",
+      locked: false,
     },
   },
 ];
@@ -633,7 +685,7 @@ const retailPriceRows: ErpRow[] = [
   },
 ];
 
-export const erpModules: ErpModule[] = [
+const coreErpModules: ErpModule[] = [
   {
     slug: "artikli",
     number: "1",
@@ -642,11 +694,54 @@ export const erpModules: ErpModule[] = [
       "Centralni matični karton artikla: status, dobavljač, kategorije, dimenzije, pakovanja, kanali prodaje i povezani opisi za sajt.",
     status: "ready",
     commands: [
-      { label: "Unos novog", tone: "primary" },
-      { label: "Excel unos", tone: "neutral" },
-      { label: "Brisanje", tone: "danger" },
+      { label: "Unos novog", tone: "primary", action: "article.create" },
+      { label: "Excel unos", tone: "neutral", href: "/admin/erp/artikli/import" },
+      {
+        label: "Arhiviraj",
+        tone: "danger",
+        action: "row.delete",
+        needsSelection: true,
+        confirm: "Arhivirati izabrane artikle?",
+      },
     ],
     columns: articleColumns,
+    editableColumns: [
+      "status",
+      "shortName",
+      "shortDescription",
+      "siteDescription",
+      "attribute1",
+      "attribute2",
+      "attribute3",
+      "attribute4",
+      "color1",
+      "color2",
+      "cogs",
+      "customsRate",
+      "stockTotal",
+      "incomingTotal",
+      "widthCm",
+      "heightCm",
+      "depthCm",
+      "weightKg",
+      "grossWeightKg",
+      "packQty",
+      "packWidthCm",
+      "packDepthCm",
+      "packHeightCm",
+      "packGrossWeightKg",
+      "supplierName",
+      "barcode",
+      "hsCode",
+      "ananasBrokerage",
+      "ananasStorage",
+      "ananasDelivery",
+      "webCheck",
+      "wholesaleCheck",
+      "exportCheck",
+      "deliveryDays",
+      "moq",
+    ],
     rows: articleRows,
     notes: [
       "Šifra artikla se automatski popunjava kod novog unosa.",
@@ -672,6 +767,27 @@ export const erpModules: ErpModule[] = [
       },
     ],
     columns: supplierColumns,
+    editableColumns: [
+      "code",
+      "name",
+      "address",
+      "city",
+      "country",
+      "email",
+      "phone",
+      "currency",
+      "parity",
+      "paymentTerms",
+      "deliveryDays",
+      "transitDays",
+      "bank",
+      "swift",
+      "iban",
+      "defaultPriceList",
+      "loading1",
+      "loading2",
+      "loading3",
+    ],
     rows: supplierRows,
     notes: ["Kontakt mail mora da sadrži @.", "Valuta je ograničena na RSD, $ ili €."],
   },
@@ -692,6 +808,17 @@ export const erpModules: ErpModule[] = [
       },
     ],
     columns: purchasePriceColumns,
+    editableColumns: [
+      "sku",
+      "name",
+      "attributes",
+      "pattern",
+      "purchasePrice",
+      "currency",
+      "parity",
+      "validFrom",
+      "validTo",
+    ],
     rows: purchasePriceRows,
     notes: ["Ista šifra artikla može da se unese više puta sa različitim periodima važenja."],
   },
@@ -721,6 +848,20 @@ export const erpModules: ErpModule[] = [
       },
     ],
     columns: purchaseOrderColumns,
+    editableColumns: [
+      "number",
+      "status",
+      "orderDate",
+      "loadingDate",
+      "deliveryDate",
+      "totalVolume",
+      "totalWeight",
+      "totalPrice",
+      "currency",
+      "transportType",
+      "parity",
+      "bmPct",
+    ],
     rows: purchaseOrderRows,
     detailHrefBase: "/admin/erp/porudzbenice",
     notes: [
@@ -737,11 +878,37 @@ export const erpModules: ErpModule[] = [
       "Operativni pregled stavki porudžbenica sa količinom za poručivanje, zapreminom, težinom, carinom, kalkulativnom MPC i BM%.",
     status: "ready",
     commands: [
-      { label: "Dodaj stavku", tone: "primary" },
-      { label: "Proveri pakovanja", tone: "neutral" },
-      { label: "Štampa Excel", tone: "neutral" },
+      {
+        label: "Dodaj stavku",
+        tone: "primary",
+        disabledReason: "Stavka se dodaje iz detalja konkretne porudžbenice.",
+      },
+      {
+        label: "Proveri pakovanja",
+        tone: "neutral",
+        action: "po-items.validate-packs",
+        needsSelection: true,
+      },
     ],
     columns: purchaseOrderItemColumns,
+    editableColumns: [
+      "sku",
+      "name",
+      "attributes",
+      "pattern",
+      "purchasePrice",
+      "currency",
+      "parity",
+      "moq",
+      "packQty",
+      "qty",
+      "totalVolume",
+      "totalWeight",
+      "customsRate",
+      "calcRetailPrice",
+      "bmPct",
+      "receivedQty",
+    ],
     rows: purchaseOrderItemRows,
     notes: [
       "Količina treba da se zacrveni kada nije deljiva brojem artikala u pakovanju.",
@@ -753,8 +920,8 @@ export const erpModules: ErpModule[] = [
     number: "5",
     title: "Ulazne fakture",
     description:
-      "Scaffold za domaće fakture, ino fakture i COGS obračun. Dokument navodi oblast, ali detaljna pravila čekaju dopunu.",
-    status: "scaffold",
+      "Domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama, zaključavanje i raspodela troškova za COGS.",
+    status: "ready",
     commands: [
       { label: "Nova faktura", tone: "primary", action: "invoice.create" },
       {
@@ -766,16 +933,32 @@ export const erpModules: ErpModule[] = [
       },
     ],
     columns: inboundInvoiceColumns,
+    editableColumns: [
+      "number",
+      "type",
+      "status",
+      "invoiceDate",
+      "currency",
+      "exchangeRate",
+      "netValue",
+      "vatValue",
+      "grossValue",
+      "allocationBasis",
+      "cogsStatus",
+    ],
     rows: inboundInvoiceRows,
-    notes: ["Domaće fakture, ino fakture i COGS obračun su označeni kao sledeća razrada."],
+    notes: [
+      "Raspodela podržava automatsko iskorišćenje težine/zapremine, vrednost, težinu, zapreminu i potpuno usaglašen ručni obračun.",
+      "Zaključan dokument nije dozvoljeno menjati.",
+    ],
   },
   {
     slug: "mp-cene",
     number: "6",
     title: "Upravljanje MP cenama",
     description:
-      "Scaffold za upravljanje maloprodajnim cenama. Detaljna pravila cena i odobravanja čekaju specifikaciju.",
-    status: "scaffold",
+      "Datirani MP cenovnici i predlozi cena sa kontrolisanom objavom i istorijom.",
+    status: "ready",
     commands: [
       {
         label: "Novi predlog cene",
@@ -793,19 +976,32 @@ export const erpModules: ErpModule[] = [
       },
     ],
     columns: retailPriceColumns,
+    editableColumns: ["currentMpc", "calcMpc", "bmPct"],
     rows: retailPriceRows,
-    notes: ["Ovaj modul je pripremljen kao radni okvir do dopune poslovnih pravila."],
+    notes: [
+      "Prioritet: najviši prioritet artikalske akcije, inače loyalty za prijavljenog kupca, zatim najviša kvalifikovana linearna promocija.",
+      "Kombinovani popust je ograničen admin podešavanjem; početna vrednost je 30%.",
+    ],
   },
+];
+
+export const erpModules: ErpModule[] = [
+  ...coreErpModules,
+  ...operationalErpModules,
 ];
 
 export function getErpModuleDefinition(slug: string) {
   return erpModules.find((m) => m.slug === slug);
 }
 
-export async function getErpModule(slug: string) {
+export async function getErpModule(
+  slug: string,
+  options: { take?: number } = {},
+) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
-  const rows = await getPersistedErpRows(slug);
+  const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
+  const rows = await getPersistedErpRows(slug, take);
   return {
     ...definition,
     rows,
@@ -818,31 +1014,31 @@ export async function getErpModule(slug: string) {
   };
 }
 
-async function getPersistedErpRows(slug: string): Promise<ErpRow[]> {
+async function getPersistedErpRows(slug: string, take: number): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows();
+      return getArticleRows(take);
     case "dobavljaci":
-      return getSupplierRows();
+      return getSupplierRows(take);
     case "nabavne-cene":
-      return getPurchasePriceRows();
+      return getPurchasePriceRows(take);
     case "porudzbenice":
-      return getPurchaseOrderRows();
+      return getPurchaseOrderRows(take);
     case "porudzbenice-po-artiklima":
-      return getPurchaseOrderItemRows();
+      return getPurchaseOrderItemRows(take);
     case "ulazne-fakture":
-      return getInboundInvoiceRows();
+      return getInboundInvoiceRows(take);
     case "mp-cene":
-      return getRetailPriceRows();
+      return getRetailPriceRows(take);
     default:
-      return [];
+      return getOperationalErpRows(slug, take);
   }
 }
 
-async function getArticleRows(): Promise<ErpRow[]> {
+async function getArticleRows(take: number): Promise<ErpRow[]> {
   const products = await db.product.findMany({
     orderBy: { updatedAt: "desc" },
-    take: 500,
+    take,
     select: {
       id: true,
       sku: true,
@@ -872,6 +1068,20 @@ async function getArticleRows(): Promise<ErpRow[]> {
       isActive: true,
       isDtz: true,
       isLimited: true,
+      articleStatus: true,
+      weightKg: true,
+      grossWeightKg: true,
+      packQty: true,
+      packWidthCm: true,
+      packDepthCm: true,
+      packHeightCm: true,
+      packGrossWeightKg: true,
+      supplierProductName: true,
+      hsCode: true,
+      moq: true,
+      ananasBrokeragePct: true,
+      ananasStoragePct: true,
+      ananasDeliveryPct: true,
       availableWebManual: true,
       availableWholesaleManual: true,
       availableExportManual: true,
@@ -912,7 +1122,7 @@ async function getArticleRows(): Promise<ErpRow[]> {
       id: product.id,
       values: {
         photo: product.media[0]?.url ? "IMG" : null,
-        status: articleStatus(product),
+        status: product.articleStatus,
         sku: product.sku,
         supplier: product.supplier?.name ?? null,
         category: product.categories[0]?.category.name ?? null,
@@ -939,8 +1149,15 @@ async function getArticleRows(): Promise<ErpRow[]> {
         heightCm: height,
         depthCm: depth,
         volumeM3: volume,
+        weightKg: asNumber(product.weightKg),
+        grossWeightKg: asNumber(product.grossWeightKg),
+        packQty: product.packQty,
+        packWidthCm: asNumber(product.packWidthCm),
+        packDepthCm: asNumber(product.packDepthCm),
+        packHeightCm: asNumber(product.packHeightCm),
+        packGrossWeightKg: asNumber(product.packGrossWeightKg),
         lastPurchasePrice: lastPurchase ? asNumber(lastPurchase.price) : null,
-        supplierName: product.supplier?.name ?? null,
+        supplierName: product.supplierProductName ?? product.supplier?.name ?? null,
         material: product.materials.map((item) => item.material.label).join(", ") || null,
         barcode: product.barcode ?? null,
         siteLink: `/p/${product.slug}`,
@@ -951,6 +1168,11 @@ async function getArticleRows(): Promise<ErpRow[]> {
         exportAuto: product.stock > 0,
         exportCheck: product.availableExportManual,
         customsRate: asNumber(product.customsRate),
+        hsCode: product.hsCode,
+        moq: product.moq,
+        ananasBrokerage: asNumber(product.ananasBrokeragePct),
+        ananasStorage: asNumber(product.ananasStoragePct),
+        ananasDelivery: asNumber(product.ananasDeliveryPct),
         parity: lastPurchase?.parity ?? null,
         deliveryDays: product.deliveryDaysMax,
         calcRetailPrice: asNumber(product.fullPrice),
@@ -959,9 +1181,10 @@ async function getArticleRows(): Promise<ErpRow[]> {
   });
 }
 
-async function getSupplierRows(): Promise<ErpRow[]> {
+async function getSupplierRows(take: number): Promise<ErpRow[]> {
   const suppliers = await db.supplier.findMany({
     orderBy: { name: "asc" },
+    take,
     select: {
       id: true,
       code: true,
@@ -979,6 +1202,12 @@ async function getSupplierRows(): Promise<ErpRow[]> {
       bank: true,
       swift: true,
       iban: true,
+      defaultPriceList: { select: { code: true } },
+      loadingLocations: {
+        orderBy: { position: "asc" },
+        take: 3,
+        select: { position: true, name: true },
+      },
     },
   });
 
@@ -1000,14 +1229,18 @@ async function getSupplierRows(): Promise<ErpRow[]> {
       bank: supplier.bank ?? null,
       swift: supplier.swift ?? null,
       iban: supplier.iban ?? null,
+      defaultPriceList: supplier.defaultPriceList?.code ?? null,
+      loading1: supplier.loadingLocations.find((item) => item.position === 1)?.name ?? null,
+      loading2: supplier.loadingLocations.find((item) => item.position === 2)?.name ?? null,
+      loading3: supplier.loadingLocations.find((item) => item.position === 3)?.name ?? null,
     },
   }));
 }
 
-async function getPurchasePriceRows(): Promise<ErpRow[]> {
+async function getPurchasePriceRows(take: number): Promise<ErpRow[]> {
   const prices = await db.purchasePrice.findMany({
     orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
-    take: 500,
+    take,
     include: {
       supplier: { select: { name: true } },
       product: { select: { name: true, sizeLabel: true, colorPrimary: true, colorSecondary: true } },
@@ -1035,11 +1268,13 @@ async function getPurchasePriceRows(): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchaseOrderRows(): Promise<ErpRow[]> {
+async function getPurchaseOrderRows(take: number): Promise<ErpRow[]> {
   const orders = await db.purchaseOrder.findMany({
     orderBy: { createdAt: "desc" },
-    take: 500,
-    include: { supplier: { select: { name: true } } },
+    take,
+    include: {
+      supplier: { select: { name: true } },
+    },
   });
 
   return orders.map((order) => ({
@@ -1063,10 +1298,10 @@ async function getPurchaseOrderRows(): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchaseOrderItemRows(): Promise<ErpRow[]> {
+async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
   const items = await db.purchaseOrderItem.findMany({
     orderBy: { createdAt: "desc" },
-    take: 500,
+    take,
     include: {
       purchaseOrder: {
         select: {
@@ -1106,11 +1341,14 @@ async function getPurchaseOrderItemRows(): Promise<ErpRow[]> {
   }));
 }
 
-async function getInboundInvoiceRows(): Promise<ErpRow[]> {
+async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
   const invoices = await db.inboundInvoice.findMany({
     orderBy: { createdAt: "desc" },
-    take: 500,
-    include: { supplier: { select: { name: true } } },
+    take,
+    include: {
+      supplier: { select: { name: true } },
+      purchaseOrder: { select: { number: true } },
+    },
   });
 
   return invoices.map((invoice) => ({
@@ -1119,19 +1357,25 @@ async function getInboundInvoiceRows(): Promise<ErpRow[]> {
       number: invoice.number,
       type: invoice.type,
       supplier: invoice.supplier?.name ?? null,
+      purchaseOrder: invoice.purchaseOrder?.number ?? null,
       status: inboundInvoiceStatusLabel(invoice.status),
       invoiceDate: dateOnly(invoice.invoiceDate),
       currency: currencyLabel(invoice.currency),
-      value: asNumber(invoice.value),
+      exchangeRate: asNumber(invoice.exchangeRate),
+      netValue: asNumber(invoice.netValue),
+      vatValue: asNumber(invoice.vatValue),
+      grossValue: asNumber(invoice.grossValue),
+      allocationBasis: invoice.allocationBasis,
       cogsStatus: cogsStatusLabel(invoice.cogsStatus),
+      locked: Boolean(invoice.lockedAt),
     },
   }));
 }
 
-async function getRetailPriceRows(): Promise<ErpRow[]> {
+async function getRetailPriceRows(take: number): Promise<ErpRow[]> {
   const products = await db.product.findMany({
     orderBy: { updatedAt: "desc" },
-    take: 500,
+    take,
     select: {
       id: true,
       sku: true,

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
 import { getSmallParcelProvider } from "@/lib/mygls";
 import { getCheckoutConfig } from "@/lib/checkout/config";
+import { CheckoutStartedAnalytics } from "@/components/analytics/first-party-analytics";
 
 export const metadata: Metadata = {
   title: "Naplata — podaci za isporuku",
@@ -40,6 +41,7 @@ export default async function CheckoutPodaciPage() {
 
   return (
     <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
+      <CheckoutStartedAnalytics />
       <Breadcrumbs
         trail={[
           { label: "Korpa", href: "/korpa" },

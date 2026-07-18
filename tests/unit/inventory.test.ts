@@ -29,6 +29,7 @@ function transactionMock(options: { insufficient?: boolean } = {}) {
     },
     warehouseStock: {
       upsert: vi.fn(async () => ({ qty: 5 })),
+      findUnique: vi.fn(async () => ({ qty: 7 })),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: options.insufficient ? 0 : 1 })),
     },

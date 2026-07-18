@@ -34,6 +34,25 @@ export interface PricingProduct {
   loyaltyPrice?: number | null;
   loyaltyDiscountPct?: number | null;
   action?: PricingAction | null;
+  /** Canonical action/product prices; highest live priority wins. */
+  actionPrices?: Array<{
+    price: number;
+    priority: number;
+    startsAt: string | Date;
+    endsAt: string | Date;
+    isPermanent?: boolean | null;
+  }>;
+  /** Eligible global/category/group promotions already resolved by the caller. */
+  linearPromotions?: Array<{
+    discountPct: number;
+    priority: number;
+    startsAt: string | Date;
+    endsAt: string | Date;
+  }>;
+  /** Loyalty must be supplied from authenticated customer context. */
+  loyaltyEligible?: boolean;
+  /** Admin setting; launch default is 30%. */
+  maxCombinedDiscountPct?: number;
 }
 
 export interface EffectivePrice {
@@ -44,7 +63,7 @@ export interface EffectivePrice {
   /** Was a valid sale price applied? */
   onSale: boolean;
   /** Which reduced-price source won. */
-  kind: "full" | "sale" | "loyalty";
+  kind: "full" | "sale" | "loyalty" | "linear";
   /** Integer percent discount, 0 if none. */
   discountPct: number;
   /** True when product carried a salePrice but the action window expired. */
@@ -82,6 +101,85 @@ function resolveLoyaltyPrice(
   };
 }
 
+function isWindowLive(
+  startsAt: string | Date,
+  endsAt: string | Date,
+  now: Date,
+  permanent = false,
+) {
+  if (permanent) return true;
+  const time = now.getTime();
+  return time >= toDate(startsAt).getTime() && time <= toDate(endsAt).getTime();
+}
+
+/**
+ * Canonical catalog precedence:
+ * 1. highest-priority live product action (exclusive);
+ * 2. authenticated loyalty price;
+ * 3. highest-priority eligible linear promotion, stacked after loyalty;
+ * 4. cap the combined loyalty + linear reduction (30% by default).
+ */
+export function resolvePromotionPrice(
+  product: PricingProduct,
+  options: { now?: Date; loggedIn?: boolean; maxDiscountPct?: number } = {},
+): EffectivePrice {
+  const now = options.now ?? new Date();
+  const full = product.fullPrice;
+  const actionPrice = [...(product.actionPrices ?? [])]
+    .filter(
+      (candidate) =>
+        candidate.price > 0 &&
+        candidate.price < full &&
+        isWindowLive(
+          candidate.startsAt,
+          candidate.endsAt,
+          now,
+          Boolean(candidate.isPermanent),
+        ),
+    )
+    .sort((left, right) => right.priority - left.priority)[0];
+  if (actionPrice) {
+    return {
+      effective: actionPrice.price,
+      full,
+      onSale: true,
+      kind: "sale",
+      discountPct: Math.round(((full - actionPrice.price) / full) * 100),
+      actionExpired: false,
+    };
+  }
+
+  const loyalty =
+    options.loggedIn || product.loyaltyEligible
+      ? resolveLoyaltyPrice(product, full)
+      : null;
+  let effective = loyalty?.effective ?? full;
+  let requestedPct = loyalty?.discountPct ?? 0;
+  const linear = [...(product.linearPromotions ?? [])]
+    .filter(
+      (candidate) =>
+        candidate.discountPct > 0 &&
+        isWindowLive(candidate.startsAt, candidate.endsAt, now),
+    )
+    .sort((left, right) => right.priority - left.priority)[0];
+  if (linear) {
+    effective = effective * (1 - linear.discountPct / 100);
+    requestedPct = ((full - effective) / full) * 100;
+  }
+  const cap =
+    options.maxDiscountPct ?? product.maxCombinedDiscountPct ?? MAX_STACK_PCT;
+  const appliedPct = Math.max(0, Math.min(requestedPct, cap));
+  effective = Math.round(full * (1 - appliedPct / 100));
+  return {
+    effective,
+    full,
+    onSale: Boolean(linear),
+    kind: linear ? "linear" : loyalty ? "loyalty" : "full",
+    discountPct: Math.round(appliedPct),
+    actionExpired: Boolean(product.actionPrices?.length),
+  };
+}
+
 /**
  * Resolves the effective unit price for a product. If the product carries a
  * `salePrice` but its `action` window has lapsed, the price falls back to
@@ -91,6 +189,13 @@ export function effectiveUnitPrice(
   product: PricingProduct,
   now: Date = new Date(),
 ): EffectivePrice {
+  if (product.actionPrices?.length || product.linearPromotions?.length) {
+    return resolvePromotionPrice(product, {
+      now,
+      loggedIn: product.loyaltyEligible,
+      maxDiscountPct: product.maxCombinedDiscountPct,
+    });
+  }
   const full = product.fullPrice;
   const sale = product.salePrice ?? null;
   const loyalty = resolveLoyaltyPrice(product, full);
