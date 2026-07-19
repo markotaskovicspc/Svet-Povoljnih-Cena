@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ErpColumn, ErpModule, ErpRow } from "@/lib/admin/erp";
-import { ERP_REQUIREMENTS } from "@/lib/admin/erp-requirements";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
@@ -663,23 +662,6 @@ export const operationalErpModules: ErpModule[] = [
     editableColumns: ["value"],
     rows: emptyRows,
   },
-  {
-    slug: "matrica-zahteva",
-    number: "QA",
-    title: "Matrica ERP zahteva",
-    description: "Svih 67 sekcija izvornog dokumenta, kanonske rute, statusi i acceptance oznake.",
-    status: "ready",
-    commands: [],
-    columns: [
-      number("id", "#"),
-      text("section", "Sekcija dokumenta"),
-      status("status", "Status", ["implemented", "blocked_external"]),
-      text("route", "Admin ruta"),
-      text("acceptance", "Acceptance"),
-      text("note", "Dokaz / razlog"),
-    ],
-    rows: emptyRows,
-  },
 ];
 
 function decimal(value: Prisma.Decimal | number | null | undefined) {
@@ -754,25 +736,9 @@ export async function getOperationalErpRows(
       return reclamationRows(take);
     case "admin-podesavanja":
       return adminSettingRows(take);
-    case "matrica-zahteva":
-      return requirementRows();
     default:
       return [];
   }
-}
-
-function requirementRows(): ErpRow[] {
-  return ERP_REQUIREMENTS.map((requirement) => ({
-    id: String(requirement.id),
-    values: {
-      id: requirement.id,
-      section: requirement.section,
-      status: requirement.status,
-      route: requirement.route,
-      acceptance: requirement.acceptance,
-      note: requirement.note,
-    },
-  }));
 }
 
 async function productLookupRows(take: number): Promise<ErpRow[]> {

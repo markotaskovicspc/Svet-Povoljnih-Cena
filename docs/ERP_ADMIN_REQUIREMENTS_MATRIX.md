@@ -1,8 +1,9 @@
 # ERP admin requirements matrix
 
 The canonical matrix is maintained in
-[`src/lib/admin/erp-requirements.ts`](../src/lib/admin/erp-requirements.ts) and is
-rendered for administrators at `/admin/erp/matrica-zahteva`.
+[`src/lib/admin/erp-requirements.ts`](../src/lib/admin/erp-requirements.ts) as an
+internal engineering artifact. It is intentionally not exposed in the admin
+panel.
 
 - Source: `ERP finalllll.pages`
 - Count: 67 substantive table-of-contents sections (`Uvod` defines the shared

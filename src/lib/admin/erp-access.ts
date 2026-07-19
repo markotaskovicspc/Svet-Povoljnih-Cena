@@ -23,7 +23,6 @@ const ADS_MODULES = new Set([
 
 const SHARED_MODULES = new Set([
   "racunovodstveni-registri",
-  "matrica-zahteva",
 ]);
 
 export function allowedRolesForErpModule(module: string): readonly AdminRoleName[] {
