@@ -200,11 +200,6 @@ export function ProductCard({
           }}
           className="focus-visible:ring-walnut/40 absolute inset-0 block focus-visible:ring-2 focus-visible:outline-none"
         >
-        {/*
-         * `layoutId` bridges this image to the PDP hero image (Phase 1H.2).
-         * Framer Motion morphs between the two when navigating to /p/[slug],
-         * thanks to AnimatePresence in app/template.tsx.
-         */}
         <div
           ref={imageTrackRef}
           onScroll={syncActiveImage}
@@ -221,38 +216,18 @@ export function ProductCard({
                   data-card-image={index}
                   className="relative min-w-full snap-center snap-always"
                 >
-                  {index === 0 ? (
-                    <motion.div
-                      layoutId={`product-cover-${product.sku}`}
-                      className="absolute inset-0"
-                      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <Image
-                        src={image.url}
-                        alt={image.alt ?? product.name}
-                        fill
-                        sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
-                        preload={preload}
-                        draggable={false}
-                        placeholder="blur"
-                        blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
-                        onError={() => markImageFailed(image.url)}
-                        className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                      />
-                    </motion.div>
-                  ) : (
-                    <Image
-                      src={image.url}
-                      alt={image.alt ?? product.name}
-                      fill
-                      sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
-                      draggable={false}
-                      placeholder="blur"
-                      blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
-                      onError={() => markImageFailed(image.url)}
-                      className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    />
-                  )}
+                  <Image
+                    src={image.url}
+                    alt={image.alt ?? product.name}
+                    fill
+                    sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
+                    preload={index === 0 ? preload : undefined}
+                    draggable={false}
+                    placeholder="blur"
+                    blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
+                    onError={() => markImageFailed(image.url)}
+                    className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  />
                 </div>
               ))
             : (

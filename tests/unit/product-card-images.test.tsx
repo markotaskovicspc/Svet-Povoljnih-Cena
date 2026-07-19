@@ -56,6 +56,20 @@ describe("ProductCard image regression", () => {
     expect(html).toContain('alt="Prva fotografija"');
   });
 
+  it("keeps duplicate product cards independent on the same page", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        "div",
+        null,
+        createElement(ProductCard, { product: readyProduct }),
+        createElement(ProductCard, { product: readyProduct }),
+      ),
+    );
+
+    expect(html.match(/alt="Prva fotografija"/g)).toHaveLength(2);
+    expect(html.match(/data-card-image="0"/g)).toHaveLength(2);
+  });
+
   it("does not render gallery controls for a one-image card", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {
