@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import type {
   Category as CategoryDTO,
@@ -599,7 +600,7 @@ export async function listProducts(
   };
 }
 
-export const getProductBySlug = cache(async function getProductBySlug(
+async function loadProductBySlug(
   slug: string,
 ): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
@@ -614,7 +615,37 @@ export const getProductBySlug = cache(async function getProductBySlug(
     console.error(`[catalog] Failed to load product by slug "${slug}".`, error);
     return getSvetAkcijaFallbackBySlug(slug);
   }
-});
+}
+
+const getProductBySlugAcrossRequests = unstable_cache(
+  loadProductBySlug,
+  ["catalog-product-by-slug-v1"],
+  {
+    revalidate: 30,
+    tags: ["catalog-products"],
+  },
+);
+
+// The short shared cache removes repeated full-PDP relation reads while the
+// checkout/order API remains authoritative for price and stock at submission.
+export const getProductBySlug = cache(getProductBySlugAcrossRequests);
+
+const getCachedProductRail = unstable_cache(
+  async (input: ListProductsInput) =>
+    listProducts({ ...input, includeTotal: false }),
+  ["catalog-product-rail-v1"],
+  {
+    revalidate: 60,
+    tags: ["catalog-products"],
+  },
+);
+
+/** Shared cache for non-authoritative recommendation rails. */
+export function listProductRail(
+  input: Omit<ListProductsInput, "includeTotal">,
+): Promise<ListProductsResult> {
+  return getCachedProductRail(input);
+}
 
 /**
  * Batch loader for listing cards.

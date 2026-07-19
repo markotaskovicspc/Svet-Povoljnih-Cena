@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { BannerPlacement } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } from "@/data/banners";
@@ -58,7 +59,7 @@ function isMissingSchemaError(error: unknown) {
   );
 }
 
-export const getActiveBanners = cache(async (): Promise<Banner[]> => {
+async function loadActiveBanners(): Promise<Banner[]> {
   if (!hasDatabaseConnection()) return heroBanners;
   if (!(await hasBannerPlacementColumn())) return heroBanners;
 
@@ -86,7 +87,15 @@ export const getActiveBanners = cache(async (): Promise<Banner[]> => {
     }
     return heroBanners;
   }
-});
+}
+
+const getActiveBannersAcrossRequests = unstable_cache(
+  loadActiveBanners,
+  ["storefront-active-banners-v1"],
+  { revalidate: 60, tags: ["storefront-home"] },
+);
+
+export const getActiveBanners = cache(getActiveBannersAcrossRequests);
 
 export async function getEditorialBanner(): Promise<Banner> {
   const banners = await getActiveBanners();
@@ -170,7 +179,7 @@ export const getProtectedPricesBanner = cache(async (): Promise<Banner> => {
   }
 });
 
-export const getActivePromoBar = cache(async (): Promise<PromoBar | null> => {
+async function loadActivePromoBar(): Promise<PromoBar | null> {
   if (!hasDatabaseConnection()) return promoBar;
 
   try {
@@ -196,9 +205,17 @@ export const getActivePromoBar = cache(async (): Promise<PromoBar | null> => {
     console.error("Failed to load active promo bar", error);
     return promoBar;
   }
-});
+}
 
-export const getActiveTabs = cache(async (): Promise<Tab[]> => {
+const getActivePromoBarAcrossRequests = unstable_cache(
+  loadActivePromoBar,
+  ["storefront-active-promo-bar-v1"],
+  { revalidate: 60, tags: ["storefront-home"] },
+);
+
+export const getActivePromoBar = cache(getActivePromoBarAcrossRequests);
+
+async function loadActiveTabs(): Promise<Tab[]> {
   if (!hasDatabaseConnection()) return headerTabs;
 
   try {
@@ -223,4 +240,12 @@ export const getActiveTabs = cache(async (): Promise<Tab[]> => {
     console.error("Failed to load active tabs", error);
     return headerTabs;
   }
-});
+}
+
+const getActiveTabsAcrossRequests = unstable_cache(
+  loadActiveTabs,
+  ["storefront-active-tabs-v1"],
+  { revalidate: 60, tags: ["storefront-home"] },
+);
+
+export const getActiveTabs = cache(getActiveTabsAcrossRequests);

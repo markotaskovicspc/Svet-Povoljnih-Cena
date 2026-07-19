@@ -9,20 +9,24 @@ test.beforeEach(async ({ context }) => {
 });
 
 test("newsletter only shows success after the API accepts the signup", async ({ page }) => {
-  let releaseResponse: (() => void) | undefined;
+  let releaseResponse = () => {};
+  const responseGate = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
   await page.route("**/api/newsletter", async (route) => {
-    await new Promise<void>((resolve) => {
-      releaseResponse = resolve;
-    });
+    await responseGate;
     await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
   });
   await page.goto("/kontakt", { waitUntil: "domcontentloaded" });
   const section = page.locator("section").filter({ hasText: "Newsletter" }).last();
   const email = section.getByLabel("Email adresa");
   await email.fill("playwright+newsletter@example.com");
-  await email.press("Enter");
+  await Promise.all([
+    page.waitForRequest("**/api/newsletter"),
+    email.press("Enter"),
+  ]);
   await expect(section.getByText("Uspešno ste prijavljeni")).toHaveCount(0);
-  releaseResponse?.();
+  releaseResponse();
   await expect(section.getByText("Uspešno ste prijavljeni na newsletter.")).toBeVisible();
 });
 

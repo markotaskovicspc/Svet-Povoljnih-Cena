@@ -11,6 +11,7 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "check:production-env": "node scripts/check-production-env.mjs",
+    "check:runtime-readiness": "node scripts/check-runtime-readiness.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev && npm run db:harden",
     "db:deploy": "prisma migrate deploy && npm run db:harden",
@@ -19,6 +20,7 @@
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "import:book12": "node scripts/import-book12-products.mjs",
+    "catalog:backfill-dimensions": "node scripts/backfill-product-dimensions.mjs",
     "media:variants": "node \"svet akcija/outputs/build-product-media-variants.mjs\"",
     "admin:create": "node scripts/create-admin.mjs",
     "postinstall": "prisma generate"

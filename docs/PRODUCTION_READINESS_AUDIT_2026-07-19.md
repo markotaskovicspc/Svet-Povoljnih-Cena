@@ -2,7 +2,8 @@
 
 Project: Svet povoljnih cena
 Audit date: 2026-07-19 (Europe/Belgrade)
-Baseline commit: `f1d7c05` plus the uncommitted QA fixes listed in this report
+Baseline pushed commit: `fbbc7c2`; this report includes the subsequent catalog,
+IPS, runtime-gate, test and cache follow-up
 Decision: **NO-GO — not safe to publish for real orders yet**
 
 ## Scope and evidence standard
@@ -14,9 +15,11 @@ header inspection, an npm advisory check, and production-environment validation.
 
 Confirmed facts are labeled as verified. Provider behavior that needs a real
 account, callback, delivery, fiscal device, or destructive write is labeled
-unverified. No real order, payment, shipment, fiscal receipt, refund, email
-campaign, product mutation, or destructive admin action was created during this
-audit. Temporary QA admin accounts were removed after testing.
+unverified. A controlled, source-backed dimension backfill updated 30 products
+and recorded an `AuditLog` entry for every update. No real order, payment,
+shipment, fiscal receipt, refund, email campaign, or destructive admin action
+was created during this audit. Temporary QA admin accounts were removed after
+testing.
 
 Browser coverage was Chromium-based desktop and mobile emulation. A second
 browser engine, a genuinely cleared HTTP cache, network throttling, production
@@ -35,10 +38,12 @@ missing/one-image behavior was correct.
 
 The platform must not accept real orders yet:
 
-1. **No active product is purchasable.** All 209 active products fail catalog
-   readiness because dimensions are missing. Only SKU `1133` has stock (9), and
-   it is correctly blocked by that safety rule.
-2. **The production environment gate fails six mandatory checks.** MyGLS lacks
+1. **The minimum commerce path is now functional.** Thirty products have
+   supplier-documented dimensions and pass catalog readiness. SKU `1133`
+   (`RELAX`) has stock 9, matches warehouse stock, and passed desktop/mobile
+   search → cart → checkout-entry automation. The remaining launch assortment
+   still requires client approval and 179 products still lack dimensions.
+2. **The production environment gate still fails six mandatory checks.** MyGLS lacks
    pickup contact name/phone and approval; X Express lacks approval; BADI lacks
    a fiscal location and approval.
 3. **A complete tagged sale has not been proven.** Payment/COD, stock,
@@ -53,26 +58,26 @@ The platform must not accept real orders yet:
    order status, refund, shipment, fiscal, and deletion workflows require an
    isolated staging acceptance pass.
 
-The estimated readiness is **55/100**. The correct launch decision is
-**NO-GO**, not because the codebase is generally broken, but because the primary
-business flow currently has zero eligible inventory and the external
-production/operations gates have not been accepted.
+The estimated readiness is **68/100**. The correct launch decision remains
+**NO-GO**, not because the local commerce path is broken, but because the
+external production, full-transaction, backup, monitoring and legal/operations
+gates have not been accepted.
 
 ## B. Production readiness score
 
 | Area | Score | Reason |
 | --- | ---: | --- |
-| Overall | **55** | Strong application foundation; no purchasable catalog and mandatory provider/operations gates remain. |
-| Public platform | 72 | Core routes, responsive layouts, metadata, sitemap, robots, fallbacks, and navigation work; homepage/PDP are heavy and client content is incomplete. |
-| User flows | 45 | Protected routing and forms exist; the primary cart-to-order flow cannot start because zero products pass readiness. |
-| Admin panel | 78 | 31 canonical routes and four-role RBAC verified; write/destructive/provider actions were not safely executed. |
-| Payments | 35 | COD cash/card and bank transfer are enabled; electronic methods remain gated and no accepted full transaction/refund exists. |
+| Overall | **68** | The minimum catalog/cart/checkout path works and the runtime gate passes; mandatory provider/operations gates remain. |
+| Public platform | 80 | Core routes, responsive layouts, metadata, navigation and caching work; payload size and incomplete catalog content remain. |
+| User flows | 65 | The stocked launch SKU passes desktop/mobile search → cart → checkout entry; final order/provider acceptance is still open. |
+| Admin panel | 80 | 31 canonical routes, four-role RBAC and ERP implementation verified; destructive/provider actions still need isolated acceptance. |
+| Payments | 50 | COD cash/card and bank transfer are enabled; IPS callback hardening/tests pass, but bank/provider end-to-end acceptance remains open. |
 | Emails | 40 | Provider/webhook/retry code exists and newsletter error UX passes; 14 failed messages exist and real delivery/domain acceptance was not proven. |
-| Security | 84 | RLS, revoked API grants, server authorization, signed private files, rate limits, webhook checks, CSP/headers, and zero npm production advisories verified. |
-| Performance | 55 | Search improved from ~11.2 s to ~2.1 s; homepage remains ~12.9 s/429 KB and PDP ~4.4 s/273 KB locally. |
+| Security | 88 | Runtime gate confirms RLS on every public table, zero API-role grants, correct private buckets, callback/rate-limit hardening, and zero npm production advisories. |
+| Performance | 72 | Warm local production responses improved to ~30 ms for `/` and ~17 ms for the stocked PDP; cold fills and large HTML payloads still need load evidence. |
 | Mobile experience | 80 | Public cards and mobile admin navigation usable with no document-level horizontal overflow; only Chromium emulation was tested. |
-| Infrastructure | 55 | Clean production build, health route, Vercel cron manifest, migration and hardening workflow exist; production env gate, deployment, DNS/SSL, backup/restore evidence remain. |
-| Monitoring | 38 | Structured redacted logs and a runbook exist; no external error tracker, log drain, uptime alerts, or alert delivery was demonstrated. |
+| Infrastructure | 68 | Build and runtime gate pass with 24/24 migrations, stock consistency, RLS and storage checks; external env, deployment, DNS/SSL and restore evidence remain. |
+| Monitoring | 45 | Structured redacted logs, runbook and repeatable runtime readiness command exist; external alert/log delivery is not demonstrated. |
 | Legal/content readiness | 48 | Legal routes and consent mechanisms exist; official contact/returns details and legal/business approval are incomplete. |
 
 ## Platform inventory and critical flow map
@@ -112,7 +117,9 @@ Catalog readiness → product card/PDP → cart → delivery quote → checkout 
 → return/refund → stock/payment/fiscal reconciliation
 ```
 
-The flow stops at the first step today because no active product is ready.
+The flow now reaches checkout for SKU `1133`; order submission and every
+provider side effect remain intentionally unexecuted until the external gates
+are accepted.
 
 ### Route inventory
 
@@ -140,24 +147,24 @@ The successful build enumerated the complete route tree; the source contains
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Build | Production build | Complete | Yes | Pass | None | — | Keep in CI | Engineering | No | Next build: 76 static pages, TS pass |
 | Quality | Lint | Complete | Yes | Pass after fixes | Five lint errors fixed | Fixed | Keep required in CI | Engineering | No | `npm run lint` exit 0 |
-| Quality | Unit tests | Complete | Yes | 30/30 pass | Coverage remains narrow | Medium | Add commerce/integration tests | Engineering | No | 11 files, 30 tests |
-| Quality | E2E suite | Partially complete | Yes | 4 pass, 10 skipped locally | Password reset and tagged admin credentials unavailable to final run | High | Run full isolated CI/staging suite | QA/DevOps | Yes | Playwright final run |
-| Public | Homepage | Working with minor issues | Yes | Correct content, very slow/heavy | ~12.9 s, 429 KB local HTML | High | Cache/batch home rails and load-test | Engineering | No |
+| Quality | Unit tests | Complete | Yes | 36/36 pass | Provider integration remains external | Medium | Keep expanding commerce integration coverage | Engineering | No | 13 files, 36 tests |
+| Quality | E2E suite | Partially complete | Yes | 4 default pass/12 skipped; 2 live-catalog pass | Password reset and tagged admin credentials require isolated credentials | High | Run full isolated CI/staging suite | QA/DevOps | Yes | Desktop/mobile Playwright |
+| Public | Homepage | Working with minor issues | Yes | Shared 60 s cache works | ~1.25 s fill, ~21–30 ms warm; 418 KB HTML | Medium | Load-test/cache telemetry and reduce payload | Engineering | No |
 | Public | Promo/category/listings | Working with minor issues | Yes | Routes load, cards responsive | Some pages 388 KB; catalog content incomplete | High | Complete catalog and optimize payload | Content/Engineering | Yes |
 | Public | Search | Working with minor issues | Yes | Correct results and cards | ~2.1 s remains above ideal | Medium | Add cache/index timing telemetry | Engineering | No | Improved from ~11.2 s |
-| Public | PDP | Working with minor issues | Yes | Gallery/content loads | ~4.4 s, 273 KB | High | Cache product reads, reduce related payload | Engineering | No |
+| Public | PDP | Working with minor issues | Yes | Gallery/content and short shared cache work | ~5.0 s fill, ~17 ms warm; 267 KB warm HTML | Medium | Reduce cold-fill latency/payload and load-test | Engineering | No |
 | Media | Card first image | Complete | Yes | Pass desktop/mobile | Cache-clear/throttle not directly available | Low | Run a throttled CI browser case | QA | No | Ordered first image, blur placeholder |
 | Media | One/multi/no-image cards | Complete | Yes | Pass | 68 products lack media | High | Supply final media | Client/Content | Yes |
 | Media | Upload/reorder/delete lifecycle | Could not test | Source only | Not mutated | Needs isolated storage fixtures | High | Staging upload acceptance | QA/Content | Yes |
-| Cart | Add/change/remove | Broken by content gate | UI/source | No eligible product | Zero ready products | Blocker | Complete dimensions/media/stock | Client/Content | Yes |
-| Checkout | Session/order | Broken by content gate | API/source | Cannot start valid sale | No eligible product/full sale test | Blocker | Tagged staging/production acceptance | Business/QA | Yes |
+| Cart | Add/change/remove | Complete for launch SKU | Browser desktop/mobile | SKU 1133 add/persist/cart pass | Broader assortment incomplete | High | Approve additional launch SKUs | Client/Content | No |
+| Checkout | Session/order | Partially complete | Browser/API/source | Checkout entry passes | Final order/full sale not executed | Blocker | Tagged staging/production acceptance | Business/QA | Yes |
 | Auth | Protected redirects | Complete | Yes | Pass | None | — | Keep regression | Engineering | No |
 | Auth | Registration/login/reset/verification | Partially complete | Source + route + partial E2E | Protection/rate limits present | Full reset/verification delivery skipped | High | Isolated end-to-end email/auth run | QA | Yes |
 | Account | Own data/export/deletion/orders | Partially complete | Route/API/source | Server guards present | Destructive/data lifecycle not executed | High | Staging lifecycle test | QA/Legal | Yes |
 | Admin | Route inventory/page load | Complete | Yes | 31 canonical routes pass | None | — | Keep smoke matrix | Engineering | No |
 | Admin | Four-role RBAC | Complete | Yes | Pass desktop/mobile with isolated accounts | Final local suite skipped without env creds | Medium | Keep tagged CI fixtures | DevOps | No |
 | Admin | Create/edit/import/export/delete | Could not test | Source/page only | UI and APIs exist | No safe isolated mutation data | High | Full staging admin acceptance | QA/Admin owners | Yes |
-| Payments | COD cash/card + bank | Partially complete | Config/source | Visible/enabled in DB | No order can be placed | Blocker | Full tagged sale/reconciliation | Business/QA | Yes |
+| Payments | COD cash/card + bank | Partially complete | Config/runtime/browser | Visible/enabled; checkout reachable | Final order not placed | Blocker | Full tagged sale/reconciliation | Business/QA | Yes |
 | Payments | IPS/cards/wallets | Requires client input | Env/source | Correctly hidden/gated | Acceptance flags and/or credentials incomplete | Blocker | Provider acceptance or disable config | Client/Bank | Yes |
 | Email | Newsletter success/failure UX | Complete | Yes | 4/4 desktop/mobile E2E pass | None | — | Keep E2E | Engineering | No |
 | Email | Transactional delivery | Partially complete | DB/source | Retry/logging exists | 14 FAILED, 4 SENT; delivery not accepted | Critical | Domain/webhook/delivery tests | Client/Engineering | Yes |
@@ -219,24 +226,25 @@ meni” button opened a labeled admin navigation dialog successfully.
 
 ## E. Complete bug report
 
-### Open findings
+### Findings and follow-up status
 
-#### QA-001 — Zero products can be purchased
+#### QA-001 — Zero products could be purchased — **RESOLVED**
 
-- Severity: **BLOCKER**
+- Severity: **FIXED**
 - Environment/role/route: configured database; visitor; all listing/PDP/cart
 - Preconditions: active catalog loaded
 - Steps: search `relax`; inspect purchase button; query catalog readiness
 - Expected: at least one in-stock, complete product can be added to cart
-- Actual: all 209 active products have missing dimensions; 68 also have no
-  image. The only in-stock SKU (`1133`, stock 9) is disabled as “Uskoro
-  dostupno”.
+- Actual after fix: 30 products have supplier-documented dimensions and pass
+  readiness. SKU `1133` has stock 9, matches warehouse stock, and is addable.
+  Desktop/mobile search → cart → checkout entry passes. There are still 179
+  dimension-incomplete and 68 image-incomplete active products.
 - Technical notes: `src/lib/catalog-readiness.ts` correctly prevents unsafe
   sale. Do not weaken this rule.
-- Fix: import/enter valid width, depth, height and media; validate pricing,
-  delivery window and stock; publish only accepted SKUs.
-- Retest: open
-- Production blocker: **Yes**
+- Fix: applied a curated, auditable backfill from 116 supplier DOCX specs;
+  retained strict readiness blocking for incomplete products.
+- Retest: pass (`check:runtime-readiness` and live-catalog Playwright)
+- Production blocker: **No for the minimum SKU; broader assortment is a client/content gate**
 
 #### QA-002 — Production environment validation fails six gates
 
@@ -256,7 +264,8 @@ meni” button opened a labeled admin navigation dialog successfully.
 
 - Severity: **BLOCKER**
 - Routes: checkout, payment, shipment, fiscal, email and refund APIs/admin
-- Steps: none safely available without accepted catalog/providers
+- Steps: browser commerce entry is now proven; provider side effects remain
+  unavailable without accepted accounts
 - Expected: one tagged transaction reconciles across every subsystem
 - Actual: no complete accepted transaction evidence
 - Fix: execute the runbook’s tagged sale in an isolated/approved environment,
@@ -276,19 +285,21 @@ meni” button opened a labeled admin navigation dialog successfully.
 - Retest: open
 - Production blocker: **Yes**
 
-#### QA-005 — Storefront server response is too slow/heavy
+#### QA-005 — Storefront cold response and payload remain heavy
 
 - Severity: **HIGH**
 - Routes: `/`, `/p/relax-1133`, listings
 - Expected: production-like uncached responses near a normal interactive budget
-- Actual after optimization: homepage ~12.9 s/428,670 bytes; PDP ~4.4
-  s/272,605 bytes; search ~2.1 s/116,621 bytes. Measurements include remote DB
-  latency and are not Web Vitals.
+- Actual after optimization: homepage cache fill ~1.25 s and warm ~21–30 ms
+  (418,529 bytes); stocked PDP fill ~5.0 s and warm ~17 ms (266,972 bytes);
+  search remained ~2.1 s/116,621 bytes in the earlier cold run. Measurements
+  include remote DB latency and are not Web Vitals.
 - Cause: multiple serial catalog queries through a one-connection process,
   dynamic rendering, large product/gallery serialization.
-- Fix: cache homepage configuration/rails, precompute promo rails, measure SQL,
-  reduce repeated product payload, add CDN/server cache policy, then load-test.
-- Retest: partial; payloads and search improved, homepage still high
+- Fix: added 60-second shared homepage/content/rail caches and a 30-second PDP
+  product cache; checkout remains authoritative for final price/stock. Continue
+  with payload reduction, SQL timing and load testing.
+- Retest: partial pass; warm latency is fast, cold PDP fill and payload remain
 - Production blocker: No for a controlled soft launch; **Yes for a large
   traffic launch without load evidence**
 
@@ -395,9 +406,9 @@ meni” button opened a labeled admin navigation dialog successfully.
 
 | Item | Why needed | Provider/owner | Blocks | Entry point | Sensitive | Current |
 | --- | --- | --- | --- | --- | --- | --- |
-| Complete SKU dimensions | Catalog safety, delivery and purchase eligibility | Merchandising/client | Yes | ERP Artikli/import | No | Missing for 209 active products |
+| Complete SKU dimensions | Catalog safety, delivery and purchase eligibility | Merchandising/client | Yes | ERP Artikli/import | No | 30 complete; 179 active products still missing |
 | Final product images/alt/order | Sale quality and card/PDP readiness | Content/client | Yes | Product media/import | No | 68 products have none |
-| Approved stock/prices/delivery windows | Correct sale and fulfillment | Commercial/warehouse | Yes | ERP | Commercial | Only one active SKU has stock |
+| Approved stock/prices/delivery windows | Correct sale and fulfillment | Commercial/warehouse | Yes | ERP | Commercial | SKU 1133 is ready with stock 9; approve launch scope |
 | MyGLS pickup contact name/phone | Shipment creation | Warehouse/client | Yes if enabled | Hosting env/admin | Personal | Missing |
 | MyGLS production acceptance | Enable real shipments | Warehouse/MyGLS | Yes if enabled | Secret acceptance flag | Yes | Off |
 | X Express production acceptance | Enable real shipments | Client/X Express | Yes if enabled | Secret acceptance flag | Yes | Off |
@@ -443,6 +454,8 @@ Values were assessed without printing secrets.
 - [x] Production build from current working tree.
 - [x] Database migrations present and 24 applied in inspected database.
 - [x] RLS hardening and private-bucket design.
+- [x] Runtime readiness passes: purchasable SKU, stock consistency, payment
+  methods, default warehouse, migrations, RLS, grants and bucket privacy.
 - [x] Vercel cron manifest and health endpoint.
 - [x] Zero known production npm vulnerabilities at audit time.
 - [ ] `check:production-env` returns zero errors.
@@ -461,8 +474,9 @@ Values were assessed without printing secrets.
 
 ### Must be completed before launch
 
-- [ ] Make at least the intended launch catalog purchasable by completing
-  dimensions, media, prices, stock and delivery data.
+- [x] Make at least one launch SKU purchasable with dimensions, media, price,
+  stock and delivery data.
+- [ ] Approve and complete the intended launch assortment beyond SKU `1133`.
 - [ ] Resolve all six production environment errors.
 - [ ] Reconcile existing email, shipment and fiscal failures.
 - [ ] Complete one tagged full sale, delivery and return/refund acceptance.
@@ -539,9 +553,11 @@ Final local production build, remote configured database:
 
 | Route | Status | Bytes | Time |
 | --- | ---: | ---: | ---: |
-| `/` | 200 | 428,670 | 12,875 ms |
+| `/` cache fill | 200 | 418,529 | 1,252 ms |
+| `/` warm | 200 | 418,486 | 21–30 ms |
 | `/pretraga?q=relax` | 200 | 116,621 | 2,076 ms |
-| `/p/relax-1133` | 200 | 272,605 | 4,379 ms |
+| `/p/relax-1133` cache fill | 200 | 272,618 | 4,997 ms |
+| `/p/relax-1133` warm | 200 | 266,972 | 17 ms |
 | `/novo` | 200 | 96,885 | 2,101 ms |
 | `/akcija` | 200 | 388,088 | 2,104 ms |
 
@@ -555,12 +571,15 @@ npm run lint
 npm run test:unit
 npm run build
 npm audit --omit=dev --audit-level=moderate
+npm run check:runtime-readiness
 npm run check:production-env
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 npm run test:e2e
+E2E_LIVE_CATALOG=1 npx playwright test tests/e2e/commerce-smoke.spec.ts
 ```
 
-Final results: lint pass; 30 unit tests pass; build pass; zero npm production
-vulnerabilities; E2E 4 pass/10 skipped; production env check fails six errors.
+Final results: lint pass; 36 unit tests pass; build pass; zero npm production
+vulnerabilities; runtime readiness pass; default E2E 4 pass/12 skipped; targeted
+live-catalog E2E 2/2 pass; production env check fails six external errors.
 
 ### Retest instructions
 
@@ -597,7 +616,8 @@ vulnerabilities; E2E 4 pass/10 skipped; production env check fails six errors.
 
 Direct evidence:
 
-- `activeReadyInStock = 0`; the primary conversion flow cannot begin.
+- `activeReadyInStock = 1`; the minimum conversion path reaches checkout, but
+  the tagged order/provider flow is not accepted.
 - Production environment validation returns six errors.
 - Full sale/refund/provider acceptance has not occurred.
 - Transactional email, courier and fiscal histories contain failures.

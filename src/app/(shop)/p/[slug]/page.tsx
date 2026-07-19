@@ -21,7 +21,7 @@ import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
-import { getProductBySlug, listProducts } from "@/lib/api/catalog";
+import { getProductBySlug, listProductRail } from "@/lib/api/catalog";
 import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
@@ -83,19 +83,17 @@ export default async function ProductPage({ params }: RouteProps) {
   // Related sets
   const [frequentlyBought, similar] = await Promise.all([
     product.collection
-      ? listProducts({
+      ? listProductRail({
           collectionSlug: product.collection,
           excludeSku: product.sku,
           limit: 8,
-          includeTotal: false,
         }).then((r) => r.items).catch(() => [])
       : Promise.resolve([]),
     product.group
-      ? listProducts({
+      ? listProductRail({
           groupSlug: product.group,
           excludeSku: product.sku,
           limit: 8,
-          includeTotal: false,
         })
           .then((r) => r.items)
           .catch(() => [])

@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import {
   ActionKind,
   BannerPlacement,
@@ -379,7 +380,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
   };
 }
 
-export const getHomeLayout = cache(async (): Promise<HomeLayout> => {
+async function loadHomeLayout(): Promise<HomeLayout> {
   const [bannerAfterSecond, bannerAfterFourth] = await Promise.all([
     getHomeBanner(
       BannerPlacement.HOME_AFTER_SECOND_ROW,
@@ -436,4 +437,17 @@ export const getHomeLayout = cache(async (): Promise<HomeLayout> => {
     bannerAfterSecond,
     bannerAfterFourth,
   };
-});
+}
+
+const getHomeLayoutAcrossRequests = unstable_cache(
+  loadHomeLayout,
+  ["storefront-home-layout-v1"],
+  {
+    revalidate: 60,
+    tags: ["storefront-home"],
+  },
+);
+
+// React cache deduplicates layout/home consumers inside one render; the Next
+// data cache avoids rebuilding five product rails on every anonymous request.
+export const getHomeLayout = cache(getHomeLayoutAcrossRequests);

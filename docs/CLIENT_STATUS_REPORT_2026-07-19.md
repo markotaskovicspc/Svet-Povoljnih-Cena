@@ -10,10 +10,10 @@ administraciju, katalog, plaćanja, dostavu, fiskalizaciju, reklamacije,
 marketing i izveštavanje. Tehnička osnova je ozbiljna i aktuelna verzija se
 uspešno gradi za produkciju.
 
-Trenutni zaključak je **NO-GO za otvaranje realnih porudžbina**. Glavni razlog
-nije opšta nestabilnost aplikacije, već to što nijedan aktivan artikal trenutno
-ne ispunjava uslove za bezbednu kupovinu, a pojedine produkcione integracije i
-operativne procedure još nemaju završenu potvrdu.
+Trenutni zaključak ostaje **NO-GO za otvaranje realnih porudžbina**. Minimalni
+put kupovine sada radi za jedan artikal na stanju, ali produkcione integracije,
+kompletna probna prodaja, backup/monitoring i poslovno-pravna potvrda još nisu
+završeni.
 
 ## 2. Završeni radovi
 
@@ -29,6 +29,20 @@ operativne procedure još nemaju završenu potvrdu.
 - Dodata je automatska zaštita od povratka problema sa prvom fotografijom.
 - Ograničeni su i zaštićeni javni zahtevi za preporuke i učitavanje proizvoda.
 - Ispravljeni su lint i nestabilni E2E testovi.
+- Iz 116 dobavljačkih specifikacija izdvojene su samo nedvosmislene dimenzije;
+  30 artikala je ažurirano u bazi sa pojedinačnim audit zapisom.
+- Artikal `RELAX` (SKU 1133) sada je spreman za kupovinu, ima 9 komada i lager
+  se slaže sa stanjem po magacinu.
+- Desktop i mobilni test potvrđuju put pretraga → dodavanje u korpu → korpa →
+  ulazak u checkout.
+- IPS callback je usklađen sa Payten specifikacijom: telo callback-a se ne
+  smatra pouzdanim, status se proverava server–server, svi callback odgovori su
+  HTTP 200, a token ima ograničen rok i kontrolisan 401 retry.
+- Dodata je automatizovana runtime provera migracija, kataloga, lagera, načina
+  plaćanja, magacina, RLS-a, API grantova i privatnosti storage bucket-a.
+- Uveden je kratki shared cache za početnu stranu i PDP railove. U lokalnom
+  produkcionom testu zagrejana početna odgovara za oko 21–30 ms, a PDP za oko
+  17 ms.
 
 ## 3. Funkcionalnosti koje trenutno rade
 
@@ -43,7 +57,12 @@ operativne procedure još nemaju završenu potvrdu.
 - Bezbednosna zaglavlja, RLS pravila baze i privatni fajlovi su pravilno
   postavljeni.
 - Newsletter pravilno prikazuje i uspeh i grešku.
-- Produkcioni build, lint i svih 30 unit testova prolaze.
+- Produkcioni build, lint i svih 36 unit testova prolaze.
+- Runtime provera je zelena: 24/24 migracije, 0 RLS propusta, 0 grantova za
+  `anon`/`authenticated`, svi PII bucket-i su privatni, a `product-media` je
+  jedini javni bucket po dizajnu.
+- ERP stavke iz starog backloga su već funkcionalne: PDF porudžbenice sa email
+  prilogom, raspodela transporta u COGS, magacinski pregled i ulazne fakture.
 - Provera npm zavisnosti nije pronašla poznate produkcione ranjivosti.
 
 ## 4. Sprovedeno testiranje
@@ -55,7 +74,8 @@ operativne procedure još nemaju završenu potvrdu.
 - Provera podataka i spremnosti kataloga u bazi.
 - Provera migracija, RLS pravila i pristupa Supabase tabelama.
 - Provera produkcionih HTTP zaglavlja i osnovnih performansi.
-- Automatizacija: 30/30 unit testova; 4/4 dostupna desktop/mobilna E2E testa.
+- Automatizacija: 36/36 unit testova; 4/4 dostupna osnovna desktop/mobilna E2E
+  testa; dodatni live-catalog commerce smoke 2/2 prolazi.
 
 Nisu izvršene realne naplate, slanje robe, izdavanje fiskalnog računa, refund,
 masovno slanje poruka ili brisanje poslovnih podataka. To mora da se uradi kao
@@ -63,21 +83,22 @@ kontrolisan, označen acceptance test sa odobrenim nalozima.
 
 ## 5. Problemi koji se trenutno rešavaju
 
-1. Svih 209 aktivnih artikala nema kompletne dimenzije. Zbog toga je kupovina
-   pravilno blokirana. Jedini artikal sa zalihom ima 9 komada, ali takođe nema
-   kompletne dimenzije.
+1. Od 209 aktivnih artikala, 30 sada prolazi kompletnu proveru spremnosti.
+   Preostalih 179 nema kompletne dimenzije, a 68 nema fotografiju. SKU 1133 je
+   spreman i može da se doda u korpu; potrebno je odobriti obim launch ponude.
 2. Za 68 artikala nedostaje fotografija.
 3. Produkciona provera prijavljuje šest obaveznih grešaka: MyGLS kontakt ime i
    telefon, MyGLS odobrenje, X Express odobrenje, BADI lokacija i BADI
    odobrenje.
 4. Potrebno je razjasniti 14 neuspešnih email poruka, dve neuspešne MyGLS
    pošiljke i jedan neuspešan fiskalni zapis.
-5. Početna strana je i dalje spora u nekesiranom lokalnom testu i zahteva
-   dodatnu optimizaciju i test opterećenja.
+5. Keširane stranice su sada brze, ali prvi hladni PDP zahtev (~5 s) i veliki
+   HTML payload-i i dalje zahtevaju SQL/CDN merenje i test opterećenja.
 
 ## 6. Preostali tehnički zadaci
 
-- Završiti katalog koji ide u prvu objavu.
+- Odobriti i završiti katalog koji ide u prvu objavu izvan trenutno spremnog
+  SKU 1133.
 - Izvršiti kompletan test porudžbine: plaćanje/COD, zaliha, dostava, račun,
   email, status, povrat i refundacija.
 - U staging okruženju testirati sve ključne admin izmene i njihov audit trag.
@@ -129,10 +150,10 @@ Pre objave moraju postojati:
 
 ## 10. Zaključak o spremnosti
 
-Procena spremnosti je **55/100**.
+Procena spremnosti je **68/100**.
 
-Platforma je blizu faze kontrolisane produkcione pripreme, ali trenutno nije
-bezbedno otvoriti realne porudžbine. Kada katalog, šest produkcionih grešaka,
-kompletan prodajni test, backup/monitoring i pravna potvrda budu završeni,
+Platforma ima funkcionalan minimalni put kupovine, ali trenutno nije bezbedno
+otvoriti realne porudžbine. Kada šest produkcionih grešaka, kompletan prodajni
+test, odobren launch asortiman, backup/monitoring i pravna potvrda budu završeni,
 status može da se promeni u **CONDITIONAL GO**, a zatim u **GO** posle uspešne
 finalne provere.

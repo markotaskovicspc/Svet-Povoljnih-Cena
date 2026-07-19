@@ -6,7 +6,6 @@ import {
   RATE_LIMITS,
   checkRateLimitForRequest,
   checkRateLimit,
-  rateLimitJson,
   rateLimitKey,
   getClientIp,
 } from "@/lib/security/rate-limit";
@@ -22,7 +21,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   // Per-IP throttle: cap how fast any single source can poke the endpoint.
   const ipLimit = await checkRateLimitForRequest(req, "ipsCallback", RATE_LIMITS.ipsCallback);
-  if (!ipLimit.ok) return rateLimitJson(ipLimit);
+  // A callback acknowledgement must remain HTTP 200 even when throttled; a 429
+  // makes the gateway retry an intentionally ignored wake-up ping.
+  if (!ipLimit.ok) return NextResponse.json({ ok: true });
 
   try {
     const rawBody = await req.text();
@@ -85,7 +86,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, paid: result.paid });
   } catch (err) {
     if (err instanceof IpsConfigError) {
-      return NextResponse.json({ ok: false, error: "not_configured" }, { status: 503 });
+      logOperationalError("payment.ips.callback_not_configured", err, {
+        clientIp: getClientIp(req),
+      });
+      return NextResponse.json({ ok: true });
     }
     logOperationalError("payment.ips.callback_verify_failed", err, {
       contentType: req.headers.get("content-type") ?? null,

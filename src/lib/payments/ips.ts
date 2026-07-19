@@ -411,6 +411,11 @@ function clearCachedToken() {
   cachedToken = null;
 }
 
+/** Test isolation for the module-level gateway token cache. */
+export function resetIpsTokenCacheForTesting() {
+  clearCachedToken();
+}
+
 // Token-authenticated POST used by all gateway calls. If the gateway rejects the
 // token (401), the cached token is stale/revoked: clear it and retry exactly once
 // with a freshly minted one before giving up. Callers that can't prove a 401 is
