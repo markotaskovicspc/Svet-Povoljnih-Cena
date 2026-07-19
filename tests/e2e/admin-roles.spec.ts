@@ -2,9 +2,21 @@ import { expect, test } from "@playwright/test";
 
 const cases = [
   { role: "SUPER", allowed: "/admin/audit-log", denied: null },
-  { role: "CONTENT", allowed: "/admin/proizvodi", denied: "/admin/narudzbine" },
-  { role: "OPS", allowed: "/admin/lager", denied: "/admin/pocetna" },
-  { role: "ADS", allowed: "/admin/oglasi", denied: "/admin/lager" },
+  {
+    role: "CONTENT",
+    allowed: "/admin/erp/artikli",
+    denied: "/admin/erp/prodajni-nalozi",
+  },
+  {
+    role: "OPS",
+    allowed: "/admin/erp/stanje-po-magacinima",
+    denied: "/admin/pocetna",
+  },
+  {
+    role: "ADS",
+    allowed: "/admin/oglasi",
+    denied: "/admin/erp/stanje-po-magacinima",
+  },
 ] as const;
 
 for (const roleCase of cases) {

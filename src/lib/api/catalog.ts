@@ -99,7 +99,12 @@ const productListSelect = {
   action: true,
   actionPrices: { include: { action: true } },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
-  media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" } },
+  // Cards expose a compact preview gallery; the PDP still loads every asset.
+  media: {
+    where: { kind: "IMAGE" },
+    orderBy: { order: "asc" },
+    take: 6,
+  },
   materials: { include: { material: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -475,6 +480,8 @@ export interface ListProductsInput {
   limit?: number;
   /** Cursor = product id; results returned strictly after this id. */
   cursor?: string;
+  /** Internal optimization for rails that do not display a result total. */
+  includeTotal?: boolean;
 }
 
 export interface ListProductsResult {
@@ -571,16 +578,17 @@ export async function listProducts(
 
   const limit = Math.min(Math.max(input.limit ?? 24, 1), 300);
 
-  const [rows, total] = await Promise.all([
-    db.product.findMany({
-      where,
-      select: productListSelect,
-      orderBy,
-      take: limit + 1,
-      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-    }),
-    db.product.count({ where }),
-  ]);
+  const rowsQuery = db.product.findMany({
+    where,
+    select: productListSelect,
+    orderBy,
+    take: limit + 1,
+    ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+  });
+  const [rows, total] =
+    input.includeTotal === false
+      ? [await rowsQuery, 0]
+      : await Promise.all([rowsQuery, db.product.count({ where })]);
 
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
@@ -607,6 +615,43 @@ export const getProductBySlug = cache(async function getProductBySlug(
     return getSvetAkcijaFallbackBySlug(slug);
   }
 });
+
+/**
+ * Batch loader for listing cards.
+ *
+ * Search results already contain the ordered slugs. Loading every card through
+ * `getProductBySlug` creates one full product query per hit; this keeps the
+ * result order while resolving the page with one listing-shaped query.
+ */
+export async function getProductCardsBySlugs(
+  slugs: readonly string[],
+): Promise<ProductDTO[]> {
+  const orderedSlugs = Array.from(
+    new Set(slugs.map((slug) => slug.trim()).filter(Boolean)),
+  ).slice(0, 120);
+  if (!orderedSlugs.length) return [];
+  if (!hasDatabaseConnection()) {
+    return orderedSlugs
+      .map(getSvetAkcijaFallbackBySlug)
+      .filter((product): product is ProductDTO => Boolean(product));
+  }
+
+  try {
+    const rows = await db.product.findMany({
+      where: { slug: { in: orderedSlugs }, isActive: true },
+      select: productListSelect,
+    });
+    const productsBySlug = new Map(
+      rows.map((row) => [row.slug, mapProductListItem(row)]),
+    );
+    return orderedSlugs
+      .map((slug) => productsBySlug.get(slug))
+      .filter((product): product is ProductDTO => Boolean(product));
+  } catch (error) {
+    console.error("[catalog] Failed to batch-load product cards.", error);
+    return [];
+  }
+}
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;

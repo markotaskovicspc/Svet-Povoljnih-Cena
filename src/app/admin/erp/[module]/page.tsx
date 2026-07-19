@@ -55,7 +55,7 @@ export default async function ErpModulePage({
         }
       />
       <div className="px-8 py-6">
-        <ErpGrid module={erpModule} />
+        <ErpGrid key={erpModule.slug} module={erpModule} />
       </div>
     </>
   );

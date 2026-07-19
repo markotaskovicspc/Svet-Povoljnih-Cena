@@ -100,20 +100,20 @@ export async function GET(
 ) {
   const { module: slug } = await context.params;
   await requireAdminAction(allowedRolesForErpModule(slug));
-  const module = await getErpModule(slug, { take: 10_000 });
-  if (!module) {
+  const erpModule = await getErpModule(slug, { take: 10_000 });
+  if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
   }
 
   const search = new URL(request.url).searchParams;
   const requestedColumns = parseArray<string>(search.get("columns"));
-  const knownColumns = new Map(module.columns.map((column) => [column.key, column]));
+  const knownColumns = new Map(erpModule.columns.map((column) => [column.key, column]));
   const columns = requestedColumns
     .map((key) => knownColumns.get(key))
     .filter((column) => Boolean(column));
   const exportColumns = columns.length
-    ? (columns as typeof module.columns)
-    : module.columns.filter((column) => column.defaultVisible);
+    ? (columns as typeof erpModule.columns)
+    : erpModule.columns.filter((column) => column.defaultVisible);
   const filters = parseArray<AdminGridFilter>(search.get("filters")).filter(
     (filter) =>
       filter &&
@@ -129,7 +129,7 @@ export async function GET(
       (sort.direction === "asc" || sort.direction === "desc"),
   );
   const rows = filterAndSortRows(
-    module.rows,
+    erpModule.rows,
     exportColumns.map((column) => column.key),
     search.get("q") ?? "",
     filters,
@@ -139,7 +139,7 @@ export async function GET(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Svet povoljnih cena ERP";
   workbook.created = new Date();
-  const worksheet = workbook.addWorksheet(module.title.slice(0, 31), {
+  const worksheet = workbook.addWorksheet(erpModule.title.slice(0, 31), {
     views: [{ state: "frozen", ySplit: 1 }],
   });
   worksheet.columns = exportColumns.map((column) => ({

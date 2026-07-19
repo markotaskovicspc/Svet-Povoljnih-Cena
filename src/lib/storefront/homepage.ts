@@ -340,7 +340,11 @@ async function resolveSlot(slot: HomeSlotForRender) {
     }
 
     const presentation = actionPresentation[action.kind];
-    const products = await listProducts({ actionSlug: action.slug, limit });
+    const products = await listProducts({
+      actionSlug: action.slug,
+      limit,
+      includeTotal: false,
+    });
     if (!products.items.length) return null;
 
     return {
@@ -358,7 +362,11 @@ async function resolveSlot(slot: HomeSlotForRender) {
     : undefined;
   if (!landing) return null;
 
-  const products = await listProducts({ ...landing.query, limit });
+  const products = await listProducts({
+    ...landing.query,
+    limit,
+    includeTotal: false,
+  });
   if (!products.items.length) return null;
 
   return {

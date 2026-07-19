@@ -21,8 +21,9 @@ import { mapXExpressStatus } from "./status";
  */
 
 async function createWaybill(
-  _input: CourierOrderInput,
+  input: CourierOrderInput,
 ): Promise<CourierShipmentResult> {
+  void input;
   if (process.env.X_EXPRESS_ENABLED === "true") {
     throw new CourierConfigError(
       "X Express nalog se kreira kroz createShipmentForOrder zbog opsega kodova.",

@@ -23,17 +23,19 @@ export async function GET(
     1,
     Math.min(100, Number.parseInt(search.get("pageSize") ?? "100", 10) || 100),
   );
-  const module = await getErpModule(slug, { take: 10_000 });
-  if (!module) {
+  const erpModule = await getErpModule(slug, { take: 10_000 });
+  if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
   }
-  const knownColumns = new Set(module.columns.map((column) => column.key));
+  const knownColumns = new Set(erpModule.columns.map((column) => column.key));
   const requestedColumns = parseGridArray<string>(search.get("columns")).filter((key) =>
     knownColumns.has(key),
   );
   const columns = requestedColumns.length
     ? requestedColumns
-    : module.columns.filter((column) => column.defaultVisible).map((column) => column.key);
+    : erpModule.columns
+        .filter((column) => column.defaultVisible)
+        .map((column) => column.key);
   const filters = parseGridArray<AdminGridFilter>(search.get("filters")).filter(
     (filter) =>
       filter &&
@@ -47,7 +49,7 @@ export async function GET(
       (sort.direction === "asc" || sort.direction === "desc"),
   );
   const result = filterAndSortGridRows(
-    module.rows,
+    erpModule.rows,
     columns,
     search.get("q") ?? "",
     filters,

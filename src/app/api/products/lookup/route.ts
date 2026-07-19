@@ -4,6 +4,11 @@ import { getProductBySku } from "@/lib/api/catalog";
 import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import type { Product, WishlistProductSnapshot } from "@/types";
+import {
+  checkRateLimitForRequest,
+  rateLimitJson,
+  RATE_LIMITS,
+} from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +18,13 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const limited = await checkRateLimitForRequest(
+    req,
+    "products:lookup",
+    RATE_LIMITS.search,
+  );
+  if (!limited.ok) return rateLimitJson(limited);
+
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {

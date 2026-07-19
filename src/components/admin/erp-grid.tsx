@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type SetStateAction,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -241,6 +246,28 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [reloadToken, setReloadToken] = useState(0);
   const canEditColumn = (columnKey: string) =>
     Boolean(module.editableColumns?.includes(columnKey));
+  const updateQuery = (value: SetStateAction<string>) => {
+    setPage(1);
+    setQuery(value);
+  };
+  const updateFilters = (
+    value: SetStateAction<AdminGridFilter[]>,
+  ) => {
+    setPage(1);
+    setFilters(value);
+  };
+  const updateSorting = (
+    value: SetStateAction<AdminGridSort[]>,
+  ) => {
+    setPage(1);
+    setSorting(value);
+  };
+  const updateVisibleColumns = (
+    value: SetStateAction<string[]>,
+  ) => {
+    setPage(1);
+    setVisibleColumns(value);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -316,10 +343,6 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     sorting,
     visibleColumns,
   ]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, module.slug, query, sorting, visibleColumns]);
 
   const visible = useMemo(
     () => {
@@ -472,7 +495,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const addFilter = () => {
     if (!newFilterColumn) return;
     const column = module.columns.find((item) => item.key === newFilterColumn);
-    setFilters((current) => [
+    updateFilters((current) => [
       ...current,
       {
         id: crypto.randomUUID(),
@@ -484,7 +507,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   };
 
   const toggleColumn = (key: string) => {
-    setVisibleColumns((current) =>
+    updateVisibleColumns((current) =>
       current.includes(key)
         ? current.filter((c) => c !== key)
         : [...current, key],
@@ -533,20 +556,20 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   };
 
   const applyView = (view: SavedView) => {
-    setVisibleColumns(view.visibleColumns);
+    updateVisibleColumns(view.visibleColumns);
     if (view.columnOrder?.length) {
       setColumnOrder(view.columnOrder);
       writeColumnOrder(module.slug, view.columnOrder);
     }
     setColumnWidths(view.columnWidths ?? {});
-    setFilters(
+    updateFilters(
       view.filters.map((filter) => ({
         ...filter,
         operator: filter.operator ?? "contains",
       })),
     );
-    setSorting(view.sorting ?? []);
-    setQuery(view.query);
+    updateSorting(view.sorting ?? []);
+    updateQuery(view.query);
   };
 
   const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
@@ -595,10 +618,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   const resetColumns = () => {
     const defaultOrder = module.columns.map((column) => column.key);
-    setVisibleColumns(defaultColumns);
+    updateVisibleColumns(defaultColumns);
     setColumnOrder(defaultOrder);
     setColumnWidths({});
-    setSorting([]);
+    updateSorting([]);
     writeColumnOrder(module.slug, defaultOrder);
   };
 
@@ -622,7 +645,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   };
 
   const toggleSort = (columnKey: string) => {
-    setSorting((current) => {
+    updateSorting((current) => {
       const existing = current.find((item) => item.columnKey === columnKey);
       if (!existing) return [{ columnKey, direction: "asc" }];
       if (existing.direction === "asc") return [{ columnKey, direction: "desc" }];
@@ -674,7 +697,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
               <div className="relative max-w-xl flex-1">
                 <Input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => updateQuery(e.target.value)}
                   placeholder="Brza pretraga po vidljivim kolonama"
                   className="h-9"
                 />
@@ -714,7 +737,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       <select
                         value={filter.operator}
                         onChange={(event) =>
-                          setFilters((current) =>
+                          updateFilters((current) =>
                             current.map((item) =>
                               item.id === filter.id
                                 ? {
@@ -743,7 +766,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                         <select
                           value={filter.value}
                           onChange={(event) =>
-                            setFilters((current) =>
+                            updateFilters((current) =>
                               current.map((item) =>
                                 item.id === filter.id
                                   ? { ...item, value: event.target.value }
@@ -766,7 +789,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                           type={inputType(column ?? { key: "", label: "" })}
                           value={filter.value}
                           onChange={(e) =>
-                            setFilters((current) =>
+                            updateFilters((current) =>
                               current.map((f) =>
                                 f.id === filter.id ? { ...f, value: e.target.value } : f,
                               ),
@@ -779,7 +802,9 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       <button
                         type="button"
                         onClick={() =>
-                          setFilters((current) => current.filter((f) => f.id !== filter.id))
+                          updateFilters((current) =>
+                            current.filter((f) => f.id !== filter.id),
+                          )
                         }
                         className="text-ink-300 hover:text-danger"
                         aria-label="Ukloni filter"

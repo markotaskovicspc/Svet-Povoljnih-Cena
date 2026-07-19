@@ -3,9 +3,8 @@ import Link from "next/link";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { ProductCard } from "@/components/product/product-card";
 import { searchProducts } from "@/lib/api/search";
-import { getProductBySlug } from "@/lib/api/catalog";
+import { getProductCardsBySlugs } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
-import type { Product } from "@/types";
 import type { SearchHit } from "@/types/search";
 
 export const metadata: Metadata = {
@@ -101,8 +100,7 @@ function searchPageHref(query: string, page: number) {
 }
 
 async function getProductsFromHits(hits: SearchHit[]) {
-  const products = await Promise.all(hits.map((hit) => getProductBySlug(hit.slug)));
-  return products.filter((product): product is Product => Boolean(product));
+  return getProductCardsBySlugs(hits.map((hit) => hit.slug));
 }
 
 function EmptyState({ title, text }: { title: string; text: string }) {
