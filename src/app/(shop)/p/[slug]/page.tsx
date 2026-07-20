@@ -117,7 +117,16 @@ export default async function ProductPage({ params }: RouteProps) {
 
   return (
     <article className="bg-canvas pb-32 md:pb-16">
-      <ProductViewAnalytics productId={product.id} />
+      <ProductViewAnalytics
+        productId={product.id}
+        item={{
+          sku: product.sku,
+          name: product.name,
+          unitPrice: price.effective,
+          fullUnitPrice: price.full,
+          categories: product.categoryPath,
+        }}
+      />
       {/* Row I — Breadcrumbs */}
       <div className="mx-auto w-full max-w-[var(--container-page)] px-4 pt-6 md:px-6">
         <Breadcrumbs trail={trail} />

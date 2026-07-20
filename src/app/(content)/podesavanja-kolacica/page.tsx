@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CookieSettingsPanel } from "@/components/privacy/cookie-consent";
 import { ContentBody, ContentHero } from "@/components/layout/content-shell";
+import { getGa4MeasurementId } from "@/lib/analytics/config";
 
 export const metadata: Metadata = {
   title: "Podešavanja kolačića",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function CookieSettingsPage() {
-  const gaId = process.env.NEXT_PUBLIC_GA4_ID;
+  const gaId = getGa4MeasurementId();
   return (
     <>
       <ContentHero title="Podešavanja kolačića" lead="Saglasnost možete promeniti u svakom trenutku." />

@@ -19,6 +19,7 @@ import { formatDateTime, formatRsd } from "@/lib/format";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
+import { PurchaseAnalytics } from "@/components/analytics/first-party-analytics";
 
 /**
  * `/checkout/potvrda` view. Reads the placed order from the checkout store
@@ -48,6 +49,7 @@ export function ConfirmationView({
 
   return (
     <div className="flex flex-col gap-8">
+      <PurchaseAnalytics order={order} paymentStatus={paymentStatus} />
       <SuccessHero order={order} paymentStatus={paymentStatus} />
       <PaymentNotice status={paymentStatus} message={paymentMessage} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

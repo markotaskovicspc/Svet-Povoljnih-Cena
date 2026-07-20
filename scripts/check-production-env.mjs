@@ -100,7 +100,10 @@ if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
 
 if (!value("NEXT_PUBLIC_MERCHANT_PHONE")) warnings.push("Public support phone is not configured");
 if (!value("NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS")) warnings.push("Returns address is not configured");
-if (!value("NEXT_PUBLIC_GA4_ID")) warnings.push("Analytics is not configured (the site remains functional)");
+const ga4Override = value("NEXT_PUBLIC_GA4_ID");
+if (ga4Override && !ga4Override.startsWith("G-")) {
+  warnings.push("NEXT_PUBLIC_GA4_ID override is invalid; the application default will be used");
+}
 
 for (const item of warnings) console.warn(`WARN: ${item}`);
 for (const item of errors) console.error(`ERROR: ${item}`);

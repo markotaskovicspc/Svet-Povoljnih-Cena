@@ -11,7 +11,10 @@ import { formatRsd } from "@/lib/format";
 import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import { getProductAvailability } from "@/lib/product-availability";
-import { recordFirstPartyEvent } from "@/components/analytics/first-party-analytics";
+import {
+  recordFirstPartyEvent,
+  recordGa4AddToCart,
+} from "@/components/analytics/first-party-analytics";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -47,6 +50,14 @@ export function commitAddToCart(product: Product, qty = 1): number {
     productId: product.id,
     quantity: qty,
     value: sale * qty,
+  });
+  recordGa4AddToCart({
+    sku: product.sku,
+    name: product.name,
+    unitPrice: sale,
+    fullUnitPrice: price.full,
+    quantity: qty,
+    categories: product.categoryPath,
   });
 
   toast.custom((id) => <AddToast id={id} line={line} qty={qty} />, {

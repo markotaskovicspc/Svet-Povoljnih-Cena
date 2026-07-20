@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { BRAND } from "@/lib/brand";
 import { CookieConsent } from "@/components/privacy/cookie-consent";
 import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytics";
+import { getGa4MeasurementId } from "@/lib/analytics/config";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -58,10 +59,9 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-// `.env` may hold an unfilled `GET_FROM_...` placeholder instead of a real
-// measurement ID (truthy but not a valid ID) — only load GA when it looks real.
-const gaId = process.env.NEXT_PUBLIC_GA4_ID;
-const isGaConfigured = !!gaId && gaId.startsWith("G-");
+// The measurement ID is public by design. An environment value can override the
+// store ID, while unfilled GET_FROM_... placeholders safely fall back to it.
+const gaId = getGa4MeasurementId();
 
 export default async function RootLayout({
   children,
@@ -110,7 +110,7 @@ export default async function RootLayout({
             </>
           )}
         </Providers>
-        <CookieConsent gaId={isGaConfigured ? gaId : undefined} />
+        <CookieConsent gaId={gaId} />
         {!isAdmin ? <FirstPartyAnalytics /> : null}
       </body>
     </html>
