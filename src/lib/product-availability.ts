@@ -9,6 +9,8 @@ type ProductAvailabilityInput = Pick<
   | "dimensionsCm"
   | "media"
   | "deliveryDays"
+  | "packageDimensionsCm"
+  | "supplierNextArrivalAt"
 >;
 
 export function getProductAvailability(product: ProductAvailabilityInput) {
@@ -16,7 +18,18 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
   const incomingStock = Number.isFinite(product.incomingStock)
     ? product.incomingStock
     : 0;
-  const readiness = getCatalogReadiness(product);
+  const displayDimensions = product.dimensionsCm;
+  const packageDimensions = product.packageDimensionsCm;
+  const hasDisplayDimensions = Object.values(displayDimensions).every(
+    (value) => Number.isFinite(value) && value > 0,
+  );
+  const readiness = getCatalogReadiness({
+    ...product,
+    dimensionsCm:
+      hasDisplayDimensions || !packageDimensions
+        ? displayDimensions
+        : packageDimensions,
+  });
 
   if (!readiness.ready) {
     return {
@@ -46,6 +59,22 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
       message: "Trenutno nije dostupno za online kupovinu",
       readiness,
     };
+  }
+
+  const nextArrival = product.supplierNextArrivalAt;
+  if (nextArrival) {
+    const date = new Date(nextArrival);
+    if (!Number.isNaN(date.getTime()) && date.getTime() > Date.now()) {
+      return {
+        canAddToCart: false,
+        label: "U dolasku",
+        addLabel: "U dolasku",
+        message: `Sledeći očekivani dolazak: ${date.toLocaleDateString(
+          "sr-Latn-RS",
+        )}`,
+        readiness,
+      };
+    }
   }
 
   return {

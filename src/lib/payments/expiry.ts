@@ -2,7 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { adjustInventory } from "@/lib/inventory";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { restoreOrderReservations } from "@/lib/order-reservations";
 
 const EXPIRABLE_PAYMENT_METHODS = [
   "IPS",
@@ -24,7 +25,16 @@ export async function expirePendingPayments(limit = 100) {
     take: Math.min(Math.max(limit, 1), 500),
     orderBy: { expiresAt: "asc" },
     include: {
-      items: { select: { id: true, productId: true, qty: true, sku: true } },
+      items: {
+        select: {
+          id: true,
+          productId: true,
+          qty: true,
+          sku: true,
+          warehouseReservedQty: true,
+          supplierReservedQty: true,
+        },
+      },
       payments: {
         where: { status: "PENDING" },
         select: { id: true, expiresAt: true },
@@ -35,6 +45,7 @@ export async function expirePendingPayments(limit = 100) {
   let expired = 0;
   let restoredLines = 0;
   for (const order of orders) {
+    const supplierCancellations: string[] = [];
     await db.$transaction(async (tx) => {
       const updated = await tx.order.updateMany({
         where: {
@@ -61,19 +72,15 @@ export async function expirePendingPayments(limit = 100) {
         },
       });
 
-      for (const item of order.items) {
-        if (!item.productId) continue;
-        await adjustInventory(tx, {
-          idempotencyKey: `order:${order.id}:payment-expiry:${item.id}`,
-          productId: item.productId,
-          sku: item.sku,
-          qtyDelta: item.qty,
-          kind: "ADJUSTMENT",
-          orderId: order.id,
-          note: `Istek plaćanja za porudžbinu ${order.number}`,
-        });
-        restoredLines += 1;
-      }
+      const restored = await restoreOrderReservations(tx, {
+        orderId: order.id,
+        orderNumber: order.number,
+        items: order.items,
+        reasonKey: "payment-expiry",
+        note: `Istek plaćanja za porudžbinu ${order.number}`,
+      });
+      restoredLines += restored.warehouseLines;
+      supplierCancellations.push(...restored.supplierCancellationIds);
 
       await tx.orderStatusEvent.create({
         data: {
@@ -84,6 +91,15 @@ export async function expirePendingPayments(limit = 100) {
       });
       expired += 1;
     });
+    await Promise.all(
+      supplierCancellations.map((fulfillmentId) =>
+        enqueueBackgroundJob({
+          kind: "SUPPLIER_CANCEL_EMAIL",
+          payload: { fulfillmentId },
+          idempotencyKey: `supplier-cancel:${fulfillmentId}`,
+        }),
+      ),
+    );
   }
 
   return { scanned: orders.length, expired, restoredLines };

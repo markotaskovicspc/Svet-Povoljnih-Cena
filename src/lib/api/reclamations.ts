@@ -111,6 +111,7 @@ export async function createReclamation(
       data: {
         number,
         orderId: order.id,
+        orderItemId: item.id,
         productId: updated.productId,
         sku: input.sku,
         customerFirst: input.customerFirst,
@@ -149,6 +150,13 @@ export async function createReclamation(
       kind: "RECLAMATION_RECEIPT",
       payload: { reclamationId: result.id },
       idempotencyKey: `reclamation-receipt:${result.id}`,
+    });
+  }
+  if (item.supplierExternalSku) {
+    await enqueueBackgroundJob({
+      kind: "SUPPLIER_RECLAMATION_EMAIL",
+      payload: { reclamationId: result.id },
+      idempotencyKey: `supplier-reclamation:${result.id}`,
     });
   }
 

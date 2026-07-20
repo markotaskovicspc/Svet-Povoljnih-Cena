@@ -20,6 +20,11 @@ import {
   svetAkcijaProducts,
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
+import { effectiveSellableStock } from "@/lib/rabalux/allocation";
+import {
+  isRabaluxEnabled,
+  isRabaluxSupplierOperational,
+} from "@/lib/rabalux/config";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -32,12 +37,17 @@ const productInclude = {
   group: true,
   collection: true,
   action: true,
+  supplier: { select: { integrationKey: true, enabled: true } },
   actionPrices: { include: { action: true } },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
-  media: { orderBy: { order: "asc" } },
+  media: { where: { syncStatus: "READY" }, orderBy: { order: "asc" } },
   pictograms: { include: { pictogram: true } },
   materials: { include: { material: true } },
   assemblyCities: { include: { city: true } },
+  attachments: {
+    where: { syncStatus: "READY" },
+    orderBy: { order: "asc" },
+  },
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
@@ -82,6 +92,13 @@ const productListSelect = {
   stock: true,
   incomingStock: true,
   supplierStock: true,
+  supplierReservedStock: true,
+  supplierNextArrivalAt: true,
+  packWidthCm: true,
+  packDepthCm: true,
+  packHeightCm: true,
+  warrantyYears: true,
+  supplier: { select: { integrationKey: true, enabled: true } },
   isHero: true,
   isNew: true,
   newUntil: true,
@@ -102,7 +119,7 @@ const productListSelect = {
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   // Cards expose a compact preview gallery; the PDP still loads every asset.
   media: {
-    where: { kind: "IMAGE" },
+    where: { kind: "IMAGE", syncStatus: "READY" },
     orderBy: { order: "asc" },
     take: 6,
   },
@@ -153,6 +170,7 @@ function mapProduct(p: ProductRow): ProductDTO {
       d: num(p.depthCm) || 0,
       h: num(p.heightCm) || 0,
     },
+    packageDimensionsCm: packageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
     materials: p.materials.map((m) => ({
@@ -166,9 +184,17 @@ function mapProduct(p: ProductRow): ProductDTO {
       label: pp.pictogram.label,
       iconUrl: pp.pictogram.iconUrl,
     })),
-    stock: p.stock,
+    stock:
+      isRabaluxSupplierOperational(p.supplier)
+        ? effectiveSellableStock({
+            warehouseStock: p.stock,
+            supplierStock: p.supplierStock,
+            supplierReservedStock: p.supplierReservedStock,
+          })
+        : p.stock,
     incomingStock: p.incomingStock,
     supplierStock: p.supplierStock ?? undefined,
+    supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     isHero: p.isHero,
     isNew: p.isNew,
     newUntil: p.newUntil?.toISOString(),
@@ -202,6 +228,14 @@ function mapProduct(p: ProductRow): ProductDTO {
       assemblyInstructions: p.assemblyInstructions ?? undefined,
       maintenance: p.maintenance ?? undefined,
     },
+    technicalSpecs: parseTechnicalSpecs(p.technicalSpecs),
+    warrantyYears: p.warrantyYears ?? undefined,
+    countryOfOrigin: p.countryOfOrigin ?? undefined,
+    attachments: p.attachments.map((attachment) => ({
+      kind: attachment.kind === "MANUAL" ? "manual" : "energy_label",
+      label: attachment.label,
+      url: resolveSupabaseStorageMedia({ url: attachment.url }).url,
+    })),
     deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
     allowsAssembly: p.allowsAssembly,
     assemblyCities: p.assemblyCities.map((a) => a.city.name),
@@ -211,7 +245,11 @@ function mapProduct(p: ProductRow): ProductDTO {
         .map(mapImageMedia)
         .filter((m) => isRenderableImageUrl(m.url)),
       video: p.media.find((m) => m.kind === "VIDEO")
-        ? { url: p.media.find((m) => m.kind === "VIDEO")!.url }
+        ? {
+            url: resolveSupabaseStorageMedia({
+              url: p.media.find((m) => m.kind === "VIDEO")!.url,
+            }).url,
+          }
         : undefined,
       video3d: p.media.find((m) => m.kind === "VIDEO_3D")
         ? { url: p.media.find((m) => m.kind === "VIDEO_3D")!.url }
@@ -323,6 +361,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
       d: num(p.depthCm) || 0,
       h: num(p.heightCm) || 0,
     },
+    packageDimensionsCm: packageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
     materials: p.materials.map((m) => ({
@@ -331,9 +370,17 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
       imageUrl: m.material.imageUrl ?? undefined,
     })),
     pictograms: [],
-    stock: p.stock,
+    stock:
+      isRabaluxSupplierOperational(p.supplier)
+        ? effectiveSellableStock({
+            warehouseStock: p.stock,
+            supplierStock: p.supplierStock,
+            supplierReservedStock: p.supplierReservedStock,
+          })
+        : p.stock,
     incomingStock: p.incomingStock,
     supplierStock: p.supplierStock ?? undefined,
+    supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     isHero: p.isHero,
     isNew: p.isNew,
     newUntil: p.newUntil?.toISOString(),
@@ -344,6 +391,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     discountPct: p.discountPct ?? undefined,
     loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
     loyaltyDiscountPct: p.loyaltyDiscountPct ?? undefined,
+    warrantyYears: p.warrantyYears ?? undefined,
     action: p.action
       ? {
           id: p.action.id,
@@ -372,6 +420,38 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   };
+}
+
+function packageDimensions(p: {
+  packWidthCm: Prisma.Decimal | null;
+  packDepthCm: Prisma.Decimal | null;
+  packHeightCm: Prisma.Decimal | null;
+}) {
+  const dimensions = {
+    w: num(p.packWidthCm) || 0,
+    d: num(p.packDepthCm) || 0,
+    h: num(p.packHeightCm) || 0,
+  };
+  return Object.values(dimensions).some((value) => value > 0)
+    ? dimensions
+    : undefined;
+}
+
+function parseTechnicalSpecs(value: Prisma.JsonValue | null) {
+  if (!Array.isArray(value)) return undefined;
+  const specs = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    if (
+      typeof record.key !== "string" ||
+      typeof record.label !== "string" ||
+      typeof record.value !== "string"
+    ) {
+      return [];
+    }
+    return [{ key: record.key, label: record.label, value: record.value }];
+  });
+  return specs.length ? specs : undefined;
 }
 
 function getSvetAkcijaFallbackBySlug(slug: string): ProductDTO | null {
@@ -543,7 +623,23 @@ export async function listProducts(
   if (input.groupSlug) where.group = { slug: input.groupSlug };
   if (input.collectionSlug) where.collection = { slug: input.collectionSlug };
   if (input.excludeSku) where.sku = { not: input.excludeSku };
-  if (input.inStockOnly) where.stock = { gt: 0 };
+  if (input.inStockOnly) {
+    appendAnd(where, {
+      OR: [
+        { stock: { gt: 0 } },
+        ...(isRabaluxEnabled()
+          ? [
+              {
+                supplierStock: { gt: 0 },
+                supplier: {
+                  is: { integrationKey: "RABALUX", enabled: true },
+                },
+              } satisfies Prisma.ProductWhereInput,
+            ]
+          : []),
+      ],
+    });
+  }
   if (input.maxPrice != null) {
     where.OR = [
       { salePrice: { lte: input.maxPrice } },

@@ -32,6 +32,14 @@
     {
       "path": "/api/cron/email-alerts",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/rabalux/catalog",
+      "schedule": "17 2 * * *"
+    },
+    {
+      "path": "/api/cron/rabalux/stock",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

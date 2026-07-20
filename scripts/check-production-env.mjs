@@ -97,6 +97,25 @@ if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
   requireNames("BADI", ["BADI_API_KEY", "BADI_API_SECRET", "FISCAL_TIN", "FISCAL_LOCATION_ID"]);
   if (!enabled("BADI_PRODUCTION_ACCEPTED")) errors.push("BADI is selected without BADI_PRODUCTION_ACCEPTED");
 }
+if (enabled("RABALUX_ENABLED")) {
+  requireNames("Rabalux", [
+    "RABALUX_CATALOG_USER",
+    "RABALUX_CATALOG_PASS",
+    "RABALUX_STOCK_USER",
+    "RABALUX_STOCK_PASS",
+    "CRON_SECRET",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "EMAIL_FROM",
+  ]);
+  if (emailProvider === "none") {
+    errors.push("Rabalux requires transactional email.");
+  }
+  const mediaWorkers = Number(value("RABALUX_MEDIA_WORKER_CONCURRENCY") ?? "2");
+  if (!Number.isInteger(mediaWorkers) || mediaWorkers < 1 || mediaWorkers > 2) {
+    errors.push("RABALUX_MEDIA_WORKER_CONCURRENCY must be 1 or 2");
+  }
+}
 
 if (!value("NEXT_PUBLIC_MERCHANT_PHONE")) warnings.push("Public support phone is not configured");
 if (!value("NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS")) warnings.push("Returns address is not configured");

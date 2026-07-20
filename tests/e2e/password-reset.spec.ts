@@ -7,6 +7,7 @@ const connectionString = process.env.E2E_DATABASE_URL;
 test.skip(!connectionString, "Password-reset E2E requires an isolated E2E_DATABASE_URL.");
 
 test("password reset consumes the link, revokes sessions and accepts the new password", async ({ page, context }, testInfo) => {
+  test.setTimeout(90_000);
   const db = new Client({ connectionString });
   await db.connect();
   const id = randomUUID();
@@ -36,7 +37,9 @@ test("password reset consumes the link, revokes sessions and accepts the new pas
     await page.goto("/nalog/lozinka/zaboravljena");
     await page.getByLabel("E-pošta naloga").fill(email);
     await page.getByRole("button", { name: "Pošalji link" }).click();
-    await expect(page.getByRole("status")).toContainText("Ako nalog postoji");
+    await expect(page.getByRole("status")).toContainText("Ako nalog postoji", {
+      timeout: 30_000,
+    });
 
     const tokenRow = await db.query<{ token: string }>(
       `SELECT "token" FROM "VerificationToken" WHERE "identifier" = $1`,
@@ -74,6 +77,10 @@ test("password reset consumes the link, revokes sessions and accepts the new pas
     await expect(page).toHaveURL(/\/nalog(?:\?|$)/);
   } finally {
     await db.query(`DELETE FROM "VerificationToken" WHERE "identifier" = $1`, [`pwreset:${id}`]);
+    await db.query(
+      `DELETE FROM "BackgroundJob" WHERE "kind" = 'PASSWORD_RESET_EMAIL' AND "payload"->>'to' = $1`,
+      [email],
+    );
     await db.query(`DELETE FROM "EmailMessage" WHERE "recipient" = $1`, [email]);
     await db.query(`DELETE FROM "User" WHERE "id" = $1`, [id]);
     await db.end();

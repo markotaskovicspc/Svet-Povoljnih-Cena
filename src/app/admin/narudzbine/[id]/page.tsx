@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma, type SupplierFulfillmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
@@ -20,7 +20,13 @@ import {
 } from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
-import { adjustInventory } from "@/lib/inventory";
+import { releaseOrderSupplierReservations } from "@/lib/rabalux/fulfillment";
+import {
+  canConfirmSupplierFulfillment,
+  canResendSupplierOrder,
+} from "@/lib/rabalux/fulfillment-state";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { restoreOrderReservations } from "@/lib/order-reservations";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -47,13 +53,23 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         if (!id || !Object.values(OrderStatus).includes(status)) {
           return { ok: false as const, error: "Nedostaje ID ili status." };
         }
+        const supplierCancellations: string[] = [];
         await db.$transaction(async (tx) => {
           const existing = await tx.order.findUnique({
             where: { id },
             select: {
               number: true,
               stockRestoredAt: true,
-              items: { select: { id: true, productId: true, qty: true, sku: true } },
+              items: {
+                select: {
+                  id: true,
+                  productId: true,
+                  qty: true,
+                  sku: true,
+                  warehouseReservedQty: true,
+                  supplierReservedQty: true,
+                },
+              },
             },
           });
           if (!existing) throw new Error("Porudžbina ne postoji.");
@@ -71,24 +87,33 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
           });
           if (updated.count !== 1) return;
           if (shouldRestore) {
-            for (const item of existing.items) {
-              if (!item.productId) continue;
-              await adjustInventory(tx, {
-                idempotencyKey: `order:${id}:cancel:${item.id}`,
-                productId: item.productId,
-                sku: item.sku,
-                qtyDelta: item.qty,
-                kind: "ADJUSTMENT",
-                orderId: id,
-                actorId,
-                note: `Otkazivanje porudžbine ${existing.number}`,
-              });
-            }
+            const restored = await restoreOrderReservations(tx, {
+              orderId: id,
+              orderNumber: existing.number,
+              items: existing.items,
+              reasonKey: "cancel",
+              actorId,
+              note: `Otkazivanje porudžbine ${existing.number}`,
+            });
+            supplierCancellations.push(...restored.supplierCancellationIds);
+          } else if (status === "U_ISPORUCI" || status === "ISPORUCENO") {
+            await releaseOrderSupplierReservations(tx, id, {
+              cancelled: false,
+            });
           }
           await tx.orderStatusEvent.create({
             data: { orderId: id, status, note, actorId },
           });
         });
+        await Promise.all(
+          supplierCancellations.map((fulfillmentId) =>
+            enqueueBackgroundJob({
+              kind: "SUPPLIER_CANCEL_EMAIL",
+              payload: { fulfillmentId },
+              idempotencyKey: `supplier-cancel:${fulfillmentId}`,
+            }),
+          ),
+        );
         await enqueueBackgroundJob({
           kind: "ORDER_STATUS_EMAIL",
           payload: { orderId: id },
@@ -290,6 +315,236 @@ async function resendBuyerReceiptAction(_state: AdminActionState, formData: Form
   )(formData);
 }
 
+async function confirmSupplierFulfillmentAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "supplierFulfillment.confirm",
+      entity: "SupplierFulfillment",
+    },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
+      const loadingLocationId = String(formData.get("loadingLocationId") ?? "");
+      const address = String(formData.get("address") ?? "").trim();
+      const city = String(formData.get("city") ?? "").trim();
+      const reason = String(formData.get("reason") ?? "").trim();
+      const requestId = String(formData.get("requestId") ?? "");
+      if (
+        !orderId ||
+        !fulfillmentId ||
+        !loadingLocationId ||
+        !address ||
+        !city ||
+        reason.length < 5 ||
+        reason.length > 500 ||
+        !isUuid(requestId)
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Izaberite lokaciju, unesite adresu i grad, kao i razlog od 5 do 500 znakova.",
+        };
+      }
+      await db.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<
+          Array<{
+            id: string;
+            supplierId: string;
+            orderId: string;
+            status: SupplierFulfillmentStatus;
+            confirmedAt: Date | null;
+          }>
+        >(Prisma.sql`
+          SELECT "id", "supplierId", "orderId", "status", "confirmedAt"
+          FROM "SupplierFulfillment"
+          WHERE "id" = ${fulfillmentId}
+          FOR UPDATE
+        `);
+        const fulfillment = rows[0];
+        const location = await tx.supplierLoadingLocation.findUnique({
+          where: { id: loadingLocationId },
+          select: { supplierId: true },
+        });
+        if (
+          !fulfillment ||
+          fulfillment.orderId !== orderId ||
+          !location ||
+          location.supplierId !== fulfillment.supplierId
+        ) {
+          throw new Error("Lokacija ne pripada ovoj realizaciji.");
+        }
+        if (!canConfirmSupplierFulfillment(fulfillment.status)) {
+          throw new Error(
+            `Realizacija u statusu ${fulfillment.status} ne može biti potvrđena.`,
+          );
+        }
+        const activeSend = await tx.backgroundJob.findFirst({
+          where: {
+            kind: "SUPPLIER_ORDER_EMAIL",
+            status: { in: ["QUEUED", "RETRY", "RUNNING"] },
+            payload: { path: ["fulfillmentId"], equals: fulfillmentId },
+          },
+          select: { id: true },
+        });
+        if (activeSend) {
+          throw new Error(
+            "Slanje dobavljaču je još u toku. Sačekajte završetak pre potvrde.",
+          );
+        }
+        await tx.supplierLoadingLocation.update({
+          where: { id: loadingLocationId },
+          data: { address, city },
+        });
+        await tx.supplierFulfillment.update({
+          where: { id: fulfillmentId },
+          data: {
+            loadingLocationId,
+            status: "CONFIRMED",
+            confirmedAt: fulfillment.confirmedAt ?? new Date(),
+            lastError: null,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: "supplierFulfillment.confirm.mutation",
+            entity: "SupplierFulfillment",
+            entityId: fulfillmentId,
+            diff: {
+              requestId,
+              reason,
+              previousStatus: fulfillment.status,
+              status: "CONFIRMED",
+              loadingLocationId,
+              address,
+              city,
+            },
+          },
+        });
+      });
+      revalidatePath(`/admin/narudzbine/${orderId}`);
+      return {
+        ok: true as const,
+        entityId: fulfillmentId,
+        diff: { requestId, reason, loadingLocationId, address, city, status: "CONFIRMED" },
+        message: "Mesto preuzimanja je potvrđeno.",
+      };
+    },
+  )(formData);
+}
+
+async function resendSupplierOrderAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "supplierFulfillment.resend",
+      entity: "SupplierFulfillment",
+    },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const fulfillmentId = String(formData.get("fulfillmentId") ?? "");
+      const reason = String(formData.get("reason") ?? "").trim();
+      const requestId = String(formData.get("requestId") ?? "");
+      if (
+        !orderId ||
+        !fulfillmentId ||
+        reason.length < 5 ||
+        reason.length > 500 ||
+        !isUuid(requestId)
+      ) {
+        return { ok: false as const, error: "Nedostaje realizacija dobavljača." };
+      }
+      const result = await db.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<
+          Array<{
+            id: string;
+            orderId: string;
+            status: SupplierFulfillmentStatus;
+            integrationKey: string | null;
+            enabled: boolean;
+          }>
+        >(Prisma.sql`
+          SELECT sf."id", sf."orderId", sf."status", s."integrationKey", s."enabled"
+          FROM "SupplierFulfillment" sf
+          JOIN "Supplier" s ON s."id" = sf."supplierId"
+          WHERE sf."id" = ${fulfillmentId}
+          FOR UPDATE OF sf
+        `);
+        const fulfillment = rows[0];
+        if (!fulfillment || fulfillment.orderId !== orderId) {
+          throw new Error("Realizacija nije dostupna za slanje.");
+        }
+        if (!isRabaluxSupplierOperational(fulfillment)) {
+          throw new Error("Dobavljačka veza je isključena.");
+        }
+        if (!canResendSupplierOrder(fulfillment.status)) {
+          throw new Error(
+            `Realizacija u statusu ${fulfillment.status} nije dostupna za ponovno slanje.`,
+          );
+        }
+        const existingRequest = await tx.backgroundJob.findUnique({
+          where: {
+            idempotencyKey: `supplier-order-resend:${fulfillmentId}:${requestId}`,
+          },
+          select: { id: true },
+        });
+        const active = await tx.backgroundJob.findFirst({
+          where: {
+            kind: "SUPPLIER_ORDER_EMAIL",
+            status: { in: ["QUEUED", "RETRY", "RUNNING"] },
+            payload: { path: ["fulfillmentId"], equals: fulfillmentId },
+          },
+          select: { id: true },
+        });
+        if (existingRequest || active) return { alreadyQueued: true };
+        await tx.backgroundJob.create({
+          data: {
+            kind: "SUPPLIER_ORDER_EMAIL",
+            payload: { fulfillmentId, dispatchKey: requestId },
+            idempotencyKey: `supplier-order-resend:${fulfillmentId}:${requestId}`,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: "supplierFulfillment.resend.mutation",
+            entity: "SupplierFulfillment",
+            entityId: fulfillmentId,
+            diff: { requestId, reason, status: fulfillment.status, queued: true },
+          },
+        });
+        return { alreadyQueued: false };
+      });
+      revalidatePath(`/admin/narudzbine/${orderId}`);
+      return {
+        ok: true as const,
+        entityId: fulfillmentId,
+        diff: { requestId, reason, queued: true, alreadyQueued: result.alreadyQueued },
+        message: result.alreadyQueued
+          ? "Slanje je već u redu i nije duplirano."
+          : "Ponovno slanje je stavljeno u red.",
+      };
+    },
+  )(formData);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 async function markFiscalized(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -431,6 +686,18 @@ export default async function OrderDetail({
         select: { id: true, receiptNumber: true, issuedAt: true, emailedAt: true, emailError: true },
       },
       reclamations: { select: { id: true, number: true, status: true } },
+      supplierFulfillments: {
+        include: {
+          supplier: {
+            select: {
+              name: true,
+              loadingLocations: { orderBy: { position: "asc" } },
+            },
+          },
+          loadingLocation: true,
+          items: { orderBy: { externalSku: "asc" } },
+        },
+      },
     },
   });
   if (!order) notFound();
@@ -504,6 +771,137 @@ export default async function OrderDetail({
               {order.shipPhone}
             </p>
           </Card>
+
+          {order.supplierFulfillments.map((fulfillment) => (
+            <Card key={fulfillment.id}>
+              <CardTitle
+                description={`Status: ${fulfillment.status}`}
+              >
+                Dobavljač · {fulfillment.supplier.name}
+              </CardTitle>
+              <DataTable
+                columns={[
+                  { key: "sku", label: "Originalna šifra" },
+                  { key: "qty", label: "Kol", align: "right" },
+                ]}
+                rows={fulfillment.items.map((item) => ({
+                  id: item.id,
+                  cells: {
+                    sku: <span className="font-mono text-xs">{item.externalSku}</span>,
+                    qty: item.qty,
+                  },
+                }))}
+                empty="Bez dobavljačkih stavki."
+              />
+              <dl className="mt-4 space-y-1 text-sm">
+                <Row
+                  k="Poslato"
+                  v={fulfillment.sentAt?.toLocaleString("sr-Latn-RS") ?? "—"}
+                />
+                <Row
+                  k="Potvrđeno"
+                  v={fulfillment.confirmedAt?.toLocaleString("sr-Latn-RS") ?? "—"}
+                />
+                <Row
+                  k="Mesto preuzimanja"
+                  v={
+                    fulfillment.loadingLocation
+                      ? `${fulfillment.loadingLocation.name} · ${
+                          fulfillment.loadingLocation.address ?? "adresa nije uneta"
+                        } · ${fulfillment.loadingLocation.city ?? "grad nije unet"}`
+                      : "Nije potvrđeno"
+                  }
+                />
+              </dl>
+              {fulfillment.lastError ? (
+                <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                  {fulfillment.lastError}
+                </p>
+              ) : null}
+              {canConfirmSupplierFulfillment(fulfillment.status) ||
+              canResendSupplierOrder(fulfillment.status) ? (
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {canConfirmSupplierFulfillment(fulfillment.status) ? (
+                    <AdminActionForm
+                      action={confirmSupplierFulfillmentAction}
+                      className="space-y-3 rounded-lg border border-border p-3"
+                    >
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input
+                        type="hidden"
+                        name="fulfillmentId"
+                        value={fulfillment.id}
+                      />
+                      <input type="hidden" name="requestId" value={randomUUID()} />
+                      <Field label="Potvrđena lokacija">
+                        <select
+                          name="loadingLocationId"
+                          defaultValue={fulfillment.loadingLocationId ?? ""}
+                          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                        >
+                          <option value="">Izaberite</option>
+                          {fulfillment.supplier.loadingLocations.map((location) => (
+                            <option key={location.id} value={location.id}>
+                              {location.position}. {location.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Adresa">
+                        <input
+                          name="address"
+                          defaultValue={fulfillment.loadingLocation?.address ?? ""}
+                          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                        />
+                      </Field>
+                      <Field label="Grad">
+                        <input
+                          name="city"
+                          defaultValue={fulfillment.loadingLocation?.city ?? ""}
+                          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                        />
+                      </Field>
+                      <Field label="Razlog potvrde">
+                        <Textarea name="reason" rows={2} minLength={5} maxLength={500} required />
+                      </Field>
+                      <SubmitButton
+                        size="sm"
+                        confirm="Potvrditi mesto preuzimanja i status realizacije?"
+                      >
+                        Potvrdi preuzimanje
+                      </SubmitButton>
+                    </AdminActionForm>
+                  ) : null}
+                  {canResendSupplierOrder(fulfillment.status) ? (
+                    <AdminActionForm
+                      action={resendSupplierOrderAction}
+                      className="space-y-3 rounded-lg border border-border p-3"
+                    >
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input
+                        type="hidden"
+                        name="fulfillmentId"
+                        value={fulfillment.id}
+                      />
+                      <input type="hidden" name="requestId" value={randomUUID()} />
+                      <Field label="Razlog ponovnog slanja">
+                        <Textarea name="reason" rows={2} minLength={5} maxLength={500} required />
+                      </Field>
+                      <div className="flex justify-end">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          confirm="Ponovo poslati dobavljačku porudžbinu?"
+                        >
+                          Pošalji ponovo
+                        </SubmitButton>
+                      </div>
+                    </AdminActionForm>
+                  ) : null}
+                </div>
+              ) : null}
+            </Card>
+          ))}
 
           <Card>
             <CardTitle>Status timeline</CardTitle>

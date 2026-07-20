@@ -24,6 +24,17 @@ const schemas = {
   IPS_PAYMENT_EMAIL: z.object({ orderId: z.string().min(1) }),
   RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_STATUS_EMAIL: z.object({ reclamationId: z.string().min(1) }),
+  RABALUX_MEDIA_PRODUCT: z.object({
+    productId: z.string().min(1),
+    assetId: z.string().min(1).optional(),
+    assetType: z.enum(["MEDIA", "ATTACHMENT"]).optional(),
+  }),
+  SUPPLIER_ORDER_EMAIL: z.object({
+    fulfillmentId: z.string().min(1),
+    dispatchKey: z.string().min(1).max(80).optional(),
+  }),
+  SUPPLIER_CANCEL_EMAIL: z.object({ fulfillmentId: z.string().min(1) }),
+  SUPPLIER_RECLAMATION_EMAIL: z.object({ reclamationId: z.string().min(1) }),
 } as const;
 
 export type BackgroundJobKind = keyof typeof schemas;
@@ -140,9 +151,24 @@ export async function processPendingBackgroundJobs(limit = 20) {
     },
     orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
     take: Math.min(Math.max(limit, 1), 100),
-    select: { id: true },
+    select: { id: true, kind: true },
   });
-  const results = await Promise.all(candidates.map(({ id }) => processBackgroundJob(id)));
+  const media = candidates.filter(({ kind }) => kind === "RABALUX_MEDIA_PRODUCT");
+  const other = candidates.filter(({ kind }) => kind !== "RABALUX_MEDIA_PRODUCT");
+  const results = await Promise.all(other.map(({ id }) => processBackgroundJob(id)));
+  const mediaConcurrency = Math.min(
+    Math.max(Number(process.env.RABALUX_MEDIA_WORKER_CONCURRENCY) || 2, 1),
+    2,
+  );
+  for (let start = 0; start < media.length; start += mediaConcurrency) {
+    results.push(
+      ...(await Promise.all(
+        media
+          .slice(start, start + mediaConcurrency)
+          .map(({ id }) => processBackgroundJob(id)),
+      )),
+    );
+  }
   await Promise.all([
     db.backgroundJob.deleteMany({
       where: { status: "COMPLETED", completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) } },
@@ -260,6 +286,43 @@ async function dispatchJob(job: JobRow) {
         to: loaded.recipient,
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "RABALUX_MEDIA_PRODUCT": {
+      const { mirrorRabaluxProductMedia } = await import("@/lib/rabalux/media");
+      const args = payload as z.infer<typeof schemas.RABALUX_MEDIA_PRODUCT>;
+      await mirrorRabaluxProductMedia(
+        args.productId,
+        args.assetId && args.assetType
+          ? { assetId: args.assetId, assetType: args.assetType }
+          : undefined,
+      );
+      return;
+    }
+    case "SUPPLIER_ORDER_EMAIL": {
+      const { sendSupplierOrderEmail } = await import("@/lib/rabalux/fulfillment");
+      await sendSupplierOrderEmail(
+        payload as z.infer<typeof schemas.SUPPLIER_ORDER_EMAIL>,
+      );
+      return;
+    }
+    case "SUPPLIER_CANCEL_EMAIL": {
+      const { sendSupplierCancellationEmail } = await import(
+        "@/lib/rabalux/fulfillment"
+      );
+      await sendSupplierCancellationEmail(
+        (payload as z.infer<typeof schemas.SUPPLIER_CANCEL_EMAIL>).fulfillmentId,
+      );
+      return;
+    }
+    case "SUPPLIER_RECLAMATION_EMAIL": {
+      const { sendSupplierReclamationEmail } = await import(
+        "@/lib/rabalux/fulfillment"
+      );
+      await sendSupplierReclamationEmail(
+        (payload as z.infer<typeof schemas.SUPPLIER_RECLAMATION_EMAIL>)
+          .reclamationId,
+      );
       return;
     }
   }

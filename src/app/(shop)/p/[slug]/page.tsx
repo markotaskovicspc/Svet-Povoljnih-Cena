@@ -109,7 +109,7 @@ export default async function ProductPage({ params }: RouteProps) {
         .map((p) => ({ label: p.label, code: p.code }))
         .filter((p) => !["assembly", "montaza", "montaža"].includes(p.code.toLowerCase()))
     : synthesizedPictograms(product);
-  const benefitChips = product.isLimited
+  const benefitChips = product.isLimited || product.isDtz
     ? [...pictograms, { code: "limited", label: "Dok traju zalihe" }]
     : pictograms;
   const materials = product.materials;
@@ -273,6 +273,54 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
+      {product.technicalSpecs?.length || product.attachments?.length ? (
+        <Reveal>
+          <section className="mx-auto mt-8 grid w-full max-w-[var(--container-page)] gap-6 px-4 md:grid-cols-2 md:px-6">
+            {product.technicalSpecs?.length ? (
+              <div>
+                <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
+                  Tehničke karakteristike
+                </h2>
+                <dl className="mt-5 divide-y divide-border/70 rounded-2xl border border-border/70 bg-surface px-4">
+                  {product.technicalSpecs.map((spec) => (
+                    <div
+                      key={spec.key}
+                      className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 py-3 text-sm"
+                    >
+                      <dt className="text-ink-500">{spec.label}</dt>
+                      <dd className="text-right font-medium text-ink-900">
+                        {spec.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
+            {product.attachments?.length ? (
+              <div>
+                <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
+                  Dokumenti
+                </h2>
+                <ul className="mt-5 space-y-3">
+                  {product.attachments.map((attachment) => (
+                    <li key={`${attachment.kind}-${attachment.url}`}>
+                      <a
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/40"
+                      >
+                        {attachment.label}
+                        <span aria-hidden>↗</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        </Reveal>
+      ) : null}
       {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
@@ -416,7 +464,10 @@ interface FallbackPictogram {
 function synthesizedPictograms(p: Product): FallbackPictogram[] {
   const out: FallbackPictogram[] = [
     { code: "delivery", label: `Isporuka ${p.deliveryDays.min}–${p.deliveryDays.max} dana` },
-    { code: "warranty", label: "Garancija 2 godine" },
+    {
+      code: "warranty",
+      label: `Garancija ${p.warrantyYears ?? 2} godine`,
+    },
     { code: "quality", label: "Kontrola kvaliteta" },
     { code: "ruler", label: "Precizne dimenzije" },
   ];

@@ -5,7 +5,10 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { validateVoucher, validateVoucherForCheckout } from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import {
+  enqueueBackgroundJob,
+  processBackgroundJob,
+} from "@/lib/background-jobs";
 import { providerForPaymentMethod } from "@/lib/payments";
 import {
   createCheckoutOrderAccessToken,
@@ -25,6 +28,11 @@ import {
   isPaymentMethodEnabled,
   resolveDeliveryQuote,
 } from "@/lib/checkout/config";
+import {
+  allocateStock,
+  effectiveSellableStock,
+} from "@/lib/rabalux/allocation";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -101,6 +109,18 @@ export const createOrderSchema = z.object({
   useSavedCard: z.boolean().optional(),
   notes: z.string().max(500).optional(),
   consent: z.literal(true),
+}).superRefine((input, context) => {
+  const seen = new Set<string>();
+  input.lines.forEach((line, index) => {
+    if (seen.has(line.sku)) {
+      context.addIssue({
+        code: "custom",
+        path: ["lines", index, "sku"],
+        message: "Artikal je dupliran u korpi.",
+      });
+    }
+    seen.add(line.sku);
+  });
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
@@ -143,7 +163,55 @@ type CreatedOrder = {
   total: Prisma.Decimal;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
+  supplierFulfillmentIds: string[];
 };
+
+type GenericSupplierJobLine = {
+  productId: string;
+  qty: number;
+};
+
+async function enqueueCheckoutPostCommit(args: {
+  orderId: string;
+  orderNumber: string;
+  supplierFulfillmentIds: string[];
+  genericSupplierLines: GenericSupplierJobLine[];
+}) {
+  const supplierEmailJobs = await Promise.all(
+    args.supplierFulfillmentIds.map((fulfillmentId) =>
+      enqueueBackgroundJob({
+        kind: "SUPPLIER_ORDER_EMAIL" as const,
+        payload: { fulfillmentId },
+        idempotencyKey: `supplier-order:${fulfillmentId}`,
+      }),
+    ),
+  );
+  const jobs: Array<Promise<unknown>> = [
+    enqueueBackgroundJob({
+      kind: "BUYER_RECEIPT",
+      payload: { orderId: args.orderId },
+      idempotencyKey: `buyer-receipt:${args.orderId}`,
+    }),
+  ];
+  if (args.genericSupplierLines.length) {
+    jobs.push(
+      enqueueBackgroundJob({
+        kind: "SUPPLIER_RESERVATION",
+        payload: {
+          orderNumber: args.orderNumber,
+          lines: args.genericSupplierLines,
+        },
+        idempotencyKey: `supplier-reservation:${args.orderId}`,
+      }),
+    );
+  }
+  await Promise.all(jobs);
+  // The durable job already exists before this best-effort immediate attempt.
+  // A provider outage cannot roll back checkout; the background cron retries it.
+  await Promise.allSettled(
+    supplierEmailJobs.map((job) => processBackgroundJob(job.id)),
+  );
+}
 
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
@@ -223,8 +291,16 @@ async function findLockedCheckoutSessionOrder(
       total: true,
       paymentMethod: true,
       shippingMethod: true,
+      supplierFulfillments: { select: { id: true } },
     },
-  });
+  }).then((order) =>
+    order
+      ? {
+          ...order,
+          supplierFulfillmentIds: order.supplierFulfillments.map(({ id }) => id),
+        }
+      : null,
+  );
 }
 
 function isOnlinePayment(method: PaymentMethod) {
@@ -253,6 +329,59 @@ export async function createOrder(
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
   if (!input.lines.length) return { ok: false, error: { code: "EMPTY_CART" } };
+  if (input.checkoutSessionId) {
+    const existingSession = await db.checkoutSession.findUnique({
+      where: { id: input.checkoutSessionId },
+      select: {
+        order: {
+          select: {
+            id: true,
+            number: true,
+            total: true,
+            paymentMethod: true,
+            shippingMethod: true,
+            supplierFulfillments: { select: { id: true } },
+            items: {
+              select: {
+                qty: true,
+                productId: true,
+                product: {
+                  select: {
+                    supplier: { select: { integrationKey: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (existingSession?.order) {
+      const existing = existingSession.order;
+      await enqueueCheckoutPostCommit({
+        orderId: existing.id,
+        orderNumber: existing.number,
+        supplierFulfillmentIds: existing.supplierFulfillments.map(({ id }) => id),
+        genericSupplierLines: existing.items.flatMap((item) =>
+          item.productId &&
+          item.product?.supplier?.integrationKey !== "RABALUX"
+            ? [{ productId: item.productId, qty: item.qty }]
+            : [],
+        ),
+      });
+      return {
+        ok: true,
+        data: {
+          id: existing.id,
+          number: existing.number,
+          accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
+          total: num(existing.total),
+          paymentMethod: existing.paymentMethod,
+          shippingMethod: existing.shippingMethod,
+        },
+      };
+    }
+  }
   if (!(await isPaymentMethodEnabled(input.paymentMethod))) {
     return { ok: false, error: { code: "PAYMENT_UNAVAILABLE" } };
   }
@@ -270,12 +399,24 @@ export async function createOrder(
       colorSecondary: true,
       isActive: true,
       stock: true,
+      supplierStock: true,
+      supplierReservedStock: true,
       fullPrice: true,
       salePrice: true,
       discountPct: true,
       allowsAssembly: true,
       action: { select: { startsAt: true, endsAt: true, name: true } },
-      supplier: { select: { name: true } },
+      supplierId: true,
+      supplierExternalId: true,
+      supplier: {
+        select: {
+          id: true,
+          name: true,
+          integrationKey: true,
+          enabled: true,
+          fulfillmentMode: true,
+        },
+      },
       group: { select: { name: true } },
       collection: { select: { name: true } },
       categories: {
@@ -290,8 +431,20 @@ export async function createOrder(
   // Pre-validate against fresh stock + activity.
   for (const line of input.lines) {
     const p = bySku.get(line.sku);
-    if (!p || !p.isActive) return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
-    if (p.stock < line.qty) return { ok: false, error: { code: "OUT_OF_STOCK", sku: line.sku } };
+    if (!p || !p.isActive) {
+      return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
+    }
+    const sellable =
+      isRabaluxSupplierOperational(p.supplier)
+        ? effectiveSellableStock({
+            warehouseStock: p.stock,
+            supplierStock: p.supplierStock,
+            supplierReservedStock: p.supplierReservedStock,
+          })
+        : p.stock;
+    if (sellable < line.qty) {
+      return { ok: false, error: { code: "OUT_OF_STOCK", sku: line.sku } };
+    }
   }
 
   // Project DB rows into the pricing engine shape (Phase 3D — single source
@@ -391,6 +544,7 @@ export async function createOrder(
       attribute4: null,
       color1: p.colorPrimary ?? null,
       color2: p.colorSecondary ?? null,
+      supplierExternalSku: p.supplierExternalId ?? null,
     };
   });
 
@@ -587,24 +741,118 @@ export async function createOrder(
         },
       });
 
+      const lockedRows = await tx.$queryRaw<
+        Array<{
+          id: string;
+          stock: number;
+          supplierStock: number | null;
+          supplierReservedStock: number;
+        }>
+      >(Prisma.sql`
+        SELECT "id", "stock", "supplierStock", "supplierReservedStock"
+        FROM "Product"
+        WHERE "id" IN (${Prisma.join(
+          input.lines.map((line) => bySku.get(line.sku)!.id),
+        )})
+        ORDER BY "id"
+        FOR UPDATE
+      `);
+      const lockedById = new Map(lockedRows.map((row) => [row.id, row]));
+      const orderItems = await tx.orderItem.findMany({
+        where: { orderId: order.id },
+        select: { id: true, sku: true },
+      });
+      const orderItemBySku = new Map(orderItems.map((item) => [item.sku, item]));
+      const supplierLines = new Map<
+        string,
+        Array<{
+          orderItemId: string;
+          productId: string;
+          externalSku: string;
+          qty: number;
+        }>
+      >();
+
       for (const line of input.lines) {
         const product = bySku.get(line.sku)!;
+        const locked = lockedById.get(product.id);
+        const orderItem = orderItemBySku.get(line.sku);
+        if (!locked || !orderItem) {
+          throw new StockReservationError(line.sku);
+        }
+        const allocation =
+          isRabaluxSupplierOperational(product.supplier)
+            ? allocateStock(line.qty, {
+                warehouseStock: locked.stock,
+                supplierStock: locked.supplierStock,
+                supplierReservedStock: locked.supplierReservedStock,
+              })
+            : locked.stock >= line.qty
+              ? { warehouseQty: line.qty, supplierQty: 0 }
+              : null;
+        if (!allocation) throw new StockReservationError(line.sku);
         try {
-          await adjustInventory(tx, {
-            idempotencyKey: `checkout:${order.id}:reservation:${product.id}`,
-            productId: product.id,
-            sku: line.sku,
-            qtyDelta: -line.qty,
-            kind: "SALE_RESERVATION",
-            orderId: order.id,
-            note: `Rezervacija za porudžbinu ${order.number}`,
-          });
+          if (allocation.warehouseQty > 0) {
+            await adjustInventory(tx, {
+              idempotencyKey: `checkout:${order.id}:reservation:${product.id}`,
+              productId: product.id,
+              sku: line.sku,
+              qtyDelta: -allocation.warehouseQty,
+              kind: "SALE_RESERVATION",
+              orderId: order.id,
+              orderItemId: orderItem.id,
+              note: `Rezervacija za porudžbinu ${order.number}`,
+            });
+          }
         } catch (err) {
           if (err instanceof InsufficientInventoryError) {
             throw new StockReservationError(line.sku);
           }
           throw err;
         }
+        if (allocation.supplierQty > 0) {
+          if (
+            !product.supplierId ||
+            !product.supplierExternalId ||
+            product.supplier?.fulfillmentMode !== "EMAIL"
+          ) {
+            throw new StockReservationError(line.sku);
+          }
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              supplierReservedStock: { increment: allocation.supplierQty },
+            },
+          });
+          const entries = supplierLines.get(product.supplierId) ?? [];
+          entries.push({
+            orderItemId: orderItem.id,
+            productId: product.id,
+            externalSku: product.supplierExternalId,
+            qty: allocation.supplierQty,
+          });
+          supplierLines.set(product.supplierId, entries);
+        }
+        await tx.orderItem.update({
+          where: { id: orderItem.id },
+          data: {
+            warehouseReservedQty: allocation.warehouseQty,
+            supplierReservedQty: allocation.supplierQty,
+          },
+        });
+      }
+
+      const supplierFulfillmentIds: string[] = [];
+      for (const [supplierId, lines] of supplierLines) {
+        const fulfillment = await tx.supplierFulfillment.create({
+          data: {
+            orderId: order.id,
+            supplierId,
+            items: { create: lines },
+          },
+          select: { id: true },
+        });
+        supplierFulfillmentIds.push(fulfillment.id);
       }
 
       if (voucherCode) {
@@ -653,7 +901,11 @@ export async function createOrder(
         });
       }
 
-      return { ...order, reusedExisting: false };
+      return {
+        ...order,
+        supplierFulfillmentIds,
+        reusedExisting: false,
+      };
     });
   } catch (err) {
     if (err instanceof StockReservationError) {
@@ -677,24 +929,38 @@ export async function createOrder(
 
   // Upserts are intentional even when an idempotent checkout request reuses
   // the order: if the first response lost one queue write, the retry repairs it.
-  await Promise.all([
-    enqueueBackgroundJob({
-      kind: "SUPPLIER_RESERVATION",
-      payload: {
-        orderNumber: created.number,
-        lines: input.lines.map((line) => ({
-          productId: bySku.get(line.sku)!.id,
-          qty: line.qty,
-        })),
-      },
-      idempotencyKey: `supplier-reservation:${created.id}`,
-    }),
-    enqueueBackgroundJob({
-      kind: "BUYER_RECEIPT",
-      payload: { orderId: created.id },
-      idempotencyKey: `buyer-receipt:${created.id}`,
-    }),
-  ]);
+  const genericSupplierLines = created.reusedExisting
+    ? await db.orderItem
+        .findMany({
+          where: { orderId: created.id },
+          select: {
+            qty: true,
+            productId: true,
+            product: {
+              select: { supplier: { select: { integrationKey: true } } },
+            },
+          },
+        })
+        .then((items) =>
+          items.flatMap((item) =>
+            item.productId &&
+            item.product?.supplier?.integrationKey !== "RABALUX"
+              ? [{ productId: item.productId, qty: item.qty }]
+              : [],
+          ),
+        )
+    : input.lines.flatMap((line) => {
+        const product = bySku.get(line.sku)!;
+        return product.supplier?.integrationKey !== "RABALUX"
+          ? [{ productId: product.id, qty: line.qty }]
+          : [];
+      });
+  await enqueueCheckoutPostCommit({
+    orderId: created.id,
+    orderNumber: created.number,
+    supplierFulfillmentIds: created.supplierFulfillmentIds,
+    genericSupplierLines,
+  });
 
   return {
     ok: true,

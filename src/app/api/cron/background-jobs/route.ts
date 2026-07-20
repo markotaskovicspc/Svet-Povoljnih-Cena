@@ -4,6 +4,7 @@ import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 async function run(req: Request) {
   if (!isAuthorizedCronRequest(req, process.env.BACKGROUND_JOBS_CRON_SECRET)) {

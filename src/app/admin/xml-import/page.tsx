@@ -1,8 +1,20 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { importSupplier } from "@/lib/xml";
+import {
+  syncPendingRabaluxMedia,
+  syncRabaluxCatalog,
+  syncRabaluxStock,
+} from "@/lib/rabalux";
+import {
+  consumeRabaluxSyncPreview,
+  createRabaluxSyncPreview,
+  parseRabaluxSyncTarget,
+  type RabaluxPreviewResult,
+} from "@/lib/rabalux/admin-sync";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -10,8 +22,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/admin/data-table";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { RabaluxControls } from "@/components/admin/rabalux-controls";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 export const metadata = {
   title: "XML import",
   robots: { index: false, follow: false },
@@ -40,14 +54,24 @@ async function saveSupplier(formData: FormData) {
             return { ok: false as const, error: "Mapping mora biti validan JSON." };
           }
         }
+        const existing = id
+          ? await db.supplier.findUnique({
+              where: { id },
+              select: { integrationKey: true },
+            })
+          : null;
         const data = {
           name,
-          feedUrl,
-          authUser,
-          authPass,
+          ...(existing?.integrationKey === "RABALUX"
+            ? {}
+            : { feedUrl, authUser, authPass }),
           enabled,
           notes,
-          mapping: (mapping ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          ...(existing?.integrationKey === "RABALUX"
+            ? {}
+            : {
+                mapping: (mapping ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+              }),
         };
         const res = id
           ? await db.supplier.update({ where: { id }, data })
@@ -55,6 +79,76 @@ async function saveSupplier(formData: FormData) {
         revalidatePath("/admin/xml-import");
         return { ok: true as const, entityId: res.id, diff: { name, enabled } };
       },
+  )(formData);
+}
+
+async function previewRabalux(
+  _state: AdminActionState<RabaluxPreviewResult>,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.syncPreview", entity: "Supplier" },
+    async (actorId, formData: FormData) => {
+      const target = parseRabaluxSyncTarget(formData.get("target"));
+      if (!target) return { ok: false as const, error: "Nepoznata akcija." };
+      const preview = await createRabaluxSyncPreview(actorId, target);
+      return {
+        ok: true as const,
+        entityId: "supplier-rabalux",
+        diff: {
+          target,
+          expiresAt: preview.expiresAt,
+          summary: preview.summary,
+        },
+        result: preview,
+        message: "Preview je spreman. Proverite rezultat pre izvršenja.",
+      };
+    },
+  )(formData);
+}
+
+async function executeRabalux(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.syncExecute", entity: "Supplier" },
+    async (actorId, formData: FormData) => {
+      const target = parseRabaluxSyncTarget(formData.get("target"));
+      if (!target) return { ok: false as const, error: "Nepoznata akcija." };
+      const reason = String(formData.get("reason") ?? "").trim();
+      const token = String(formData.get("token") ?? "");
+      const phrase = String(formData.get("phrase") ?? "");
+      const confirmation = await consumeRabaluxSyncPreview({
+        actorId,
+        target,
+        token,
+        phrase,
+        reason,
+      });
+      const result =
+        target === "catalog"
+          ? await syncRabaluxCatalog()
+          : target === "stock"
+            ? await syncRabaluxStock()
+            : await syncPendingRabaluxMedia(100);
+      revalidatePath("/admin/xml-import");
+      return {
+        ok: true as const,
+        entityId: "supplier-rabalux",
+        diff: {
+          target,
+          reason,
+          previewRunId: confirmation.runId,
+          result,
+        } as unknown as Record<string, unknown>,
+        message: "Akcija je prihvaćena i rezultat je zabeležen.",
+      };
+    },
   )(formData);
 }
 
@@ -110,6 +204,7 @@ export default async function XmlImportPage({
       include: { supplier: { select: { name: true } } },
     }),
   ]);
+  const rabalux = suppliers.find((supplier) => supplier.integrationKey === "RABALUX");
 
   return (
     <>
@@ -120,6 +215,21 @@ export default async function XmlImportPage({
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          {rabalux ? (
+            <Card>
+              <CardTitle description="Katalog dnevno · lager na 15 minuta · mediji resumable">
+                Rabalux
+              </CardTitle>
+              <RabaluxControls
+                previewAction={previewRabalux}
+                executeAction={executeRabalux}
+              />
+              <p className="mt-3 text-xs text-ink-500">
+                Kredencijali su server-side env promenljive i ne prikazuju se u
+                administraciji.
+              </p>
+            </Card>
+          ) : null}
           <Card>
             <CardTitle>Dobavljači</CardTitle>
             <DataTable
@@ -139,7 +249,11 @@ export default async function XmlImportPage({
                     </span>
                   ) : "—",
                   enabled: s.enabled ? "Da" : "Ne",
-                  actions: (
+                  actions: s.integrationKey === "RABALUX" ? (
+                    <a href={`?supplier=${s.id}`} className="text-xs text-walnut hover:underline">
+                      Osnovni podaci
+                    </a>
+                  ) : (
                     <div className="flex flex-wrap gap-2">
                       <a href={`?supplier=${s.id}`} className="text-xs text-walnut hover:underline">
                         Izmeni
@@ -185,7 +299,7 @@ export default async function XmlImportPage({
                 id: r.id,
                 cells: {
                   supplier: r.supplier.name,
-                  mode: r.dryRun ? "Preview" : "Import",
+                  mode: r.dryRun ? "Preview" : r.kind,
                   started: r.startedAt.toLocaleString("sr-Latn-RS"),
                   duration: r.finishedAt
                     ? `${Math.round((r.finishedAt.getTime() - r.startedAt.getTime()) / 1000)}s`
@@ -225,17 +339,25 @@ export default async function XmlImportPage({
             <Field label="Naziv">
               <Input name="name" defaultValue={edit?.name ?? ""} required />
             </Field>
-            <Field label="Feed URL">
-              <Input name="feedUrl" defaultValue={edit?.feedUrl ?? ""} />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Auth user">
-                <Input name="authUser" defaultValue={edit?.authUser ?? ""} />
-              </Field>
-              <Field label="Auth pass">
-                <Input name="authPass" type="password" defaultValue={edit?.authPass ?? ""} />
-              </Field>
-            </div>
+            {edit?.integrationKey === "RABALUX" ? (
+              <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
+                Feed adrese i autentikacija su zaključani u server konfiguraciji.
+              </p>
+            ) : (
+              <>
+                <Field label="Feed URL">
+                  <Input name="feedUrl" defaultValue={edit?.feedUrl ?? ""} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Auth user">
+                    <Input name="authUser" defaultValue={edit?.authUser ?? ""} />
+                  </Field>
+                  <Field label="Auth pass">
+                    <Input name="authPass" type="password" defaultValue={edit?.authPass ?? ""} />
+                  </Field>
+                </div>
+              </>
+            )}
             <Field label="Aktivan">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -247,14 +369,16 @@ export default async function XmlImportPage({
                 Uključi u importe
               </label>
             </Field>
-            <Field label="Mapping (JSON)">
-              <Textarea
-                name="mapping"
-                rows={6}
-                defaultValue={edit?.mapping ? JSON.stringify(edit.mapping, null, 2) : ""}
-                className="font-mono text-xs"
-              />
-            </Field>
+            {edit?.integrationKey !== "RABALUX" ? (
+              <Field label="Mapping (JSON)">
+                <Textarea
+                  name="mapping"
+                  rows={6}
+                  defaultValue={edit?.mapping ? JSON.stringify(edit.mapping, null, 2) : ""}
+                  className="font-mono text-xs"
+                />
+              </Field>
+            ) : null}
             <Field label="Napomene">
               <Textarea name="notes" rows={2} defaultValue={edit?.notes ?? ""} />
             </Field>

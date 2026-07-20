@@ -35,6 +35,18 @@ export interface ProductMedia {
   video3d?: MediaAsset;
 }
 
+export interface ProductAttachment {
+  kind: "manual" | "energy_label";
+  label: string;
+  url: string;
+}
+
+export interface TechnicalSpecification {
+  key: string;
+  label: string;
+  value: string;
+}
+
 export interface PromoAction {
   id: string;
   name: string; // e.g. "Black Friday", "Nedeljna akcija"
@@ -72,6 +84,7 @@ export interface Product {
   shortDescription?: string;
 
   dimensionsCm: Dimensions;
+  packageDimensionsCm?: Dimensions;
   colorPrimary?: string;
   colorSecondary?: string;
   materials: Material[];
@@ -80,6 +93,7 @@ export interface Product {
   stock: number;
   incomingStock: number;
   supplierStock?: number;
+  supplierNextArrivalAt?: ISODate;
 
   isHero?: boolean;
   isNew?: boolean;
@@ -107,6 +121,10 @@ export interface Product {
     assemblyInstructions?: string;
     maintenance?: string;
   };
+  technicalSpecs?: TechnicalSpecification[];
+  warrantyYears?: number;
+  countryOfOrigin?: string;
+  attachments?: ProductAttachment[];
 
   deliveryDays: { min: number; max: number };
   allowsAssembly: boolean;

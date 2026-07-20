@@ -16,6 +16,10 @@ import {
   createMyGlsShipmentForOrder,
   syncMyGlsShipmentById,
 } from "@/lib/mygls";
+import {
+  assertSupplierPickupConfirmed,
+  releaseOrderSupplierReservations,
+} from "@/lib/rabalux/fulfillment";
 import { bulkyAdapter } from "./bulky";
 import { smallParcelAdapter } from "./small-parcel";
 import {
@@ -93,6 +97,7 @@ export async function createShipmentForOrder(
 
   const existing = order.shipments[0];
   if (existing && existing.status !== "FAILED") return existing;
+  await assertSupplierPickupConfirmed(order.id);
 
   const service = routeService({
     shippingMethod: order.shippingMethod,
@@ -284,6 +289,15 @@ export async function applyShipmentEvent(
           status: newOrderStatus,
           note: message,
         },
+      });
+    }
+    if (
+      ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
+        event.status,
+      )
+    ) {
+      await releaseOrderSupplierReservations(tx, shipment.orderId, {
+        cancelled: false,
       });
     }
   });

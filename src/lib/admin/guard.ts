@@ -1,8 +1,10 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { AdminRoleName } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { logOperationalError } from "@/lib/monitoring";
 import {
   adminActionError,
   adminActionSuccess,
@@ -94,38 +96,108 @@ export function withAdminState<TArgs extends unknown[], TOut>(
   return async (...args: TArgs) => {
     const admin = await requireAdminAction(meta.allowed);
     const { logAudit } = await import("./audit");
+    const requestId = randomUUID();
+    try {
+      await logAudit({
+        actorId: admin.id,
+        action: `${meta.action}.attempt`,
+        entity: meta.entity,
+        diff: { requestId },
+      });
+    } catch (error) {
+      logOperationalError("admin.audit.attempt_failed", error, {
+        action: meta.action,
+        actorId: admin.id,
+        requestId,
+      });
+      return adminActionError<TOut>(
+        `Akcija nije izvršena jer audit zapis nije sačuvan. Referenca: ${requestId}`,
+      );
+    }
     try {
       const out = await fn(admin.id, ...args);
       if (out.ok) {
-        await logAudit({
-          actorId: admin.id,
-          action: meta.action,
-          entity: meta.entity,
-          entityId: out.entityId ?? null,
-          diff: out.diff,
-        });
+        try {
+          await logAudit({
+            actorId: admin.id,
+            action: meta.action,
+            entity: meta.entity,
+            entityId: out.entityId ?? null,
+            diff: auditDiff(requestId, out.diff),
+          });
+        } catch (error) {
+          logOperationalError("admin.audit.success_failed", error, {
+            action: meta.action,
+            actorId: admin.id,
+            requestId,
+          });
+          return adminActionError<TOut>(
+            `Akcija je izvršena, ali završni audit zapis nije potvrđen. Ne ponavljajte akciju pre provere. Referenca: ${requestId}`,
+          );
+        }
         return adminActionSuccess<TOut>(out.message, out.result);
       }
       const message = out.message ?? out.error ?? "Neispravan unos.";
-      await logAudit({
+      await recordFailureAudit(logAudit, {
         actorId: admin.id,
-        action: `${meta.action}.error`,
+        action: meta.action,
         entity: meta.entity,
-        diff: { error: message },
+        requestId,
+        error: message,
       });
       return adminActionError<TOut>(message, out.fieldErrors);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Nepoznata greška.";
-      await logAudit({
+      await recordFailureAudit(logAudit, {
         actorId: admin.id,
-        action: `${meta.action}.error`,
+        action: meta.action,
         entity: meta.entity,
-        diff: { error: message },
+        requestId,
+        error: message,
       });
       return adminActionError<TOut>(message);
     }
   };
+}
+
+function auditDiff(requestId: string, diff: unknown) {
+  if (diff && typeof diff === "object" && !Array.isArray(diff)) {
+    return { ...(diff as Record<string, unknown>), requestId };
+  }
+  return { requestId, result: diff ?? null };
+}
+
+async function recordFailureAudit(
+  logAudit: (args: {
+    actorId?: string | null;
+    action: string;
+    entity: string;
+    entityId?: string | null;
+    diff?: unknown;
+  }) => Promise<void>,
+  args: {
+    actorId: string;
+    action: string;
+    entity: string;
+    requestId: string;
+    error: string;
+  },
+) {
+  try {
+    await logAudit({
+      actorId: args.actorId,
+      action: `${args.action}.error`,
+      entity: args.entity,
+      diff: { requestId: args.requestId, error: args.error },
+    });
+  } catch (error) {
+    logOperationalError("admin.audit.error_failed", error, {
+      action: args.action,
+      actorId: args.actorId,
+      requestId: args.requestId,
+    });
+  }
 }
 
 /**
