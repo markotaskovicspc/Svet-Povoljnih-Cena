@@ -571,6 +571,7 @@ export const operationalErpModules: ErpModule[] = [
       { label: "Nova kampanja", tone: "primary", action: "newsletter.create" },
       {
         label: "Pošalji",
+        confirm: "Poslati izabranu newsletter kampanju primaocima? Proverite naslov, sadržaj i publiku pre potvrde.",
         disabledReason: "Slanje je dostupno tek kada EMAIL_PROVIDER i marketing pošiljalac prođu health check.",
       },
       {

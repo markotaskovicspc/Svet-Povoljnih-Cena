@@ -564,7 +564,12 @@ export default async function OrderDetail({
                 <Textarea name="note" rows={2} />
               </Field>
               <div className="flex justify-end">
-                <SubmitButton size="sm">Sačuvaj</SubmitButton>
+                <SubmitButton
+                  size="sm"
+                  confirm="Sačuvati novi status porudžbine? Otkazivanje vraća robu na lager, a pojedini statusi mogu pokrenuti obaveštenje ili kurirski nalog."
+                >
+                  Sačuvaj
+                </SubmitButton>
               </div>
             </AdminActionForm>
           </Card>
@@ -622,7 +627,11 @@ export default async function OrderDetail({
                     />
                   </Field>
                   <div className="flex justify-end">
-                    <SubmitButton variant="destructive" size="sm">
+                    <SubmitButton
+                      variant="destructive"
+                      size="sm"
+                      confirm="Izvršiti IPS povraćaj? Proverite iznos i referencu transakcije pre potvrde."
+                    >
                       Izvrši IPS povraćaj
                     </SubmitButton>
                   </div>
@@ -752,14 +761,22 @@ export default async function OrderDetail({
                                   defaultValue={num(order.total)}
                                   className="h-7 w-24 rounded-md border border-input bg-transparent px-2 text-xs"
                                 />
-                                <SubmitButton variant="outline" size="xs">
+                                <SubmitButton
+                                  variant="outline"
+                                  size="xs"
+                                  confirm="Izmeniti COD iznos kod MyGLS-a? Proverite iznos pre potvrde."
+                                >
                                   Izmeni COD
                                 </SubmitButton>
                               </AdminActionForm>
                               <AdminActionForm action={deleteMyGlsShipment}>
                                 <input type="hidden" name="shipmentId" value={shipment.id} />
                                 <input type="hidden" name="orderId" value={order.id} />
-                                <SubmitButton variant="destructive" size="xs">
+                                <SubmitButton
+                                  variant="destructive"
+                                  size="xs"
+                                  confirm="Otkazati MyGLS nalog i obrisati etiketu? Ova akcija se šalje kurirskom provajderu."
+                                >
                                   Obriši GLS
                                 </SubmitButton>
                               </AdminActionForm>
@@ -780,7 +797,12 @@ export default async function OrderDetail({
                                   />
                                 </Field>
                               ) : null}
-                              <SubmitButton size="xs">Ponovi nalog</SubmitButton>
+                              <SubmitButton
+                                size="xs"
+                                confirm="Ponovo poslati zahtev za kurirski nalog?"
+                              >
+                                Ponovi nalog
+                              </SubmitButton>
                             </AdminActionForm>
                           ) : null}
                         </div>
@@ -824,7 +846,10 @@ export default async function OrderDetail({
                           />
                         </Field>
                       ) : null}
-                      <SubmitButton size="sm">
+                      <SubmitButton
+                        size="sm"
+                        confirm={`Kreirati ${activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog za ovu porudžbinu?`}
+                      >
                         Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
                       </SubmitButton>
                   </AdminActionForm>
@@ -863,7 +888,10 @@ export default async function OrderDetail({
               ) : null}
               <AdminActionForm action={resendBuyerReceiptAction}>
                 <input type="hidden" name="id" value={order.id} />
-                <SubmitButton size="sm">
+                <SubmitButton
+                  size="sm"
+                  confirm="Izdati ili ponovo poslati dokument kupcu? Proverite adresu e-pošte pre potvrde."
+                >
                   {buyerReceipt ? "Ponovo pošalji" : "Izdaj i pošalji"}
                 </SubmitButton>
               </AdminActionForm>
@@ -876,7 +904,10 @@ export default async function OrderDetail({
             </CardTitle>
             <AdminActionForm action={issueFiscalReceiptAction} className="mb-4">
               <input type="hidden" name="id" value={order.id} />
-              <SubmitButton size="sm">
+              <SubmitButton
+                size="sm"
+                confirm="Izdati ili ponovo poslati fiskalni račun? Ova akcija poziva fiskalnog i email provajdera."
+              >
                 {latestFiscal ? "Ponovo pošalji fiskalni račun" : "Izdaj fiskalni račun"}
               </SubmitButton>
             </AdminActionForm>
@@ -901,7 +932,12 @@ export default async function OrderDetail({
                 />
               </Field>
               <div className="flex justify-end">
-                <SubmitButton size="sm">Sačuvaj</SubmitButton>
+                <SubmitButton
+                  size="sm"
+                  confirm="Ručno sačuvati broj fiskalnog računa? Potvrdite da se broj tačno poklapa sa dokumentom provajdera."
+                >
+                  Sačuvaj
+                </SubmitButton>
               </div>
             </AdminActionForm>
           </Card>

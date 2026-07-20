@@ -168,7 +168,13 @@ export default async function ViberPage({
                       </a>
                       <form action={deleteAudience}>
                         <input type="hidden" name="id" value={a.id} />
-                        <SubmitButton size="sm" variant="ghost">Obriši</SubmitButton>
+                        <SubmitButton
+                          size="sm"
+                          variant="ghost"
+                          confirm={`Obrisati publiku „${a.name}“? Ova akcija je nepovratna.`}
+                        >
+                          Obriši
+                        </SubmitButton>
                       </form>
                     </div>
                   ),
@@ -206,7 +212,13 @@ export default async function ViberPage({
                       </a>
                       <form action={deleteCampaign}>
                         <input type="hidden" name="id" value={c.id} />
-                        <SubmitButton size="sm" variant="ghost">Obriši</SubmitButton>
+                        <SubmitButton
+                          size="sm"
+                          variant="ghost"
+                          confirm={`Obrisati Viber kampanju „${c.title}“? Ova akcija je nepovratna.`}
+                        >
+                          Obriši
+                        </SubmitButton>
                       </form>
                     </div>
                   ),

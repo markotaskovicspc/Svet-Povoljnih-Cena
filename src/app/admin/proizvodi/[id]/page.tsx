@@ -11,6 +11,7 @@ import { num } from "@/lib/api/_helpers";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  getManagedProductMediaStorageKeys,
   getProductMediaBucket,
   resolveSupabaseStorageUrl,
 } from "@/lib/supabase/storage";
@@ -426,12 +427,38 @@ async function deleteProductMedia(_state: AdminActionState, formData: FormData) 
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
       const { productId, mediaId } = parsed.data;
-      await db.productMedia.deleteMany({ where: { id: mediaId, productId } });
+      const media = await db.productMedia.findFirst({
+        where: { id: mediaId, productId },
+        select: {
+          id: true,
+          url: true,
+          thumbUrl: true,
+          cardUrl: true,
+          pdpUrl: true,
+        },
+      });
+      if (!media) {
+        return { ok: false as const, error: "Fotografija ne postoji." };
+      }
+      const storageKeys = getManagedProductMediaStorageKeys(media);
+      if (storageKeys.length) {
+        const { error } = await createAdminClient()
+          .storage
+          .from(getProductMediaBucket())
+          .remove(storageKeys);
+        if (error) {
+          return {
+            ok: false as const,
+            error: `Storage nije obrisan; fotografija je ostala u katalogu. Pokušajte ponovo: ${error.message}`,
+          };
+        }
+      }
+      await db.productMedia.delete({ where: { id: media.id } });
       await revalidateProductSurfaces(productId);
       return {
         ok: true as const,
         entityId: mediaId,
-        diff: { productId },
+        diff: { productId, storageKeys },
         message: "Fotografija je obrisana.",
       };
     },

@@ -27,6 +27,56 @@ export function resolveSupabaseStorageUrl(value: string | null | undefined) {
   return `${baseUrl.replace(/\/+$/, "")}/storage/v1/object/public/${bucket}/${encodedPath}`;
 }
 
+export function getManagedProductMediaStorageKey(
+  value: string | null | undefined,
+) {
+  if (!value || /^(data:|blob:)/.test(value) || value.startsWith("/")) {
+    return null;
+  }
+  if (!/^https?:\/\//.test(value)) {
+    return value.replace(/^\/+/, "");
+  }
+
+  try {
+    const mediaUrl = new URL(value);
+    const baseUrl = publicSupabaseUrl();
+    if (!baseUrl || mediaUrl.origin !== new URL(baseUrl).origin) {
+      return null;
+    }
+    const bucket = getProductMediaBucket();
+    const prefixes = [
+      `/storage/v1/object/public/${bucket}/`,
+      `/storage/v1/object/sign/${bucket}/`,
+    ];
+    const prefix = prefixes.find((candidate) =>
+      mediaUrl.pathname.startsWith(candidate),
+    );
+    if (!prefix) return null;
+    return mediaUrl.pathname
+      .slice(prefix.length)
+      .split("/")
+      .map(decodeURIComponent)
+      .join("/");
+  } catch {
+    return null;
+  }
+}
+
+export function getManagedProductMediaStorageKeys(media: {
+  url?: string | null;
+  thumbUrl?: string | null;
+  cardUrl?: string | null;
+  pdpUrl?: string | null;
+}) {
+  return Array.from(
+    new Set(
+      [media.url, media.thumbUrl, media.cardUrl, media.pdpUrl]
+        .map(getManagedProductMediaStorageKey)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
 export function resolveSupabaseStorageMedia<T extends {
   url: string | null;
   thumbUrl?: string | null;

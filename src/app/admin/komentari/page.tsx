@@ -98,7 +98,11 @@ export default async function CommentsPage() {
                     </form>
                     <form action={removeComment}>
                       <input type="hidden" name="id" value={c.id} />
-                      <SubmitButton size="sm" variant="ghost">
+                      <SubmitButton
+                        size="sm"
+                        variant="ghost"
+                        confirm={`Obrisati komentar korisnika ${c.email}? Ova akcija je nepovratna.`}
+                      >
                         Obriši
                       </SubmitButton>
                     </form>

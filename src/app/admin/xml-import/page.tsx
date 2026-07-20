@@ -153,7 +153,13 @@ export default async function XmlImportPage({
                       </form>
                       <form action={triggerImport}>
                         <input type="hidden" name="id" value={s.id} />
-                        <SubmitButton size="sm" pendingLabel="Importujem…">Pokreni import</SubmitButton>
+                        <SubmitButton
+                          size="sm"
+                          pendingLabel="Importujem…"
+                          confirm="Pokrenuti stvarni XML import? Dobavljački podaci mogu promeniti katalog, cene i zalihe."
+                        >
+                          Pokreni import
+                        </SubmitButton>
                       </form>
                     </div>
                   ),

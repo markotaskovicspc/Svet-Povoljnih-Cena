@@ -347,7 +347,11 @@ function ManualFiscalizationDialog({
             )) ?? <p className="px-3 py-6 text-sm text-ink-500">Nema nefiskalizovanih stavki.</p>}
           </div>
           <DialogFooter>
-            <SubmitButton size="sm" pendingLabel="Fiskalizacija…">
+            <SubmitButton
+              size="sm"
+              pendingLabel="Fiskalizacija…"
+              confirm="Izdati fiskalni račun za izabranu porudžbinu? Ova akcija poziva fiskalnog provajdera."
+            >
               Fiskalizuj
             </SubmitButton>
           </DialogFooter>
@@ -437,7 +441,12 @@ function RefundDialog({
             </span>
           </label>
           <DialogFooter>
-            <SubmitButton variant="destructive" size="sm" pendingLabel="Refundacija…">
+            <SubmitButton
+              variant="destructive"
+              size="sm"
+              pendingLabel="Refundacija…"
+              confirm="Izvršiti fiskalnu refundaciju? Proverite iznos i referentni račun pre potvrde."
+            >
               Refundiraj
             </SubmitButton>
           </DialogFooter>

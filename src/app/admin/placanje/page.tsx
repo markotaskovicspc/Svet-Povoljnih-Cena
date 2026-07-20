@@ -112,7 +112,9 @@ export default async function PaymentsPage() {
                   <Input name="note" defaultValue={cfg?.note ?? ""} />
                 </Field>
                 <div className="flex justify-end">
-                  <SubmitButton>Sačuvaj</SubmitButton>
+                  <SubmitButton confirm={`Sačuvati podešavanje načina plaćanja ${method}? Promena je odmah vidljiva u checkout-u.`}>
+                    Sačuvaj
+                  </SubmitButton>
                 </div>
               </AdminActionForm>
             </Card>

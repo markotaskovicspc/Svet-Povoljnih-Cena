@@ -121,7 +121,13 @@ export default async function NewsletterPage({
                     ) : null}
                     <form action={removeSub}>
                       <input type="hidden" name="id" value={s.id} />
-                      <SubmitButton size="sm" variant="ghost">Obriši</SubmitButton>
+                      <SubmitButton
+                        size="sm"
+                        variant="ghost"
+                        confirm={`Obrisati pretplatnika ${s.email}? Ova akcija je nepovratna.`}
+                      >
+                        Obriši
+                      </SubmitButton>
                     </form>
                   </div>
                 ),

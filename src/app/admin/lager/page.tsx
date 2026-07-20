@@ -174,7 +174,13 @@ export default async function InventoryPage() {
               <Field label="CSV fajl"><Input name="file" type="file" accept=".csv,text/csv,text/plain" required /></Field>
               <div className="flex flex-wrap gap-2">
                 <button name="mode" value="preview" className="h-8 rounded-lg border border-border px-3 text-sm">Proveri</button>
-                <SubmitButton name="mode" value="apply">Primeni uvoz</SubmitButton>
+                <SubmitButton
+                  name="mode"
+                  value="apply"
+                  confirm="Primeniti početno stanje iz CSV-a? Količine i dimenzije iz fajla biće upisane u bazu."
+                >
+                  Primeni uvoz
+                </SubmitButton>
               </div>
             </AdminActionForm>
           </Card>
@@ -185,7 +191,9 @@ export default async function InventoryPage() {
               <Field label="SKU"><Input name="sku" required /></Field>
               <Field label="Promena količine" hint="Pozitivno za ulaz, negativno za izlaz."><Input name="qtyDelta" type="number" step="1" required /></Field>
               <Field label="Razlog"><Input name="note" maxLength={300} required /></Field>
-              <SubmitButton>Proknjiži promenu</SubmitButton>
+              <SubmitButton confirm="Proknjižiti ovu korekciju lagera? Promena će ostaviti trajan magacinski i audit trag.">
+                Proknjiži promenu
+              </SubmitButton>
             </AdminActionForm>
           </Card>
         </div>
