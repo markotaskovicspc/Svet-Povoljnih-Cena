@@ -348,6 +348,72 @@ describe("Rabalux checkout integration", () => {
     }
   });
 
+  it("serializes shared category creation and scopes child slug collisions", async () => {
+    const originalFetch = globalThis.fetch;
+    const products = Array.from({ length: 8 }, (_, index) => {
+      const root = index < 6 ? "Rabalux collision A" : "Rabalux collision B";
+      return `<Product>
+        <Sku>IT-CAT-${index + 1}</Sku><Name>Collision ${index + 1}</Name>
+        <Ean11>59999999999${String(index).padStart(2, "0")}</Ean11>
+        <Product_category>${root}</Product_category><Type>Shared child</Type>
+        <Recommended_price>1000</Recommended_price><Description>Collision test</Description>
+        <Product_fhdimages><Image>rabaluxkep.plugin.hu/images/IT-CAT-${index + 1}.jpg</Image></Product_fhdimages>
+      </Product>`;
+    }).join("");
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      if (String(input).includes("/id/332")) {
+        return new Response(`<?xml version="1.0"?><Products>${products}</Products>`, {
+          status: 200,
+        });
+      }
+      throw new Error(`Unexpected integration-test URL: ${String(input)}`);
+    });
+
+    let runId = "";
+    try {
+      const result = await syncRabaluxCatalog();
+      runId = result.runId;
+      expect(result).toMatchObject({ read: 8, ok: 8, failed: 0, created: 8 });
+
+      const categories = await db.category.findMany({
+        where: {
+          path: {
+            in: [
+              "/rabalux-collision-a/shared-child",
+              "/rabalux-collision-b/shared-child",
+            ],
+          },
+        },
+        select: { path: true, slug: true },
+        orderBy: { path: "asc" },
+      });
+      expect(categories).toHaveLength(2);
+      expect(new Set(categories.map(({ slug }) => slug)).size).toBe(2);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+      await db.backgroundJob.deleteMany({
+        where: { kind: "RABALUX_MEDIA_PRODUCT" },
+      });
+      await db.product.deleteMany({
+        where: {
+          supplierId,
+          supplierExternalId: { startsWith: "IT-CAT-" },
+        },
+      });
+      if (runId) await db.importRun.delete({ where: { id: runId } });
+      await db.category.deleteMany({
+        where: {
+          level: { gt: 0 },
+          path: { startsWith: "/rabalux-collision-" },
+        },
+      });
+      await db.category.deleteMany({
+        where: { path: { startsWith: "/rabalux-collision-" } },
+      });
+      await db.group.deleteMany({ where: { slug: "shared-child" } });
+    }
+  });
+
   it("creates a retry-safe mixed-stock fulfillment and sends one supplier email", async () => {
     const mixed = await createProduct({
       suffix: "MIXED",

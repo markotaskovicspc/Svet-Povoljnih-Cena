@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
@@ -662,8 +663,17 @@ async function ensureCategory(tx: Prisma.TransactionClient, segments: string[]) 
   let id = "";
   for (let level = 0; level < segments.length; level++) {
     const name = segments[level].trim();
-    const slug = slugify(name);
-    path = `${path}/${slug}`;
+    const baseSlug = slugify(name);
+    path = `${path}/${baseSlug}`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`rabalux-category:${baseSlug}`})) IS NULL AS "locked"`;
+    const slugOwner = await tx.category.findUnique({
+      where: { slug: baseSlug },
+      select: { path: true },
+    });
+    const slug =
+      !slugOwner || slugOwner.path === path
+        ? baseSlug
+        : scopedCategorySlug(baseSlug, path);
     const category = await tx.category.upsert({
       where: { path },
       create: { slug, name, parentId, path, level },
@@ -674,6 +684,11 @@ async function ensureCategory(tx: Prisma.TransactionClient, segments: string[]) 
     parentId = id;
   }
   return id;
+}
+
+function scopedCategorySlug(baseSlug: string, path: string) {
+  const suffix = createHash("sha256").update(path).digest("hex").slice(0, 8);
+  return `${baseSlug.slice(0, 87)}-${suffix}`;
 }
 
 async function ensureGroup(tx: Prisma.TransactionClient, name: string) {
