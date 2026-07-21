@@ -104,12 +104,12 @@ export default async function ProductPage({ params }: RouteProps) {
   const cleanDescription = stripHtml(product.description);
 
   // Pictograms — fall back to synthesized set if XML hasn't supplied any yet
-  const pictograms = product.pictograms.length
+  const pictograms: DisplayPictogram[] = product.pictograms.length
     ? product.pictograms
-        .map((p) => ({ label: p.label, code: p.code }))
+        .map((p) => ({ label: p.label, code: p.code, iconUrl: p.iconUrl }))
         .filter((p) => !["assembly", "montaza", "montaža"].includes(p.code.toLowerCase()))
     : synthesizedPictograms(product);
-  const benefitChips = product.isLimited || product.isDtz
+  const benefitChips: DisplayPictogram[] = product.isLimited || product.isDtz
     ? [...pictograms, { code: "limited", label: "Dok traju zalihe" }]
     : pictograms;
   const materials = product.materials;
@@ -216,7 +216,19 @@ export default async function ProductPage({ params }: RouteProps) {
             {benefitChips.slice(0, 6).map((benefit) => (
               <FeatureChip
                 key={`${benefit.code}-${benefit.label}`}
-                icon={<PictogramIcon code={benefit.code} className="size-3 text-walnut" />}
+                icon={
+                  benefit.iconUrl ? (
+                    <Image
+                      src={benefit.iconUrl}
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="size-4 object-contain"
+                    />
+                  ) : (
+                    <PictogramIcon code={benefit.code} className="size-3 text-walnut" />
+                  )
+                }
                 label={benefit.label}
               />
             ))}
@@ -456,13 +468,14 @@ function FeatureChip({
   );
 }
 
-interface FallbackPictogram {
+interface DisplayPictogram {
   code: string;
   label: string;
+  iconUrl?: string;
 }
 
-function synthesizedPictograms(p: Product): FallbackPictogram[] {
-  const out: FallbackPictogram[] = [
+function synthesizedPictograms(p: Product): DisplayPictogram[] {
+  const out: DisplayPictogram[] = [
     { code: "delivery", label: `Isporuka ${p.deliveryDays.min}–${p.deliveryDays.max} dana` },
     {
       code: "warranty",
