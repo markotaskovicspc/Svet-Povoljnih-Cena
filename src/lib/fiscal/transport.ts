@@ -90,7 +90,22 @@ export async function fiscalize(
   const badiReady = cfg.provider === "badi" && isBadiConfigured(cfg.badi);
   const efiskalReady = cfg.provider === "efiskal" && Boolean(cfg.apiKey);
 
-  if (!badiReady && !efiskalReady) {
+  if (cfg.provider === "badi" && !badiReady) {
+    return {
+      ok: false,
+      provider: "badi",
+      error: "fiscal:config BADI fiskalizacija nije potpuno konfigurisana.",
+    };
+  }
+  if (cfg.provider === "efiskal" && !efiskalReady) {
+    return {
+      ok: false,
+      provider: "efiskal",
+      error: "fiscal:config eFiskal gateway nema API ključ.",
+    };
+  }
+
+  if (cfg.provider === "none") {
     // Deterministic dev stub: the receipt number is derived from the
     // invoice ref so retries collapse to the same value.
     const key = input.idempotencyKey ?? input.invoiceRef;

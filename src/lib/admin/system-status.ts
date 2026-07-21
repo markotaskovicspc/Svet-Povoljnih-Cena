@@ -6,6 +6,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
 
 type Requirement = {
   name: string;
+  aliases?: string[];
   valid?: (value: string) => boolean;
 };
 
@@ -51,6 +52,10 @@ function present(name: string): Requirement {
   return { name };
 }
 
+function presentOneOf(name: string, ...aliases: string[]): Requirement {
+  return { name, aliases };
+}
+
 function enabled(name: string): Requirement {
   return {
     name,
@@ -73,7 +78,9 @@ function integration(
 ): IntegrationReadiness {
   const missing = input.requirements
     .filter((requirement) => {
-      const value = normalized(env[requirement.name]);
+      const value = [requirement.name, ...(requirement.aliases ?? [])]
+        .map((name) => normalized(env[name]))
+        .find((item): item is string => Boolean(item));
       return !value || (requirement.valid ? !requirement.valid(value) : false);
     })
     .map((requirement) => requirement.name);
@@ -94,6 +101,24 @@ function integration(
 export function getIntegrationReadiness(
   env: Environment = process.env,
 ): IntegrationReadiness[] {
+  const hasVpfrCredentials = [
+    "BADI_VPFR_PFX",
+    "BADI_VPFR_PASSWORD",
+    "BADI_VPFR_PAC",
+  ].some((name) => normalized(env[name]));
+  const badiMode = normalized(env.BADI_FISCAL_MODE)?.toLowerCase() ??
+    (hasVpfrCredentials ? "vpfr" : "public");
+  const badiModeRequirements = badiMode === "vpfr"
+    ? [
+        equals("BADI_FISCAL_MODE", "vpfr"),
+        presentOneOf("BADI_STORE_ID", "BADI_CLIENT_ID"),
+        presentOneOf("BADI_CASHIER_ID", "FISCAL_CASHIER"),
+        present("BADI_VPFR_PFX"),
+        present("BADI_VPFR_PASSWORD"),
+        present("BADI_VPFR_PAC"),
+      ]
+    : [present("BADI_CLIENT_ID")];
+
   return [
     integration(env, {
       id: "core",
@@ -189,6 +214,7 @@ export function getIntegrationReadiness(
         present("BADI_API_SECRET"),
         present("FISCAL_TIN"),
         present("FISCAL_LOCATION_ID"),
+        ...badiModeRequirements,
       ],
     }),
   ];

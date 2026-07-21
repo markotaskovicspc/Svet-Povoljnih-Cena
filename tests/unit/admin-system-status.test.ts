@@ -42,6 +42,25 @@ describe("admin system status", () => {
     expect(JSON.stringify(resend)).not.toContain(secret);
   });
 
+  it("requires the complete certificate trio for badi VPFR readiness", () => {
+    const badi = getIntegrationReadiness({
+      FISCAL_PROVIDER: "badi",
+      BADI_PRODUCTION_ACCEPTED: "true",
+      BADI_API_KEY: "api-key",
+      BADI_API_SECRET: "api-secret",
+      FISCAL_TIN: "123456789",
+      FISCAL_LOCATION_ID: "1234567",
+      BADI_FISCAL_MODE: "vpfr",
+      BADI_STORE_ID: "store-id",
+      BADI_CASHIER_ID: "cashier-id",
+      BADI_VPFR_PFX: "base64-pfx",
+      BADI_VPFR_PASSWORD: "password",
+    }).find((item) => item.id === "badi");
+
+    expect(badi?.ready).toBe(false);
+    expect(badi?.missing).toEqual(["BADI_VPFR_PAC"]);
+  });
+
   it("recognizes supported external monitoring configurations", () => {
     expect(
       externalMonitoringIsConnected({

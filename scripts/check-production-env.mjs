@@ -19,6 +19,12 @@ function requireNames(scope, names) {
   for (const name of names) if (!value(name)) errors.push(`${scope}: ${name} is missing or a placeholder`);
 }
 
+function requireOneOf(scope, names) {
+  if (!names.some((name) => value(name))) {
+    errors.push(`${scope}: one of ${names.join(", ")} is required`);
+  }
+}
+
 function publicHttps(name) {
   const item = value(name);
   if (!item) return errors.push(`${name} is missing`);
@@ -94,8 +100,44 @@ if (enabled("X_EXPRESS_ENABLED") || enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
   if (!enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) errors.push("X Express is enabled without X_EXPRESS_PRODUCTION_ACCEPTED");
 }
 if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
-  requireNames("BADI", ["BADI_API_KEY", "BADI_API_SECRET", "FISCAL_TIN", "FISCAL_LOCATION_ID"]);
+  requireNames("BADI", [
+    "BADI_API_KEY",
+    "BADI_API_SECRET",
+    "BADI_FISCAL_MODE",
+    "FISCAL_TIN",
+    "FISCAL_LOCATION_ID",
+  ]);
   if (!enabled("BADI_PRODUCTION_ACCEPTED")) errors.push("BADI is selected without BADI_PRODUCTION_ACCEPTED");
+  const vpfrNames = ["BADI_VPFR_PFX", "BADI_VPFR_PASSWORD", "BADI_VPFR_PAC"];
+  const vpfrCount = vpfrNames.filter((name) => value(name)).length;
+  const badiMode = (value("BADI_FISCAL_MODE") ?? (vpfrCount ? "vpfr" : "public")).toLowerCase();
+  if (!["public", "vpfr"].includes(badiMode)) {
+    errors.push("BADI_FISCAL_MODE must be public or vpfr");
+  } else if (badiMode === "vpfr") {
+    requireNames("BADI VPFR", vpfrNames);
+    requireOneOf("BADI VPFR store", ["BADI_STORE_ID", "BADI_CLIENT_ID"]);
+    requireOneOf("BADI VPFR cashier", ["BADI_CASHIER_ID", "FISCAL_CASHIER"]);
+
+    const pac = value("BADI_VPFR_PAC");
+    if (pac && !/^[A-Z0-9]{6}$/i.test(pac)) {
+      errors.push("BADI_VPFR_PAC must contain exactly 6 alphanumeric characters");
+    }
+    const pfx = value("BADI_VPFR_PFX")?.replace(/^data:[^,]+,/, "").replace(/\s+/g, "");
+    if (pfx) {
+      try {
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(pfx) || pfx.length % 4 !== 0) {
+          throw new Error("invalid base64");
+        }
+        const bytes = Buffer.from(pfx, "base64");
+        if (bytes.length < 256 || bytes[0] !== 0x30) throw new Error("invalid PKCS#12");
+      } catch {
+        errors.push("BADI_VPFR_PFX must be base64-encoded PKCS#12 content");
+      }
+    }
+  } else {
+    requireNames("BADI public API", ["BADI_CLIENT_ID"]);
+    if (vpfrCount) errors.push("BADI VPFR credentials are set while BADI_FISCAL_MODE is public");
+  }
 }
 if (enabled("RABALUX_ENABLED")) {
   requireNames("Rabalux", [
