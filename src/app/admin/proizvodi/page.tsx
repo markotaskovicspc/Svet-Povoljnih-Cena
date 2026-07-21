@@ -19,6 +19,12 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+type SimilarityGroupRow = {
+  normalizedName: string;
+  count: number;
+  productIds: string[];
+};
+
 const PAGE = 30;
 const lfsPointerPattern = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\b|oid sha256:/i;
 
@@ -71,6 +77,24 @@ export default async function ProductsPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const status = sp.status ?? "";
 
+  const similarityGroups = await db.$queryRaw<SimilarityGroupRow[]>(Prisma.sql`
+    SELECT lower(regexp_replace(btrim(p.name), '\\s+', ' ', 'g')) AS "normalizedName",
+           COUNT(*)::int AS count,
+           array_agg(p.id ORDER BY p.sku) AS "productIds"
+      FROM "Product" p
+      JOIN "Supplier" s ON s.id = p."supplierId"
+     WHERE s."integrationKey" = 'RABALUX'
+       AND p."deletedAt" IS NULL
+     GROUP BY lower(regexp_replace(btrim(p.name), '\\s+', ' ', 'g'))
+    HAVING COUNT(*) > 1
+  `);
+  const similarProductIds = similarityGroups.flatMap((group) => group.productIds);
+  const similarityByProductId = new Map(
+    similarityGroups.flatMap((group) =>
+      group.productIds.map((productId) => [productId, group.count] as const),
+    ),
+  );
+
   const filters: Prisma.ProductWhereInput[] = [];
   if (q) {
     filters.push({
@@ -91,6 +115,7 @@ export default async function ProductsPage({
   if (status === "hero") filters.push({ isHero: true });
   if (status === "lowstock") filters.push({ stock: { gt: 0, lte: 2 } });
   if (status === "notready") filters.push(catalogNotReadyFilter);
+  if (status === "similar") filters.push({ id: { in: similarProductIds } });
 
   const where: Prisma.ProductWhereInput = {
     deletedAt: null,
@@ -201,6 +226,7 @@ export default async function ProductsPage({
                 <option value="hero">Hero meseca</option>
                 <option value="lowstock">Niske zalihe</option>
                 <option value="notready">Nije spremno za prodaju</option>
+                <option value="similar">Slični modeli — potrebna odluka</option>
               </select>
             </div>
             <button
@@ -213,7 +239,7 @@ export default async function ProductsPage({
         </Card>
 
         <Card>
-          <div className="grid gap-3 text-sm sm:grid-cols-5">
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-6">
             <LaunchReadinessMetric
               label="Nije za prodaju"
               value={catalogNotReadyCount}
@@ -239,6 +265,11 @@ export default async function ProductsPage({
               value={brokenDescriptionCount}
               href={link({ status: "needsownerdata", page: 1 })}
             />
+            <LaunchReadinessMetric
+              label="Slični modeli"
+              value={similarProductIds.length}
+              href={link({ status: "similar", page: 1 })}
+            />
           </div>
         </Card>
 
@@ -252,6 +283,7 @@ export default async function ProductsPage({
             { key: "actions", label: "" },
           ]}
           rows={items.map((p) => {
+            const similarityGroupSize = similarityByProductId.get(p.id) ?? 0;
             const ownerIssues = productOwnerIssues(p);
             const readiness = getCatalogReadiness({
               fullPrice: num(p.fullPrice),
@@ -319,6 +351,15 @@ export default async function ProductsPage({
                       <span className="rounded bg-info/15 px-1.5 py-0.5 text-info">
                         Novo
                       </span>
+                    ) : null}
+                    {similarityGroupSize > 1 ? (
+                      <Link
+                        href={`/admin/proizvodi?q=${encodeURIComponent(p.name)}`}
+                        className="rounded bg-info/15 px-1.5 py-0.5 text-info hover:underline"
+                        title="Isti naziv, različite šifre — potrebna je odluka klijenta"
+                      >
+                        Sličan model · grupa {similarityGroupSize}
+                      </Link>
                     ) : null}
                     {ownerIssues.map((issue) => (
                       <span
