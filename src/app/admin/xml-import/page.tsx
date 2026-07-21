@@ -82,6 +82,73 @@ async function saveSupplier(formData: FormData) {
   )(formData);
 }
 
+async function saveRabaluxLoadingLocations(formData: FormData) {
+  "use server";
+
+  return withAdmin(
+    {
+      allowed: ["OPS"],
+      action: "rabalux.loadingLocations.save",
+      entity: "SupplierLoadingLocation",
+    },
+    async (_actorId, formData: FormData) => {
+      const supplierId = String(formData.get("supplierId") ?? "");
+      const supplier = await db.supplier.findFirst({
+        where: { id: supplierId, integrationKey: "RABALUX" },
+        select: { id: true },
+      });
+      if (!supplier) {
+        return { ok: false as const, error: "Dobavljač nije pronađen." };
+      }
+
+      const locations = [1, 2].map((position) => ({
+        position,
+        address: String(formData.get(`address${position}`) ?? "").trim(),
+        city: String(formData.get(`city${position}`) ?? "").trim(),
+      }));
+      for (const location of locations) {
+        if (location.address.length > 250 || location.city.length > 120) {
+          return { ok: false as const, error: "Adresa ili grad su predugački." };
+        }
+        if (Boolean(location.address) !== Boolean(location.city)) {
+          return {
+            ok: false as const,
+            error: `Za lokaciju ${location.position} unesite i adresu i grad ili ostavite oba polja prazna.`,
+          };
+        }
+      }
+
+      await db.$transaction(
+        locations.map((location) =>
+          db.supplierLoadingLocation.update({
+            where: {
+              supplierId_position: {
+                supplierId: supplier.id,
+                position: location.position,
+              },
+            },
+            data: {
+              address: location.address || null,
+              city: location.city || null,
+            },
+          }),
+        ),
+      );
+      revalidatePath("/admin/xml-import");
+      return {
+        ok: true as const,
+        entityId: supplier.id,
+        diff: {
+          locations: locations.map((location) => ({
+            position: location.position,
+            configured: Boolean(location.address && location.city),
+          })),
+        },
+      };
+    },
+  )(formData);
+}
+
 async function previewRabalux(
   _state: AdminActionState<RabaluxPreviewResult>,
   formData: FormData,
@@ -194,7 +261,10 @@ export default async function XmlImportPage({
   await requireAdminAction(["OPS"]);
   const sp = await searchParams;
   const [suppliers, edit, recentRuns] = await Promise.all([
-    db.supplier.findMany({ orderBy: { name: "asc" } }),
+    db.supplier.findMany({
+      orderBy: { name: "asc" },
+      include: { loadingLocations: { orderBy: { position: "asc" } } },
+    }),
     sp.supplier
       ? db.supplier.findUnique({ where: { id: sp.supplier } })
       : Promise.resolve(null),
@@ -224,6 +294,41 @@ export default async function XmlImportPage({
                 previewAction={previewRabalux}
                 executeAction={executeRabalux}
               />
+              <form
+                action={saveRabaluxLoadingLocations}
+                className="mt-5 space-y-3 border-t border-border pt-4"
+              >
+                <input type="hidden" name="supplierId" value={rabalux.id} />
+                <p className="text-sm font-medium text-ink">Mesta preuzimanja</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {rabalux.loadingLocations.map((location) => (
+                    <div key={location.id} className="space-y-2 rounded-lg border border-border p-3">
+                      <p className="text-xs font-semibold text-ink-700">{location.name}</p>
+                      <Field label="Adresa">
+                        <Input
+                          name={`address${location.position}`}
+                          defaultValue={location.address ?? ""}
+                          maxLength={250}
+                          autoComplete="street-address"
+                        />
+                      </Field>
+                      <Field label="Grad">
+                        <Input
+                          name={`city${location.position}`}
+                          defaultValue={location.city ?? ""}
+                          maxLength={120}
+                          autoComplete="address-level2"
+                        />
+                      </Field>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <SubmitButton size="sm" variant="secondary">
+                    Sačuvaj mesta preuzimanja
+                  </SubmitButton>
+                </div>
+              </form>
               <p className="mt-3 text-xs text-ink-500">
                 Kredencijali su server-side env promenljive i ne prikazuju se u
                 administraciji.
