@@ -1,13 +1,16 @@
 import "server-only";
 
+import { Readable } from "node:stream";
 import sharp from "sharp";
 import { Prisma } from "@prisma/client";
+import { Upload } from "tus-js-client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { envValue } from "@/lib/env";
 import { normalizeRabaluxMediaUrl } from "./parser";
+import { directStorageOrigin } from "./media-upload";
 import {
   isRabaluxSupplierOperational,
   RABALUX_INTEGRATION_KEY,
@@ -16,6 +19,7 @@ import {
 const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 512 * 1024 * 1024;
+const TUS_CHUNK_BYTES = 6 * 1024 * 1024;
 const VARIANTS = [
   { name: "thumb", width: 160, quality: 76 },
   { name: "card", width: 640, quality: 80 },
@@ -431,32 +435,71 @@ async function streamVideoToStorage(
     if (!supabaseUrl || !serviceRole) {
       throw new Error("Product media storage is not configured.");
     }
-    const encodedKey = storageKey.split("/").map(encodeURIComponent).join("/");
-    const destination = `${supabaseUrl.replace(
-      /\/+$/,
-      "",
-    )}/storage/v1/object/${encodeURIComponent(
-      getProductMediaBucket(),
-    )}/${encodedKey}`;
-    const response = await fetch(destination, {
-      method: "POST",
-      headers: {
-        apikey: serviceRole,
-        Authorization: `Bearer ${serviceRole}`,
-        "Content-Type": contentType,
-        "Cache-Control": "max-age=31536000",
-        "x-upsert": "true",
-      },
-      body: source.body.pipeThrough(limiter),
-      duplex: "half",
-      signal: controller.signal,
-    } as RequestInit & { duplex: "half" });
-    if (!response.ok) {
-      throw new Error(`Product media upload returned HTTP ${response.status}.`);
+    if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+      throw new Error("Rabalux video response does not include a valid size.");
     }
+    const stream = Readable.fromWeb(
+      source.body.pipeThrough(limiter) as Parameters<typeof Readable.fromWeb>[0],
+    );
+    await uploadVideoResumable({
+      stream,
+      uploadSize: contentLength,
+      storageKey,
+      contentType,
+      supabaseUrl,
+      serviceRole,
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function uploadVideoResumable(args: {
+  stream: Readable;
+  uploadSize: number;
+  storageKey: string;
+  contentType: string;
+  supabaseUrl: string;
+  serviceRole: string;
+  signal: AbortSignal;
+}) {
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => args.signal.removeEventListener("abort", abort);
+    const abort = () => {
+      void upload.abort().finally(() => reject(new Error("Video upload timed out.")));
+    };
+    const upload = new Upload(args.stream, {
+      endpoint: `${directStorageOrigin(args.supabaseUrl)}/storage/v1/upload/resumable`,
+      headers: {
+        apikey: args.serviceRole,
+        Authorization: `Bearer ${args.serviceRole}`,
+        "x-upsert": "true",
+      },
+      chunkSize: TUS_CHUNK_BYTES,
+      uploadSize: args.uploadSize,
+      uploadDataDuringCreation: true,
+      retryDelays: [0, 3_000, 5_000, 10_000, 20_000],
+      storeFingerprintForResuming: false,
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName: getProductMediaBucket(),
+        objectName: args.storageKey,
+        contentType: args.contentType,
+        cacheControl: "31536000",
+      },
+      onError: (error) => {
+        cleanup();
+        reject(error);
+      },
+      onSuccess: () => {
+        cleanup();
+        resolve();
+      },
+    });
+    args.signal.addEventListener("abort", abort, { once: true });
+    upload.start();
+  });
 }
 
 async function upload(
