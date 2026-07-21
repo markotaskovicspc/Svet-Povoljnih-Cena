@@ -115,7 +115,11 @@ type BadiError = {
 type BadiResult<T> = { ok: true; data: T } | BadiError;
 
 export function isBadiConfigured(badi: BadiConfig): boolean {
-  return Boolean(badi.apiKey && badi.apiSecret);
+  if (!badi.apiKey || !badi.apiSecret) return false;
+  if (badi.fiscalMode === "vpfr") {
+    return Boolean(badi.vpfr && badi.storeId && badi.cashierId);
+  }
+  return Boolean(badi.clientId || badi.storeId);
 }
 
 async function badiRequest<T>(
@@ -125,10 +129,9 @@ async function badiRequest<T>(
   const { badi } = getFiscalConfig();
   const auth = Buffer.from(`${badi.apiKey}:${badi.apiSecret}`).toString("base64");
 
-  // VPFR certificate mode (badi api-docs): receipt endpoints accept pfx/
-  // password/pac headers so fiscalization runs through the Tax Authority's
-  // cloud V-PFR instead of a locally connected LPFR client. Exact header
-  // encoding (raw vs base64 pfx) is unverified until a live E2E — revisit then.
+  // VPFR certificate mode (badi OpenAPI 3.0.0): receipt endpoints accept the
+  // base64-encoded PFX/P12 plus password/PAC headers so fiscalization runs
+  // through the Tax Authority's cloud V-PFR.
   const vpfrHeaders: Record<string, string> =
     init.vpfr && badi.vpfr
       ? { pfx: badi.vpfr.pfx, password: badi.vpfr.password, pac: badi.vpfr.pac }
@@ -179,12 +182,15 @@ export async function fiscalizeWithBadi(
   const { badi } = getFiscalConfig();
   const transactionType = input.transactionType ?? "SALE";
 
-  // storeId is REQUIRED by the receipt endpoints; the badi dashboard's
-  // "ID klijenta" UUID doubles as its value. We keep `clientId` alongside
-  // belt-and-braces (extra body keys were tolerated in the live spike).
-  const storeIdentity = badi.clientId
-    ? { storeId: badi.clientId, clientId: badi.clientId }
-    : {};
+  // VPFR requires storeId + cashierId. Public API mode keeps the live-spike
+  // compatibility pair because badi accepted the dashboard client UUID as
+  // storeId while its current OpenAPI recommends clientId.
+  const storeIdentity = badi.fiscalMode === "vpfr"
+    ? { storeId: badi.storeId!, cashierId: badi.cashierId! }
+    : {
+        ...(badi.storeId ? { storeId: badi.storeId } : {}),
+        ...(badi.clientId ? { clientId: badi.clientId } : {}),
+      };
 
   let result: BadiResult<BadiReceiptResponse>;
   if (transactionType === "REFUND") {

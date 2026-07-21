@@ -28,6 +28,12 @@ export interface BadiConfig {
   baseUrl: string;
   /** Required by badi in public-API mode; optional for single-client accounts. */
   clientId: string | null;
+  /** Sales-location UUID required by badi's VPFR certificate mode. */
+  storeId: string | null;
+  /** Cashier/user identifier printed on receipts in VPFR certificate mode. */
+  cashierId: string | null;
+  /** Explicit transport mode; VPFR fails closed unless the certificate trio is complete. */
+  fiscalMode: "public" | "vpfr";
   /** Tax rate label registered with badi products ("Ђ" = 20 % standard). */
   taxRateLabel: string;
   /**
@@ -76,6 +82,8 @@ export function getFiscalConfig(): FiscalConfig {
 
   const badiEnv = (envValue("BADI_ENV") ?? "sandbox").toLowerCase();
 
+  const badi = badiConfigFromEnv();
+
   cached = {
     provider,
     apiKey: provider === "efiskal" ? envValue("FISCAL_API_KEY") : null,
@@ -92,25 +100,92 @@ export function getFiscalConfig(): FiscalConfig {
       process.env.NEXTAUTH_URL ??
       "https://www.svetpovoljnihcena.rs",
     badi: {
-      apiKey: envValue("BADI_API_KEY"),
-      apiSecret: envValue("BADI_API_SECRET"),
+      ...badi,
       baseUrl:
         envValue("BADI_BASE_URL") ??
         BADI_BASE_URLS[badiEnv] ??
         BADI_BASE_URLS.sandbox!,
-      clientId: envValue("BADI_CLIENT_ID"),
       taxRateLabel: envValue("BADI_TAX_RATE_LABEL") ?? "Ђ",
-      vpfr: badiVpfrFromEnv(),
     },
   };
   return cached;
 }
 
-function badiVpfrFromEnv(): BadiConfig["vpfr"] {
+function badiConfigFromEnv(): Omit<BadiConfig, "baseUrl" | "taxRateLabel"> {
+  const apiKey = envValue("BADI_API_KEY");
+  const apiSecret = envValue("BADI_API_SECRET");
+  const clientId = envValue("BADI_CLIENT_ID");
+  const storeId = envValue("BADI_STORE_ID") ?? clientId;
+  const cashierId = envValue("BADI_CASHIER_ID") ?? envValue("FISCAL_CASHIER");
+
   const pfx = envValue("BADI_VPFR_PFX");
   const password = envValue("BADI_VPFR_PASSWORD");
   const pac = envValue("BADI_VPFR_PAC");
-  return pfx && password && pac ? { pfx, password, pac } : null;
+  const suppliedVpfrValues = [pfx, password, pac].filter(Boolean).length;
+  const modeValue = envValue("BADI_FISCAL_MODE")?.toLowerCase();
+  if (modeValue && modeValue !== "public" && modeValue !== "vpfr") {
+    throw new FiscalConfigError("BADI_FISCAL_MODE mora biti 'public' ili 'vpfr'.");
+  }
+  const fiscalMode: BadiConfig["fiscalMode"] =
+    modeValue === "vpfr" || (!modeValue && suppliedVpfrValues > 0)
+      ? "vpfr"
+      : "public";
+
+  if (fiscalMode === "public" && suppliedVpfrValues > 0) {
+    throw new FiscalConfigError(
+      "BADI VPFR podaci su postavljeni, ali je BADI_FISCAL_MODE='public'.",
+    );
+  }
+  if (fiscalMode === "vpfr" && suppliedVpfrValues !== 3) {
+    throw new FiscalConfigError(
+      "BADI VPFR režim zahteva BADI_VPFR_PFX, BADI_VPFR_PASSWORD i BADI_VPFR_PAC.",
+    );
+  }
+
+  const vpfr = pfx && password && pac
+    ? {
+        pfx: normalizePfxBase64(pfx),
+        password,
+        pac: normalizePac(pac),
+      }
+    : null;
+
+  if (fiscalMode === "vpfr" && (!storeId || !cashierId)) {
+    throw new FiscalConfigError(
+      "BADI VPFR režim zahteva BADI_STORE_ID i BADI_CASHIER_ID (ili njihove postojeće fallback vrednosti).",
+    );
+  }
+
+  return {
+    apiKey,
+    apiSecret,
+    clientId,
+    storeId,
+    cashierId,
+    fiscalMode,
+    vpfr,
+  };
+}
+
+function normalizePfxBase64(value: string): string {
+  const compact = value.replace(/^data:[^,]+,/, "").replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact) || compact.length % 4 !== 0) {
+    throw new FiscalConfigError("BADI_VPFR_PFX mora biti base64 sadržaj PFX/P12 datoteke.");
+  }
+
+  const decoded = Buffer.from(compact, "base64");
+  if (decoded.length < 256 || decoded[0] !== 0x30) {
+    throw new FiscalConfigError("BADI_VPFR_PFX ne izgleda kao PKCS#12 (PFX/P12) datoteka.");
+  }
+  return compact;
+}
+
+function normalizePac(value: string): string {
+  const pac = value.toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(pac)) {
+    throw new FiscalConfigError("BADI_VPFR_PAC mora imati tačno 6 alfanumeričkih znakova.");
+  }
+  return pac;
 }
 
 /** Test-only helper: reset the cached config so env changes take effect. */
