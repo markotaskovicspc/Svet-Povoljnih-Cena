@@ -174,6 +174,53 @@ export default async function SystemStatusPage() {
         </Card>
 
         <Card>
+          <CardTitle description="Circuit breaker, approval red, stale run-ovi i media retry stanje.">
+            Rabalux integracija
+          </CardTitle>
+          {snapshot.rabalux ? (
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatCard
+                label="Media greške"
+                value={String(snapshot.rabalux.failedMediaJobs)}
+                tone={snapshot.rabalux.failedMediaJobs ? "danger" : "success"}
+              />
+              <StatCard
+                label="Media retry"
+                value={String(snapshot.rabalux.retryMediaJobs)}
+                tone={snapshot.rabalux.retryMediaJobs ? "warning" : "success"}
+              />
+              <StatCard
+                label="Stale sync"
+                value={String(snapshot.rabalux.staleRuns)}
+                tone={snapshot.rabalux.staleRuns ? "danger" : "success"}
+              />
+              <StatCard
+                label="Čeka odobrenje"
+                value={String(snapshot.rabalux.pendingApprovals)}
+                tone={snapshot.rabalux.pendingApprovals ? "warning" : "success"}
+              />
+              <StatCard
+                label="Mapping konflikti"
+                value={String(snapshot.rabalux.pendingMappings)}
+                tone={snapshot.rabalux.pendingMappings ? "warning" : "success"}
+              />
+              <StatCard
+                label="Poslednji katalog"
+                value={snapshot.rabalux.lastCatalogSuccessAt ? new Date(snapshot.rabalux.lastCatalogSuccessAt).toLocaleString("sr-RS") : "—"}
+                tone={snapshot.rabalux.lastCatalogSuccessAt ? "success" : "warning"}
+              />
+              <StatCard
+                label="Poslednji lager"
+                value={snapshot.rabalux.lastStockSuccessAt ? new Date(snapshot.rabalux.lastStockSuccessAt).toLocaleString("sr-RS") : "—"}
+                tone={snapshot.rabalux.lastStockSuccessAt ? "success" : "warning"}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-ink-500">Rabalux dobavljač nije dostupan u bazi.</p>
+          )}
+        </Card>
+
+        <Card>
           <CardTitle description="Prikazuju se samo nazivi promenljivih koje nedostaju, nikada njihove vrednosti.">
             Spoljne integracije
           </CardTitle>

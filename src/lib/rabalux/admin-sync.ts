@@ -4,7 +4,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Prisma, type ImportKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isRabaluxSupplierOperational, RABALUX_INTEGRATION_KEY } from "./config";
-import { inspectRabaluxLiveFeeds } from "./sync";
+import { prepareRabaluxPreview, type RabaluxPreviewSummary } from "./preview";
 
 export type RabaluxSyncTarget = "catalog" | "stock" | "media";
 
@@ -13,7 +13,7 @@ export type RabaluxPreviewResult = {
   target: RabaluxSyncTarget;
   phrase: string;
   expiresAt: string;
-  summary: Awaited<ReturnType<typeof inspectRabaluxLiveFeeds>>;
+  summary: RabaluxPreviewSummary;
 };
 
 const TARGET: Record<
@@ -37,40 +37,64 @@ export async function createRabaluxSyncPreview(
 ): Promise<RabaluxPreviewResult> {
   const supplier = await db.supplier.findUniqueOrThrow({
     where: { integrationKey: RABALUX_INTEGRATION_KEY },
-    select: { id: true },
   });
-  const summary = await inspectRabaluxLiveFeeds();
+  if (!isRabaluxSupplierOperational(supplier)) {
+    throw new Error("Dobavljačka veza je isključena.");
+  }
   const id = randomUUID();
   const secret = randomBytes(32).toString("base64url");
   const token = `${id}.${secret}`;
   const expiresAt = new Date(Date.now() + 10 * 60_000);
   const targetConfig = TARGET[target];
-  const recordsRead =
-    target === "catalog"
-      ? summary.catalogRows
-      : target === "stock"
-        ? summary.stockRows
-        : summary.videos + summary.manuals + summary.energyLabels + summary.imageAssets;
   await db.importRun.create({
     data: {
       id,
       supplierId: supplier.id,
       kind: targetConfig.kind,
       dryRun: true,
-      status: "SUCCESS",
-      finishedAt: new Date(),
-      recordsRead,
-      recordsOk: recordsRead,
-      metadata: {
-        actorId,
-        target,
-        tokenHash: hashToken(token),
-        expiresAt: expiresAt.toISOString(),
-        consumedAt: null,
-        summary,
-      } as Prisma.InputJsonValue,
+      status: "RUNNING",
+      requestedById: actorId,
     },
   });
+  let summary: RabaluxPreviewSummary;
+  try {
+    summary = await prepareRabaluxPreview({ supplier, target, runId: id });
+    const recordsRead =
+      target === "catalog"
+        ? summary.catalogRows
+        : target === "stock"
+          ? summary.stockRows
+          : summary.diff.mediaPending;
+    await db.importRun.update({
+      where: { id },
+      data: {
+        status: "SUCCESS",
+        finishedAt: new Date(),
+        recordsRead,
+        recordsOk: recordsRead,
+        sourceHash: summary.sourceHash,
+        metadata: {
+          actorId,
+          target,
+          tokenHash: hashToken(token),
+          expiresAt: expiresAt.toISOString(),
+          consumedAt: null,
+          summary,
+        } as Prisma.InputJsonValue,
+      },
+    });
+  } catch (error) {
+    await db.importRun.update({
+      where: { id },
+      data: {
+        status: "FAILED",
+        finishedAt: new Date(),
+        recordsFail: 1,
+        errorMessage: error instanceof Error ? error.message.slice(0, 1000) : String(error),
+      },
+    });
+    throw error;
+  }
   return {
     token,
     target,
@@ -106,7 +130,7 @@ export async function consumeRabaluxSyncPreview(args: {
   if (!isRabaluxSupplierOperational(supplier)) {
     throw new Error("Dobavljačka veza je isključena.");
   }
-  const consumed = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  const consumed = await db.$queryRaw<Array<{ id: string; sourceHash: string | null }>>(Prisma.sql`
     UPDATE "ImportRun"
        SET "metadata" = "metadata" || jsonb_build_object(
          'consumedAt', NOW()::text,
@@ -121,14 +145,23 @@ export async function consumeRabaluxSyncPreview(args: {
        AND "metadata"->>'tokenHash' = ${hashToken(args.token)}
        AND "metadata"->>'consumedAt' IS NULL
        AND ("metadata"->>'expiresAt')::timestamptz > NOW()
-    RETURNING "id"
+       AND NOT EXISTS (
+         SELECT 1
+           FROM "ImportRun" newer
+          WHERE newer."supplierId" = "ImportRun"."supplierId"
+            AND newer."kind" = "ImportRun"."kind"
+            AND newer."dryRun" = FALSE
+            AND newer."startedAt" > "ImportRun"."startedAt"
+            AND newer."status" IN ('RUNNING', 'SUCCESS', 'PARTIAL')
+       )
+    RETURNING "id", "sourceHash"
   `);
   if (consumed.length !== 1) {
     throw new Error(
       "Preview potvrda je istekla, već je iskorišćena ili pripada drugom administratoru.",
     );
   }
-  return { runId, reason };
+  return { runId, reason, sourceHash: consumed[0].sourceHash };
 }
 
 function hashToken(token: string) {

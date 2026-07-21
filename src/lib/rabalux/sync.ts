@@ -1,6 +1,5 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
 import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
@@ -22,6 +21,24 @@ import type {
   RabaluxCatalogItem,
   RabaluxStockItem,
 } from "./types";
+import {
+  applyRabaluxOverrides,
+  isRabaluxFieldLocked,
+  parseOverrideFields,
+} from "./ownership";
+import {
+  acquireSyncLease,
+  assertFeedBaseline,
+  assertSafeMissingShare,
+  configuredPositiveInt,
+  heartbeatSyncLease,
+  isRiskyPriceChange,
+  missingGraceSatisfied,
+  previousSuccessfulRowCount,
+  releaseSyncLease,
+  reportCircuitBreaker,
+  stableSourceHash,
+} from "./safety";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
@@ -37,6 +54,15 @@ type SyncSummary = {
   mediaQueued: number;
   errors: Array<{ sourceSku?: string; message: string }>;
   metadata: Record<string, unknown>;
+};
+
+export type RabaluxSyncOptions = {
+  expectedSourceHash?: string;
+  previewRunId?: string;
+  requestedById?: string;
+  reason?: string;
+  allowRiskyPrices?: boolean;
+  allowLargeRemoval?: boolean;
 };
 
 async function getSupplier(requireEnabled = false) {
@@ -71,6 +97,10 @@ async function closeRun(
         ? (summary.errors as Prisma.InputJsonValue)
         : Prisma.JsonNull,
       metadata: summary.metadata as Prisma.InputJsonValue,
+      sourceHash:
+        typeof summary.metadata.sourceHash === "string"
+          ? summary.metadata.sourceHash
+          : undefined,
     },
   });
   return summary;
@@ -83,17 +113,8 @@ function safeMessage(error: unknown) {
     .slice(0, 1000);
 }
 
-function configuredMinimumRows(name: string, fallback: number) {
-  const configured = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isInteger(configured) && configured > 0 ? configured : fallback;
-}
-
 function assertMinimumFeedRows(kind: string, actual: number, minimum: number) {
-  if (actual < minimum) {
-    throw new Error(
-      `Rabalux ${kind} feed has ${actual} row(s); expected at least ${minimum}.`,
-    );
-  }
+  assertFeedBaseline({ kind, actual, absoluteMinimum: minimum });
 }
 
 export async function fetchRabaluxCatalog(supplier: Supplier) {
@@ -109,7 +130,7 @@ export async function fetchRabaluxCatalog(supplier: Supplier) {
     assertMinimumFeedRows(
       "catalog",
       items.length,
-      configuredMinimumRows("RABALUX_MIN_CATALOG_ROWS", 2_000),
+      configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
     );
     return { source: "XML" as const, items };
   } catch (xmlError) {
@@ -123,7 +144,7 @@ export async function fetchRabaluxCatalog(supplier: Supplier) {
     assertMinimumFeedRows(
       "catalog fallback",
       items.length,
-      configuredMinimumRows("RABALUX_MIN_CATALOG_ROWS", 2_000),
+      configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
     );
     return {
       source: "CSV" as const,
@@ -144,7 +165,7 @@ export async function fetchRabaluxStock(supplier: Supplier) {
   assertMinimumFeedRows(
     "stock",
     items.length,
-    configuredMinimumRows("RABALUX_MIN_STOCK_ROWS", 2_000),
+    configuredPositiveInt("RABALUX_MIN_STOCK_ROWS", 2_000),
   );
   return items;
 }
@@ -158,10 +179,17 @@ export async function inspectRabaluxLiveFeeds() {
   return { source, ...summarizeRabaluxDryRun(catalog, stock) };
 }
 
-export async function syncRabaluxCatalog() {
+export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
   const supplier = await getSupplier(true);
   const run = await db.importRun.create({
-    data: { supplierId: supplier.id, kind: "CATALOG", status: "RUNNING" },
+    data: {
+      supplierId: supplier.id,
+      kind: "CATALOG",
+      status: "RUNNING",
+      previewRunId: options.previewRunId,
+      requestedById: options.requestedById,
+      metadata: options.reason ? { reason: options.reason } : undefined,
+    },
   });
   const summary: SyncSummary = {
     runId: run.id,
@@ -175,23 +203,81 @@ export async function syncRabaluxCatalog() {
     errors: [],
     metadata: {},
   };
+  let leaseAcquired = false;
   try {
+    await acquireSyncLease({
+      supplierId: supplier.id,
+      runId: run.id,
+      scope: "CATALOG",
+    });
+    leaseAcquired = true;
     const catalog = await fetchRabaluxCatalog(supplier);
     summary.read = catalog.items.length;
+    const sourceHash = stableSourceHash(catalog.items);
+    summary.metadata.sourceHash = sourceHash;
+    if (options.expectedSourceHash && options.expectedSourceHash !== sourceHash) {
+      throw new Error(
+        "Rabalux catalog changed after preview. Create a new preview before execution.",
+      );
+    }
     summary.metadata.source = catalog.source;
     if (catalog.fallbackReason) {
       summary.metadata.xmlFallbackReason = catalog.fallbackReason;
     }
-    const seen = new Set<string>();
+    const existingProducts = await db.product.findMany({
+      where: { supplierId: supplier.id, deletedAt: null },
+      select: {
+        id: true,
+        supplierExternalId: true,
+        supplierCatalogMissingCount: true,
+        supplierCatalogMissingSince: true,
+        isActive: true,
+        supplierApprovalStatus: true,
+        syncOverrides: true,
+      },
+    });
+    assertFeedBaseline({
+      kind: "catalog",
+      actual: catalog.items.length,
+      absoluteMinimum: configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
+      previousSuccessfulRows: await previousSuccessfulRowCount(
+        supplier.id,
+        "CATALOG",
+        run.id,
+      ),
+    });
+    const seen = new Set(catalog.items.map((item) => item.sourceSku));
+    const missing = existingProducts.filter(
+      (product) =>
+        product.supplierExternalId && !seen.has(product.supplierExternalId),
+    );
+    assertSafeMissingShare({
+      kind: "catalog",
+      existing: existingProducts.length,
+      missing: missing.length,
+      allowLargeRemoval: options.allowLargeRemoval,
+    });
+
     for (let start = 0; start < catalog.items.length; start += ITEM_CONCURRENCY) {
       const batch = catalog.items.slice(start, start + ITEM_CONCURRENCY);
       const results = await Promise.allSettled(
-        batch.map((item) => upsertCatalogItem(supplier, item)),
+        batch.map((item) =>
+          upsertCatalogItem(supplier, item, run.id, sourceHash, options),
+        ),
       );
       results.forEach((result, index) => {
         const item = batch[index];
-        seen.add(item.sourceSku);
         if (result.status === "fulfilled") {
+          if (result.value.conflict) {
+            summary.failed++;
+            if (summary.errors.length < MAX_RECORDED_ERRORS) {
+              summary.errors.push({
+                sourceSku: item.sourceSku,
+                message: result.value.conflict,
+              });
+            }
+            return;
+          }
           summary.ok++;
           summary[result.value.created ? "created" : "updated"]++;
           if (result.value.mediaQueued) summary.mediaQueued++;
@@ -205,33 +291,151 @@ export async function syncRabaluxCatalog() {
           }
         }
       });
+      if ((start / ITEM_CONCURRENCY) % 25 === 24) {
+        await heartbeatSyncLease({
+          supplierId: supplier.id,
+          runId: run.id,
+          scope: "CATALOG",
+        });
+      }
     }
-    const disappeared = await db.product.updateMany({
-      where: {
-        supplierId: supplier.id,
-        supplierExternalId: { notIn: [...seen] },
-        deletedAt: null,
-      },
-      data: { isActive: false },
+    const disappearance = await reconcileMissingCatalogProducts({
+      supplierId: supplier.id,
+      runId: run.id,
+      products: missing,
     });
-    summary.metadata.disappeared = disappeared.count;
+    summary.metadata.missingPending = disappearance.pending;
+    summary.metadata.deactivatedAfterGrace = disappearance.deactivated;
     summary.metadata.invalid = catalog.items.filter((item) => !item.valid).length;
     return await closeRun(run.id, summary);
   } catch (error) {
     summary.failed = Math.max(summary.failed, 1);
     summary.errors.push({ message: safeMessage(error) });
+    reportCircuitBreaker(error, { runId: run.id, scope: "CATALOG" });
     await closeRun(run.id, summary);
     throw error;
+  } finally {
+    if (leaseAcquired) {
+      await releaseSyncLease({
+        supplierId: supplier.id,
+        runId: run.id,
+        scope: "CATALOG",
+      });
+    }
   }
 }
 
-async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
+export async function syncRabaluxCatalogProduct(
+  externalSku: string,
+  options: RabaluxSyncOptions = {},
+) {
+  const normalizedSku = externalSku.trim();
+  if (!normalizedSku || normalizedSku.length > 120) {
+    throw new Error("Rabalux external SKU is invalid.");
+  }
+  const supplier = await getSupplier(true);
+  const run = await db.importRun.create({
+    data: {
+      supplierId: supplier.id,
+      kind: "CATALOG",
+      status: "RUNNING",
+      requestedById: options.requestedById,
+      metadata: {
+        reason: options.reason ?? null,
+        onlyExternalSku: normalizedSku,
+      },
+    },
+  });
+  const summary: SyncSummary = {
+    runId: run.id,
+    kind: "CATALOG",
+    read: 0,
+    ok: 0,
+    failed: 0,
+    created: 0,
+    updated: 0,
+    mediaQueued: 0,
+    errors: [],
+    metadata: { onlyExternalSku: normalizedSku },
+  };
+  let leaseAcquired = false;
+  try {
+    await acquireSyncLease({
+      supplierId: supplier.id,
+      runId: run.id,
+      scope: "CATALOG",
+    });
+    leaseAcquired = true;
+    const catalog = await fetchRabaluxCatalog(supplier);
+    assertFeedBaseline({
+      kind: "catalog",
+      actual: catalog.items.length,
+      absoluteMinimum: configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
+      previousSuccessfulRows: await previousSuccessfulRowCount(
+        supplier.id,
+        "CATALOG",
+        run.id,
+      ),
+    });
+    const sourceHash = stableSourceHash(catalog.items);
+    summary.metadata.sourceHash = sourceHash;
+    summary.metadata.feedRows = catalog.items.length;
+    summary.metadata.source = catalog.source;
+    const item = catalog.items.find((candidate) => candidate.sourceSku === normalizedSku);
+    if (!item) throw new Error(`Rabalux product ${normalizedSku} is not in the complete feed.`);
+    summary.read = 1;
+    const result = await upsertCatalogItem(
+      supplier,
+      item,
+      run.id,
+      sourceHash,
+      options,
+    );
+    if (result.conflict) throw new Error(result.conflict);
+    summary.ok = 1;
+    summary[result.created ? "created" : "updated"] = 1;
+    summary.mediaQueued = result.mediaQueued ? 1 : 0;
+    return await closeRun(run.id, summary);
+  } catch (error) {
+    summary.failed = 1;
+    summary.errors.push({ sourceSku: normalizedSku, message: safeMessage(error) });
+    reportCircuitBreaker(error, { runId: run.id, scope: "CATALOG" });
+    await closeRun(run.id, summary);
+    throw error;
+  } finally {
+    if (leaseAcquired) {
+      await releaseSyncLease({
+        supplierId: supplier.id,
+        runId: run.id,
+        scope: "CATALOG",
+      });
+    }
+  }
+}
+
+async function upsertCatalogItem(
+  supplier: Supplier,
+  item: RabaluxCatalogItem,
+  runId: string,
+  sourceHash: string,
+  options: RabaluxSyncOptions,
+) {
   const result = await db.$transaction(async (tx) => {
-    const categoryId =
+    const mapping =
       item.category && item.type
-        ? await ensureCategory(tx, [item.category, item.type])
+        ? await tx.supplierCategoryMapping.findUnique({
+            where: {
+              supplierId_externalCategory_externalType: {
+                supplierId: supplier.id,
+                externalCategory: item.category,
+                externalType: item.type,
+              },
+            },
+            select: { categoryId: true, enabled: true },
+          })
         : null;
-    const groupId = item.type ? await ensureGroup(tx, item.type) : null;
+    const categoryId = mapping?.enabled ? mapping.categoryId : null;
+    const groupId = categoryId && item.type ? await ensureGroup(tx, item.type) : null;
     const existing = await tx.product.findUnique({
       where: {
         supplierId_supplierExternalId: {
@@ -243,13 +447,103 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
         id: true,
         syncOverrides: true,
         articleStatus: true,
-        media: { select: { sourceUrl: true, kind: true, order: true, syncStatus: true } },
+        sku: true,
+        slug: true,
+        name: true,
+        barcode: true,
+        description: true,
+        shortDescription: true,
+        colorPrimary: true,
+        colorSecondary: true,
+        groupId: true,
+        widthCm: true,
+        depthCm: true,
+        heightCm: true,
+        weightKg: true,
+        grossWeightKg: true,
+        packWidthCm: true,
+        packDepthCm: true,
+        packHeightCm: true,
+        packGrossWeightKg: true,
+        fullPrice: true,
+        salePrice: true,
+        discountPct: true,
+        technicalSpecs: true,
+        warrantyYears: true,
+        countryOfOrigin: true,
+        hsCode: true,
+        isNew: true,
+        isActive: true,
+        supplierApprovalStatus: true,
+        categories: { select: { categoryId: true } },
+        supplierCatalogMissingCount: true,
+        lastSupplierSourceHash: true,
+        media: {
+          orderBy: { order: "asc" },
+          select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
+        },
         attachments: {
+          orderBy: { order: "asc" },
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
       },
     });
+    if (!existing) {
+      const identityConflict = await tx.product.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { sku: item.sku },
+            ...(item.barcode ? [{ barcode: item.barcode }] : []),
+          ],
+        },
+        select: { id: true, sku: true, barcode: true, supplierId: true },
+      });
+      if (identityConflict) {
+        const message = `Identity conflict with product ${identityConflict.sku}.`;
+        await tx.supplierSyncChange.create({
+          data: {
+            supplierId: supplier.id,
+            importRunId: runId,
+            productId: identityConflict.id,
+            externalSku: item.sourceSku,
+            changeType: "IDENTITY_CONFLICT",
+            status: "CONFLICT",
+            fieldNames: ["sku", ...(item.barcode ? ["barcode"] : [])],
+            before: jsonSnapshot(identityConflict),
+            after: jsonSnapshot({ sku: item.sku, barcode: item.barcode }),
+            reversible: false,
+            reason: message,
+          },
+        });
+        return {
+          productId: identityConflict.id,
+          created: false,
+          mediaQueued: false,
+          mediaTarget: null,
+          conflict: message,
+        };
+      }
+    }
     const overrideFields = parseOverrideFields(existing?.syncOverrides);
+    const itemSourceHash = stableSourceHash(item);
+    if (
+      existing &&
+      existing.lastSupplierSourceHash === itemSourceHash &&
+      existing.supplierCatalogMissingCount === 0 &&
+      (!categoryId ||
+        existing.categories.some((category) => category.categoryId === categoryId) ||
+        overrideFields.has("categories") ||
+        overrideFields.has("category"))
+    ) {
+      return {
+        productId: existing.id,
+        created: false,
+        mediaQueued: false,
+        mediaTarget: null,
+        conflict: null,
+      };
+    }
     const incomingMedia = item.media.map((asset) => ({
       sourceUrl: asset.sourceUrl,
       kind: asset.kind,
@@ -273,9 +567,24 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
       existing?.media.some(
         (asset) => asset.kind === "IMAGE" && asset.syncStatus === "READY",
       );
+    const hasApprovedCategory = Boolean(
+      categoryId ||
+        (existing?.categories.length &&
+          (overrideFields.has("categories") || overrideFields.has("category"))),
+    );
+    const approvalStatus = existing
+      ? hasApprovedCategory
+        ? existing.supplierApprovalStatus === "PENDING_MAPPING"
+          ? "PENDING_APPROVAL"
+          : (existing.supplierApprovalStatus ?? "PENDING_APPROVAL")
+        : "PENDING_MAPPING"
+      : hasApprovedCategory
+        ? "PENDING_APPROVAL"
+        : "PENDING_MAPPING";
     const activeCandidate =
       item.valid &&
       existing?.articleStatus !== "ARH" &&
+      approvalStatus === "APPROVED" &&
       Boolean(hasReadyImage);
 
     const data: Prisma.ProductUncheckedCreateInput = {
@@ -318,14 +627,41 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
       supplierId: supplier.id,
       supplierExternalId: item.sourceSku,
       isActive: activeCandidate,
+      supplierApprovalStatus: approvalStatus,
+      supplierCatalogMissingCount: 0,
+      supplierCatalogMissingSince: null,
+      lastSupplierSyncAt: new Date(),
+      lastSupplierSourceHash: itemSourceHash,
     };
 
     let productId: string;
+    const beforeSnapshot = existing
+      ? jsonSnapshotOmitting(existing, [
+          "syncOverrides",
+          "supplierCatalogMissingCount",
+          "lastSupplierSourceHash",
+        ])
+      : Prisma.JsonNull;
+    const riskyPrice = Boolean(
+      existing &&
+        !isRabaluxFieldLocked(overrideFields, "pricing") &&
+        Number(existing.fullPrice) !== item.fullPrice &&
+        isRiskyPriceChange(Number(existing.fullPrice), item.fullPrice),
+    );
     if (existing) {
-      const updateData = applyOverrides(data, overrideFields);
+      const updateData = applyRabaluxOverrides(
+        data as unknown as Record<string, unknown>,
+        overrideFields,
+      ) as Prisma.ProductUncheckedUpdateInput;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
       delete (updateData as Record<string, unknown>).incomingStock;
+      if (!categoryId) delete (updateData as Record<string, unknown>).groupId;
+      if (!item.valid || (riskyPrice && !options.allowRiskyPrices)) {
+        delete (updateData as Record<string, unknown>).fullPrice;
+        delete (updateData as Record<string, unknown>).salePrice;
+        delete (updateData as Record<string, unknown>).discountPct;
+      }
       if (item.valid && !mediaChanged) {
         delete (updateData as Record<string, unknown>).isActive;
       }
@@ -334,6 +670,41 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
       }
       await tx.product.update({ where: { id: existing.id }, data: updateData });
       productId = existing.id;
+      if (riskyPrice && !options.allowRiskyPrices) {
+        await tx.supplierSyncChange.updateMany({
+          where: {
+            productId,
+            changeType: "PRICE_PROPOSAL",
+            status: "PENDING",
+          },
+          data: {
+            status: "SKIPPED",
+            reason: "Superseded by a newer supplier price proposal.",
+          },
+        });
+        await tx.supplierSyncChange.create({
+          data: {
+            supplierId: supplier.id,
+            importRunId: runId,
+            productId,
+            externalSku: item.sourceSku,
+            changeType: "PRICE_PROPOSAL",
+            status: "PENDING",
+            fieldNames: ["fullPrice", "salePrice", "discountPct"],
+            before: jsonSnapshot({
+              fullPrice: existing.fullPrice,
+              salePrice: existing.salePrice,
+              discountPct: existing.discountPct,
+            }),
+            after: jsonSnapshot({
+              fullPrice: item.fullPrice,
+              salePrice: item.salePrice,
+              discountPct: item.discountPct,
+            }),
+            reason: "Price change exceeds the automatic threshold.",
+          },
+        });
+      }
     } else {
       const created = await tx.product.create({ data, select: { id: true } });
       productId = created.id;
@@ -414,6 +785,71 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
           orderBy: [{ syncStatus: "asc" }, { order: "asc" }],
           select: { id: true },
         });
+    const after = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: {
+        id: true,
+        sku: true,
+        slug: true,
+        name: true,
+        barcode: true,
+        description: true,
+        shortDescription: true,
+        colorPrimary: true,
+        colorSecondary: true,
+        groupId: true,
+        widthCm: true,
+        depthCm: true,
+        heightCm: true,
+        weightKg: true,
+        grossWeightKg: true,
+        packWidthCm: true,
+        packDepthCm: true,
+        packHeightCm: true,
+        packGrossWeightKg: true,
+        fullPrice: true,
+        salePrice: true,
+        discountPct: true,
+        technicalSpecs: true,
+        warrantyYears: true,
+        countryOfOrigin: true,
+        hsCode: true,
+        isNew: true,
+        isActive: true,
+        articleStatus: true,
+        supplierApprovalStatus: true,
+        categories: { select: { categoryId: true } },
+        media: {
+          orderBy: { order: "asc" },
+          select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
+        },
+        attachments: {
+          orderBy: { order: "asc" },
+          select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
+        },
+      },
+    });
+    const afterSnapshot = jsonSnapshot(after);
+    const fieldNames = changedSnapshotFields(beforeSnapshot, afterSnapshot);
+    if (!existing || fieldNames.length) {
+      await tx.supplierSyncChange.create({
+        data: {
+          supplierId: supplier.id,
+          importRunId: runId,
+          productId,
+          externalSku: item.sourceSku,
+          changeType: existing ? "UPDATE" : "CREATE",
+          status: "APPLIED",
+          fieldNames: existing ? fieldNames : ["product"],
+          before: beforeSnapshot,
+          after: afterSnapshot,
+          reversible: true,
+          reason: options.reason,
+          appliedAt: new Date(),
+          reviewedById: options.requestedById,
+        },
+      });
+    }
     return {
       productId,
       created: !existing,
@@ -426,6 +862,7 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
               assetType: "ATTACHMENT" as const,
             }
           : null,
+      conflict: null,
     };
   });
 
@@ -440,10 +877,17 @@ async function upsertCatalogItem(supplier: Supplier, item: RabaluxCatalogItem) {
   return result;
 }
 
-export async function syncRabaluxStock() {
+export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
   const supplier = await getSupplier(true);
   const run = await db.importRun.create({
-    data: { supplierId: supplier.id, kind: "STOCK", status: "RUNNING" },
+    data: {
+      supplierId: supplier.id,
+      kind: "STOCK",
+      status: "RUNNING",
+      previewRunId: options.previewRunId,
+      requestedById: options.requestedById,
+      metadata: options.reason ? { reason: options.reason } : undefined,
+    },
   });
   const summary: SyncSummary = {
     runId: run.id,
@@ -457,9 +901,23 @@ export async function syncRabaluxStock() {
     errors: [],
     metadata: {},
   };
+  let leaseAcquired = false;
   try {
+    await acquireSyncLease({
+      supplierId: supplier.id,
+      runId: run.id,
+      scope: "STOCK",
+    });
+    leaseAcquired = true;
     const stock = await fetchRabaluxStock(supplier);
     summary.read = stock.length;
+    const sourceHash = stableSourceHash(stock);
+    summary.metadata.sourceHash = sourceHash;
+    if (options.expectedSourceHash && options.expectedSourceHash !== sourceHash) {
+      throw new Error(
+        "Rabalux stock feed changed after preview. Create a new preview before execution.",
+      );
+    }
     const products = await db.product.findMany({
       where: { supplierId: supplier.id, deletedAt: null },
       select: {
@@ -467,89 +925,149 @@ export async function syncRabaluxStock() {
         supplierExternalId: true,
         supplierStock: true,
         supplierNextArrivalAt: true,
+        supplierStockMissingCount: true,
+        supplierStockMissingSince: true,
+        syncOverrides: true,
+        articleStatus: true,
+        isDtz: true,
+        isActive: true,
+        supplierApprovalStatus: true,
       },
+    });
+    assertFeedBaseline({
+      kind: "stock",
+      actual: stock.length,
+      absoluteMinimum: configuredPositiveInt("RABALUX_MIN_STOCK_ROWS", 2_000),
+      previousSuccessfulRows: await previousSuccessfulRowCount(
+        supplier.id,
+        "STOCK",
+        run.id,
+      ),
     });
     const productBySourceSku = new Map(
       products
         .filter((product) => product.supplierExternalId)
         .map((product) => [product.supplierExternalId!, product]),
     );
-    const seen = new Set<string>();
-    const stockOnly: string[] = [];
-    for (let start = 0; start < stock.length; start += ITEM_CONCURRENCY) {
-      const batch = stock.slice(start, start + ITEM_CONCURRENCY);
-      await Promise.all(
-        batch.map(async (item) => {
-          seen.add(item.sourceSku);
-          const product = productBySourceSku.get(item.sourceSku);
-          if (!product) {
-            stockOnly.push(item.sourceSku);
-            summary.ok++;
-            return;
-          }
-          await updateStockItem(supplier.id, product, item);
-          summary.ok++;
-          summary.updated++;
-        }),
-      );
-    }
+    const seen = new Set(stock.map((item) => item.sourceSku));
     const catalogOnly = products.filter(
       (product) =>
         product.supplierExternalId && !seen.has(product.supplierExternalId),
     );
-    for (let start = 0; start < catalogOnly.length; start += ITEM_CONCURRENCY) {
-      await Promise.all(
-        catalogOnly.slice(start, start + ITEM_CONCURRENCY).map(async (product) => {
-          if ((product.supplierStock ?? 0) !== 0) {
-            await db.supplierStockSnapshot.create({
-              data: {
-                supplierId: supplier.id,
-                productId: product.id,
-                externalSku: product.supplierExternalId!,
-                stock: 0,
-                incomingStock: 0,
-              },
-            });
+    assertSafeMissingShare({
+      kind: "stock",
+      existing: products.length,
+      missing: catalogOnly.length,
+      allowLargeRemoval: options.allowLargeRemoval,
+    });
+    const stockOnly: string[] = [];
+    for (let start = 0; start < stock.length; start += ITEM_CONCURRENCY) {
+      const batch = stock.slice(start, start + ITEM_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (item) => {
+          const product = productBySourceSku.get(item.sourceSku);
+          if (!product) {
+            stockOnly.push(item.sourceSku);
+            return;
           }
-          await db.product.update({
-            where: { id: product.id },
-            data: { supplierStock: 0, supplierNextArrivalAt: null },
-          });
+          return updateStockItem(
+            supplier.id,
+            run.id,
+            product,
+            item,
+            options,
+          );
         }),
       );
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          summary.ok++;
+          if (result.value) summary.updated++;
+        } else {
+          summary.failed++;
+          if (summary.errors.length < MAX_RECORDED_ERRORS) {
+            summary.errors.push({
+              sourceSku: batch[index].sourceSku,
+              message: safeMessage(result.reason),
+            });
+          }
+        }
+      });
+      if ((start / ITEM_CONCURRENCY) % 25 === 24) {
+        await heartbeatSyncLease({
+          supplierId: supplier.id,
+          runId: run.id,
+          scope: "STOCK",
+        });
+      }
     }
+    const missingResult = await reconcileMissingStockProducts({
+      supplierId: supplier.id,
+      runId: run.id,
+      products: catalogOnly,
+      reason: options.reason,
+      reviewedById: options.requestedById,
+    });
     summary.metadata.stockOnly = stockOnly.sort();
     summary.metadata.catalogOnly = catalogOnly
       .map((product) => product.supplierExternalId)
       .filter(Boolean)
       .sort();
+    summary.metadata.missingPending = missingResult.pending;
+    summary.metadata.zeroedAfterGrace = missingResult.zeroed;
     summary.metadata.restricted = stock.filter((item) => item.restricted).length;
     summary.metadata.outgoing = stock.filter((item) => item.outgoing).length;
     return await closeRun(run.id, summary);
   } catch (error) {
     summary.failed = Math.max(summary.failed, 1);
     summary.errors.push({ message: safeMessage(error) });
+    reportCircuitBreaker(error, { runId: run.id, scope: "STOCK" });
     await closeRun(run.id, summary);
     throw error;
+  } finally {
+    if (leaseAcquired) {
+      await releaseSyncLease({
+        supplierId: supplier.id,
+        runId: run.id,
+        scope: "STOCK",
+      });
+    }
   }
 }
 
 async function updateStockItem(
   supplierId: string,
+  runId: string,
   product: {
     id: string;
     supplierExternalId: string | null;
     supplierStock: number | null;
     supplierNextArrivalAt: Date | null;
+    supplierStockMissingCount: number;
+    supplierStockMissingSince: Date | null;
+    syncOverrides: Prisma.JsonValue | null;
+    articleStatus: "SP" | "IT" | "DTZ" | "DOB" | "ARH" | "UZ";
+    isDtz: boolean;
+    isActive: boolean;
+    supplierApprovalStatus:
+      | "PENDING_MAPPING"
+      | "PENDING_APPROVAL"
+      | "APPROVED"
+      | "REJECTED"
+      | null;
   },
   item: RabaluxStockItem,
+  options: RabaluxSyncOptions,
 ) {
   const nextStatus = item.restricted ? "ARH" : item.outgoing ? "DTZ" : "SP";
-  await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
+    const overrideFields = parseOverrideFields(product.syncOverrides);
+    const stockLocked = isRabaluxFieldLocked(overrideFields, "stock");
+    const flagsLocked = isRabaluxFieldLocked(overrideFields, "flags");
     const stockChanged =
       (product.supplierStock ?? 0) !== item.stock ||
       product.supplierNextArrivalAt?.getTime() !== item.nextArrivalAt?.getTime();
-    if (stockChanged) {
+    if (stockChanged && !stockLocked) {
       await tx.supplierStockSnapshot.create({
         data: {
           supplierId,
@@ -560,21 +1078,40 @@ async function updateStockItem(
         },
       });
     }
+    const before = jsonSnapshot({
+      supplierStock: product.supplierStock,
+      supplierNextArrivalAt: product.supplierNextArrivalAt,
+      articleStatus: product.articleStatus,
+      isDtz: product.isDtz,
+      isActive: product.isActive,
+    });
     await tx.product.update({
       where: { id: product.id },
       data: {
-        supplierStock: item.stock,
-        supplierNextArrivalAt: item.nextArrivalAt,
-        isDtz: item.outgoing,
-        articleStatus: nextStatus,
-        ...(item.restricted ? { isActive: false } : {}),
+        ...(!stockLocked
+          ? {
+              supplierStock: item.stock,
+              supplierNextArrivalAt: item.nextArrivalAt,
+            }
+          : {}),
+        ...(!flagsLocked
+          ? {
+              isDtz: item.outgoing,
+              articleStatus: nextStatus,
+              ...(item.restricted ? { isActive: false } : {}),
+            }
+          : {}),
+        supplierStockMissingCount: 0,
+        supplierStockMissingSince: null,
+        lastSupplierSyncAt: new Date(),
       },
     });
-    if (!item.restricted) {
+    if (!item.restricted && !flagsLocked) {
       const readiness = await tx.product.findUniqueOrThrow({
         where: { id: product.id },
         select: {
           fullPrice: true,
+          supplierApprovalStatus: true,
           categories: { select: { categoryId: true }, take: 1 },
           media: {
             where: { kind: "IMAGE", syncStatus: "READY" },
@@ -587,13 +1124,262 @@ async function updateStockItem(
         where: { id: product.id },
         data: {
           isActive:
+            readiness.supplierApprovalStatus === "APPROVED" &&
             Number(readiness.fullPrice) > 0 &&
             readiness.categories.length > 0 &&
             readiness.media.length > 0,
         },
       });
     }
+    const finalProduct = await tx.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: {
+        supplierStock: true,
+        supplierNextArrivalAt: true,
+        articleStatus: true,
+        isDtz: true,
+        isActive: true,
+      },
+    });
+    const after = jsonSnapshot(finalProduct);
+    const fieldNames = changedSnapshotFields(before, after);
+    if (fieldNames.length) {
+      await tx.supplierSyncChange.create({
+        data: {
+          supplierId,
+          importRunId: runId,
+          productId: product.id,
+          externalSku: item.sourceSku,
+          changeType: "STOCK_UPDATE",
+          status: "APPLIED",
+          fieldNames,
+          before,
+          after,
+          appliedAt: new Date(),
+          reason: options.reason,
+          reviewedById: options.requestedById,
+        },
+      });
+    }
+    return fieldNames.length > 0;
   });
+}
+
+async function reconcileMissingCatalogProducts(args: {
+  supplierId: string;
+  runId: string;
+  products: Array<{
+    id: string;
+    supplierExternalId: string | null;
+    supplierCatalogMissingCount: number;
+    supplierCatalogMissingSince: Date | null;
+    isActive: boolean;
+    supplierApprovalStatus:
+      | "PENDING_MAPPING"
+      | "PENDING_APPROVAL"
+      | "APPROVED"
+      | "REJECTED"
+      | null;
+    syncOverrides: Prisma.JsonValue | null;
+  }>;
+}) {
+  const now = new Date();
+  const confirmations = configuredPositiveInt(
+    "RABALUX_CATALOG_MISSING_CONFIRMATIONS",
+    2,
+  );
+  const graceHours = configuredPositiveInt("RABALUX_CATALOG_MISSING_GRACE_HOURS", 20);
+  let pending = 0;
+  let deactivated = 0;
+  for (let start = 0; start < args.products.length; start += ITEM_CONCURRENCY) {
+    await Promise.all(
+      args.products.slice(start, start + ITEM_CONCURRENCY).map(async (product) => {
+        const nextCount = product.supplierCatalogMissingCount + 1;
+        const firstMissingAt = product.supplierCatalogMissingSince ?? now;
+        const flagsLocked = isRabaluxFieldLocked(
+          parseOverrideFields(product.syncOverrides),
+          "flags",
+        );
+        const shouldDeactivate =
+          !flagsLocked &&
+          missingGraceSatisfied({
+            nextCount,
+            firstMissingAt,
+            now,
+            confirmations,
+            graceMs: graceHours * 60 * 60 * 1_000,
+          });
+        await db.$transaction(async (tx) => {
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              supplierCatalogMissingCount: nextCount,
+              supplierCatalogMissingSince: firstMissingAt,
+              ...(shouldDeactivate
+                ? {
+                    isActive: false,
+                    supplierApprovalStatus: "PENDING_APPROVAL" as const,
+                  }
+                : {}),
+            },
+          });
+          if (shouldDeactivate && product.isActive) {
+            await tx.supplierSyncChange.create({
+              data: {
+                supplierId: args.supplierId,
+                importRunId: args.runId,
+                productId: product.id,
+                externalSku: product.supplierExternalId!,
+                changeType: "DEACTIVATE_MISSING",
+                status: "APPLIED",
+                fieldNames: ["isActive", "supplierApprovalStatus"],
+                before: jsonSnapshot({
+                  isActive: product.isActive,
+                  supplierApprovalStatus: product.supplierApprovalStatus,
+                }),
+                after: jsonSnapshot({
+                  isActive: false,
+                  supplierApprovalStatus: "PENDING_APPROVAL",
+                }),
+                appliedAt: now,
+                reason: `Missing from ${nextCount} complete catalog feeds after ${graceHours}h grace.`,
+              },
+            });
+          }
+        });
+        if (shouldDeactivate) deactivated++;
+        else pending++;
+      }),
+    );
+  }
+  return { pending, deactivated };
+}
+
+async function reconcileMissingStockProducts(args: {
+  supplierId: string;
+  runId: string;
+  products: Array<{
+    id: string;
+    supplierExternalId: string | null;
+    supplierStock: number | null;
+    supplierNextArrivalAt: Date | null;
+    supplierStockMissingCount: number;
+    supplierStockMissingSince: Date | null;
+    syncOverrides: Prisma.JsonValue | null;
+  }>;
+  reason?: string;
+  reviewedById?: string;
+}) {
+  const now = new Date();
+  const confirmations = configuredPositiveInt(
+    "RABALUX_STOCK_MISSING_CONFIRMATIONS",
+    3,
+  );
+  const graceMinutes = configuredPositiveInt("RABALUX_STOCK_MISSING_GRACE_MINUTES", 30);
+  let pending = 0;
+  let zeroed = 0;
+  for (let start = 0; start < args.products.length; start += ITEM_CONCURRENCY) {
+    await Promise.all(
+      args.products.slice(start, start + ITEM_CONCURRENCY).map(async (product) => {
+        const nextCount = product.supplierStockMissingCount + 1;
+        const firstMissingAt = product.supplierStockMissingSince ?? now;
+        const stockLocked = isRabaluxFieldLocked(
+          parseOverrideFields(product.syncOverrides),
+          "stock",
+        );
+        const shouldZero =
+          !stockLocked &&
+          missingGraceSatisfied({
+            nextCount,
+            firstMissingAt,
+            now,
+            confirmations,
+            graceMs: graceMinutes * 60 * 1_000,
+          });
+        await db.$transaction(async (tx) => {
+          if (shouldZero && (product.supplierStock ?? 0) !== 0) {
+            await tx.supplierStockSnapshot.create({
+              data: {
+                supplierId: args.supplierId,
+                productId: product.id,
+                externalSku: product.supplierExternalId!,
+                stock: 0,
+                incomingStock: 0,
+              },
+            });
+          }
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              supplierStockMissingCount: nextCount,
+              supplierStockMissingSince: firstMissingAt,
+              ...(shouldZero
+                ? { supplierStock: 0, supplierNextArrivalAt: null }
+                : {}),
+            },
+          });
+          if (shouldZero && (product.supplierStock ?? 0) !== 0) {
+            await tx.supplierSyncChange.create({
+              data: {
+                supplierId: args.supplierId,
+                importRunId: args.runId,
+                productId: product.id,
+                externalSku: product.supplierExternalId!,
+                changeType: "ZERO_MISSING_STOCK",
+                status: "APPLIED",
+                fieldNames: ["supplierStock", "supplierNextArrivalAt"],
+                before: jsonSnapshot({
+                  supplierStock: product.supplierStock,
+                  supplierNextArrivalAt: product.supplierNextArrivalAt,
+                }),
+                after: jsonSnapshot({
+                  supplierStock: 0,
+                  supplierNextArrivalAt: null,
+                }),
+                appliedAt: now,
+                reason:
+                  args.reason ??
+                  `Missing from ${nextCount} complete stock feeds after ${graceMinutes}m grace.`,
+                reviewedById: args.reviewedById,
+              },
+            });
+          }
+        });
+        if (shouldZero) zeroed++;
+        else pending++;
+      }),
+    );
+  }
+  return { pending, zeroed };
+}
+
+function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function jsonSnapshotOmitting(
+  value: Record<string, unknown>,
+  omitted: string[],
+): Prisma.InputJsonValue {
+  return jsonSnapshot(
+    Object.fromEntries(
+      Object.entries(value).filter(([key]) => !omitted.includes(key)),
+    ),
+  );
+}
+
+function changedSnapshotFields(before: unknown, after: unknown) {
+  const left =
+    before && typeof before === "object" && !Array.isArray(before)
+      ? (before as Record<string, unknown>)
+      : {};
+  const right =
+    after && typeof after === "object" && !Array.isArray(after)
+      ? (after as Record<string, unknown>)
+      : {};
+  return [...new Set([...Object.keys(left), ...Object.keys(right)])].filter(
+    (key) => stableSourceHash(left[key]) !== stableSourceHash(right[key]),
+  );
 }
 
 function decimal(value: number | null) {
@@ -612,83 +1398,6 @@ function signature(
       .map(({ sourceUrl, kind, order }) => ({ sourceUrl, kind, order }))
       .sort((left, right) => left.order - right.order),
   );
-}
-
-function parseOverrideFields(value: Prisma.JsonValue | null | undefined) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return new Set<string>();
-  const fields = (value as Record<string, unknown>).fields;
-  if (!Array.isArray(fields)) return new Set<string>();
-  return new Set(
-    fields
-      .map((field) => (typeof field === "string" ? field.trim() : ""))
-      .filter(Boolean),
-  );
-}
-
-function applyOverrides(
-  data: Prisma.ProductUncheckedCreateInput,
-  fields: Set<string>,
-) {
-  const output: Record<string, unknown> = { ...data };
-  const groups: Record<string, string[]> = {
-    identity: ["sku", "slug", "name", "barcode"],
-    name: ["name"],
-    description: ["description", "shortDescription"],
-    pricing: ["fullPrice", "salePrice", "discountPct"],
-    price: ["fullPrice", "salePrice", "discountPct"],
-    dimensions: [
-      "widthCm",
-      "depthCm",
-      "heightCm",
-      "weightKg",
-      "grossWeightKg",
-      "packWidthCm",
-      "packDepthCm",
-      "packHeightCm",
-      "packGrossWeightKg",
-    ],
-    delivery: ["deliveryDaysMin", "deliveryDaysMax"],
-    grouping: ["groupId"],
-    specifications: ["technicalSpecs", "warrantyYears", "countryOfOrigin", "hsCode"],
-  };
-  for (const field of fields) {
-    for (const key of groups[field] ?? [field]) delete output[key];
-  }
-  return output as Prisma.ProductUncheckedUpdateInput;
-}
-
-async function ensureCategory(tx: Prisma.TransactionClient, segments: string[]) {
-  let parentId: string | null = null;
-  let path = "";
-  let id = "";
-  for (let level = 0; level < segments.length; level++) {
-    const name = segments[level].trim();
-    const baseSlug = slugify(name);
-    path = `${path}/${baseSlug}`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`rabalux-category:${baseSlug}`})) IS NULL AS "locked"`;
-    const slugOwner = await tx.category.findUnique({
-      where: { slug: baseSlug },
-      select: { path: true },
-    });
-    const slug =
-      !slugOwner || slugOwner.path === path
-        ? baseSlug
-        : scopedCategorySlug(baseSlug, path);
-    const category = await tx.category.upsert({
-      where: { path },
-      create: { slug, name, parentId, path, level },
-      update: { name, parentId, level },
-      select: { id: true },
-    });
-    id = category.id;
-    parentId = id;
-  }
-  return id;
-}
-
-function scopedCategorySlug(baseSlug: string, path: string) {
-  const suffix = createHash("sha256").update(path).digest("hex").slice(0, 8);
-  return `${baseSlug.slice(0, 87)}-${suffix}`;
 }
 
 async function ensureGroup(tx: Prisma.TransactionClient, name: string) {

@@ -30,6 +30,15 @@ export type OperationsSnapshot = {
     failedBackgroundJobs: number;
     queuedBackgroundJobs: number;
   } | null;
+  rabalux: {
+    failedMediaJobs: number;
+    retryMediaJobs: number;
+    staleRuns: number;
+    pendingApprovals: number;
+    pendingMappings: number;
+    lastCatalogSuccessAt: string | null;
+    lastStockSuccessAt: string | null;
+  } | null;
 };
 
 const enabledValues = new Set(["1", "true", "yes", "on"]);
@@ -105,6 +114,18 @@ export function getIntegrationReadiness(
         present("CRON_SECRET"),
         present("ORDER_ACCESS_TOKEN_SECRET"),
         present("EMAIL_UNSUBSCRIBE_SECRET"),
+      ],
+    }),
+    integration(env, {
+      id: "rabalux",
+      label: "Rabalux",
+      description: "Dobavljački katalog, lager, mediji i dropshipping.",
+      requirements: [
+        enabled("RABALUX_ENABLED"),
+        present("RABALUX_CATALOG_USER"),
+        present("RABALUX_CATALOG_PASS"),
+        present("RABALUX_STOCK_USER"),
+        present("RABALUX_STOCK_PASS"),
       ],
     }),
     integration(env, {
@@ -211,6 +232,7 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
       checkedAt,
       database: { ok: false, latencyMs: null },
       queues: null,
+      rabalux: null,
     };
   }
 
@@ -222,6 +244,7 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
       checkedAt,
       database: { ok: false, latencyMs: null },
       queues: null,
+      rabalux: null,
     };
   }
 
@@ -237,12 +260,73 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
       failedFiscalDocuments,
       failedBackgroundJobs,
       queuedBackgroundJobs,
+      rabaluxSupplier,
+      failedRabaluxMediaJobs,
+      retryRabaluxMediaJobs,
+      staleRabaluxRuns,
+      pendingRabaluxApprovals,
+      pendingRabaluxMappings,
+      lastRabaluxCatalog,
+      lastRabaluxStock,
     ] = await Promise.all([
       db.emailMessage.count({ where: { status: "FAILED" } }),
       db.shipment.count({ where: { status: "FAILED" } }),
       db.fiscalDocument.count({ where: { status: "FAILED" } }),
       db.backgroundJob.count({ where: { status: "FAILED" } }),
       db.backgroundJob.count({ where: { status: { in: ["QUEUED", "RETRY"] } } }),
+      db.supplier.findUnique({
+        where: { integrationKey: "RABALUX" },
+        select: { id: true },
+      }),
+      db.backgroundJob.count({
+        where: { kind: "RABALUX_MEDIA_PRODUCT", status: "FAILED" },
+      }),
+      db.backgroundJob.count({
+        where: { kind: "RABALUX_MEDIA_PRODUCT", status: "RETRY" },
+      }),
+      db.importRun.count({
+        where: {
+          supplier: { integrationKey: "RABALUX" },
+          status: "RUNNING",
+          OR: [
+            { heartbeatAt: { lt: new Date(Date.now() - 10 * 60_000) } },
+            { heartbeatAt: null, startedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
+          ],
+        },
+      }),
+      db.product.count({
+        where: {
+          supplier: { integrationKey: "RABALUX" },
+          supplierApprovalStatus: { in: ["PENDING_MAPPING", "PENDING_APPROVAL"] },
+        },
+      }),
+      db.supplierSyncChange.count({
+        where: {
+          supplier: { integrationKey: "RABALUX" },
+          changeType: "MAPPING_REQUIRED",
+          status: "CONFLICT",
+        },
+      }),
+      db.importRun.findFirst({
+        where: {
+          supplier: { integrationKey: "RABALUX" },
+          kind: "CATALOG",
+          status: "SUCCESS",
+          dryRun: false,
+        },
+        orderBy: { finishedAt: "desc" },
+        select: { finishedAt: true },
+      }),
+      db.importRun.findFirst({
+        where: {
+          supplier: { integrationKey: "RABALUX" },
+          kind: "STOCK",
+          status: "SUCCESS",
+          dryRun: false,
+        },
+        orderBy: { finishedAt: "desc" },
+        select: { finishedAt: true },
+      }),
     ]);
 
     return {
@@ -255,8 +339,19 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
         failedBackgroundJobs,
         queuedBackgroundJobs,
       },
+      rabalux: rabaluxSupplier
+        ? {
+            failedMediaJobs: failedRabaluxMediaJobs,
+            retryMediaJobs: retryRabaluxMediaJobs,
+            staleRuns: staleRabaluxRuns,
+            pendingApprovals: pendingRabaluxApprovals,
+            pendingMappings: pendingRabaluxMappings,
+            lastCatalogSuccessAt: lastRabaluxCatalog?.finishedAt?.toISOString() ?? null,
+            lastStockSuccessAt: lastRabaluxStock?.finishedAt?.toISOString() ?? null,
+          }
+        : null,
     };
   } catch {
-    return { checkedAt, database, queues: null };
+    return { checkedAt, database, queues: null, rabalux: null };
   }
 }

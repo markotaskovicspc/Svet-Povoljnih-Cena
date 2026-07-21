@@ -28,8 +28,13 @@ import {
   consumeRabaluxSyncPreview,
   createRabaluxSyncPreview,
 } from "@/lib/rabalux/admin-sync";
+import {
+  reviewRabaluxProduct,
+  rollbackRabaluxRun,
+} from "@/lib/rabalux/governance";
 
 const PREFIX = "RAB-IT-";
+const testStartedAt = new Date();
 let categoryId = "";
 let groupId = "";
 let supplierId = "";
@@ -91,6 +96,23 @@ beforeAll(async () => {
     },
   });
   groupId = group.id;
+  await db.supplierCategoryMapping.upsert({
+    where: {
+      supplierId_externalCategory_externalType: {
+        supplierId,
+        externalCategory: "Rabalux integration feed",
+        externalType: "Rabalux integration feed tip",
+      },
+    },
+    create: {
+      supplierId,
+      externalCategory: "Rabalux integration feed",
+      externalType: "Rabalux integration feed tip",
+      categoryId,
+      createdById: "integration-test",
+    },
+    update: { categoryId, enabled: true },
+  });
 });
 
 afterAll(async () => {
@@ -118,9 +140,40 @@ afterAll(async () => {
     });
     await db.product.deleteMany({ where: { id: { in: productIds } } });
   }
-  await db.backgroundJob.deleteMany();
-  await db.emailProviderEvent.deleteMany();
-  await db.emailMessage.deleteMany();
+  await db.backgroundJob.deleteMany({
+    where: {
+      createdAt: { gte: testStartedAt },
+      kind: {
+        in: [
+          "RABALUX_MEDIA_PRODUCT",
+          "SUPPLIER_ORDER_EMAIL",
+          "SUPPLIER_CANCEL_EMAIL",
+          "SUPPLIER_RECLAMATION_EMAIL",
+        ],
+      },
+    },
+  });
+  const testMessages = await db.emailMessage.findMany({
+    where: { createdAt: { gte: testStartedAt } },
+    select: { id: true },
+  });
+  if (testMessages.length) {
+    await db.emailProviderEvent.deleteMany({
+      where: { messageId: { in: testMessages.map(({ id }) => id) } },
+    });
+    await db.emailMessage.deleteMany({
+      where: { id: { in: testMessages.map(({ id }) => id) } },
+    });
+  }
+  await db.supplierCategoryMapping.deleteMany({
+    where: {
+      supplierId,
+      OR: [
+        { externalCategory: "Rabalux integration feed" },
+        { externalCategory: { startsWith: "Rabalux collision " } },
+      ],
+    },
+  });
   await db.category.deleteMany({
     where: {
       OR: [
@@ -162,6 +215,7 @@ async function createProduct(args: {
       supplierReservedStock: 0,
       supplierId,
       supplierExternalId: `IT-${args.suffix}`,
+      supplierApprovalStatus: "APPROVED",
       isActive: true,
       categories: { create: { categoryId } },
       media: {
@@ -249,6 +303,16 @@ describe("Rabalux checkout integration", () => {
           },
         },
       });
+      expect(initial.supplierApprovalStatus).toBe("PENDING_APPROVAL");
+      expect(initial.isActive).toBe(false);
+      expect(
+        await db.productMedia.findFirstOrThrow({
+          where: { productId: initial.id },
+          select: { sourceUrl: true },
+        }),
+      ).toEqual({
+        sourceUrl: "https://rabaluxkep.plugin.hu/images/IT-SYNC_fhd.jpg",
+      });
       expect(
         await db.product.count({
           where: { supplierId, supplierExternalId: "IT-SYNC" },
@@ -285,7 +349,11 @@ describe("Rabalux checkout integration", () => {
         "catalog",
       );
       runIds.push(preview.token.split(".")[0]);
-      expect(preview.summary).toMatchObject({ catalogRows: 1, stockRows: 1 });
+      expect(preview.summary).toMatchObject({
+        catalogRows: 1,
+        stockRows: 0,
+        diff: { creates: 0 },
+      });
       await expect(
         consumeRabaluxSyncPreview({
           actorId: "another-admin",
@@ -348,7 +416,7 @@ describe("Rabalux checkout integration", () => {
     }
   });
 
-  it("serializes shared category creation and scopes child slug collisions", async () => {
+  it("uses explicit category mappings and never creates feed taxonomy implicitly", async () => {
     const originalFetch = globalThis.fetch;
     const products = Array.from({ length: 8 }, (_, index) => {
       const root = index < 6 ? "Rabalux collision A" : "Rabalux collision B";
@@ -371,24 +439,39 @@ describe("Rabalux checkout integration", () => {
 
     let runId = "";
     try {
+      await db.supplierCategoryMapping.createMany({
+        data: ["Rabalux collision A", "Rabalux collision B"].map(
+          (externalCategory) => ({
+            supplierId,
+            externalCategory,
+            externalType: "Shared child",
+            categoryId,
+            createdById: "integration-test",
+          }),
+        ),
+        skipDuplicates: true,
+      });
       const result = await syncRabaluxCatalog();
       runId = result.runId;
       expect(result).toMatchObject({ read: 8, ok: 8, failed: 0, created: 8 });
 
-      const categories = await db.category.findMany({
+      const generatedCategories = await db.category.count({
         where: {
-          path: {
-            in: [
-              "/rabalux-collision-a/shared-child",
-              "/rabalux-collision-b/shared-child",
-            ],
-          },
+          path: { startsWith: "/rabalux-collision-" },
         },
-        select: { path: true, slug: true },
-        orderBy: { path: "asc" },
       });
-      expect(categories).toHaveLength(2);
-      expect(new Set(categories.map(({ slug }) => slug)).size).toBe(2);
+      expect(generatedCategories).toBe(0);
+      expect(
+        await db.productCategory.count({
+          where: {
+            categoryId,
+            product: {
+              supplierId,
+              supplierExternalId: { startsWith: "IT-CAT-" },
+            },
+          },
+        }),
+      ).toBe(8);
     } finally {
       vi.stubGlobal("fetch", originalFetch);
       await db.backgroundJob.deleteMany({
@@ -401,16 +484,259 @@ describe("Rabalux checkout integration", () => {
         },
       });
       if (runId) await db.importRun.delete({ where: { id: runId } });
-      await db.category.deleteMany({
+      await db.supplierCategoryMapping.deleteMany({
         where: {
-          level: { gt: 0 },
-          path: { startsWith: "/rabalux-collision-" },
+          supplierId,
+          externalCategory: { startsWith: "Rabalux collision " },
         },
       });
-      await db.category.deleteMany({
-        where: { path: { startsWith: "/rabalux-collision-" } },
-      });
       await db.group.deleteMany({ where: { slug: "shared-child" } });
+    }
+  });
+
+  it("keeps a new supplier product pending until approval and rolls back an unchanged batch", async () => {
+    const originalFetch = globalThis.fetch;
+    let name = "Approval original";
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      if (String(input).includes("/id/332")) {
+        return new Response(
+          `<?xml version="1.0"?><Products><Product>
+            <Sku>IT-APPROVAL</Sku><Name>${name}</Name><Ean11>5999999999901</Ean11>
+            <Product_category>Rabalux integration feed</Product_category>
+            <Type>Rabalux integration feed tip</Type>
+            <Recommended_price>1500</Recommended_price><Description>Approval feed</Description>
+            <Product_fhdimages><Image>rabaluxkep.plugin.hu/images/IT-APPROVAL.jpg</Image></Product_fhdimages>
+          </Product></Products>`,
+          { status: 200 },
+        );
+      }
+      throw new Error(`Unexpected integration-test URL: ${String(input)}`);
+    });
+
+    const runIds: string[] = [];
+    let productId = "";
+    try {
+      const createdRun = await syncRabaluxCatalog({ allowLargeRemoval: true });
+      runIds.push(createdRun.runId);
+      const pending = await db.product.findUniqueOrThrow({
+        where: {
+          supplierId_supplierExternalId: {
+            supplierId,
+            supplierExternalId: "IT-APPROVAL",
+          },
+        },
+        select: { id: true, supplierApprovalStatus: true, isActive: true },
+      });
+      productId = pending.id;
+      expect(pending).toMatchObject({
+        supplierApprovalStatus: "PENDING_APPROVAL",
+        isActive: false,
+      });
+      await db.productMedia.updateMany({
+        where: { productId },
+        data: { syncStatus: "READY" },
+      });
+      await reviewRabaluxProduct({
+        productId,
+        actorId: "integration-admin",
+        decision: "APPROVE",
+        reason: "Integraciono odobrenje proizvoda",
+      });
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { supplierApprovalStatus: true, isActive: true },
+        }),
+      ).toEqual({ supplierApprovalStatus: "APPROVED", isActive: true });
+
+      name = "Approval changed";
+      const changedRun = await syncRabaluxCatalog({ allowLargeRemoval: true });
+      runIds.push(changedRun.runId);
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { name: true },
+        }),
+      ).toEqual({ name: "Approval changed" });
+      const rollback = await rollbackRabaluxRun({
+        importRunId: changedRun.runId,
+        actorId: "integration-admin",
+        reason: "Integracioni rollback proverenog batch-a",
+      });
+      runIds.push(rollback.runId);
+      expect(rollback).toMatchObject({ applied: 1, conflicts: 0, failed: 0 });
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { name: true },
+        }),
+      ).toEqual({ name: "Approval original" });
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+      if (productId) {
+        await db.backgroundJob.deleteMany({
+          where: {
+            kind: "RABALUX_MEDIA_PRODUCT",
+            payload: { path: ["productId"], equals: productId },
+          },
+        });
+        const relatedRuns = await db.supplierSyncChange.findMany({
+          where: { externalSku: "IT-APPROVAL" },
+          select: { importRunId: true },
+        });
+        await db.product.deleteMany({ where: { id: productId } });
+        runIds.push(...relatedRuns.map(({ importRunId }) => importRunId));
+      }
+      if (runIds.length) {
+        await db.importRun.deleteMany({ where: { id: { in: [...new Set(runIds)] } } });
+      }
+    }
+  });
+
+  it("opens the circuit, rejects a concurrent run, and deactivates only after grace", async () => {
+    const originalFetch = globalThis.fetch;
+    const protectedProduct = await createProduct({
+      suffix: "SAFE",
+      warehouseStock: 0,
+      supplierStock: 4,
+    });
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      if (String(input).includes("/id/332")) {
+        return new Response(
+          `<?xml version="1.0"?><Products><Product>
+            <Sku>IT-DUMMY</Sku><Name>Dummy</Name><Ean11>5999999999902</Ean11>
+            <Product_category>Rabalux integration feed</Product_category>
+            <Type>Rabalux integration feed tip</Type>
+            <Recommended_price>1000</Recommended_price><Description>Safety feed</Description>
+            <Product_fhdimages><Image>rabaluxkep.plugin.hu/images/IT-DUMMY.jpg</Image></Product_fhdimages>
+          </Product></Products>`,
+          { status: 200 },
+        );
+      }
+      throw new Error(`Unexpected integration-test URL: ${String(input)}`);
+    });
+    const runIds: string[] = [];
+    try {
+      const baseline = await db.importRun.create({
+        data: {
+          supplierId,
+          kind: "CATALOG",
+          status: "SUCCESS",
+          finishedAt: new Date(),
+          recordsRead: 100,
+          recordsOk: 100,
+        },
+      });
+      runIds.push(baseline.id);
+      await expect(syncRabaluxCatalog({ allowLargeRemoval: true })).rejects.toThrow(
+        "shrank",
+      );
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: protectedProduct.id },
+          select: { isActive: true, supplierStock: true },
+        }),
+      ).toEqual({ isActive: true, supplierStock: 4 });
+
+      await db.importRun.delete({ where: { id: baseline.id } });
+      const owner = await db.importRun.create({
+        data: {
+          supplierId,
+          kind: "CATALOG",
+          status: "RUNNING",
+          heartbeatAt: new Date(),
+        },
+      });
+      runIds.push(owner.id);
+      await db.supplierSyncLease.create({
+        data: {
+          supplierId,
+          scope: "ALL",
+          ownerRunId: owner.id,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      await expect(syncRabaluxCatalog({ allowLargeRemoval: true })).rejects.toThrow(
+        "already running",
+      );
+      await db.supplierSyncLease.deleteMany({ where: { supplierId, scope: "ALL" } });
+      await db.importRun.update({
+        where: { id: owner.id },
+        data: { status: "FAILED", finishedAt: new Date() },
+      });
+
+      process.env.RABALUX_CATALOG_MISSING_CONFIRMATIONS = "2";
+      process.env.RABALUX_CATALOG_MISSING_GRACE_HOURS = "1";
+      const firstMissing = await syncRabaluxCatalog({ allowLargeRemoval: true });
+      runIds.push(firstMissing.runId);
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: protectedProduct.id },
+          select: { isActive: true, supplierCatalogMissingCount: true },
+        }),
+      ).toEqual({ isActive: true, supplierCatalogMissingCount: 1 });
+      await db.product.update({
+        where: { id: protectedProduct.id },
+        data: { supplierCatalogMissingSince: new Date(Date.now() - 2 * 60 * 60_000) },
+      });
+      const secondMissing = await syncRabaluxCatalog({ allowLargeRemoval: true });
+      runIds.push(secondMissing.runId);
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: protectedProduct.id },
+          select: {
+            isActive: true,
+            supplierCatalogMissingCount: true,
+            supplierApprovalStatus: true,
+          },
+        }),
+      ).toEqual({
+        isActive: false,
+        supplierCatalogMissingCount: 2,
+        supplierApprovalStatus: "PENDING_APPROVAL",
+      });
+    } finally {
+      delete process.env.RABALUX_CATALOG_MISSING_CONFIRMATIONS;
+      delete process.env.RABALUX_CATALOG_MISSING_GRACE_HOURS;
+      vi.stubGlobal("fetch", originalFetch);
+      await db.supplierSyncLease.deleteMany({ where: { supplierId, scope: "ALL" } });
+      const products = await db.product.findMany({
+        where: {
+          supplierId,
+          supplierExternalId: { in: ["IT-SAFE", "IT-DUMMY"] },
+        },
+        select: { id: true },
+      });
+      if (products.length) {
+        await db.backgroundJob.deleteMany({
+          where: {
+            kind: "RABALUX_MEDIA_PRODUCT",
+            OR: products.map(({ id }) => ({
+              payload: { path: ["productId"], equals: id },
+            })),
+          },
+        });
+      }
+      await db.product.deleteMany({
+        where: {
+          supplierId,
+          supplierExternalId: { in: ["IT-SAFE", "IT-DUMMY"] },
+        },
+      });
+      const generatedRuns = await db.importRun.findMany({
+        where: {
+          supplierId,
+          OR: [
+            { id: { in: runIds } },
+            { errorMessage: { contains: "Rabalux catalog" } },
+            { errorMessage: { contains: "already running" } },
+          ],
+        },
+        select: { id: true },
+      });
+      await db.importRun.deleteMany({
+        where: { id: { in: generatedRuns.map(({ id }) => id) } },
+      });
     }
   });
 
@@ -565,6 +891,10 @@ describe("Rabalux checkout integration", () => {
       payload: { fulfillmentId: cancellationIds[0] },
       idempotencyKey: `supplier-cancel:${cancellationIds[0]}`,
     });
+    await db.backgroundJob.update({
+      where: { id: cancellationJob.id },
+      data: { availableAt: new Date(0) },
+    });
     const cancellationResult = await processBackgroundJob(cancellationJob.id);
     expect(cancellationResult).toMatchObject({ claimed: true, ok: true });
     await db.$transaction((tx) =>
@@ -613,6 +943,10 @@ describe("Rabalux checkout integration", () => {
       kind: "SUPPLIER_RECLAMATION_EMAIL",
       payload: { reclamationId: reclamation.id },
       idempotencyKey: `supplier-reclamation:${reclamation.id}`,
+    });
+    await db.backgroundJob.update({
+      where: { id: reclamationJob.id },
+      data: { availableAt: new Date(0) },
     });
     expect(await processBackgroundJob(reclamationJob.id)).toMatchObject({
       claimed: true,

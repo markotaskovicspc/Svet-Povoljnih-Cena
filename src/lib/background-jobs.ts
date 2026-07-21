@@ -47,6 +47,13 @@ type JobRow = {
   maxAttempts: number;
 };
 
+export class PermanentBackgroundJobError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentBackgroundJobError";
+  }
+}
+
 export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
   kind: K;
   payload: z.input<(typeof schemas)[K]>;
@@ -68,9 +75,12 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const existing = await db.backgroundJob.findUniqueOrThrow({
         where: { idempotencyKey: args.idempotencyKey.slice(0, 200) },
-        select: { id: true, status: true },
+        select: { id: true, status: true, lastError: true },
       });
-      if (existing.status === "FAILED") {
+      if (
+        existing.status === "FAILED" &&
+        !existing.lastError?.startsWith("[permanent]")
+      ) {
         return db.backgroundJob.update({
           where: { id: existing.id },
           data: {
@@ -85,7 +95,7 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
           select: { id: true, status: true },
         });
       }
-      return existing;
+      return { id: existing.id, status: existing.status };
     }
     throw error;
   }
@@ -123,18 +133,24 @@ export async function processBackgroundJob(id: string) {
     });
     return { claimed: true as const, ok: true as const };
   } catch (error) {
-    const exhausted = job.attempts >= job.maxAttempts;
+    const permanent = error instanceof PermanentBackgroundJobError;
+    const exhausted = permanent || job.attempts >= job.maxAttempts;
     const delaySeconds = Math.min(3600, 15 * 2 ** Math.min(job.attempts, 8));
     await db.backgroundJob.update({
       where: { id: job.id },
       data: {
         status: exhausted ? "FAILED" : "RETRY",
         lockedAt: null,
-        lastError: safeError(error),
+        lastError: `${permanent ? "[permanent] " : ""}${safeError(error)}`,
         availableAt: exhausted ? new Date() : new Date(Date.now() + delaySeconds * 1000),
       },
     });
-    return { claimed: true as const, ok: false as const, exhausted };
+    return {
+      claimed: true as const,
+      ok: false as const,
+      exhausted,
+      permanent,
+    };
   }
 }
 

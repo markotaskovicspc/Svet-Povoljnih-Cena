@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   test: {
+    setupFiles: ["./tests/helpers/require-test-database.ts"],
     environment: "node",
     fileParallelism: false,
     sequence: { concurrent: false },

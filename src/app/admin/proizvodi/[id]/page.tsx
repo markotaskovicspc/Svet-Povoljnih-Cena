@@ -22,6 +22,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
+import {
+  retryFailedRabaluxProductMedia,
+  syncRabaluxCatalogProduct,
+} from "@/lib/rabalux";
+import {
+  mergeOverrideFields,
+  parseOverrideFields,
+  RABALUX_OVERRIDE_OPTIONS,
+  type RabaluxOverrideGroup,
+} from "@/lib/rabalux/ownership";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -138,25 +148,11 @@ const mediaDeleteSchema = z.object({
   mediaId: z.string(),
 });
 
-const XML_OVERRIDE_OPTIONS = [
-  { value: "identity", label: "SKU / barkod / eksterni ID" },
-  { value: "name", label: "Naziv" },
-  { value: "description", label: "Opisi i PDP tekstovi" },
-  { value: "pricing", label: "Cene i akcije" },
-  { value: "stock", label: "Zalihe i ulaz" },
-  { value: "flags", label: "Statusi i kanali prodaje" },
-  { value: "dimensions", label: "Dimenzije" },
-  { value: "delivery", label: "Isporuka i montaža" },
-  { value: "grouping", label: "Grupa i kolekcija" },
-  { value: "categories", label: "Kategorije" },
-  { value: "media", label: "Fotografije" },
-  { value: "pictograms", label: "Piktogrami" },
-  { value: "materials", label: "Materijali" },
-] as const;
-
-type XmlOverrideValue = (typeof XML_OVERRIDE_OPTIONS)[number]["value"];
-
-const XML_OVERRIDE_VALUES = new Set(XML_OVERRIDE_OPTIONS.map((option) => option.value));
+const XML_OVERRIDE_OPTIONS = RABALUX_OVERRIDE_OPTIONS;
+type XmlOverrideValue = RabaluxOverrideGroup;
+const XML_OVERRIDE_VALUES = new Set<RabaluxOverrideGroup>(
+  XML_OVERRIDE_OPTIONS.map((option) => option.value),
+);
 
 const COMMON_PRODUCT_SURFACES = [
   "/",
@@ -210,6 +206,57 @@ async function uploadProductImage(productId: string, file: File) {
   });
   if (error) throw new Error(error.message);
   return key;
+}
+
+async function lockSupplierOwnedFields(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  actorId: string,
+  fields: RabaluxOverrideGroup[],
+) {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: { supplierId: true, syncOverrides: true },
+  });
+  if (!product?.supplierId || !fields.length) return;
+  await tx.product.update({
+    where: { id: productId },
+    data: {
+      syncOverrides: mergeOverrideFields(
+        product.syncOverrides,
+        fields,
+        actorId,
+      ),
+    },
+  });
+}
+
+function changedManualGroups(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+) {
+  const groups: Array<[RabaluxOverrideGroup, string[]]> = [
+    ["name", ["name"]],
+    ["identity", ["barcode"]],
+    ["description", ["description", "shortDescription"]],
+    ["pricing", ["fullPrice", "salePrice", "discountPct"]],
+    ["specifications", ["colorPrimary", "colorSecondary"]],
+    ["dimensions", ["widthCm", "depthCm", "heightCm"]],
+    ["delivery", ["deliveryDaysMin", "deliveryDaysMax", "allowsAssembly"]],
+    ["flags", ["isActive", "isNew", "isDtz"]],
+  ];
+  return groups
+    .filter(([, keys]) =>
+      keys.some(
+        (key) => JSON.stringify(normalizeComparable(before[key])) !== JSON.stringify(normalizeComparable(after[key])),
+      ),
+    )
+    .map(([group]) => group);
+}
+
+function normalizeComparable(value: unknown) {
+  if (value instanceof Prisma.Decimal) return Number(value);
+  return value ?? null;
 }
 
 async function updateProduct(_state: AdminActionState, formData: FormData) {
@@ -279,9 +326,52 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           inMetaCatalog: d.inMetaCatalog,
         };
         const updated = await db.$transaction(async (tx) => {
+          const existing = await tx.product.findUniqueOrThrow({
+            where: { id: d.id },
+            select: {
+              supplierId: true,
+              supplierApprovalStatus: true,
+              syncOverrides: true,
+              name: true,
+              barcode: true,
+              description: true,
+              shortDescription: true,
+              fullPrice: true,
+              salePrice: true,
+              discountPct: true,
+              colorPrimary: true,
+              colorSecondary: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              deliveryDaysMin: true,
+              deliveryDaysMax: true,
+              allowsAssembly: true,
+              isActive: true,
+              isNew: true,
+              isDtz: true,
+            },
+          });
+          const manualGroups = existing.supplierId
+            ? changedManualGroups(existing, data)
+            : [];
           const saved = await tx.product.update({
             where: { id: d.id },
-            data,
+            data: {
+              ...data,
+              ...(existing.supplierId && existing.supplierApprovalStatus !== "APPROVED"
+                ? { isActive: false }
+                : {}),
+              ...(manualGroups.length
+                ? {
+                    syncOverrides: mergeOverrideFields(
+                      existing.syncOverrides,
+                      manualGroups,
+                      actorId,
+                    ),
+                  }
+                : {}),
+            },
             select: { slug: true },
           });
           await setDefaultWarehouseStock(tx, {
@@ -309,7 +399,7 @@ async function updateProductCategory(_state: AdminActionState, formData: FormDat
 
   return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.category.update", entity: "Product" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const parsed = categorySchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -318,6 +408,18 @@ async function updateProductCategory(_state: AdminActionState, formData: FormDat
       await db.$transaction(async (tx) => {
         await tx.productCategory.deleteMany({ where: { productId } });
         await tx.productCategory.create({ data: { productId, categoryId } });
+        await lockSupplierOwnedFields(tx, productId, actorId, ["categories"]);
+        await tx.product.updateMany({
+          where: {
+            id: productId,
+            supplierId: { not: null },
+            supplierApprovalStatus: "PENDING_MAPPING",
+          },
+          data: {
+            supplierApprovalStatus: "PENDING_APPROVAL",
+            isActive: false,
+          },
+        });
       });
       await revalidateProductSurfaces(productId);
       return {
@@ -335,7 +437,7 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
 
   return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.create", entity: "ProductMedia" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const parsed = mediaSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -360,17 +462,21 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
         where: { productId },
         _max: { order: true },
       });
-      const media = await db.productMedia.create({
-        data: {
-          productId,
-          url,
-          thumbUrl: thumbUrl?.trim() || null,
-          cardUrl: cardUrl?.trim() || null,
-          pdpUrl: pdpUrl?.trim() || null,
-          alt: alt?.trim() || null,
-          order: (last._max.order ?? -1) + 1,
-        },
-        select: { id: true },
+      const media = await db.$transaction(async (tx) => {
+        const created = await tx.productMedia.create({
+          data: {
+            productId,
+            url,
+            thumbUrl: thumbUrl?.trim() || null,
+            cardUrl: cardUrl?.trim() || null,
+            pdpUrl: pdpUrl?.trim() || null,
+            alt: alt?.trim() || null,
+            order: (last._max.order ?? -1) + 1,
+          },
+          select: { id: true },
+        });
+        await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
+        return created;
       });
       await revalidateProductSurfaces(productId);
       return {
@@ -388,22 +494,25 @@ async function updateProductMedia(_state: AdminActionState, formData: FormData) 
 
   return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.update", entity: "ProductMedia" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const parsed = mediaUpdateSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
       const { productId, mediaId, url, thumbUrl, cardUrl, pdpUrl, alt, order } = parsed.data;
-      await db.productMedia.updateMany({
-        where: { id: mediaId, productId },
-        data: {
-          url,
-          thumbUrl: thumbUrl?.trim() || null,
-          cardUrl: cardUrl?.trim() || null,
-          pdpUrl: pdpUrl?.trim() || null,
-          alt: alt?.trim() || null,
-          order,
-        },
+      await db.$transaction(async (tx) => {
+        await tx.productMedia.updateMany({
+          where: { id: mediaId, productId },
+          data: {
+            url,
+            thumbUrl: thumbUrl?.trim() || null,
+            cardUrl: cardUrl?.trim() || null,
+            pdpUrl: pdpUrl?.trim() || null,
+            alt: alt?.trim() || null,
+            order,
+          },
+        });
+        await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
       });
       await revalidateProductSurfaces(productId);
       return {
@@ -421,7 +530,7 @@ async function deleteProductMedia(_state: AdminActionState, formData: FormData) 
 
   return withAdminState(
     { allowed: ["CONTENT", "OPS"], action: "product.media.delete", entity: "ProductMedia" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const parsed = mediaDeleteSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -453,7 +562,10 @@ async function deleteProductMedia(_state: AdminActionState, formData: FormData) 
           };
         }
       }
-      await db.productMedia.delete({ where: { id: media.id } });
+      await db.$transaction(async (tx) => {
+        await tx.productMedia.delete({ where: { id: media.id } });
+        await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
+      });
       await revalidateProductSurfaces(productId);
       return {
         ok: true as const,
@@ -505,11 +617,79 @@ async function updateProductSyncOverrides(_state: AdminActionState, formData: Fo
   )(formData);
 }
 
-function readSyncOverrideFields(value: Prisma.JsonValue | null) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return new Set<string>();
-  const fields = (value as Record<string, Prisma.JsonValue>).fields;
-  if (!Array.isArray(fields)) return new Set<string>();
-  return new Set(fields.filter((field): field is string => typeof field === "string"));
+async function syncSingleRabaluxProduct(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.product.sync", entity: "Product" },
+    async (actorId, formData: FormData) => {
+      const productId = String(formData.get("productId") ?? "");
+      const reason = String(formData.get("reason") ?? "").trim();
+      const phrase = String(formData.get("phrase") ?? "").trim();
+      if (reason.length < 5 || reason.length > 500) {
+        return { ok: false as const, error: "Razlog mora imati između 5 i 500 znakova." };
+      }
+      const product = await db.product.findFirst({
+        where: {
+          id: productId,
+          supplier: { integrationKey: "RABALUX" },
+        },
+        select: { supplierExternalId: true },
+      });
+      if (!product?.supplierExternalId) {
+        return { ok: false as const, error: "Rabalux proizvod nije pronađen." };
+      }
+      if (phrase !== `SYNC ${product.supplierExternalId}`) {
+        return {
+          ok: false as const,
+          error: `Unesite tačnu potvrdu: SYNC ${product.supplierExternalId}`,
+        };
+      }
+      const result = await syncRabaluxCatalogProduct(product.supplierExternalId, {
+        requestedById: actorId,
+        reason,
+        allowRiskyPrices: true,
+      });
+      await revalidateProductSurfaces(productId);
+      return {
+        ok: true as const,
+        entityId: productId,
+        diff: result as unknown as Record<string, unknown>,
+        message: "Jedan Rabalux proizvod je sinhronizovan.",
+      };
+    },
+  )(formData);
+}
+
+async function retryFailedRabaluxMedia(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.product.media.retry", entity: "Product" },
+    async (_actorId, formData: FormData) => {
+      const productId = String(formData.get("productId") ?? "");
+      const reason = String(formData.get("reason") ?? "").trim();
+      if (reason.length < 5 || reason.length > 500) {
+        return { ok: false as const, error: "Razlog mora imati između 5 i 500 znakova." };
+      }
+      const result = await retryFailedRabaluxProductMedia(productId);
+      await revalidateProductSurfaces(productId);
+      return {
+        ok: true as const,
+        entityId: productId,
+        diff: { reason, ...result },
+        message: result.queued
+          ? "Neuspeli medij je ponovo stavljen u red."
+          : "Proizvod nema neuspele medije za retry.",
+      };
+    },
+  )(formData);
 }
 
 export default async function ProductDetail({
@@ -529,7 +709,7 @@ export default async function ProductDetail({
     },
   });
   if (!product) notFound();
-  const syncOverrideFields = readSyncOverrideFields(product.syncOverrides);
+  const syncOverrideFields = parseOverrideFields(product.syncOverrides);
   const categories = await db.category.findMany({
     orderBy: [{ level: "asc" }, { name: "asc" }],
     select: { id: true, name: true, path: true },
@@ -807,6 +987,32 @@ export default async function ProductDetail({
             <p className="font-mono text-xs text-ink-500">
               Ext: {product.supplierExternalId ?? "—"}
             </p>
+            {product.supplierApprovalStatus ? (
+              <p className="mt-2 text-xs text-ink-500">
+                Status dobavljačkog odobrenja: {product.supplierApprovalStatus}
+              </p>
+            ) : null}
+            {product.supplier?.integrationKey === "RABALUX" && product.supplierExternalId ? (
+              <div className="mt-4 space-y-4 border-t border-border pt-4">
+                <AdminActionForm action={syncSingleRabaluxProduct} className="space-y-2">
+                  <input type="hidden" name="productId" value={product.id} />
+                  <Textarea name="reason" rows={2} minLength={5} maxLength={500} required placeholder="Razlog sync-a jednog proizvoda" />
+                  <Field label={`Upišite: SYNC ${product.supplierExternalId}`}>
+                    <Input name="phrase" autoComplete="off" required />
+                  </Field>
+                  <SubmitButton size="sm" variant="secondary">
+                    Sync samo ovog proizvoda
+                  </SubmitButton>
+                </AdminActionForm>
+                <AdminActionForm action={retryFailedRabaluxMedia} className="space-y-2">
+                  <input type="hidden" name="productId" value={product.id} />
+                  <Textarea name="reason" rows={2} minLength={5} maxLength={500} required placeholder="Razlog retry-a neuspelog medija" />
+                  <SubmitButton size="sm" variant="secondary">
+                    Retry samo neuspelog medija
+                  </SubmitButton>
+                </AdminActionForm>
+              </div>
+            ) : null}
           </Card>
 
           <Card>

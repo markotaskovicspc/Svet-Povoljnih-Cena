@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { isRabaluxEnabled, syncPendingRabaluxMedia } from "@/lib/rabalux";
+import {
+  isRabaluxEnabled,
+  RabaluxSyncBusyError,
+  syncPendingRabaluxMedia,
+} from "@/lib/rabalux";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 import { logOperationalError } from "@/lib/monitoring";
 
@@ -24,6 +28,12 @@ async function run(request: Request) {
       summary: await syncPendingRabaluxMedia(limit),
     });
   } catch (error) {
+    if (error instanceof RabaluxSyncBusyError) {
+      return NextResponse.json(
+        { ok: true, skipped: "already_running" },
+        { status: 202 },
+      );
+    }
     logOperationalError("rabalux.media.failed", error);
     return NextResponse.json(
       { ok: false, error: "Rabalux media synchronization failed." },

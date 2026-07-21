@@ -5,7 +5,10 @@ import sharp from "sharp";
 import { Prisma } from "@prisma/client";
 import { Upload } from "tus-js-client";
 import { db } from "@/lib/db";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import {
+  enqueueBackgroundJob,
+  PermanentBackgroundJobError,
+} from "@/lib/background-jobs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { envValue } from "@/lib/env";
@@ -15,10 +18,20 @@ import {
   isRabaluxSupplierOperational,
   RABALUX_INTEGRATION_KEY,
 } from "./config";
+import {
+  acquireSyncLease,
+  configuredPositiveInt,
+  releaseSyncLease,
+  stableSourceHash,
+} from "./safety";
+import type { RabaluxSyncOptions } from "./sync";
 
 const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
-const VIDEO_MAX_BYTES = 512 * 1024 * 1024;
+const VIDEO_MAX_BYTES = configuredPositiveInt(
+  "RABALUX_VIDEO_MAX_BYTES",
+  50 * 1024 * 1024,
+);
 const TUS_CHUNK_BYTES = 6 * 1024 * 1024;
 const VARIANTS = [
   { name: "thumb", width: 160, quality: 76 },
@@ -44,6 +57,7 @@ export async function mirrorRabaluxProductMedia(
       id: true,
       fullPrice: true,
       articleStatus: true,
+      supplierApprovalStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
       supplier: { select: { integrationKey: true, enabled: true } },
       media: {
@@ -84,6 +98,7 @@ export async function mirrorRabaluxProductMedia(
       await mirrorAttachment(selected);
     }
   } catch (error) {
+    const classifiedError = classifyMediaError(error);
     if (selectedType === "MEDIA") {
       await db.productMedia.update({
         where: { id: selected.id },
@@ -97,7 +112,7 @@ export async function mirrorRabaluxProductMedia(
     }
     await enqueueNextRabaluxMediaAsset(product.id, selected.id);
     await refreshRabaluxProductActivity(product.id);
-    throw error;
+    throw classifiedError;
   }
 
   await refreshRabaluxProductActivity(product.id);
@@ -131,7 +146,9 @@ async function mirrorMediaAsset(asset: {
   }
   const downloaded = await downloadAsset(sourceUrl, maxBytes);
   if (asset.kind === "IMAGE" && !downloaded.contentType.startsWith("image/")) {
-    throw new Error("Rabalux image response has an invalid content type.");
+    throw new PermanentBackgroundJobError(
+      "Rabalux image response has an invalid content type.",
+    );
   }
 
   const storage = createAdminClient().storage.from(getProductMediaBucket());
@@ -140,7 +157,9 @@ async function mirrorMediaAsset(asset: {
   const image = sharp(downloaded.buffer, { failOn: "error" }).rotate();
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height) {
-    throw new Error("Rabalux image dimensions could not be verified.");
+    throw new PermanentBackgroundJobError(
+      "Rabalux image dimensions could not be verified.",
+    );
   }
   const variantKeys: Record<(typeof VARIANTS)[number]["name"], string> = {
     thumb: "",
@@ -183,7 +202,9 @@ async function mirrorAttachment(asset: {
   const sourceUrl = requireTrustedSource(asset.sourceUrl);
   const downloaded = await downloadAsset(sourceUrl, DOCUMENT_MAX_BYTES);
   if (downloaded.contentType !== "application/pdf" && !looksLikePdf(downloaded.buffer)) {
-    throw new Error("Rabalux document response is not a PDF.");
+    throw new PermanentBackgroundJobError(
+      "Rabalux document response is not a PDF.",
+    );
   }
   const storage = createAdminClient().storage.from(getProductMediaBucket());
   await upload(storage, asset.url, downloaded.buffer, "application/pdf");
@@ -199,6 +220,7 @@ async function refreshRabaluxProductActivity(productId: string) {
     select: {
       fullPrice: true,
       articleStatus: true,
+      supplierApprovalStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
       media: {
         where: { kind: "IMAGE", syncStatus: "READY" },
@@ -211,6 +233,7 @@ async function refreshRabaluxProductActivity(productId: string) {
     where: { id: productId },
     data: {
       isActive:
+        product.supplierApprovalStatus === "APPROVED" &&
         Number(product.fullPrice) > 0 &&
         product.articleStatus !== "ARH" &&
         product.categories.length > 0 &&
@@ -219,7 +242,10 @@ async function refreshRabaluxProductActivity(productId: string) {
   });
 }
 
-export async function syncPendingRabaluxMedia(limit = 100) {
+export async function syncPendingRabaluxMedia(
+  limit = 100,
+  options: RabaluxSyncOptions = {},
+) {
   const supplier = await db.supplier.findUniqueOrThrow({
     where: { integrationKey: RABALUX_INTEGRATION_KEY },
     select: { id: true, integrationKey: true, enabled: true },
@@ -228,77 +254,191 @@ export async function syncPendingRabaluxMedia(limit = 100) {
     throw new Error("Supplier integration is disabled.");
   }
   const run = await db.importRun.create({
-    data: { supplierId: supplier.id, kind: "MEDIA", status: "RUNNING" },
-  });
-  const products = await db.product.findMany({
-    where: {
+    data: {
       supplierId: supplier.id,
-      OR: [
-        { media: { some: { syncStatus: { not: "READY" } } } },
-        { attachments: { some: { syncStatus: { not: "READY" } } } },
-      ],
+      kind: "MEDIA",
+      status: "RUNNING",
+      previewRunId: options.previewRunId,
+      requestedById: options.requestedById,
+      metadata: options.reason ? { reason: options.reason } : undefined,
+    },
+  });
+  let leaseAcquired = false;
+  try {
+    await acquireSyncLease({
+      supplierId: supplier.id,
+      runId: run.id,
+      scope: "MEDIA",
+    });
+    leaseAcquired = true;
+    const [pendingMedia, pendingAttachments] = await Promise.all([
+      db.productMedia.findMany({
+        where: {
+          product: { supplierId: supplier.id },
+          syncStatus: { not: "READY" },
+        },
+        orderBy: { id: "asc" },
+        select: { id: true },
+      }),
+      db.productAttachment.findMany({
+        where: {
+          product: { supplierId: supplier.id },
+          syncStatus: { not: "READY" },
+        },
+        orderBy: { id: "asc" },
+        select: { id: true },
+      }),
+    ]);
+    const sourceHash = stableSourceHash(
+      [...pendingMedia, ...pendingAttachments].map(({ id }) => id),
+    );
+    if (options.expectedSourceHash && sourceHash !== options.expectedSourceHash) {
+      throw new Error(
+        "Rabalux media queue changed after preview. Create a new preview before execution.",
+      );
+    }
+    const products = await db.product.findMany({
+      where: {
+        supplierId: supplier.id,
+        OR: [
+          { media: { some: { syncStatus: { not: "READY" } } } },
+          { attachments: { some: { syncStatus: { not: "READY" } } } },
+        ],
+      },
+      select: {
+        id: true,
+        supplierExternalId: true,
+        media: {
+          where: { syncStatus: { not: "READY" } },
+          orderBy: [{ syncStatus: "asc" }, { order: "asc" }],
+          select: { id: true },
+          take: 1,
+        },
+        attachments: {
+          where: { syncStatus: { not: "READY" } },
+          orderBy: [{ syncStatus: "asc" }, { order: "asc" }],
+          select: { id: true },
+          take: 1,
+        },
+      },
+      take: Math.min(Math.max(limit, 1), 500),
+      orderBy: { updatedAt: "asc" },
+    });
+    let ok = 0;
+    const errors: Array<{ productId: string; message: string }> = [];
+    for (const product of products) {
+      const target = product.media[0]
+        ? { assetId: product.media[0].id, assetType: "MEDIA" as const }
+        : product.attachments[0]
+          ? {
+              assetId: product.attachments[0].id,
+              assetType: "ATTACHMENT" as const,
+            }
+          : null;
+      if (!target) continue;
+      try {
+        await enqueueRabaluxMediaAsset(product.id, target);
+        await db.supplierSyncChange.create({
+          data: {
+            supplierId: supplier.id,
+            importRunId: run.id,
+            productId: product.id,
+            externalSku: product.supplierExternalId ?? product.id,
+            changeType: "MEDIA_QUEUED",
+            status: "APPLIED",
+            fieldNames: ["syncStatus"],
+            before: { assetId: target.assetId, syncStatus: "PENDING_OR_FAILED" },
+            after: { assetId: target.assetId, syncStatus: "QUEUED" },
+            reversible: false,
+            appliedAt: new Date(),
+            reason: options.reason,
+            reviewedById: options.requestedById,
+          },
+        });
+        ok++;
+      } catch (error) {
+        errors.push({
+          productId: product.id,
+          message:
+            error instanceof Error
+              ? error.message.slice(0, 1000)
+              : String(error).slice(0, 1000),
+        });
+      }
+    }
+    await db.importRun.update({
+      where: { id: run.id },
+      data: {
+        status: errors.length ? (ok ? "PARTIAL" : "FAILED") : "SUCCESS",
+        finishedAt: new Date(),
+        recordsRead: products.length,
+        recordsOk: ok,
+        recordsFail: errors.length,
+        sourceHash,
+        errorMessage: errors[0]?.message ?? null,
+        errors: errors.length
+          ? (errors.slice(0, 50) as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        metadata: {
+          reason: options.reason ?? null,
+          remainingMayExist:
+            products.length === Math.min(Math.max(limit, 1), 500),
+        },
+      },
+    });
+    return { runId: run.id, read: products.length, ok, failed: errors.length };
+  } catch (error) {
+    await db.importRun.update({
+      where: { id: run.id },
+      data: {
+        status: "FAILED",
+        finishedAt: new Date(),
+        recordsFail: 1,
+        errorMessage: error instanceof Error ? error.message.slice(0, 1000) : String(error),
+      },
+    });
+    throw error;
+  } finally {
+    if (leaseAcquired) {
+      await releaseSyncLease({
+        supplierId: supplier.id,
+        runId: run.id,
+        scope: "MEDIA",
+      });
+    }
+  }
+}
+
+export async function retryFailedRabaluxProductMedia(productId: string) {
+  const product = await db.product.findFirst({
+    where: {
+      id: productId,
+      supplier: { integrationKey: RABALUX_INTEGRATION_KEY },
     },
     select: {
-      id: true,
       media: {
-        where: { syncStatus: { not: "READY" } },
-        orderBy: [{ syncStatus: "asc" }, { order: "asc" }],
+        where: { syncStatus: "FAILED" },
+        orderBy: { order: "asc" },
         select: { id: true },
         take: 1,
       },
       attachments: {
-        where: { syncStatus: { not: "READY" } },
-        orderBy: [{ syncStatus: "asc" }, { order: "asc" }],
+        where: { syncStatus: "FAILED" },
+        orderBy: { order: "asc" },
         select: { id: true },
         take: 1,
       },
     },
-    take: Math.min(Math.max(limit, 1), 500),
-    orderBy: { updatedAt: "asc" },
   });
-  let ok = 0;
-  const errors: Array<{ productId: string; message: string }> = [];
-  for (const product of products) {
-    const target = product.media[0]
-      ? { assetId: product.media[0].id, assetType: "MEDIA" as const }
-      : product.attachments[0]
-        ? {
-            assetId: product.attachments[0].id,
-            assetType: "ATTACHMENT" as const,
-          }
-        : null;
-    if (!target) continue;
-    try {
-      await enqueueRabaluxMediaAsset(product.id, target);
-      ok++;
-    } catch (error) {
-      errors.push({
-        productId: product.id,
-        message:
-          error instanceof Error
-            ? error.message.slice(0, 1000)
-            : String(error).slice(0, 1000),
-      });
-    }
-  }
-  await db.importRun.update({
-    where: { id: run.id },
-    data: {
-      status: errors.length ? (ok ? "PARTIAL" : "FAILED") : "SUCCESS",
-      finishedAt: new Date(),
-      recordsRead: products.length,
-      recordsOk: ok,
-      recordsFail: errors.length,
-      errorMessage: errors[0]?.message ?? null,
-      errors: errors.length
-        ? (errors.slice(0, 50) as Prisma.InputJsonValue)
-        : Prisma.JsonNull,
-      metadata: {
-        remainingMayExist: products.length === Math.min(Math.max(limit, 1), 500),
-      },
-    },
-  });
-  return { runId: run.id, read: products.length, ok, failed: errors.length };
+  if (!product) throw new Error("Rabalux product does not exist.");
+  const target = product.media[0]
+    ? { assetId: product.media[0].id, assetType: "MEDIA" as const }
+    : product.attachments[0]
+      ? { assetId: product.attachments[0].id, assetType: "ATTACHMENT" as const }
+      : null;
+  if (!target) return { queued: false as const, reason: "no_failed_assets" };
+  const job = await enqueueRabaluxMediaAsset(productId, target);
+  return { queued: true as const, jobId: job.id, ...target };
 }
 
 async function enqueueNextRabaluxMediaAsset(
@@ -345,18 +485,24 @@ async function enqueueRabaluxMediaAsset(
   productId: string,
   target: MediaTarget,
 ) {
-  return enqueueBackgroundJob({
+  const job = await enqueueBackgroundJob({
     kind: "RABALUX_MEDIA_PRODUCT",
     payload: { productId, ...target },
     idempotencyKey: `rabalux-media-asset:${target.assetType}:${target.assetId}`,
     maxAttempts: 12,
   });
+  if (job.status === "FAILED") {
+    throw new PermanentBackgroundJobError(
+      "Rabalux media asset has a permanent failed job; change the source asset before retrying.",
+    );
+  }
+  return job;
 }
 
 function requireTrustedSource(value: string | null) {
   const normalized = value ? normalizeRabaluxMediaUrl(value) : null;
-  if (!normalized || normalized !== value) {
-    throw new Error("Untrusted Rabalux media source.");
+  if (!normalized) {
+    throw new PermanentBackgroundJobError("Untrusted Rabalux media source.");
   }
   return normalized;
 }
@@ -372,13 +518,15 @@ async function downloadAsset(url: string, maxBytes: number) {
       headers: { "User-Agent": "SvetPovoljnihCena-RabaluxMedia/1.0" },
     });
     if (!response.ok) {
-      throw new Error(`Rabalux media returned HTTP ${response.status}.`);
+      throw mediaHttpError("media", response.status);
     }
     const contentLength = Number(response.headers.get("content-length") ?? 0);
-    if (contentLength > maxBytes) throw new Error("Rabalux media file is too large.");
+    if (contentLength > maxBytes) {
+      throw new PermanentBackgroundJobError("Rabalux media file is too large.");
+    }
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length || buffer.length > maxBytes) {
-      throw new Error("Rabalux media file size is invalid.");
+      throw new PermanentBackgroundJobError("Rabalux media file size is invalid.");
     }
     return {
       buffer,
@@ -406,24 +554,28 @@ async function streamVideoToStorage(
       headers: { "User-Agent": "SvetPovoljnihCena-RabaluxMedia/1.0" },
     });
     if (!source.ok || !source.body) {
-      throw new Error(`Rabalux video returned HTTP ${source.status}.`);
+      throw mediaHttpError("video", source.status);
     }
     const contentType =
       source.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ??
       "";
     if (!contentType.startsWith("video/")) {
-      throw new Error("Rabalux video response has an invalid content type.");
+      throw new PermanentBackgroundJobError(
+        "Rabalux video response has an invalid content type.",
+      );
     }
     const contentLength = Number(source.headers.get("content-length") ?? 0);
     if (contentLength > maxBytes) {
-      throw new Error("Rabalux video file is too large.");
+      throw new PermanentBackgroundJobError("Rabalux video file is too large.");
     }
     let received = 0;
     const limiter = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, streamController) {
         received += chunk.byteLength;
         if (received > maxBytes) {
-          streamController.error(new Error("Rabalux video file is too large."));
+          streamController.error(
+            new PermanentBackgroundJobError("Rabalux video file is too large."),
+          );
           controller.abort();
           return;
         }
@@ -436,7 +588,9 @@ async function streamVideoToStorage(
       throw new Error("Product media storage is not configured.");
     }
     if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
-      throw new Error("Rabalux video response does not include a valid size.");
+      throw new PermanentBackgroundJobError(
+        "Rabalux video response does not include a valid size.",
+      );
     }
     const stream = Readable.fromWeb(
       source.body.pipeThrough(limiter) as Parameters<typeof Readable.fromWeb>[0],
@@ -500,6 +654,24 @@ async function uploadVideoResumable(args: {
     args.signal.addEventListener("abort", abort, { once: true });
     upload.start();
   });
+}
+
+function mediaHttpError(kind: string, status: number) {
+  const message = `Rabalux ${kind} returned HTTP ${status}.`;
+  return status >= 400 && status < 500 && ![408, 425, 429].includes(status)
+    ? new PermanentBackgroundJobError(message)
+    : new Error(message);
+}
+
+function classifyMediaError(error: unknown) {
+  if (error instanceof PermanentBackgroundJobError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  if (/\b413\b|payload too large|maximum allowed size|entity too large/i.test(message)) {
+    return new PermanentBackgroundJobError(
+      `Rabalux media cannot fit the configured storage limit: ${message.slice(0, 500)}`,
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 async function upload(

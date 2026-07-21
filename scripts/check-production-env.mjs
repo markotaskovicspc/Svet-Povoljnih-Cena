@@ -115,6 +115,32 @@ if (enabled("RABALUX_ENABLED")) {
   if (!Number.isInteger(mediaWorkers) || mediaWorkers < 1 || mediaWorkers > 2) {
     errors.push("RABALUX_MEDIA_WORKER_CONCURRENCY must be 1 or 2");
   }
+  for (const name of ["RABALUX_MIN_BASELINE_RATIO", "RABALUX_MAX_MISSING_RATIO"]) {
+    const configured = value(name);
+    const ratio = Number(configured);
+    if (configured && (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1)) {
+      errors.push(`${name} must be a number greater than 0 and at most 1`);
+    }
+  }
+  for (const name of [
+    "RABALUX_SYNC_LEASE_SECONDS",
+    "RABALUX_CATALOG_MISSING_CONFIRMATIONS",
+    "RABALUX_CATALOG_MISSING_GRACE_HOURS",
+    "RABALUX_STOCK_MISSING_CONFIRMATIONS",
+    "RABALUX_STOCK_MISSING_GRACE_MINUTES",
+    "RABALUX_VIDEO_MAX_BYTES",
+  ]) {
+    const configured = value(name);
+    const number = Number(configured);
+    if (configured && (!Number.isInteger(number) || number <= 0)) {
+      errors.push(`${name} must be a positive integer`);
+    }
+  }
+  const configuredMaxPriceChange = value("RABALUX_MAX_AUTO_PRICE_CHANGE_PCT");
+  const maxPriceChange = Number(configuredMaxPriceChange);
+  if (configuredMaxPriceChange && (!Number.isFinite(maxPriceChange) || maxPriceChange < 0)) {
+    errors.push("RABALUX_MAX_AUTO_PRICE_CHANGE_PCT must be zero or a positive number");
+  }
 }
 
 if (!value("NEXT_PUBLIC_MERCHANT_PHONE")) warnings.push("Public support phone is not configured");

@@ -23,6 +23,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/admin/data-table";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { RabaluxControls } from "@/components/admin/rabalux-controls";
+import { AdminActionForm } from "@/components/admin/action-form";
+import {
+  reviewRabaluxPriceProposal,
+  reviewRabaluxProduct,
+  rollbackRabaluxRun,
+  saveRabaluxCategoryMapping,
+} from "@/lib/rabalux/governance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -199,10 +206,28 @@ async function executeRabalux(
       });
       const result =
         target === "catalog"
-          ? await syncRabaluxCatalog()
+          ? await syncRabaluxCatalog({
+              expectedSourceHash: confirmation.sourceHash ?? undefined,
+              previewRunId: confirmation.runId,
+              requestedById: actorId,
+              reason,
+              allowRiskyPrices: true,
+              allowLargeRemoval: true,
+            })
           : target === "stock"
-            ? await syncRabaluxStock()
-            : await syncPendingRabaluxMedia(100);
+            ? await syncRabaluxStock({
+                expectedSourceHash: confirmation.sourceHash ?? undefined,
+                previewRunId: confirmation.runId,
+                requestedById: actorId,
+                reason,
+                allowLargeRemoval: true,
+              })
+            : await syncPendingRabaluxMedia(100, {
+                expectedSourceHash: confirmation.sourceHash ?? undefined,
+                previewRunId: confirmation.runId,
+                requestedById: actorId,
+                reason,
+              });
       revalidatePath("/admin/xml-import");
       return {
         ok: true as const,
@@ -214,6 +239,125 @@ async function executeRabalux(
           result,
         } as unknown as Record<string, unknown>,
         message: "Akcija je prihvaćena i rezultat je zabeležen.",
+      };
+    },
+  )(formData);
+}
+
+async function saveRabaluxMapping(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.mapping.save", entity: "SupplierCategoryMapping" },
+    async (actorId, formData: FormData) => {
+      const result = await saveRabaluxCategoryMapping({
+        actorId,
+        externalCategory: String(formData.get("externalCategory") ?? ""),
+        externalType: String(formData.get("externalType") ?? ""),
+        categoryId: String(formData.get("categoryId") ?? ""),
+      });
+      revalidatePath("/admin/xml-import");
+      return {
+        ok: true as const,
+        entityId: result.mappingId,
+        diff: result,
+        message: `Mapiranje je sačuvano; ${result.affectedProducts} proizvod(a) čeka odobrenje.`,
+      };
+    },
+  )(formData);
+}
+
+async function reviewRabaluxProductAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.product.review", entity: "Product" },
+    async (actorId, formData: FormData) => {
+      const decision = String(formData.get("decision") ?? "");
+      if (decision !== "APPROVE" && decision !== "REJECT") {
+        return { ok: false as const, error: "Nepoznata odluka." };
+      }
+      const result = await reviewRabaluxProduct({
+        productId: String(formData.get("productId") ?? ""),
+        actorId,
+        decision,
+        reason: String(formData.get("reason") ?? ""),
+      });
+      revalidatePath("/admin/xml-import");
+      revalidatePath("/admin/proizvodi");
+      return {
+        ok: true as const,
+        entityId: result.productId,
+        diff: result,
+        message: `Proizvod je označen kao ${result.status}.`,
+      };
+    },
+  )(formData);
+}
+
+async function reviewRabaluxPriceAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.price.review", entity: "SupplierSyncChange" },
+    async (actorId, formData: FormData) => {
+      const decision = String(formData.get("decision") ?? "");
+      if (decision !== "APPROVE" && decision !== "REJECT") {
+        return { ok: false as const, error: "Nepoznata odluka." };
+      }
+      const result = await reviewRabaluxPriceProposal({
+        changeId: String(formData.get("changeId") ?? ""),
+        actorId,
+        decision,
+        reason: String(formData.get("reason") ?? ""),
+      });
+      revalidatePath("/admin/xml-import");
+      revalidatePath("/admin/proizvodi");
+      return {
+        ok: true as const,
+        entityId: result.changeId,
+        diff: result,
+        message: `Predlog cene je ${result.status}.`,
+      };
+    },
+  )(formData);
+}
+
+async function rollbackRabaluxAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "rabalux.sync.rollback", entity: "ImportRun" },
+    async (actorId, formData: FormData) => {
+      const importRunId = String(formData.get("importRunId") ?? "");
+      const phrase = String(formData.get("phrase") ?? "").trim();
+      if (phrase !== `ROLLBACK ${importRunId}`) {
+        return { ok: false as const, error: `Unesite tačnu potvrdu: ROLLBACK ${importRunId}` };
+      }
+      const result = await rollbackRabaluxRun({
+        importRunId,
+        actorId,
+        reason: String(formData.get("reason") ?? ""),
+      });
+      revalidatePath("/admin/xml-import");
+      revalidatePath("/admin/proizvodi");
+      return {
+        ok: true as const,
+        entityId: result.runId,
+        diff: result,
+        message: `Rollback: ${result.applied} vraćeno, ${result.conflicts} konflikata, ${result.failed} grešaka.`,
       };
     },
   )(formData);
@@ -253,6 +397,21 @@ function formatRunErrors(value: Prisma.JsonValue | null) {
     .join("\n");
 }
 
+function jsonField(value: Prisma.JsonValue | null, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
+  const field = (value as Record<string, Prisma.JsonValue>)[key];
+  return typeof field === "number" || typeof field === "string" ? String(field) : "—";
+}
+
+function DashboardStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="text-xs text-ink-500">{label}</div>
+      <div className="font-mono text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
 export default async function XmlImportPage({
   searchParams,
 }: {
@@ -275,6 +434,108 @@ export default async function XmlImportPage({
     }),
   ]);
   const rabalux = suppliers.find((supplier) => supplier.integrationKey === "RABALUX");
+  const [
+    pendingProducts,
+    mappingConflicts,
+    priceProposals,
+    rollbackCandidates,
+    categoryOptions,
+    rabaluxQueue,
+    staleRabaluxRunRows,
+  ] = rabalux
+    ? await Promise.all([
+        db.product.findMany({
+          where: {
+            supplierId: rabalux.id,
+            supplierApprovalStatus: { in: ["PENDING_MAPPING", "PENDING_APPROVAL"] },
+            deletedAt: null,
+          },
+          orderBy: { updatedAt: "asc" },
+          take: 50,
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            supplierExternalId: true,
+            supplierApprovalStatus: true,
+          },
+        }),
+        db.supplierSyncChange.findMany({
+          where: {
+            supplierId: rabalux.id,
+            changeType: "MAPPING_REQUIRED",
+            status: "CONFLICT",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+          select: { id: true, after: true },
+        }),
+        db.supplierSyncChange.findMany({
+          where: {
+            supplierId: rabalux.id,
+            changeType: "PRICE_PROPOSAL",
+            status: "PENDING",
+          },
+          orderBy: { createdAt: "asc" },
+          take: 50,
+          select: {
+            id: true,
+            externalSku: true,
+            before: true,
+            after: true,
+            product: { select: { name: true } },
+          },
+        }),
+        db.importRun.findMany({
+          where: {
+            supplierId: rabalux.id,
+            dryRun: false,
+            status: { in: ["SUCCESS", "PARTIAL"] },
+            rollbackOfId: null,
+            changes: { some: { status: "APPLIED", reversible: true } },
+          },
+          orderBy: { startedAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            kind: true,
+            startedAt: true,
+            recordsOk: true,
+            _count: { select: { changes: true } },
+          },
+        }),
+        db.category.findMany({
+          orderBy: [{ level: "asc" }, { name: "asc" }],
+          select: { id: true, name: true, path: true },
+        }),
+        db.backgroundJob.groupBy({
+          by: ["status"],
+          where: { kind: "RABALUX_MEDIA_PRODUCT" },
+          _count: { _all: true },
+        }),
+        db.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+          SELECT COUNT(*)::int AS "count"
+            FROM "ImportRun"
+           WHERE "supplierId" = ${rabalux.id}
+             AND "status" = 'RUNNING'
+             AND COALESCE("heartbeatAt", "startedAt") < NOW() - INTERVAL '10 minutes'
+        `),
+      ])
+    : [[], [], [], [], [], [], [{ count: 0 }]];
+  const staleRabaluxRuns = staleRabaluxRunRows[0]?.count ?? 0;
+  const unmappedPairs = Array.from(
+    new Map(
+      mappingConflicts.flatMap((conflict) => {
+        if (!conflict.after || typeof conflict.after !== "object" || Array.isArray(conflict.after)) {
+          return [];
+        }
+        const after = conflict.after as Record<string, Prisma.JsonValue>;
+        const category = typeof after.category === "string" ? after.category : "";
+        const type = typeof after.type === "string" ? after.type : "";
+        return category && type ? [[`${category}\u0000${type}`, { category, type }]] : [];
+      }),
+    ).values(),
+  );
 
   return (
     <>
@@ -294,6 +555,124 @@ export default async function XmlImportPage({
                 previewAction={previewRabalux}
                 executeAction={executeRabalux}
               />
+              <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
+                <DashboardStat label="Čeka odobrenje" value={pendingProducts.length} />
+                <DashboardStat label="Nemapirano" value={unmappedPairs.length} />
+                <DashboardStat label="Predlozi cena" value={priceProposals.length} />
+                <DashboardStat label="Stale run-ovi" value={staleRabaluxRuns} />
+              </div>
+              <p className="mt-2 text-xs text-ink-500">
+                Media queue: {rabaluxQueue.map((row) => `${row.status} ${row._count._all}`).join(" · ") || "prazan"}
+              </p>
+
+              {unmappedPairs.length ? (
+                <div className="mt-5 space-y-3 border-t border-border pt-4">
+                  <p className="text-sm font-medium text-ink">Mapiranje dobavljačkih kategorija</p>
+                  {unmappedPairs.slice(0, 20).map((pair) => (
+                    <AdminActionForm
+                      key={`${pair.category}-${pair.type}`}
+                      action={saveRabaluxMapping}
+                      className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[1fr_1fr_2fr_auto] md:items-end"
+                    >
+                      <input type="hidden" name="externalCategory" value={pair.category} />
+                      <input type="hidden" name="externalType" value={pair.type} />
+                      <div className="text-xs"><span className="text-ink-500">Kategorija</span><br />{pair.category}</div>
+                      <div className="text-xs"><span className="text-ink-500">Tip</span><br />{pair.type}</div>
+                      <Field label="Interna kategorija">
+                        <select
+                          name="categoryId"
+                          required
+                          className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+                        >
+                          <option value="">Izaberite…</option>
+                          {categoryOptions.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.path} · {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <SubmitButton size="sm">Mapiraj</SubmitButton>
+                    </AdminActionForm>
+                  ))}
+                </div>
+              ) : null}
+
+              {pendingProducts.length ? (
+                <div className="mt-5 space-y-3 border-t border-border pt-4">
+                  <p className="text-sm font-medium text-ink">Odobrenje proizvoda</p>
+                  {pendingProducts.map((product) => (
+                    <AdminActionForm
+                      key={product.id}
+                      action={reviewRabaluxProductAction}
+                      className="space-y-2 rounded-lg border border-border p-3"
+                    >
+                      <input type="hidden" name="productId" value={product.id} />
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <a href={`/admin/proizvodi/${product.id}`} className="font-medium text-walnut hover:underline">
+                          {product.name}
+                        </a>
+                        <span className="font-mono text-xs text-ink-500">
+                          {product.supplierExternalId} · {product.supplierApprovalStatus}
+                        </span>
+                      </div>
+                      <Textarea name="reason" rows={2} minLength={5} maxLength={500} required placeholder="Razlog odluke" />
+                      <div className="flex gap-2">
+                        <SubmitButton name="decision" value="APPROVE" size="sm">Odobri</SubmitButton>
+                        <SubmitButton name="decision" value="REJECT" size="sm" variant="destructive">Odbij</SubmitButton>
+                      </div>
+                    </AdminActionForm>
+                  ))}
+                </div>
+              ) : null}
+
+              {priceProposals.length ? (
+                <div className="mt-5 space-y-3 border-t border-border pt-4">
+                  <p className="text-sm font-medium text-ink">Predlozi većih promena cena</p>
+                  {priceProposals.map((proposal) => (
+                    <AdminActionForm
+                      key={proposal.id}
+                      action={reviewRabaluxPriceAction}
+                      className="space-y-2 rounded-lg border border-border p-3"
+                    >
+                      <input type="hidden" name="changeId" value={proposal.id} />
+                      <p className="text-sm">
+                        {proposal.product?.name ?? proposal.externalSku}: {jsonField(proposal.before, "fullPrice")} → {jsonField(proposal.after, "fullPrice")} RSD
+                      </p>
+                      <Textarea name="reason" rows={2} minLength={5} maxLength={500} required placeholder="Razlog odluke" />
+                      <div className="flex gap-2">
+                        <SubmitButton name="decision" value="APPROVE" size="sm">Odobri cenu</SubmitButton>
+                        <SubmitButton name="decision" value="REJECT" size="sm" variant="destructive">Odbij</SubmitButton>
+                      </div>
+                    </AdminActionForm>
+                  ))}
+                </div>
+              ) : null}
+
+              {rollbackCandidates.length ? (
+                <div className="mt-5 space-y-3 border-t border-border pt-4">
+                  <p className="text-sm font-medium text-ink">Rollback primenjenih batch-eva</p>
+                  {rollbackCandidates.map((run) => (
+                    <AdminActionForm
+                      key={run.id}
+                      action={rollbackRabaluxAction}
+                      className="space-y-2 rounded-lg border border-border p-3"
+                    >
+                      <input type="hidden" name="importRunId" value={run.id} />
+                      <p className="font-mono text-xs">
+                        {run.kind} · {run.id} · {run.startedAt.toLocaleString("sr-RS")} · {run._count.changes} promena
+                      </p>
+                      <Textarea name="reason" rows={2} minLength={5} maxLength={500} required placeholder="Razlog rollback-a" />
+                      <Field label={`Upišite: ROLLBACK ${run.id}`}>
+                        <Input name="phrase" autoComplete="off" required />
+                      </Field>
+                      <SubmitButton size="sm" variant="destructive" confirm="Rollback će pokušati da vrati samo neizmenjena polja ovog batch-a. Nastaviti?">
+                        Pokreni rollback
+                      </SubmitButton>
+                    </AdminActionForm>
+                  ))}
+                </div>
+              ) : null}
               <form
                 action={saveRabaluxLoadingLocations}
                 className="mt-5 space-y-3 border-t border-border pt-4"

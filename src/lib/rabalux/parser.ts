@@ -124,14 +124,15 @@ export function normalizeRabaluxMediaUrl(raw: string) {
   let url: URL;
   try {
     url = new URL(
-      /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `http://${trimmed.replace(/^\/+/, "")}`,
+      /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, "")}`,
     );
   } catch {
     return null;
   }
   if (url.hostname.toLowerCase() !== MEDIA_HOST) return null;
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   if (!url.pathname.startsWith("/images/") || url.username || url.password) return null;
-  url.protocol = "http:";
+  url.protocol = "https:";
   url.port = "";
   url.search = "";
   url.hash = "";

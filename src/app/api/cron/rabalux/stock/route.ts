@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { isRabaluxEnabled, syncRabaluxStock } from "@/lib/rabalux";
+import {
+  isRabaluxEnabled,
+  RabaluxSyncBusyError,
+  syncRabaluxStock,
+} from "@/lib/rabalux";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 import { logOperationalError } from "@/lib/monitoring";
 
@@ -17,6 +21,12 @@ async function run(request: Request) {
   try {
     return NextResponse.json({ ok: true, summary: await syncRabaluxStock() });
   } catch (error) {
+    if (error instanceof RabaluxSyncBusyError) {
+      return NextResponse.json(
+        { ok: true, skipped: "already_running" },
+        { status: 202 },
+      );
+    }
     logOperationalError("rabalux.stock.failed", error);
     return NextResponse.json(
       { ok: false, error: "Rabalux stock synchronization failed." },

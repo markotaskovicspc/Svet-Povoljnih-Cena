@@ -54,8 +54,11 @@ describe("Rabalux catalog mapping", () => {
 
   it("normalizes only the trusted HTTP media host", () => {
     expect(normalizeRabaluxMediaUrl("rabaluxkep.plugin.hu/images/a.jpg")).toBe(
-      "http://rabaluxkep.plugin.hu/images/a.jpg",
+      "https://rabaluxkep.plugin.hu/images/a.jpg",
     );
+    expect(
+      normalizeRabaluxMediaUrl("http://rabaluxkep.plugin.hu/images/a.jpg"),
+    ).toBe("https://rabaluxkep.plugin.hu/images/a.jpg");
     expect(normalizeRabaluxMediaUrl("https://evil.example/images/a.jpg")).toBeNull();
     expect(normalizeRabaluxMediaUrl("http://rabaluxkep.plugin.hu/other/a.jpg")).toBeNull();
   });

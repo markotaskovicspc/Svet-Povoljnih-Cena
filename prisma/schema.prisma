@@ -279,6 +279,7 @@ model Category {
   products         ProductCategory[]
   deliveryRules    DeliveryPriceRule[]
   linearPromotions LinearPromotionCategory[]
+  supplierMappings SupplierCategoryMapping[]
 
   @@index([parentId, order])
 }
@@ -306,6 +307,24 @@ enum ArticleStatus {
   DOB
   ARH
   UZ
+}
+
+/// Supplier-owned products are never published until their category mapping
+/// and an explicit administrator approval are both present.
+enum SupplierProductApprovalStatus {
+  PENDING_MAPPING
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum SupplierSyncChangeStatus {
+  PREVIEW
+  PENDING
+  APPLIED
+  REVERTED
+  SKIPPED
+  CONFLICT
 }
 
 model Product {
@@ -409,6 +428,15 @@ model Product {
   /// Field-level admin overrides that XML imports must not overwrite.
   /// Shape: { fields: ["name", "description", "media", ...], updatedBy, updatedAt }
   syncOverrides      Json?
+  supplierApprovalStatus SupplierProductApprovalStatus?
+  supplierApprovedAt     DateTime?
+  supplierApprovedById   String?
+  supplierCatalogMissingCount Int       @default(0)
+  supplierCatalogMissingSince DateTime?
+  supplierStockMissingCount   Int       @default(0)
+  supplierStockMissingSince   DateTime?
+  lastSupplierSyncAt          DateTime?
+  lastSupplierSourceHash      String?
 
   // Ads
   inGoogleMerchant Boolean @default(false)
@@ -453,6 +481,7 @@ model Product {
   stockCountItems          StockCountItem[]
   analyticsEvents          AnalyticsEvent[]
   supplierFulfillmentItems SupplierFulfillmentItem[]
+  supplierSyncChanges      SupplierSyncChange[]
 
   @@unique([supplierId, supplierExternalId])
   @@index([slug])
@@ -462,6 +491,7 @@ model Product {
   @@index([groupId])
   @@index([collectionId])
   @@index([supplierId])
+  @@index([supplierId, supplierApprovalStatus])
 }
 
 model ProductCategory {
@@ -847,6 +877,9 @@ model Supplier {
   safetyRules      SafetyStockRule[]
   loadingLocations SupplierLoadingLocation[]
   fulfillments     SupplierFulfillment[]
+  syncLeases       SupplierSyncLease[]
+  categoryMappings SupplierCategoryMapping[]
+  syncChanges      SupplierSyncChange[]
   defaultPriceList PriceList?                @relation("SupplierDefaultPriceList", fields: [defaultPriceListId], references: [id], onDelete: SetNull)
 }
 
@@ -905,10 +938,84 @@ model ImportRun {
   errorMessage String?      @db.Text
   errors       Json?
   metadata     Json?
+  sourceHash   String?
+  heartbeatAt  DateTime?
+  previewRunId String?
+  requestedById String?
+  rollbackOfId  String?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  changes SupplierSyncChange[]
+
+  @@index([supplierId, startedAt])
+  @@index([supplierId, kind, status, startedAt])
+}
+
+/// Renewable lease used to prevent cron and administrators from running the
+/// same supplier sync concurrently. Acquisition is performed atomically.
+model SupplierSyncLease {
+  supplierId String
+  scope      String   @db.VarChar(32)
+  ownerRunId String
+  acquiredAt DateTime @default(now())
+  heartbeatAt DateTime @default(now())
+  expiresAt  DateTime
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
-  @@index([supplierId, startedAt])
+  @@id([supplierId, scope])
+  @@index([expiresAt])
+}
+
+/// Explicit supplier taxonomy mapping. Unknown feed categories stay pending
+/// instead of silently creating a public storefront taxonomy.
+model SupplierCategoryMapping {
+  id               String   @id @default(cuid())
+  supplierId       String
+  externalCategory String
+  externalType     String
+  categoryId       String
+  enabled          Boolean  @default(true)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([supplierId, externalCategory, externalType])
+  @@index([categoryId])
+}
+
+/// Per-product before/after ledger for previews, proposals, conflict review,
+/// applied batches and field-level rollback.
+model SupplierSyncChange {
+  id           String                   @id @default(cuid())
+  supplierId   String
+  importRunId  String
+  productId    String?
+  externalSku  String
+  changeType   String                   @db.VarChar(40)
+  status       SupplierSyncChangeStatus @default(PREVIEW)
+  fieldNames   String[]
+  before       Json?
+  after        Json?
+  reversible   Boolean                  @default(true)
+  reason       String?                  @db.Text
+  appliedAt    DateTime?
+  revertedAt   DateTime?
+  reviewedById String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  importRun ImportRun @relation(fields: [importRunId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([importRunId, status])
+  @@index([supplierId, status, createdAt])
+  @@index([productId, createdAt])
+  @@index([externalSku])
 }
 
 // ──────────────────────────────────────────────────────────────────────

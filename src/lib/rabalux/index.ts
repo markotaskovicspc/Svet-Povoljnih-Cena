@@ -1,6 +1,7 @@
 export {
   inspectRabaluxLiveFeeds,
   syncRabaluxCatalog,
+  syncRabaluxCatalogProduct,
   syncRabaluxStock,
 } from "./sync";
 export {
@@ -12,7 +13,9 @@ export {
   summarizeRabaluxDryRun,
 } from "./parser";
 export { isRabaluxEnabled, isRabaluxSupplierOperational } from "./config";
+export { RabaluxSyncBusyError } from "./safety";
 export {
   mirrorRabaluxProductMedia,
+  retryFailedRabaluxProductMedia,
   syncPendingRabaluxMedia,
 } from "./media";
