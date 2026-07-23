@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  CogsStatus,
   DispatchNoteType,
   DocumentPostingStatus,
-  InboundInvoiceStatus,
-  InboundInvoiceType,
   PaymentMethod,
   Prisma,
   RetailPriceProposalStatus,
@@ -17,12 +14,15 @@ import {
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import {
-  allocateLandedCost,
   createPurchaseOrder,
   postPurchaseOrder,
   receivePurchaseOrder,
   sendPurchaseOrder,
 } from "@/lib/admin/po";
+import {
+  createInboundInvoice,
+  lockInboundInvoice,
+} from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { adjustInventory } from "@/lib/inventory";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
@@ -156,9 +156,16 @@ async function runCommand(
       }
       return receivePurchaseOrders(ids, actorId);
     case "invoice.create":
-      return createInboundInvoice();
+      if (module !== "ulazne-fakture") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createInboundInvoiceCommand();
+    case "invoice.lock":
     case "invoice.post":
-      return postInboundInvoices(ids);
+      if (module !== "ulazne-fakture") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return lockInboundInvoices(ids);
     case "mp.proposal":
       return createRetailProposals(ids, actorId);
     case "mp.publish":
@@ -697,22 +704,13 @@ async function postPurchaseOrders(
   return { message: `Proknjiženo i zaključano porudžbenica: ${ids.length}.` };
 }
 
-async function createInboundInvoice(): Promise<CommandResult> {
-  const year = new Date().getFullYear();
-  const invoice = await withUniqueRetry(async () => {
-    const count = await db.inboundInvoice.count({
-      where: { number: { startsWith: `UF-${year}-` } },
-    });
-    const number = `UF-${year}-${String(count + 1).padStart(4, "0")}`;
-    return db.inboundInvoice.create({
-      data: {
-        number,
-        type: InboundInvoiceType.DOM,
-        status: InboundInvoiceStatus.DRAFT,
-      },
-    });
-  });
-  return { message: `Faktura ${invoice.number} je kreirana.`, createdId: invoice.id };
+async function createInboundInvoiceCommand(): Promise<CommandResult> {
+  const invoice = await createInboundInvoice();
+  return {
+    message: `Faktura ${invoice.number} je kreirana.`,
+    createdId: invoice.id,
+    redirect: `/admin/erp/ulazne-fakture/${invoice.id}?mode=edit`,
+  };
 }
 
 async function sendPurchaseOrders(ids: string[], actorId: string): Promise<CommandResult> {
@@ -742,79 +740,10 @@ async function receivePurchaseOrders(ids: string[], actorId: string): Promise<Co
   };
 }
 
-async function postInboundInvoices(ids: string[]): Promise<CommandResult> {
+async function lockInboundInvoices(ids: string[]): Promise<CommandResult> {
   requireIds(ids);
-  const count = await db.$transaction(async (tx) => {
-    let posted = 0;
-    for (const id of ids) {
-      const invoice = await tx.inboundInvoice.findUnique({
-        where: { id },
-        include: {
-          items: true,
-          purchaseOrder: { include: { items: true } },
-        },
-      });
-      if (!invoice) throw new Error(`Ulazna faktura ${id} ne postoji.`);
-      if (invoice.lockedAt || invoice.status === InboundInvoiceStatus.POSTED) continue;
-      const net = Number(invoice.netValue);
-      const vat = Number(invoice.vatValue);
-      const gross = Number(invoice.grossValue);
-      if (Math.abs(net + vat - gross) > 0.01) {
-        throw new Error(`Faktura ${invoice.number}: neto + PDV nije jednako bruto vrednosti.`);
-      }
-      if (invoice.type === InboundInvoiceType.COGS && !invoice.purchaseOrder) {
-        throw new Error(`COGS faktura ${invoice.number} mora biti vezana za porudžbenicu.`);
-      }
-      if (invoice.purchaseOrder) {
-        const rate = Number(invoice.exchangeRate);
-        if (!Number.isFinite(rate) || rate <= 0) {
-          throw new Error(`Faktura ${invoice.number}: kurs mora biti veći od nule.`);
-        }
-        const allocations = allocateLandedCost(
-          net * rate,
-          invoice.purchaseOrder.items.map((item) => ({
-            id: item.id,
-            purchasePrice: Number(item.purchasePrice),
-            qty: item.qty,
-            totalWeight: Number(item.totalWeight ?? 0),
-            totalVolume: Number(item.totalVolume ?? 0),
-            manualAmount:
-              invoice.allocationBasis === "MANUAL"
-                ? invoice.items
-                    .filter(
-                      (line) =>
-                        (line.productId && line.productId === item.productId) ||
-                        (line.sku && line.sku === item.sku),
-                    )
-                    .reduce((sum, line) => sum + Number(line.total) * rate, 0)
-                : null,
-          })),
-          invoice.allocationBasis,
-        );
-        for (const item of invoice.purchaseOrder.items) {
-          await tx.purchaseOrderItem.update({
-            where: { id: item.id },
-            data: {
-              additionalCostAllocated:
-                Number(item.additionalCostAllocated ?? 0) +
-                (allocations.get(item.id) ?? 0),
-            },
-          });
-        }
-      }
-      await tx.inboundInvoice.update({
-        where: { id },
-        data: {
-          status: InboundInvoiceStatus.POSTED,
-          cogsStatus: invoice.purchaseOrder ? CogsStatus.CALCULATED : CogsStatus.PENDING,
-          lockedAt: new Date(),
-        },
-      });
-      posted += 1;
-    }
-    return posted;
-  });
-  return { message: `Proknjiženo faktura: ${count}.` };
+  for (const id of ids) await lockInboundInvoice(id);
+  return { message: `Zaključano faktura: ${ids.length}.` };
 }
 
 // MP-cene rows are products, so `ids` are product ids.

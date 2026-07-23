@@ -51,6 +51,7 @@ const currencyFromUi: Record<string, ErpCurrency> = {
 const inboundStatusFromUi: Record<string, InboundInvoiceStatus> = {
   "U pripremi": "DRAFT",
   Primljena: "RECEIVED",
+  "Zaključana": "POSTED",
   "Proknjižena": "POSTED",
   Storno: "CANCELLED",
   DRAFT: "DRAFT",

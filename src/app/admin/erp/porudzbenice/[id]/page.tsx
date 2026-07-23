@@ -855,10 +855,10 @@ export default async function PurchaseOrderEditorPage({
                   <li key={invoice.id} className="flex items-center justify-between gap-3">
                     <span>{invoice.number} · {invoice.type} · {invoice.status}</span>
                     <Link
-                      href="/admin/erp/ulazne-fakture"
+                      href={`/admin/erp/ulazne-fakture/${invoice.id}`}
                       className="text-walnut hover:underline"
                     >
-                      Otvori pregled
+                      Otvori fakturu
                     </Link>
                   </li>
                 ))}

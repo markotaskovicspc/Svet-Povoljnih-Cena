@@ -69,7 +69,7 @@ export type ErpCommand = {
   label: string;
   tone?: "primary" | "danger" | "neutral";
   /** Client-only command handled by the grid without an API mutation. */
-  clientAction?: "edit";
+  clientAction?: "edit" | "open";
   /** Server command key dispatched to POST /api/admin/erp/[module]/commands. */
   action?: string;
   /** If set, the button navigates to this href instead of dispatching. */
@@ -146,7 +146,7 @@ function inboundInvoiceStatusLabel(status: string) {
   const labels: Record<string, string> = {
     DRAFT: "U pripremi",
     RECEIVED: "Primljena",
-    POSTED: "Proknjižena",
+    POSTED: "Zaključana",
     CANCELLED: "Storno",
   };
   return labels[status] ?? status;
@@ -668,24 +668,24 @@ const purchaseOrderItemRows: ErpRow[] = [
 
 const inboundInvoiceColumns: ErpColumn[] = [
   { key: "number", label: "Broj fakture", defaultVisible: true },
-  { key: "type", label: "Tip", options: ["DOM", "INO", "COGS"], defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
-  { key: "purchaseOrder", label: "Porudžbenica", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Proknjižena", "Storno"], defaultVisible: true },
-  { key: "invoiceDate", label: "Datum fakture", type: "date", defaultVisible: true },
-  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
-  { key: "netValue", label: "Neto", type: "money", align: "right", defaultVisible: true },
+  { key: "invoiceDate", label: "Datum prijema", type: "date", defaultVisible: true },
+  { key: "supplier", label: "Naziv dobavljača", defaultVisible: true },
+  { key: "netValue", label: "Vrednost bez PDV-a", type: "money", align: "right", defaultVisible: true },
   { key: "vatValue", label: "PDV", type: "money", align: "right", defaultVisible: true },
-  { key: "grossValue", label: "Bruto", type: "money", align: "right", defaultVisible: true },
+  { key: "purchaseOrder", label: "Veza sa dokumentom", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Zaključana", "Storno"], defaultVisible: true },
+  { key: "locked", label: "Zaključano", type: "boolean", defaultVisible: true },
+  { key: "type", label: "Tip", options: ["DOM", "INO", "COGS"] },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"] },
+  { key: "exchangeRate", label: "Kurs", type: "number", align: "right" },
+  { key: "grossValue", label: "Bruto", type: "money", align: "right" },
   {
     key: "allocationBasis",
     label: "Raspodela",
     type: "status",
     options: ["AUTO_UTILIZATION", "VALUE", "WEIGHT", "VOLUME", "MANUAL"],
-    defaultVisible: true,
   },
-  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"], defaultVisible: true },
-  { key: "locked", label: "Zaključano", type: "boolean", defaultVisible: true },
+  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"] },
 ];
 
 const inboundInvoiceRows: ErpRow[] = [
@@ -985,33 +985,30 @@ const coreErpModules: ErpModule[] = [
       "Domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama, zaključavanje i raspodela troškova za COGS.",
     status: "ready",
     commands: [
-      { label: "Nova faktura", tone: "primary", action: "invoice.create" },
+      { label: "Nova", tone: "primary", action: "invoice.create" },
       {
-        label: "Proknjiži",
+        label: "Uredi",
         tone: "neutral",
-        action: "invoice.post",
+        clientAction: "open",
         needsSelection: true,
-        confirm: "Proknjižiti izabrane ulazne fakture?",
+      },
+      {
+        label: "Zaključaj",
+        tone: "neutral",
+        action: "invoice.lock",
+        needsSelection: true,
+        confirm:
+          "Zaključati izabrane ulazne fakture i uključiti njihove troškove u COGS?",
       },
     ],
     columns: inboundInvoiceColumns,
-    editableColumns: [
-      "number",
-      "type",
-      "status",
-      "invoiceDate",
-      "currency",
-      "exchangeRate",
-      "netValue",
-      "vatValue",
-      "grossValue",
-      "allocationBasis",
-      "cogsStatus",
-    ],
+    editableColumns: [],
     rows: inboundInvoiceRows,
+    detailHrefBase: "/admin/erp/ulazne-fakture",
     notes: [
-      "Raspodela podržava automatsko iskorišćenje težine/zapremine, vrednost, težinu, zapreminu i potpuno usaglašen ručni obračun.",
-      "Zaključan dokument nije dozvoljeno menjati.",
+      "Dvoklik na red otvara pojedinačnu fakturu.",
+      "Trošak vezanih faktura raspoređuje se prema vrednosti svake šifre na porudžbenici.",
+      "Zaključana faktura se ne može menjati niti ponovo uključiti u COGS.",
     ],
   },
   {
@@ -1692,6 +1689,11 @@ async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
 
   return invoices.map((invoice) => ({
     id: invoice.id,
+    cellHrefs: invoice.purchaseOrderId
+      ? {
+          purchaseOrder: `/admin/erp/porudzbenice/${invoice.purchaseOrderId}`,
+        }
+      : undefined,
     values: {
       number: invoice.number,
       type: invoice.type,

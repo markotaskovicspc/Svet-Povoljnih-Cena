@@ -63,6 +63,14 @@ type EditingCell = {
   columnKey: string;
 } | null;
 
+function isActionableGridControl(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(
+    target.closest("a,button,input,select,textarea,[role=button],[role=checkbox]"),
+  );
+}
+
 function textValue(value: ErpValue) {
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "Da" : "Ne";
@@ -494,6 +502,18 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       setEditingCell(null);
       setIsEditMode((current) => !current);
       setCommandMessage(null);
+      return;
+    }
+    if (command.clientAction === "open") {
+      const ids = Array.from(selectedIds);
+      if (ids.length !== 1 || !module.detailHrefBase) {
+        setCommandMessage({
+          ok: false,
+          text: "Izaberite tačno jedan red za uređivanje.",
+        });
+        return;
+      }
+      router.push(`${module.detailHrefBase}/${ids[0]}?mode=edit`);
       return;
     }
     if (command.fields?.length && !input) {
@@ -1254,12 +1274,9 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 {filteredRows.map((row) => (
                   <tr
                     key={row.id}
-                    onDoubleClick={(event) => {
+                    onDoubleClickCapture={(event) => {
                       if (!module.detailHrefBase) return;
-                      const target = event.target as HTMLElement;
-                      if (target.closest("a,button,input,select,textarea,[role=checkbox]")) {
-                        return;
-                      }
+                      if (isActionableGridControl(event.target)) return;
                       router.push(`${module.detailHrefBase}/${row.id}`);
                     }}
                     className={cn(
@@ -1295,6 +1312,8 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       ] ?? null;
                       const isSaving =
                         savingCell?.rowId === row.id && savingCell.columnKey === column.key;
+                      const isCellEditable =
+                        isEditMode && canEditColumn(column.key);
                       return (
                         <td
                           key={column.key}
@@ -1388,17 +1407,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                             />
                           ) : column.type === "status" ? (
                             <span
-                              role="button"
-                              tabIndex={0}
+                              role={isCellEditable ? "button" : undefined}
+                              tabIndex={isCellEditable ? 0 : undefined}
                               onClick={() =>
-                                isEditMode &&
-                                canEditColumn(column.key) &&
+                                isCellEditable &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
                               onKeyDown={(event) => {
                                 if (
-                                  isEditMode &&
-                                  canEditColumn(column.key) &&
+                                  isCellEditable &&
                                   (event.key === "Enter" || event.key === " ")
                                 ) {
                                   setEditingCell({ rowId: row.id, columnKey: column.key });
@@ -1406,11 +1423,11 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               }}
                               className={cn(
                                 "inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1",
-                                isEditMode && canEditColumn(column.key) && "cursor-text",
+                                isCellEditable && "cursor-text",
                                 statusClass(value),
                               )}
                               title={
-                                isEditMode && canEditColumn(column.key)
+                                isCellEditable
                                   ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
                                   : "Polje je samo za čitanje"
                               }
@@ -1457,6 +1474,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                             >
                               {formatValue(value, column)}
                             </Link>
+                          ) : row.cellHrefs?.[column.key] ? (
+                            <Link
+                              href={row.cellHrefs[column.key]}
+                              className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
+                            >
+                              <span className="truncate">
+                                {formatValue(value, column)}
+                              </span>
+                            </Link>
                           ) : column.key === "siteDescription" ? (
                             <Link
                               href={`/admin/proizvodi/${row.id}#opis-za-sajt`}
@@ -1479,39 +1505,37 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                             >
                               {value}
                             </Link>
-                          ) : (
+                          ) : isCellEditable ? (
                             <button
                               type="button"
                               onClick={() =>
-                                isEditMode &&
-                                canEditColumn(column.key) &&
                                 setEditingCell({ rowId: row.id, columnKey: column.key })
                               }
-                              disabled={
-                                !isEditMode ||
-                                !canEditColumn(column.key) ||
-                                Boolean(savingCell)
-                              }
+                              disabled={Boolean(savingCell)}
                               className={cn(
                                 "group inline-flex min-h-8 max-w-[360px] items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-muted-bg",
-                                !isEditMode && "cursor-default hover:bg-transparent",
                                 column.align === "right" && "justify-end text-right tabular-nums",
                                 column.align === "center" && "justify-center text-center",
                               )}
-                              title={
-                                isEditMode && canEditColumn(column.key)
-                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Polje je samo za čitanje"
-                              }
+                              title={`Klik za izmenu. Original: ${formatValue(originalValue, column)}`}
                             >
                               <span className="truncate">{formatValue(value, column)}</span>
-                              {isEditMode ? (
-                                <Pencil
-                                  className="size-3 text-ink-300 opacity-0 transition group-hover:opacity-100"
-                                  aria-hidden
-                                />
-                              ) : null}
+                              <Pencil
+                                className="size-3 text-ink-300 opacity-0 transition group-hover:opacity-100"
+                                aria-hidden
+                              />
                             </button>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-flex min-h-8 max-w-[360px] items-center gap-2 rounded-md px-1.5 py-1",
+                                column.align === "right" && "justify-end text-right tabular-nums",
+                                column.align === "center" && "justify-center text-center",
+                              )}
+                              title="Polje je samo za čitanje"
+                            >
+                              <span className="truncate">{formatValue(value, column)}</span>
+                            </span>
                           )}
                         </td>
                       );
