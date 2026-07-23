@@ -33,8 +33,13 @@ import {
   syncProductChannelAvailability,
 } from "@/lib/channel-availability.server";
 import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
+import { updatePurchasePriceCell } from "@/lib/admin/purchase-price.server";
 
 type CellValue = string | number | boolean | null;
+type PersistedCellResult = {
+  value: CellValue;
+  refreshRow?: boolean;
+};
 
 const currencyFromUi: Record<string, ErpCurrency> = {
   RSD: "RSD",
@@ -113,7 +118,11 @@ export async function PATCH(
       diff: { columnKey, value },
     });
 
-    return NextResponse.json({ ok: true, value: result.value });
+    return NextResponse.json({
+      ok: true,
+      value: result.value,
+      refreshRow: result.refreshRow ?? false,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "ERP izmena nije snimljena.";
     await logAudit({
@@ -132,7 +141,7 @@ async function persistErpCell(
   rowId: string,
   columnKey: string,
   value: CellValue,
-): Promise<{ value: CellValue } | null> {
+): Promise<PersistedCellResult | null> {
   switch (module) {
     case "artikli":
     case "mp-cene":
@@ -513,40 +522,7 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
 }
 
 async function persistPurchasePriceCell(rowId: string, columnKey: string, value: CellValue) {
-  const data: Prisma.PurchasePriceUncheckedUpdateInput = {};
-  switch (columnKey) {
-    case "sku":
-      data.sku = requiredString(value, "SKU je obavezan.");
-      break;
-    case "name":
-      data.name = optionalString(value);
-      break;
-    case "attributes":
-      data.attributes = optionalString(value);
-      break;
-    case "pattern":
-      data.pattern = optionalString(value);
-      break;
-    case "purchasePrice":
-      data.price = decimalValue(value, "Nabavna cena mora biti broj.");
-      break;
-    case "currency":
-      data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
-      break;
-    case "parity":
-      data.parity = optionalString(value);
-      break;
-    case "validFrom":
-      data.validFrom = dateValue(value, "Datum važenja je neispravan.");
-      break;
-    case "validTo":
-      data.validTo = value === null ? null : dateValue(value, "Datum važenja je neispravan.");
-      break;
-    default:
-      return null;
-  }
-  await db.purchasePrice.update({ where: { id: rowId }, data });
-  return { value };
+  return updatePurchasePriceCell(rowId, columnKey, value);
 }
 
 async function persistPurchaseOrderCell(rowId: string, columnKey: string, value: CellValue) {

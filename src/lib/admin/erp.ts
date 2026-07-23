@@ -8,6 +8,10 @@ import { computeArticleStock } from "@/lib/article-stock";
 import { richTextPlainText } from "@/lib/rich-text";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
+import {
+  composePurchasePriceAttributes,
+  composePurchasePricePattern,
+} from "@/lib/admin/purchase-price";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -74,6 +78,16 @@ export type ErpCommand = {
   confirm?: string;
   /** Why a provider or business command cannot currently run. */
   disabledReason?: string;
+  /** Optional values collected in an accessible dialog before dispatch. */
+  fields?: Array<{
+    key: string;
+    label: string;
+    type: "text" | "number" | "date";
+    required?: boolean;
+    options?: string[];
+    min?: number;
+    step?: number;
+  }>;
 };
 
 export type ErpModule = {
@@ -445,16 +459,16 @@ const supplierRows: ErpRow[] = [
 ];
 
 const purchasePriceColumns: ErpColumn[] = [
-  { key: "sku", label: "Šifra artikla", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "sku", label: "Šifra artikla", options: [], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", defaultVisible: true },
   { key: "name", label: "Naziv artikla", defaultVisible: true },
-  { key: "attributes", label: "Atributi", defaultVisible: true },
-  { key: "pattern", label: "Dezen", defaultVisible: true },
+  { key: "attributes", label: "Atributi artikla", defaultVisible: true },
+  { key: "pattern", label: "Dezen artikla", defaultVisible: true },
   { key: "purchasePrice", label: "Nabavna cena", type: "money", align: "right", defaultVisible: true },
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
-  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
-  { key: "validFrom", label: "Važi od", type: "date", defaultVisible: true },
-  { key: "validTo", label: "Važi do", type: "date", defaultVisible: true },
+  { key: "parity", label: "Paritet", defaultVisible: true },
+  { key: "validFrom", label: "Važenje cene od", type: "date", defaultVisible: true },
+  { key: "validTo", label: "Važenje cene do", type: "date", defaultVisible: true },
 ];
 
 const purchasePriceRows: ErpRow[] = [
@@ -824,6 +838,40 @@ const coreErpModules: ErpModule[] = [
     status: "ready",
     commands: [
       {
+        label: "Unos nove",
+        tone: "primary",
+        action: "purchase-price.create",
+        fields: [
+          {
+            key: "sku",
+            label: "Šifra artikla",
+            type: "text",
+            required: true,
+            options: [],
+          },
+          {
+            key: "purchasePrice",
+            label: "Nabavna cena",
+            type: "number",
+            required: true,
+            min: 0,
+            step: 0.01,
+          },
+          {
+            key: "validFrom",
+            label: "Važenje cene od",
+            type: "date",
+            required: true,
+          },
+          {
+            key: "validTo",
+            label: "Važenje cene do",
+            type: "date",
+          },
+        ],
+      },
+      { label: "Uredi", tone: "neutral", clientAction: "edit" },
+      {
         label: "Brisanje",
         tone: "danger",
         action: "row.delete",
@@ -834,17 +882,15 @@ const coreErpModules: ErpModule[] = [
     columns: purchasePriceColumns,
     editableColumns: [
       "sku",
-      "name",
-      "attributes",
-      "pattern",
       "purchasePrice",
-      "currency",
-      "parity",
       "validFrom",
       "validTo",
     ],
     rows: purchasePriceRows,
-    notes: ["Ista šifra artikla može da se unese više puta sa različitim periodima važenja."],
+    notes: [
+      "Dobavljač, naziv, atributi, dezen, valuta i paritet se automatski preuzimaju iz baze artikala i dobavljača i ne mogu ručno da se menjaju.",
+      "Ista šifra artikla može da se unese više puta sa različitim periodima važenja.",
+    ],
   },
   {
     slug: "porudzbenice",
@@ -1020,15 +1066,27 @@ export function getErpModuleDefinition(slug: string) {
 
 export async function getErpModule(
   slug: string,
-  options: { take?: number; warehouseId?: string | null } = {},
+  options: {
+    take?: number;
+    warehouseId?: string | null;
+    includeLookupOptions?: boolean;
+  } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
-  const [rows, articleContext, supplierContext] = await Promise.all([
+  const includeLookupOptions = options.includeLookupOptions !== false;
+  const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
     getPersistedErpRows(slug, take, options.warehouseId),
-    slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
-    slug === "dobavljaci" ? getSupplierModuleContext() : Promise.resolve(null),
+    includeLookupOptions && slug === "artikli"
+      ? getArticleModuleContext()
+      : Promise.resolve(null),
+    includeLookupOptions && slug === "dobavljaci"
+      ? getSupplierModuleContext()
+      : Promise.resolve(null),
+    includeLookupOptions && slug === "nabavne-cene"
+      ? getPurchasePriceModuleContext()
+      : Promise.resolve(null),
   ]);
   const columns = definition.columns.map((column) => ({
     ...column,
@@ -1048,11 +1106,24 @@ export async function getErpModule(
           : /^loading[1-3]$/.test(column.key)
             ? supplierContext.loadingLocations
             : column.options
+        : purchasePriceContext && column.key === "sku"
+          ? purchasePriceContext.skus
         : column.options,
+  }));
+  const commands = definition.commands.map((command) => ({
+    ...command,
+    fields: command.fields?.map((field) => ({
+      ...field,
+      options:
+        purchasePriceContext && field.key === "sku"
+          ? purchasePriceContext.skus
+          : field.options,
+    })),
   }));
   return {
     ...definition,
     columns,
+    commands,
     rows,
     contextFilters: articleContext
       ? [
@@ -1142,6 +1213,15 @@ async function getSupplierModuleContext() {
     priceLists: priceLists.map((priceList) => priceList.code),
     loadingLocations: loadingLocations.map((location) => location.name),
   };
+}
+
+async function getPurchasePriceModuleContext() {
+  const products = await db.product.findMany({
+    where: { deletedAt: null },
+    orderBy: { sku: "asc" },
+    select: { sku: true },
+  });
+  return { skus: products.map((product) => product.sku) };
 }
 
 async function getArticleRows(
@@ -1476,7 +1556,18 @@ async function getPurchasePriceRows(take: number): Promise<ErpRow[]> {
     take,
     include: {
       supplier: { select: { name: true } },
-      product: { select: { name: true, sizeLabel: true, colorPrimary: true, colorSecondary: true } },
+      product: {
+        select: {
+          name: true,
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          sizeLabel: true,
+          colorPrimary: true,
+          colorSecondary: true,
+        },
+      },
     },
   });
 
@@ -1486,12 +1577,12 @@ async function getPurchasePriceRows(take: number): Promise<ErpRow[]> {
       sku: price.sku,
       supplier: price.supplier?.name ?? null,
       name: price.name ?? price.product?.name ?? null,
-      attributes: price.attributes ?? price.product?.sizeLabel ?? null,
+      attributes:
+        price.attributes ??
+        (price.product ? composePurchasePriceAttributes(price.product) : null),
       pattern:
         price.pattern ??
-        ([price.product?.colorPrimary, price.product?.colorSecondary]
-          .filter(Boolean)
-          .join(" + ") || null),
+        (price.product ? composePurchasePricePattern(price.product) : null),
       purchasePrice: asNumber(price.price),
       currency: currencyLabel(price.currency),
       parity: price.parity ?? null,

@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type FormEvent,
   type SetStateAction,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -26,6 +27,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type {
   AdminGridFilter,
@@ -95,6 +104,14 @@ function commandClass(tone: ErpCommand["tone"]) {
   if (tone === "danger") return "border-danger/30 text-danger hover:bg-danger/10";
   if (tone === "primary") return "bg-ink-900 text-canvas hover:bg-walnut";
   return "";
+}
+
+function localDateValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function storageKey(moduleSlug: string) {
@@ -240,6 +257,9 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     null,
   );
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
+  const [activeCommand, setActiveCommand] = useState<ErpCommand | null>(null);
+  const [commandInput, setCommandInput] = useState<Record<string, string>>({});
+  const [commandFormError, setCommandFormError] = useState<string | null>(null);
   const [serverRows, setServerRows] = useState<ErpRow[]>(module.rows);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
@@ -456,7 +476,16 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     });
   };
 
-  const runCommand = async (command: ErpCommand) => {
+  const closeCommandForm = () => {
+    setActiveCommand(null);
+    setCommandInput({});
+    setCommandFormError(null);
+  };
+
+  const runCommand = async (
+    command: ErpCommand,
+    input?: Record<string, string>,
+  ) => {
     if (command.href) {
       router.push(command.href);
       return;
@@ -464,6 +493,22 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     if (command.clientAction === "edit") {
       setEditingCell(null);
       setIsEditMode((current) => !current);
+      setCommandMessage(null);
+      return;
+    }
+    if (command.fields?.length && !input) {
+      setActiveCommand(command);
+      setCommandInput(
+        Object.fromEntries(
+          command.fields.map((field) => [
+            field.key,
+            field.key === "validFrom" && field.type === "date"
+              ? localDateValue()
+              : "",
+          ]),
+        ),
+      );
+      setCommandFormError(null);
       setCommandMessage(null);
       return;
     }
@@ -486,7 +531,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: command.action, ids }),
+          body: JSON.stringify({ action: command.action, ids, input }),
         },
       );
       const payload = (await res.json().catch(() => null)) as
@@ -506,20 +551,33 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         router.push(payload.redirect);
         return;
       }
-      if (payload.createdId && module.slug === "dobavljaci") {
+      if (
+        payload.createdId &&
+        (module.slug === "dobavljaci" || module.slug === "nabavne-cene")
+      ) {
         setIsEditMode(true);
       }
+      closeCommandForm();
       setCommandMessage({ ok: true, text: payload.message ?? "Urađeno." });
       setReloadToken((token) => token + 1);
       router.refresh();
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Komanda nije izvršena.";
       setCommandMessage({
         ok: false,
-        text: err instanceof Error ? err.message : "Komanda nije izvršena.",
+        text: message,
       });
+      if (input) setCommandFormError(message);
     } finally {
       setRunningCommand(null);
     }
+  };
+
+  const submitCommandForm = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeCommand) return;
+    void runCommand(activeCommand, commandInput);
   };
 
   const addFilter = () => {
@@ -626,9 +684,32 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           body: JSON.stringify({ columnKey: column.key, value }),
         },
       );
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+      const payload = (await res.json().catch(() => null)) as
+        | {
+            error?: string;
+            value?: ErpValue;
+            refreshRow?: boolean;
+          }
+        | null;
       if (!res.ok) {
         throw new Error(payload?.error ?? "ERP izmena nije snimljena.");
+      }
+      if (payload && "value" in payload) {
+        setCellEdits((current) => ({
+          ...current,
+          [row.id]: {
+            ...(current[row.id] ?? {}),
+            [column.key]: payload.value ?? null,
+          },
+        }));
+      }
+      if (payload?.refreshRow) {
+        setCellEdits((current) => {
+          const next = { ...current };
+          delete next[row.id];
+          return next;
+        });
+        setReloadToken((token) => token + 1);
       }
       setSavedCellCount((count) => count + 1);
     } catch (err) {
@@ -948,6 +1029,96 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(activeCommand)}
+        onOpenChange={(open) => {
+          if (!open && !runningCommand) closeCommandForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{activeCommand?.label}</DialogTitle>
+            <DialogDescription>
+              Unesite promenljive podatke. Dobavljač, naziv artikla, atributi,
+              dezen, valuta i paritet biće automatski preuzeti iz matičnih
+              podataka.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-4" onSubmit={submitCommandForm}>
+            {activeCommand?.fields?.map((field) => {
+              const id = `erp-command-${field.key}`;
+              return (
+                <label key={field.key} htmlFor={id} className="grid gap-1.5">
+                  <span className="text-sm font-medium text-ink-800">
+                    {field.label}
+                    {field.required ? " *" : ""}
+                  </span>
+                  {field.options ? (
+                    <select
+                      id={id}
+                      value={commandInput[field.key] ?? ""}
+                      required={field.required}
+                      disabled={Boolean(runningCommand)}
+                      onChange={(event) =>
+                        setCommandInput((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                      className="h-9 rounded-lg border border-input bg-surface px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
+                    >
+                      <option value="">Izaberite artikal</option>
+                      {field.options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      id={id}
+                      type={field.type}
+                      value={commandInput[field.key] ?? ""}
+                      required={field.required}
+                      min={field.min}
+                      step={field.step}
+                      disabled={Boolean(runningCommand)}
+                      onChange={(event) =>
+                        setCommandInput((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
+                </label>
+              );
+            })}
+            {commandFormError ? (
+              <p
+                role="alert"
+                className="rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger"
+              >
+                {commandFormError}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(runningCommand)}
+                onClick={closeCommandForm}
+              >
+                Odustani
+              </Button>
+              <Button type="submit" disabled={Boolean(runningCommand)}>
+                {runningCommand ? "Čuvanje…" : activeCommand?.label}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {saveError ? (
         <div

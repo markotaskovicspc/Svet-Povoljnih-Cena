@@ -26,6 +26,7 @@ export async function GET(
   const erpModule = await getErpModule(slug, {
     take: 10_000,
     warehouseId: search.get("warehouseId"),
+    includeLookupOptions: false,
   });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });

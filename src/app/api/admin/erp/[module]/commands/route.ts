@@ -27,6 +27,10 @@ import { adjustInventory } from "@/lib/inventory";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { articleSlug } from "@/lib/article-master";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
+import {
+  createPurchasePrice,
+  type PurchasePriceCommandInput,
+} from "@/lib/admin/purchase-price.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -37,25 +41,26 @@ export async function POST(
   const { module } = await ctx.params;
   const admin = await requireAdminAction(allowedRolesForErpModule(module));
   const body = (await req.json().catch(() => null)) as
-    | { action?: unknown; ids?: unknown }
+    | { action?: unknown; ids?: unknown; input?: unknown }
     | null;
   const action = typeof body?.action === "string" ? body.action : "";
   const ids = Array.isArray(body?.ids)
     ? body.ids.filter((id): id is string => typeof id === "string")
     : [];
+  const input = isCommandInput(body?.input) ? body.input : {};
 
   if (!action) {
     return NextResponse.json({ ok: false, error: "Nedostaje komanda." }, { status: 400 });
   }
 
   try {
-    const result = await runCommand(module, action, ids, admin.id);
+    const result = await runCommand(module, action, ids, admin.id, input);
     await logAudit({
       actorId: admin.id,
       action: `erp.command.${action}`,
       entity: `erp:${module}`,
       entityId: result.createdId ?? (ids.join(",") || null),
-      diff: { action, ids },
+      diff: { action, ids, input },
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
@@ -65,7 +70,7 @@ export async function POST(
       action: `erp.command.${action}.error`,
       entity: `erp:${module}`,
       entityId: ids.join(",") || null,
-      diff: { action, ids, error: message },
+      diff: { action, ids, input, error: message },
     });
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
@@ -76,6 +81,7 @@ async function runCommand(
   action: string,
   ids: string[],
   actorId: string,
+  input: PurchasePriceCommandInput,
 ): Promise<CommandResult> {
   switch (action) {
     case "row.delete":
@@ -86,6 +92,11 @@ async function runCommand(
       return createLookupValue();
     case "supplier.create":
       return createSupplier();
+    case "purchase-price.create":
+      if (module !== "nabavne-cene") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createPurchasePriceEntry(input);
     case "price-list.create":
       return createPriceList();
     case "loyalty.create":
@@ -137,6 +148,10 @@ async function runCommand(
     default:
       throw new Error("Ova komanda još nije povezana.");
   }
+}
+
+function isCommandInput(value: unknown): value is PurchasePriceCommandInput {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function requireIds(ids: string[]) {
@@ -254,6 +269,16 @@ async function createSupplier(): Promise<CommandResult> {
   return {
     message: `Dobavljač ${supplier.code} je kreiran. Popunite podatke u redu.`,
     createdId: supplier.id,
+  };
+}
+
+async function createPurchasePriceEntry(
+  input: PurchasePriceCommandInput,
+): Promise<CommandResult> {
+  const purchasePrice = await createPurchasePrice(input);
+  return {
+    message: `Nabavna cena za artikal ${purchasePrice.sku} je kreirana.`,
+    createdId: purchasePrice.id,
   };
 }
 
