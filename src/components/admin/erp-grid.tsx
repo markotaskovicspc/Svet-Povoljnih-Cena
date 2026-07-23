@@ -1254,8 +1254,17 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 {filteredRows.map((row) => (
                   <tr
                     key={row.id}
+                    onDoubleClick={(event) => {
+                      if (!module.detailHrefBase) return;
+                      const target = event.target as HTMLElement;
+                      if (target.closest("a,button,input,select,textarea,[role=checkbox]")) {
+                        return;
+                      }
+                      router.push(`${module.detailHrefBase}/${row.id}`);
+                    }}
                     className={cn(
                       "hover:bg-muted-bg/30",
+                      module.detailHrefBase && "cursor-pointer",
                       selectedIds.has(row.id) && "bg-brand-blue-50/40",
                     )}
                   >
@@ -1296,6 +1305,13 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                           className={cn(
                             "whitespace-nowrap px-3 py-2 text-ink-700",
                             isSaving && "bg-warning/5",
+                            module.slug === "porudzbenice-po-artiklima" &&
+                              column.key === "qty" &&
+                              typeof value === "number" &&
+                              typeof row.values.packQty === "number" &&
+                              row.values.packQty > 0 &&
+                              value % row.values.packQty !== 0 &&
+                              "bg-danger/10 font-semibold text-danger",
                             column.align === "right" && "text-right tabular-nums",
                             column.align === "center" && "text-center",
                           )}
@@ -1403,7 +1419,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                             </span>
                           ) : column.key === "photo" ? (
                             <Link
-                              href={`/admin/proizvodi/${row.id}#mediji`}
+                              href={
+                                row.cellHrefs?.photo ??
+                                `/admin/proizvodi/${row.id}#mediji`
+                              }
                               className="inline-flex size-12 items-center justify-center overflow-hidden rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:ring-walnut/40"
                               title={value ? "Otvori fotografije artikla" : "Dodaj fotografiju"}
                             >

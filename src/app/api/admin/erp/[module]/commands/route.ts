@@ -9,7 +9,6 @@ import {
   InboundInvoiceType,
   PaymentMethod,
   Prisma,
-  PurchaseOrderStatus,
   RetailPriceProposalStatus,
   SalesChannel,
   ShippingMethod,
@@ -19,6 +18,8 @@ import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import {
   allocateLandedCost,
+  createPurchaseOrder,
+  postPurchaseOrder,
   receivePurchaseOrder,
   sendPurchaseOrder,
 } from "@/lib/admin/po";
@@ -130,12 +131,29 @@ async function runCommand(
     case "newsletter.create":
       return createNewsletterCampaign();
     case "po-items.validate-packs":
+      if (module !== "porudzbenice-po-artiklima") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
       return validatePurchaseOrderPacks(ids);
     case "po.create":
-      return createPurchaseOrder();
+      if (module !== "porudzbenice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createPurchaseOrderCommand();
     case "po.send":
+      if (module !== "porudzbenice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
       return sendPurchaseOrders(ids, actorId);
+    case "po.post":
+      if (module !== "porudzbenice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return postPurchaseOrders(ids, actorId);
     case "po.receive":
+      if (module !== "porudzbenice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
       return receivePurchaseOrders(ids, actorId);
     case "invoice.create":
       return createInboundInvoice();
@@ -180,12 +198,6 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
       break;
     case "nabavne-cene":
       count = (await db.purchasePrice.deleteMany({ where })).count;
-      break;
-    case "porudzbenice":
-      count = (await db.purchaseOrder.deleteMany({ where })).count;
-      break;
-    case "porudzbenice-po-artiklima":
-      count = (await db.purchaseOrderItem.deleteMany({ where })).count;
       break;
     case "ulazne-fakture":
       count = (await db.inboundInvoice.deleteMany({ where })).count;
@@ -665,23 +677,24 @@ async function validatePurchaseOrderPacks(ids: string[]): Promise<CommandResult>
   return { message: `Pakovanja su ispravna za ${items.length} stavki.` };
 }
 
-async function createPurchaseOrder(): Promise<CommandResult> {
-  // Spec §4.1.1: number runs by sequence within the current year, e.g. 1/26.
-  const yy = String(new Date().getFullYear()).slice(-2);
-  const order = await withUniqueRetry(async () => {
-    const existing = await db.purchaseOrder.count({
-      where: { number: { endsWith: `/${yy}` } },
-    });
-    const number = `${existing + 1}/${yy}`;
-    return db.purchaseOrder.create({
-      data: { number, status: PurchaseOrderStatus.DRAFT },
-    });
-  });
+async function createPurchaseOrderCommand(): Promise<CommandResult> {
+  const order = await createPurchaseOrder();
   return {
     message: `Porudžbenica ${order.number} je kreirana (status: U obradi).`,
     createdId: order.id,
     redirect: `/admin/erp/porudzbenice/${order.id}`,
   };
+}
+
+async function postPurchaseOrders(
+  ids: string[],
+  actorId: string,
+): Promise<CommandResult> {
+  requireIds(ids);
+  for (const id of ids) {
+    await postPurchaseOrder(id, actorId);
+  }
+  return { message: `Proknjiženo i zaključano porudžbenica: ${ids.length}.` };
 }
 
 async function createInboundInvoice(): Promise<CommandResult> {

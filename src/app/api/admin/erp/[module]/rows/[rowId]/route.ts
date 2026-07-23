@@ -13,7 +13,6 @@ import {
   Prisma,
   PriceListKind,
   ProductLookupKind,
-  PurchaseOrderStatus,
   ReclamationDecision,
   ReclamationRequest,
   ReclamationResolution,
@@ -47,19 +46,6 @@ const currencyFromUi: Record<string, ErpCurrency> = {
   "€": "EUR",
   USD: "USD",
   "$": "USD",
-};
-
-const purchaseOrderStatusFromUi: Record<string, PurchaseOrderStatus> = {
-  "U obradi": "DRAFT",
-  Poslata: "SENT",
-  "Potvrđena": "CONFIRMED",
-  Primljena: "RECEIVED",
-  Otkazana: "CANCELLED",
-  DRAFT: "DRAFT",
-  SENT: "SENT",
-  CONFIRMED: "CONFIRMED",
-  RECEIVED: "RECEIVED",
-  CANCELLED: "CANCELLED",
 };
 
 const inboundStatusFromUi: Record<string, InboundInvoiceStatus> = {
@@ -151,9 +137,8 @@ async function persistErpCell(
     case "nabavne-cene":
       return persistPurchasePriceCell(rowId, columnKey, value);
     case "porudzbenice":
-      return persistPurchaseOrderCell(rowId, columnKey, value);
     case "porudzbenice-po-artiklima":
-      return persistPurchaseOrderItemCell(rowId, columnKey, value);
+      return null;
     case "ulazne-fakture":
       return persistInboundInvoiceCell(rowId, columnKey, value);
     case "sifarnici-artikala":
@@ -523,122 +508,6 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
 
 async function persistPurchasePriceCell(rowId: string, columnKey: string, value: CellValue) {
   return updatePurchasePriceCell(rowId, columnKey, value);
-}
-
-async function persistPurchaseOrderCell(rowId: string, columnKey: string, value: CellValue) {
-  const current = await db.purchaseOrder.findUnique({
-    where: { id: rowId },
-    select: { lockedAt: true },
-  });
-  if (current?.lockedAt) throw new Error("Zaključana porudžbenica se ne može menjati.");
-  const data: Prisma.PurchaseOrderUncheckedUpdateInput = {};
-  switch (columnKey) {
-    case "number":
-      data.number = requiredString(value, "Broj porudžbenice je obavezan.");
-      break;
-    case "status":
-      data.status = enumFromMap(purchaseOrderStatusFromUi, value, "Nepoznat status porudžbenice.");
-      break;
-    case "orderDate":
-      data.orderDate = value === null ? null : dateValue(value, "Datum porudžbine je neispravan.");
-      break;
-    case "loadingDate":
-      data.loadingDate = value === null ? null : dateValue(value, "Datum utovara je neispravan.");
-      break;
-    case "deliveryDate":
-      data.deliveryDate = value === null ? null : dateValue(value, "Datum isporuke je neispravan.");
-      break;
-    case "totalVolume":
-      data.totalVolume = nullableDecimal(value, "Zapremina mora biti broj.");
-      break;
-    case "totalWeight":
-      data.totalWeight = nullableDecimal(value, "Težina mora biti broj.");
-      break;
-    case "totalPrice":
-      data.totalPrice = decimalValue(value, "Ukupna cena mora biti broj.");
-      break;
-    case "currency":
-      data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
-      break;
-    case "transportType":
-      data.transportType = optionalString(value);
-      break;
-    case "parity":
-      data.parity = optionalString(value);
-      break;
-    case "bmPct":
-      data.bmPct = nullableDecimal(value, "BM% mora biti broj.");
-      break;
-    default:
-      return null;
-  }
-  await db.purchaseOrder.update({ where: { id: rowId }, data });
-  return { value };
-}
-
-async function persistPurchaseOrderItemCell(rowId: string, columnKey: string, value: CellValue) {
-  const current = await db.purchaseOrderItem.findUnique({
-    where: { id: rowId },
-    select: { purchaseOrder: { select: { lockedAt: true } } },
-  });
-  if (current?.purchaseOrder.lockedAt) {
-    throw new Error("Stavke zaključane porudžbenice se ne mogu menjati.");
-  }
-  const data: Prisma.PurchaseOrderItemUncheckedUpdateInput = {};
-  switch (columnKey) {
-    case "sku":
-      data.sku = requiredString(value, "SKU je obavezan.");
-      break;
-    case "name":
-      data.name = requiredString(value, "Naziv je obavezan.");
-      break;
-    case "attributes":
-      data.attributes = optionalString(value);
-      break;
-    case "pattern":
-      data.pattern = optionalString(value);
-      break;
-    case "purchasePrice":
-      data.purchasePrice = decimalValue(value, "Nabavna cena mora biti broj.");
-      break;
-    case "currency":
-      data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
-      break;
-    case "parity":
-      data.parity = optionalString(value);
-      break;
-    case "moq":
-      data.moq = nullableInt(value, "MOQ mora biti ceo broj.");
-      break;
-    case "packQty":
-      data.packQty = nullableInt(value, "Kom/pak mora biti ceo broj.");
-      break;
-    case "qty":
-      data.qty = intValue(value, "Količina mora biti ceo broj.");
-      break;
-    case "receivedQty":
-      data.receivedQty = intValue(value, "Primljena količina mora biti ceo broj.");
-      break;
-    case "totalVolume":
-      data.totalVolume = nullableDecimal(value, "Zapremina mora biti broj.");
-      break;
-    case "totalWeight":
-      data.totalWeight = nullableDecimal(value, "Težina mora biti broj.");
-      break;
-    case "customsRate":
-      data.customsRate = nullableDecimal(value, "Carinska stopa mora biti broj.");
-      break;
-    case "calcRetailPrice":
-      data.calcRetailPrice = nullableDecimal(value, "Kalkulativna MPC mora biti broj.");
-      break;
-    case "bmPct":
-      data.bmPct = nullableDecimal(value, "BM% mora biti broj.");
-      break;
-    default:
-      return null;
-  }
-  await db.purchaseOrderItem.update({ where: { id: rowId }, data });
-  return { value };
 }
 
 async function persistInboundInvoiceCell(rowId: string, columnKey: string, value: CellValue) {

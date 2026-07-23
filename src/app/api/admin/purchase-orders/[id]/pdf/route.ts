@@ -23,9 +23,19 @@ export async function GET(
     ...order,
     freightCost: Number(order.freightCost),
     totalPrice: Number(order.totalPrice),
+    totalVolume: Number(order.totalVolume ?? 0),
+    totalWeight: Number(order.totalWeight ?? 0),
+    exchangeRate: Number(order.exchangeRate),
+    freightExchangeRate: Number(order.freightExchangeRate),
     items: order.items.map((item) => ({
       ...item,
       purchasePrice: Number(item.purchasePrice),
+      totalVolume: Number(item.totalVolume ?? 0),
+      totalWeight: Number(item.totalWeight ?? 0),
+      customsRate: Number(item.customsRate ?? 0),
+      calcRetailPrice:
+        item.calcRetailPrice == null ? null : Number(item.calcRetailPrice),
+      bmPct: item.bmPct == null ? null : Number(item.bmPct),
     })),
   });
   return new NextResponse(new Uint8Array(pdf), {

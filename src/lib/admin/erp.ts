@@ -61,6 +61,8 @@ export type AdminGridQuery = {
 export type ErpRow = {
   id: string;
   values: Record<string, ErpValue>;
+  /** Optional per-cell links for values such as item photos. */
+  cellHrefs?: Record<string, string>;
 };
 
 export type ErpCommand = {
@@ -578,26 +580,37 @@ const purchaseOrderRows: ErpRow[] = [
 ];
 
 const purchaseOrderItemColumns: ErpColumn[] = [
-  { key: "poNumber", label: "Porudžbenica", defaultVisible: true },
+  { key: "poNumber", label: "Broj porudžbenice", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", defaultVisible: true },
+  { key: "headerSupplier", label: "Dobavljač (zaglavlje)", defaultVisible: true },
+  { key: "createdAt", label: "Datum kreiranja", type: "date", defaultVisible: true },
+  { key: "orderDate", label: "Datum porudžbine", type: "date", defaultVisible: true },
+  { key: "loadingDate", label: "Datum utovara", type: "date", defaultVisible: true },
+  { key: "deliveryDate", label: "Datum isporuke", type: "date", defaultVisible: true },
+  { key: "headerCurrency", label: "Valuta (zaglavlje)", defaultVisible: true },
+  { key: "transportType", label: "Tip transporta", defaultVisible: true },
+  { key: "headerParity", label: "Paritet (zaglavlje)", defaultVisible: true },
   { key: "sku", label: "Šifra artikla", defaultVisible: true },
-  { key: "photo", label: "Foto", defaultVisible: true },
+  { key: "photo", label: "Fotografija artikla", defaultVisible: true },
   { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
-  { key: "name", label: "Naziv", defaultVisible: true },
-  { key: "attributes", label: "Atributi", defaultVisible: true },
-  { key: "pattern", label: "Dezen", defaultVisible: true },
+  { key: "name", label: "Naziv artikla", defaultVisible: true },
+  { key: "attributes", label: "Atributi artikla", defaultVisible: true },
+  { key: "pattern", label: "Dezen artikla", defaultVisible: true },
   { key: "purchasePrice", label: "Nabavna cena", type: "money", align: "right", defaultVisible: true },
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
-  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"] },
-  { key: "validFrom", label: "Važi od", type: "date" },
-  { key: "moq", label: "MOQ", type: "number", align: "right" },
-  { key: "packQty", label: "Kom/pak", type: "number", align: "right" },
+  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
+  { key: "validFrom", label: "Važenje cene od", type: "date", defaultVisible: true },
+  { key: "moq", label: "MOQ", type: "number", align: "right", defaultVisible: true },
+  { key: "packQty", label: "Broj artikala u pakovanju", type: "number", align: "right", defaultVisible: true },
   { key: "qty", label: "Količina za poručivanje", type: "number", align: "right", defaultVisible: true },
   { key: "totalVolume", label: "Ukupna zapremina", type: "number", align: "right", defaultVisible: true },
   { key: "totalWeight", label: "Ukupna težina", type: "number", align: "right", defaultVisible: true },
-  { key: "customsRate", label: "Carinska stopa", type: "number", align: "right" },
+  { key: "customsRate", label: "Carinska stopa", type: "number", align: "right", defaultVisible: true },
   { key: "calcRetailPrice", label: "Kalkulativna MPC", type: "money", align: "right", defaultVisible: true },
   { key: "bmPct", label: "BM%", type: "number", align: "right", defaultVisible: true },
-  { key: "receivedQty", label: "Primljena količina", type: "number", align: "right" },
+  { key: "supplierProductName", label: "Dobavljačev naziv artikla", defaultVisible: true },
+  { key: "certificates", label: "Sertifikati", defaultVisible: true },
+  { key: "barcode", label: "Bar kod", defaultVisible: true },
 ];
 
 const purchaseOrderItemRows: ErpRow[] = [
@@ -902,6 +915,11 @@ const coreErpModules: ErpModule[] = [
     commands: [
       { label: "Kreiraj novu", tone: "primary", action: "po.create" },
       {
+        label: "Pregled po artiklima",
+        tone: "neutral",
+        href: "/admin/erp/porudzbenice-po-artiklima",
+      },
+      {
         label: "Pošalji dobavljaču",
         tone: "neutral",
         action: "po.send",
@@ -909,29 +927,15 @@ const coreErpModules: ErpModule[] = [
         confirm: "Označiti izabrane porudžbenice kao poslate dobavljaču?",
       },
       {
-        label: "Kreiraj prijemnicu",
+        label: "Proknjiži porudžbenicu",
         tone: "neutral",
-        action: "po.receive",
+        action: "po.post",
         needsSelection: true,
-        confirm:
-          "Proknjižiti prijem izabranih porudžbenica? Roba se dodaje na lager podrazumevanog magacina.",
+        confirm: "Proknjižiti i zaključati izabrane porudžbenice?",
       },
     ],
     columns: purchaseOrderColumns,
-    editableColumns: [
-      "number",
-      "status",
-      "orderDate",
-      "loadingDate",
-      "deliveryDate",
-      "totalVolume",
-      "totalWeight",
-      "totalPrice",
-      "currency",
-      "transportType",
-      "parity",
-      "bmPct",
-    ],
+    editableColumns: [],
     rows: purchaseOrderRows,
     detailHrefBase: "/admin/erp/porudzbenice",
     notes: [
@@ -949,8 +953,13 @@ const coreErpModules: ErpModule[] = [
     status: "ready",
     commands: [
       {
+        label: "Pregled porudžbenica",
+        tone: "neutral",
+        href: "/admin/erp/porudzbenice",
+      },
+      {
         label: "Dodaj stavku",
-        tone: "primary",
+        tone: "neutral",
         disabledReason: "Stavka se dodaje iz detalja konkretne porudžbenice.",
       },
       {
@@ -961,24 +970,7 @@ const coreErpModules: ErpModule[] = [
       },
     ],
     columns: purchaseOrderItemColumns,
-    editableColumns: [
-      "sku",
-      "name",
-      "attributes",
-      "pattern",
-      "purchasePrice",
-      "currency",
-      "parity",
-      "moq",
-      "packQty",
-      "qty",
-      "totalVolume",
-      "totalWeight",
-      "customsRate",
-      "calcRetailPrice",
-      "bmPct",
-      "receivedQty",
-    ],
+    editableColumns: [],
     rows: purchaseOrderItemRows,
     notes: [
       "Količina treba da se zacrveni kada nije deljiva brojem artikala u pakovanju.",
@@ -1630,6 +1622,13 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
       purchaseOrder: {
         select: {
           number: true,
+          status: true,
+          createdAt: true,
+          orderDate: true,
+          loadingDate: true,
+          deliveryDate: true,
+          currency: true,
+          transportType: true,
           parity: true,
           supplier: { select: { name: true } },
         },
@@ -1640,10 +1639,24 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
 
   return items.map((item) => ({
     id: item.id,
+    cellHrefs: item.productId
+      ? { photo: `/admin/proizvodi/${item.productId}#mediji` }
+      : undefined,
     values: {
       poNumber: item.purchaseOrder.number,
+      status: purchaseOrderStatusLabel(item.purchaseOrder.status),
+      headerSupplier: item.purchaseOrder.supplier?.name ?? null,
+      createdAt: dateOnly(item.purchaseOrder.createdAt),
+      orderDate: dateOnly(item.purchaseOrder.orderDate),
+      loadingDate: dateOnly(item.purchaseOrder.loadingDate),
+      deliveryDate: dateOnly(item.purchaseOrder.deliveryDate),
+      headerCurrency: currencyLabel(item.purchaseOrder.currency),
+      transportType: item.purchaseOrder.transportType ?? null,
+      headerParity: item.purchaseOrder.parity ?? null,
       sku: item.sku,
-      photo: item.product?.media[0]?.url ? "IMG" : null,
+      photo: item.product?.media[0]?.url
+        ? resolveSupabaseStorageUrl(item.product.media[0].url)
+        : null,
       supplier: item.purchaseOrder.supplier?.name ?? null,
       name: item.name,
       attributes: item.attributes ?? null,
@@ -1651,7 +1664,7 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
       purchasePrice: asNumber(item.purchasePrice),
       currency: currencyLabel(item.currency),
       parity: item.parity ?? item.purchaseOrder.parity ?? null,
-      validFrom: null,
+      validFrom: dateOnly(item.priceValidFrom),
       moq: item.moq ?? null,
       packQty: item.packQty ?? null,
       qty: item.qty,
@@ -1660,7 +1673,9 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
       customsRate: asNumber(item.customsRate),
       calcRetailPrice: asNumber(item.calcRetailPrice),
       bmPct: asNumber(item.bmPct),
-      receivedQty: item.receivedQty,
+      supplierProductName: item.supplierProductName ?? null,
+      certificates: item.certificates ?? null,
+      barcode: item.barcode ?? null,
     },
   }));
 }
