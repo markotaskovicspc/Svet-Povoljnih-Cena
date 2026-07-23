@@ -33,6 +33,7 @@ import {
   effectiveSellableStock,
 } from "@/lib/rabalux/allocation";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -435,9 +436,7 @@ export async function createOrder(
     const p = bySku.get(line.sku);
     if (
       !p ||
-      !p.isActive ||
-      !p.availableWebManual ||
-      !p.availableWebAuto
+      !isProductAvailableOnWeb(p)
     ) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }

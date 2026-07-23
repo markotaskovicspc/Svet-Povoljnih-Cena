@@ -25,6 +25,10 @@ import {
   isRabaluxEnabled,
   isRabaluxSupplierOperational,
 } from "@/lib/rabalux/config";
+import {
+  isProductAvailableOnWeb,
+  webStorefrontProductWhere,
+} from "@/lib/web-storefront-availability";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -599,12 +603,6 @@ function appendAnd(where: Prisma.ProductWhereInput, condition: Prisma.ProductWhe
   ];
 }
 
-const WEB_AVAILABLE_PRODUCT_WHERE = {
-  isActive: true,
-  availableWebManual: true,
-  availableWebAuto: true,
-} satisfies Prisma.ProductWhereInput;
-
 export async function listProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
@@ -612,7 +610,7 @@ export async function listProducts(
     return { items: [], nextCursor: null, total: 0 };
   }
 
-  const where: Prisma.ProductWhereInput = { ...WEB_AVAILABLE_PRODUCT_WHERE };
+  const where: Prisma.ProductWhereInput = webStorefrontProductWhere();
   const now = new Date();
 
   if (input.categoryPath) {
@@ -712,7 +710,7 @@ async function loadProductBySlug(
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
   try {
     const row = await db.product.findFirst({
-      where: { slug, ...WEB_AVAILABLE_PRODUCT_WHERE },
+      where: { slug, ...webStorefrontProductWhere() },
       include: productInclude,
     });
     if (!row) return getSvetAkcijaFallbackBySlug(slug);
@@ -775,7 +773,7 @@ export async function getProductCardsBySlugs(
 
   try {
     const rows = await db.product.findMany({
-      where: { slug: { in: orderedSlugs }, ...WEB_AVAILABLE_PRODUCT_WHERE },
+      where: { slug: { in: orderedSlugs }, ...webStorefrontProductWhere() },
       select: productListSelect,
     });
     const productsBySlug = new Map(
@@ -793,7 +791,7 @@ export async function getProductCardsBySlugs(
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
   const row = await db.product.findFirst({
-    where: { sku, ...WEB_AVAILABLE_PRODUCT_WHERE },
+    where: { sku, ...webStorefrontProductWhere() },
     include: productInclude,
   });
   if (!row) return null;
@@ -811,7 +809,7 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
     where: {
       collectionId: p.collectionId,
       id: { not: productId },
-      ...WEB_AVAILABLE_PRODUCT_WHERE,
+      ...webStorefrontProductWhere(),
     },
     include: productInclude,
     take: limit,
@@ -831,7 +829,7 @@ export async function getRelatedProducts(productId: string, limit = 8) {
     where: {
       groupId: p.groupId,
       id: { not: productId },
-      ...WEB_AVAILABLE_PRODUCT_WHERE,
+      ...webStorefrontProductWhere(),
     },
     include: productInclude,
     take: limit,
@@ -860,7 +858,7 @@ export async function getCartRecommendationsForSkus(
   if (!uniqueSkus.length) return [];
 
   const cartProducts = await db.product.findMany({
-    where: { sku: { in: uniqueSkus }, ...WEB_AVAILABLE_PRODUCT_WHERE },
+    where: { sku: { in: uniqueSkus }, ...webStorefrontProductWhere() },
     select: { groupId: true },
   });
   const groupIds = Array.from(
@@ -880,9 +878,7 @@ export async function getCartRecommendationsForSkus(
     for (const product of rule.products) {
       if (
         seen.has(product.sku) ||
-        !product.isActive ||
-        !product.availableWebManual ||
-        !product.availableWebAuto
+        !isProductAvailableOnWeb(product)
       ) {
         continue;
       }

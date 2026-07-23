@@ -4,6 +4,7 @@ import { db, hasDatabaseConnection } from "@/lib/db";
 import { BRAND } from "@/lib/brand";
 import { isRenderableImageUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import {
   sourceValue,
   svetAkcijaProducts,
@@ -24,9 +25,7 @@ async function fetchDbProducts() {
   try {
     return await db.product.findMany({
       where: {
-        isActive: true,
-        availableWebManual: true,
-        availableWebAuto: true,
+        ...webStorefrontProductWhere(),
         sku: { in: svetAkcijaProducts.map((product) => sourceValue(product, "Šifra")) },
       },
       select: {

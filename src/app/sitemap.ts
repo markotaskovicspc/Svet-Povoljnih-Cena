@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { BRAND } from "@/lib/brand";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 
 const STATIC_PATHS = [
   "", "/novo", "/outlet", "/sve-do-999", "/svet-akcija", "/o-nama",
@@ -21,9 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const [products, categories, collections] = await Promise.all([
       db.product.findMany({
         where: {
-          isActive: true,
-          availableWebManual: true,
-          availableWebAuto: true,
+          ...webStorefrontProductWhere(),
           deletedAt: null,
         },
         select: { slug: true, updatedAt: true },
