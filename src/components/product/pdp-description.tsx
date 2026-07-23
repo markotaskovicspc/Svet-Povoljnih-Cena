@@ -3,7 +3,7 @@ export function PdpDescription({
 }: {
   description: string;
 }) {
-  const clean = description.trim();
+  const clean = richTextPlainText(description);
 
   return (
     <p className="mt-2 line-clamp-3 text-justify text-sm leading-relaxed text-ink-700">
@@ -11,3 +11,4 @@ export function PdpDescription({
     </p>
   );
 }
+import { richTextPlainText } from "@/lib/rich-text";

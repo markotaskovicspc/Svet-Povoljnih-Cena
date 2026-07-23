@@ -4,7 +4,6 @@ import {
   authenticatePartner,
   partnerRateLimitHeaders,
 } from "@/lib/partners/auth";
-import { resolveChannelAvailability } from "@/lib/channel-availability";
 
 export async function GET(request: Request) {
   const auth = await authenticatePartner(request, "inventory:read");
@@ -37,6 +36,10 @@ export async function GET(request: Request) {
       availableWebManual: true,
       availableWholesaleManual: true,
       availableExportManual: true,
+      availableWebAuto: true,
+      availableWholesaleAuto: true,
+      availableExportAuto: true,
+      dcAvailableQty: true,
       warehouseStocks: {
         where: { warehouse: { active: true } },
         select: {
@@ -61,24 +64,20 @@ export async function GET(request: Request) {
       (sum, reservation) => sum + reservation.qty,
       0,
     );
-    const channels = resolveChannelAvailability({
-      physical,
-      reserved,
-      manualWeb: product.availableWebManual,
-      manualWholesale: product.availableWholesaleManual,
-      manualExport: product.availableExportManual,
-    });
+    const available = Math.max(physical - reserved, 0);
     return {
       sku: product.sku,
       name: product.name,
       physical,
       reserved,
-      available: channels.available,
+      available,
+      dcAvailable: product.dcAvailableQty,
       incoming: product.incomingStock,
       channels: {
-        web: channels.web,
-        wholesale: channels.wholesale,
-        export: channels.export,
+        web: product.availableWebManual && product.availableWebAuto,
+        wholesale:
+          product.availableWholesaleManual && product.availableWholesaleAuto,
+        export: product.availableExportManual && product.availableExportAuto,
       },
       warehouses: product.warehouseStocks.map((stock) => ({
         code: stock.warehouse.code,

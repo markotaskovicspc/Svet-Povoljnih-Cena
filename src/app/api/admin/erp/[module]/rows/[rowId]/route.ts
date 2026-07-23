@@ -23,6 +23,15 @@ import {
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import {
+  composedArticleName,
+  syncArticleLookupAssignments,
+} from "@/lib/admin/article-master.server";
+import { sanitizeRichText } from "@/lib/rich-text";
+import {
+  syncAllProductChannelAvailability,
+  syncProductChannelAvailability,
+} from "@/lib/channel-availability.server";
 
 type CellValue = string | number | boolean | null;
 
@@ -201,13 +210,13 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
   switch (columnKey) {
     case "shortName":
     case "name":
-      data.name = requiredString(value, "Naziv je obavezan.");
+      data.shortName = requiredString(value, "Naziv je obavezan.");
       break;
     case "shortDescription":
       data.shortDescription = optionalString(value);
       break;
     case "siteDescription":
-      data.description = optionalString(value) ?? "";
+      data.description = sanitizeRichText(optionalString(value) ?? "");
       break;
     case "attribute1":
       data.attribute1 = optionalString(value);
@@ -235,13 +244,12 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
         value === null ? null : decimalValue(value, "Carinska stopa mora biti broj.");
       break;
     case "stockTotal":
-      data.stock = intValue(value, "Zalihe moraju biti ceo broj.");
-      break;
+    case "reservedStock":
     case "stockDc":
     case "availableTotal":
     case "availableDc":
       throw new Error(
-        "Ova kolona je izračunata. Izmenite „Ukupne zalihe“ ili stanje po magacinu.",
+        "Ova kolona je izračunata. Izmenite stanje na kartonu artikla ili po magacinu.",
       );
     case "incomingTotal":
     case "incomingAvailable":
@@ -330,7 +338,68 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
     default:
       return null;
   }
-  await db.product.update({ where: { id: rowId }, data });
+  await db.$transaction(async (tx) => {
+    await tx.product.update({ where: { id: rowId }, data });
+    if (["shortName", "name", "shortDescription"].includes(columnKey)) {
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: rowId },
+        select: {
+          shortName: true,
+          shortDescription: true,
+          collection: { select: { name: true } },
+        },
+      });
+      await tx.product.update({
+        where: { id: rowId },
+        data: {
+          name: composedArticleName({
+            collectionName: product.collection?.name,
+            shortDescription: product.shortDescription,
+            shortName: product.shortName,
+          }),
+        },
+      });
+    }
+    if (
+      ["attribute1", "attribute2", "attribute3", "attribute4", "color1", "color2"].includes(
+        columnKey,
+      )
+    ) {
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: rowId },
+        select: {
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          colorPrimary: true,
+          colorSecondary: true,
+          lookupAssignments: {
+            where: { lookupValue: { kind: { in: ["BENEFIT", "CERTIFICATE"] } } },
+            select: { lookupValue: { select: { kind: true, value: true } } },
+          },
+        },
+      });
+      await syncArticleLookupAssignments(tx, rowId, {
+        attributes: [
+          product.attribute1,
+          product.attribute2,
+          product.attribute3,
+          product.attribute4,
+        ],
+        colors: [product.colorPrimary, product.colorSecondary],
+        benefits: product.lookupAssignments
+          .filter((row) => row.lookupValue.kind === "BENEFIT")
+          .map((row) => row.lookupValue.value),
+        certificates: product.lookupAssignments
+          .filter((row) => row.lookupValue.kind === "CERTIFICATE")
+          .map((row) => row.lookupValue.value),
+      });
+    }
+    if (["webCheck", "wholesaleCheck", "exportCheck"].includes(columnKey)) {
+      await syncProductChannelAvailability(tx, rowId);
+    }
+  });
   return { value };
 }
 
@@ -810,6 +879,7 @@ async function persistWarehouseCell(rowId: string, columnKey: string, value: Cel
           await tx.warehouse.updateMany({ where: { id: { not: rowId } }, data: { isDefault: false } });
         }
         await tx.warehouse.update({ where: { id: rowId }, data: { isDefault } });
+        await syncAllProductChannelAvailability(tx);
       });
       return { value: isDefault };
     }

@@ -25,6 +25,8 @@ async function fetchDbProducts() {
     return await db.product.findMany({
       where: {
         isActive: true,
+        availableWebManual: true,
+        availableWebAuto: true,
         sku: { in: svetAkcijaProducts.map((product) => sourceValue(product, "Šifra")) },
       },
       select: {

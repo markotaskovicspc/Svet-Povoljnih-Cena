@@ -333,6 +333,8 @@ model Product {
   barcode          String?
   slug             String        @unique
   name             String
+  /// The editable final component of the composed storefront name.
+  shortName        String?
   description      String        @db.Text
   shortDescription String?       @db.Text
   sizeLabel        String?
@@ -363,6 +365,7 @@ model Product {
   packHeightCm        Decimal?  @db.Decimal(8, 2)
   packGrossWeightKg   Decimal?  @db.Decimal(10, 3)
   supplierProductName String?
+  materialText        String?   @db.Text
   hsCode              String?
   moq                 Int?
   tncFrom             DateTime?
@@ -415,6 +418,11 @@ model Product {
   availableWebManual       Boolean @default(true)
   availableWholesaleManual Boolean @default(true)
   availableExportManual    Boolean @default(true)
+  /// Denormalized live availability in the default distribution centre.
+  dcAvailableQty           Int     @default(0)
+  availableWebAuto         Boolean @default(false)
+  availableWholesaleAuto   Boolean @default(false)
+  availableExportAuto      Boolean @default(false)
 
   // Delivery / assembly
   deliveryDaysMin Int     @default(3)
@@ -492,6 +500,12 @@ model Product {
   @@index([collectionId])
   @@index([supplierId])
   @@index([supplierId, supplierApprovalStatus])
+}
+
+model ArticleSequence {
+  year      Int      @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 model ProductCategory {
@@ -1827,6 +1841,7 @@ model Warehouse {
   outgoingDispatchNotes   DispatchNote[]   @relation("DispatchSourceWarehouse")
   incomingDispatchNotes   DispatchNote[]   @relation("DispatchDestinationWarehouse")
   stockCounts             StockCount[]
+  partnerReservations     PartnerReservation[]
 
   @@index([active, isDefault])
 }
@@ -2563,6 +2578,7 @@ model PartnerReservation {
   id             String                   @id @default(cuid())
   clientId       String
   productId      String
+  warehouseId    String?
   externalRef    String
   idempotencyKey String
   qty            Int
@@ -2573,10 +2589,12 @@ model PartnerReservation {
 
   client  PartnerApiClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   product Product          @relation(fields: [productId], references: [id])
+  warehouse Warehouse?     @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
 
   @@unique([clientId, idempotencyKey])
   @@unique([clientId, externalRef])
   @@index([productId, status])
+  @@index([warehouseId, status])
 }
 
 model StockCount {

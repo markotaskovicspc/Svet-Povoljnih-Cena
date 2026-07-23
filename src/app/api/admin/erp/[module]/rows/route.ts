@@ -23,7 +23,10 @@ export async function GET(
     1,
     Math.min(100, Number.parseInt(search.get("pageSize") ?? "100", 10) || 100),
   );
-  const erpModule = await getErpModule(slug, { take: 10_000 });
+  const erpModule = await getErpModule(slug, {
+    take: 10_000,
+    warehouseId: search.get("warehouseId"),
+  });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
   }

@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   adjustInventory,
   InsufficientInventoryError,
+  setDefaultWarehouseStock,
 } from "@/lib/inventory";
 
-function transactionMock(options: { insufficient?: boolean } = {}) {
+function transactionMock(options: { insufficient?: boolean; reserved?: number } = {}) {
   let movement: Record<string, unknown> | null = null;
   const tx = {
     stockMovement: {
@@ -32,6 +33,15 @@ function transactionMock(options: { insufficient?: boolean } = {}) {
       findUnique: vi.fn(async () => ({ qty: 7 })),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: options.insufficient ? 0 : 1 })),
+      count: vi.fn(async () => 1),
+    },
+    partnerReservation: {
+      aggregate: vi.fn(async () => ({ _sum: { qty: 0 } })),
+    },
+    orderItem: {
+      aggregate: vi.fn(async () => ({
+        _sum: { warehouseReservedQty: options.reserved ?? 0 },
+      })),
     },
   };
   return tx as unknown as Prisma.TransactionClient;
@@ -52,7 +62,7 @@ describe("inventory transactions", () => {
     const second = await adjustInventory(tx, command);
 
     expect(second).toEqual(first);
-    expect(tx.product.update).toHaveBeenCalledTimes(1);
+    expect(tx.product.update).toHaveBeenCalledTimes(2);
     expect(tx.warehouseStock.update).toHaveBeenCalledTimes(1);
     expect(tx.stockMovement.create).toHaveBeenCalledTimes(1);
   });
@@ -69,5 +79,20 @@ describe("inventory transactions", () => {
       }),
     ).rejects.toBeInstanceOf(InsufficientInventoryError);
     expect(tx.stockMovement.create).not.toHaveBeenCalled();
+  });
+
+  it("treats a manual target as physical stock and preserves checkout reservations", async () => {
+    const tx = transactionMock({ reserved: 2 });
+    await setDefaultWarehouseStock(tx, {
+      idempotencyKey: "admin:stock:1",
+      productId: "product-1",
+      targetQty: 10,
+      note: "QA popis",
+    });
+    expect(tx.warehouseStock.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { qty: { increment: 3 } },
+      }),
+    );
   });
 });

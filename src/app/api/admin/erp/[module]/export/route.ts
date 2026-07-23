@@ -100,12 +100,15 @@ export async function GET(
 ) {
   const { module: slug } = await context.params;
   await requireAdminAction(allowedRolesForErpModule(slug));
-  const erpModule = await getErpModule(slug, { take: 10_000 });
+  const search = new URL(request.url).searchParams;
+  const erpModule = await getErpModule(slug, {
+    take: 10_000,
+    warehouseId: search.get("warehouseId"),
+  });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
   }
 
-  const search = new URL(request.url).searchParams;
   const requestedColumns = parseArray<string>(search.get("columns"));
   const knownColumns = new Map(erpModule.columns.map((column) => [column.key, column]));
   const columns = requestedColumns

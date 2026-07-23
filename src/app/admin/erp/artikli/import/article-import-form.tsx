@@ -56,9 +56,17 @@ export function ArticleImportForm() {
           className="mt-2 block w-full rounded-lg border border-input bg-surface px-3 py-2 text-sm"
         />
         <p className="mt-3 text-sm text-ink-500">
-          Obavezne kolone: SKU/Šifra, Naziv, Opis i MPC. Podržane su i Status,
-          Bar kod, Zalihe, U dolasku, Dobavljač, dimenzije, težina, pakovanje,
-          HS kod i MOQ.
+          Obavezna je samo kolona Kratki naziv. Ako SKU/Šifra nije uneta,
+          sistem je automatski dodeljuje. Uvoz podržava sva izvorna polja
+          matičnog kartona: fotografiju kao URL, status, dobavljača,
+          kategoriju/podgrupu, grupu,
+          kolekciju, atribute, boje, benefite, formatirani opis, zalihe, COGS,
+          dimenzije i pakovanje, materijal, sertifikate, kanale prodaje, MOQ,
+          Novo i T&amp;C datume.
+        </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Kod izmene postojećeg SKU-a menjaju se samo kolone koje postoje u
+          datoteci; ostali matični podaci ostaju nepromenjeni.
         </p>
         <p className="mt-1 text-sm font-medium text-warning">
           Uvoz je atomski: ako bilo koji red nije ispravan, nijedan red neće

@@ -19,7 +19,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!hasDatabaseConnection()) return entries;
   try {
     const [products, categories, collections] = await Promise.all([
-      db.product.findMany({ where: { isActive: true, deletedAt: null }, select: { slug: true, updatedAt: true } }),
+      db.product.findMany({
+        where: {
+          isActive: true,
+          availableWebManual: true,
+          availableWebAuto: true,
+          deletedAt: null,
+        },
+        select: { slug: true, updatedAt: true },
+      }),
       db.category.findMany({ select: { path: true, updatedAt: true } }),
       db.collection.findMany({ select: { slug: true } }),
     ]);

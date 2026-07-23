@@ -14,6 +14,7 @@ type SavedViewPayload = {
   columnOrder?: unknown;
   columnWidths?: unknown;
   isDefault?: unknown;
+  context?: unknown;
 };
 
 function toView(row: {
@@ -43,6 +44,12 @@ function toView(row: {
       typeof columns.columnWidths === "object" &&
       !Array.isArray(columns.columnWidths)
         ? columns.columnWidths
+        : {},
+    context:
+      columns.context &&
+      typeof columns.context === "object" &&
+      !Array.isArray(columns.context)
+        ? columns.context
         : {},
   };
 }
@@ -99,6 +106,21 @@ export async function POST(request: Request) {
     !Array.isArray(body.columnWidths)
       ? body.columnWidths
       : {};
+  const contextKeys = new Set(
+    moduleSlug === "artikli"
+      ? ["warehouseId"]
+      : (definition.contextFilters ?? []).map((filter) => filter.key),
+  );
+  const context =
+    body?.context && typeof body.context === "object" && !Array.isArray(body.context)
+      ? Object.fromEntries(
+          Object.entries(body.context).filter(
+            ([key, value]) =>
+              typeof value === "string" &&
+              contextKeys.has(key),
+          ),
+        )
+      : {};
 
   if (body?.isDefault === true) {
     await db.adminSavedView.updateMany({
@@ -130,6 +152,7 @@ export async function POST(request: Request) {
         visibleColumns,
         columnOrder,
         columnWidths,
+        context,
       } as Prisma.InputJsonValue,
       pageSize: 100,
       isDefault: body?.isDefault === true,
@@ -142,6 +165,7 @@ export async function POST(request: Request) {
         visibleColumns,
         columnOrder,
         columnWidths,
+        context,
       } as Prisma.InputJsonValue,
       pageSize: 100,
       isDefault: body?.isDefault === true,

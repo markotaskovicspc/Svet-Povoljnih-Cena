@@ -24,6 +24,8 @@ import {
 } from "@/lib/admin/po";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { adjustInventory } from "@/lib/inventory";
+import { nextArticleSku } from "@/lib/admin/article-master.server";
+import { articleSlug } from "@/lib/article-master";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -192,17 +194,14 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
 }
 
 async function createArticle(): Promise<CommandResult> {
-  const year = new Date().getFullYear();
-  const product = await withUniqueRetry(async () => {
-    const count = await db.product.count({
-      where: { sku: { startsWith: `NOV-${year}-` } },
-    });
-    const serial = String(count + 1).padStart(5, "0");
-    return db.product.create({
+  const product = await db.$transaction(async (tx) => {
+    const sku = await nextArticleSku(tx);
+    return tx.product.create({
       data: {
-        sku: `NOV-${year}-${serial}`,
-        slug: `novi-artikal-${year}-${serial}`,
-        name: `Novi artikal ${serial}`,
+        sku,
+        slug: `${articleSlug(sku)}-${randomBytes(3).toString("hex")}`,
+        name: "Novi artikal",
+        shortName: "Novi artikal",
         description: "Dopuniti opis za sajt.",
         fullPrice: 0,
         articleStatus: "UZ",

@@ -4,6 +4,9 @@ import {
   getOperationalErpRows,
   operationalErpModules,
 } from "@/lib/admin/erp-operations";
+import { computeArticleStock } from "@/lib/article-stock";
+import { richTextPlainText } from "@/lib/rich-text";
+import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -85,6 +88,12 @@ export type ErpModule = {
   editableColumns?: string[];
   /** When set, each row gets an "Otvori" link to `${detailHrefBase}/${row.id}`. */
   detailHrefBase?: string;
+  /** Module-level selectors that change the server-side row context. */
+  contextFilters?: Array<{
+    key: string;
+    label: string;
+    options: Array<{ value: string; label: string }>;
+  }>;
 };
 
 function asNumber(value: Prisma.Decimal | number | null | undefined) {
@@ -152,10 +161,11 @@ const articleColumns: ErpColumn[] = [
   { key: "color2", label: "Boja 2" },
   { key: "benefits", label: "Benefiti" },
   { key: "siteDescription", label: "Opis za sajt" },
-  { key: "stockTotal", label: "Ukupne zalihe", type: "number", align: "right", defaultVisible: true },
-  { key: "stockDc", label: "Zalihe DC", type: "number", align: "right", defaultVisible: true },
-  { key: "availableTotal", label: "Raspoloživo ukupno", type: "number", align: "right" },
-  { key: "availableDc", label: "Raspoloživo DC", type: "number", align: "right" },
+  { key: "stockTotal", label: "Ukupno fizičko stanje", type: "number", align: "right", defaultVisible: true },
+  { key: "reservedStock", label: "Rezervisano", type: "number", align: "right", defaultVisible: true },
+  { key: "availableTotal", label: "Ukupno raspoloživo", type: "number", align: "right", defaultVisible: true },
+  { key: "stockDc", label: "Fizičko po magacinu", type: "number", align: "right" },
+  { key: "availableDc", label: "Raspoloživo po magacinu", type: "number", align: "right" },
   { key: "cogs", label: "COGS", type: "money", align: "right" },
   { key: "incomingTotal", label: "Količina u dolasku", type: "number", align: "right" },
   { key: "incomingAvailable", label: "Raspoloživo u dolasku", type: "number", align: "right" },
@@ -173,6 +183,7 @@ const articleColumns: ErpColumn[] = [
   { key: "packVolumeM3", label: "Pak. m3", type: "number", align: "right" },
   { key: "packGrossWeightKg", label: "Pak. bruto kg", type: "number", align: "right" },
   { key: "lastPurchasePrice", label: "Posl. nabavna", type: "money", align: "right" },
+  { key: "lastPurchaseCurrency", label: "Valuta nabavne" },
   { key: "supplierName", label: "Dobavljačev naziv" },
   { key: "material", label: "Materijal" },
   { key: "certificates", label: "Sertifikati" },
@@ -192,6 +203,9 @@ const articleColumns: ErpColumn[] = [
   { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"] },
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right" },
   { key: "moq", label: "MOQ", type: "number", align: "right" },
+  { key: "newUntil", label: "Novo do", type: "date" },
+  { key: "tncFrom", label: "T&C od", type: "date" },
+  { key: "tncUntil", label: "T&C do", type: "date" },
 ];
 
 const articleRows: ErpRow[] = [
@@ -709,7 +723,6 @@ const coreErpModules: ErpModule[] = [
       "status",
       "shortName",
       "shortDescription",
-      "siteDescription",
       "attribute1",
       "attribute2",
       "attribute3",
@@ -718,7 +731,6 @@ const coreErpModules: ErpModule[] = [
       "color2",
       "cogs",
       "customsRate",
-      "stockTotal",
       "incomingTotal",
       "widthCm",
       "heightCm",
@@ -739,9 +751,9 @@ const coreErpModules: ErpModule[] = [
       "webCheck",
       "wholesaleCheck",
       "exportCheck",
-      "deliveryDays",
       "moq",
     ],
+    detailHrefBase: "/admin/proizvodi",
     rows: articleRows,
     notes: [
       "Šifra artikla se automatski popunjava kod novog unosa.",
@@ -996,15 +1008,46 @@ export function getErpModuleDefinition(slug: string) {
 
 export async function getErpModule(
   slug: string,
-  options: { take?: number } = {},
+  options: { take?: number; warehouseId?: string | null } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
-  const rows = await getPersistedErpRows(slug, take);
+  const [rows, articleContext] = await Promise.all([
+    getPersistedErpRows(slug, take, options.warehouseId),
+    slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
+  ]);
+  const columns = articleContext
+    ? definition.columns.map((column) => ({
+        ...column,
+        options:
+          column.key === "supplier"
+            ? articleContext.suppliers
+            : column.key === "category" || column.key === "subgroup"
+              ? articleContext.categories
+              : column.key === "group"
+                ? articleContext.groups
+                : column.key === "collection"
+                  ? articleContext.collections
+                  : column.options,
+      }))
+    : definition.columns;
   return {
     ...definition,
+    columns,
     rows,
+    contextFilters: articleContext
+      ? [
+          {
+            key: "warehouseId",
+            label: "Kontekst zaliha",
+            options: [
+              { value: "", label: "Svi magacini" },
+              ...articleContext.warehouses,
+            ],
+          },
+        ]
+      : definition.contextFilters,
     notes: [
       ...(definition.notes ?? []),
       rows.length
@@ -1014,10 +1057,14 @@ export async function getErpModule(
   };
 }
 
-async function getPersistedErpRows(slug: string, take: number): Promise<ErpRow[]> {
+async function getPersistedErpRows(
+  slug: string,
+  take: number,
+  warehouseId?: string | null,
+): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows(take);
+      return getArticleRows(take, warehouseId);
     case "dobavljaci":
       return getSupplierRows(take);
     case "nabavne-cene":
@@ -1035,8 +1082,35 @@ async function getPersistedErpRows(slug: string, take: number): Promise<ErpRow[]
   }
 }
 
-async function getArticleRows(take: number): Promise<ErpRow[]> {
-  const products = await db.product.findMany({
+async function getArticleModuleContext() {
+  const [warehouses, suppliers, categories, groups, collections] = await Promise.all([
+    db.warehouse.findMany({
+      where: { active: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, name: true, code: true, isDefault: true },
+    }),
+    db.supplier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    db.category.findMany({ orderBy: [{ level: "asc" }, { name: "asc" }], select: { name: true } }),
+    db.group.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    db.collection.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+  ]);
+  return {
+    warehouses: warehouses.map((warehouse) => ({
+      value: warehouse.id,
+      label: `${warehouse.name} (${warehouse.code})${warehouse.isDefault ? " · DC" : ""}`,
+    })),
+    suppliers: suppliers.map((row) => row.name),
+    categories: categories.map((row) => row.name),
+    groups: groups.map((row) => row.name),
+    collections: collections.map((row) => row.name),
+  };
+}
+
+async function getArticleRows(
+  take: number,
+  selectedWarehouseId?: string | null,
+): Promise<ErpRow[]> {
+  const [products, activeWarehouses] = await Promise.all([db.product.findMany({
     orderBy: { updatedAt: "desc" },
     take,
     select: {
@@ -1045,6 +1119,7 @@ async function getArticleRows(take: number): Promise<ErpRow[]> {
       barcode: true,
       slug: true,
       name: true,
+      shortName: true,
       description: true,
       shortDescription: true,
       sizeLabel: true,
@@ -1077,25 +1152,44 @@ async function getArticleRows(take: number): Promise<ErpRow[]> {
       packHeightCm: true,
       packGrossWeightKg: true,
       supplierProductName: true,
+      materialText: true,
       hsCode: true,
       moq: true,
+      newUntil: true,
+      tncFrom: true,
+      tncUntil: true,
       ananasBrokeragePct: true,
       ananasStoragePct: true,
       ananasDeliveryPct: true,
       availableWebManual: true,
       availableWholesaleManual: true,
       availableExportManual: true,
-      supplier: { select: { name: true } },
+      supplier: {
+        select: {
+          name: true,
+          parity: true,
+          deliveryDays: true,
+        },
+      },
       group: { select: { name: true } },
       collection: { select: { name: true } },
       categories: {
         take: 1,
-        select: { category: { select: { name: true, path: true } } },
+        select: {
+          category: {
+            select: {
+              name: true,
+              path: true,
+              parent: { select: { name: true } },
+            },
+          },
+        },
       },
       media: {
         take: 1,
         orderBy: { order: "asc" },
-        select: { url: true },
+        where: { kind: "IMAGE", syncStatus: "READY" },
+        select: { url: true, thumbUrl: true },
       },
       materials: {
         take: 2,
@@ -1106,66 +1200,164 @@ async function getArticleRows(take: number): Promise<ErpRow[]> {
         orderBy: { validFrom: "desc" },
         select: { price: true, currency: true, parity: true },
       },
+      warehouseStocks: {
+        where: { warehouse: { active: true } },
+        select: {
+          qty: true,
+          warehouse: {
+            select: { id: true, name: true, isDefault: true },
+          },
+        },
+      },
+      orderItems: {
+        where: {
+          warehouseReservedQty: { gt: 0 },
+          order: {
+            status: {
+              notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"],
+            },
+          },
+        },
+        select: { warehouseId: true, warehouseReservedQty: true },
+      },
+      partnerReservations: {
+        where: {
+          status: "ACTIVE",
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        select: { warehouseId: true, qty: true },
+      },
+      lookupAssignments: {
+        where: {
+          lookupValue: {
+            kind: { in: ["BENEFIT", "CERTIFICATE"] },
+            active: true,
+          },
+        },
+        select: { lookupValue: { select: { kind: true, value: true } } },
+      },
     },
-  });
+  }), db.warehouse.findMany({
+    where: { active: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  })]);
 
   return products.map((product) => {
     const width = asNumber(product.widthCm);
     const depth = asNumber(product.depthCm);
     const height = asNumber(product.heightCm);
+    const packWidth = asNumber(product.packWidthCm);
+    const packDepth = asNumber(product.packDepthCm);
+    const packHeight = asNumber(product.packHeightCm);
     const volume =
       width !== null && depth !== null && height !== null
         ? Number(((width * depth * height) / 1_000_000).toFixed(3))
         : null;
+    const area =
+      width !== null && depth !== null
+        ? Number(((width * depth) / 10_000).toFixed(3))
+        : null;
+    const packVolume =
+      packWidth !== null && packDepth !== null && packHeight !== null
+        ? Number(((packWidth * packDepth * packHeight) / 1_000_000).toFixed(3))
+        : null;
     const lastPurchase = product.purchasePrices[0] ?? null;
+    const stockRows = new Map(
+      product.warehouseStocks.map((row) => [row.warehouse.id, row.qty]),
+    );
+    const stock = computeArticleStock({
+      aggregateStock: product.stock,
+      warehouses: activeWarehouses.map((warehouse) => ({
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+        isDefault: warehouse.isDefault,
+        qty:
+          stockRows.get(warehouse.id) ??
+          (!stockRows.size && warehouse.isDefault ? product.stock : 0),
+      })),
+      orderReservations: product.orderItems.map((row) => ({
+        warehouseId: row.warehouseId,
+        qty: row.warehouseReservedQty,
+      })),
+      partnerReservations: product.partnerReservations,
+      manualWeb: product.availableWebManual,
+      manualWholesale: product.availableWholesaleManual,
+      manualExport: product.availableExportManual,
+      selectedWarehouseId,
+    });
+    const benefits = product.lookupAssignments
+      .filter((row) => row.lookupValue.kind === "BENEFIT")
+      .map((row) => row.lookupValue.value)
+      .join(", ");
+    const certificates = product.lookupAssignments
+      .filter((row) => row.lookupValue.kind === "CERTIFICATE")
+      .map((row) => row.lookupValue.value)
+      .join(", ");
+    const mediaUrl = resolveSupabaseStorageUrl(
+      product.media[0]?.thumbUrl ?? product.media[0]?.url,
+    );
     return {
       id: product.id,
       values: {
-        photo: product.media[0]?.url ? "IMG" : null,
+        photo: mediaUrl || null,
         status: product.articleStatus,
         sku: product.sku,
         supplier: product.supplier?.name ?? null,
-        category: product.categories[0]?.category.name ?? null,
+        category:
+          product.categories[0]?.category.parent?.name ??
+          product.categories[0]?.category.name ??
+          null,
         group: product.group?.name ?? null,
-        subgroup: product.categories[0]?.category.path ?? null,
+        subgroup: product.categories[0]?.category.parent
+          ? product.categories[0].category.name
+          : null,
         collection: product.collection?.name ?? null,
         shortDescription: product.shortDescription ?? null,
-        shortName: product.name,
+        shortName: product.shortName ?? product.name,
         attribute1: product.attribute1 ?? product.sizeLabel ?? null,
         attribute2: product.attribute2 ?? null,
         attribute3: product.attribute3 ?? null,
         attribute4: product.attribute4 ?? null,
         color1: product.colorPrimary ?? null,
         color2: product.colorSecondary ?? null,
-        siteDescription: product.description,
-        stockTotal: product.stock,
-        stockDc: product.stock,
-        availableTotal: Math.max(product.stock, 0),
-        availableDc: Math.max(product.stock, 0),
+        benefits: benefits || null,
+        certificates: certificates || null,
+        siteDescription: richTextPlainText(product.description),
+        stockTotal: stock.physicalTotal,
+        reservedStock: stock.contextual.reserved,
+        availableTotal: stock.availableTotal,
+        stockDc: stock.contextual.physical,
+        availableDc: stock.contextual.available,
         cogs: asNumber(product.cogs) ?? (lastPurchase ? asNumber(lastPurchase.price) : null),
         incomingTotal: product.incomingStock,
         incomingAvailable: product.incomingStock,
         widthCm: width,
         heightCm: height,
         depthCm: depth,
+        areaM2: area,
         volumeM3: volume,
         weightKg: asNumber(product.weightKg),
         grossWeightKg: asNumber(product.grossWeightKg),
         packQty: product.packQty,
-        packWidthCm: asNumber(product.packWidthCm),
-        packDepthCm: asNumber(product.packDepthCm),
-        packHeightCm: asNumber(product.packHeightCm),
+        packWidthCm: packWidth,
+        packDepthCm: packDepth,
+        packHeightCm: packHeight,
+        packVolumeM3: packVolume,
         packGrossWeightKg: asNumber(product.packGrossWeightKg),
         lastPurchasePrice: lastPurchase ? asNumber(lastPurchase.price) : null,
+        lastPurchaseCurrency: lastPurchase?.currency ?? null,
         supplierName: product.supplierProductName ?? product.supplier?.name ?? null,
-        material: product.materials.map((item) => item.material.label).join(", ") || null,
+        material:
+          product.materialText ??
+          (product.materials.map((item) => item.material.label).join(", ") || null),
         barcode: product.barcode ?? null,
         siteLink: `/p/${product.slug}`,
-        webAuto: product.stock > 0,
+        webAuto: stock.channels.webAuto,
         webCheck: product.availableWebManual,
-        wholesaleAuto: product.stock > 0,
+        wholesaleAuto: stock.channels.wholesaleAuto,
         wholesaleCheck: product.availableWholesaleManual,
-        exportAuto: product.stock > 0,
+        exportAuto: stock.channels.exportAuto,
         exportCheck: product.availableExportManual,
         customsRate: asNumber(product.customsRate),
         hsCode: product.hsCode,
@@ -1173,8 +1365,11 @@ async function getArticleRows(take: number): Promise<ErpRow[]> {
         ananasBrokerage: asNumber(product.ananasBrokeragePct),
         ananasStorage: asNumber(product.ananasStoragePct),
         ananasDelivery: asNumber(product.ananasDeliveryPct),
-        parity: lastPurchase?.parity ?? null,
-        deliveryDays: product.deliveryDaysMax,
+        parity: product.supplier?.parity ?? null,
+        deliveryDays: product.supplier?.deliveryDays ?? null,
+        newUntil: dateOnly(product.newUntil),
+        tncFrom: dateOnly(product.tncFrom),
+        tncUntil: dateOnly(product.tncUntil),
         calcRetailPrice: asNumber(product.fullPrice),
       },
     };

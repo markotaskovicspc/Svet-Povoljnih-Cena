@@ -59,15 +59,19 @@ describe("badi VPFR transport", () => {
     process.env.BADI_VPFR_PAC = "ABC123";
     __resetFiscalConfig();
 
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          invoiceNumber: "STORE-CASHIER-1",
-          verificationUrl: "https://suf.example.test/verify",
-          sdcDateTime: "2026-07-21T15:00:00.000Z",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        void input;
+        void init;
+        return new Response(
+          JSON.stringify({
+            invoiceNumber: "STORE-CASHIER-1",
+            verificationUrl: "https://suf.example.test/verify",
+            sdcDateTime: "2026-07-21T15:00:00.000Z",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
     );
     global.fetch = fetchMock as typeof fetch;
 

@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { sanitizeRichText } from "@/lib/rich-text";
 
 export type PdpInfoKey =
   | "description"
@@ -147,7 +148,7 @@ function RichText({ content }: { content: string }) {
     return (
       <div
         className="pb-4 text-justify text-sm leading-relaxed text-ink-700 [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5"
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: sanitizeRichText(content) }}
       />
     );
   }

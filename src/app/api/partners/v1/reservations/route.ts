@@ -5,6 +5,7 @@ import {
   authenticatePartner,
   partnerRateLimitHeaders,
 } from "@/lib/partners/auth";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 
 class ReservationRequestError extends Error {
   constructor(
@@ -85,25 +86,38 @@ export async function POST(request: Request) {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${product.id} FOR UPDATE`,
       );
-      const [stock, reservations, warehouse] = await Promise.all([
-        tx.warehouseStock.aggregate({
-          where: { productId: product.id, warehouse: { active: true } },
-          _sum: { qty: true },
+      const warehouse = await tx.warehouse.findFirst({
+        where: { active: true },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      });
+      if (!warehouse) {
+        throw new ReservationRequestError("Aktivan magacin nije konfigurisan.", 409);
+      }
+      const [stock, reservations] = await Promise.all([
+        tx.warehouseStock.findUnique({
+          where: {
+            warehouseId_productId: {
+              warehouseId: warehouse.id,
+              productId: product.id,
+            },
+          },
+          select: { qty: true },
         }),
         tx.partnerReservation.aggregate({
           where: {
             productId: product.id,
             status: "ACTIVE",
             OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+            AND: [
+              {
+                OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
+              },
+            ],
           },
           _sum: { qty: true },
         }),
-        tx.warehouse.findFirst({
-          where: { active: true },
-          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-        }),
       ]);
-      const physical = stock._sum.qty ?? 0;
+      const physical = stock?.qty ?? 0;
       const reserved = reservations._sum.qty ?? 0;
       if (physical - reserved < qty) {
         throw new ReservationRequestError(
@@ -111,14 +125,11 @@ export async function POST(request: Request) {
           409,
         );
       }
-      if (!warehouse) {
-        throw new ReservationRequestError("Aktivan magacin nije konfigurisan.", 409);
-      }
-
       const reservation = await tx.partnerReservation.create({
         data: {
           clientId: auth.client.id,
           productId: product.id,
+          warehouseId: warehouse.id,
           externalRef,
           idempotencyKey,
           qty,
@@ -138,6 +149,7 @@ export async function POST(request: Request) {
           balanceAfterTotal: physical,
         },
       });
+      await syncProductChannelAvailability(tx, product.id);
       return { reservation, idempotent: false };
     });
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma, StockMovementKind } from "@prisma/client";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 
 const DEFAULT_WAREHOUSE_CODE = "DC";
 const DEFAULT_WAREHOUSE_NAME = "Distributivni centar";
@@ -138,6 +139,7 @@ export async function adjustInventory(
       select: { stock: true },
     }),
   ]);
+  await syncProductChannelAvailability(tx, input.productId);
 
   return tx.stockMovement.create({
     data: {
@@ -191,8 +193,29 @@ export async function setDefaultWarehouseStock(
     },
     update: {},
   });
-  const delta = input.targetQty - row.qty;
-  if (delta === 0) return null;
+  const checkoutReservations = await tx.orderItem.aggregate({
+    where: {
+      productId: input.productId,
+      warehouseReservedQty: { gt: 0 },
+      OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
+      order: {
+        status: {
+          notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"],
+        },
+      },
+    },
+    _sum: { warehouseReservedQty: true },
+  });
+  // WarehouseStock is decremented when checkout stock is reserved. The admin
+  // "Stanje" field represents a physical count, so preserve active reservations
+  // instead of adding them on top of the entered quantity.
+  const currentPhysical =
+    row.qty + (checkoutReservations._sum.warehouseReservedQty ?? 0);
+  const delta = input.targetQty - currentPhysical;
+  if (delta === 0) {
+    await syncProductChannelAvailability(tx, input.productId);
+    return null;
+  }
   return adjustInventory(tx, {
     idempotencyKey: input.idempotencyKey,
     productId: input.productId,

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,6 +46,7 @@ type SavedView = {
   filters: AdminGridFilter[];
   sorting: AdminGridSort[];
   query: string;
+  context?: Record<string, string>;
 };
 
 type EditingCell = {
@@ -224,7 +226,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     readColumnOrder(module.slug, module.columns),
   );
-  const [views, setViews] = useState<SavedView[]>(() => readViews(module.slug));
+  const [views, setViews] = useState<SavedView[]>([]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
@@ -244,6 +246,9 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const [totalRows, setTotalRows] = useState(module.rows.length);
   const [loadingRows, setLoadingRows] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [context, setContext] = useState<Record<string, string>>(() =>
+    Object.fromEntries((module.contextFilters ?? []).map((filter) => [filter.key, ""])),
+  );
   const canEditColumn = (columnKey: string) =>
     Boolean(module.editableColumns?.includes(columnKey));
   const updateQuery = (value: SetStateAction<string>) => {
@@ -271,16 +276,19 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
   useEffect(() => {
     let cancelled = false;
+    const localViews = readViews(module.slug);
     fetch(`/api/admin/saved-views?module=${encodeURIComponent(module.slug)}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Pogledi nisu učitani.");
         return response.json() as Promise<{ views?: SavedView[] }>;
       })
       .then((payload) => {
-        if (!cancelled && payload.views) setViews(payload.views);
+        if (!cancelled) {
+          setViews(payload.views?.length ? payload.views : localViews);
+        }
       })
       .catch(() => {
-        // Local views remain a read-only migration fallback until the first DB save.
+        if (!cancelled) setViews(localViews);
       });
     return () => {
       cancelled = true;
@@ -299,6 +307,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           filters: JSON.stringify(filters),
           sorting: JSON.stringify(sorting),
           columns: JSON.stringify(visibleColumns),
+          ...context,
         });
         const response = await fetch(
           `/api/admin/erp/${encodeURIComponent(module.slug)}/rows?${params}`,
@@ -342,6 +351,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     reloadToken,
     sorting,
     visibleColumns,
+    context,
   ]);
 
   const visible = useMemo(
@@ -368,6 +378,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   );
 
   const getSelectOptions = (column: ErpColumn, currentValue: ErpValue) => {
+    if (!column.options && column.type !== "status") return [];
     const configuredOptions =
       column.options ??
       (column.type === "status"
@@ -525,6 +536,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       filters,
       sorting,
       query,
+      context,
     };
     try {
       const response = await fetch("/api/admin/saved-views", {
@@ -570,6 +582,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     );
     updateSorting(view.sorting ?? []);
     updateQuery(view.query);
+    setContext((current) => ({ ...current, ...(view.context ?? {}) }));
   };
 
   const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
@@ -681,6 +694,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       filters: JSON.stringify(filters),
       sorting: JSON.stringify(sorting),
       columns: JSON.stringify(visible.map((column) => column.key)),
+      ...context,
     });
     const a = document.createElement("a");
     a.href = `/api/admin/erp/${encodeURIComponent(module.slug)}/export?${params}`;
@@ -721,6 +735,37 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 </Button>
               </div>
             </div>
+
+            {module.contextFilters?.length ? (
+              <div className="flex flex-wrap gap-3">
+                {module.contextFilters.map((filter) => (
+                  <label
+                    key={filter.key}
+                    className="flex items-center gap-2 text-sm text-ink-600"
+                  >
+                    <span>{filter.label}</span>
+                    <select
+                      value={context[filter.key] ?? ""}
+                      onChange={(event) => {
+                        setPage(1);
+                        setContext((current) => ({
+                          ...current,
+                          [filter.key]: event.target.value,
+                        }));
+                      }}
+                      className="h-9 min-w-56 rounded-lg border border-input bg-surface px-2 text-sm text-ink-900"
+                      aria-label={filter.label}
+                    >
+                      {filter.options.map((option) => (
+                        <option key={option.value || "all"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            ) : null}
 
             {filters.length ? (
               <div className="flex flex-wrap gap-2">
@@ -1148,27 +1193,64 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                               {formatValue(value, column)}
                             </span>
                           ) : column.key === "photo" ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                isEditMode &&
-                                canEditColumn(column.key) &&
-                                setEditingCell({ rowId: row.id, columnKey: column.key })
-                              }
-                              disabled={
-                                !isEditMode ||
-                                !canEditColumn(column.key) ||
-                                Boolean(savingCell)
-                              }
-                              className="inline-flex size-8 items-center justify-center rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:bg-surface hover:text-ink-900 disabled:cursor-default disabled:hover:bg-muted-bg disabled:hover:text-ink-500"
-                              title={
-                                isEditMode && canEditColumn(column.key)
-                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Polje je samo za čitanje"
-                              }
+                            <Link
+                              href={`/admin/proizvodi/${row.id}#mediji`}
+                              className="inline-flex size-12 items-center justify-center overflow-hidden rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:ring-walnut/40"
+                              title={value ? "Otvori fotografije artikla" : "Dodaj fotografiju"}
                             >
-                              IMG
-                            </button>
+                              {typeof value === "string" && value ? (
+                                <Image
+                                  src={value}
+                                  alt=""
+                                  width={48}
+                                  height={48}
+                                  unoptimized
+                                  className="size-12 object-cover"
+                                />
+                              ) : (
+                                "+ Foto"
+                              )}
+                            </Link>
+                          ) : [
+                              "stockTotal",
+                              "reservedStock",
+                              "availableTotal",
+                              "stockDc",
+                              "availableDc",
+                            ].includes(column.key) ? (
+                            <Link
+                              href={`/admin/erp/artikli/${row.id}/zalihe${
+                                context.warehouseId
+                                  ? `?warehouseId=${encodeURIComponent(context.warehouseId)}`
+                                  : ""
+                              }`}
+                              className="inline-flex min-h-8 items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
+                              title="Otvori stanje i kretanje zaliha"
+                            >
+                              {formatValue(value, column)}
+                            </Link>
+                          ) : column.key === "siteDescription" ? (
+                            <Link
+                              href={`/admin/proizvodi/${row.id}#opis-za-sajt`}
+                              className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
+                              title="Otvori formatirani opis artikla"
+                            >
+                              <span className="truncate">{formatValue(value, column)}</span>
+                            </Link>
+                          ) : column.key === "benefits" || column.key === "certificates" ? (
+                            <Link
+                              href={`/admin/proizvodi/${row.id}#sifarnici`}
+                              className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
+                            >
+                              <span className="truncate">{formatValue(value, column)}</span>
+                            </Link>
+                          ) : column.key === "siteLink" && typeof value === "string" ? (
+                            <Link
+                              href={value}
+                              className="text-walnut underline-offset-2 hover:underline"
+                            >
+                              {value}
+                            </Link>
                           ) : (
                             <button
                               type="button"

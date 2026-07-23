@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { ScrollProgress } from "@/components/motion/scroll-progress";
 
 /**
@@ -14,7 +13,3 @@ export default function ContentLayout({ children }: { children: ReactNode }) {
     </>
   );
 }
-
-// Re-export so pages can build trails without an extra import line.
-export type { Crumb };
-export { Breadcrumbs };

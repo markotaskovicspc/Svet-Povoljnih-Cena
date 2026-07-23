@@ -398,6 +398,8 @@ export async function createOrder(
       colorPrimary: true,
       colorSecondary: true,
       isActive: true,
+      availableWebManual: true,
+      availableWebAuto: true,
       stock: true,
       supplierStock: true,
       supplierReservedStock: true,
@@ -431,7 +433,12 @@ export async function createOrder(
   // Pre-validate against fresh stock + activity.
   for (const line of input.lines) {
     const p = bySku.get(line.sku);
-    if (!p || !p.isActive) {
+    if (
+      !p ||
+      !p.isActive ||
+      !p.availableWebManual ||
+      !p.availableWebAuto
+    ) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }
     const sellable =

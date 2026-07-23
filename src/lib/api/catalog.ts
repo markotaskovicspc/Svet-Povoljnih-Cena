@@ -52,6 +52,10 @@ const productInclude = {
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
+function isNewStatusActive(isNew: boolean, newUntil: Date | null) {
+  return isNew && (!newUntil || newUntil > new Date());
+}
+
 function categoryPathLabels(
   categories: Array<{ category: { name: string } }>,
 ): string[] {
@@ -196,7 +200,7 @@ function mapProduct(p: ProductRow): ProductDTO {
     supplierStock: p.supplierStock ?? undefined,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     isHero: p.isHero,
-    isNew: p.isNew,
+    isNew: isNewStatusActive(p.isNew, p.newUntil),
     newUntil: p.newUntil?.toISOString(),
     isLimited: p.isLimited,
     isDtz: p.isDtz,
@@ -382,7 +386,7 @@ function mapProductListItem(p: ProductListRow): ProductDTO {
     supplierStock: p.supplierStock ?? undefined,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     isHero: p.isHero,
-    isNew: p.isNew,
+    isNew: isNewStatusActive(p.isNew, p.newUntil),
     newUntil: p.newUntil?.toISOString(),
     isLimited: p.isLimited,
     isDtz: p.isDtz,
@@ -595,6 +599,12 @@ function appendAnd(where: Prisma.ProductWhereInput, condition: Prisma.ProductWhe
   ];
 }
 
+const WEB_AVAILABLE_PRODUCT_WHERE = {
+  isActive: true,
+  availableWebManual: true,
+  availableWebAuto: true,
+} satisfies Prisma.ProductWhereInput;
+
 export async function listProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
@@ -602,7 +612,7 @@ export async function listProducts(
     return { items: [], nextCursor: null, total: 0 };
   }
 
-  const where: Prisma.ProductWhereInput = { isActive: true };
+  const where: Prisma.ProductWhereInput = { ...WEB_AVAILABLE_PRODUCT_WHERE };
   const now = new Date();
 
   if (input.categoryPath) {
@@ -702,7 +712,7 @@ async function loadProductBySlug(
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
   try {
     const row = await db.product.findFirst({
-      where: { slug, isActive: true },
+      where: { slug, ...WEB_AVAILABLE_PRODUCT_WHERE },
       include: productInclude,
     });
     if (!row) return getSvetAkcijaFallbackBySlug(slug);
@@ -765,7 +775,7 @@ export async function getProductCardsBySlugs(
 
   try {
     const rows = await db.product.findMany({
-      where: { slug: { in: orderedSlugs }, isActive: true },
+      where: { slug: { in: orderedSlugs }, ...WEB_AVAILABLE_PRODUCT_WHERE },
       select: productListSelect,
     });
     const productsBySlug = new Map(
@@ -783,7 +793,7 @@ export async function getProductCardsBySlugs(
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
   const row = await db.product.findFirst({
-    where: { sku, isActive: true },
+    where: { sku, ...WEB_AVAILABLE_PRODUCT_WHERE },
     include: productInclude,
   });
   if (!row) return null;
@@ -798,7 +808,11 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
   });
   if (!p?.collectionId) return [];
   const rows = await db.product.findMany({
-    where: { collectionId: p.collectionId, id: { not: productId }, isActive: true },
+    where: {
+      collectionId: p.collectionId,
+      id: { not: productId },
+      ...WEB_AVAILABLE_PRODUCT_WHERE,
+    },
     include: productInclude,
     take: limit,
     orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
@@ -814,7 +828,11 @@ export async function getRelatedProducts(productId: string, limit = 8) {
   });
   if (!p?.groupId) return [];
   const rows = await db.product.findMany({
-    where: { groupId: p.groupId, id: { not: productId }, isActive: true },
+    where: {
+      groupId: p.groupId,
+      id: { not: productId },
+      ...WEB_AVAILABLE_PRODUCT_WHERE,
+    },
     include: productInclude,
     take: limit,
     orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
@@ -842,7 +860,7 @@ export async function getCartRecommendationsForSkus(
   if (!uniqueSkus.length) return [];
 
   const cartProducts = await db.product.findMany({
-    where: { sku: { in: uniqueSkus }, isActive: true },
+    where: { sku: { in: uniqueSkus }, ...WEB_AVAILABLE_PRODUCT_WHERE },
     select: { groupId: true },
   });
   const groupIds = Array.from(
@@ -860,7 +878,14 @@ export async function getCartRecommendationsForSkus(
   const out: ProductDTO[] = [];
   for (const rule of rules) {
     for (const product of rule.products) {
-      if (seen.has(product.sku) || !product.isActive) continue;
+      if (
+        seen.has(product.sku) ||
+        !product.isActive ||
+        !product.availableWebManual ||
+        !product.availableWebAuto
+      ) {
+        continue;
+      }
       seen.add(product.sku);
       out.push(mapProduct(product));
       if (out.length >= limit) return out;
