@@ -26,6 +26,7 @@ import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { adjustInventory } from "@/lib/inventory";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { articleSlug } from "@/lib/article-master";
+import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -247,13 +248,13 @@ async function withUniqueRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function createSupplier(): Promise<CommandResult> {
-  const supplier = await withUniqueRetry(async () => {
-    const count = await db.supplier.count();
-    return db.supplier.create({
-      data: { name: `Novi dobavljač ${count + 1}` },
-    });
-  });
-  return { message: "Dobavljač je kreiran. Popunite podatke u redu.", createdId: supplier.id };
+  const supplier = await createSupplierWithAutomaticCode((code) => ({
+    name: `Novi dobavljač ${code}`,
+  }));
+  return {
+    message: `Dobavljač ${supplier.code} je kreiran. Popunite podatke u redu.`,
+    createdId: supplier.id,
+  };
 }
 
 async function createPriceList(): Promise<CommandResult> {

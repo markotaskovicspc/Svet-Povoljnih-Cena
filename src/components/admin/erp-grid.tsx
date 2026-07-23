@@ -328,7 +328,11 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         setServerRows(payload.rows);
         setPageCount(payload.pageCount ?? 1);
         setTotalRows(payload.total ?? payload.rows.length);
-        setSelectedIds(new Set());
+        const loadedIds = new Set(payload.rows.map((row) => row.id));
+        setSelectedIds(
+          (current) =>
+            new Set(Array.from(current).filter((id) => loadedIds.has(id))),
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setCommandMessage({
@@ -457,6 +461,12 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       router.push(command.href);
       return;
     }
+    if (command.clientAction === "edit") {
+      setEditingCell(null);
+      setIsEditMode((current) => !current);
+      setCommandMessage(null);
+      return;
+    }
     if (!command.action) {
       setCommandMessage({ ok: false, text: "Komanda još nije povezana." });
       return;
@@ -480,15 +490,24 @@ export function ErpGrid({ module }: { module: ErpModule }) {
         },
       );
       const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; message?: string; error?: string; redirect?: string }
+        | {
+            ok?: boolean;
+            message?: string;
+            error?: string;
+            redirect?: string;
+            createdId?: string;
+          }
         | null;
       if (!res.ok || !payload?.ok) {
         throw new Error(payload?.error ?? "Komanda nije izvršena.");
       }
-      setSelectedIds(new Set());
+      setSelectedIds(payload.createdId ? new Set([payload.createdId]) : new Set());
       if (payload.redirect) {
         router.push(payload.redirect);
         return;
+      }
+      if (payload.createdId && module.slug === "dobavljaci") {
+        setIsEditMode(true);
       }
       setCommandMessage({ ok: true, text: payload.message ?? "Urađeno." });
       setReloadToken((token) => token + 1);
@@ -865,6 +884,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
 
           <div className="flex flex-wrap gap-2">
             {module.commands.map((command) => {
+              const isEditCommand = command.clientAction === "edit";
               const disabled =
                 runningCommand !== null ||
                 Boolean(command.disabledReason) ||
@@ -873,20 +893,34 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                 <Button
                   key={command.label}
                   type="button"
-                  variant={command.tone === "primary" ? "default" : "outline"}
-                  className={commandClass(command.tone)}
+                  variant={
+                    command.tone === "primary" || (isEditCommand && isEditMode)
+                      ? "default"
+                      : "outline"
+                  }
+                  className={cn(
+                    commandClass(command.tone),
+                    isEditCommand &&
+                      isEditMode &&
+                      "bg-ink-900 text-canvas hover:bg-walnut",
+                  )}
                   disabled={disabled}
                   onClick={() => runCommand(command)}
                   title={command.disabledReason}
                 >
-                  {runningCommand === command.label ? "…" : command.label}
+                  {runningCommand === command.label
+                    ? "…"
+                    : isEditCommand && isEditMode
+                      ? "Završi uređivanje"
+                      : command.label}
                   {command.needsSelection && selectedIds.size > 0
                     ? ` (${selectedIds.size})`
                     : ""}
                 </Button>
               );
             })}
-            {module.editableColumns?.length ? (
+            {module.editableColumns?.length &&
+            !module.commands.some((command) => command.clientAction === "edit") ? (
               <Button
                 type="button"
                 variant={isEditMode ? "default" : "outline"}
@@ -916,7 +950,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       </div>
 
       {saveError ? (
-        <div className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger"
+        >
           {saveError}
         </div>
       ) : null}
@@ -1109,7 +1146,8 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                                 aria-label={`${column.label} ${row.id}`}
                               />
                             </label>
-                          ) : isEditing && selectOptions.length ? (
+                          ) : isEditing &&
+                            (column.options !== undefined || column.type === "status") ? (
                             <select
                               autoFocus
                               value={textValue(value)}

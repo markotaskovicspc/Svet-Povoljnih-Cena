@@ -30,6 +30,7 @@ import {
   rollbackRabaluxRun,
   saveRabaluxCategoryMapping,
 } from "@/lib/rabalux/governance";
+import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -67,7 +68,7 @@ async function saveSupplier(formData: FormData) {
               select: { integrationKey: true },
             })
           : null;
-        const data = {
+        const data: Prisma.SupplierUncheckedCreateInput = {
           name,
           ...(existing?.integrationKey === "RABALUX"
             ? {}
@@ -82,7 +83,7 @@ async function saveSupplier(formData: FormData) {
         };
         const res = id
           ? await db.supplier.update({ where: { id }, data })
-          : await db.supplier.create({ data });
+          : await createSupplierWithAutomaticCode(data);
         revalidatePath("/admin/xml-import");
         return { ok: true as const, entityId: res.id, diff: { name, enabled } };
       },

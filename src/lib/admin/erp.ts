@@ -7,6 +7,7 @@ import {
 import { computeArticleStock } from "@/lib/article-stock";
 import { richTextPlainText } from "@/lib/rich-text";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -61,6 +62,8 @@ export type ErpRow = {
 export type ErpCommand = {
   label: string;
   tone?: "primary" | "danger" | "neutral";
+  /** Client-only command handled by the grid without an API mutation. */
+  clientAction?: "edit";
   /** Server command key dispatched to POST /api/admin/erp/[module]/commands. */
   action?: string;
   /** If set, the button navigates to this href instead of dispatching. */
@@ -373,25 +376,29 @@ const articleRows: ErpRow[] = [
 
 const supplierColumns: ErpColumn[] = [
   { key: "code", label: "Šifra dobavljača", defaultVisible: true },
-  { key: "name", label: "Naziv", defaultVisible: true },
+  { key: "name", label: "Naziv dobavljača", defaultVisible: true },
   { key: "address", label: "Adresa", defaultVisible: true },
   { key: "city", label: "Grad", defaultVisible: true },
   { key: "country", label: "Država", defaultVisible: true },
   { key: "email", label: "Kontakt mail", defaultVisible: true },
-  { key: "phone", label: "Telefon", defaultVisible: true },
+  { key: "phone", label: "Telefon dobavljača", defaultVisible: true },
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
-  { key: "exchangeRate", label: "Kurs", type: "number", align: "right", defaultVisible: true },
-  { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
-  { key: "paymentTerms", label: "Uslovi plaćanja" },
+  {
+    key: "parity",
+    label: "Paritet",
+    options: [...SUPPLIER_PARITY_OPTIONS],
+    defaultVisible: true,
+  },
+  { key: "paymentTerms", label: "Uslovi plaćanja", defaultVisible: true },
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right", defaultVisible: true },
-  { key: "transitDays", label: "Tranzit", type: "number", align: "right" },
-  { key: "bank", label: "Banka" },
-  { key: "swift", label: "SWIFT" },
-  { key: "iban", label: "IBAN" },
-  { key: "defaultPriceList", label: "Podrazumevani cenovnik" },
-  { key: "loading1", label: "Mesto utovara 1" },
-  { key: "loading2", label: "Mesto utovara 2" },
-  { key: "loading3", label: "Mesto utovara 3" },
+  { key: "transitDays", label: "Tranzitno vreme", type: "number", align: "right", defaultVisible: true },
+  { key: "bank", label: "Banka dobavljača", defaultVisible: true },
+  { key: "swift", label: "SWIFT kod", defaultVisible: true },
+  { key: "iban", label: "IBAN", defaultVisible: true },
+  { key: "defaultPriceList", label: "Cenovnik", defaultVisible: true },
+  { key: "loading1", label: "Mesto utovara 1", defaultVisible: true },
+  { key: "loading2", label: "Mesto utovara 2", defaultVisible: true },
+  { key: "loading3", label: "Mesto utovara 3", defaultVisible: true },
 ];
 
 const supplierRows: ErpRow[] = [
@@ -770,6 +777,7 @@ const coreErpModules: ErpModule[] = [
     status: "ready",
     commands: [
       { label: "Unos novog", tone: "primary", action: "supplier.create" },
+      { label: "Uredi", tone: "neutral", clientAction: "edit" },
       {
         label: "Brisanje",
         tone: "danger",
@@ -780,7 +788,6 @@ const coreErpModules: ErpModule[] = [
     ],
     columns: supplierColumns,
     editableColumns: [
-      "code",
       "name",
       "address",
       "city",
@@ -801,7 +808,12 @@ const coreErpModules: ErpModule[] = [
       "loading3",
     ],
     rows: supplierRows,
-    notes: ["Kontakt mail mora da sadrži @.", "Valuta je ograničena na RSD, $ ili €."],
+    notes: [
+      "Šifra dobavljača se automatski dodeljuje i nije ručno izmenljiva.",
+      "Kontakt mail mora da sadrži @.",
+      "Valuta je ograničena na RSD, $ ili €, a paritet se bira iz Incoterms liste.",
+      "Cenovnik i mesta utovara biraju se iz postojećih ponuđenih vrednosti.",
+    ],
   },
   {
     slug: "nabavne-cene",
@@ -1013,25 +1025,31 @@ export async function getErpModule(
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
-  const [rows, articleContext] = await Promise.all([
+  const [rows, articleContext, supplierContext] = await Promise.all([
     getPersistedErpRows(slug, take, options.warehouseId),
     slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
+    slug === "dobavljaci" ? getSupplierModuleContext() : Promise.resolve(null),
   ]);
-  const columns = articleContext
-    ? definition.columns.map((column) => ({
-        ...column,
-        options:
-          column.key === "supplier"
-            ? articleContext.suppliers
-            : column.key === "category" || column.key === "subgroup"
-              ? articleContext.categories
-              : column.key === "group"
-                ? articleContext.groups
-                : column.key === "collection"
-                  ? articleContext.collections
-                  : column.options,
-      }))
-    : definition.columns;
+  const columns = definition.columns.map((column) => ({
+    ...column,
+    options: articleContext
+      ? column.key === "supplier"
+        ? articleContext.suppliers
+        : column.key === "category" || column.key === "subgroup"
+          ? articleContext.categories
+          : column.key === "group"
+            ? articleContext.groups
+            : column.key === "collection"
+              ? articleContext.collections
+              : column.options
+      : supplierContext
+        ? column.key === "defaultPriceList"
+          ? supplierContext.priceLists
+          : /^loading[1-3]$/.test(column.key)
+            ? supplierContext.loadingLocations
+            : column.options
+        : column.options,
+  }));
   return {
     ...definition,
     columns,
@@ -1103,6 +1121,26 @@ async function getArticleModuleContext() {
     categories: categories.map((row) => row.name),
     groups: groups.map((row) => row.name),
     collections: collections.map((row) => row.name),
+  };
+}
+
+async function getSupplierModuleContext() {
+  const [priceLists, loadingLocations] = await Promise.all([
+    db.priceList.findMany({
+      where: { active: true },
+      orderBy: { code: "asc" },
+      select: { code: true },
+    }),
+    db.supplierLoadingLocation.findMany({
+      orderBy: { name: "asc" },
+      distinct: ["name"],
+      select: { name: true },
+    }),
+  ]);
+
+  return {
+    priceLists: priceLists.map((priceList) => priceList.code),
+    loadingLocations: loadingLocations.map((location) => location.name),
   };
 }
 
@@ -1406,10 +1444,10 @@ async function getSupplierRows(take: number): Promise<ErpRow[]> {
     },
   });
 
-  return suppliers.map((supplier, index) => ({
+  return suppliers.map((supplier) => ({
     id: supplier.id,
     values: {
-      code: supplier.code ?? `DOB-${String(index + 1).padStart(4, "0")}`,
+      code: supplier.code,
       name: supplier.name,
       address: supplier.address ?? null,
       city: supplier.city ?? null,

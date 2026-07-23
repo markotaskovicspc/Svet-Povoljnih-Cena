@@ -32,6 +32,7 @@ import {
   syncAllProductChannelAvailability,
   syncProductChannelAvailability,
 } from "@/lib/channel-availability.server";
+import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
 
 type CellValue = string | number | boolean | null;
 
@@ -412,6 +413,13 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
         where: { supplierId: rowId, position },
       });
     } else {
+      const offeredLocation = await db.supplierLoadingLocation.findFirst({
+        where: { name },
+        select: { id: true },
+      });
+      if (!offeredLocation) {
+        throw new Error("Izaberite mesto utovara iz ponuđenih vrednosti.");
+      }
       await db.supplierLoadingLocation.upsert({
         where: { supplierId_position: { supplierId: rowId, position } },
         create: {
@@ -438,9 +446,6 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
   }
   const data: Prisma.SupplierUncheckedUpdateInput = {};
   switch (columnKey) {
-    case "code":
-      data.code = optionalString(value);
-      break;
     case "name":
       data.name = requiredString(value, "Naziv dobavljača je obavezan.");
       break;
@@ -465,17 +470,31 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
     case "currency":
       data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
       break;
-    case "parity":
-      data.parity = optionalString(value);
+    case "parity": {
+      const parity = optionalString(value);
+      if (
+        parity &&
+        !SUPPLIER_PARITY_OPTIONS.some((option) => option === parity)
+      ) {
+        throw new Error("Izaberite paritet iz ponuđene liste.");
+      }
+      data.parity = parity;
       break;
+    }
     case "paymentTerms":
       data.paymentTerms = optionalString(value);
       break;
     case "deliveryDays":
       data.deliveryDays = nullableInt(value, "Rok isporuke mora biti ceo broj.");
+      if (typeof data.deliveryDays === "number" && data.deliveryDays < 0) {
+        throw new Error("Rok isporuke ne može biti negativan.");
+      }
       break;
     case "transitDays":
       data.transitDays = nullableInt(value, "Tranzitno vreme mora biti ceo broj.");
+      if (typeof data.transitDays === "number" && data.transitDays < 0) {
+        throw new Error("Tranzitno vreme ne može biti negativno.");
+      }
       break;
     case "bank":
       data.bank = optionalString(value);

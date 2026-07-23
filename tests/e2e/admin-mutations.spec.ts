@@ -203,7 +203,7 @@ test.describe("isolated admin mutation acceptance", () => {
         waitUntil: "domcontentloaded",
       });
       await page
-        .getByRole("textbox", { name: "Naziv" })
+        .getByRole("textbox", { name: "Kratki naziv", exact: true })
         .fill(fixture.productUpdatedName);
       await page.getByLabel("Puna cena (RSD)").fill("1299");
       await page.getByLabel("Stanje").fill("7");
@@ -215,16 +215,23 @@ test.describe("isolated admin mutation acceptance", () => {
         .poll(async () => {
           const product = await db.product.findUniqueOrThrow({
             where: { id: productId! },
-            select: { name: true, fullPrice: true, stock: true },
+            select: {
+              name: true,
+              shortName: true,
+              fullPrice: true,
+              stock: true,
+            },
           });
           return {
             name: product.name,
+            shortName: product.shortName,
             fullPrice: Number(product.fullPrice),
             stock: product.stock,
           };
         })
         .toEqual({
-          name: fixture.productUpdatedName,
+          name: `QA fixture ${fixture.productUpdatedName}`,
+          shortName: fixture.productUpdatedName,
           fullPrice: 1299,
           stock: 7,
         });
