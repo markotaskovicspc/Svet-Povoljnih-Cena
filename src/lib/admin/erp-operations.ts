@@ -73,7 +73,7 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "cenovnici",
-    number: "7",
+    number: "7a",
     title: "Cenovnici",
     description: "Datirani MP, nabavni, veleprodajni i izvozni cenovnici sa istorijom stavki.",
     status: "ready",
@@ -93,7 +93,7 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "akcijske-cene",
-    number: "8",
+    number: "7b",
     title: "Akcijske cene proizvoda",
     description: "Cena po proizvodu i akciji sa numeričkim prioritetom i periodom važenja.",
     status: "ready",
@@ -114,7 +114,7 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "loyalty",
-    number: "9",
+    number: "7c",
     title: "Loyalty pravila i istorija",
     description: "Vremenski ograničena loyalty pravila i trag promena loyalty cena po artiklu.",
     status: "ready",
@@ -132,7 +132,7 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "linearne-promocije",
-    number: "10",
+    number: "7d",
     title: "Linearne promocije",
     description: "Globalne, kategorijske i grupne promocije sa prioritetom i kontrolom maksimalnog popusta.",
     status: "ready",
@@ -154,22 +154,34 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "magacini",
-    number: "11",
+    number: "8",
     title: "Magacini",
-    description: "Više magacina, kontaktni podaci i izbor podrazumevanog distributivnog centra.",
+    description: "Definisanje i održavanje više magacina sa adresnim i kontaktnim podacima.",
     status: "ready",
-    commands: [{ label: "Novi magacin", tone: "primary", action: "warehouse.create" }],
+    commands: [
+      {
+        label: "Novi magacin",
+        description:
+          "Unesite podatke novog magacina. Naziv je obavezan, a interna šifra se dodeljuje automatski.",
+        tone: "primary",
+        action: "warehouse.create",
+        fields: [
+          { key: "name", label: "Naziv", type: "text", required: true },
+          { key: "address", label: "Adresa", type: "text" },
+          { key: "city", label: "Mesto", type: "text" },
+          { key: "email", label: "E-mail", type: "email" },
+          { key: "phone", label: "Telefon", type: "tel" },
+        ],
+      },
+    ],
     columns: [
-      text("code", "Šifra"),
       text("name", "Naziv"),
       text("address", "Adresa"),
-      text("city", "Grad"),
+      text("city", "Mesto"),
       text("email", "E-mail"),
       text("phone", "Telefon"),
-      bool("isDefault", "DC"),
-      bool("active", "Aktivan"),
     ],
-    editableColumns: ["code", "name", "address", "city", "email", "phone", "isDefault", "active"],
+    editableColumns: ["name", "address", "city", "email", "phone"],
     rows: emptyRows,
   },
   {
@@ -881,14 +893,11 @@ async function warehouseRows(take: number): Promise<ErpRow[]> {
   return rows.map((row) => ({
     id: row.id,
     values: {
-      code: row.code,
       name: row.name,
       address: row.address,
       city: row.city,
       email: row.email,
       phone: row.phone,
-      isDefault: row.isDefault,
-      active: row.active,
     },
   }));
 }

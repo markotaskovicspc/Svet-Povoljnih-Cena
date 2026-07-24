@@ -1060,9 +1060,8 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           <DialogHeader>
             <DialogTitle>{activeCommand?.label}</DialogTitle>
             <DialogDescription>
-              Unesite promenljive podatke. Dobavljač, naziv artikla, atributi,
-              dezen, valuta i paritet biće automatski preuzeti iz matičnih
-              podataka.
+              {activeCommand?.description ??
+                "Unesite podatke potrebne za izvršenje komande."}
             </DialogDescription>
           </DialogHeader>
           <form className="grid gap-4" onSubmit={submitCommandForm}>
@@ -1088,7 +1087,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                       }
                       className="h-9 rounded-lg border border-input bg-surface px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
                     >
-                      <option value="">Izaberite artikal</option>
+                      <option value="">Izaberite vrednost</option>
                       {field.options.map((option) => (
                         <option key={option} value={option}>
                           {option}

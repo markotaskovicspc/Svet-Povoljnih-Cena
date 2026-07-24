@@ -32,6 +32,7 @@ import {
   createPurchasePrice,
   type PurchasePriceCommandInput,
 } from "@/lib/admin/purchase-price.server";
+import { createWarehouseWithAutomaticCode } from "@/lib/admin/warehouse-master.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -105,7 +106,10 @@ async function runCommand(
     case "linear-promotion.create":
       return createLinearPromotion();
     case "warehouse.create":
-      return createWarehouse();
+      if (module !== "magacini") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createWarehouse(input);
     case "stock-count.create":
       return createStockCount();
     case "stock-count.post":
@@ -356,19 +360,14 @@ async function createLinearPromotion(): Promise<CommandResult> {
   };
 }
 
-async function createWarehouse(): Promise<CommandResult> {
-  const warehouse = await withUniqueRetry(async () => {
-    const count = await db.warehouse.count();
-    const serial = String(count + 1).padStart(2, "0");
-    return db.warehouse.create({
-      data: {
-        code: `MAG-${serial}`,
-        name: `Novi magacin ${serial}`,
-        active: false,
-      },
-    });
-  });
-  return { message: `Magacin ${warehouse.code} je kreiran isključen.`, createdId: warehouse.id };
+async function createWarehouse(
+  input: Record<string, unknown>,
+): Promise<CommandResult> {
+  const warehouse = await createWarehouseWithAutomaticCode(input);
+  return {
+    message: `Magacin „${warehouse.name}” je kreiran.`,
+    createdId: warehouse.id,
+  };
 }
 
 async function defaultWarehouse() {

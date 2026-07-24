@@ -27,12 +27,16 @@ import {
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
 import { sanitizeRichText } from "@/lib/rich-text";
-import {
-  syncAllProductChannelAvailability,
-  syncProductChannelAvailability,
-} from "@/lib/channel-availability.server";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
 import { updatePurchasePriceCell } from "@/lib/admin/purchase-price.server";
+import {
+  normalizeWarehouseAddress,
+  normalizeWarehouseCity,
+  normalizeWarehouseEmail,
+  normalizeWarehouseName,
+  normalizeWarehousePhone,
+} from "@/lib/admin/warehouse-master";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -712,47 +716,43 @@ async function persistLinearPromotionCell(
 
 async function persistWarehouseCell(rowId: string, columnKey: string, value: CellValue) {
   const data: Prisma.WarehouseUncheckedUpdateInput = {};
+  let persistedValue: CellValue = value;
   switch (columnKey) {
-    case "code":
-      data.code = requiredString(value, "Šifra magacina je obavezna.");
-      break;
-    case "name":
-      data.name = requiredString(value, "Naziv magacina je obavezan.");
-      break;
-    case "address":
-      data.address = optionalString(value);
-      break;
-    case "city":
-      data.city = optionalString(value);
-      break;
-    case "email": {
-      const email = optionalString(value);
-      if (email && !email.includes("@")) throw new Error("E-mail mora da sadrži @.");
-      data.email = email;
+    case "name": {
+      const name = normalizeWarehouseName(value);
+      data.name = name;
+      persistedValue = name;
       break;
     }
-    case "phone":
-      data.phone = optionalString(value);
+    case "address": {
+      const address = normalizeWarehouseAddress(value);
+      data.address = address;
+      persistedValue = address;
       break;
-    case "active":
-      data.active = Boolean(value);
+    }
+    case "city": {
+      const city = normalizeWarehouseCity(value);
+      data.city = city;
+      persistedValue = city;
       break;
-    case "isDefault": {
-      const isDefault = Boolean(value);
-      await db.$transaction(async (tx) => {
-        if (isDefault) {
-          await tx.warehouse.updateMany({ where: { id: { not: rowId } }, data: { isDefault: false } });
-        }
-        await tx.warehouse.update({ where: { id: rowId }, data: { isDefault } });
-        await syncAllProductChannelAvailability(tx);
-      });
-      return { value: isDefault };
+    }
+    case "email": {
+      const email = normalizeWarehouseEmail(value);
+      data.email = email;
+      persistedValue = email;
+      break;
+    }
+    case "phone": {
+      const phone = normalizeWarehousePhone(value);
+      data.phone = phone;
+      persistedValue = phone;
+      break;
     }
     default:
       return null;
   }
   await db.warehouse.update({ where: { id: rowId }, data });
-  return { value };
+  return { value: persistedValue };
 }
 
 async function persistCustomerCell(rowId: string, columnKey: string, value: CellValue) {

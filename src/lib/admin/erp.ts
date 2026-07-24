@@ -67,6 +67,8 @@ export type ErpRow = {
 
 export type ErpCommand = {
   label: string;
+  /** Short, command-specific guidance shown in the input dialog. */
+  description?: string;
   tone?: "primary" | "danger" | "neutral";
   /** Client-only command handled by the grid without an API mutation. */
   clientAction?: "edit" | "open";
@@ -84,7 +86,7 @@ export type ErpCommand = {
   fields?: Array<{
     key: string;
     label: string;
-    type: "text" | "number" | "date";
+    type: "text" | "number" | "date" | "email" | "tel";
     required?: boolean;
     options?: string[];
     min?: number;
