@@ -1184,6 +1184,8 @@ model Order {
   customerId                 String?
   priceListId                String?
   externalOrderNo            String?
+  /// Manual or synchronized confirmation that the issued invoice was accepted by SEF.
+  sefAcceptedAt              DateTime?
 
   subtotal              Decimal  @db.Decimal(12, 2)
   savings               Decimal  @default(0) @db.Decimal(12, 2)
@@ -1268,6 +1270,15 @@ model OrderSequence {
   year      Int      @id
   lastValue Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+model SalesOrderSequence {
+  channel   SalesChannel
+  year      Int
+  lastValue Int          @default(0)
+  updatedAt DateTime     @updatedAt
+
+  @@id([channel, year])
 }
 
 model CheckoutSession {

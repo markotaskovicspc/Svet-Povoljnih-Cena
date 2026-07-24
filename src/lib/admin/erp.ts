@@ -60,6 +60,8 @@ export type AdminGridQuery = {
 
 export type ErpRow = {
   id: string;
+  /** Optional entity id used by row/detail navigation when the grid row is a child record. */
+  detailId?: string;
   values: Record<string, ErpValue>;
   /** Optional per-cell links for values such as item photos. */
   cellHrefs?: Record<string, string>;
@@ -107,7 +109,7 @@ export type ErpModule = {
   blockedReason?: string;
   /** Only columns with a complete server-side write mapping may enter edit mode. */
   editableColumns?: string[];
-  /** When set, each row gets an "Otvori" link to `${detailHrefBase}/${row.id}`. */
+  /** When set, each row gets an "Otvori" link to its detailId (or row id). */
   detailHrefBase?: string;
   /** Module-level selectors that change the server-side row context. */
   contextFilters?: Array<{

@@ -505,15 +505,24 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       return;
     }
     if (command.clientAction === "open") {
-      const ids = Array.from(selectedIds);
-      if (ids.length !== 1 || !module.detailHrefBase) {
+      const detailIds = new Set(
+        serverRows
+          .filter((row) => selectedIds.has(row.id))
+          .map((row) => row.detailId ?? row.id),
+      );
+      if (detailIds.size !== 1 || !module.detailHrefBase) {
         setCommandMessage({
           ok: false,
-          text: "Izaberite tačno jedan red za uređivanje.",
+          text: "Izaberite redove tačno jedne porudžbine za uređivanje.",
         });
         return;
       }
-      router.push(`${module.detailHrefBase}/${ids[0]}?mode=edit`);
+      const href = `${module.detailHrefBase}/${Array.from(detailIds)[0]}?mode=edit`;
+      if (module.slug === "prodajni-nalozi") {
+        window.location.assign(href);
+      } else {
+        router.push(href);
+      }
       return;
     }
     if (command.fields?.length && !input) {
@@ -1276,7 +1285,12 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                     onDoubleClickCapture={(event) => {
                       if (!module.detailHrefBase) return;
                       if (isActionableGridControl(event.target)) return;
-                      router.push(`${module.detailHrefBase}/${row.id}`);
+                      const href = `${module.detailHrefBase}/${row.detailId ?? row.id}`;
+                      if (module.slug === "prodajni-nalozi") {
+                        window.location.assign(href);
+                      } else {
+                        router.push(href);
+                      }
                     }}
                     className={cn(
                       "hover:bg-muted-bg/30",
@@ -1294,7 +1308,15 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                     {module.detailHrefBase ? (
                       <td className="px-3 py-2">
                         <Link
-                          href={`${module.detailHrefBase}/${row.id}`}
+                          href={`${module.detailHrefBase}/${row.detailId ?? row.id}`}
+                          onClick={
+                            module.slug === "prodajni-nalozi"
+                              ? (event) => {
+                                  event.preventDefault();
+                                  window.location.assign(event.currentTarget.href);
+                                }
+                              : undefined
+                          }
                           className="text-xs text-walnut hover:underline"
                         >
                           Otvori
@@ -1476,6 +1498,16 @@ export function ErpGrid({ module }: { module: ErpModule }) {
                           ) : row.cellHrefs?.[column.key] ? (
                             <Link
                               href={row.cellHrefs[column.key]}
+                              onClick={
+                                module.slug === "prodajni-nalozi"
+                                  ? (event) => {
+                                      event.preventDefault();
+                                      window.location.assign(
+                                        event.currentTarget.href,
+                                      );
+                                    }
+                                  : undefined
+                              }
                               className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                             >
                               <span className="truncate">

@@ -4,11 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   DispatchNoteType,
   DocumentPostingStatus,
-  PaymentMethod,
   Prisma,
   RetailPriceProposalStatus,
-  SalesChannel,
-  ShippingMethod,
   StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -32,6 +29,7 @@ import {
   createPurchasePrice,
   type PurchasePriceCommandInput,
 } from "@/lib/admin/purchase-price.server";
+import { deleteManualSalesOrders } from "@/lib/admin/sales-order.server";
 import { createWarehouseWithAutomaticCode } from "@/lib/admin/warehouse-master.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
@@ -114,10 +112,15 @@ async function runCommand(
       return createStockCount();
     case "stock-count.post":
       return postStockCounts(ids, actorId);
-    case "sales-order.create-vp":
-      return createManualSalesOrder(SalesChannel.VP);
-    case "sales-order.create-ino":
-      return createManualSalesOrder(SalesChannel.INO);
+    case "sales-order.delete": {
+      if (module !== "prodajni-nalozi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const deleted = await deleteManualSalesOrders(ids, actorId);
+      return {
+        message: `Obrisano porudžbina: ${deleted.length}.`,
+      };
+    }
     case "dispatch.create":
       return createDispatchNote();
     case "dispatch.post":
@@ -393,41 +396,6 @@ async function createStockCount(): Promise<CommandResult> {
     });
   });
   return { message: `Popis ${stockCount.number} je kreiran.`, createdId: stockCount.id };
-}
-
-async function createManualSalesOrder(
-  channel: typeof SalesChannel.VP | typeof SalesChannel.INO,
-): Promise<CommandResult> {
-  const year = new Date().getFullYear();
-  const prefix = channel === SalesChannel.VP ? "VP" : "INO";
-  const order = await withUniqueRetry(async () => {
-    const count = await db.order.count({
-      where: { number: { startsWith: `${prefix}-${year}-` } },
-    });
-    return db.order.create({
-      data: {
-        number: `${prefix}-${year}-${String(count + 1).padStart(5, "0")}`,
-        channel,
-        subtotal: 0,
-        total: 0,
-        shippingMethod: ShippingMethod.KURIR,
-        paymentMethod: PaymentMethod.UPLATA_NA_RACUN,
-        shipFirstName: "Dopuniti",
-        shipLastName: "kupca",
-        shipPhone: "Dopuniti",
-        shipStreet: "Dopuniti",
-        shipCity: "Dopuniti",
-        shipPostalCode: "00000",
-        notes: `Ručna ${prefix} porudžbina — dopuniti kupca, magacine i stavke pre potvrde.`,
-        termsAcceptedAt: new Date(),
-      },
-    });
-  });
-  return {
-    message: `${prefix} porudžbina ${order.number} je kreirana.`,
-    createdId: order.id,
-    redirect: `/admin/narudzbine/${order.id}`,
-  };
 }
 
 async function postStockCounts(ids: string[], actorId: string): Promise<CommandResult> {

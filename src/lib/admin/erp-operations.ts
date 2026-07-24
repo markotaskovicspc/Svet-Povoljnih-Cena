@@ -6,6 +6,7 @@ import {
   STOCK_MOVEMENT_KIND_LABELS,
   stockMovementKindLabel,
 } from "@/lib/inventory-movement";
+import { calculateSalesLineTotals } from "@/lib/admin/sales-order";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -276,29 +277,73 @@ export const operationalErpModules: ErpModule[] = [
   {
     slug: "prodajni-nalozi",
     number: "15",
-    title: "Prodajni nalozi",
-    description: "Jedinstven ERP pregled web, Ananas, veleprodajnih i izvoznih naloga.",
+    title: "Pregled porudžbina",
+    description:
+      "Jedinstven pregled WEB, Ananas, VP i INO porudžbina — jedan red za svaku šifru artikla.",
     status: "ready",
     commands: [
-      { label: "Nova VP porudžbina", tone: "primary", action: "sales-order.create-vp" },
-      { label: "Nova INO porudžbina", tone: "neutral", action: "sales-order.create-ino" },
+      {
+        label: "Nova",
+        tone: "primary",
+        href: "/admin/erp/prodajni-nalozi/nova",
+      },
+      {
+        label: "Uredi",
+        tone: "neutral",
+        clientAction: "open",
+        needsSelection: true,
+      },
+      {
+        label: "Obriši",
+        tone: "danger",
+        action: "sales-order.delete",
+        needsSelection: true,
+        confirm:
+          "Obrisati izabrane neobrađene VP/INO porudžbine? WEB, Ananas, plaćene i dokumentovane porudžbine ne mogu da se obrišu.",
+      },
     ],
-    detailHrefBase: "/admin/narudzbine",
+    detailHrefBase: "/admin/erp/prodajni-nalozi",
     columns: [
-      text("number", "Broj"),
+      text("number", "Broj porudžbine"),
       status("channel", "Kanal", ["WEB", "ANANAS", "VP", "INO"]),
-      status("status", "Status"),
-      text("customer", "Kupac"),
+      text("customer", "Ime i prezime kupca / firma"),
+      text("pib", "PIB"),
+      text("priceList", "Cenovnik"),
+      text("address", "Adresa"),
+      text("city", "Mesto"),
+      text("postalCode", "Poštanski broj"),
+      text("phone", "Telefon"),
       text("email", "E-mail"),
-      text("city", "Grad"),
-      number("items", "Stavke"),
-      money("total", "Ukupno"),
-      text("payment", "Plaćanje"),
-      text("fiscal", "Fiskalizacija"),
-      text("invoice", "Faktura / SEF"),
-      date("createdAt", "Kreirano"),
+      text("sku", "Šifra artikla"),
+      text("supplier", "Dobavljač"),
+      text("category", "Kategorija artikala"),
+      text("group", "Grupa artikla"),
+      text("subgroup", "Podgrupa artikla"),
+      text("collection", "Kolekcija"),
+      text("shortDescription", "Kratki opis artikla"),
+      text("shortName", "Kratki naziv artikla"),
+      text("attribute1", "Atribut 1"),
+      text("attribute2", "Atribut 2"),
+      text("attribute3", "Atribut 3"),
+      text("attribute4", "Atribut 4"),
+      text("color1", "Boja 1"),
+      text("color2", "Boja 2"),
+      number("qty", "Količina"),
+      money("unitPrice", "MP cena"),
+      money("totalNet", "Ukupno bez PDV-a po šifri"),
+      money("totalGross", "Ukupno sa PDV-om po šifri"),
+      text("warehouse", "Magacin"),
+      status("status", "Status porudžbine"),
+      bool("fiscalized", "Fiskalizovano"),
+      bool("invoiced", "Fakturisano"),
+      bool("sefAccepted", "Prihvaćeno na SEF-u"),
+      bool("paid", "Plaćeno"),
     ],
     rows: emptyRows,
+    notes: [
+      "Klik na broj otvara celu porudžbinu. Nova, Uredi i Obriši rade nad celom porudžbinom i kada je izabran samo jedan red artikla.",
+      "DOB artikal se podrazumevano vodi u DC-u kada tamo postoji raspoloživo stanje; bez DC stanja vodi se kod dobavljača. Ostali statusi podrazumevano koriste DC.",
+    ],
   },
   {
     slug: "otpremnice",
@@ -1082,36 +1127,154 @@ async function stockCountRows(take: number): Promise<ErpRow[]> {
 }
 
 async function salesOrderRows(take: number): Promise<ErpRow[]> {
-  const rows = await db.order.findMany({
+  const orders = await db.order.findMany({
     take,
     orderBy: { createdAt: "desc" },
     include: {
       customer: true,
-      _count: { select: { items: true } },
-      fiscalDocuments: { take: 1, orderBy: { createdAt: "desc" }, select: { status: true } },
-      invoices: { take: 1, orderBy: { issuedAt: "desc" }, select: { status: true } },
+      priceList: { select: { code: true, name: true, currency: true } },
+      items: {
+        orderBy: { id: "asc" },
+        include: {
+          warehouse: { select: { name: true } },
+          product: {
+            include: {
+              supplier: { select: { name: true } },
+              group: { select: { name: true } },
+              collection: { select: { name: true } },
+              categories: {
+                orderBy: { category: { level: "desc" } },
+                include: {
+                  category: {
+                    select: {
+                      name: true,
+                      parent: { select: { name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      fiscal: { select: { id: true } },
+      fiscalDocuments: {
+        where: { kind: "SALE", status: "ISSUED" },
+        select: { id: true },
+      },
+      invoices: {
+        where: { status: { not: "CANCELLED" } },
+        select: { id: true },
+      },
+      payments: {
+        where: { status: "PAID" },
+        select: { id: true },
+      },
     },
   });
-  return rows.map((row) => ({
-    id: row.id,
-    values: {
-      number: row.number,
-      channel: row.channel,
-      status: row.status,
-      customer:
-        [row.customer?.firstName ?? row.shipFirstName, row.customer?.lastName ?? row.shipLastName]
-          .filter(Boolean)
-          .join(" ") || row.customer?.companyName || row.shipCompanyName,
-      email: row.customer?.email ?? row.guestEmail,
-      city: row.shipCity,
-      items: row._count.items,
-      total: decimal(row.total),
-      payment: row.paymentMethod,
-      fiscal: row.fiscalDocuments[0]?.status ?? "NIJE_KREIRAN",
-      invoice: row.invoices[0]?.status ?? "NIJE_KREIRANA",
-      createdAt: dateTime(row.createdAt),
-    },
-  }));
+  return orders.flatMap((order): ErpRow[] => {
+    const customer =
+      order.shipCompanyName ||
+      [order.shipFirstName, order.shipLastName].filter(Boolean).join(" ");
+    const common = {
+      number: order.number,
+      channel: order.channel,
+      customer,
+      pib: order.shipPib,
+      priceList: order.priceList
+        ? `${order.priceList.code} · ${order.priceList.name} (${order.priceList.currency})`
+        : null,
+      address: order.shipStreet,
+      city: order.shipCity,
+      postalCode: order.shipPostalCode,
+      phone: order.shipPhone,
+      email: order.guestEmail ?? order.customer?.email ?? null,
+      status: order.status,
+      fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
+      invoiced: order.invoices.length > 0,
+      sefAccepted: Boolean(order.sefAcceptedAt),
+      paid: order.payments.length > 0,
+    };
+    if (!order.items.length) {
+      return [
+        {
+          id: order.id,
+          detailId: order.id,
+          cellHrefs: {
+            number: `/admin/erp/prodajni-nalozi/${order.id}`,
+          },
+          values: {
+            ...common,
+            sku: null,
+            supplier: null,
+            category: null,
+            group: null,
+            subgroup: null,
+            collection: null,
+            shortDescription: null,
+            shortName: null,
+            attribute1: null,
+            attribute2: null,
+            attribute3: null,
+            attribute4: null,
+            color1: null,
+            color2: null,
+            qty: 0,
+            unitPrice: 0,
+            totalNet: 0,
+            totalGross: 0,
+            warehouse: null,
+          },
+        },
+      ];
+    }
+    return order.items.map((item) => {
+      const product = item.product;
+      const leaf = product?.categories[0]?.category ?? null;
+      const unitPrice = decimal(item.unitPriceSale) ?? 0;
+      const totals = calculateSalesLineTotals(item.qty, unitPrice);
+      return {
+        id: item.id,
+        detailId: order.id,
+        cellHrefs: {
+          number: `/admin/erp/prodajni-nalozi/${order.id}`,
+        },
+        values: {
+          ...common,
+          sku: item.sku,
+          supplier: product?.supplier?.name ?? item.supplierName,
+          category:
+            leaf?.parent?.name ?? leaf?.name ?? item.categoryName,
+          group: product?.group?.name ?? item.groupName,
+          subgroup:
+            (leaf?.parent ? leaf.name : null) ?? item.subgroupName,
+          collection: product?.collection?.name ?? item.collectionName,
+          shortDescription:
+            product?.shortDescription ?? item.shortDescriptionSnapshot,
+          shortName:
+            product?.shortName ??
+            item.shortNameSnapshot ??
+            product?.name ??
+            item.name,
+          attribute1: product?.attribute1 ?? item.attribute1,
+          attribute2: product?.attribute2 ?? item.attribute2,
+          attribute3: product?.attribute3 ?? item.attribute3,
+          attribute4: product?.attribute4 ?? item.attribute4,
+          color1: product?.colorPrimary ?? item.color1,
+          color2: product?.colorSecondary ?? item.color2,
+          qty: item.qty,
+          unitPrice,
+          totalNet: totals.totalNet,
+          totalGross: totals.totalGross,
+          warehouse:
+            item.warehouse?.name ??
+            (item.supplierReservedQty > 0
+              ? `Kod dobavljača${product?.supplier?.name ? ` · ${product.supplier.name}` : ""}`
+              : null),
+        },
+      };
+    });
+  });
 }
 
 async function dispatchRows(take: number): Promise<ErpRow[]> {
