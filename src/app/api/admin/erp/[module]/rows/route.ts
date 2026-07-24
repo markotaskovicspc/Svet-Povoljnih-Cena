@@ -27,6 +27,7 @@ export async function GET(
     take: 10_000,
     warehouseId: search.get("warehouseId"),
     includeLookupOptions: false,
+    query: search.get("q") ?? undefined,
   });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });

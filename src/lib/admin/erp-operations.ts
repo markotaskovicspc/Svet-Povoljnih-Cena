@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ErpColumn, ErpModule, ErpRow } from "@/lib/admin/erp";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
+import {
+  STOCK_MOVEMENT_KIND_LABELS,
+  stockMovementKindLabel,
+} from "@/lib/inventory-movement";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -193,21 +197,42 @@ export const operationalErpModules: ErpModule[] = [
     slug: "kretanja-zaliha",
     number: "13",
     title: "Kretanja zaliha",
-    description: "Neizmenjiv trag svih prijema, prodaja, povrata, otpremnica, prenosa i popisa.",
+    description:
+      "Neizmenjiva istorija promena zaliha po artiklu i magacinu, sa automatski popunjenim matičnim podacima i stanjem nakon svake promene.",
     status: "ready",
     commands: [],
     columns: [
-      date("createdAt", "Datum"),
+      text("sku", "Šifra artikla"),
+      text("supplier", "Dobavljač"),
+      text("category", "Kategorija artikala"),
+      text("group", "Grupa artikla"),
+      text("subgroup", "Podgrupa artikla"),
+      text("collection", "Kolekcija"),
+      text("shortDescription", "Kratki opis artikla"),
+      text("shortName", "Kratki naziv artikla"),
+      text("attribute1", "Atribut 1"),
+      text("attribute2", "Atribut 2"),
+      text("attribute3", "Atribut 3"),
+      text("attribute4", "Atribut 4"),
+      text("color1", "Boja 1"),
+      text("color2", "Boja 2"),
+      date("createdAt", "Datum promene"),
+      status("kind", "Tip promene", Object.values(STOCK_MOVEMENT_KIND_LABELS)),
+      number("qty", "Promena količine"),
       text("warehouse", "Magacin"),
-      status("kind", "Vrsta"),
-      text("sku", "SKU"),
-      number("qty", "Promena"),
-      number("balanceAfterWarehouse", "Stanje magacina"),
-      number("balanceAfterTotal", "Ukupno stanje"),
+      number(
+        "balanceAfterWarehouse",
+        "Ukupna količina na magacinu nakon promene",
+      ),
+      number("balanceAfterTotal", "Ukupna količina nakon promene"),
       text("note", "Napomena"),
       text("idempotencyKey", "Idempotency key", false),
     ],
     rows: emptyRows,
+    notes: [
+      "Šifra i matični podaci artikla popunjavaju se automatski iz baze artikala.",
+      "Datum, tip, magacin, promena i oba stanja nastaju automatski prilikom knjiženja; istorija nema ručnu izmenu ni brisanje.",
+    ],
   },
   {
     slug: "popisi",
@@ -924,22 +949,104 @@ async function stockMovementRows(take: number): Promise<ErpRow[]> {
   const rows = await db.stockMovement.findMany({
     take,
     orderBy: { createdAt: "desc" },
-    include: { warehouse: { select: { name: true } } },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    values: {
-      createdAt: dateTime(row.createdAt),
-      warehouse: row.warehouse.name,
-      kind: row.kind,
-      sku: row.sku,
-      qty: row.qty,
-      balanceAfterWarehouse: row.balanceAfterWarehouse,
-      balanceAfterTotal: row.balanceAfterTotal,
-      note: row.note,
-      idempotencyKey: row.idempotencyKey,
+    include: {
+      warehouse: { select: { name: true } },
+      product: {
+        select: {
+          name: true,
+          shortName: true,
+          shortDescription: true,
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          colorPrimary: true,
+          colorSecondary: true,
+          supplier: { select: { name: true } },
+          group: { select: { name: true } },
+          collection: { select: { name: true } },
+          categories: {
+            take: 1,
+            orderBy: { category: { level: "desc" } },
+            select: {
+              category: {
+                select: {
+                  name: true,
+                  parent: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderItem: {
+        select: {
+          name: true,
+          supplierName: true,
+          categoryName: true,
+          groupName: true,
+          subgroupName: true,
+          collectionName: true,
+          shortDescriptionSnapshot: true,
+          shortNameSnapshot: true,
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          color1: true,
+          color2: true,
+        },
+      },
     },
-  }));
+  });
+  return rows.map((row) => {
+    const category = row.product?.categories[0]?.category;
+    return {
+      id: row.id,
+      values: {
+        sku: row.sku,
+        supplier: row.product?.supplier?.name ?? row.orderItem?.supplierName ?? null,
+        category:
+          category?.parent?.name ??
+          category?.name ??
+          row.orderItem?.categoryName ??
+          null,
+        group: row.product?.group?.name ?? row.orderItem?.groupName ?? null,
+        subgroup:
+          (category?.parent ? category.name : null) ??
+          row.orderItem?.subgroupName ??
+          null,
+        collection:
+          row.product?.collection?.name ??
+          row.orderItem?.collectionName ??
+          null,
+        shortDescription:
+          row.product?.shortDescription ??
+          row.orderItem?.shortDescriptionSnapshot ??
+          null,
+        shortName:
+          row.product?.shortName ??
+          row.orderItem?.shortNameSnapshot ??
+          row.product?.name ??
+          row.orderItem?.name ??
+          null,
+        attribute1: row.product?.attribute1 ?? row.orderItem?.attribute1 ?? null,
+        attribute2: row.product?.attribute2 ?? row.orderItem?.attribute2 ?? null,
+        attribute3: row.product?.attribute3 ?? row.orderItem?.attribute3 ?? null,
+        attribute4: row.product?.attribute4 ?? row.orderItem?.attribute4 ?? null,
+        color1: row.product?.colorPrimary ?? row.orderItem?.color1 ?? null,
+        color2: row.product?.colorSecondary ?? row.orderItem?.color2 ?? null,
+        createdAt: dateTime(row.createdAt),
+        kind: stockMovementKindLabel(row.kind),
+        qty: row.qty,
+        warehouse: row.warehouse.name,
+        balanceAfterWarehouse: row.balanceAfterWarehouse,
+        balanceAfterTotal: row.balanceAfterTotal,
+        note: row.note,
+        idempotencyKey: row.idempotencyKey,
+      },
+    };
+  });
 }
 
 async function stockCountRows(take: number): Promise<ErpRow[]> {

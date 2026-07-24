@@ -1059,6 +1059,7 @@ export async function getErpModule(
     take?: number;
     warehouseId?: string | null;
     includeLookupOptions?: boolean;
+    query?: string;
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
@@ -1066,7 +1067,7 @@ export async function getErpModule(
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
   const includeLookupOptions = options.includeLookupOptions !== false;
   const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
-    getPersistedErpRows(slug, take, options.warehouseId),
+    getPersistedErpRows(slug, take, options.warehouseId, options.query),
     includeLookupOptions && slug === "artikli"
       ? getArticleModuleContext()
       : Promise.resolve(null),
@@ -1139,10 +1140,11 @@ async function getPersistedErpRows(
   slug: string,
   take: number,
   warehouseId?: string | null,
+  query?: string,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows(take, warehouseId);
+      return getArticleRows(take, warehouseId, query);
     case "dobavljaci":
       return getSupplierRows(take);
     case "nabavne-cene":
@@ -1216,8 +1218,41 @@ async function getPurchasePriceModuleContext() {
 async function getArticleRows(
   take: number,
   selectedWarehouseId?: string | null,
+  query?: string,
 ): Promise<ErpRow[]> {
+  const search = query?.trim();
+  const numericSearch = search ? Number(search.replace(",", ".")) : Number.NaN;
+  const where: Prisma.ProductWhereInput | undefined = search
+    ? {
+        OR: [
+          { sku: { contains: search, mode: "insensitive" } },
+          { barcode: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" } },
+          { shortName: { contains: search, mode: "insensitive" } },
+          { shortDescription: { contains: search, mode: "insensitive" } },
+          { supplier: { name: { contains: search, mode: "insensitive" } } },
+          { group: { name: { contains: search, mode: "insensitive" } } },
+          { collection: { name: { contains: search, mode: "insensitive" } } },
+          {
+            categories: {
+              some: {
+                category: {
+                  name: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+          },
+          ...(Number.isFinite(numericSearch) && Number.isInteger(numericSearch)
+            ? [
+                { stock: numericSearch },
+                { incomingStock: numericSearch },
+              ]
+            : []),
+        ],
+      }
+    : undefined;
   const [products, activeWarehouses] = await Promise.all([db.product.findMany({
+    where,
     orderBy: { updatedAt: "desc" },
     take,
     select: {

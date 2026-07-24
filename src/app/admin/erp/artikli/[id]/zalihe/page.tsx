@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
 import { computeArticleStock } from "@/lib/article-stock";
+import { stockMovementKindLabel } from "@/lib/inventory-movement";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { Input } from "@/components/ui/input";
@@ -392,7 +393,9 @@ export default async function ArticleStockPage({
                   <tr key={movement.id}>
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(movement.createdAt)}</td>
                     <td className="px-3 py-2">{movement.warehouse.name}</td>
-                    <td className="px-3 py-2">{movement.kind.replaceAll("_", " ")}</td>
+                    <td className="px-3 py-2">
+                      {stockMovementKindLabel(movement.kind)}
+                    </td>
                     <td className="px-3 py-2">
                       {movement.order ? (
                         <Link
