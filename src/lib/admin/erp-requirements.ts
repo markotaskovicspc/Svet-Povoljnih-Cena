@@ -58,7 +58,7 @@ export const ERP_REQUIREMENTS: readonly ErpRequirement[] = [
   { id: 41, section: "Kategorije", route: "/admin/kategorije", status: "implemented", acceptance: "CONTENT-04", note: "Stablo sa fiksnim editorom i naglašenim vršnim nivoima." },
   { id: 42, section: "Piktogrami", route: "/admin/erp/pozicije-piktograma", status: "implemented", acceptance: "CONTENT-05", note: "Četiri pozicije po akciji ili landing strani." },
   { id: 43, section: "Proizvodi", route: "/admin/erp/artikli", status: "implemented", acceptance: "REDIRECT-01", note: "Legacy lista preusmerena; duboki linkovi ostaju očuvani." },
-  { id: 44, section: "Akcije", route: "/admin/erp/akcijske-cene", status: "implemented", acceptance: "REDIRECT-02", note: "Legacy lista preusmerena na ERP akcijske cene." },
+  { id: 44, section: "Akcije", route: "/admin/akcije", status: "implemented", acceptance: "PRICE-05", note: "Selektovana akcija, modal artikala, MP/akcijska cena, loyalty i linearni popusti." },
   { id: 45, section: "Heroji meseca", route: "/admin/erp/heroji-meseca", status: "implemented", acceptance: "CONTENT-06", note: "Mesečni izbor proizvoda, redosled i veza sa akcijom." },
   { id: 46, section: "Preporuke kupovine", route: "/admin/preporuke", status: "implemented", acceptance: "CONTENT-07", note: "Kategorijska, globalna i rodna strategija bez automatskog zaključivanja pola." },
   { id: 47, section: "Pravila dostave", route: "/admin/dostava", status: "implemented", acceptance: "LOG-03", note: "Rutiranje i numeracija paketa iz stvarnih dimenzija, težine i sastava porudžbine." },

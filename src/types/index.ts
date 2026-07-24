@@ -78,8 +78,14 @@ export interface Product {
   slug: Slug;
   name: string;
   group: string; // for "slični artikli"
+  /** Internal canonical relation id used to resolve scoped promotions. */
+  groupId?: string;
   collection?: string; // for "često kupovano zajedno"
   categoryPath: string[]; // e.g. ["Nameštaj", "Police", "Otvorene police"]
+  /** Internal canonical relation ids used to resolve scoped promotions. */
+  categoryIds?: string[];
+  /** Materialized category paths, including descendants for scoped promotions. */
+  pricingCategoryPaths?: string[];
   description: string; // rich-text HTML or MDX
   shortDescription?: string;
 
@@ -107,12 +113,24 @@ export interface Product {
   discountPct?: number;
   loyaltyPrice?: number;
   loyaltyDiscountPct?: number;
+  /** Set from the authenticated storefront context, never from public catalog cache. */
+  loyaltyEligible?: boolean;
   actionPrices?: Array<{
     price: number;
     priority: number;
     startsAt: ISODate;
     endsAt: ISODate;
     isPermanent?: boolean;
+    actionId?: string;
+    actionName?: string;
+    isHero?: boolean;
+  }>;
+  linearPromotions?: Array<{
+    discountPct: number;
+    priority: number;
+    startsAt: ISODate;
+    endsAt: ISODate;
+    name?: string;
   }>;
   action?: PromoAction;
   pdpInfo?: {

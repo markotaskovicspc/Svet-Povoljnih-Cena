@@ -69,7 +69,12 @@ export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
   if (p.isHero) {
     out.push({ key: "hero", label: "Heroj meseca", tone: "gold" });
   }
-  if (price.discountPct > 0 && (price.kind === "sale" || price.kind === "loyalty")) {
+  if (
+    price.discountPct > 0 &&
+    (price.kind === "sale" ||
+      price.kind === "loyalty" ||
+      price.kind === "linear")
+  ) {
     out.push({ key: "discount", label: `-${price.discountPct}%`, tone: "action" });
   }
   if (price.onSale && p.action?.name) {

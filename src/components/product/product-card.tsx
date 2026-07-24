@@ -31,6 +31,7 @@ import {
   protectedPricesIcon,
   type CampaignStickerKey,
 } from "@/data/campaign-icons";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 interface ProductCardProps {
   product: Product;
@@ -61,6 +62,11 @@ export function ProductCard({
   preload,
 }: ProductCardProps) {
   const reduced = useReducedMotion();
+  const loyaltyEligible = useLoyaltyEligibility();
+  const pricingProduct =
+    product.loyaltyEligible === loyaltyEligible
+      ? product
+      : { ...product, loyaltyEligible };
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
   const cartHydrated = useCart((s) => s.hydrated);
@@ -91,10 +97,10 @@ export function ProductCard({
     didDrag: false,
   });
   const [activeImage, setActiveImage] = useState(0);
-  const imageBadges = deriveImageBadges(product);
+  const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
-  const price = effectiveUnitPrice(product);
+  const price = effectiveUnitPrice(pricingProduct);
   const hasReducedPrice = price.effective < price.full;
   const shortDescription =
     product.shortDescription?.trim() ||
@@ -104,6 +110,8 @@ export function ProductCard({
     ? "Trajno niska cena"
     : price.kind === "sale" && product.action?.endsAt
       ? `Akcija do ${formatDate(product.action.endsAt)}`
+      : price.kind === "linear"
+        ? "Dodatni akcijski popust"
       : "";
   const availability = getProductAvailability(product);
 
@@ -173,7 +181,7 @@ export function ProductCard({
 
   function handleAdd() {
     if (!availability.canAddToCart) return;
-    commitAddToCart(product);
+    commitAddToCart(pricingProduct);
   }
 
   const markImageFailed = useCallback((url: string) => {
@@ -300,7 +308,7 @@ export function ProductCard({
         type="button"
         aria-pressed={wished}
         aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
-        onClick={() => toggleWish(product)}
+        onClick={() => toggleWish(pricingProduct)}
         className="bg-surface/85 ring-border/60 hover:text-action focus-visible:ring-walnut/40 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full text-ink-700 ring-1 backdrop-blur transition focus-visible:ring-2 focus-visible:outline-none"
       >
         <Heart

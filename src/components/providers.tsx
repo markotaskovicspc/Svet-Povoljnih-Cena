@@ -8,24 +8,33 @@ import { CartDrawer } from "@/components/cart/cart-drawer";
 import { CrossSellModal } from "@/components/cart/cross-sell-modal";
 import { WishlistDrawer } from "@/components/cart/wishlist-drawer";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
+import { PricingEligibilityProvider } from "@/components/pricing/pricing-eligibility";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  isCustomerLoggedIn = false,
+}: {
+  children: React.ReactNode;
+  isCustomerLoggedIn?: boolean;
+}) {
   return (
-    <MotionConfig reducedMotion="user">
-      <TooltipProvider delay={150}>
-        {children}
-        <CartDrawer />
-        <WishlistDrawer />
-        <CrossSellModal />
-        <CartOverlayHistoryBridge />
-        <Toaster
-          position="bottom-right"
-          richColors
-          closeButton
-          toastOptions={{ duration: 4000 }}
-        />
-      </TooltipProvider>
-    </MotionConfig>
+    <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider delay={150}>
+          {children}
+          <CartDrawer />
+          <WishlistDrawer />
+          <CrossSellModal />
+          <CartOverlayHistoryBridge />
+          <Toaster
+            position="bottom-right"
+            richColors
+            closeButton
+            toastOptions={{ duration: 4000 }}
+          />
+        </TooltipProvider>
+      </MotionConfig>
+    </PricingEligibilityProvider>
   );
 }
 

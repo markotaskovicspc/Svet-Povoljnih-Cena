@@ -835,11 +835,10 @@ async function linearPromotionRows(take: number): Promise<ErpRow[]> {
       name: row.name,
       target: row.target,
       scope:
-        row.target === "CATEGORY"
-          ? row.categories.map((item) => item.category.name).join(", ")
-          : row.target === "GROUP"
-            ? row.groups.map((item) => item.group.name).join(", ")
-            : "Svi artikli",
+        [
+          ...row.categories.map((item) => item.category.name),
+          ...row.groups.map((item) => item.group.name),
+        ].join(", ") || "Svi artikli",
       discountPct: decimal(row.discountPct),
       priority: row.priority,
       startsAt: dateOnly(row.startsAt),

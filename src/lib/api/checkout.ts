@@ -19,6 +19,7 @@ import { adjustInventory, InsufficientInventoryError } from "@/lib/inventory";
 import { logOperationalError } from "@/lib/monitoring";
 import {
   computeOrderPricing,
+  effectiveUnitPrice,
   type PricingLine,
 } from "@/lib/pricing";
 import { getMediaVariantUrl } from "@/lib/media";
@@ -33,6 +34,10 @@ import {
   effectiveSellableStock,
 } from "@/lib/rabalux/allocation";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import {
+  getActivePricingRules,
+  pricingRuleInputsForProduct,
+} from "@/lib/pricing/rules";
 import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 
 /**
@@ -407,8 +412,24 @@ export async function createOrder(
       fullPrice: true,
       salePrice: true,
       discountPct: true,
+      loyaltyPrice: true,
+      loyaltyDiscountPct: true,
       allowsAssembly: true,
       action: { select: { startsAt: true, endsAt: true, name: true } },
+      actionPrices: {
+        include: {
+          action: {
+            select: {
+              id: true,
+              name: true,
+              priority: true,
+              startsAt: true,
+              endsAt: true,
+              isPermanent: true,
+            },
+          },
+        },
+      },
       supplierId: true,
       supplierExternalId: true,
       supplier: {
@@ -420,11 +441,15 @@ export async function createOrder(
           fulfillmentMode: true,
         },
       },
+      groupId: true,
       group: { select: { name: true } },
       collection: { select: { name: true } },
       categories: {
-        take: 1,
-        select: { category: { select: { name: true, path: true } } },
+        orderBy: { category: { level: "asc" } },
+        select: {
+          categoryId: true,
+          category: { select: { name: true, path: true } },
+        },
       },
       media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" }, take: 1 },
     },
@@ -455,8 +480,17 @@ export async function createOrder(
 
   // Project DB rows into the pricing engine shape (Phase 3D — single source
   // of truth for effective price + action-window validation).
+  const activePricingRules = await getActivePricingRules();
   const pricingLines: PricingLine[] = input.lines.map((line) => {
     const p = bySku.get(line.sku)!;
+    const ruleInputs = pricingRuleInputsForProduct(
+      {
+        categoryIds: p.categories.map((item) => item.categoryId),
+        categoryPaths: p.categories.map((item) => item.category.path),
+        groupId: p.groupId,
+      },
+      activePricingRules,
+    );
     return {
       sku: line.sku,
       qty: line.qty,
@@ -464,7 +498,21 @@ export async function createOrder(
         fullPrice: num(p.fullPrice),
         salePrice: p.salePrice ? num(p.salePrice) : null,
         discountPct: p.discountPct,
+        loyaltyPrice: p.loyaltyPrice ? num(p.loyaltyPrice) : null,
+        loyaltyDiscountPct:
+          ruleInputs.loyaltyDiscountPct ?? p.loyaltyDiscountPct,
+        loyaltyEligible: Boolean(userId),
         action: p.action ?? null,
+        actionPrices: p.actionPrices.map((entry) => ({
+          price: num(entry.salePrice),
+          priority: entry.action.priority,
+          startsAt: entry.action.startsAt,
+          endsAt: entry.action.endsAt,
+          isPermanent: entry.action.isPermanent,
+          actionId: entry.action.id,
+          actionName: entry.action.name,
+        })),
+        linearPromotions: ruleInputs.linearPromotions,
       },
     };
   });
@@ -495,8 +543,7 @@ export async function createOrder(
   let voucherInput: { code: string; discountRsd: number } | null = null;
   // Use the pre-discount subtotal for voucher's min-subtotal check.
   const preDiscountSubtotal = pricingLines.reduce((n, l) => {
-    const sale = l.product.salePrice ?? l.product.fullPrice;
-    return n + sale * l.qty;
+    return n + effectiveUnitPrice(l.product).effective * l.qty;
   }, 0);
   if (input.voucherCode) {
     const v = await validateVoucher(input.voucherCode, preDiscountSubtotal, userId);

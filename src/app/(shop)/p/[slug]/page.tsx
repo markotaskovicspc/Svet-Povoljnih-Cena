@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
+import { getCurrentUser } from "@/lib/auth/session";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -62,8 +63,15 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 
 export default async function ProductPage({ params }: RouteProps) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
-  if (!product) notFound();
+  const [catalogProduct, currentUser] = await Promise.all([
+    getProductBySlug(slug),
+    getCurrentUser(),
+  ]);
+  if (!catalogProduct) notFound();
+  const product: Product = {
+    ...catalogProduct,
+    loyaltyEligible: currentUser?.userType === "customer",
+  };
 
   const price = effectiveUnitPrice(product);
   const hasReducedPrice = price.effective < price.full;
@@ -173,8 +181,8 @@ export default async function ProductPage({ params }: RouteProps) {
             <div>
               <p className="mb-0.5 text-xs font-semibold text-ink-500 md:mb-1">
                 {price.kind === "loyalty"
-                  ? "MP cena"
-                  : price.kind === "sale"
+                  ? "Loyalty cena"
+                  : price.kind === "sale" || price.kind === "linear"
                     ? "Akcijska cena"
                     : "Cena"}
               </p>
@@ -206,6 +214,10 @@ export default async function ProductPage({ params }: RouteProps) {
               ) : price.kind === "loyalty" ? (
                 <p className="mt-1 text-xs text-ink-500">
                   Cena za kupce sa nalogom.
+                </p>
+              ) : price.kind === "linear" ? (
+                <p className="mt-1 text-xs text-ink-500">
+                  Dodatni akcijski popust na izabrani asortiman.
                 </p>
               ) : null}
             </div>

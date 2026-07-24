@@ -90,7 +90,7 @@ export default async function RootLayout({
         suppressHydrationWarning
         className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
-        <Providers>
+        <Providers isCustomerLoggedIn={isCustomerLoggedIn}>
           {isAdmin ? (
             <main className="flex-1">{children}</main>
           ) : (

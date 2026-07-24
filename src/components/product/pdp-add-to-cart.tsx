@@ -16,6 +16,7 @@ import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { getProductAvailability } from "@/lib/product-availability";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -24,6 +25,11 @@ interface PdpAddToCartProps {
 }
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
+  const loyaltyEligible = useLoyaltyEligibility();
+  const pricingProduct =
+    product.loyaltyEligible === loyaltyEligible
+      ? product
+      : { ...product, loyaltyEligible };
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
   const lineQty = useCart(
@@ -33,7 +39,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
 
   function handleAdd() {
     if (!availability.canAddToCart) return;
-    commitAddToCart(product, 1);
+    commitAddToCart(pricingProduct, 1);
   }
 
   const ctas = (
@@ -88,7 +94,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
           type="button"
           aria-pressed={wished}
           aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
-          onClick={() => toggleWish(product)}
+          onClick={() => toggleWish(pricingProduct)}
           className={cn(
             "ring-border/60 focus-visible:ring-walnut/40 inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-ink-700 ring-1 transition hover:text-action focus-visible:ring-2 focus-visible:outline-none",
             wished && "text-action",

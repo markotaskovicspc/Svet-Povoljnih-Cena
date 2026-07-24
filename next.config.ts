@@ -98,7 +98,6 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/admin/proizvodi", destination: "/admin/erp/artikli", permanent: false },
-      { source: "/admin/akcije", destination: "/admin/erp/akcijske-cene", permanent: false },
       { source: "/admin/heroji", destination: "/admin/erp/heroji-meseca", permanent: false },
       { source: "/admin/lager", destination: "/admin/erp/stanje-po-magacinima", permanent: false },
       { source: "/admin/narudzbine", destination: "/admin/erp/prodajni-nalozi", permanent: false },

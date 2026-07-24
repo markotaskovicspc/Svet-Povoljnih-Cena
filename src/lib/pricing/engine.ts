@@ -41,6 +41,8 @@ export interface PricingProduct {
     startsAt: string | Date;
     endsAt: string | Date;
     isPermanent?: boolean | null;
+    actionId?: string;
+    actionName?: string;
   }>;
   /** Eligible global/category/group promotions already resolved by the caller. */
   linearPromotions?: Array<{
@@ -68,6 +70,10 @@ export interface EffectivePrice {
   discountPct: number;
   /** True when product carried a salePrice but the action window expired. */
   actionExpired: boolean;
+  /** Percentage supplied by the selected linear promotion, before the cap. */
+  linearDiscountPct: number;
+  /** Name of the selected product action, when present. */
+  actionName?: string;
 }
 
 function toDate(d: string | Date): Date {
@@ -114,10 +120,10 @@ function isWindowLive(
 
 /**
  * Canonical catalog precedence:
- * 1. highest-priority live product action (exclusive);
- * 2. authenticated loyalty price;
- * 3. highest-priority eligible linear promotion, stacked after loyalty;
- * 4. cap the combined loyalty + linear reduction (30% by default).
+ * 1. highest-priority live product action, otherwise authenticated loyalty;
+ * 2. highest-priority eligible linear promotion stacked on that base price;
+ * 3. cap the combined reduction without ever making the selected base price
+ *    more expensive (an explicit action price always remains authoritative).
  */
 export function resolvePromotionPrice(
   product: PricingProduct,
@@ -138,23 +144,18 @@ export function resolvePromotionPrice(
         ),
     )
     .sort((left, right) => right.priority - left.priority)[0];
-  if (actionPrice) {
-    return {
-      effective: actionPrice.price,
-      full,
-      onSale: true,
-      kind: "sale",
-      discountPct: Math.round(((full - actionPrice.price) / full) * 100),
-      actionExpired: false,
-    };
-  }
-
   const loyalty =
-    options.loggedIn || product.loyaltyEligible
+    !actionPrice && (options.loggedIn || product.loyaltyEligible)
       ? resolveLoyaltyPrice(product, full)
       : null;
-  let effective = loyalty?.effective ?? full;
-  let requestedPct = loyalty?.discountPct ?? 0;
+  const baseKind: EffectivePrice["kind"] = actionPrice
+    ? "sale"
+    : loyalty
+      ? "loyalty"
+      : "full";
+  let effective = actionPrice?.price ?? loyalty?.effective ?? full;
+  const basePct = ((full - effective) / full) * 100;
+  let requestedPct = basePct;
   const linear = [...(product.linearPromotions ?? [])]
     .filter(
       (candidate) =>
@@ -168,15 +169,17 @@ export function resolvePromotionPrice(
   }
   const cap =
     options.maxDiscountPct ?? product.maxCombinedDiscountPct ?? MAX_STACK_PCT;
-  const appliedPct = Math.max(0, Math.min(requestedPct, cap));
+  const appliedPct = Math.max(0, Math.min(requestedPct, Math.max(cap, basePct)));
   effective = Math.round(full * (1 - appliedPct / 100));
   return {
     effective,
     full,
-    onSale: Boolean(linear),
-    kind: linear ? "linear" : loyalty ? "loyalty" : "full",
+    onSale: Boolean(actionPrice || linear),
+    kind: baseKind === "full" && linear ? "linear" : baseKind,
     discountPct: Math.round(appliedPct),
-    actionExpired: Boolean(product.actionPrices?.length),
+    actionExpired: Boolean(product.actionPrices?.length && !actionPrice),
+    linearDiscountPct: linear?.discountPct ?? 0,
+    actionName: actionPrice?.actionName,
   };
 }
 
@@ -198,7 +201,9 @@ export function effectiveUnitPrice(
   }
   const full = product.fullPrice;
   const sale = product.salePrice ?? null;
-  const loyalty = resolveLoyaltyPrice(product, full);
+  const loyalty = product.loyaltyEligible
+    ? resolveLoyaltyPrice(product, full)
+    : null;
   if (sale == null || sale >= full) {
     if (loyalty) {
       return {
@@ -206,8 +211,9 @@ export function effectiveUnitPrice(
         full,
         onSale: false,
         kind: "loyalty",
-        discountPct: loyalty.discountPct,
-        actionExpired: false,
+      discountPct: loyalty.discountPct,
+      actionExpired: false,
+      linearDiscountPct: 0,
       };
     }
     return {
@@ -217,6 +223,7 @@ export function effectiveUnitPrice(
       kind: "full",
       discountPct: 0,
       actionExpired: false,
+      linearDiscountPct: 0,
     };
   }
   const live = isActionLive(product.action, now);
@@ -227,8 +234,9 @@ export function effectiveUnitPrice(
         full,
         onSale: false,
         kind: "loyalty",
-        discountPct: loyalty.discountPct,
-        actionExpired: true,
+      discountPct: loyalty.discountPct,
+      actionExpired: true,
+      linearDiscountPct: 0,
       };
     }
     return {
@@ -238,6 +246,7 @@ export function effectiveUnitPrice(
       kind: "full",
       discountPct: 0,
       actionExpired: true,
+      linearDiscountPct: 0,
     };
   }
   const pct = product.discountPct ?? Math.round(((full - sale) / full) * 100);
@@ -248,6 +257,7 @@ export function effectiveUnitPrice(
     kind: "sale",
     discountPct: pct,
     actionExpired: false,
+    linearDiscountPct: 0,
   };
 }
 

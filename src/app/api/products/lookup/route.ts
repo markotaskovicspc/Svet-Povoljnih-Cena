@@ -9,6 +9,7 @@ import {
   rateLimitJson,
   RATE_LIMITS,
 } from "@/lib/security/rate-limit";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +33,16 @@ export async function POST(req: Request) {
   }
 
   const skus = Array.from(new Set(parsed.data.skus.map((sku) => sku.trim())));
-  const products: Product[] = (await Promise.all(skus.map((sku) => getProductBySku(sku))))
-    .filter((product): product is Product => Boolean(product));
+  const [catalogProducts, currentUser] = await Promise.all([
+    Promise.all(skus.map((sku) => getProductBySku(sku))),
+    getCurrentUser(),
+  ]);
+  const products: Product[] = catalogProducts
+    .filter((product): product is Product => Boolean(product))
+    .map((product) => ({
+      ...product,
+      loyaltyEligible: currentUser?.userType === "customer",
+    }));
   const items: WishlistProductSnapshot[] = products.map((product) => {
     const price = effectiveUnitPrice(product);
     return {

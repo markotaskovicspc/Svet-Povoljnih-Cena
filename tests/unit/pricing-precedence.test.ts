@@ -4,7 +4,7 @@ import { resolvePromotionPrice } from "@/lib/pricing";
 const now = new Date("2026-07-18T12:00:00.000Z");
 
 describe("ERP pricing precedence", () => {
-  it("uses the highest-priority live product action exclusively", () => {
+  it("uses the highest-priority live product action and stacks a linear promotion", () => {
     const price = resolvePromotionPrice(
       {
         fullPrice: 10_000,
@@ -34,8 +34,9 @@ describe("ERP pricing precedence", () => {
       },
       { now, loggedIn: true },
     );
-    expect(price.effective).toBe(7_500);
+    expect(price.effective).toBe(7_000);
     expect(price.kind).toBe("sale");
+    expect(price.linearDiscountPct).toBe(20);
   });
 
   it("stacks authenticated loyalty then one highest-priority linear discount under the cap", () => {
@@ -62,7 +63,7 @@ describe("ERP pricing precedence", () => {
     );
     expect(price.effective).toBe(8_000);
     expect(price.discountPct).toBe(20);
-    expect(price.kind).toBe("linear");
+    expect(price.kind).toBe("loyalty");
   });
 
   it("does not apply loyalty to an anonymous customer", () => {
