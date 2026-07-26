@@ -1,0 +1,226 @@
+import "server-only";
+
+import {
+  DispatchNoteType,
+  DocumentPostingStatus,
+  Prisma,
+  StockMovementKind,
+} from "@prisma/client";
+import { db } from "@/lib/db";
+import { adjustInventory } from "@/lib/inventory";
+import {
+  nextStocktakeDispatchNumber,
+  STOCKTAKE_DESTINATION_NAME,
+} from "@/lib/admin/stocktake-dispatch";
+
+const MAX_CREATE_ATTEMPTS = 3;
+
+async function defaultWarehouse() {
+  return db.warehouse.findFirst({
+    where: { active: true },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  });
+}
+
+function positiveQty(value: number) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("Količina mora biti pozitivan ceo broj.");
+  }
+  return value;
+}
+
+async function requireDraftStocktake(
+  tx: Prisma.TransactionClient,
+  dispatchId: string,
+) {
+  const dispatch = await tx.dispatchNote.findUnique({
+    where: { id: dispatchId },
+    select: { id: true, number: true, type: true, status: true },
+  });
+  if (!dispatch || dispatch.type !== DispatchNoteType.STOCKTAKE) {
+    throw new Error("Popis nije pronađen.");
+  }
+  if (dispatch.status !== DocumentPostingStatus.DRAFT) {
+    throw new Error(`Popis ${dispatch.number} više nije moguće menjati.`);
+  }
+  return dispatch;
+}
+
+export async function createStocktakeDispatch() {
+  const warehouse = await defaultWarehouse();
+  if (!warehouse) throw new Error("Nema aktivnog izvornog magacina za novi popis.");
+
+  const year = new Date().getFullYear();
+  for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt += 1) {
+    const existing = await db.dispatchNote.findMany({
+      where: { number: { startsWith: `POP-${year}-` } },
+      select: { number: true },
+    });
+    try {
+      return await db.dispatchNote.create({
+        data: {
+          number: nextStocktakeDispatchNumber(
+            existing.map((row) => row.number),
+            year,
+          ),
+          type: DispatchNoteType.STOCKTAKE,
+          sourceWarehouseId: warehouse.id,
+          destinationName: STOCKTAKE_DESTINATION_NAME,
+        },
+      });
+    } catch (error) {
+      const isUniqueCollision =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002";
+      if (!isUniqueCollision || attempt === MAX_CREATE_ATTEMPTS - 1) throw error;
+    }
+  }
+  throw new Error("Broj popisa nije moguće dodeliti.");
+}
+
+export async function saveStocktakeDispatchHeader(input: {
+  id: string;
+  sourceWarehouseId: string;
+  notes: string | null;
+}) {
+  return db.$transaction(async (tx) => {
+    await requireDraftStocktake(tx, input.id);
+    const warehouse = await tx.warehouse.findUnique({
+      where: { id: input.sourceWarehouseId },
+      select: { id: true, active: true },
+    });
+    if (!warehouse?.active) throw new Error("Izabrani izvorni magacin nije aktivan.");
+    return tx.dispatchNote.update({
+      where: { id: input.id },
+      data: {
+        sourceWarehouseId: warehouse.id,
+        destinationWarehouseId: null,
+        destinationName: STOCKTAKE_DESTINATION_NAME,
+        notes: input.notes,
+      },
+    });
+  });
+}
+
+export async function addStocktakeDispatchItem(input: {
+  dispatchId: string;
+  sku: string;
+  qty: number;
+}) {
+  const normalizedSku = input.sku.trim();
+  if (!normalizedSku) throw new Error("Šifra artikla je obavezna.");
+  const qty = positiveQty(input.qty);
+
+  return db.$transaction(async (tx) => {
+    await requireDraftStocktake(tx, input.dispatchId);
+    const product = await tx.product.findFirst({
+      where: {
+        sku: { equals: normalizedSku, mode: "insensitive" },
+        isActive: true,
+      },
+      select: { id: true, sku: true, name: true, shortName: true },
+    });
+    if (!product) throw new Error(`Aktivan artikal ${normalizedSku} nije pronađen.`);
+    const duplicate = await tx.dispatchNoteItem.findFirst({
+      where: { dispatchNoteId: input.dispatchId, productId: product.id },
+      select: { id: true },
+    });
+    if (duplicate) throw new Error(`Artikal ${product.sku} je već dodat u popis.`);
+    return tx.dispatchNoteItem.create({
+      data: {
+        dispatchNoteId: input.dispatchId,
+        productId: product.id,
+        sku: product.sku,
+        name: product.shortName ?? product.name,
+        qty,
+      },
+    });
+  });
+}
+
+export async function updateStocktakeDispatchItem(input: {
+  dispatchId: string;
+  itemId: string;
+  qty: number;
+}) {
+  const qty = positiveQty(input.qty);
+  return db.$transaction(async (tx) => {
+    await requireDraftStocktake(tx, input.dispatchId);
+    const updated = await tx.dispatchNoteItem.updateMany({
+      where: { id: input.itemId, dispatchNoteId: input.dispatchId },
+      data: { qty },
+    });
+    if (updated.count !== 1) throw new Error("Stavka popisa nije pronađena.");
+    return { id: input.itemId, qty };
+  });
+}
+
+export async function removeStocktakeDispatchItem(input: {
+  dispatchId: string;
+  itemId: string;
+}) {
+  return db.$transaction(async (tx) => {
+    await requireDraftStocktake(tx, input.dispatchId);
+    const removed = await tx.dispatchNoteItem.deleteMany({
+      where: { id: input.itemId, dispatchNoteId: input.dispatchId },
+    });
+    if (removed.count !== 1) throw new Error("Stavka popisa nije pronađena.");
+    return { id: input.itemId };
+  });
+}
+
+export async function postStocktakeDispatches(ids: string[], actorId: string) {
+  if (ids.length === 0) throw new Error("Izaberite bar jedan popis.");
+  let posted = 0;
+
+  for (const id of ids) {
+    const didPost = await db.$transaction(async (tx) => {
+      const dispatch = await tx.dispatchNote.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+      if (!dispatch || dispatch.type !== DispatchNoteType.STOCKTAKE) {
+        throw new Error(`Popis ${id} ne postoji.`);
+      }
+      if (dispatch.status !== DocumentPostingStatus.DRAFT) return false;
+      if (dispatch.items.length === 0) {
+        throw new Error(`Popis ${dispatch.number} nema nijednu stavku.`);
+      }
+
+      const locked = await tx.dispatchNote.updateMany({
+        where: {
+          id,
+          type: DispatchNoteType.STOCKTAKE,
+          status: DocumentPostingStatus.DRAFT,
+        },
+        data: {
+          status: DocumentPostingStatus.POSTED,
+          postedAt: new Date(),
+          actorId,
+          destinationWarehouseId: null,
+          destinationName: STOCKTAKE_DESTINATION_NAME,
+        },
+      });
+      if (locked.count !== 1) return false;
+
+      for (const item of dispatch.items) {
+        if (!item.productId) throw new Error(`Stavka ${item.sku} nema vezan artikal.`);
+        const qty = positiveQty(item.qty);
+        await adjustInventory(tx, {
+          idempotencyKey: `stocktake-dispatch:${dispatch.id}:${item.id}`,
+          warehouseId: dispatch.sourceWarehouseId,
+          productId: item.productId,
+          sku: item.sku,
+          qtyDelta: -qty,
+          kind: StockMovementKind.STOCK_COUNT,
+          note: `Popis ${dispatch.number} — otpremnica za ${STOCKTAKE_DESTINATION_NAME}`,
+          actorId,
+        });
+      }
+      return true;
+    });
+    if (didPost) posted += 1;
+  }
+
+  return posted;
+}

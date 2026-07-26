@@ -37,6 +37,10 @@ import {
   postPickupBatches,
 } from "@/lib/admin/pickup-batch.server";
 import {
+  createStocktakeDispatch,
+  postStocktakeDispatches,
+} from "@/lib/admin/stocktake-dispatch.server";
+import {
   customerGenderLabel,
   normalizeCustomerDetails,
 } from "@/lib/admin/customer-master";
@@ -117,10 +121,24 @@ async function runCommand(
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
       return createWarehouse(input);
-    case "stock-count.create":
-      return createStockCount();
-    case "stock-count.post":
-      return postStockCounts(ids, actorId);
+    case "stocktake.create": {
+      if (module !== "popisi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const dispatch = await createStocktakeDispatch();
+      return {
+        message: `Popis ${dispatch.number} je kreiran.`,
+        createdId: dispatch.id,
+        redirect: `/admin/erp/popisi/${dispatch.id}?mode=edit`,
+      };
+    }
+    case "stocktake.post": {
+      if (module !== "popisi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const posted = await postStocktakeDispatches(ids, actorId);
+      return { message: `Proknjiženo popisa: ${posted}.` };
+    }
     case "sales-order.delete": {
       if (module !== "prodajni-nalozi") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
@@ -405,66 +423,6 @@ async function defaultWarehouse() {
   });
 }
 
-async function createStockCount(): Promise<CommandResult> {
-  const warehouse = await defaultWarehouse();
-  if (!warehouse) throw new Error("Nema aktivnog magacina za novi popis.");
-  const year = new Date().getFullYear();
-  const stockCount = await withUniqueRetry(async () => {
-    const count = await db.stockCount.count({
-      where: { number: { startsWith: `POP-${year}-` } },
-    });
-    return db.stockCount.create({
-      data: {
-        number: `POP-${year}-${String(count + 1).padStart(4, "0")}`,
-        warehouseId: warehouse.id,
-      },
-    });
-  });
-  return { message: `Popis ${stockCount.number} je kreiran.`, createdId: stockCount.id };
-}
-
-async function postStockCounts(ids: string[], actorId: string): Promise<CommandResult> {
-  requireIds(ids);
-  let posted = 0;
-  for (const id of ids) {
-    const didPost = await db.$transaction(async (tx) => {
-      const stockCount = await tx.stockCount.findUnique({
-        where: { id },
-        include: {
-          items: { include: { product: { select: { sku: true } } } },
-        },
-      });
-      if (!stockCount) throw new Error(`Popis ${id} ne postoji.`);
-      if (stockCount.status !== DocumentPostingStatus.DRAFT) return false;
-      const locked = await tx.stockCount.updateMany({
-        where: { id, status: DocumentPostingStatus.DRAFT },
-        data: {
-          status: DocumentPostingStatus.POSTED,
-          postedAt: new Date(),
-          actorId,
-        },
-      });
-      if (locked.count !== 1) return false;
-      for (const item of stockCount.items) {
-        if (item.differenceQty === 0) continue;
-        await adjustInventory(tx, {
-          idempotencyKey: `stock-count:${stockCount.id}:${item.id}`,
-          warehouseId: stockCount.warehouseId,
-          productId: item.productId,
-          sku: item.product.sku,
-          qtyDelta: item.differenceQty,
-          kind: StockMovementKind.STOCK_COUNT,
-          note: `Popis ${stockCount.number}: ${item.expectedQty} → ${item.countedQty}`,
-          actorId,
-        });
-      }
-      return true;
-    });
-    if (didPost) posted += 1;
-  }
-  return { message: `Proknjiženo popisa: ${posted}.` };
-}
-
 async function createDispatchNote(): Promise<CommandResult> {
   const warehouse = await defaultWarehouse();
   if (!warehouse) throw new Error("Nema aktivnog izvornog magacina.");
@@ -494,6 +452,11 @@ async function postDispatchNotes(ids: string[], actorId: string): Promise<Comman
       });
       if (!dispatch) throw new Error(`Otpremnica ${id} ne postoji.`);
       if (dispatch.status !== DocumentPostingStatus.DRAFT) return false;
+      if (dispatch.type === DispatchNoteType.STOCKTAKE) {
+        throw new Error(
+          `Popis ${dispatch.number} knjiži se iz modula Popisi (tačka 17).`,
+        );
+      }
       if (
         dispatch.type === DispatchNoteType.INTERNAL &&
         !dispatch.destinationWarehouseId

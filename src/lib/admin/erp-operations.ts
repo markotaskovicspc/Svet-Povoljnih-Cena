@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { DispatchNoteType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ErpColumn, ErpModule, ErpRow } from "@/lib/admin/erp";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
@@ -15,6 +15,10 @@ import {
   customerGenderLabel,
   inferCustomerGender,
 } from "@/lib/admin/customer-master";
+import {
+  STOCKTAKE_DESTINATION_NAME,
+  STOCKTAKE_STATUS_LABEL,
+} from "@/lib/admin/stocktake-dispatch";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -258,29 +262,43 @@ export const operationalErpModules: ErpModule[] = [
   {
     slug: "popisi",
     number: "14",
-    title: "Popisi zaliha",
-    description: "Kontrolisani popisi po magacinu sa očekivanim, prebrojanim i razlikama.",
+    title: "Popisi",
+    description:
+      "Popisne otpremnice iz magacina firme ka fiksnom odredištu Popis.",
     status: "ready",
     commands: [
-      { label: "Novi popis", tone: "primary", action: "stock-count.create" },
+      { label: "Novi popis", tone: "primary", action: "stocktake.create" },
+      {
+        label: "Uredi",
+        tone: "neutral",
+        clientAction: "open",
+        needsSelection: true,
+      },
       {
         label: "Proknjiži popis",
         tone: "neutral",
-        action: "stock-count.post",
+        action: "stocktake.post",
         needsSelection: true,
-        confirm: "Proknjižiti razlike izabranih popisa na lager?",
+        confirm:
+          "Proknjižiti izabrane popise kao otpremnice i skinuti stavke sa izvornog lagera?",
       },
     ],
+    detailHrefBase: "/admin/erp/popisi",
     columns: [
       text("number", "Broj"),
-      text("warehouse", "Magacin"),
+      text("source", "Magacin firme koja šalje robu"),
+      text("destination", "Magacin firme koja prima robu"),
       status("status", "Status", ["DRAFT", "POSTED", "CANCELLED"]),
       number("items", "Stavke"),
-      number("difference", "Ukupna razlika"),
-      date("countedAt", "Prebrojano"),
+      number("totalQty", "Ukupna količina"),
       date("postedAt", "Proknjiženo"),
+      date("createdAt", "Kreirano"),
     ],
     rows: emptyRows,
+    notes: [
+      `Odredišni magacin je uvek „${STOCKTAKE_DESTINATION_NAME}”.`,
+      "Knjiženjem nastaje popisna otpremnica i količina se skida sa izvornog magacina.",
+    ],
   },
   {
     slug: "prodajni-nalozi",
@@ -839,7 +857,7 @@ export async function getOperationalErpRows(
     case "kretanja-zaliha":
       return stockMovementRows(take);
     case "popisi":
-      return stockCountRows(take);
+      return stocktakeDispatchRows(take);
     case "prodajni-nalozi":
       return salesOrderRows(take);
     case "otpremnice":
@@ -1160,25 +1178,27 @@ async function stockMovementRows(take: number): Promise<ErpRow[]> {
   });
 }
 
-async function stockCountRows(take: number): Promise<ErpRow[]> {
-  const rows = await db.stockCount.findMany({
+async function stocktakeDispatchRows(take: number): Promise<ErpRow[]> {
+  const rows = await db.dispatchNote.findMany({
+    where: { type: DispatchNoteType.STOCKTAKE },
     take,
     orderBy: { createdAt: "desc" },
     include: {
-      warehouse: { select: { name: true } },
-      items: { select: { differenceQty: true } },
+      sourceWarehouse: { select: { name: true } },
+      items: { select: { qty: true } },
     },
   });
   return rows.map((row) => ({
     id: row.id,
     values: {
       number: row.number,
-      warehouse: row.warehouse.name,
-      status: row.status,
+      source: row.sourceWarehouse.name,
+      destination: row.destinationName ?? STOCKTAKE_DESTINATION_NAME,
+      status: STOCKTAKE_STATUS_LABEL[row.status],
       items: row.items.length,
-      difference: row.items.reduce((sum, item) => sum + item.differenceQty, 0),
-      countedAt: dateOnly(row.countedAt),
-      postedAt: dateOnly(row.postedAt),
+      totalQty: row.items.reduce((sum, item) => sum + item.qty, 0),
+      postedAt: dateTime(row.postedAt),
+      createdAt: dateTime(row.createdAt),
     },
   }));
 }
@@ -1336,6 +1356,9 @@ async function salesOrderRows(take: number): Promise<ErpRow[]> {
 
 async function dispatchRows(take: number): Promise<ErpRow[]> {
   const rows = await db.dispatchNote.findMany({
+    where: {
+      type: { in: [DispatchNoteType.CUSTOMER, DispatchNoteType.INTERNAL] },
+    },
     take,
     orderBy: { createdAt: "desc" },
     include: {
