@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Boxes, ChevronRight, FileSpreadsheet, Package, Truck } from "lucide-react";
-import { erpModules } from "@/lib/admin/erp";
+import { erpDashboardModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { requireAdminAction, isAuthorized } from "@/lib/admin";
@@ -17,7 +17,7 @@ const ICONS = [Package, Truck, FileSpreadsheet, Boxes, FileSpreadsheet, FileSpre
 
 export default async function ErpDashboardPage() {
   const admin = await requireAdminAction();
-  const visibleModules = erpModules.filter((module) =>
+  const visibleModules = erpDashboardModules.filter((module) =>
     isAuthorized(admin.role, allowedRolesForErpModule(module.slug)),
   );
   const ready = visibleModules.filter((m) => m.status === "ready");
@@ -54,7 +54,7 @@ export default async function ErpDashboardPage() {
               return (
                 <Link
                   key={module.slug}
-                  href={`/admin/erp/${module.slug}`}
+                  href={module.href}
                   className="group rounded-xl border border-border/60 bg-surface p-4 transition hover:border-walnut/40 hover:bg-muted-bg/30"
                 >
                   <div className="flex items-start justify-between gap-4">

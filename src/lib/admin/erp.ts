@@ -1048,10 +1048,108 @@ const coreErpModules: ErpModule[] = [
   },
 ];
 
+const primaryErpModulePresentation = [
+  { slug: "artikli", number: "1", title: "Matični podaci o artiklima" },
+  { slug: "dobavljaci", number: "2", title: "Matični podaci o dobavljačima" },
+  { slug: "nabavne-cene", number: "3", title: "Cenovnik nabavnih cena" },
+  { slug: "porudzbenice", number: "4", title: "Nabavne porudžbenice" },
+  { slug: "ulazne-fakture", number: "5", title: "Ulazne fakture" },
+  { slug: "cenovnici", number: "6", title: "Cenovnici" },
+  {
+    slug: "akcijske-cene",
+    number: "7",
+    title: "Upravljanje akcijskim cenama i prioritetima",
+  },
+  { slug: "magacini", number: "8", title: "Magacini" },
+  { slug: "stanje-po-magacinima", number: "9", title: "Lageri" },
+  { slug: "prodajni-nalozi", number: "10", title: "Pregled porudžbina" },
+  { slug: "otpremnice", number: "12", title: "Otpremnice" },
+  {
+    slug: "preuzimanja",
+    number: "13",
+    title: "Nalozi za preuzimanje (Kurirske službe)",
+  },
+  { slug: "integracije", number: "14", title: "Povezivanje sa Ananasom" },
+  {
+    slug: "racunovodstveni-registri",
+    number: "15",
+    title: "Knjigovodstveni izveštaji",
+  },
+  {
+    slug: "partner-klijenti",
+    number: "16",
+    title: "API za razmenu lagera i rezervacije",
+  },
+  { slug: "popisi", number: "17", title: "Popisi" },
+  { slug: "kupci", number: "18", title: "Baza kupaca" },
+] as const;
+
+const allErpRouteModules = [...coreErpModules, ...operationalErpModules];
+const primaryErpModuleSlugs = new Set<string>(
+  primaryErpModulePresentation.map((module) => module.slug),
+);
+
+const primaryErpRouteModules = primaryErpModulePresentation.map((presentation) => {
+  const routeModule = allErpRouteModules.find(
+    (candidate) => candidate.slug === presentation.slug,
+  );
+
+  if (!routeModule) {
+    throw new Error(`Nedostaje definicija ERP modula: ${presentation.slug}`);
+  }
+
+  return {
+    ...routeModule,
+    number: presentation.number,
+    title: presentation.title,
+  };
+});
+
+const secondaryErpRouteModules = allErpRouteModules
+  .filter((routeModule) => !primaryErpModuleSlugs.has(routeModule.slug))
+  .map((routeModule, index) => ({
+    ...routeModule,
+    number: String(19 + index),
+  }));
+
 export const erpModules: ErpModule[] = [
-  ...coreErpModules,
-  ...operationalErpModules,
+  ...primaryErpRouteModules,
+  ...secondaryErpRouteModules,
 ];
+
+export type ErpDashboardModule = Pick<
+  ErpModule,
+  "slug" | "number" | "title" | "description" | "status"
+> & {
+  href: string;
+};
+
+const fiscalizationDashboardModule: ErpDashboardModule = {
+  slug: "fiskalizacija",
+  number: "11",
+  title: "Fiskalizacija i refundacija",
+  description:
+    "Jedinstven pregled fiskalnih dokumenata, ručne i automatske fiskalizacije i refundacija.",
+  status: "ready",
+  href: "/admin/fiskalizacija",
+};
+
+export const erpDashboardModules: ErpDashboardModule[] = erpModules.flatMap(
+  (routeModule) => {
+    const dashboardModule = {
+      slug: routeModule.slug,
+      number: routeModule.number,
+      title: routeModule.title,
+      description: routeModule.description,
+      status: routeModule.status,
+      href: `/admin/erp/${routeModule.slug}`,
+    } satisfies ErpDashboardModule;
+
+    return routeModule.number === "12"
+      ? [fiscalizationDashboardModule, dashboardModule]
+      : [dashboardModule];
+  },
+);
 
 export function getErpModuleDefinition(slug: string) {
   return erpModules.find((m) => m.slug === slug);
