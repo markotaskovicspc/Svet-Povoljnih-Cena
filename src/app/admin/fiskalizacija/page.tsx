@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { Prisma, PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -9,6 +10,7 @@ import {
   ensureDefaultWarehouse,
   issueFiscalRefund,
   issueAndDeliverFiscalReceipt,
+  paymentMethodLabel,
 } from "@/lib/fiscal";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -17,7 +19,7 @@ import { FiscalizationClient } from "./fiscalization-client";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Fiskalizacija",
+  title: "Fiskalizacija i refundacija",
   robots: { index: false, follow: false },
 };
 
@@ -183,7 +185,7 @@ export default async function FiscalizationPage({
     orderNumber: line.orderNumber,
     fiscalReceiptNumber: line.fiscalDocument.receiptNumber ?? "-",
     issuedAt: line.fiscalDocument.issuedAt?.toLocaleString("sr-Latn-RS") ?? "-",
-    customerName: line.customerName,
+    customerName: line.companyName ?? line.customerName,
     pib: line.pib ?? "-",
     priceList: line.priceList,
     address: line.address,
@@ -210,15 +212,28 @@ export default async function FiscalizationPage({
     totalNet: formatRsd(num(line.totalNet)),
     totalGross: formatRsd(num(line.totalGross)),
     warehouseName: line.warehouseName ?? "DC",
+    paymentMethod: line.fiscalDocument.paymentMethod ?? "UPLATA_NA_RACUN",
     refunded: line.refundedQty >= line.qty,
   }));
 
   return (
     <>
       <PageHeader
-        title="Fiskalizacija"
+        title="Fiskalizacija i refundacija"
         description="Pregled fiskalizovanih porudžbina po artikalima i refundacija"
-        crumbs={[{ href: "/admin", label: "Admin" }, { label: "Fiskalizacija" }]}
+        crumbs={[
+          { href: "/admin", label: "Admin" },
+          { href: "/admin/erp", label: "ERP" },
+          { label: "Tačka 11" },
+        ]}
+        actions={
+          <Link
+            href="/admin/erp"
+            className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+          >
+            Svi ERP moduli
+          </Link>
+        }
       />
       <div className="space-y-4 px-8 py-6">
         <Card>
@@ -269,7 +284,10 @@ export default async function FiscalizationPage({
           rows={rows}
           warehouses={warehouses}
           manualOrders={manualOrders}
-          paymentMethods={Object.values(PaymentMethod)}
+          paymentMethods={Object.values(PaymentMethod).map((value) => ({
+            value,
+            label: paymentMethodLabel(value),
+          }))}
           manualFiscalizeAction={manualFiscalizeAction}
           refundAction={refundFiscalLinesAction}
         />

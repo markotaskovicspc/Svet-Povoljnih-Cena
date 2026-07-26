@@ -52,6 +52,7 @@ type FiscalizationRow = {
   totalNet: string;
   totalGross: string;
   warehouseName: string;
+  paymentMethod: string;
   refunded: boolean;
 };
 
@@ -72,6 +73,7 @@ type ManualOrder = {
 };
 
 type WarehouseOption = { id: string; code: string; name: string; isDefault: boolean };
+type PaymentMethodOption = { value: string; label: string };
 
 const columns: { key: keyof FiscalizationRow; label: string; align?: "right" | "center" }[] = [
   { key: "orderNumber", label: "Broj porudžbine" },
@@ -116,7 +118,7 @@ export function FiscalizationClient({
   rows: FiscalizationRow[];
   warehouses: WarehouseOption[];
   manualOrders: ManualOrder[];
-  paymentMethods: string[];
+  paymentMethods: PaymentMethodOption[];
   manualFiscalizeAction: AdminFormAction;
   refundAction: AdminFormAction;
 }) {
@@ -125,7 +127,15 @@ export function FiscalizationClient({
   const [refundOpen, setRefundOpen] = useState(false);
   const refundableIds = useMemo(() => rows.filter((row) => !row.refunded).map((row) => row.id), [rows]);
   const selectedRefundable = selectedRows.filter((id) => refundableIds.includes(id));
-  const allVisibleRefundableSelected = refundableIds.length > 0 && refundableIds.every((id) => selectedRows.includes(id));
+  const selectedOrderNumber = rows.find((row) => selectedRefundable.includes(row.id))?.orderNumber;
+  const selectedOrderRefundableIds = selectedOrderNumber
+    ? rows
+        .filter((row) => row.orderNumber === selectedOrderNumber && !row.refunded)
+        .map((row) => row.id)
+    : [];
+  const allSelectedOrderRowsSelected =
+    selectedOrderRefundableIds.length > 0 &&
+    selectedOrderRefundableIds.every((id) => selectedRows.includes(id));
 
   const toggleRow = (id: string) => {
     setSelectedRows((current) =>
@@ -134,17 +144,32 @@ export function FiscalizationClient({
   };
 
   const toggleAll = () => {
-    setSelectedRows(allVisibleRefundableSelected ? [] : refundableIds);
+    if (!selectedOrderNumber) return;
+    setSelectedRows(allSelectedOrderRowsSelected ? [] : selectedOrderRefundableIds);
   };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
         <div className="text-sm text-ink-500">
-          Izabrano: <span className="font-medium text-ink-800">{selectedRefundable.length}</span>
+          {selectedOrderNumber ? (
+            <>
+              Porudžbina <span className="font-medium text-ink-800">{selectedOrderNumber}</span>
+              {" · "}izabrano{" "}
+              <span className="font-medium text-ink-800">{selectedRefundable.length}</span>
+            </>
+          ) : (
+            "Izaberite jedan ili više redova iste porudžbine."
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" onClick={() => setManualOpen(true)}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!manualOrders.length}
+            title={manualOrders.length ? undefined : "Nema porudžbina sa nefiskalizovanim stavkama."}
+            onClick={() => setManualOpen(true)}
+          >
             <ReceiptText className="size-4" />
             Ručna fiskalizacija
           </Button>
@@ -168,9 +193,10 @@ export function FiscalizationClient({
               <th className="sticky left-0 z-10 bg-muted-bg px-3 py-3 text-left">
                 <input
                   type="checkbox"
-                  checked={allVisibleRefundableSelected}
+                  checked={allSelectedOrderRowsSelected}
+                  disabled={!selectedOrderNumber}
                   onChange={toggleAll}
-                  aria-label="Izaberi sve redove za refundaciju"
+                  aria-label="Izaberi sve redove izabrane porudžbine za refundaciju"
                 />
               </th>
               {columns.map((column) => (
@@ -198,9 +224,12 @@ export function FiscalizationClient({
                   <input
                     type="checkbox"
                     checked={selectedRows.includes(row.id)}
-                    disabled={row.refunded}
+                    disabled={
+                      row.refunded ||
+                      Boolean(selectedOrderNumber && row.orderNumber !== selectedOrderNumber)
+                    }
                     onChange={() => toggleRow(row.id)}
-                    aria-label={`Izaberi red ${row.sku}`}
+                    aria-label={`Izaberi red ${row.sku} iz porudžbine ${row.orderNumber}`}
                   />
                 </td>
                 {columns.map((column) => (
@@ -250,6 +279,7 @@ export function FiscalizationClient({
         onOpenChange={setRefundOpen}
         selectedIds={selectedRefundable}
         suggestedBuyerId={suggestBuyerId(rows, selectedRefundable)}
+        suggestedPaymentMethod={suggestPaymentMethod(rows, selectedRefundable)}
         warehouses={warehouses}
         paymentMethods={paymentMethods}
         action={refundAction}
@@ -268,17 +298,21 @@ function ManualFiscalizationDialog({
   open: boolean;
   onOpenChange: (value: boolean) => void;
   orders: ManualOrder[];
-  paymentMethods: string[];
+  paymentMethods: PaymentMethodOption[];
   action: AdminFormAction;
 }) {
   const [orderId, setOrderId] = useState(orders[0]?.id ?? "");
   const order = orders.find((item) => item.id === orderId) ?? orders[0] ?? null;
   const [selectedItems, setSelectedItems] = useState<string[]>(() => order?.lines.map((line) => line.id) ?? []);
+  const [paymentMethod, setPaymentMethod] = useState(
+    order?.paymentMethod ?? paymentMethods[0]?.value ?? "",
+  );
 
   const changeOrder = (nextOrderId: string) => {
     const nextOrder = orders.find((item) => item.id === nextOrderId) ?? null;
     setOrderId(nextOrderId);
     setSelectedItems(nextOrder?.lines.map((line) => line.id) ?? []);
+    setPaymentMethod(nextOrder?.paymentMethod ?? paymentMethods[0]?.value ?? "");
   };
 
   return (
@@ -312,12 +346,13 @@ function ManualFiscalizationDialog({
               <span className="font-medium text-ink-700">Način plaćanja</span>
               <select
                 name="paymentMethod"
-                defaultValue={order?.paymentMethod ?? paymentMethods[0]}
+                value={paymentMethod}
+                onChange={(event) => setPaymentMethod(event.target.value)}
                 className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
               >
                 {paymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
+                  <option key={method.value} value={method.value}>
+                    {method.label}
                   </option>
                 ))}
               </select>
@@ -349,6 +384,7 @@ function ManualFiscalizationDialog({
           <DialogFooter>
             <SubmitButton
               size="sm"
+              disabled={!order || !selectedItems.length || !paymentMethod}
               pendingLabel="Fiskalizacija…"
               confirm="Izdati fiskalni račun za izabranu porudžbinu? Ova akcija poziva fiskalnog provajdera."
             >
@@ -366,11 +402,16 @@ function suggestBuyerId(rows: FiscalizationRow[], selectedIds: string[]): string
   return withPib ? `10:${withPib.pib}` : "";
 }
 
+function suggestPaymentMethod(rows: FiscalizationRow[], selectedIds: string[]): string {
+  return rows.find((row) => selectedIds.includes(row.id))?.paymentMethod ?? "";
+}
+
 function RefundDialog({
   open,
   onOpenChange,
   selectedIds,
   suggestedBuyerId,
+  suggestedPaymentMethod,
   warehouses,
   paymentMethods,
   action,
@@ -379,8 +420,9 @@ function RefundDialog({
   onOpenChange: (value: boolean) => void;
   selectedIds: string[];
   suggestedBuyerId: string;
+  suggestedPaymentMethod: string;
   warehouses: WarehouseOption[];
-  paymentMethods: string[];
+  paymentMethods: PaymentMethodOption[];
   action: AdminFormAction;
 }) {
   const defaultWarehouse = warehouses.find((warehouse) => warehouse.isDefault) ?? warehouses[0];
@@ -393,7 +435,11 @@ function RefundDialog({
             Refundira se cela preostala količina za {selectedIds.length} izabranih redova.
           </DialogDescription>
         </DialogHeader>
-        <AdminActionForm action={action} className="space-y-4">
+        <AdminActionForm
+          key={selectedIds.join(":")}
+          action={action}
+          className="space-y-4"
+        >
           {selectedIds.map((id) => (
             <input key={id} type="hidden" name="fiscalLineIds" value={id} />
           ))}
@@ -401,12 +447,12 @@ function RefundDialog({
             <span className="font-medium text-ink-700">Način vraćanja novca</span>
             <select
               name="paymentReturnMethod"
-              defaultValue={paymentMethods[0]}
+              defaultValue={suggestedPaymentMethod || paymentMethods[0]?.value}
               className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
             >
               {paymentMethods.map((method) => (
-                <option key={method} value={method}>
-                  {method}
+                <option key={method.value} value={method.value}>
+                  {method.label}
                 </option>
               ))}
             </select>
@@ -444,6 +490,7 @@ function RefundDialog({
             <SubmitButton
               variant="destructive"
               size="sm"
+              disabled={!selectedIds.length || !warehouses.length || !paymentMethods.length}
               pendingLabel="Refundacija…"
               confirm="Izvršiti fiskalnu refundaciju? Proverite iznos i referentni račun pre potvrde."
             >

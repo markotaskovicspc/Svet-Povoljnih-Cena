@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ChevronRight, FileSpreadsheet, Package, Truck } from "lucide-react";
+import { Boxes, ChevronRight, FileSpreadsheet, Package, ReceiptText, Truck } from "lucide-react";
 import { erpDashboardModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
@@ -39,8 +39,17 @@ export default async function ErpDashboardPage() {
       />
       <div className="space-y-8 px-8 py-6">
         <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Moduli" value={String(visibleModules.length)} hint="Dostupno vašoj ulozi" />
-          <StatCard label="Operativno" value={String(ready.length)} hint="Podaci, filteri, pogledi i export" tone="success" />
+          <StatCard
+            label="Moduli"
+            value={String(visibleModules.length)}
+            hint="Dostupno vašoj ulozi"
+          />
+          <StatCard
+            label="Operativno"
+            value={String(ready.length)}
+            hint="Podaci, filteri, pogledi i export"
+            tone="success"
+          />
           <StatCard label="Spoljne blokade" value={String(blocked.length)} hint="Vidljiv tačan razlog konfiguracije" tone="warning" />
         </div>
 
@@ -50,7 +59,9 @@ export default async function ErpDashboardPage() {
           </CardTitle>
           <div className="grid gap-3 lg:grid-cols-2">
             {visibleModules.map((module, index) => {
-              const Icon = ICONS[index] ?? FileSpreadsheet;
+              const Icon = module.slug === "fiskalizacija"
+                ? ReceiptText
+                : (ICONS[index] ?? FileSpreadsheet);
               return (
                 <Link
                   key={module.slug}
