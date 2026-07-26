@@ -36,6 +36,10 @@ import {
   deletePickupBatches,
   postPickupBatches,
 } from "@/lib/admin/pickup-batch.server";
+import {
+  customerGenderLabel,
+  normalizeCustomerDetails,
+} from "@/lib/admin/customer-master";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -146,7 +150,10 @@ async function runCommand(
       }
       return postPickupBatchCommand(ids, actorId);
     case "customer.create":
-      return createCustomer();
+      if (module !== "kupci") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createCustomer(input);
     case "partner-client.create":
       return createPartnerClient();
     case "landing.create":
@@ -569,16 +576,26 @@ async function postPickupBatchCommand(
   };
 }
 
-async function createCustomer(): Promise<CommandResult> {
-  const count = await db.customer.count();
+async function createCustomer(
+  input: Record<string, unknown>,
+): Promise<CommandResult> {
+  const details = normalizeCustomerDetails(input);
   const customer = await db.customer.create({
     data: {
-      firstName: "Novi",
-      lastName: `kupac ${count + 1}`,
-      gender: "NEPOZNATO",
+      firstName: details.firstName,
+      lastName: details.lastName,
+      address: details.address,
+      city: details.city,
+      postalCode: details.postalCode,
+      phone: details.phone,
+      email: details.email,
+      gender: details.gender,
     },
   });
-  return { message: "Kupac je kreiran; pol ostaje NEPOZNATO do ručne izmene.", createdId: customer.id };
+  return {
+    message: `Kupac „${details.fullName}” je kreiran. Pol: ${customerGenderLabel(details.gender)}.`,
+    createdId: customer.id,
+  };
 }
 
 async function createPartnerClient(): Promise<CommandResult> {

@@ -1082,7 +1082,7 @@ const primaryErpModulePresentation = [
     title: "API za razmenu lagera i rezervacije",
   },
   { slug: "popisi", number: "17", title: "Popisi" },
-  { slug: "kupci", number: "18", title: "Baza kupaca" },
+  { slug: "kupci", number: "19", title: "Baza kupaca" },
 ] as const;
 
 const allErpRouteModules = [...coreErpModules, ...operationalErpModules];
@@ -1110,7 +1110,7 @@ const secondaryErpRouteModules = allErpRouteModules
   .filter((routeModule) => !primaryErpModuleSlugs.has(routeModule.slug))
   .map((routeModule, index) => ({
     ...routeModule,
-    number: String(19 + index),
+    number: String(20 + index),
   }));
 
 export const erpModules: ErpModule[] = [

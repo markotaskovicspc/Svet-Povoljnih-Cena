@@ -49,7 +49,7 @@ export const ERP_REQUIREMENTS: readonly ErpRequirement[] = [
   { id: 32, section: "KEP knjiga", route: "/admin/erp/racunovodstveni-registri", status: "implemented", acceptance: "ACC-06", note: "Interni KEP prikaz sa jasnom oznakom da nije odobren statutarni obrazac." },
   { id: 33, section: "API za razmenu lagera i rezervacije", route: "/admin/erp/partner-klijenti", status: "implemented", acceptance: "PARTNER-01", note: "Scope-ovani bearer ključevi, rate limit, audit i idempotentne rezervacije." },
   { id: 34, section: "Popisi", route: "/admin/erp/popisi", status: "implemented", acceptance: "STOCK-03", note: "Očekivano/prebrojano/razlika i transakciono knjiženje." },
-  { id: 35, section: "Baza kupaca", route: "/admin/erp/kupci", status: "implemented", acceptance: "CRM-01", note: "Kontakti, adrese, PIB i isključivo ručno NEPOZNATO/ŽENSKI/MUŠKI." },
+  { id: 35, section: "Baza kupaca", route: "/admin/erp/kupci", status: "implemented", acceptance: "CRM-01", note: "Ime i prezime, adresa, mesto, poštanski broj, telefon i e-mail; pol se automatski određuje na osnovu imena." },
   { id: 36, section: "Postojeći moduli u admin panelu", route: "/admin", status: "implemented", acceptance: "ADMIN-01", note: "Postojeći moduli su sačuvani, a duplikati preusmereni na kanonski ERP." },
   { id: 37, section: "Kontrolna tabla", route: "/admin", status: "implemented", acceptance: "DASH-01", note: "Operativne metrike i linkovi ka filtriranim ERP pregledima." },
   { id: 38, section: "Baneri", route: "/admin/baneri", status: "implemented", acceptance: "CONTENT-01", note: "Tri pozicije, višestruki HERO slajdovi, periodi, dimenzije i brisanje sa potvrdom." },

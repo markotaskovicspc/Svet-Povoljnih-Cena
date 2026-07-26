@@ -4,7 +4,6 @@ import {
   AllocationBasis,
   CampaignStatus,
   CogsStatus,
-  CustomerGender,
   DiscountTarget,
   ErpCurrency,
   InboundInvoiceStatus,
@@ -37,6 +36,14 @@ import {
   normalizeWarehouseName,
   normalizeWarehousePhone,
 } from "@/lib/admin/warehouse-master";
+import {
+  normalizeCustomerAddress,
+  normalizeCustomerCity,
+  normalizeCustomerEmail,
+  normalizeCustomerName,
+  normalizeCustomerPhone,
+  normalizeCustomerPostalCode,
+} from "@/lib/admin/customer-master";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -757,33 +764,54 @@ async function persistWarehouseCell(rowId: string, columnKey: string, value: Cel
 
 async function persistCustomerCell(rowId: string, columnKey: string, value: CellValue) {
   const data: Prisma.CustomerUncheckedUpdateInput = {};
+  let persistedValue = value;
+  let refreshRow = false;
   switch (columnKey) {
-    case "email": {
-      const email = optionalString(value);
-      if (email && !email.includes("@")) throw new Error("E-mail mora da sadrži @.");
-      data.email = email;
+    case "name": {
+      const name = normalizeCustomerName(value);
+      data.firstName = name.firstName;
+      data.lastName = name.lastName;
+      data.companyName = null;
+      data.gender = name.gender;
+      persistedValue = name.fullName;
+      refreshRow = true;
       break;
     }
-    case "phone":
-      data.phone = optionalString(value);
+    case "email": {
+      const email = normalizeCustomerEmail(value);
+      data.email = email;
+      persistedValue = email;
       break;
-    case "address":
-      data.address = optionalString(value);
+    }
+    case "phone": {
+      const phone = normalizeCustomerPhone(value);
+      data.phone = phone;
+      persistedValue = phone;
       break;
-    case "city":
-      data.city = optionalString(value);
+    }
+    case "address": {
+      const address = normalizeCustomerAddress(value);
+      data.address = address;
+      persistedValue = address;
       break;
-    case "pib":
-      data.pib = optionalString(value);
+    }
+    case "city": {
+      const city = normalizeCustomerCity(value);
+      data.city = city;
+      persistedValue = city;
       break;
-    case "gender":
-      data.gender = enumFromMap(CustomerGender, value, "Nepoznata vrednost pola.");
+    }
+    case "postalCode": {
+      const postalCode = normalizeCustomerPostalCode(value);
+      data.postalCode = postalCode;
+      persistedValue = postalCode;
       break;
+    }
     default:
       return null;
   }
   await db.customer.update({ where: { id: rowId }, data });
-  return { value };
+  return { value: persistedValue, refreshRow };
 }
 
 async function persistPartnerClientCell(

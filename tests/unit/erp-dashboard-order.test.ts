@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { erpDashboardModules } from "@/lib/admin/erp";
+import { erpDashboardModules, getErpModuleDefinition } from "@/lib/admin/erp";
 
 const primaryModuleTitles = [
   "Matični podaci o artiklima",
@@ -23,10 +23,11 @@ const primaryModuleTitles = [
 ];
 
 describe("ERP dashboard module order", () => {
-  it("shows the 18 primary modules in the requested order", () => {
-    expect(erpDashboardModules.slice(0, 18).map((item) => item.number)).toEqual(
-      Array.from({ length: 18 }, (_, index) => String(index + 1)),
-    );
+  it("shows the primary modules in the requested order and makes the customer base module 19", () => {
+    expect(erpDashboardModules.slice(0, 18).map((item) => item.number)).toEqual([
+      ...Array.from({ length: 17 }, (_, index) => String(index + 1)),
+      "19",
+    ]);
     expect(erpDashboardModules.slice(0, 18).map((item) => item.title)).toEqual(
       primaryModuleTitles,
     );
@@ -39,11 +40,27 @@ describe("ERP dashboard module order", () => {
     });
   });
 
-  it("numbers every remaining ERP module sequentially from 19", () => {
+  it("shows exactly the requested customer columns", () => {
+    const customerModule = getErpModuleDefinition("kupci");
+
+    expect(customerModule?.number).toBe("19");
+    expect(customerModule?.columns.map((column) => column.label)).toEqual([
+      "Ime i prezime kupca",
+      "Adresa",
+      "Mesto",
+      "Poštanski broj",
+      "Telefon",
+      "E-mail",
+      "Pol",
+    ]);
+    expect(customerModule?.editableColumns).not.toContain("gender");
+  });
+
+  it("numbers every remaining ERP module sequentially from 20", () => {
     const secondaryModules = erpDashboardModules.slice(18);
 
     expect(secondaryModules.map((item) => item.number)).toEqual(
-      secondaryModules.map((_, index) => String(19 + index)),
+      secondaryModules.map((_, index) => String(20 + index)),
     );
   });
 });

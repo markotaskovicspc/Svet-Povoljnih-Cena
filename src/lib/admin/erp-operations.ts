@@ -11,6 +11,10 @@ import {
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
 } from "@/lib/admin/pickup-batch";
+import {
+  customerGenderLabel,
+  inferCustomerGender,
+} from "@/lib/admin/customer-master";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -428,24 +432,43 @@ export const operationalErpModules: ErpModule[] = [
   },
   {
     slug: "kupci",
-    number: "18",
-    title: "Kupci",
-    description: "Jedinstvena baza kupaca sa kontaktima, adresama, PIB-om i ručno održavanim polom.",
+    number: "19",
+    title: "Baza kupaca",
+    description:
+      "Jedinstvena baza kupaca sa adresnim i kontaktnim podacima i polom automatski određenim na osnovu imena.",
     status: "ready",
-    commands: [{ label: "Novi kupac", tone: "primary", action: "customer.create" }],
-    columns: [
-      text("name", "Ime / naziv"),
-      text("email", "E-mail"),
-      text("phone", "Telefon"),
-      text("address", "Adresa"),
-      text("city", "Grad"),
-      text("pib", "PIB"),
-      status("gender", "Pol", ["NEPOZNATO", "ZENSKI", "MUSKI"]),
-      number("orders", "Porudžbine"),
-      money("turnover", "Promet"),
-      date("createdAt", "Kreiran"),
+    commands: [
+      {
+        label: "Novi kupac",
+        description:
+          "Unesite podatke kupca. Pol će biti automatski određen na osnovu imena.",
+        tone: "primary",
+        action: "customer.create",
+        fields: [
+          {
+            key: "name",
+            label: "Ime i prezime kupca",
+            type: "text",
+            required: true,
+          },
+          { key: "address", label: "Adresa", type: "text" },
+          { key: "city", label: "Mesto", type: "text" },
+          { key: "postalCode", label: "Poštanski broj", type: "text" },
+          { key: "phone", label: "Telefon", type: "tel" },
+          { key: "email", label: "E-mail", type: "email" },
+        ],
+      },
     ],
-    editableColumns: ["email", "phone", "address", "city", "pib", "gender"],
+    columns: [
+      text("name", "Ime i prezime kupca"),
+      text("address", "Adresa"),
+      text("city", "Mesto"),
+      text("postalCode", "Poštanski broj"),
+      text("phone", "Telefon"),
+      text("email", "E-mail"),
+      status("gender", "Pol", ["Nepoznato", "Ženski", "Muški"]),
+    ],
+    editableColumns: ["name", "address", "city", "postalCode", "phone", "email"],
     rows: emptyRows,
   },
   {
@@ -1361,9 +1384,6 @@ async function customerRows(take: number): Promise<ErpRow[]> {
   const rows = await db.customer.findMany({
     take,
     orderBy: { updatedAt: "desc" },
-    include: {
-      orders: { select: { total: true } },
-    },
   });
   return rows.map((row) => ({
     id: row.id,
@@ -1371,16 +1391,13 @@ async function customerRows(take: number): Promise<ErpRow[]> {
       name:
         [row.firstName, row.lastName].filter(Boolean).join(" ") ||
         row.companyName ||
-        "Bez naziva",
-      email: row.email,
-      phone: row.phone,
+        "Bez imena",
       address: row.address,
       city: row.city,
-      pib: row.pib,
-      gender: row.gender,
-      orders: row.orders.length,
-      turnover: row.orders.reduce((sum, order) => sum + Number(order.total), 0),
-      createdAt: dateOnly(row.createdAt),
+      postalCode: row.postalCode,
+      phone: row.phone,
+      email: row.email,
+      gender: customerGenderLabel(inferCustomerGender(row.firstName)),
     },
   }));
 }
