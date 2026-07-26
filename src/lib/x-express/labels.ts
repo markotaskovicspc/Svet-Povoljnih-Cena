@@ -29,6 +29,7 @@ type XExpressLabelShipment = {
   providerParcelNumbers: Prisma.JsonValue | null;
   providerRouteCode: string | null;
   providerRouteName: string | null;
+  rawCreateResponse: Prisma.JsonValue | null;
   createdAt: Date;
   order: {
     number: string;
@@ -63,7 +64,7 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
     body { margin: 0; background: #f5f5f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
     .sheet { display: grid; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; gap: 6mm 5mm; align-items: start; justify-content: center; padding: 0; }
     .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; display: flex; flex-direction: column; }
-    .topline { text-align: center; font-size: 9px; font-weight: 700; margin-bottom: 2mm; }
+    .topline { text-align: center; font-size: 8px; font-weight: 700; margin-bottom: 2mm; }
     .sender { border: 1px solid #ddd; padding: 2mm; min-height: 15mm; font-size: 11px; line-height: 1.2; }
     .barcode { margin: 3mm 0 1mm; text-align: center; }
     .barcode svg { width: 100%; height: 24mm; display: block; }
@@ -96,23 +97,26 @@ function renderLabel(
   const order = shipment.order;
   const cod = isCod(order.paymentMethod);
   const route = shipment.providerRouteCode ?? shipment.providerRouteName ?? "REON";
-  const content = order.items
-    .map((item) => item.name)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(", ")
-    .slice(0, 80) || "Roba";
+  const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);
+  const content =
+    packageData?.content ??
+    (order.items
+      .map((item) => item.name)
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(", ")
+      .slice(0, 80) || "Roba");
   const note = order.notes?.trim() || "";
   return `<section class="label">
-    <div class="topline">${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}</div>
+    <div class="topline">X EXPRESS DOO BEOGRAD · Đorđa Ognjanovića 16, Beograd · 011 443 44 44</div>
     <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
-    <div class="recipient">Primalac:<strong>${escapeHtml(`${order.shipFirstName} ${order.shipLastName}`.trim())},<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>
+    <div class="recipient">Primalac:<strong>${escapeHtml(`${order.shipFirstName} ${order.shipLastName}`.trim())},<br />${escapeHtml(order.shipStreet)}<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>
     <div class="route"><span class="route-code">${escapeHtml(route)}</span><span class="pkg">${index}/${count}</span></div>
     <div class="meta">
-      <div><strong>Referentni broj:</strong> ${escapeHtml(order.number)}<br /><strong>Povratna dokumentacija:</strong> -<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
-      <div><strong>Uslugu plaća:</strong> nalogodavac - virman<br /><strong>Otkupnina:</strong> ${cod ? escapeHtml(formatRsd(num(order.total))) : "0 RSD"}<br /><strong>Masa:</strong> 0.3kg</div>
+      <div><strong>Referenca:</strong> ${escapeHtml(shipment.id)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
+      <div><strong>Uslugu plaća:</strong> nalogodavac - virman<br /><strong>Otkupnina:</strong> ${cod ? escapeHtml(formatRsd(num(order.total))) : "0 RSD"}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
     </div>
     <div class="note"><strong>Napomena:</strong><br />${escapeHtml(note)}</div>
     <div class="stamp">vreme štampe: ${escapeHtml(formatDateTime(new Date()))}</div>
@@ -133,7 +137,7 @@ function isCod(method: PaymentMethod) {
 }
 
 function code128Svg(value: string) {
-  const codes = encodeCode128(value);
+  const codes = encodeXExpressCode128(value);
   const checksum = codes.reduce((sum, code, index) => sum + (index === 0 ? code : code * index), 0) % 103;
   const allCodes = [...codes, checksum, 106];
   const modules = allCodes.flatMap((code) => CODE128_PATTERNS[code].split("").map(Number));
@@ -149,10 +153,10 @@ function code128Svg(value: string) {
   return `<svg viewBox="0 0 ${width} 60" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(value)} barcode">${rects.join("")}</svg>`;
 }
 
-function encodeCode128(value: string) {
+export function encodeXExpressCode128(value: string) {
   const chars = String(value);
-  const codes = [104];
-  let mode: "B" | "C" = "B";
+  const codes = [103];
+  let mode: "A" | "B" | "C" = "A";
   let i = 0;
   while (i < chars.length) {
     const digitRun = chars.slice(i).match(/^\d+/)?.[0] ?? "";
@@ -168,11 +172,15 @@ function encodeCode128(value: string) {
       i += usable;
       continue;
     }
-    if (mode !== "B") {
+    const charCode = chars.charCodeAt(i);
+    if (mode === "C") {
       codes.push(100);
       mode = "B";
     }
-    const charCode = chars.charCodeAt(i);
+    if (mode === "A" && charCode > 95) {
+      codes.push(100);
+      mode = "B";
+    }
     if (charCode < 32 || charCode > 127) {
       throw new Error(`Code128 ne podržava karakter u bar-kodu: ${chars[i]}`);
     }
@@ -180,6 +188,30 @@ function encodeCode128(value: string) {
     i += 1;
   }
   return codes;
+}
+
+function readPackageData(raw: Prisma.JsonValue | null, trackingCode: string) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const packages = raw.packages;
+  if (!Array.isArray(packages)) return null;
+  for (const entry of packages) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const code = typeof entry.Code === "string" ? entry.Code : "";
+    if (code !== trackingCode) continue;
+    return {
+      mass: typeof entry.Mass === "number" ? entry.Mass : null,
+      content: typeof entry.Content === "string" ? entry.Content : null,
+    };
+  }
+  return null;
+}
+
+function formatMass(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${new Intl.NumberFormat("sr-Latn-RS", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(value)} kg`;
 }
 
 function escapeHtml(value: string) {

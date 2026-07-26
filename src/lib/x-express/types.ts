@@ -1,4 +1,4 @@
-import type { OrderStatus, PaymentMethod, ShipmentStatus } from "@prisma/client";
+import type { OrderStatus, ShipmentStatus } from "@prisma/client";
 
 export interface XExpressLocationCode {
   code: string;
@@ -49,56 +49,85 @@ export interface XExpressStatusCode {
   raw: unknown;
 }
 
-export interface XExpressRecipient {
-  firstName: string;
-  lastName: string;
-  companyName?: string | null;
-  phone: string;
-  street: string;
-  city: string;
-  postalCode: string;
-  country: string;
-  locationCode?: string | null;
+/** Exact PascalCase contract used by POST /api/order/add. */
+export interface XExpressParty {
+  Name: string;
+  Phone: string;
+  Email?: string;
+}
+
+export interface XExpressAddress {
+  Name: string;
+  TownId: number;
+  StreetName: string;
+  StreetNumber: string;
+  Latitude?: number;
+  Longitude?: number;
+  Description: string;
+}
+
+export interface XExpressContact {
+  Name: string;
+  Phone: string;
+}
+
+export interface XExpressWaypoint {
+  Address: XExpressAddress;
+  Contact: XExpressContact;
+  WaypointType: "PICKUP" | "DELIVERY" | "RETURN";
+}
+
+export interface XExpressCashOnDeliveryOption {
+  OptionTypeId: 2;
+  Data: {
+    Name: string;
+    Amount: number;
+    Account: string;
+    Address: string;
+  };
+}
+
+export interface XExpressPackage {
+  Code: string;
+  Mass: number;
+  Content: string;
 }
 
 export interface XExpressCreateOrderPayload {
-  contractCode: string;
-  shipmentCode: string;
-  reference: string;
-  externalOrderId: string;
-  recipient: XExpressRecipient;
-  payment: {
-    method: PaymentMethod;
-    type: "PREPAID" | "COD";
-    codAmount: number;
-    currency: "RSD";
-  };
-  parcels: {
-    count: number;
-    weightKg: number;
-  };
-  notes?: string | null;
+  ContractCode: string;
+  Reference: string;
+  Sender: XExpressParty;
+  Recipient: XExpressParty;
+  ServicePayerId: number;
+  TypeId: number;
+  Content: string;
+  Waypoints: XExpressWaypoint[];
+  Options?: XExpressCashOnDeliveryOption[];
+  Packages: XExpressPackage[];
 }
 
 export interface XExpressCreateOrderResponse {
+  requestGuid: string;
   trackingNo: string;
-  labelUrl?: string | null;
-  providerOrderId?: string | null;
-  providerShipmentId?: string | null;
-  providerStatusCode?: string | null;
+  labelUrl: null;
+  providerOrderId: null;
+  providerShipmentId: string;
+  providerStatusCode: null;
   raw: unknown;
 }
 
+/** Exact PascalCase contract used by POST /api/order/check-address. */
 export interface XExpressAddressCheckPayload {
-  townId: number;
-  streetId?: number | null;
-  street: string;
-  city: string;
-  postalCode: string;
+  Name: string;
+  TownId: number;
+  StreetName: string;
+  StreetNumber: string;
+  Description: string | null;
 }
 
 export interface XExpressAddressCheckResponse {
-  valid: boolean;
+  valid: true;
+  area: string;
   message?: string | null;
   raw: unknown;
 }

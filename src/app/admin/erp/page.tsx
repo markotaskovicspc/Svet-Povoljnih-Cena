@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Boxes, ChevronRight, FileSpreadsheet, Package, ReceiptText, Truck } from "lucide-react";
-import { erpDashboardModules } from "@/lib/admin/erp";
+import { getErpDashboardModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { requireAdminAction, isAuthorized } from "@/lib/admin";
@@ -17,7 +17,7 @@ const ICONS = [Package, Truck, FileSpreadsheet, Boxes, FileSpreadsheet, FileSpre
 
 export default async function ErpDashboardPage() {
   const admin = await requireAdminAction();
-  const visibleModules = erpDashboardModules.filter((module) =>
+  const visibleModules = (await getErpDashboardModules()).filter((module) =>
     isAuthorized(admin.role, allowedRolesForErpModule(module.slug)),
   );
   const ready = visibleModules.filter((m) => m.status === "ready");

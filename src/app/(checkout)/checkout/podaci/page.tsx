@@ -5,7 +5,7 @@ import { listAddresses } from "@/lib/api/addresses";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
-import { getSmallParcelProvider } from "@/lib/mygls";
+import { getSelectedSmallParcelProvider } from "@/lib/courier";
 import { getCheckoutConfig } from "@/lib/checkout/config";
 import { CheckoutStartedAnalytics } from "@/components/analytics/first-party-analytics";
 
@@ -34,7 +34,7 @@ export default async function CheckoutPodaciPage() {
     .filter(Boolean)
     .join(" ");
   const accountName = account?.name ?? (accountFullName || null);
-  const smallParcelProvider = getSmallParcelProvider();
+  const smallParcelProvider = await getSelectedSmallParcelProvider();
   const glsDeliveryPointsEnabled = smallParcelProvider === "MYGLS";
   const xExpressAddressEnabled = smallParcelProvider === "X_EXPRESS";
   const checkoutConfig = await getCheckoutConfig();

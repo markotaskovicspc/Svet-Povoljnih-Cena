@@ -31,6 +31,11 @@ import {
 } from "@/lib/admin/purchase-price.server";
 import { deleteManualSalesOrders } from "@/lib/admin/sales-order.server";
 import { createWarehouseWithAutomaticCode } from "@/lib/admin/warehouse-master.server";
+import {
+  createPickupBatch,
+  deletePickupBatches,
+  postPickupBatches,
+} from "@/lib/admin/pickup-batch.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -126,7 +131,20 @@ async function runCommand(
     case "dispatch.post":
       return postDispatchNotes(ids, actorId);
     case "pickup.create":
-      return createPickupBatch();
+      if (module !== "preuzimanja") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return createPickupBatchCommand();
+    case "pickup.delete":
+      if (module !== "preuzimanja") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return deletePickupBatchCommand(ids, actorId);
+    case "pickup.post":
+      if (module !== "preuzimanja") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return postPickupBatchCommand(ids, actorId);
     case "customer.create":
       return createCustomer();
     case "partner-client.create":
@@ -524,21 +542,31 @@ async function postDispatchNotes(ids: string[], actorId: string): Promise<Comman
   return { message: `Proknjiženo otpremnica: ${posted}.` };
 }
 
-async function createPickupBatch(): Promise<CommandResult> {
-  const year = new Date().getFullYear();
-  const batch = await withUniqueRetry(async () => {
-    const count = await db.pickupBatch.count({
-      where: { number: { startsWith: `PRE-${year}-` } },
-    });
-    return db.pickupBatch.create({
-      data: {
-        number: `PRE-${year}-${String(count + 1).padStart(4, "0")}`,
-        configurationIssue:
-          "Izaberite kurira; rezervacija preuzimanja ostaje isključena dok provider health check ne bude zelen.",
-      },
-    });
-  });
-  return { message: `Pickup batch ${batch.number} je kreiran.`, createdId: batch.id };
+async function createPickupBatchCommand(): Promise<CommandResult> {
+  const batch = await createPickupBatch();
+  return {
+    message: `Nalog ${batch.number} je kreiran.`,
+    createdId: batch.id,
+    redirect: `/admin/erp/preuzimanja/${batch.id}?mode=edit`,
+  };
+}
+
+async function deletePickupBatchCommand(
+  ids: string[],
+  actorId: string,
+): Promise<CommandResult> {
+  const result = await deletePickupBatches(ids, actorId);
+  return { message: `Obrisano naloga: ${result.deletedCount}.` };
+}
+
+async function postPickupBatchCommand(
+  ids: string[],
+  actorId: string,
+): Promise<CommandResult> {
+  const result = await postPickupBatches(ids, actorId);
+  return {
+    message: `Proknjiženo naloga: ${result.posted}; X Express pošiljki: ${result.shipmentCount}.`,
+  };
 }
 
 async function createCustomer(): Promise<CommandResult> {

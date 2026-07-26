@@ -75,36 +75,25 @@ export class XExpressClient {
     const path = requireXExpressPath(this.cfg, "createOrder");
     const raw = await this.request("POST", path, payload);
     const record = unwrapRecord(raw);
-    const trackingNo =
-      pickString(record, [
-        "trackingNo",
-        "trackingNumber",
-        "barcode",
-        "code",
-        "shipmentCode",
-        "waybill",
-        "brojPosiljke",
-      ]) ?? payload.shipmentCode;
-    const providerOrderId = pickString(record, [
-      "orderId",
-      "nalogId",
-      "providerOrderId",
-      "id",
-    ]);
-    const providerShipmentId = pickString(record, [
-      "shipmentId",
-      "packageId",
-      "posiljkaId",
-      "providerShipmentId",
-    ]);
-    const labelUrl = pickString(record, ["labelUrl", "labelPdfUrl", "pdfUrl", "label"]);
-    const providerStatusCode = pickString(record, ["statusCode", "status", "state"]);
+    const requestGuid = pickString(record, ["requestGuid", "RequestGuid"]);
+    if (!requestGuid) {
+      throw new XExpressProviderError(
+        "X Express odgovor na kreiranje nema requestGuid.",
+        undefined,
+        redactXExpressSecrets(raw),
+      );
+    }
+    const trackingNo = payload.Packages[0]?.Code;
+    if (!trackingNo) {
+      throw new XExpressProviderError("X Express zahtev nema nijedan paket.");
+    }
     return {
+      requestGuid,
       trackingNo,
-      labelUrl,
-      providerOrderId,
-      providerShipmentId,
-      providerStatusCode,
+      labelUrl: null,
+      providerOrderId: null,
+      providerShipmentId: requestGuid,
+      providerStatusCode: null,
       raw,
     };
   }
@@ -115,16 +104,17 @@ export class XExpressClient {
     const path = requireXExpressPath(this.cfg, "checkAddress");
     const raw = await this.request("POST", path, payload);
     const record = unwrapRecord(raw);
-    const valid = pickBoolean(record, ["valid", "isValid", "success", "addressValid"]);
-    if (valid == null) {
+    const area = pickString(record, ["area", "Area"]);
+    if (!area) {
       throw new XExpressProviderError(
-        "X Express provera adrese nije vratila prepoznatljiv rezultat.",
+        "X Express provera adrese nije vratila reon.",
         pickString(record, ["code", "errorCode"]) ?? undefined,
         redactXExpressSecrets(raw),
       );
     }
     return {
-      valid,
+      valid: true,
+      area,
       message: pickString(record, ["message", "description", "reason", "error"]),
       raw,
     };
@@ -173,7 +163,7 @@ export class XExpressClient {
         }
         const record = isRecord(json) ? json : {};
         throw new XExpressProviderError(
-          pickString(record, ["message", "error", "reason"]) ??
+          problemDetailsMessage(record) ??
             `X Express zahtev nije uspeo (HTTP ${res.status}).`,
           pickString(record, ["code", "errorCode"]) ?? undefined,
           redactXExpressSecrets(json),
@@ -268,6 +258,19 @@ function pickBoolean(record: Record<string, unknown>, keys: string[]) {
     }
   }
   return null;
+}
+
+function problemDetailsMessage(record: Record<string, unknown>) {
+  const direct = pickString(record, ["detail", "message", "error", "reason", "title"]);
+  const errors = record.errors;
+  if (!isRecord(errors)) return direct;
+  const messages = Object.entries(errors).flatMap(([field, value]) => {
+    const entries = Array.isArray(value) ? value : [value];
+    return entries
+      .filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      .map((item) => `${field}: ${item.trim()}`);
+  });
+  return messages.join("; ") || direct;
 }
 
 export function parseXExpressMunicipality(value: unknown): XExpressMunicipality {

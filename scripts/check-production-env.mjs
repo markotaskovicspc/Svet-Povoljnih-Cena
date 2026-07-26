@@ -92,12 +92,23 @@ if (enabled("MYGLS_ENABLED") || enabled("MYGLS_PRODUCTION_ACCEPTED")) {
   if (!enabled("MYGLS_PRODUCTION_ACCEPTED")) errors.push("MyGLS is enabled without MYGLS_PRODUCTION_ACCEPTED");
 }
 if (enabled("X_EXPRESS_ENABLED") || enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
+  const xExpressEnv = (value("X_EXPRESS_ENV") ?? "test").toLowerCase();
+  if (!["test", "production"].includes(xExpressEnv)) {
+    errors.push("X_EXPRESS_ENV must be test or production");
+  }
   requireNames("X Express", [
     "X_EXPRESS_BASE_URL", "X_EXPRESS_API_USER", "X_EXPRESS_API_KEY",
     "X_EXPRESS_CONTRACT_CODE", "X_EXPRESS_CHECK_ADDRESS_PATH", "X_EXPRESS_CREATE_ORDER_PATH",
-    "X_EXPRESS_WEBHOOK_API_KEY",
+    "X_EXPRESS_WEBHOOK_API_KEY", "X_EXPRESS_CODE_RANGE_START", "X_EXPRESS_CODE_RANGE_END",
+    "X_EXPRESS_PICKUP_NAME", "X_EXPRESS_PICKUP_TOWN_ID", "X_EXPRESS_PICKUP_STREET_NAME",
+    "X_EXPRESS_PICKUP_STREET_NUMBER", "X_EXPRESS_PICKUP_LATITUDE", "X_EXPRESS_PICKUP_LONGITUDE",
+    "X_EXPRESS_PICKUP_CONTACT_NAME", "X_EXPRESS_PICKUP_CONTACT_PHONE",
   ]);
-  if (!enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) errors.push("X Express is enabled without X_EXPRESS_PRODUCTION_ACCEPTED");
+  if (xExpressEnv === "production" && !enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
+    errors.push("X Express production is enabled without X_EXPRESS_PRODUCTION_ACCEPTED");
+  } else if (xExpressEnv === "test") {
+    warnings.push("X Express is using the provider test account; no real pickup is created");
+  }
 }
 if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
   requireNames("BADI", [

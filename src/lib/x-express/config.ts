@@ -1,5 +1,6 @@
 import "server-only";
 import { isProviderAccepted } from "@/lib/provider-acceptance";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const X_EXPRESS_PROVIDER = "X_EXPRESS";
 
@@ -17,6 +18,7 @@ export class XExpressProviderError extends Error {
 export interface XExpressConfig {
   enabled: boolean;
   autoCreate: boolean;
+  env: "test" | "production";
   baseUrl: string;
   apiUser: string;
   apiKey: string;
@@ -26,6 +28,26 @@ export interface XExpressConfig {
   codeRangeStart: number | null;
   codeRangeEnd: number | null;
   statusCronSecret: string;
+  servicePayerId: number;
+  serviceTypeId: number;
+  defaultContent: string;
+  pickup: {
+    name: string;
+    townId: number | null;
+    streetName: string;
+    streetNumber: string;
+    latitude: number | null;
+    longitude: number | null;
+    description: string;
+    contactName: string;
+    contactPhone: string;
+    contactEmail: string;
+  };
+  cod: {
+    name: string;
+    account: string;
+    address: string;
+  };
   paths: {
     municipalities: string;
     towns: string;
@@ -38,7 +60,8 @@ export interface XExpressConfig {
 }
 
 function trim(value: string | undefined) {
-  return value?.trim() ?? "";
+  const normalized = value?.trim() ?? "";
+  return normalized && !normalized.startsWith("GET_FROM_") ? normalized : "";
 }
 
 function bool(value: string | undefined, fallback = false) {
@@ -52,12 +75,22 @@ function int(value: string | undefined) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+function decimal(value: string | undefined) {
+  if (!value?.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function getXExpressConfig(): XExpressConfig {
+  const env = trim(process.env.X_EXPRESS_ENV).toLowerCase() === "production"
+    ? "production"
+    : "test";
   return {
     enabled:
       bool(process.env.X_EXPRESS_ENABLED) &&
-      isProviderAccepted("X_EXPRESS_PRODUCTION_ACCEPTED"),
+      (env === "test" || isProviderAccepted("X_EXPRESS_PRODUCTION_ACCEPTED")),
     autoCreate: bool(process.env.X_EXPRESS_AUTO_CREATE),
+    env,
     baseUrl:
       trim(process.env.X_EXPRESS_BASE_URL).replace(/\/+$/, "") ||
       "https://portal.pm.xexpress.rs",
@@ -71,6 +104,29 @@ export function getXExpressConfig(): XExpressConfig {
     codeRangeStart: int(process.env.X_EXPRESS_CODE_RANGE_START),
     codeRangeEnd: int(process.env.X_EXPRESS_CODE_RANGE_END),
     statusCronSecret: trim(process.env.X_EXPRESS_STATUS_CRON_SECRET),
+    servicePayerId: int(process.env.X_EXPRESS_SERVICE_PAYER_ID) ?? 1,
+    serviceTypeId: int(process.env.X_EXPRESS_SERVICE_TYPE_ID) ?? 1,
+    defaultContent:
+      trim(process.env.X_EXPRESS_DEFAULT_CONTENT) || "Webshop porudžbina",
+    pickup: {
+      name: trim(process.env.X_EXPRESS_PICKUP_NAME),
+      townId: int(process.env.X_EXPRESS_PICKUP_TOWN_ID),
+      streetName: trim(process.env.X_EXPRESS_PICKUP_STREET_NAME),
+      streetNumber: trim(process.env.X_EXPRESS_PICKUP_STREET_NUMBER),
+      latitude: decimal(process.env.X_EXPRESS_PICKUP_LATITUDE),
+      longitude: decimal(process.env.X_EXPRESS_PICKUP_LONGITUDE),
+      description: trim(process.env.X_EXPRESS_PICKUP_DESCRIPTION),
+      contactName: trim(process.env.X_EXPRESS_PICKUP_CONTACT_NAME),
+      contactPhone: trim(process.env.X_EXPRESS_PICKUP_CONTACT_PHONE),
+      contactEmail: trim(process.env.X_EXPRESS_PICKUP_CONTACT_EMAIL),
+    },
+    cod: {
+      name: trim(process.env.X_EXPRESS_COD_NAME) || MERCHANT_LEGAL_INFO.name,
+      account:
+        trim(process.env.X_EXPRESS_COD_ACCOUNT) || MERCHANT_LEGAL_INFO.bankAccount,
+      address:
+        trim(process.env.X_EXPRESS_COD_ADDRESS) || MERCHANT_LEGAL_INFO.shortAddress,
+    },
     paths: {
       municipalities:
         trim(process.env.X_EXPRESS_MUNICIPALITIES_PATH) ||
@@ -99,6 +155,63 @@ export function requireXExpressEnabled() {
     throw new XExpressConfigError(
       "X Express konfiguracija nije kompletna. Proverite base URL, x-api-user, x-api-key i contractCode.",
     );
+  }
+  return cfg;
+}
+
+export function requireXExpressShipmentConfig(cashOnDelivery = false) {
+  const cfg = requireXExpressEnabled();
+  requireXExpressPath(cfg, "checkAddress");
+  requireXExpressPath(cfg, "createOrder");
+  if (
+    cfg.codeRangeStart == null ||
+    cfg.codeRangeEnd == null ||
+    cfg.codeRangeStart > cfg.codeRangeEnd
+  ) {
+    throw new XExpressConfigError("X Express opseg kodova nije ispravno podešen.");
+  }
+  if (!/^U\d{6}$/.test(cfg.contractCode)) {
+    throw new XExpressConfigError("X Express contract code mora biti u formatu U + 6 cifara.");
+  }
+  if (!/^[A-Z]{3}$/.test(cfg.codePrefix)) {
+    throw new XExpressConfigError("X Express code prefix mora imati tačno tri velika slova.");
+  }
+  if (![1, 2, 3, 4].includes(cfg.servicePayerId)) {
+    throw new XExpressConfigError("X Express ServicePayerId mora biti 1, 2, 3 ili 4.");
+  }
+  if (cfg.serviceTypeId !== 1) {
+    throw new XExpressConfigError("X Express trenutno podržava TypeId=1.");
+  }
+
+  const requiredPickup: Array<[string, unknown]> = [
+    ["X_EXPRESS_PICKUP_NAME", cfg.pickup.name],
+    ["X_EXPRESS_PICKUP_TOWN_ID", cfg.pickup.townId],
+    ["X_EXPRESS_PICKUP_STREET_NAME", cfg.pickup.streetName],
+    ["X_EXPRESS_PICKUP_STREET_NUMBER", cfg.pickup.streetNumber],
+    ["X_EXPRESS_PICKUP_LATITUDE", cfg.pickup.latitude],
+    ["X_EXPRESS_PICKUP_LONGITUDE", cfg.pickup.longitude],
+    ["X_EXPRESS_PICKUP_CONTACT_NAME", cfg.pickup.contactName],
+    ["X_EXPRESS_PICKUP_CONTACT_PHONE", cfg.pickup.contactPhone],
+  ];
+  const missing = requiredPickup
+    .filter(([, value]) => value == null || value === "")
+    .map(([name]) => name);
+  if (missing.length) {
+    throw new XExpressConfigError(
+      `X Express pickup konfiguracija nije kompletna: ${missing.join(", ")}.`,
+    );
+  }
+  if (cfg.pickup.townId! <= 0) {
+    throw new XExpressConfigError("X_EXPRESS_PICKUP_TOWN_ID mora biti pozitivan broj.");
+  }
+  if (Math.abs(cfg.pickup.latitude!) > 90 || Math.abs(cfg.pickup.longitude!) > 180) {
+    throw new XExpressConfigError("X Express pickup koordinate nisu validne.");
+  }
+  if (
+    cashOnDelivery &&
+    (!cfg.cod.name || !cfg.cod.account || !cfg.cod.address)
+  ) {
+    throw new XExpressConfigError("X Express COD podaci nisu kompletni.");
   }
   return cfg;
 }

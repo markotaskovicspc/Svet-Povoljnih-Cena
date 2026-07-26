@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  isXExpressWebhookContractValid,
   parseXExpressWebhookBatch,
   processXExpressWebhookNotifyIds,
   stageXExpressWebhookBatch,
@@ -21,22 +22,22 @@ export async function POST(req: Request) {
   } catch {
     return new NextResponse("", { status: 400 });
   }
+  if (!isXExpressWebhookContractValid(batch)) {
+    return new NextResponse("", { status: 400 });
+  }
 
   await stageXExpressWebhookBatch(batch);
-  const summary = await processXExpressWebhookNotifyIds(
+  await processXExpressWebhookNotifyIds(
     batch.map((item) => item.NotifyId),
   );
-  return NextResponse.json({
-    ok: true,
-    received: batch.length,
-    processed: summary.processed,
-    failed: summary.failed,
-  });
+  // X Express explicitly expects an empty HTTP 200 response. Processing is
+  // idempotent by NotifyId, so a provider retry is safe after a timeout.
+  return new NextResponse(null, { status: 200 });
 }
 
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    webhookUrl: "https://svetpovoljnihcena.rs/api/x-express/webhook",
+    webhookUrl: "https://www.svetpovoljnihcena.rs/api/x-express/webhook",
   });
 }

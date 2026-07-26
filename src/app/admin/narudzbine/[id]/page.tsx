@@ -6,7 +6,11 @@ import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
-import { createShipmentForOrder, syncCourierShipmentById } from "@/lib/courier";
+import {
+  createShipmentForOrder,
+  getSelectedSmallParcelProvider,
+  syncCourierShipmentById,
+} from "@/lib/courier";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
@@ -14,7 +18,6 @@ import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import {
   deleteMyGlsLabelsForShipment,
   getMyGlsConfig,
-  getSmallParcelProvider,
   modifyMyGlsCODForShipment,
   MYGLS_PROVIDER,
 } from "@/lib/mygls";
@@ -119,7 +122,10 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
           payload: { orderId: id },
           idempotencyKey: `order-status-email:${id}:${status}`,
         });
-        if (status === "SPREMNO_ZA_ISPORUKU" && smallParcelAutoCreateEnabled()) {
+        if (
+          status === "SPREMNO_ZA_ISPORUKU" &&
+          (await smallParcelAutoCreateEnabled())
+        ) {
           await createShipmentForOrder(id);
         }
         revalidatePath(`/admin/narudzbine/${id}`);
@@ -702,7 +708,9 @@ export default async function OrderDetail({
   });
   if (!order) notFound();
   const activeSmallProvider =
-    getSmallParcelProvider() === "MYGLS" ? MYGLS_PROVIDER : X_EXPRESS_PROVIDER;
+    (await getSelectedSmallParcelProvider()) === "MYGLS"
+      ? MYGLS_PROVIDER
+      : X_EXPRESS_PROVIDER;
   const latestIpsPayment =
     order.payments.find((payment) => payment.provider === "IPS") ?? null;
   const reservedRefundTotal = order.paymentRefunds
@@ -1180,7 +1188,8 @@ export default async function OrderDetail({
                               </AdminActionForm>
                             </>
                           ) : null}
-                          {shipment.status === "FAILED" ? (
+                          {shipment.status === "FAILED" &&
+                          shipment.provider === activeSmallProvider ? (
                             <AdminActionForm action={createCourierShipment} className="flex items-end gap-2">
                               <input type="hidden" name="id" value={order.id} />
                               {shipment.provider === X_EXPRESS_PROVIDER ? (
@@ -1227,8 +1236,7 @@ export default async function OrderDetail({
                   <p className="text-ink-500">Kurirski nalog još nije kreiran.</p>
                 )}
                 {order.shipments.every(
-                  (shipment) =>
-                    shipment.provider !== activeSmallProvider || shipment.status === "FAILED",
+                  (shipment) => shipment.status === "FAILED",
                 ) ? (
                     <AdminActionForm action={createCourierShipment} className="flex items-end justify-end gap-2">
                       <input type="hidden" name="id" value={order.id} />
@@ -1358,8 +1366,8 @@ export default async function OrderDetail({
   );
 }
 
-function smallParcelAutoCreateEnabled() {
-  return getSmallParcelProvider() === "MYGLS"
+async function smallParcelAutoCreateEnabled() {
+  return (await getSelectedSmallParcelProvider()) === "MYGLS"
     ? getMyGlsConfig().autoCreate
     : getXExpressConfig().autoCreate;
 }

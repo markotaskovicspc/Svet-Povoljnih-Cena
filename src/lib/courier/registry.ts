@@ -11,7 +11,6 @@ import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
 import { syncXExpressShipmentById } from "@/lib/x-express/sync";
 import {
-  getSmallParcelProvider,
   MYGLS_PROVIDER,
   createMyGlsShipmentForOrder,
   syncMyGlsShipmentById,
@@ -29,6 +28,7 @@ import {
 } from "./types";
 import { SHIPMENT_STATUS_LABEL } from "./status";
 import { routeService } from "./routing";
+import { getSelectedSmallParcelProvider } from "./provider-selection";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -112,9 +112,21 @@ export async function createShipmentForOrder(
     })),
   });
   if (service === "COURIER_SMALL") {
-    return getSmallParcelProvider() === "MYGLS"
+    const selectedProvider = await getSelectedSmallParcelProvider();
+    const derivedPackageCount = order.items.reduce(
+      (sum, item) =>
+        sum +
+        Math.max(
+          1,
+          Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1)),
+        ),
+      0,
+    );
+    return selectedProvider === "MYGLS"
       ? createMyGlsShipmentForOrder(order.id)
-      : createXExpressShipmentForOrder(order.id, options);
+      : createXExpressShipmentForOrder(order.id, {
+          packageCount: options.packageCount ?? derivedPackageCount,
+        });
   }
 
   const adapter = getAdapter(service);
@@ -223,6 +235,10 @@ export async function applyShipmentEvent(
   const occurredAt = event.occurredAt ?? new Date();
   const newOrderStatus = orderStatusFor(event.status);
   const message = event.message ?? SHIPMENT_STATUS_LABEL[event.status];
+  const selectedSmallProvider =
+    service === "COURIER_SMALL"
+      ? await getSelectedSmallParcelProvider()
+      : null;
   let eventCreated = false;
 
   await db.$transaction(async (tx) => {
@@ -263,7 +279,7 @@ export async function applyShipmentEvent(
         provider:
           shipment.provider ??
           (service === "COURIER_SMALL"
-            ? getSmallParcelProvider() === "MYGLS"
+            ? selectedSmallProvider === "MYGLS"
               ? MYGLS_PROVIDER
               : X_EXPRESS_PROVIDER
             : undefined),

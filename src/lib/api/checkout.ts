@@ -24,7 +24,8 @@ import {
 } from "@/lib/pricing";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
-import { getSmallParcelProvider, MYGLS_PROVIDER } from "@/lib/mygls";
+import { MYGLS_PROVIDER } from "@/lib/mygls";
+import { getSelectedSmallParcelProvider } from "@/lib/courier";
 import {
   isPaymentMethodEnabled,
   resolveDeliveryQuote,
@@ -616,7 +617,7 @@ export async function createOrder(
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : input.billing ?? null;
-  const smallParcelProvider = getSmallParcelProvider();
+  const smallParcelProvider = await getSelectedSmallParcelProvider();
   const glsProviderActive = smallParcelProvider === "MYGLS";
   const xExpressProviderActive = smallParcelProvider === "X_EXPRESS";
   const xExpressTown =

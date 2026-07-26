@@ -9,13 +9,17 @@ import {
 } from "./config";
 
 export function formatXExpressTrackingCode(prefix: string, value: number) {
-  if (!/^[A-Z0-9]{2,10}$/.test(prefix)) {
-    throw new XExpressConfigError("X Express prefiks mora biti alfanumerički.");
+  if (!/^[A-Z]{3}$/.test(prefix)) {
+    throw new XExpressConfigError("X Express prefiks mora imati tačno tri velika slova.");
   }
   if (!Number.isInteger(value) || value < 0) {
     throw new XExpressConfigError("X Express broj pošiljke nije validan.");
   }
-  return `${prefix}${String(value).padStart(10, "0")}`;
+  const numeric = String(value).padStart(10, "0");
+  if (numeric.length !== 10) {
+    throw new XExpressConfigError("X Express broj paketa mora imati najviše 10 cifara.");
+  }
+  return `${prefix}${numeric}`;
 }
 
 export async function allocateXExpressTrackingCode(

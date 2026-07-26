@@ -7,6 +7,10 @@ import {
   stockMovementKindLabel,
 } from "@/lib/inventory-movement";
 import { calculateSalesLineTotals } from "@/lib/admin/sales-order";
+import {
+  PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
+  PICKUP_BATCH_STATUS_LABEL,
+} from "@/lib/admin/pickup-batch";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -378,18 +382,48 @@ export const operationalErpModules: ErpModule[] = [
     slug: "preuzimanja",
     number: "17",
     title: "Kurirska preuzimanja",
-    description: "Paketi, pickup batch-evi i manifesti za kurirsko preuzimanje.",
-    status: "ready",
-    commands: [{ label: "Novi batch", tone: "primary", action: "pickup.create" }],
-    columns: [
-      text("number", "Broj"),
-      text("courier", "Kurir"),
-      status("status", "Status", ["DRAFT", "BOOKED", "PICKED_UP", "CANCELLED"]),
-      number("packages", "Paketi"),
-      date("pickupDate", "Datum preuzimanja"),
-      text("manifestRef", "Manifest"),
-      text("configurationIssue", "Konfiguracija"),
+    description:
+      "Nalozi sa DC redovima kreiranih porudžbina za najavu preuzimanja izabranoj kurirskoj službi.",
+    status: "blocked_external",
+    blockedReason: PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
+    commands: [
+      { label: "Novi", tone: "primary", action: "pickup.create" },
+      {
+        label: "Uredi",
+        tone: "neutral",
+        clientAction: "open",
+        needsSelection: true,
+      },
+      {
+        label: "Obriši",
+        tone: "danger",
+        action: "pickup.delete",
+        needsSelection: true,
+        confirm:
+          "Obrisati izabrane naloge? Učitane porudžbine biće vraćene u status Kreirano.",
+      },
+      {
+        label: "Proknjiži",
+        tone: "neutral",
+        action: "pickup.post",
+        needsSelection: true,
+        disabledReason: PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
+      },
     ],
+    columns: [
+      status("status", "Status", [
+        "Novi",
+        "Slanje kuriru",
+        "Proknjižen",
+        "Preuzet",
+        "Otkazan",
+      ]),
+      text("number", "Broj naloga"),
+      date("createdAt", "Datum naloga"),
+      date("pickupDate", "Datum preuzimanja"),
+      number("packages", "Broj redova"),
+    ],
+    detailHrefBase: "/admin/erp/preuzimanja",
     rows: emptyRows,
   },
   {
@@ -1315,12 +1349,10 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
     id: row.id,
     values: {
       number: row.number,
-      courier: row.courier,
-      status: row.status,
+      status: PICKUP_BATCH_STATUS_LABEL[row.status],
       packages: row._count.lines,
+      createdAt: dateTime(row.createdAt),
       pickupDate: dateTime(row.pickupDate),
-      manifestRef: row.manifestRef,
-      configurationIssue: row.configurationIssue,
     },
   }));
 }
@@ -1433,9 +1465,16 @@ async function integrationRows(): Promise<ErpRow[]> {
       "MYGLS_PICKUP_CITY",
     ]),
     providerRow("XEXPRESS_PICKUP", [
-      "XEXPRESS_BASE_URL",
-      "XEXPRESS_USERNAME",
-      "XEXPRESS_PASSWORD",
+      "X_EXPRESS_BASE_URL",
+      "X_EXPRESS_API_USER",
+      "X_EXPRESS_API_KEY",
+      "X_EXPRESS_CONTRACT_CODE",
+      "X_EXPRESS_PICKUP_TOWN_ID",
+      "X_EXPRESS_PICKUP_STREET_NAME",
+      "X_EXPRESS_PICKUP_STREET_NUMBER",
+      "X_EXPRESS_PICKUP_LATITUDE",
+      "X_EXPRESS_PICKUP_LONGITUDE",
+      "X_EXPRESS_PICKUP_CONTACT_PHONE",
     ]),
     providerRow("NEWSLETTER", ["EMAIL_PROVIDER", "EMAIL_MARKETING_FROM"]),
     providerRow("VIBER", ["VIBER_PROVIDER", "VIBER_API_TOKEN", "VIBER_WEBHOOK_SECRET"]),

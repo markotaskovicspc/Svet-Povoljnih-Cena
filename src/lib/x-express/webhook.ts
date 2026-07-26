@@ -65,6 +65,13 @@ export function parseXExpressWebhookBatch(value: unknown) {
   return notifyBatchSchema.parse(Array.isArray(payload) ? payload : [payload]);
 }
 
+export function isXExpressWebhookContractValid(
+  batch: XExpressWebhookNotify[],
+) {
+  const contractCode = getXExpressConfig().contractCode;
+  return Boolean(contractCode) && batch.every((item) => item.ContractId === contractCode);
+}
+
 export async function stageXExpressWebhookBatch(batch: XExpressWebhookNotify[]) {
   await db.xExpressWebhookEvent.createMany({
     data: batch.map((item) => ({
@@ -165,25 +172,38 @@ type XExpressWebhookEventRow = {
 };
 
 async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
-  const order = await db.order.findFirst({
-    where: {
-      OR: [{ number: event.referenceId }, { id: event.referenceId }],
-    },
+  const directShipment = await db.shipment.findFirst({
+    where: { id: event.referenceId, provider: X_EXPRESS_PROVIDER },
     select: {
       id: true,
-      shipments: {
-        where: { provider: X_EXPRESS_PROVIDER },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { id: true, trackingNo: true },
-      },
+      orderId: true,
+      trackingNo: true,
     },
   });
-  if (!order) {
-    throw new Error(`Porudžbina za ReferenceId ${event.referenceId} nije pronađena.`);
+  let shipment = directShipment;
+  let orderId = directShipment?.orderId ?? null;
+
+  // Compatibility for shipments created before Reference became the unique
+  // Shipment.id: those requests used the order number/id as Reference.
+  if (!shipment) {
+    const legacyOrder = await db.order.findFirst({
+      where: {
+        OR: [{ number: event.referenceId }, { id: event.referenceId }],
+      },
+      select: {
+        id: true,
+        shipments: {
+          where: { provider: X_EXPRESS_PROVIDER },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, orderId: true, trackingNo: true },
+        },
+      },
+    });
+    shipment = legacyOrder?.shipments[0] ?? null;
+    orderId = legacyOrder?.id ?? null;
   }
-  const shipment = order.shipments[0];
-  if (!shipment?.trackingNo) {
+  if (!shipment?.trackingNo || !orderId) {
     throw new Error(`X Express pošiljka za ReferenceId ${event.referenceId} nije pronađena.`);
   }
 
@@ -215,7 +235,7 @@ async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
   await db.xExpressWebhookEvent.update({
     where: { id: event.id },
     data: {
-      orderId: order.id,
+      orderId,
       shipmentId: shipment.id,
       processedAt: new Date(),
       processError: null,

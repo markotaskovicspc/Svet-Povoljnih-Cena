@@ -7,11 +7,12 @@ import {
   X_EXPRESS_PROVIDER,
   XExpressConfigError,
   XExpressProviderError,
-  requireXExpressEnabled,
+  requireXExpressShipmentConfig,
 } from "./config";
 import { XExpressClient } from "./client";
 import { allocateXExpressTrackingCode } from "./code";
 import {
+  buildXExpressAddressCheckPayload,
   buildXExpressCreateOrderPayload,
   isXExpressCashOnDelivery,
 } from "./payload";
@@ -22,12 +23,26 @@ export async function createXExpressShipmentForOrder(
   orderId: string,
   options: { packageCount?: number } = {},
 ) {
-  const cfg = requireXExpressEnabled();
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
-      items: { select: { qty: true, withAssembly: true } },
+      items: {
+        select: {
+          name: true,
+          qty: true,
+          withAssembly: true,
+          product: {
+            select: {
+              packQty: true,
+              packGrossWeightKg: true,
+              grossWeightKg: true,
+              weightKg: true,
+            },
+          },
+        },
+      },
+      user: { select: { email: true } },
       payments: {
         orderBy: { createdAt: "desc" },
         select: { status: true, method: true, providerRef: true },
@@ -62,10 +77,17 @@ export async function createXExpressShipmentForOrder(
       );
     }
   }
+  const cfg = requireXExpressShipmentConfig(
+    isXExpressCashOnDelivery(order.paymentMethod),
+  );
 
+  const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);
   const allocated =
-    existing?.provider === X_EXPRESS_PROVIDER && existing.trackingNo
-      ? [existing.trackingNo]
+    existing?.provider === X_EXPRESS_PROVIDER &&
+    existing.status === "FAILED" &&
+    existing.packageCount === packageCount &&
+    reusableCodes.length >= packageCount
+      ? reusableCodes.slice(0, packageCount)
       : await db.$transaction(async (tx) => {
           const codes: string[] = [];
           for (let i = 0; i < packageCount; i += 1) {
@@ -81,6 +103,17 @@ export async function createXExpressShipmentForOrder(
   );
   const shipmentId =
     existing?.provider === X_EXPRESS_PROVIDER ? existing.id : randomUUID();
+  const officialStreet = order.shipXExpressStreetId
+    ? await db.xExpressStreet.findFirst({
+        where: {
+          id: order.shipXExpressStreetId,
+          townId: order.shipXExpressTownId ?? undefined,
+          active: true,
+          deleted: false,
+        },
+        select: { name: true },
+      })
+    : null;
 
   try {
     const townId = order.shipXExpressTownId ?? Number(location?.code);
@@ -88,33 +121,30 @@ export async function createXExpressShipmentForOrder(
       throw new XExpressConfigError("X Express mesto isporuke nije potvrđeno u šifarniku.");
     }
     const client = new XExpressClient(cfg);
-    const addressCheck = await client.checkAddress({
+    const recipientName =
+      order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`;
+    const addressCheckPayload = buildXExpressAddressCheckPayload({
+      recipientName,
       townId,
-      streetId: order.shipXExpressStreetId,
       street: order.shipStreet,
-      city: order.shipCity,
-      postalCode: order.shipPostalCode,
+      officialStreetName: officialStreet?.name,
     });
-    if (!addressCheck.valid) {
-      throw new XExpressProviderError(
-        addressCheck.message ?? "X Express nije potvrdio adresu isporuke.",
-        "INVALID_ADDRESS",
-        addressCheck.raw,
-      );
-    }
+    const addressCheck = await client.checkAddress(addressCheckPayload);
     const payload = buildXExpressCreateOrderPayload({
-      contractCode: cfg.contractCode,
-      trackingNo,
+      cfg,
+      reference: shipmentId,
+      trackingCodes: allocated,
       order,
-      location,
+      townId,
+      officialStreetName: officialStreet?.name,
     });
-    payload.parcels.count = packageCount;
     const providerResult = await client.createOrder(payload);
     const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;
     const rawCreateResponse = {
       addressCheck: addressCheck.raw,
       createOrder: providerResult.raw,
-      trackingCodes: allocated,
+      reference: shipmentId,
+      packages: payload.Packages,
     };
     const data = {
       provider: X_EXPRESS_PROVIDER,
@@ -126,9 +156,9 @@ export async function createXExpressShipmentForOrder(
       status: "CREATED" as const,
       providerStatusCode: providerResult.providerStatusCode ?? null,
       providerParcelNumbers: allocated as Prisma.InputJsonValue,
-      providerRouteCode: null,
+      providerRouteCode: addressCheck.area,
       providerRouteName: null,
-      rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
+      rawCreateResponse: rawCreateResponse as unknown as Prisma.InputJsonValue,
       syncError: null,
     };
 
@@ -141,7 +171,7 @@ export async function createXExpressShipmentForOrder(
             create: {
               status: "CREATED",
               message: "X Express nalog kreiran i adresa potvrđena",
-              raw: rawCreateResponse as Prisma.InputJsonValue,
+              raw: rawCreateResponse as unknown as Prisma.InputJsonValue,
             },
           },
         },
@@ -158,7 +188,7 @@ export async function createXExpressShipmentForOrder(
           create: {
             status: "CREATED",
             message: "X Express nalog kreiran i adresa potvrđena",
-            raw: rawCreateResponse as Prisma.InputJsonValue,
+            raw: rawCreateResponse as unknown as Prisma.InputJsonValue,
           },
         },
       },
@@ -175,6 +205,8 @@ export async function createXExpressShipmentForOrder(
       existingShipmentId:
         existing?.provider === X_EXPRESS_PROVIDER ? existing.id : undefined,
       trackingNo,
+      trackingCodes: allocated,
+      packageCount,
       message,
       raw: err instanceof XExpressProviderError ? err.raw : undefined,
     });
@@ -234,6 +266,8 @@ async function persistFailedShipment(args: {
   orderId: string;
   existingShipmentId?: string;
   trackingNo: string;
+  trackingCodes: string[];
+  packageCount: number;
   message: string;
   raw?: unknown;
 }) {
@@ -247,6 +281,9 @@ async function persistFailedShipment(args: {
       where: { id: args.existingShipmentId },
       data: {
         status: "FAILED",
+        trackingNo: args.trackingNo,
+        packageCount: args.packageCount,
+        providerParcelNumbers: args.trackingCodes as Prisma.InputJsonValue,
         syncError: args.message,
         events: { create: event },
       },
@@ -260,9 +297,19 @@ async function persistFailedShipment(args: {
       service: "COURIER_SMALL",
       provider: X_EXPRESS_PROVIDER,
       trackingNo: args.trackingNo,
+      packageCount: args.packageCount,
+      providerParcelNumbers: args.trackingCodes as Prisma.InputJsonValue,
       status: "FAILED",
       syncError: args.message,
       events: { create: event },
     },
   });
+}
+
+function readParcelNumbers(value: Prisma.JsonValue | null | undefined) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

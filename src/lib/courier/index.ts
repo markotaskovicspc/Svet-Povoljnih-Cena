@@ -4,6 +4,11 @@ export * from "./types";
 export * from "./status";
 export * from "./routing";
 export {
+  getSelectedSmallParcelProvider,
+  setSelectedSmallParcelProvider,
+  SMALL_PARCEL_PROVIDER_SETTING_KEY,
+} from "./provider-selection";
+export {
   adapterFromSlug,
   applyShipmentEvent,
   createShipmentForOrder,

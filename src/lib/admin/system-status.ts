@@ -127,6 +127,8 @@ export function getIntegrationReadiness(
         present("BADI_VPFR_PAC"),
       ]
     : [present("BADI_CLIENT_ID")];
+  const xExpressProduction =
+    normalized(env.X_EXPRESS_ENV)?.toLowerCase() === "production";
 
   return [
     integration(env, {
@@ -189,7 +191,7 @@ export function getIntegrationReadiness(
       description: "Alternativni kurir za male pošiljke.",
       requirements: [
         enabled("X_EXPRESS_ENABLED"),
-        enabled("X_EXPRESS_PRODUCTION_ACCEPTED"),
+        ...(xExpressProduction ? [enabled("X_EXPRESS_PRODUCTION_ACCEPTED")] : []),
         present("X_EXPRESS_BASE_URL"),
         present("X_EXPRESS_API_USER"),
         present("X_EXPRESS_API_KEY"),
@@ -197,6 +199,16 @@ export function getIntegrationReadiness(
         present("X_EXPRESS_CHECK_ADDRESS_PATH"),
         present("X_EXPRESS_CREATE_ORDER_PATH"),
         present("X_EXPRESS_WEBHOOK_API_KEY"),
+        present("X_EXPRESS_CODE_RANGE_START"),
+        present("X_EXPRESS_CODE_RANGE_END"),
+        present("X_EXPRESS_PICKUP_NAME"),
+        present("X_EXPRESS_PICKUP_TOWN_ID"),
+        present("X_EXPRESS_PICKUP_STREET_NAME"),
+        present("X_EXPRESS_PICKUP_STREET_NUMBER"),
+        present("X_EXPRESS_PICKUP_LATITUDE"),
+        present("X_EXPRESS_PICKUP_LONGITUDE"),
+        present("X_EXPRESS_PICKUP_CONTACT_NAME"),
+        present("X_EXPRESS_PICKUP_CONTACT_PHONE"),
       ],
     }),
     integration(env, {

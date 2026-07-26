@@ -15,18 +15,40 @@ export function inferXExpressShipmentStatus(
   const normalizedCode = String(code ?? "").trim().toUpperCase();
   if (
     normalizedCode === "CREATED" ||
+    normalizedCode === "REQUEST_RECEIVED" ||
     normalizedCode === "REGISTERED" ||
-    normalizedCode === "ANNOUNCED"
+    normalizedCode === "ANNOUNCED" ||
+    normalizedCode === "PCK_ASGN_MISS" ||
+    normalizedCode === "PCK_ASGN_OVERLOAD"
   ) {
     return "CREATED";
   }
   if (normalizedCode === "PICKEDUP" || normalizedCode === "PICKED_UP") {
     return "PICKED_UP";
   }
-  if (normalizedCode === "DLV_ASSIGNED" || normalizedCode === "OUT_FOR_DELIVERY") {
+  if (
+    normalizedCode === "DLV_ASSIGNED" ||
+    normalizedCode === "DLV_TO_PUDO" ||
+    normalizedCode === "PUDO_DEPOSITED" ||
+    normalizedCode === "OUT_FOR_DELIVERY"
+  ) {
     return "OUT_FOR_DELIVERY";
   }
-  if (normalizedCode === "DELIVERED") return "DELIVERED";
+  if (
+    normalizedCode === "DELIVERED" ||
+    normalizedCode === "PUDO_DELIVERED" ||
+    normalizedCode === "PUDO_RETRIEVED"
+  ) {
+    return "DELIVERED";
+  }
+  if (
+    normalizedCode === "RETURNING" ||
+    normalizedCode === "RET_ASSIGNED" ||
+    normalizedCode === "REVERSE_RETURN" ||
+    normalizedCode === "REVERSE_RETURNING"
+  ) {
+    return "IN_TRANSIT";
+  }
   if (
     normalizedCode === "RETURNED" ||
     normalizedCode === "REFUSED" ||
@@ -37,6 +59,13 @@ export function inferXExpressShipmentStatus(
   if (
     normalizedCode.startsWith("PCK_FAIL") ||
     normalizedCode.startsWith("DLV_FAIL") ||
+    normalizedCode === "DELETED" ||
+    normalizedCode === "CONFISCATED" ||
+    normalizedCode === "DAMAGED" ||
+    normalizedCode === "LOST" ||
+    normalizedCode === "PUDO_NOTPOSSIBLE" ||
+    normalizedCode === "RCP_DLV_REJECTED" ||
+    normalizedCode === "SRVC_CANCELED" ||
     normalizedCode.includes("CANCELED") ||
     normalizedCode.includes("CANCELLED")
   ) {

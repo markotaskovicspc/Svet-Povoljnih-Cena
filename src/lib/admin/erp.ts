@@ -12,6 +12,7 @@ import {
   composePurchasePriceAttributes,
   composePurchasePricePattern,
 } from "@/lib/admin/purchase-price";
+import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -1151,6 +1152,15 @@ export const erpDashboardModules: ErpDashboardModule[] = erpModules.flatMap(
   },
 );
 
+export async function getErpDashboardModules() {
+  const availability = await getPickupPostingAvailability();
+  return erpDashboardModules.map((module) =>
+    module.slug === "preuzimanja"
+      ? { ...module, status: availability.available ? "ready" as const : "blocked_external" as const }
+      : module,
+  );
+}
+
 export function getErpModuleDefinition(slug: string) {
   return erpModules.find((m) => m.slug === slug);
 }
@@ -1166,6 +1176,17 @@ export async function getErpModule(
 ) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
+  const pickupAvailability =
+    slug === "preuzimanja" ? await getPickupPostingAvailability() : null;
+  const runtimeDefinition = pickupAvailability
+    ? {
+        ...definition,
+        status: pickupAvailability.available
+          ? ("ready" as const)
+          : ("blocked_external" as const),
+        blockedReason: pickupAvailability.reason ?? undefined,
+      }
+    : definition;
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
   const includeLookupOptions = options.includeLookupOptions !== false;
   const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
@@ -1180,7 +1201,7 @@ export async function getErpModule(
       ? getPurchasePriceModuleContext()
       : Promise.resolve(null),
   ]);
-  const columns = definition.columns.map((column) => ({
+  const columns = runtimeDefinition.columns.map((column) => ({
     ...column,
     options: articleContext
       ? column.key === "supplier"
@@ -1202,8 +1223,12 @@ export async function getErpModule(
           ? purchasePriceContext.skus
         : column.options,
   }));
-  const commands = definition.commands.map((command) => ({
+  const commands = runtimeDefinition.commands.map((command) => ({
     ...command,
+    disabledReason:
+      pickupAvailability && command.action === "pickup.post"
+        ? pickupAvailability.reason ?? undefined
+        : command.disabledReason,
     fields: command.fields?.map((field) => ({
       ...field,
       options:
@@ -1213,7 +1238,7 @@ export async function getErpModule(
     })),
   }));
   return {
-    ...definition,
+    ...runtimeDefinition,
     columns,
     commands,
     rows,
@@ -1228,9 +1253,9 @@ export async function getErpModule(
             ],
           },
         ]
-      : definition.contextFilters,
+      : runtimeDefinition.contextFilters,
     notes: [
-      ...(definition.notes ?? []),
+      ...(runtimeDefinition.notes ?? []),
       rows.length
         ? "Redovi su učitani iz baze. Izmene podržanih polja se snimaju kroz admin API i ulaze u audit log."
         : "Nema još zapisa u bazi za ovaj ERP modul.",
