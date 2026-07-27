@@ -11,6 +11,7 @@ type ProductAvailabilityInput = Pick<
   | "deliveryDays"
   | "packageDimensionsCm"
   | "supplierNextArrivalAt"
+  | "availabilitySource"
 >;
 
 export function getProductAvailability(product: ProductAvailabilityInput) {
@@ -37,16 +38,26 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
       label: "Podaci se dopunjuju",
       addLabel: "Uskoro dostupno",
       message: "Proizvod još nije spreman za bezbednu online kupovinu",
+      isSupplierSourced: false,
       readiness,
     };
   }
 
   if (stock > 0) {
+    const supplierOnly = product.availabilitySource === "SUPPLIER";
+    const mixed = product.availabilitySource === "MIXED";
     return {
       canAddToCart: true,
-      label: "Na stanju",
+      label: supplierOnly ? "Dostupno kod dobavljača" : "Na stanju",
       addLabel: "Dodaj u korpu",
-      message: stock <= 2 ? `Još ${stock} na stanju` : "Spremno za poručivanje",
+      message: supplierOnly
+        ? `Dostupno kod dobavljača · isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
+        : mixed
+          ? "Na stanju; dodatne količine su dostupne kod dobavljača"
+          : stock <= 2
+            ? `Još ${stock} na stanju`
+            : "Spremno za poručivanje",
+      isSupplierSourced: supplierOnly || mixed,
       readiness,
     };
   }
@@ -57,6 +68,7 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
       label: "U dolasku",
       addLabel: "U dolasku",
       message: "Trenutno nije dostupno za online kupovinu",
+      isSupplierSourced: false,
       readiness,
     };
   }
@@ -72,6 +84,7 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
         message: `Sledeći očekivani dolazak: ${date.toLocaleDateString(
           "sr-Latn-RS",
         )}`,
+        isSupplierSourced: false,
         readiness,
       };
     }
@@ -82,6 +95,7 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     label: "Nije dostupno",
     addLabel: "Nije dostupno",
     message: "Trenutno nije dostupno za online kupovinu",
+    isSupplierSourced: false,
     readiness,
   };
 }

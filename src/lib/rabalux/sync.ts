@@ -27,6 +27,10 @@ import {
   parseOverrideFields,
 } from "./ownership";
 import {
+  RABALUX_SUPPLIER_SAFETY_STOCK,
+  resolveRabaluxAvailability,
+} from "./availability";
+import {
   acquireSyncLease,
   assertFeedBaseline,
   assertSafeMissingShare,
@@ -924,7 +928,10 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
         id: true,
         supplierExternalId: true,
         supplierStock: true,
+        supplierReservedStock: true,
         supplierNextArrivalAt: true,
+        lastSupplierStockSyncAt: true,
+        dcAvailableQty: true,
         supplierStockMissingCount: true,
         supplierStockMissingSince: true,
         syncOverrides: true,
@@ -1042,7 +1049,10 @@ async function updateStockItem(
     id: string;
     supplierExternalId: string | null;
     supplierStock: number | null;
+    supplierReservedStock: number;
     supplierNextArrivalAt: Date | null;
+    lastSupplierStockSyncAt: Date | null;
+    dcAvailableQty: number;
     supplierStockMissingCount: number;
     supplierStockMissingSince: Date | null;
     syncOverrides: Prisma.JsonValue | null;
@@ -1059,6 +1069,7 @@ async function updateStockItem(
   item: RabaluxStockItem,
   options: RabaluxSyncOptions,
 ) {
+  const now = new Date();
   const nextStatus = item.restricted ? "ARH" : item.outgoing ? "DTZ" : "SP";
   return db.$transaction(async (tx) => {
     const overrideFields = parseOverrideFields(product.syncOverrides);
@@ -1092,6 +1103,14 @@ async function updateStockItem(
           ? {
               supplierStock: item.stock,
               supplierNextArrivalAt: item.nextArrivalAt,
+              lastSupplierStockSyncAt: now,
+              availableWebAuto:
+                product.dcAvailableQty > 0 ||
+                (product.supplierApprovalStatus === "APPROVED" &&
+                  item.stock -
+                    product.supplierReservedStock -
+                    RABALUX_SUPPLIER_SAFETY_STOCK >
+                    0),
             }
           : {}),
         ...(!flagsLocked
@@ -1103,7 +1122,7 @@ async function updateStockItem(
           : {}),
         supplierStockMissingCount: 0,
         supplierStockMissingSince: null,
-        lastSupplierSyncAt: new Date(),
+        lastSupplierSyncAt: now,
       },
     });
     if (!item.restricted && !flagsLocked) {
@@ -1265,6 +1284,15 @@ async function reconcileMissingStockProducts(args: {
     supplierNextArrivalAt: Date | null;
     supplierStockMissingCount: number;
     supplierStockMissingSince: Date | null;
+    supplierReservedStock: number;
+    lastSupplierStockSyncAt: Date | null;
+    dcAvailableQty: number;
+    supplierApprovalStatus:
+      | "PENDING_MAPPING"
+      | "PENDING_APPROVAL"
+      | "APPROVED"
+      | "REJECTED"
+      | null;
     syncOverrides: Prisma.JsonValue | null;
   }>;
   reason?: string;
@@ -1296,6 +1324,15 @@ async function reconcileMissingStockProducts(args: {
             confirmations,
             graceMs: graceMinutes * 60 * 1_000,
           });
+        const availability = resolveRabaluxAvailability({
+          warehouseStock: product.dcAvailableQty,
+          supplierStock: shouldZero ? 0 : product.supplierStock,
+          supplierReservedStock: product.supplierReservedStock,
+          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          supplierOperational: true,
+          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+          now,
+        });
         await db.$transaction(async (tx) => {
           if (shouldZero && (product.supplierStock ?? 0) !== 0) {
             await tx.supplierStockSnapshot.create({
@@ -1313,6 +1350,7 @@ async function reconcileMissingStockProducts(args: {
             data: {
               supplierStockMissingCount: nextCount,
               supplierStockMissingSince: firstMissingAt,
+              availableWebAuto: availability.sellableStock > 0,
               ...(shouldZero
                 ? { supplierStock: 0, supplierNextArrivalAt: null }
                 : {}),

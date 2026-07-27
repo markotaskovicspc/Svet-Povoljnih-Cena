@@ -44,4 +44,23 @@ describe("Rabalux stock allocation", () => {
       }),
     ).toBe(0);
   });
+
+  it("keeps a configurable supplier safety buffer", () => {
+    expect(
+      effectiveSellableStock({
+        warehouseStock: 2,
+        supplierStock: 5,
+        supplierReservedStock: 1,
+        supplierSafetyStock: 1,
+      }),
+    ).toBe(5);
+    expect(
+      allocateStock(6, {
+        warehouseStock: 2,
+        supplierStock: 5,
+        supplierReservedStock: 1,
+        supplierSafetyStock: 1,
+      }),
+    ).toBeNull();
+  });
 });

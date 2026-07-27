@@ -20,7 +20,11 @@ import {
   svetAkcijaProducts,
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
-import { effectiveSellableStock } from "@/lib/rabalux/allocation";
+import {
+  RABALUX_SUPPLIER_SAFETY_STOCK,
+  rabaluxStockFreshAfter,
+  resolveRabaluxAvailability,
+} from "@/lib/rabalux/availability";
 import {
   isRabaluxEnabled,
   isRabaluxSupplierOperational,
@@ -107,6 +111,8 @@ const productListSelect = {
   supplierStock: true,
   supplierReservedStock: true,
   supplierNextArrivalAt: true,
+  supplierApprovalStatus: true,
+  lastSupplierStockSyncAt: true,
   packWidthCm: true,
   packDepthCm: true,
   packHeightCm: true,
@@ -169,6 +175,7 @@ function mapProduct(
   p: ProductRow,
   pricingRules?: ActivePricingRules,
 ): ProductDTO {
+  const availability = productStockAvailability(p);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -204,17 +211,10 @@ function mapProduct(
       label: pp.pictogram.label,
       iconUrl: pp.pictogram.iconUrl,
     })),
-    stock:
-      isRabaluxSupplierOperational(p.supplier)
-        ? effectiveSellableStock({
-            warehouseStock: p.stock,
-            supplierStock: p.supplierStock,
-            supplierReservedStock: p.supplierReservedStock,
-          })
-        : p.stock,
+    stock: availability.sellableStock,
     incomingStock: p.incomingStock,
-    supplierStock: p.supplierStock ?? undefined,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
+    availabilitySource: availability.source,
     isHero: p.isHero,
     isNew: isNewStatusActive(p.isNew, p.newUntil),
     newUntil: p.newUntil?.toISOString(),
@@ -321,6 +321,7 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     pictograms: [],
     stock: 0,
     incomingStock: 0,
+    availabilitySource: "NONE",
     isHero: false,
     isNew: false,
     isLimited: false,
@@ -372,6 +373,7 @@ function mapProductListItem(
   p: ProductListRow,
   pricingRules?: ActivePricingRules,
 ): ProductDTO {
+  const availability = productStockAvailability(p);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -402,17 +404,10 @@ function mapProductListItem(
       imageUrl: m.material.imageUrl ?? undefined,
     })),
     pictograms: [],
-    stock:
-      isRabaluxSupplierOperational(p.supplier)
-        ? effectiveSellableStock({
-            warehouseStock: p.stock,
-            supplierStock: p.supplierStock,
-            supplierReservedStock: p.supplierReservedStock,
-          })
-        : p.stock,
+    stock: availability.sellableStock,
     incomingStock: p.incomingStock,
-    supplierStock: p.supplierStock ?? undefined,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
+    availabilitySource: availability.source,
     isHero: p.isHero,
     isNew: isNewStatusActive(p.isNew, p.newUntil),
     newUntil: p.newUntil?.toISOString(),
@@ -458,6 +453,31 @@ function mapProductListItem(
   return pricingRules
     ? applyActivePricingRules(product, pricingRules)
     : product;
+}
+
+function productStockAvailability(product: {
+  stock: number;
+  supplierStock: number | null;
+  supplierReservedStock: number;
+  supplierApprovalStatus: string | null;
+  lastSupplierStockSyncAt: Date | null;
+  supplier: { integrationKey: string | null; enabled: boolean } | null;
+}) {
+  if (product.supplier?.integrationKey !== "RABALUX") {
+    const stock = Math.max(Math.trunc(product.stock), 0);
+    return {
+      sellableStock: stock,
+      source: stock > 0 ? ("DC" as const) : ("NONE" as const),
+    };
+  }
+  return resolveRabaluxAvailability({
+    warehouseStock: product.stock,
+    supplierStock: product.supplierStock,
+    supplierReservedStock: product.supplierReservedStock,
+    lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+    supplierOperational: isRabaluxSupplierOperational(product.supplier),
+    supplierApproved: product.supplierApprovalStatus === "APPROVED",
+  });
 }
 
 function packageDimensions(p: {
@@ -755,13 +775,16 @@ export async function listProducts(
   if (input.collectionSlug) where.collection = { slug: input.collectionSlug };
   if (input.excludeSku) where.sku = { not: input.excludeSku };
   if (input.inStockOnly) {
+    const freshAfter = rabaluxStockFreshAfter(now);
     appendAnd(where, {
       OR: [
         { stock: { gt: 0 } },
         ...(isRabaluxEnabled()
           ? [
               {
-                supplierStock: { gt: 0 },
+                supplierStock: { gt: RABALUX_SUPPLIER_SAFETY_STOCK },
+                supplierApprovalStatus: "APPROVED",
+                lastSupplierStockSyncAt: { gte: freshAfter },
                 supplier: {
                   is: { integrationKey: "RABALUX", enabled: true },
                 },

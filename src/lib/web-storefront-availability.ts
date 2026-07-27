@@ -13,13 +13,16 @@ function enabled(value: string | undefined) {
 }
 
 /**
- * Rollout guard for DC-based automatic web availability.
+ * Rollout guard for automatic web availability.
  *
  * Production currently has legacy catalog data but no populated DC balances.
  * Until those balances are imported and verified, the storefront keeps honoring
  * the manual Web check without allowing an all-false auto backfill to hide the
- * complete catalog. Set ENFORCE_WEB_AUTO_AVAILABILITY=true only after the DC
- * readiness audit shows that automatic availability is trustworthy.
+ * complete catalog. The approved business default counts audited DC stock and
+ * fresh, approved Rabalux stock (with its safety buffer), but this guard must
+ * stay off until the DC import/audit is complete and the client confirms that
+ * supplier stock should participate. Set ENFORCE_WEB_AUTO_AVAILABILITY=true
+ * only when that combined automatic availability is trustworthy.
  */
 export function isWebAutoAvailabilityEnforced() {
   return enabled(process.env.ENFORCE_WEB_AUTO_AVAILABILITY);

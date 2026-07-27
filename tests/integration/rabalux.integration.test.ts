@@ -1,6 +1,14 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/cache", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/cache")>();
+  return {
+    ...actual,
+    unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
+  };
+});
+
 vi.mock("@/lib/api/order-access", () => ({
   createOrderAccessToken: () => randomBytes(32).toString("base64url"),
   createCheckoutOrderAccessToken: (checkoutSessionId: string) =>
@@ -213,6 +221,7 @@ async function createProduct(args: {
       stock: args.warehouseStock,
       supplierStock: args.supplierStock,
       supplierReservedStock: 0,
+      lastSupplierStockSyncAt: new Date(),
       supplierId,
       supplierExternalId: `IT-${args.suffix}`,
       supplierApprovalStatus: "APPROVED",
@@ -749,7 +758,7 @@ describe("Rabalux checkout integration", () => {
     const supplierOnly = await createProduct({
       suffix: "SUPPLIER",
       warehouseStock: 0,
-      supplierStock: 1,
+      supplierStock: 2,
     });
     const input = orderInput(
       [
@@ -974,7 +983,7 @@ describe("Rabalux checkout integration", () => {
     const product = await createProduct({
       suffix: "RACE",
       warehouseStock: 0,
-      supplierStock: 2,
+      supplierStock: 3,
     });
     const [left, right] = await Promise.all([
       createOrder(

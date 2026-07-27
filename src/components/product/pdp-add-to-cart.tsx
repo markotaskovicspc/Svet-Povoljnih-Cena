@@ -77,7 +77,9 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
       <div className="hidden flex-col gap-2 md:flex">
         {ctas}
         <p className="text-xs text-ink-500">
-          {availability.canAddToCart
+          {availability.isSupplierSourced
+            ? availability.message
+            : availability.canAddToCart
             ? `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
             : availability.message}
         </p>

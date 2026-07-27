@@ -11,6 +11,9 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
+import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 import {
   SUPPLIER_ALLOCATION,
   calculateSalesLineTotals,
@@ -33,6 +36,8 @@ const productInclude = {
     select: {
       id: true,
       name: true,
+      integrationKey: true,
+      enabled: true,
     },
   },
   group: { select: { name: true } },
@@ -552,9 +557,18 @@ async function allocateLines(
         throw new Error(`Artikal ${line.sku} ne može da se vodi kod dobavljača.`);
       }
       const supplierAvailable =
-        product.supplierStock === null
-          ? null
-          : product.supplierStock - product.supplierReservedStock;
+        product.supplier?.integrationKey === "RABALUX"
+          ? resolveRabaluxAvailability({
+              warehouseStock: 0,
+              supplierStock: product.supplierStock,
+              supplierReservedStock: product.supplierReservedStock,
+              lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+              supplierOperational: isRabaluxSupplierOperational(product.supplier),
+              supplierApproved: product.supplierApprovalStatus === "APPROVED",
+            }).supplierAvailable
+          : product.supplierStock === null
+            ? null
+            : product.supplierStock - product.supplierReservedStock;
       if (supplierAvailable !== null && supplierAvailable < line.qty) {
         throw new Error(
           `Dobavljač nema dovoljnu raspoloživu količinu za ${line.sku}.`,
@@ -564,6 +578,7 @@ async function allocateLines(
         where: { id: product.id },
         data: { supplierReservedStock: { increment: line.qty } },
       });
+      await syncProductChannelAvailability(tx, product.id);
       await tx.orderItem.update({
         where: { id: orderItem.id },
         data: {
@@ -676,6 +691,7 @@ async function releaseManualAllocations(
       if (updated.count !== 1) {
         throw new Error(`Rezervacija dobavljača za ${item.sku} nije usklađena.`);
       }
+      await syncProductChannelAvailability(tx, item.productId);
     }
   }
   await tx.supplierFulfillment.deleteMany({ where: { orderId: args.orderId } });

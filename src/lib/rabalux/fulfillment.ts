@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { trackedDispatch } from "@/lib/email";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 import { isRabaluxSupplierOperational } from "./config";
 import { canSendSupplierOrder } from "./fulfillment-state";
 import {
@@ -251,6 +252,7 @@ export async function releaseOrderSupplierReservations(
         if (updated.count !== 1) {
           throw new Error("Supplier reservation balance is inconsistent.");
         }
+        await syncProductChannelAvailability(tx, item.productId);
       }
     }
     await tx.supplierFulfillment.update({

@@ -7,11 +7,13 @@ export function effectiveSellableStock(input: {
   warehouseStock: number;
   supplierStock?: number | null;
   supplierReservedStock?: number | null;
+  supplierSafetyStock?: number | null;
 }) {
   const warehouse = nonnegativeInt(input.warehouseStock);
   const supplier = nonnegativeInt(input.supplierStock ?? 0);
   const reserved = nonnegativeInt(input.supplierReservedStock ?? 0);
-  return warehouse + Math.max(supplier - reserved, 0);
+  const safety = nonnegativeInt(input.supplierSafetyStock ?? 0);
+  return warehouse + Math.max(supplier - reserved - safety, 0);
 }
 
 export function allocateStock(
@@ -20,13 +22,15 @@ export function allocateStock(
     warehouseStock: number;
     supplierStock?: number | null;
     supplierReservedStock?: number | null;
+    supplierSafetyStock?: number | null;
   },
 ): StockAllocation | null {
   if (!Number.isInteger(requestedQty) || requestedQty <= 0) return null;
   const warehouseAvailable = nonnegativeInt(input.warehouseStock);
   const supplierAvailable = Math.max(
     nonnegativeInt(input.supplierStock ?? 0) -
-      nonnegativeInt(input.supplierReservedStock ?? 0),
+      nonnegativeInt(input.supplierReservedStock ?? 0) -
+      nonnegativeInt(input.supplierSafetyStock ?? 0),
     0,
   );
   if (warehouseAvailable + supplierAvailable < requestedQty) return null;

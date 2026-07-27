@@ -6,6 +6,14 @@ import {
   CHANNEL_SAFETY_STOCK,
   resolveChannelAvailability,
 } from "@/lib/channel-availability";
+import {
+  rabaluxStockFreshAfter,
+  resolveRabaluxAvailability,
+} from "@/lib/rabalux/availability";
+import {
+  isRabaluxEnabled,
+  isRabaluxSupplierOperational,
+} from "@/lib/rabalux/config";
 
 async function defaultWarehouse(tx: Prisma.TransactionClient) {
   const existing = await tx.warehouse.findFirst({
@@ -38,6 +46,13 @@ export async function syncProductChannelAvailability(
         availableWebManual: true,
         availableWholesaleManual: true,
         availableExportManual: true,
+        supplierStock: true,
+        supplierReservedStock: true,
+        supplierApprovalStatus: true,
+        lastSupplierStockSyncAt: true,
+        supplier: {
+          select: { integrationKey: true, enabled: true },
+        },
       },
     }),
     tx.warehouseStock.findUnique({
@@ -76,24 +91,62 @@ export async function syncProductChannelAvailability(
     manualWholesale: product.availableWholesaleManual,
     manualExport: product.availableExportManual,
   });
+  const rabaluxAvailability = resolveRabaluxAvailability({
+    warehouseStock: dcAvailable,
+    supplierStock: product.supplierStock,
+    supplierReservedStock: product.supplierReservedStock,
+    lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+    supplierOperational: isRabaluxSupplierOperational(product.supplier),
+    supplierApproved: product.supplierApprovalStatus === "APPROVED",
+  });
+  const webAuto =
+    product.supplier?.integrationKey === "RABALUX"
+      ? rabaluxAvailability.sellableStock > CHANNEL_SAFETY_STOCK.web
+      : dcAvailable > CHANNEL_SAFETY_STOCK.web;
   await tx.product.update({
     where: { id: productId },
     data: {
       dcAvailableQty: dcAvailable,
-      availableWebAuto: dcAvailable > CHANNEL_SAFETY_STOCK.web,
+      availableWebAuto: webAuto,
       availableWholesaleAuto: dcAvailable > CHANNEL_SAFETY_STOCK.wholesale,
       availableExportAuto: dcAvailable > CHANNEL_SAFETY_STOCK.export,
     },
   });
   return {
     dcAvailable,
-    webAuto: dcAvailable > CHANNEL_SAFETY_STOCK.web,
+    supplierAvailable: rabaluxAvailability.supplierAvailable,
+    webAuto,
     wholesaleAuto: dcAvailable > CHANNEL_SAFETY_STOCK.wholesale,
     exportAuto: dcAvailable > CHANNEL_SAFETY_STOCK.export,
     web: effective.web,
     wholesale: effective.wholesale,
     export: effective.export,
   };
+}
+
+export async function expireStaleRabaluxWebAvailability(now = new Date()) {
+  const staleWhere = isRabaluxEnabled()
+    ? {
+        OR: [
+          { lastSupplierStockSyncAt: null },
+          { lastSupplierStockSyncAt: { lt: rabaluxStockFreshAfter(now) } },
+          { supplierApprovalStatus: null },
+          { supplierApprovalStatus: { not: "APPROVED" as const } },
+          { supplier: { is: { integrationKey: "RABALUX", enabled: false } } },
+        ],
+      }
+    : {};
+  const result = await db.product.updateMany({
+    where: {
+      deletedAt: null,
+      availableWebAuto: true,
+      dcAvailableQty: { lte: CHANNEL_SAFETY_STOCK.web },
+      supplier: { is: { integrationKey: "RABALUX" } },
+      ...staleWhere,
+    },
+    data: { availableWebAuto: false },
+  });
+  return result.count;
 }
 
 export async function syncAllProductChannelAvailability(

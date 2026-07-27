@@ -98,8 +98,9 @@ export interface Product {
 
   stock: number;
   incomingStock: number;
-  supplierStock?: number;
   supplierNextArrivalAt?: ISODate;
+  /** Customer-facing source of currently sellable stock; exact supplier quantities stay server-side. */
+  availabilitySource?: "DC" | "SUPPLIER" | "MIXED" | "NONE";
 
   isHero?: boolean;
   isNew?: boolean;

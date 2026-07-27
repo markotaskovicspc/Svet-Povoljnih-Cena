@@ -444,6 +444,8 @@ model Product {
   supplierStockMissingCount   Int       @default(0)
   supplierStockMissingSince   DateTime?
   lastSupplierSyncAt          DateTime?
+  /// Last successful item-level supplier stock observation. Catalog syncs do not update it.
+  lastSupplierStockSyncAt     DateTime?
   lastSupplierSourceHash      String?
 
   // Ads
@@ -500,6 +502,7 @@ model Product {
   @@index([collectionId])
   @@index([supplierId])
   @@index([supplierId, supplierApprovalStatus])
+  @@index([supplierId, lastSupplierStockSyncAt])
 }
 
 model ArticleSequence {

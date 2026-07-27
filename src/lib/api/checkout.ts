@@ -32,9 +32,13 @@ import {
 } from "@/lib/checkout/config";
 import {
   allocateStock,
-  effectiveSellableStock,
 } from "@/lib/rabalux/allocation";
+import {
+  RABALUX_SUPPLIER_SAFETY_STOCK,
+  resolveRabaluxAvailability,
+} from "@/lib/rabalux/availability";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 import {
   getActivePricingRules,
   pricingRuleInputsForProduct,
@@ -410,6 +414,8 @@ export async function createOrder(
       stock: true,
       supplierStock: true,
       supplierReservedStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
       fullPrice: true,
       salePrice: true,
       discountPct: true,
@@ -466,13 +472,17 @@ export async function createOrder(
     ) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }
+    const rabaluxAvailability = resolveRabaluxAvailability({
+      warehouseStock: p.stock,
+      supplierStock: p.supplierStock,
+      supplierReservedStock: p.supplierReservedStock,
+      lastSupplierStockSyncAt: p.lastSupplierStockSyncAt,
+      supplierOperational: isRabaluxSupplierOperational(p.supplier),
+      supplierApproved: p.supplierApprovalStatus === "APPROVED",
+    });
     const sellable =
-      isRabaluxSupplierOperational(p.supplier)
-        ? effectiveSellableStock({
-            warehouseStock: p.stock,
-            supplierStock: p.supplierStock,
-            supplierReservedStock: p.supplierReservedStock,
-          })
+      p.supplier?.integrationKey === "RABALUX"
+        ? rabaluxAvailability.sellableStock
         : p.stock;
     if (sellable < line.qty) {
       return { ok: false, error: { code: "OUT_OF_STOCK", sku: line.sku } };
@@ -834,12 +844,22 @@ export async function createOrder(
         if (!locked || !orderItem) {
           throw new StockReservationError(line.sku);
         }
+        const rabaluxAvailability = resolveRabaluxAvailability({
+          warehouseStock: locked.stock,
+          supplierStock: locked.supplierStock,
+          supplierReservedStock: locked.supplierReservedStock,
+          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          supplierOperational: isRabaluxSupplierOperational(product.supplier),
+          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+        });
         const allocation =
-          isRabaluxSupplierOperational(product.supplier)
+          product.supplier?.integrationKey === "RABALUX" &&
+          rabaluxAvailability.supplierFresh
             ? allocateStock(line.qty, {
                 warehouseStock: locked.stock,
                 supplierStock: locked.supplierStock,
                 supplierReservedStock: locked.supplierReservedStock,
+                supplierSafetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
               })
             : locked.stock >= line.qty
               ? { warehouseQty: line.qty, supplierQty: 0 }
@@ -878,6 +898,7 @@ export async function createOrder(
               supplierReservedStock: { increment: allocation.supplierQty },
             },
           });
+          await syncProductChannelAvailability(tx, product.id);
           const entries = supplierLines.get(product.supplierId) ?? [];
           entries.push({
             orderItemId: orderItem.id,

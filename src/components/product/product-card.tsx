@@ -378,7 +378,11 @@ export function ProductCard({
             )}
           </div>
           <p className="mt-1 min-h-3.5 truncate text-[10px] leading-none text-ink-500 md:text-[11px]">
-            {availability.canAddToCart ? promoLine : availability.message}
+            {availability.isSupplierSourced
+              ? availability.message
+              : availability.canAddToCart
+                ? promoLine
+                : availability.message}
           </p>
         </div>
       </div>

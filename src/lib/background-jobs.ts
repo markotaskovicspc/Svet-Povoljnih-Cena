@@ -4,7 +4,10 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { redactText } from "@/lib/monitoring";
-import { expirePartnerReservations } from "@/lib/channel-availability.server";
+import {
+  expirePartnerReservations,
+  expireStaleRabaluxWebAvailability,
+} from "@/lib/channel-availability.server";
 
 const schemas = {
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
@@ -186,7 +189,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
       )),
     );
   }
-  const [, , , partnerReservations] = await Promise.all([
+  const [, , , partnerReservations, staleRabaluxProducts] = await Promise.all([
     db.backgroundJob.deleteMany({
       where: { status: "COMPLETED", completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) } },
     }),
@@ -202,12 +205,14 @@ export async function processPendingBackgroundJobs(limit = 20) {
       },
     }),
     expirePartnerReservations(),
+    expireStaleRabaluxWebAvailability(now),
   ]);
   return {
     selected: candidates.length,
     completed: results.filter((result) => result.claimed && result.ok).length,
     failed: results.filter((result) => result.claimed && !result.ok).length,
     releasedPartnerReservations: partnerReservations.released,
+    staleRabaluxProducts,
   };
 }
 
