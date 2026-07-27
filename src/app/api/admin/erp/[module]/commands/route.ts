@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  DispatchNoteType,
-  DocumentPostingStatus,
   Prisma,
   RetailPriceProposalStatus,
-  StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
@@ -21,7 +18,6 @@ import {
   lockInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
-import { adjustInventory } from "@/lib/inventory";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { articleSlug } from "@/lib/article-master";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
@@ -44,6 +40,11 @@ import {
   customerGenderLabel,
   normalizeCustomerDetails,
 } from "@/lib/admin/customer-master";
+import {
+  deleteDispatchNotes,
+  postDispatchNotes,
+  sendDispatchNoteToSef,
+} from "@/lib/admin/dispatch-note.server";
 
 type CommandResult = { message: string; createdId?: string; redirect?: string };
 
@@ -148,10 +149,36 @@ async function runCommand(
         message: `Obrisano porudžbina: ${deleted.length}.`,
       };
     }
-    case "dispatch.create":
-      return createDispatchNote();
-    case "dispatch.post":
-      return postDispatchNotes(ids, actorId);
+    case "dispatch.delete": {
+      if (module !== "otpremnice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const deleted = await deleteDispatchNotes(ids);
+      return { message: `Obrisano otpremnica: ${deleted.length}.` };
+    }
+    case "dispatch.post": {
+      if (module !== "otpremnice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const posted = await postDispatchNotes(ids, actorId);
+      return { message: `Proknjiženo otpremnica: ${posted.length}.` };
+    }
+    case "dispatch.sef-send": {
+      if (module !== "otpremnice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      requireIds(ids);
+      let sent = 0;
+      for (const id of Array.from(new Set(ids))) {
+        const before = await db.dispatchNote.findUnique({
+          where: { id },
+          select: { sefSentAt: true },
+        });
+        await sendDispatchNoteToSef(id);
+        if (!before?.sefSentAt) sent += 1;
+      }
+      return { message: `Poslato na SEF: ${sent}.` };
+    }
     case "pickup.create":
       if (module !== "preuzimanja") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
@@ -414,102 +441,6 @@ async function createWarehouse(
     message: `Magacin „${warehouse.name}” je kreiran.`,
     createdId: warehouse.id,
   };
-}
-
-async function defaultWarehouse() {
-  return db.warehouse.findFirst({
-    where: { active: true },
-    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-  });
-}
-
-async function createDispatchNote(): Promise<CommandResult> {
-  const warehouse = await defaultWarehouse();
-  if (!warehouse) throw new Error("Nema aktivnog izvornog magacina.");
-  const year = new Date().getFullYear();
-  const dispatch = await withUniqueRetry(async () => {
-    const count = await db.dispatchNote.count({
-      where: { number: { startsWith: `OTP-${year}-` } },
-    });
-    return db.dispatchNote.create({
-      data: {
-        number: `OTP-${year}-${String(count + 1).padStart(5, "0")}`,
-        sourceWarehouseId: warehouse.id,
-      },
-    });
-  });
-  return { message: `Otpremnica ${dispatch.number} je kreirana.`, createdId: dispatch.id };
-}
-
-async function postDispatchNotes(ids: string[], actorId: string): Promise<CommandResult> {
-  requireIds(ids);
-  let posted = 0;
-  for (const id of ids) {
-    const didPost = await db.$transaction(async (tx) => {
-      const dispatch = await tx.dispatchNote.findUnique({
-        where: { id },
-        include: { items: true },
-      });
-      if (!dispatch) throw new Error(`Otpremnica ${id} ne postoji.`);
-      if (dispatch.status !== DocumentPostingStatus.DRAFT) return false;
-      if (dispatch.type === DispatchNoteType.STOCKTAKE) {
-        throw new Error(
-          `Popis ${dispatch.number} knjiži se iz modula Popisi (tačka 17).`,
-        );
-      }
-      if (
-        dispatch.type === DispatchNoteType.INTERNAL &&
-        !dispatch.destinationWarehouseId
-      ) {
-        throw new Error(`Interna otpremnica ${dispatch.number} nema odredišni magacin.`);
-      }
-      const locked = await tx.dispatchNote.updateMany({
-        where: { id, status: DocumentPostingStatus.DRAFT },
-        data: {
-          status: DocumentPostingStatus.POSTED,
-          postedAt: new Date(),
-          actorId,
-        },
-      });
-      if (locked.count !== 1) return false;
-      for (const item of dispatch.items) {
-        if (!item.productId) {
-          throw new Error(`Stavka ${item.sku} nema vezan artikal.`);
-        }
-        await adjustInventory(tx, {
-          idempotencyKey: `dispatch:${dispatch.id}:${item.id}:out`,
-          warehouseId: dispatch.sourceWarehouseId,
-          productId: item.productId,
-          sku: item.sku,
-          qtyDelta: -item.qty,
-          kind:
-            dispatch.type === DispatchNoteType.INTERNAL
-              ? StockMovementKind.INTERNAL_TRANSFER_OUT
-              : StockMovementKind.DISPATCH,
-          note: `Otpremnica ${dispatch.number}`,
-          actorId,
-        });
-        if (
-          dispatch.type === DispatchNoteType.INTERNAL &&
-          dispatch.destinationWarehouseId
-        ) {
-          await adjustInventory(tx, {
-            idempotencyKey: `dispatch:${dispatch.id}:${item.id}:in`,
-            warehouseId: dispatch.destinationWarehouseId,
-            productId: item.productId,
-            sku: item.sku,
-            qtyDelta: item.qty,
-            kind: StockMovementKind.INTERNAL_TRANSFER_IN,
-            note: `Interni prijem po otpremnici ${dispatch.number}`,
-            actorId,
-          });
-        }
-      }
-      return true;
-    });
-    if (didPost) posted += 1;
-  }
-  return { message: `Proknjiženo otpremnica: ${posted}.` };
 }
 
 async function createPickupBatchCommand(): Promise<CommandResult> {

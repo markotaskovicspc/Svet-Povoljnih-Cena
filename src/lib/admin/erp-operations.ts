@@ -374,11 +374,27 @@ export const operationalErpModules: ErpModule[] = [
   {
     slug: "otpremnice",
     number: "16",
-    title: "Otpremnice i interni prenosi",
-    description: "Kupčevske i interne otpremnice sa knjiženjem transakcionalnih kretanja zaliha.",
+    title: "Otpremnice",
+    description: "Kupčevske i interne otpremnice sa uvozom VP/INO porudžbina, štampom, SEF slanjem i knjiženjem lagera.",
     status: "ready",
     commands: [
-      { label: "Nova otpremnica", tone: "primary", action: "dispatch.create" },
+      {
+        label: "Nova",
+        tone: "primary",
+        href: "/admin/erp/otpremnice/nova",
+      },
+      {
+        label: "Uredi",
+        clientAction: "open",
+        needsSelection: true,
+      },
+      {
+        label: "Obriši",
+        tone: "danger",
+        action: "dispatch.delete",
+        needsSelection: true,
+        confirm: "Obrisati izabrane nacrte otpremnica?",
+      },
       {
         label: "Proknjiži",
         tone: "neutral",
@@ -386,19 +402,42 @@ export const operationalErpModules: ErpModule[] = [
         needsSelection: true,
         confirm: "Proknjižiti izabrane otpremnice i promeniti lager?",
       },
+      {
+        label: "Pošalji na SEF",
+        tone: "neutral",
+        action: "dispatch.sef-send",
+        needsSelection: true,
+        confirm: "Poslati izabrane proknjižene otpremnice na SEF?",
+      },
+      {
+        label: "Štampaj otpremnicu PDF",
+        clientAction: "download-pdf",
+        needsSelection: true,
+      },
+      {
+        label: "Štampaj otpremnicu Excel",
+        clientAction: "download-excel",
+        needsSelection: true,
+      },
     ],
     columns: [
-      text("number", "Broj"),
-      status("type", "Vrsta", ["CUSTOMER", "INTERNAL", "STOCKTAKE"]),
-      status("status", "Status", ["DRAFT", "POSTED", "CANCELLED"]),
-      text("order", "Nalog"),
-      text("source", "Iz magacina"),
-      text("destination", "Odredište"),
-      number("items", "Stavke"),
-      date("postedAt", "Proknjiženo"),
-      date("createdAt", "Kreirano"),
+      text("number", "Broj otpremnice"),
+      date("issueDate", "Datum otpremnice"),
+      text("issuer", "Naziv firme koja izdaje"),
+      text("sourceWarehouse", "Magacin"),
+      text("receiver", "Naziv firme koja prima robu"),
+      text("destinationWarehouse", "Magacin primaoca"),
+      money("totalNet", "Vrednost bez PDV-a"),
+      money("totalGross", "Vrednost sa PDV-om"),
+      bool("posted", "Proknjiženo"),
+      bool("sefSent", "Poslato na SEF"),
     ],
     rows: emptyRows,
+    detailHrefBase: "/admin/erp/otpremnice",
+    notes: [
+      "Dupli klik na red otvara celu otpremnicu. Proknjižena ili poslata otpremnica je zaključana za izmene i brisanje.",
+      "Kod internog prenosa odredišni magacin je obavezan, a cene se ne prikazuju niti ulaze u iznose.",
+    ],
   },
   {
     slug: "preuzimanja",
@@ -533,13 +572,14 @@ export const operationalErpModules: ErpModule[] = [
     slug: "integracije",
     number: "21",
     title: "Integracije i konfiguracija",
-    description: "Stvarna spremnost SEF, Ananas, kurirskih, newsletter i Viber adaptera.",
+    description: "Stvarna spremnost eOtpremnice, Ananas, kurirskih, newsletter i Viber adaptera.",
     status: "blocked_external",
     blockedReason: "Pojedinačne akcije se uključuju tek kada health check potvrdi sve obavezne vrednosti.",
     commands: [
       {
-        label: "SEF sinhronizacija",
-        disabledReason: "Nedostaju SEF_BASE_URL, SEF_CLIENT_ID i SEF_CLIENT_SECRET.",
+        label: "eOtpremnica sinhronizacija",
+        disabledReason:
+          "Nedostaju EOTPREMNICA_BASE_URL i EOTPREMNICA_API_KEY.",
       },
       {
         label: "Ananas sinhronizacija",
@@ -1362,25 +1402,26 @@ async function dispatchRows(take: number): Promise<ErpRow[]> {
     take,
     orderBy: { createdAt: "desc" },
     include: {
-      order: { select: { number: true } },
       sourceWarehouse: { select: { name: true } },
       destinationWarehouse: { select: { name: true } },
-      _count: { select: { items: true } },
     },
   });
   return rows.map((row) => ({
     id: row.id,
+    detailId: row.id,
     values: {
       number: row.number,
-      type: row.type,
-      status: row.status,
-      order: row.order?.number ?? null,
-      source: row.sourceWarehouse.name,
-      destination:
-        row.destinationWarehouse?.name ?? row.destinationName ?? row.destinationAddress,
-      items: row._count.items,
-      postedAt: dateTime(row.postedAt),
-      createdAt: dateTime(row.createdAt),
+      issueDate: dateOnly(row.issueDate),
+      issuer: row.issuerName || null,
+      sourceWarehouse: row.sourceWarehouse.name,
+      receiver: row.receiverName || null,
+      destinationWarehouse:
+        row.destinationWarehouse?.name ??
+        (row.type === "INTERNAL" ? row.destinationName : null),
+      totalNet: decimal(row.totalNet),
+      totalGross: decimal(row.totalGross),
+      posted: row.status === "POSTED",
+      sefSent: Boolean(row.sefSentAt),
     },
   }));
 }
@@ -1495,7 +1536,10 @@ function providerRow(provider: string, keys: string[]): ErpRow {
 
 async function integrationRows(): Promise<ErpRow[]> {
   return [
-    providerRow("SEF", ["SEF_BASE_URL", "SEF_CLIENT_ID", "SEF_CLIENT_SECRET"]),
+    providerRow("EOTPREMNICA", [
+      "EOTPREMNICA_BASE_URL",
+      "EOTPREMNICA_API_KEY",
+    ]),
     providerRow("ANANAS", ["ANANAS_BASE_URL", "ANANAS_API_KEY"]),
     providerRow("MYGLS_PICKUP", [
       "MYGLS_USERNAME",

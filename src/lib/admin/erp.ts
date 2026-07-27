@@ -74,7 +74,7 @@ export type ErpCommand = {
   description?: string;
   tone?: "primary" | "danger" | "neutral";
   /** Client-only command handled by the grid without an API mutation. */
-  clientAction?: "edit" | "open";
+  clientAction?: "edit" | "open" | "download-pdf" | "download-excel";
   /** Server command key dispatched to POST /api/admin/erp/[module]/commands. */
   action?: string;
   /** If set, the button navigates to this href instead of dispatching. */

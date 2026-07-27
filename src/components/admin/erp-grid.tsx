@@ -513,7 +513,10 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       if (detailIds.size !== 1 || !module.detailHrefBase) {
         setCommandMessage({
           ok: false,
-          text: "Izaberite redove tačno jedne porudžbine za uređivanje.",
+          text:
+            module.slug === "otpremnice"
+              ? "Izaberite tačno jednu otpremnicu za uređivanje."
+              : "Izaberite redove tačno jedne porudžbine za uređivanje.",
         });
         return;
       }
@@ -523,6 +526,31 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       } else {
         router.push(href);
       }
+      return;
+    }
+    if (
+      command.clientAction === "download-pdf" ||
+      command.clientAction === "download-excel"
+    ) {
+      const detailIds = new Set(
+        serverRows
+          .filter((row) => selectedIds.has(row.id))
+          .map((row) => row.detailId ?? row.id),
+      );
+      if (detailIds.size !== 1) {
+        setCommandMessage({
+          ok: false,
+          text: "Izaberite tačno jednu otpremnicu za štampu.",
+        });
+        return;
+      }
+      const format =
+        command.clientAction === "download-pdf" ? "pdf" : "excel";
+      window.location.assign(
+        `/api/admin/dispatch-notes/${encodeURIComponent(
+          Array.from(detailIds)[0],
+        )}/${format}`,
+      );
       return;
     }
     if (command.fields?.length && !input) {

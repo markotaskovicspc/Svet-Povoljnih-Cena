@@ -70,6 +70,7 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
                   qty: true,
                   sku: true,
                   warehouseReservedQty: true,
+                  warehouseDispatchedQty: true,
                   supplierReservedQty: true,
                 },
               },

@@ -43,6 +43,7 @@ type InventoryAdjustment = {
   orderId?: string | null;
   orderItemId?: string | null;
   fiscalDocumentId?: string | null;
+  dispatchNoteId?: string | null;
 };
 
 /**
@@ -61,6 +62,9 @@ export async function adjustInventory(
     where: { idempotencyKey: input.idempotencyKey },
   });
   if (existingMovement) return existingMovement;
+  await tx.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${input.productId} FOR UPDATE`,
+  );
   const product = await tx.product.findUnique({
     where: { id: input.productId },
     select: { sku: true, stock: true },
@@ -72,6 +76,10 @@ export async function adjustInventory(
     : await ensureDefaultWarehouse(tx);
   if (!warehouse?.active) throw new Error("Aktivan magacin nije pronađen.");
 
+  const representedWarehouseStock = await tx.warehouseStock.findFirst({
+    where: { productId: input.productId },
+    select: { id: true },
+  });
   await tx.warehouseStock.upsert({
     where: {
       warehouseId_productId: {
@@ -82,7 +90,9 @@ export async function adjustInventory(
     create: {
       warehouseId: warehouse.id,
       productId: input.productId,
-      qty: product.stock,
+      // Product.stock predates per-warehouse rows and is only an opening
+      // balance when this product has never been represented in any warehouse.
+      qty: representedWarehouseStock ? 0 : product.stock,
     },
     update: {},
   });
@@ -149,6 +159,7 @@ export async function adjustInventory(
       orderId: input.orderId ?? null,
       orderItemId: input.orderItemId ?? null,
       fiscalDocumentId: input.fiscalDocumentId ?? null,
+      dispatchNoteId: input.dispatchNoteId ?? null,
       kind: input.kind,
       sku,
       qty: input.qtyDelta,

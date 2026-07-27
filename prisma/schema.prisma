@@ -1337,6 +1337,9 @@ model OrderItem {
   reclamationCount         Int      @default(0)
   warehouseId              String?
   warehouseReservedQty     Int      @default(0)
+  /// Quantity already consumed by posted dispatch notes. This prevents a
+  /// later cancellation from restoring stock that has physically left.
+  warehouseDispatchedQty   Int      @default(0)
   supplierReservedQty      Int      @default(0)
   supplierExternalSku      String?
 
@@ -1879,6 +1882,7 @@ model StockMovement {
   orderId               String?
   orderItemId           String?
   fiscalDocumentId      String?
+  dispatchNoteId        String?
   kind                  StockMovementKind
   sku                   String
   qty                   Int
@@ -1893,11 +1897,13 @@ model StockMovement {
   order          Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderItem      OrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   fiscalDocument FiscalDocument? @relation(fields: [fiscalDocumentId], references: [id], onDelete: SetNull)
+  dispatchNote   DispatchNote?   @relation(fields: [dispatchNoteId], references: [id], onDelete: SetNull)
 
   @@index([warehouseId, createdAt])
   @@index([productId])
   @@index([orderId])
   @@index([fiscalDocumentId])
+  @@index([dispatchNoteId])
   @@index([sku])
 }
 
@@ -2438,28 +2444,33 @@ enum CustomerGender {
 }
 
 model Customer {
-  id          String         @id @default(cuid())
-  userId      String?        @unique
-  firstName   String?
-  lastName    String?
-  companyName String?
-  pib         String?
-  address     String?
-  city        String?
-  postalCode  String?
-  country     String         @default("RS")
-  phone       String?
-  email       String?
-  gender      CustomerGender @default(NEPOZNATO)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  userId             String?        @unique
+  firstName          String?
+  lastName           String?
+  companyName        String?
+  pib                String?
+  registrationNumber String?
+  address            String?
+  city               String?
+  postalCode         String?
+  country            String         @default("RS")
+  phone              String?
+  email              String?
+  gender             CustomerGender @default(NEPOZNATO)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  orders Order[]
+  user                  User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orders                Order[]
+  issuedDispatchNotes   DispatchNote[] @relation("DispatchIssuerCustomer")
+  receivedDispatchNotes DispatchNote[] @relation("DispatchReceiverCustomer")
+  carriedDispatchNotes  DispatchNote[] @relation("DispatchCarrierCustomer")
 
   @@index([email])
   @@index([phone])
   @@index([pib])
+  @@index([registrationNumber])
   @@index([createdAt])
 }
 
@@ -2476,40 +2487,115 @@ enum DocumentPostingStatus {
 }
 
 model DispatchNote {
-  id                     String                @id @default(cuid())
-  number                 String                @unique
-  type                   DispatchNoteType      @default(CUSTOMER)
-  status                 DocumentPostingStatus @default(DRAFT)
-  orderId                String?
-  sourceWarehouseId      String
-  destinationWarehouseId String?
-  destinationName        String?
-  destinationAddress     String?
-  destinationCity        String?
-  notes                  String?               @db.Text
-  postedAt               DateTime?
-  actorId                String?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
+  id                         String                @id @default(cuid())
+  number                     String                @unique
+  type                       DispatchNoteType      @default(CUSTOMER)
+  status                     DocumentPostingStatus @default(DRAFT)
+  issueDate                  DateTime              @default(now())
+  orderId                    String?
+  issuerCustomerId           String?
+  receiverCustomerId         String?
+  carrierCustomerId          String?
+  sourceWarehouseId          String
+  destinationWarehouseId     String?
+  issuerName                 String                @default("")
+  issuerPib                  String                @default("")
+  issuerRegistrationNumber   String                @default("")
+  issuerAddress              String                @default("")
+  issuerCity                 String                @default("")
+  issuerPostalCode           String                @default("")
+  issuerCountry              String                @default("RS")
+  issuerPhone                String?
+  issuerEmail                String?
+  receiverName               String                @default("")
+  receiverPib                String                @default("")
+  receiverRegistrationNumber String                @default("")
+  receiverAddress            String                @default("")
+  receiverCity               String                @default("")
+  receiverPostalCode         String                @default("")
+  receiverCountry            String                @default("RS")
+  receiverPhone              String?
+  receiverEmail              String?
+  carrierName                String?
+  carrierPib                 String?
+  carrierRegistrationNumber  String?
+  carrierAddress             String?
+  carrierCity                String?
+  carrierPostalCode          String?
+  carrierCountry             String?
+  carrierPhone               String?
+  carrierEmail               String?
+  licensePlate               String?
+  courierFirstName           String?
+  courierLastName            String?
+  courierIdNumber            String?
+  destinationName            String?
+  destinationAddress         String?
+  destinationCity            String?
+  showPrices                 Boolean               @default(true)
+  currency                   String                @default("RSD")
+  totalNet                   Decimal               @default(0) @db.Decimal(12, 2)
+  totalVat                   Decimal               @default(0) @db.Decimal(12, 2)
+  totalGross                 Decimal               @default(0) @db.Decimal(12, 2)
+  importFrom                 DateTime?
+  importTo                   DateTime?
+  shipmentMethod             Int                   @default(1)
+  actualDispatchAt           DateTime?
+  plannedDeliveryAt          DateTime?
+  sefRequestId               String?               @unique
+  sefDocumentId              String?
+  sefStatus                  String?
+  sefSentAt                  DateTime?
+  sefResponse                Json?
+  sefError                   String?               @db.Text
+  notes                      String?               @db.Text
+  postedAt                   DateTime?
+  actorId                    String?
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
 
   order                Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  issuerCustomer       Customer?          @relation("DispatchIssuerCustomer", fields: [issuerCustomerId], references: [id], onDelete: SetNull)
+  receiverCustomer     Customer?          @relation("DispatchReceiverCustomer", fields: [receiverCustomerId], references: [id], onDelete: SetNull)
+  carrierCustomer      Customer?          @relation("DispatchCarrierCustomer", fields: [carrierCustomerId], references: [id], onDelete: SetNull)
   sourceWarehouse      Warehouse          @relation("DispatchSourceWarehouse", fields: [sourceWarehouseId], references: [id])
   destinationWarehouse Warehouse?         @relation("DispatchDestinationWarehouse", fields: [destinationWarehouseId], references: [id], onDelete: SetNull)
   items                DispatchNoteItem[]
+  stockMovements       StockMovement[]
 
   @@index([orderId])
+  @@index([issuerCustomerId, issueDate])
+  @@index([receiverCustomerId, issueDate])
+  @@index([carrierCustomerId])
   @@index([status, createdAt])
   @@index([sourceWarehouseId, createdAt])
+  @@index([sefSentAt])
 }
 
 model DispatchNoteItem {
-  id             String  @id @default(cuid())
-  dispatchNoteId String
-  orderItemId    String?
-  productId      String?
-  sku            String
-  name           String
-  qty            Int
+  id                String  @id @default(cuid())
+  dispatchNoteId    String
+  orderItemId       String?
+  productId         String?
+  sku               String
+  name              String
+  qty               Int
+  sourceOrderNumber String?
+  subgroup          String?
+  collection        String?
+  shortDescription  String? @db.Text
+  shortName         String?
+  attribute1        String?
+  attribute2        String?
+  attribute3        String?
+  attribute4        String?
+  color1            String?
+  color2            String?
+  unitPriceGross    Decimal @default(0) @db.Decimal(12, 2)
+  vatRate           Decimal @default(20) @db.Decimal(5, 2)
+  totalNet          Decimal @default(0) @db.Decimal(12, 2)
+  totalVat          Decimal @default(0) @db.Decimal(12, 2)
+  totalGross        Decimal @default(0) @db.Decimal(12, 2)
 
   dispatchNote DispatchNote @relation(fields: [dispatchNoteId], references: [id], onDelete: Cascade)
   orderItem    OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)

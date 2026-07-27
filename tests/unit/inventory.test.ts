@@ -9,6 +9,7 @@ import {
 function transactionMock(options: { insufficient?: boolean; reserved?: number } = {}) {
   let movement: Record<string, unknown> | null = null;
   const tx = {
+    $queryRaw: vi.fn(async () => [{ id: "product-1" }]),
     stockMovement: {
       findUnique: vi.fn(async ({ where }: { where: { idempotencyKey: string } }) =>
         movement?.idempotencyKey === where.idempotencyKey ? movement : null,
@@ -30,6 +31,7 @@ function transactionMock(options: { insufficient?: boolean; reserved?: number } 
     },
     warehouseStock: {
       upsert: vi.fn(async () => ({ qty: 5 })),
+      findFirst: vi.fn(async () => ({ id: "warehouse-stock-1" })),
       findUnique: vi.fn(async () => ({ qty: 7 })),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: options.insufficient ? 0 : 1 })),

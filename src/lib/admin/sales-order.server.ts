@@ -825,6 +825,7 @@ function ensureEditableOrder(order: {
   fiscalDocuments: unknown[];
   shipments: unknown[];
   dispatchNotes: unknown[];
+  dispatchItemCount: number;
   supplierFulfillments: Array<{ sentAt: Date | null }>;
 }) {
   if (!MANUAL_CHANNELS.includes(order.channel)) {
@@ -837,7 +838,8 @@ function ensureEditableOrder(order: {
     order.invoices.length ||
     order.fiscalDocuments.length ||
     order.shipments.length ||
-    order.dispatchNotes.length
+    order.dispatchNotes.length ||
+    order.dispatchItemCount > 0
   ) {
     throw new Error("Obrađena porudžbina sa dokumentima ili isporukom ne može da se menja.");
   }
@@ -864,11 +866,25 @@ export async function updateManualSalesOrder(
         fiscalDocuments: { select: { id: true } },
         shipments: { select: { id: true } },
         dispatchNotes: { select: { id: true } },
+        items: {
+          select: {
+            dispatchNoteItems: {
+              where: { dispatchNote: { status: { not: "CANCELLED" } } },
+              select: { id: true },
+            },
+          },
+        },
         supplierFulfillments: { select: { sentAt: true } },
       },
     });
     if (!existing) throw new Error("Porudžbina ne postoji.");
-    ensureEditableOrder(existing);
+    ensureEditableOrder({
+      ...existing,
+      dispatchItemCount: existing.items.reduce(
+        (sum, item) => sum + item.dispatchNoteItems.length,
+        0,
+      ),
+    });
     if (existing.channel !== data.channel) {
       throw new Error("Kanal postojeće porudžbine ne može da se promeni.");
     }
@@ -962,7 +978,16 @@ export async function deleteManualSalesOrders(
     const orders = await tx.order.findMany({
       where: { id: { in: orderIds } },
       include: {
-        items: { select: { id: true, sku: true } },
+        items: {
+          select: {
+            id: true,
+            sku: true,
+            dispatchNoteItems: {
+              where: { dispatchNote: { status: { not: "CANCELLED" } } },
+              select: { id: true },
+            },
+          },
+        },
         payments: { select: { status: true } },
         invoices: { select: { id: true } },
         fiscalDocuments: { select: { id: true } },
@@ -981,7 +1006,13 @@ export async function deleteManualSalesOrders(
       ),
     );
     for (const order of orders) {
-      ensureEditableOrder(order);
+      ensureEditableOrder({
+        ...order,
+        dispatchItemCount: order.items.reduce(
+          (sum, item) => sum + item.dispatchNoteItems.length,
+          0,
+        ),
+      });
       if (order.status !== "KREIRANO") {
         throw new Error(`Samo kreirana porudžbina može da se obriše (${order.number}).`);
       }
@@ -1017,6 +1048,10 @@ export async function getSalesOrderDetail(
         orderBy: { id: "asc" },
         include: {
           product: { include: productInclude },
+          dispatchNoteItems: {
+            where: { dispatchNote: { status: { not: "CANCELLED" } } },
+            select: { id: true },
+          },
         },
       },
       payments: { orderBy: { createdAt: "desc" } },
@@ -1039,6 +1074,10 @@ export async function getSalesOrderDetail(
     fiscalDocuments: order.fiscalDocuments,
     shipments: order.shipments,
     dispatchNotes: order.dispatchNotes,
+    dispatchItemCount: order.items.reduce(
+      (sum, item) => sum + item.dispatchNoteItems.length,
+      0,
+    ),
     supplierFulfillments: order.supplierFulfillments,
   };
   let canEdit = true;

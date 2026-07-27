@@ -10,11 +10,18 @@ export type RestorableOrderItem = {
   sku: string;
   qty: number;
   warehouseReservedQty: number;
+  warehouseDispatchedQty: number;
   supplierReservedQty: number;
 };
 
 export function warehouseRestoreQty(item: RestorableOrderItem) {
   if (item.warehouseReservedQty > 0) return item.warehouseReservedQty;
+  if (item.warehouseDispatchedQty > 0) {
+    return Math.max(
+      item.qty - item.warehouseDispatchedQty - item.supplierReservedQty,
+      0,
+    );
+  }
   // Rows created before allocation tracking was introduced had both fields at
   // zero and reserved their full quantity from the owned warehouse.
   return item.supplierReservedQty === 0 ? item.qty : 0;

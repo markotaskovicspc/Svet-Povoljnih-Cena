@@ -6,7 +6,7 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
  * Minimal PDF generator for the order confirmation attachments
  * (`predracun-racun.pdf` and `obrazac-za-odustajanje.pdf`).
  *
- * We hand-roll a single-page PDF rather than pulling in a PDF library:
+ * We hand-roll a compact multi-page PDF rather than pulling in a PDF library:
  *   - PDF text uses standard 14 fonts (Helvetica / Helvetica-Bold) which are
  *     guaranteed available in every viewer and don't require font embedding.
  *   - WinAnsiEncoding is the default for those fonts, which only covers a
@@ -35,28 +35,22 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
     (l) => ({ ...l, text: transliterate(l.text) }),
   );
 
-  // Build content stream: y starts at top margin and decreases per line.
-  const contentLines: string[] = ["BT"];
+  // Paginate before creating the PDF objects so no line is silently dropped.
+  const pages: string[][] = [[]];
   let cursorY = PAGE_HEIGHT - MARGIN_Y;
-  let firstSet = false;
   for (const line of sanitized) {
     const size = line.size ?? FONT_SIZE;
     const font = line.bold ? "/F2" : "/F1";
     const advance = (line.spaceAbove ?? 0) + (line.size ? line.size + 4 : LINE_HEIGHT);
-    cursorY -= advance;
-    if (!firstSet) {
-      contentLines.push(`${font} ${size} Tf`);
-      contentLines.push(`${MARGIN_X} ${cursorY} Td`);
-      firstSet = true;
-    } else {
-      contentLines.push(`${font} ${size} Tf`);
-      contentLines.push(`0 ${-advance} Td`);
+    if (cursorY - advance < MARGIN_Y && pages.at(-1)!.length) {
+      pages.push([]);
+      cursorY = PAGE_HEIGHT - MARGIN_Y;
     }
-    contentLines.push(`(${pdfEscape(line.text)}) Tj`);
-    if (cursorY < MARGIN_Y) break; // single-page only
+    cursorY -= advance;
+    pages.at(-1)!.push(
+      `${font} ${size} Tf\n1 0 0 1 ${MARGIN_X} ${cursorY} Tm\n(${pdfEscape(line.text)}) Tj`,
+    );
   }
-  contentLines.push("ET");
-  const stream = contentLines.join("\n");
 
   // Object table
   const objects: string[] = [];
@@ -69,15 +63,27 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
   const fontHelveticaBold = push(
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   );
-  const contentObj = push(`<< /Length ${Buffer.byteLength(stream, "binary")} >>\nstream\n${stream}\nendstream`);
-  const pageObj = push(
-    `<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontHelvetica} 0 R /F2 ${fontHelveticaBold} 0 R >> >> >>`,
+  const pageObjects = pages.map((page) => {
+    const stream = `BT\n${page.join("\n")}\nET`;
+    const contentObj = push(
+      `<< /Length ${Buffer.byteLength(stream, "binary")} >>\nstream\n${stream}\nendstream`,
+    );
+    return push(
+      `<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontHelvetica} 0 R /F2 ${fontHelveticaBold} 0 R >> >> >>`,
+    );
+  });
+  const pagesObj = push(
+    `<< /Type /Pages /Kids [${pageObjects.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjects.length} >>`,
   );
-  const pagesObj = push(`<< /Type /Pages /Kids [${pageObj} 0 R] /Count 1 >>`);
   const catalogObj = push(`<< /Type /Catalog /Pages ${pagesObj} 0 R >>`);
 
-  // Patch the Page's parent reference now that we know the Pages object id.
-  objects[pageObj - 1] = objects[pageObj - 1]!.replace("__PARENT__", `${pagesObj} 0 R`);
+  // Patch the Page parent references now that we know the Pages object id.
+  for (const pageObj of pageObjects) {
+    objects[pageObj - 1] = objects[pageObj - 1]!.replace(
+      "__PARENT__",
+      `${pagesObj} 0 R`,
+    );
+  }
 
   // Assemble the file with proper xref offsets.
   const header = "%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n";

@@ -32,6 +32,7 @@ export async function expirePendingPayments(limit = 100) {
           qty: true,
           sku: true,
           warehouseReservedQty: true,
+          warehouseDispatchedQty: true,
           supplierReservedQty: true,
         },
       },
