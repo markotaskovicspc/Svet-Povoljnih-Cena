@@ -80,6 +80,16 @@ function textValue(value: ErpValue) {
 function formatValue(value: ErpValue, column: ErpColumn) {
   if (value === null || value === undefined || value === "") return "—";
   if (column.type === "boolean") return value ? "Da" : "Ne";
+  if (column.type === "date" && typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("sr-Latn-RS", {
+        dateStyle: "short",
+        ...(value.includes("T") ? { timeStyle: "short" as const } : {}),
+        timeZone: "Europe/Belgrade",
+      }).format(parsed);
+    }
+  }
   if (column.type === "money" && typeof value === "number") {
     return new Intl.NumberFormat("sr-Latn-RS", {
       maximumFractionDigits: 2,
@@ -234,14 +244,29 @@ function matchesFilter(value: ErpValue, filter: AdminGridFilter) {
   }
 }
 
-export function ErpGrid({ module }: { module: ErpModule }) {
+export function ErpGrid({
+  module,
+  fixedFilters = [],
+  initialVisibleColumns,
+}: {
+  module: ErpModule;
+  fixedFilters?: AdminGridFilter[];
+  initialVisibleColumns?: string[];
+}) {
   const router = useRouter();
   const defaultColumns = useMemo(
-    () =>
-      module.columns
-        .filter((c) => c.defaultVisible)
-        .map((c) => c.key),
-    [module.columns],
+    () => {
+      const knownColumns = new Set(module.columns.map((column) => column.key));
+      const requestedColumns = (initialVisibleColumns ?? []).filter((key) =>
+        knownColumns.has(key),
+      );
+      return requestedColumns.length
+        ? requestedColumns
+        : module.columns
+            .filter((column) => column.defaultVisible)
+            .map((column) => column.key);
+    },
+    [initialVisibleColumns, module.columns],
   );
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<AdminGridFilter[]>([]);
@@ -332,7 +357,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           page: String(page),
           pageSize: "100",
           q: query,
-          filters: JSON.stringify(filters),
+          filters: JSON.stringify([...fixedFilters, ...filters]),
           sorting: JSON.stringify(sorting),
           columns: JSON.stringify(visibleColumns),
           ...context,
@@ -377,6 +402,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
     };
   }, [
     filters,
+    fixedFilters,
     module.slug,
     page,
     query,
@@ -439,7 +465,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
           .toLowerCase();
         if (!hay.includes(q)) return false;
       }
-      return filters.every((filter) => {
+      return [...fixedFilters, ...filters].every((filter) => {
         return matchesFilter(row.values[filter.columnKey], filter);
       });
     });
@@ -458,7 +484,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
       }
       return 0;
     });
-  }, [filters, query, rows, sorting, visible]);
+  }, [filters, fixedFilters, query, rows, sorting, visible]);
 
   const allVisibleSelected =
     filteredRows.length > 0 && filteredRows.every((row) => selectedIds.has(row.id));
@@ -848,7 +874,7 @@ export function ErpGrid({ module }: { module: ErpModule }) {
   const exportXlsx = () => {
     const params = new URLSearchParams({
       q: query,
-      filters: JSON.stringify(filters),
+      filters: JSON.stringify([...fixedFilters, ...filters]),
       sorting: JSON.stringify(sorting),
       columns: JSON.stringify(visible.map((column) => column.key)),
       ...context,

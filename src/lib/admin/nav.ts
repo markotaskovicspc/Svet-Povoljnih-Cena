@@ -52,6 +52,11 @@ export const adminNav: AdminNavGroup[] = [
       { href: "/admin/erp/otpremnice", label: "Otpremnice", allowed: O },
       { href: "/admin/erp/kupci", label: "Kupci i partneri", allowed: O },
       { href: "/admin/fiskalizacija", label: "Fiskalizacija i refundacija", allowed: O },
+      {
+        href: "/admin/erp/racunovodstveni-registri",
+        label: "Knjigovodstveni izveštaji",
+        allowed: O,
+      },
     ],
   },
   {
@@ -101,4 +106,15 @@ export function allowedNavFor(role: AdminRoleName | null | undefined): AdminNavG
       ),
     }))
     .filter((g) => g.items.length > 0);
+}
+
+export function activeAdminNavHref(nav: AdminNavGroup[], pathname: string) {
+  return nav
+    .flatMap((group) => group.items)
+    .filter((item) =>
+      item.href === "/admin"
+        ? pathname === "/admin"
+        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 }

@@ -3,7 +3,6 @@ import type { AdminRoleName } from "@prisma/client";
 const CONTENT_MODULES = new Set([
   "artikli",
   "sifarnici-artikala",
-  "mp-cene",
   "cenovnici",
   "akcijske-cene",
   "loyalty",
@@ -16,6 +15,8 @@ const CONTENT_MODULES = new Set([
   "pozicije-piktograma",
 ]);
 
+const OPS_CONTENT_MODULES = new Set(["mp-cene"]);
+
 const ADS_MODULES = new Set([
   "newsletter-kampanje",
   "posete-konverzije",
@@ -27,6 +28,7 @@ const SHARED_MODULES = new Set([
 
 export function allowedRolesForErpModule(module: string): readonly AdminRoleName[] {
   if (module === "integracije" || module === "admin-podesavanja") return [];
+  if (OPS_CONTENT_MODULES.has(module)) return ["CONTENT", "OPS"];
   if (CONTENT_MODULES.has(module)) return ["CONTENT"];
   if (ADS_MODULES.has(module)) return ["ADS"];
   if (SHARED_MODULES.has(module)) return ["CONTENT", "OPS", "ADS"];

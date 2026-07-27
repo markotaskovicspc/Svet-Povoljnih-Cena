@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { MenuIcon } from "lucide-react";
 import { useState } from "react";
+import { activeAdminNavHref } from "@/lib/admin/nav";
 
 function AdminNavContent({
   nav,
@@ -23,6 +24,8 @@ function AdminNavContent({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const activeHref = activeAdminNavHref(nav, pathname);
+
   return (
     <nav className="flex flex-col gap-6 px-4 py-6 text-sm">
       <Link
@@ -38,10 +41,7 @@ function AdminNavContent({
             {group.label}
           </p>
           {group.items.map((item) => {
-            const active =
-              item.href === "/admin"
-                ? pathname === "/admin"
-                : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = item.href === activeHref;
             return (
               <Link
                 key={item.href}

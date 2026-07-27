@@ -1579,8 +1579,13 @@ async function accountingRows(take: number): Promise<ErpRow[]> {
     values: {
       receiptNumber: row.receiptNumber ?? row.idempotencyKey,
       order: row.order.number,
-      kind: row.kind,
-      status: row.status,
+      kind: row.kind === "SALE" ? "Promet" : "Storno / refundacija",
+      status:
+        row.status === "ISSUED"
+          ? "Izdato"
+          : row.status === "FAILED"
+            ? "Neuspešno"
+            : "Na čekanju",
       net: decimal(row.totalNet),
       vat: decimal(row.totalVat),
       gross: decimal(row.totalGross),
