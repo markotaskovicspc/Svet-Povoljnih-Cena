@@ -574,24 +574,42 @@ model ProductMedia {
 enum ProductAttachmentKind {
   MANUAL
   ENERGY_LABEL
+  DOCUMENT
+}
+
+enum ProductAttachmentSection {
+  GENERAL
+  DELIVERY_TERMS
+  DECLARATION
+  ASSEMBLY_INSTRUCTIONS
+  MAINTENANCE
+}
+
+enum ProductAttachmentOrigin {
+  SUPPLIER
+  ADMIN_UPLOAD
 }
 
 model ProductAttachment {
-  id         String                 @id @default(cuid())
+  id         String                   @id @default(cuid())
   productId  String
   kind       ProductAttachmentKind
+  section    ProductAttachmentSection @default(GENERAL)
+  origin     ProductAttachmentOrigin  @default(SUPPLIER)
   label      String
   url        String
   sourceUrl  String?
-  syncStatus ProductAssetSyncStatus @default(READY)
-  order      Int                    @default(0)
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
+  mimeType   String?
+  sizeBytes  Int?
+  syncStatus ProductAssetSyncStatus   @default(READY)
+  order      Int                      @default(0)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, kind, order])
-  @@index([productId, order])
+  @@unique([productId, section, kind, order])
+  @@index([productId, section, order])
   @@index([syncStatus])
 }
 
@@ -2755,18 +2773,18 @@ model LandingPage {
   ogImageUrl          String?
   canonicalUrl        String?
   robotsIndex         Boolean           @default(true)
-  blocks               Json              @default("[]")
-  seoTitle             String?
-  seoDescription       String?           @db.Text
-  status               LandingPageStatus @default(DRAFT)
-  startsAt             DateTime?
-  endsAt               DateTime?
-  publishedAt          DateTime?
-  draftRevisionId      String?           @unique
-  publishedRevisionId  String?           @unique
-  archivedAt           DateTime?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  blocks              Json              @default("[]")
+  seoTitle            String?
+  seoDescription      String?           @db.Text
+  status              LandingPageStatus @default(DRAFT)
+  startsAt            DateTime?
+  endsAt              DateTime?
+  publishedAt         DateTime?
+  draftRevisionId     String?           @unique
+  publishedRevisionId String?           @unique
+  archivedAt          DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   sections            LandingPageSection[]
   pictogramPlacements PictogramPlacement[]

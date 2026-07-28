@@ -55,6 +55,7 @@ type SavedView = {
   filters: AdminGridFilter[];
   sorting: AdminGridSort[];
   query: string;
+  searchColumn?: string;
   context?: Record<string, string>;
 };
 
@@ -271,6 +272,7 @@ export function ErpGrid({
     [initialVisibleColumns, module.columns],
   );
   const [query, setQuery] = useState("");
+  const [searchColumn, setSearchColumn] = useState("");
   const [filters, setFilters] = useState<AdminGridFilter[]>([]);
   const [sorting, setSorting] = useState<AdminGridSort[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
@@ -359,6 +361,7 @@ export function ErpGrid({
           page: String(page),
           pageSize: "100",
           q: query,
+          searchColumn,
           filters: JSON.stringify([...fixedFilters, ...filters]),
           sorting: JSON.stringify(sorting),
           columns: JSON.stringify(visibleColumns),
@@ -408,6 +411,7 @@ export function ErpGrid({
     module.slug,
     page,
     query,
+    searchColumn,
     reloadToken,
     sorting,
     visibleColumns,
@@ -461,7 +465,10 @@ export function ErpGrid({
     const q = query.trim().toLowerCase();
     const filtered = rows.filter((row) => {
       if (q) {
-        const hay = visible
+        const searchColumns = searchColumn
+          ? module.columns.filter((column) => column.key === searchColumn)
+          : visible;
+        const hay = searchColumns
           .map((c) => textValue(row.values[c.key]))
           .join(" ")
           .toLowerCase();
@@ -486,7 +493,7 @@ export function ErpGrid({
       }
       return 0;
     });
-  }, [filters, fixedFilters, query, rows, sorting, visible]);
+  }, [filters, fixedFilters, module.columns, query, rows, searchColumn, sorting, visible]);
 
   const allVisibleSelected =
     filteredRows.length > 0 && filteredRows.every((row) => selectedIds.has(row.id));
@@ -698,6 +705,7 @@ export function ErpGrid({
       filters,
       sorting,
       query,
+      searchColumn,
       context,
     };
     try {
@@ -744,6 +752,7 @@ export function ErpGrid({
     );
     updateSorting(view.sorting ?? []);
     updateQuery(view.query);
+    setSearchColumn(view.searchColumn ?? "");
     setContext((current) => ({ ...current, ...(view.context ?? {}) }));
   };
 
@@ -876,6 +885,7 @@ export function ErpGrid({
   const exportXlsx = () => {
     const params = new URLSearchParams({
       q: query,
+      searchColumn,
       filters: JSON.stringify([...fixedFilters, ...filters]),
       sorting: JSON.stringify(sorting),
       columns: JSON.stringify(visible.map((column) => column.key)),
@@ -893,11 +903,31 @@ export function ErpGrid({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <select
+                value={searchColumn}
+                onChange={(event) => {
+                  setPage(1);
+                  setSearchColumn(event.target.value);
+                }}
+                className="h-9 rounded-lg border border-input bg-surface px-2 text-sm"
+                aria-label="Opseg brze pretrage"
+              >
+                <option value="">Sve vidljive kolone</option>
+                {module.columns.map((column) => (
+                  <option key={column.key} value={column.key}>
+                    {column.label}
+                  </option>
+                ))}
+              </select>
               <div className="relative max-w-xl flex-1">
                 <Input
                   value={query}
                   onChange={(e) => updateQuery(e.target.value)}
-                  placeholder="Brza pretraga po vidljivim kolonama"
+                  placeholder={
+                    searchColumn
+                      ? `Pretraga: ${module.columns.find((column) => column.key === searchColumn)?.label ?? searchColumn}`
+                      : "Brza pretraga po vidljivim kolonama"
+                  }
                   className="h-9"
                 />
               </div>

@@ -8,6 +8,7 @@
  */
 
 import { effectiveUnitPrice, type PricingProduct } from "./engine";
+import { productNewUntilIsActive } from "@/lib/product-newness";
 
 export type BadgeKey =
   | "discount"
@@ -45,9 +46,10 @@ export interface BadgeProduct extends PricingProduct {
 const DTZ_LOW_STOCK_THRESHOLD = 15;
 
 function isNewActive(p: BadgeProduct, now: Date): boolean {
-  if (!p.isNew) return false;
-  if (!p.newUntil) return true;
-  return new Date(p.newUntil).getTime() >= now.getTime();
+  return productNewUntilIsActive(
+    p.newUntil ? new Date(p.newUntil) : null,
+    now,
+  );
 }
 
 /**

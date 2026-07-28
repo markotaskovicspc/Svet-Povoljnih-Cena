@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { sanitizeRichText } from "@/lib/rich-text";
+import type { ProductAttachment } from "@/types";
 
 export type PdpInfoKey =
   | "description"
@@ -29,14 +30,17 @@ const LABELS: Record<PdpInfoKey, string> = {
 export function PdpInfoLinks({
   sections,
   descriptionPreview,
+  attachments = {},
 }: {
   sections: Partial<Record<PdpInfoKey, string>>;
   descriptionPreview?: string;
+  attachments?: Partial<Record<PdpInfoKey, ProductAttachment[]>>;
 }) {
   const items = (Object.keys(LABELS) as PdpInfoKey[]).map((key) => ({
     key,
     label: LABELS[key],
     content: sections[key]?.trim() || defaultContent(key),
+    attachments: attachments[key] ?? [],
   }));
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<PdpInfoKey>("description");
@@ -115,7 +119,26 @@ export function PdpInfoLinks({
                     />
                   </button>
                   {isExpanded ? (
-                    <RichText content={item.content} />
+                    <div className="pb-4">
+                      <RichText content={item.content} />
+                      {item.attachments.length ? (
+                        <ul className="mt-1 space-y-2 border-t border-border/60 pt-3">
+                          {item.attachments.map((attachment) => (
+                            <li key={`${attachment.kind}-${attachment.url}`}>
+                              <a
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center justify-between rounded-xl border border-border/70 bg-surface px-3 py-2.5 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/40"
+                              >
+                                {attachment.label}
+                                <span aria-hidden>↗</span>
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   ) : null}
                 </section>
               );
@@ -147,13 +170,13 @@ function RichText({ content }: { content: string }) {
   if (hasMarkup) {
     return (
       <div
-        className="pb-4 text-justify text-sm leading-relaxed text-ink-700 [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5"
+        className="text-justify text-sm leading-relaxed text-ink-700 [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5"
         dangerouslySetInnerHTML={{ __html: sanitizeRichText(content) }}
       />
     );
   }
   return (
-    <div className="pb-4 text-justify text-sm leading-relaxed whitespace-pre-line text-ink-700">
+    <div className="text-justify text-sm leading-relaxed whitespace-pre-line text-ink-700">
       {content}
     </div>
   );

@@ -90,7 +90,10 @@ export const operationalErpModules: ErpModule[] = [
     title: "Cenovnici",
     description: "Datirani MP, nabavni, veleprodajni i izvozni cenovnici sa istorijom stavki.",
     status: "ready",
-    commands: [{ label: "Novi cenovnik", tone: "primary", action: "price-list.create" }],
+    commands: [
+      { label: "Novi cenovnik", tone: "primary", action: "price-list.create" },
+      { label: "Otvori stavke", clientAction: "open", needsSelection: true },
+    ],
     columns: [
       text("code", "Šifra"),
       text("name", "Naziv"),
@@ -102,6 +105,7 @@ export const operationalErpModules: ErpModule[] = [
       bool("active", "Aktivan"),
     ],
     editableColumns: ["code", "name", "kind", "currency", "validFrom", "validTo", "active"],
+    detailHrefBase: "/admin/cenovnici",
     rows: emptyRows,
   },
   {

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { DeliveryScope } from "@prisma/client";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
@@ -23,6 +23,11 @@ import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { DataTable } from "@/components/admin/data-table";
 import { AdminActionForm } from "@/components/admin/action-form";
+import {
+  DELIVERY_WINDOWS_SETTING_KEY,
+  deliveryWindowsSchema,
+  getDeliveryWindows,
+} from "@/lib/delivery-windows";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -51,6 +56,57 @@ const ruleSchema = z.object({
 });
 
 const smallParcelProviderSchema = z.enum(["MYGLS", "X_EXPRESS"]);
+
+async function updateDeliveryWindows(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "delivery.windows.update",
+      entity: "AdminSetting",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = deliveryWindowsSchema.safeParse({
+        dc: {
+          min: actionData.get("dcMin"),
+          max: actionData.get("dcMax"),
+        },
+        supplier: {
+          min: actionData.get("supplierMin"),
+          max: actionData.get("supplierMax"),
+        },
+      });
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error: parsed.error.issues[0]?.message ?? "Rokovi nisu ispravni.",
+        };
+      }
+      await db.adminSetting.upsert({
+        where: { key: DELIVERY_WINDOWS_SETTING_KEY },
+        create: {
+          key: DELIVERY_WINDOWS_SETTING_KEY,
+          value: parsed.data,
+          updatedBy: actorId,
+        },
+        update: { value: parsed.data, updatedBy: actorId },
+      });
+      updateTag(DELIVERY_WINDOWS_SETTING_KEY);
+      updateTag("catalog-products");
+      revalidatePath("/admin/dostava");
+      return {
+        ok: true as const,
+        entityId: DELIVERY_WINDOWS_SETTING_KEY,
+        diff: parsed.data,
+        message: "Globalni rokovi isporuke su sačuvani.",
+      };
+    },
+  )(formData);
+}
 
 async function updateSmallParcelProvider(
   _state: AdminActionState,
@@ -228,7 +284,10 @@ export default async function DeliveryPage() {
       take: 5,
     }),
   ]);
-  const smallProvider = await getSelectedSmallParcelProvider();
+  const [smallProvider, deliveryWindows] = await Promise.all([
+    getSelectedSmallParcelProvider(),
+    getDeliveryWindows(),
+  ]);
 
   return (
     <>
@@ -238,6 +297,32 @@ export default async function DeliveryPage() {
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Dostava" }]}
       />
       <div className="space-y-6 px-8 py-6">
+        <Card>
+          <CardTitle description="Rok se bira prema izvoru robe. Artikal iz DC-a koristi DC rok; odobrena sveža dobavljačka zaliha koristi dobavljački rok.">
+            Globalni rokovi isporuke
+          </CardTitle>
+          <AdminActionForm
+            action={updateDeliveryWindows}
+            className="mt-4 flex flex-wrap items-end gap-3"
+          >
+            <Field label="DC od (dana)">
+              <Input name="dcMin" type="number" min={0} max={60} required defaultValue={deliveryWindows.dc.min} />
+            </Field>
+            <Field label="DC do (dana)">
+              <Input name="dcMax" type="number" min={0} max={60} required defaultValue={deliveryWindows.dc.max} />
+            </Field>
+            <Field label="Dobavljač od (dana)">
+              <Input name="supplierMin" type="number" min={0} max={60} required defaultValue={deliveryWindows.supplier.min} />
+            </Field>
+            <Field label="Dobavljač do (dana)">
+              <Input name="supplierMax" type="number" min={0} max={60} required defaultValue={deliveryWindows.supplier.max} />
+            </Field>
+            <SubmitButton pendingLabel="Čuvanje…">Sačuvaj rokove</SubmitButton>
+          </AdminActionForm>
+          <p className="mt-3 text-xs text-ink-500">
+            Kupcu se za dobavljačku zalihu prikazuje dostupnost kod dobavljača i rok, bez tačne količine.
+          </p>
+        </Card>
         <Card>
           <CardTitle description="Ručni izbor važi za nove male kurirske pošiljke, checkout i knjiženje naloga u Modulu 13.">
             Aktivni kurir za male pošiljke

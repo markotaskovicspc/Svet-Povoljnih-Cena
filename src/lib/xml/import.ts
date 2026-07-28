@@ -4,6 +4,8 @@ import { envValue } from "@/lib/env";
 import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { connectorFor } from "./connector";
+import { productNewUntilIsActive } from "@/lib/product-newness";
+import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 import type {
   FeedItem,
   ImportSummary,
@@ -267,10 +269,10 @@ function applyProductOverrides(
     description: ["description", "shortDescription"],
     pricing: ["fullPrice", "salePrice", "discountPct", "actionId"],
     price: ["fullPrice", "salePrice", "discountPct", "actionId"],
-    stock: ["stock", "incomingStock", "supplierStock", "isActive"],
+    stock: ["stock", "supplierStock", "isActive"],
     flags: ["isHero", "isNew", "newUntil", "isLimited", "isDtz"],
     dimensions: ["widthCm", "depthCm", "heightCm"],
-    delivery: ["deliveryDaysMin", "deliveryDaysMax", "allowsAssembly"],
+    delivery: ["allowsAssembly"],
     grouping: ["groupId", "collectionId"],
   };
   for (const field of fields) {
@@ -305,7 +307,7 @@ async function upsertFeedItem(
           { supplierId, supplierExternalId: item.externalId },
         ],
       },
-      select: { id: true, syncOverrides: true },
+      select: { id: true, actionId: true, syncOverrides: true },
     });
 
     const slug = item.slug ?? item.sku.toLowerCase();
@@ -321,22 +323,18 @@ async function upsertFeedItem(
       depthCm: item.depthCm != null ? new Prisma.Decimal(item.depthCm) : null,
       heightCm: item.heightCm != null ? new Prisma.Decimal(item.heightCm) : null,
       fullPrice: new Prisma.Decimal(item.fullPrice),
-      salePrice:
-        item.salePrice != null ? new Prisma.Decimal(item.salePrice) : null,
-      discountPct: item.discountPct ?? null,
+      salePrice: null,
+      discountPct: null,
       actionId,
       isHero: item.isHero ?? false,
-      isNew: item.isNew ?? false,
+      isNew: productNewUntilIsActive(item.newUntil),
       newUntil: item.newUntil ?? null,
       isLimited: item.isLimited ?? false,
       isDtz: item.isDtz ?? false,
       // Owned warehouse stock is authoritative and is never sourced from a
       // supplier availability feed. New products start with no owned stock.
       stock: 0,
-      incomingStock: item.incomingStock ?? 0,
       supplierStock: item.supplierStock ?? item.stock,
-      deliveryDaysMin: item.deliveryDaysMin ?? 3,
-      deliveryDaysMax: item.deliveryDaysMax ?? 5,
       allowsAssembly: item.allowsAssembly ?? false,
       supplierId,
       supplierExternalId: item.externalId,
@@ -350,9 +348,14 @@ async function upsertFeedItem(
     let kind: "created" | "updated";
     const overrides = existing ? parseSyncOverrideFields(existing.syncOverrides) : new Set<string>();
     const productData = existing ? applyProductOverrides(data, overrides) : data;
+    const pricingLocked = overrides.has("pricing") || overrides.has("price");
 
     if (existing) {
       delete (productData as Record<string, unknown>).stock;
+      // Existing legacy sale values remain a read-only fallback until an admin
+      // assigns them to an ActionProduct; supplier sync must not create new ones.
+      delete (productData as Record<string, unknown>).salePrice;
+      delete (productData as Record<string, unknown>).discountPct;
       await tx.product.update({ where: { id: existing.id }, data: productData });
       productId = existing.id;
       kind = "updated";
@@ -360,6 +363,31 @@ async function upsertFeedItem(
       const fresh = await tx.product.create({ data, select: { id: true } });
       productId = fresh.id;
       kind = "created";
+    }
+
+    if (!pricingLocked) {
+      await upsertActiveRetailPrice(tx, {
+        productId,
+        price: item.fullPrice,
+      });
+      if (existing?.actionId && existing.actionId !== actionId) {
+        await tx.actionProduct.deleteMany({
+          where: { productId, actionId: existing.actionId },
+        });
+      }
+      if (actionId && item.salePrice != null) {
+        await tx.actionProduct.upsert({
+          where: { actionId_productId: { actionId, productId } },
+          create: {
+            actionId,
+            productId,
+            salePrice: new Prisma.Decimal(item.salePrice),
+          },
+          update: { salePrice: new Prisma.Decimal(item.salePrice) },
+        });
+      } else if (actionId) {
+        await tx.actionProduct.deleteMany({ where: { actionId, productId } });
+      }
     }
 
     if (categoryId && !overrides.has("categories") && !overrides.has("category")) {

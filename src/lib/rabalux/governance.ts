@@ -11,6 +11,11 @@ import {
   type RabaluxSyncScope,
 } from "./safety";
 import { RABALUX_INTEGRATION_KEY } from "./config";
+import {
+  activeRetailPriceEntryWhere,
+  removeActiveRetailPrice,
+  upsertActiveRetailPrice,
+} from "@/lib/pricing/retail-price-write.server";
 
 export async function saveRabaluxCategoryMapping(args: {
   externalCategory: string;
@@ -113,6 +118,11 @@ export async function reviewRabaluxProduct(args: {
       supplierApprovalStatus: true,
       isActive: true,
       fullPrice: true,
+      priceListEntries: {
+        where: activeRetailPriceEntryWhere(),
+        take: 1,
+        select: { price: true },
+      },
       articleStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
       media: {
@@ -128,13 +138,15 @@ export async function reviewRabaluxProduct(args: {
   const approve = args.decision === "APPROVE";
   if (approve) {
     if (!product.categories.length) throw new Error("Proizvod nema mapiranu kategoriju.");
-    if (Number(product.fullPrice) <= 0) throw new Error("Proizvod nema validnu cenu.");
+    if (!product.priceListEntries.length || Number(product.priceListEntries[0]!.price) <= 0) {
+      throw new Error("Proizvod nema važeću cenu u RETAIL cenovniku.");
+    }
     if (!product.media.length) throw new Error("Proizvod nema spremnu fotografiju.");
   }
   const isActive =
     approve &&
     product.articleStatus !== "ARH" &&
-    Number(product.fullPrice) > 0 &&
+    product.priceListEntries.length > 0 &&
     product.categories.length > 0 &&
     product.media.length > 0;
   const governanceRun = await createGovernanceRun({
@@ -212,17 +224,20 @@ export async function reviewRabaluxPriceProposal(args: {
   }
   const after = jsonObject(proposal.after);
   const fullPrice = numberValue(after.fullPrice);
-  const salePrice = nullableNumberValue(after.salePrice);
-  const discountPct = nullableIntegerValue(after.discountPct);
-  if (fullPrice <= 0 || (salePrice != null && salePrice >= fullPrice)) {
+  if (fullPrice <= 0) {
     throw new Error("Predložena cena nije validna.");
   }
-  await db.$transaction([
-    db.product.update({
-      where: { id: proposal.product.id },
-      data: { fullPrice, salePrice, discountPct },
-    }),
-    db.supplierSyncChange.update({
+  const productId = proposal.product.id;
+  await db.$transaction(async (tx) => {
+    await tx.product.update({
+      where: { id: productId },
+      data: { fullPrice },
+    });
+    await upsertActiveRetailPrice(tx, {
+      productId,
+      price: fullPrice,
+    });
+    await tx.supplierSyncChange.update({
       where: { id: proposal.id },
       data: {
         status: "APPLIED",
@@ -230,8 +245,8 @@ export async function reviewRabaluxPriceProposal(args: {
         reviewedById: args.actorId,
         reason,
       },
-    }),
-  ]);
+    });
+  });
   return { changeId: proposal.id, status: "APPLIED" };
 }
 
@@ -400,6 +415,14 @@ async function rollbackChange(args: {
       const scalarData = rollbackScalarData(before, args.change.fieldNames);
       if (Object.keys(scalarData).length) {
         await tx.product.update({ where: { id: productId }, data: scalarData });
+      }
+      if (args.change.fieldNames.includes("fullPrice") && "fullPrice" in before) {
+        const restoredPrice = Number(before.fullPrice);
+        if (Number.isFinite(restoredPrice) && restoredPrice > 0) {
+          await upsertActiveRetailPrice(tx, { productId, price: restoredPrice });
+        } else {
+          await removeActiveRetailPrice(tx, { productId });
+        }
       }
       if (args.change.fieldNames.includes("categories")) {
         const categoryIds = relationIds(before.categories, "categoryId");
@@ -656,16 +679,5 @@ function relationIds(value: unknown, key: string) {
 function numberValue(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error("Predložena cena nije broj.");
-  return number;
-}
-
-function nullableNumberValue(value: unknown) {
-  return value == null ? null : numberValue(value);
-}
-
-function nullableIntegerValue(value: unknown) {
-  if (value == null) return null;
-  const number = numberValue(value);
-  if (!Number.isInteger(number)) throw new Error("Predloženi popust nije ceo broj.");
   return number;
 }

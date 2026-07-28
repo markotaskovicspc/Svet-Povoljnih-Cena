@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
+import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
 import { trackedDispatch } from "@/lib/email";
 import {
@@ -253,6 +254,7 @@ export async function addPurchaseOrderItem(input: {
     return created;
   });
   await recomputePurchaseOrderTotals(order.id);
+  await recomputeIncomingStockForPurchaseOrders(db, [order.id]);
   return item;
 }
 
@@ -331,6 +333,7 @@ export async function updatePurchaseOrderItem(input: {
     },
   });
   await recomputePurchaseOrderTotals(item.purchaseOrder.id);
+  await recomputeIncomingStockForPurchaseOrders(db, [item.purchaseOrder.id]);
 }
 
 export async function postPurchaseOrder(id: string, actorId: string) {
@@ -434,6 +437,7 @@ export async function changePurchaseOrderStatus(
       },
     }),
   ]);
+  await recomputeIncomingStockForPurchaseOrders(db, [id]);
 }
 
 export function allocateFreight(
@@ -768,6 +772,7 @@ export async function receivePurchaseOrder(
       where: { id },
       data: { lockedAt: order.lockedAt ?? new Date(), postedAt: new Date() },
     });
+    await recomputeIncomingStockForPurchaseOrders(tx, [order.id]);
     return true;
   });
 

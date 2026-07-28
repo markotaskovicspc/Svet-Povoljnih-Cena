@@ -29,6 +29,7 @@ import {
   purchaseOrderCapacityWarnings,
 } from "@/lib/admin/purchase-order";
 import { db } from "@/lib/db";
+import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 export const dynamic = "force-dynamic";
@@ -279,6 +280,7 @@ async function deleteLine(formData: FormData) {
       }
       await db.purchaseOrderItem.delete({ where: { id } });
       await recomputePurchaseOrderTotals(item.purchaseOrderId);
+      await recomputeIncomingStockForPurchaseOrders(db, [item.purchaseOrderId]);
       revalidatePath(`/admin/erp/porudzbenice/${item.purchaseOrderId}`);
       revalidatePath("/admin/erp/porudzbenice");
       revalidatePath("/admin/erp/porudzbenice-po-artiklima");

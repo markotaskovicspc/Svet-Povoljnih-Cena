@@ -101,11 +101,13 @@ export async function GET(
   const { module: slug } = await context.params;
   await requireAdminAction(allowedRolesForErpModule(slug));
   const search = new URL(request.url).searchParams;
+  const requestedSearchColumn = search.get("searchColumn") ?? "";
   const erpModule = await getErpModule(slug, {
     take: 10_000,
     warehouseId: search.get("warehouseId"),
     includeLookupOptions: false,
     query: search.get("q") ?? undefined,
+    searchColumn: requestedSearchColumn || undefined,
   });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
@@ -135,7 +137,9 @@ export async function GET(
   );
   const rows = filterAndSortRows(
     erpModule.rows,
-    exportColumns.map((column) => column.key),
+    knownColumns.has(requestedSearchColumn)
+      ? [requestedSearchColumn]
+      : exportColumns.map((column) => column.key),
     search.get("q") ?? "",
     filters,
     sorting,

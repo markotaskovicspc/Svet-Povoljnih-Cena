@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createHash, randomBytes } from "node:crypto";
-import {
-  Prisma,
-  RetailPriceProposalStatus,
-} from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import {
@@ -14,12 +11,13 @@ import {
   sendPurchaseOrder,
 } from "@/lib/admin/po";
 import {
+  cancelInboundInvoice,
   createInboundInvoice,
   lockInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
-import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { articleSlug } from "@/lib/article-master";
+import { normalizeArticleSku } from "@/lib/article-sku";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 import {
   createPurchasePrice,
@@ -105,7 +103,7 @@ async function runCommand(
     case "row.delete":
       return deleteRows(module, ids);
     case "article.create":
-      return createArticle();
+      return createArticle(input);
     case "lookup.create":
       return createLookupValue();
     case "supplier.create":
@@ -247,10 +245,16 @@ async function runCommand(
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
       return lockInboundInvoices(ids);
+    case "invoice.cancel":
+      if (module !== "ulazne-fakture") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      return cancelInboundInvoices(ids);
     case "mp.proposal":
-      return createRetailProposals(ids, actorId);
     case "mp.publish":
-      return publishRetailPrices(ids, actorId);
+      throw new Error(
+        "Legacy objava MP cena je isključena. Koristite važeću stavku RETAIL cenovnika.",
+      );
     default:
       throw new Error("Ova komanda još nije povezana.");
   }
@@ -309,10 +313,16 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
   return { message: `Obrisano: ${count}.` };
 }
 
-async function createArticle(): Promise<CommandResult> {
-  const product = await db.$transaction(async (tx) => {
-    const sku = await nextArticleSku(tx);
-    return tx.product.create({
+async function createArticle(input: PurchasePriceCommandInput): Promise<CommandResult> {
+  const sku = normalizeArticleSku(input.sku);
+  const duplicate = await db.product.findFirst({
+    where: { sku: { equals: sku, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (duplicate) throw new Error(`Artikal sa šifrom ${sku} već postoji.`);
+  let product;
+  try {
+    product = await db.product.create({
       data: {
         sku,
         slug: `${articleSlug(sku)}-${randomBytes(3).toString("hex")}`,
@@ -324,7 +334,12 @@ async function createArticle(): Promise<CommandResult> {
         isActive: false,
       },
     });
-  });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error(`Artikal sa šifrom ${sku} već postoji.`);
+    }
+    throw error;
+  }
   return {
     message: `Artikal ${product.sku} je kreiran neobjavljen. Dopunite obavezna polja.`,
     createdId: product.id,
@@ -657,64 +672,8 @@ async function lockInboundInvoices(ids: string[]): Promise<CommandResult> {
   return { message: `Zaključano faktura: ${ids.length}.` };
 }
 
-// MP-cene rows are products, so `ids` are product ids.
-async function createRetailProposals(ids: string[], actorId: string): Promise<CommandResult> {
+async function cancelInboundInvoices(ids: string[]): Promise<CommandResult> {
   requireIds(ids);
-  const products = await db.product.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, sku: true, name: true, fullPrice: true, salePrice: true },
-  });
-  let count = 0;
-  for (const product of products) {
-    await db.retailPriceProposal.create({
-      data: {
-        productId: product.id,
-        sku: product.sku,
-        name: product.name,
-        currentMpc: product.salePrice ?? product.fullPrice,
-        proposedMpc: product.fullPrice,
-        status: RetailPriceProposalStatus.PREDLOG,
-        actorId,
-      },
-    });
-    count += 1;
-  }
-  return {
-    message: `Kreirano predloga cena: ${count}. Uredite „Kalkulativnu MPC“ pre objave.`,
-  };
-}
-
-async function publishRetailPrices(ids: string[], actorId: string): Promise<CommandResult> {
-  requireIds(ids);
-  let published = 0;
-  for (const productId of ids) {
-    const proposal = await db.retailPriceProposal.findFirst({
-      where: { productId, status: RetailPriceProposalStatus.PREDLOG },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!proposal) continue;
-
-    await db.$transaction([
-      // Archive any previously published price for this product.
-      db.retailPriceProposal.updateMany({
-        where: { productId, status: RetailPriceProposalStatus.OBJAVLJENO },
-        data: { status: RetailPriceProposalStatus.ARHIVA },
-      }),
-      db.retailPriceProposal.update({
-        where: { id: proposal.id },
-        data: {
-          status: RetailPriceProposalStatus.OBJAVLJENO,
-          publishedAt: new Date(),
-          actorId,
-        },
-      }),
-      db.product.update({
-        where: { id: productId },
-        data: { salePrice: proposal.proposedMpc },
-      }),
-    ]);
-    published += 1;
-  }
-  if (published > 0) revalidatePath("/");
-  return { message: `Objavljeno cena: ${published}.` };
+  for (const id of ids) await cancelInboundInvoice(id);
+  return { message: `Stornirano faktura: ${ids.length}. COGS i dolaz su preračunati.` };
 }

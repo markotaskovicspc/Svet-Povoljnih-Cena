@@ -43,6 +43,10 @@ import {
   reportCircuitBreaker,
   stableSourceHash,
 } from "./safety";
+import {
+  activeRetailPriceEntryWhere,
+  upsertActiveRetailPrice,
+} from "@/lib/pricing/retail-price-write.server";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
@@ -487,6 +491,7 @@ async function upsertCatalogItem(
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
         attachments: {
+          where: { origin: "SUPPLIER" },
           orderBy: { order: "asc" },
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
@@ -615,18 +620,16 @@ async function upsertCatalogItem(
       packHeightCm: decimal(item.packHeightCm),
       packGrossWeightKg: decimal(item.packGrossWeightKg),
       fullPrice: new Prisma.Decimal(item.fullPrice),
-      salePrice: decimal(item.salePrice),
-      discountPct: item.discountPct,
+      salePrice: null,
+      discountPct: null,
       technicalSpecs: item.technicalSpecs as Prisma.InputJsonValue,
       warrantyYears: item.warrantyYears,
       countryOfOrigin: item.countryOfOrigin,
       hsCode: item.hsCode,
-      isNew: item.isNew,
+      isNew: false,
       stock: 0,
       incomingStock: 0,
       supplierStock: 0,
-      deliveryDaysMin: 7,
-      deliveryDaysMax: 10,
       allowsAssembly: false,
       supplierId: supplier.id,
       supplierExternalId: item.sourceSku,
@@ -660,6 +663,11 @@ async function upsertCatalogItem(
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
       delete (updateData as Record<string, unknown>).incomingStock;
+      // Existing legacy sale values are preserved as a read-only fallback, but
+      // supplier sync may no longer create or overwrite legacy sale fields.
+      delete (updateData as Record<string, unknown>).salePrice;
+      delete (updateData as Record<string, unknown>).discountPct;
+      delete (updateData as Record<string, unknown>).isNew;
       if (!categoryId) delete (updateData as Record<string, unknown>).groupId;
       if (!item.valid || (riskyPrice && !options.allowRiskyPrices)) {
         delete (updateData as Record<string, unknown>).fullPrice;
@@ -694,16 +702,12 @@ async function upsertCatalogItem(
             externalSku: item.sourceSku,
             changeType: "PRICE_PROPOSAL",
             status: "PENDING",
-            fieldNames: ["fullPrice", "salePrice", "discountPct"],
+            fieldNames: ["fullPrice"],
             before: jsonSnapshot({
               fullPrice: existing.fullPrice,
-              salePrice: existing.salePrice,
-              discountPct: existing.discountPct,
             }),
             after: jsonSnapshot({
               fullPrice: item.fullPrice,
-              salePrice: item.salePrice,
-              discountPct: item.discountPct,
             }),
             reason: "Price change exceeds the automatic threshold.",
           },
@@ -712,6 +716,17 @@ async function upsertCatalogItem(
     } else {
       const created = await tx.product.create({ data, select: { id: true } });
       productId = created.id;
+    }
+
+    if (
+      item.valid &&
+      !isRabaluxFieldLocked(overrideFields, "pricing") &&
+      (!riskyPrice || options.allowRiskyPrices)
+    ) {
+      await upsertActiveRetailPrice(tx, {
+        productId,
+        price: item.fullPrice,
+      });
     }
 
     if (
@@ -761,11 +776,15 @@ async function upsertCatalogItem(
     }
 
     if (attachmentsChanged && !overrideFields.has("attachments")) {
-      await tx.productAttachment.deleteMany({ where: { productId } });
+      await tx.productAttachment.deleteMany({
+        where: { productId, origin: "SUPPLIER" },
+      });
       if (item.attachments.length) {
         await tx.productAttachment.createMany({
           data: item.attachments.map((asset) => ({
             productId,
+            section: "GENERAL",
+            origin: "SUPPLIER",
             kind: asset.kind,
             label: asset.label,
             sourceUrl: asset.sourceUrl,
@@ -828,6 +847,7 @@ async function upsertCatalogItem(
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
         attachments: {
+          where: { origin: "SUPPLIER" },
           orderBy: { order: "asc" },
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
@@ -1130,6 +1150,11 @@ async function updateStockItem(
         where: { id: product.id },
         select: {
           fullPrice: true,
+          priceListEntries: {
+            where: activeRetailPriceEntryWhere(),
+            take: 1,
+            select: { price: true },
+          },
           supplierApprovalStatus: true,
           categories: { select: { categoryId: true }, take: 1 },
           media: {
@@ -1144,7 +1169,7 @@ async function updateStockItem(
         data: {
           isActive:
             readiness.supplierApprovalStatus === "APPROVED" &&
-            Number(readiness.fullPrice) > 0 &&
+            readiness.priceListEntries.length > 0 &&
             readiness.categories.length > 0 &&
             readiness.media.length > 0,
         },

@@ -38,6 +38,17 @@ import {
   isProductAvailableOnWeb,
   webStorefrontProductWhere,
 } from "@/lib/web-storefront-availability";
+import {
+  DEFAULT_DELIVERY_WINDOWS,
+  getDeliveryWindows,
+  resolveDeliveryWindowForQuantity,
+  type DeliveryWindows,
+} from "@/lib/delivery-windows";
+import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import {
+  productNewUntilFloor,
+  productNewUntilIsActive,
+} from "@/lib/product-newness";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -52,6 +63,11 @@ const productInclude = {
   action: true,
   supplier: { select: { integrationKey: true, enabled: true } },
   actionPrices: { include: { action: true } },
+  priceListEntries: {
+    where: { priceList: { active: true, kind: "RETAIL" } },
+    include: { priceList: true },
+    orderBy: { validFrom: "desc" },
+  },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   media: { where: { syncStatus: "READY" }, orderBy: { order: "asc" } },
   pictograms: {
@@ -62,15 +78,11 @@ const productInclude = {
   assemblyCities: { include: { city: true } },
   attachments: {
     where: { syncStatus: "READY" },
-    orderBy: { order: "asc" },
+    orderBy: [{ section: "asc" }, { order: "asc" }],
   },
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
-
-function isNewStatusActive(isNew: boolean, newUntil: Date | null) {
-  return isNew && (!newUntil || newUntil > new Date());
-}
 
 function categoryPathLabels(
   categories: Array<{ category: { name: string } }>,
@@ -139,6 +151,11 @@ const productListSelect = {
   collection: true,
   action: true,
   actionPrices: { include: { action: true } },
+  priceListEntries: {
+    where: { priceList: { active: true, kind: "RETAIL" } },
+    include: { priceList: true },
+    orderBy: { validFrom: "desc" },
+  },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   // Cards expose a compact preview gallery; the PDP still loads every asset.
   media: {
@@ -177,8 +194,10 @@ function mapImageMedia(m: {
 function mapProduct(
   p: ProductRow,
   pricingRules?: ActivePricingRules,
+  deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
 ): ProductDTO {
   const availability = productStockAvailability(p);
+  const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -219,11 +238,11 @@ function mapProduct(
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
     isHero: p.isHero,
-    isNew: isNewStatusActive(p.isNew, p.newUntil),
+    isNew: productNewUntilIsActive(p.newUntil),
     newUntil: p.newUntil?.toISOString(),
     isLimited: p.isLimited,
     isDtz: p.isDtz,
-    fullPrice: num(p.fullPrice),
+    fullPrice: retailPrice.price,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
     loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
@@ -258,11 +277,31 @@ function mapProduct(
     warrantyYears: p.warrantyYears ?? undefined,
     countryOfOrigin: p.countryOfOrigin ?? undefined,
     attachments: p.attachments.map((attachment) => ({
-      kind: attachment.kind === "MANUAL" ? "manual" : "energy_label",
+      kind:
+        attachment.kind === "MANUAL"
+          ? "manual"
+          : attachment.kind === "ENERGY_LABEL"
+            ? "energy_label"
+            : "document",
+      section: attachment.section.toLowerCase() as
+        | "general"
+        | "delivery_terms"
+        | "declaration"
+        | "assembly_instructions"
+        | "maintenance",
       label: attachment.label,
       url: resolveSupabaseStorageMedia({ url: attachment.url }).url,
+      mimeType: attachment.mimeType ?? undefined,
+      sizeBytes: attachment.sizeBytes ?? undefined,
     })),
-    deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
+    deliveryDays: resolveDeliveryWindowForQuantity(
+      {
+        quantity: 1,
+        dcAvailable: availability.warehouseAvailable,
+        supplierAvailable: availability.supplierAvailable,
+      },
+      deliveryWindows,
+    ),
     allowsAssembly: p.allowsAssembly,
     assemblyCities: p.assemblyCities.map((a) => a.city.name),
     media: {
@@ -375,8 +414,10 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
 function mapProductListItem(
   p: ProductListRow,
   pricingRules?: ActivePricingRules,
+  deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
 ): ProductDTO {
   const availability = productStockAvailability(p);
+  const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -412,11 +453,11 @@ function mapProductListItem(
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
     isHero: p.isHero,
-    isNew: isNewStatusActive(p.isNew, p.newUntil),
+    isNew: productNewUntilIsActive(p.newUntil),
     newUntil: p.newUntil?.toISOString(),
     isLimited: p.isLimited,
     isDtz: p.isDtz,
-    fullPrice: num(p.fullPrice),
+    fullPrice: retailPrice.price,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
     loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
@@ -442,7 +483,14 @@ function mapProductListItem(
       actionName: entry.action.name,
       isHero: entry.action.isHero,
     })),
-    deliveryDays: { min: p.deliveryDaysMin, max: p.deliveryDaysMax },
+    deliveryDays: resolveDeliveryWindowForQuantity(
+      {
+        quantity: 1,
+        dcAvailable: availability.warehouseAvailable,
+        supplierAvailable: availability.supplierAvailable,
+      },
+      deliveryWindows,
+    ),
     allowsAssembly: p.allowsAssembly,
     assemblyCities: [],
     media: {
@@ -469,6 +517,8 @@ function productStockAvailability(product: {
   if (product.supplier?.integrationKey !== "RABALUX") {
     const stock = Math.max(Math.trunc(product.stock), 0);
     return {
+      warehouseAvailable: stock,
+      supplierAvailable: 0,
       sellableStock: stock,
       source: stock > 0 ? ("DC" as const) : ("NONE" as const),
     };
@@ -539,7 +589,7 @@ export interface CategoryNode extends CategoryDTO {
   children: CategoryNode[];
 }
 
-export async function getCategoryTree(): Promise<CategoryNode[]> {
+async function loadCategoryTree(): Promise<CategoryNode[]> {
   if (!hasDatabaseConnection()) return [];
   const rows = await db.category.findMany({ orderBy: [{ level: "asc" }, { order: "asc" }] });
   const byId = new Map<string, CategoryNode>();
@@ -565,6 +615,14 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
   }
   return roots;
 }
+
+const getCategoryTreeAcrossRequests = unstable_cache(
+  loadCategoryTree,
+  ["storefront-category-tree-v1"],
+  { revalidate: 60, tags: ["storefront-categories"] },
+);
+
+export const getCategoryTree = cache(getCategoryTreeAcrossRequests);
 
 export async function getCategoryBySlug(slug: string) {
   if (!hasDatabaseConnection()) return null;
@@ -674,7 +732,10 @@ export async function listProducts(
 
   const where: Prisma.ProductWhereInput = webStorefrontProductWhere();
   const now = new Date();
-  const pricingRules = await getActivePricingRules();
+  const [pricingRules, deliveryWindows] = await Promise.all([
+    getActivePricingRules(),
+    getDeliveryWindows(),
+  ]);
 
   if (input.categoryPath) {
     where.categories = {
@@ -770,7 +831,9 @@ export async function listProducts(
     });
   }
   if (input.limitedOnly) where.isLimited = true;
-  if (input.newOnly) appendAnd(where, { isNew: true, OR: [{ newUntil: null }, { newUntil: { gt: now } }] });
+  if (input.newOnly) {
+    appendAnd(where, { newUntil: { gte: productNewUntilFloor(now) } });
+  }
   if (input.outletOnly) {
     appendAnd(where, { discountPct: { gte: 30 }, ...liveSaleWhere(now) });
   }
@@ -850,7 +913,7 @@ export async function listProducts(
   const slice = hasMore ? rows.slice(0, limit) : rows;
   return {
     items: slice.map((product) =>
-      mapProductListItem(product, pricingRules),
+      mapProductListItem(product, pricingRules, deliveryWindows),
     ),
     nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
     total,
@@ -862,15 +925,16 @@ async function loadProductBySlug(
 ): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
   try {
-    const [row, pricingRules] = await Promise.all([
+    const [row, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findFirst({
         where: { slug, ...webStorefrontProductWhere() },
         include: productInclude,
       }),
       getActivePricingRules(),
+      getDeliveryWindows(),
     ]);
     if (!row) return getSvetAkcijaFallbackBySlug(slug);
-    return mapProduct(row, pricingRules);
+    return mapProduct(row, pricingRules, deliveryWindows);
   } catch (error) {
     console.error(`[catalog] Failed to load product by slug "${slug}".`, error);
     return getSvetAkcijaFallbackBySlug(slug);
@@ -882,7 +946,7 @@ const getProductBySlugAcrossRequests = unstable_cache(
   ["catalog-product-by-slug-v1"],
   {
     revalidate: 30,
-    tags: ["catalog-products"],
+    tags: ["catalog-products", "storefront-categories"],
   },
 );
 
@@ -896,7 +960,7 @@ const getCachedProductRail = unstable_cache(
   ["catalog-product-rail-v1"],
   {
     revalidate: 60,
-    tags: ["catalog-products"],
+    tags: ["catalog-products", "storefront-categories"],
   },
 );
 
@@ -928,17 +992,18 @@ export async function getProductCardsBySlugs(
   }
 
   try {
-    const [rows, pricingRules] = await Promise.all([
+    const [rows, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findMany({
         where: { slug: { in: orderedSlugs }, ...webStorefrontProductWhere() },
         select: productListSelect,
       }),
       getActivePricingRules(),
+      getDeliveryWindows(),
     ]);
     const productsBySlug = new Map(
       rows.map((row) => [
         row.slug,
-        mapProductListItem(row, pricingRules),
+        mapProductListItem(row, pricingRules, deliveryWindows),
       ]),
     );
     return orderedSlugs
@@ -960,15 +1025,19 @@ export async function getProductsBySkus(
   if (!orderedSkus.length || !hasDatabaseConnection()) return [];
 
   try {
-    const [rows, pricingRules] = await Promise.all([
+    const [rows, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findMany({
         where: { sku: { in: orderedSkus }, ...webStorefrontProductWhere() },
         select: productListSelect,
       }),
       getActivePricingRules(),
+      getDeliveryWindows(),
     ]);
     const productsBySku = new Map(
-      rows.map((row) => [row.sku, mapProductListItem(row, pricingRules)]),
+      rows.map((row) => [
+        row.sku,
+        mapProductListItem(row, pricingRules, deliveryWindows),
+      ]),
     );
     return orderedSkus
       .map((sku) => productsBySku.get(sku))
@@ -981,15 +1050,16 @@ export async function getProductsBySkus(
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
-  const [row, pricingRules] = await Promise.all([
+  const [row, pricingRules, deliveryWindows] = await Promise.all([
     db.product.findFirst({
       where: { sku, ...webStorefrontProductWhere() },
       include: productInclude,
     }),
     getActivePricingRules(),
+    getDeliveryWindows(),
   ]);
   if (!row) return null;
-  return mapProduct(row, pricingRules);
+  return mapProduct(row, pricingRules, deliveryWindows);
 }
 
 /** "Često kupovano zajedno" — items in the same `collection`. */
@@ -999,7 +1069,7 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
     select: { collectionId: true },
   });
   if (!p?.collectionId) return [];
-  const [rows, pricingRules] = await Promise.all([
+  const [rows, pricingRules, deliveryWindows] = await Promise.all([
     db.product.findMany({
       where: {
         collectionId: p.collectionId,
@@ -1011,8 +1081,11 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
       orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
     }),
     getActivePricingRules(),
+    getDeliveryWindows(),
   ]);
-  return rows.map((product) => mapProduct(product, pricingRules));
+  return rows.map((product) =>
+    mapProduct(product, pricingRules, deliveryWindows),
+  );
 }
 
 /** "Slični artikli" — items in the same `group`. */
@@ -1022,7 +1095,7 @@ export async function getRelatedProducts(productId: string, limit = 8) {
     select: { groupId: true },
   });
   if (!p?.groupId) return [];
-  const [rows, pricingRules] = await Promise.all([
+  const [rows, pricingRules, deliveryWindows] = await Promise.all([
     db.product.findMany({
       where: {
         groupId: p.groupId,
@@ -1034,24 +1107,28 @@ export async function getRelatedProducts(productId: string, limit = 8) {
       orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
     }),
     getActivePricingRules(),
+    getDeliveryWindows(),
   ]);
-  return rows.map((product) => mapProduct(product, pricingRules));
+  return rows.map((product) =>
+    mapProduct(product, pricingRules, deliveryWindows),
+  );
 }
 
 /** Cross-sell list backing the post-add-to-cart "Predlog kupovine" modal. */
 export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
-  const [rule, pricingRules] = await Promise.all([
+  const [rule, pricingRules, deliveryWindows] = await Promise.all([
     db.recommendationRule.findFirst({
       where: { enabled: true, group: { slug: groupSlug } },
       include: { products: { include: productInclude } },
       orderBy: { order: "asc" },
     }),
     getActivePricingRules(),
+    getDeliveryWindows(),
   ]);
   if (!rule) return [];
   return rule.products
     .slice(0, limit)
-    .map((product) => mapProduct(product, pricingRules));
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows));
 }
 
 export async function getCartRecommendationsForSkus(
@@ -1071,13 +1148,14 @@ export async function getCartRecommendationsForSkus(
   );
   if (!groupIds.length) return [];
 
-  const [rules, pricingRules] = await Promise.all([
+  const [rules, pricingRules, deliveryWindows] = await Promise.all([
     db.recommendationRule.findMany({
       where: { enabled: true, groupId: { in: groupIds } },
       include: { products: { include: productInclude } },
       orderBy: [{ order: "asc" }],
     }),
     getActivePricingRules(),
+    getDeliveryWindows(),
   ]);
 
   const seen = new Set(uniqueSkus);
@@ -1091,7 +1169,7 @@ export async function getCartRecommendationsForSkus(
         continue;
       }
       seen.add(product.sku);
-      out.push(mapProduct(product, pricingRules));
+      out.push(mapProduct(product, pricingRules, deliveryWindows));
       if (out.length >= limit) return out;
     }
   }

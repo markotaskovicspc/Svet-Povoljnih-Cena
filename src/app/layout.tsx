@@ -14,6 +14,9 @@ import { BRAND } from "@/lib/brand";
 import { CookieConsent } from "@/components/privacy/cookie-consent";
 import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytics";
 import { getGa4MeasurementId } from "@/lib/analytics/config";
+import { getCategoryTree } from "@/lib/api/catalog";
+import type { CategoryNode } from "@/lib/api/catalog";
+import type { NavNode } from "@/data/site";
 
 const fontDisplay = Playfair_Display({
   variable: "--font-display",
@@ -63,6 +66,23 @@ export const viewport: Viewport = {
 // store ID, while unfilled GET_FROM_... placeholders safely fall back to it.
 const gaId = getGa4MeasurementId();
 
+function categoryNav(
+  nodes: CategoryNode[],
+  parentSegments: string[] = [],
+): NavNode[] {
+  return nodes.map((node) => {
+    const segments = [...parentSegments, node.slug];
+    return {
+      label: node.name,
+      href: `/k/${segments.join("/")}`,
+      imageUrl: node.imageUrl,
+      children: node.children.length
+        ? categoryNav(node.children, segments)
+        : undefined,
+    };
+  });
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -71,9 +91,14 @@ export default async function RootLayout({
   // Suppress storefront chrome on /admin — admin owns its own shell.
   const pathname = (await headers()).get("x-pathname") ?? "";
   const isAdmin = pathname.startsWith("/admin");
-  const [activePromoBar, activeTabs, currentUser] = isAdmin
-    ? [null, [], null]
-    : await Promise.all([getActivePromoBar(), getActiveTabs(), getCurrentUser()]);
+  const [activePromoBar, activeTabs, currentUser, categoryTree] = isAdmin
+    ? [null, [], null, []]
+    : await Promise.all([
+        getActivePromoBar(),
+        getActiveTabs(),
+        getCurrentUser(),
+        getCategoryTree(),
+      ]);
   const isCustomerLoggedIn = currentUser?.userType === "customer";
   const showFirstPurchaseCta =
     !isAdmin &&
@@ -101,7 +126,11 @@ export default async function RootLayout({
                   className="h-[max(env(safe-area-inset-top),1.5rem)] bg-white md:hidden"
                 />
                 {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
-                <Header tabs={activeTabs} isCustomerLoggedIn={isCustomerLoggedIn} />
+                <Header
+                  tabs={activeTabs}
+                  categories={categoryNav(categoryTree)}
+                  isCustomerLoggedIn={isCustomerLoggedIn}
+                />
               </div>
               <main className="flex-1">{children}</main>
               {showFirstPurchaseCta ? <FirstPurchaseCta /> : null}

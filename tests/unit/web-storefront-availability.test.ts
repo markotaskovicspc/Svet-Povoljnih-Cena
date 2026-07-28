@@ -20,9 +20,15 @@ describe("web storefront availability rollout", () => {
     delete process.env.ENFORCE_WEB_AUTO_AVAILABILITY;
 
     expect(isWebAutoAvailabilityEnforced()).toBe(false);
-    expect(webStorefrontProductWhere()).toEqual({
+    expect(webStorefrontProductWhere()).toMatchObject({
       isActive: true,
       availableWebManual: true,
+      priceListEntries: {
+        some: {
+          price: { gt: 0 },
+          priceList: { is: { kind: "RETAIL", active: true } },
+        },
+      },
     });
     expect(
       isProductAvailableOnWeb({
@@ -49,10 +55,16 @@ describe("web storefront availability rollout", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
 
     expect(isWebAutoAvailabilityEnforced()).toBe(true);
-    expect(webStorefrontProductWhere()).toEqual({
+    expect(webStorefrontProductWhere()).toMatchObject({
       isActive: true,
       availableWebManual: true,
       availableWebAuto: true,
+      priceListEntries: {
+        some: {
+          price: { gt: 0 },
+          priceList: { is: { kind: "RETAIL", active: true } },
+        },
+      },
     });
     expect(
       isProductAvailableOnWeb({

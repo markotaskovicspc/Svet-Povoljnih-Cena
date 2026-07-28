@@ -227,13 +227,17 @@ export async function setDefaultWarehouseStock(
     await syncProductChannelAvailability(tx, input.productId);
     return null;
   }
+  const note = input.note.trim();
+  if (note.length < 3) {
+    throw new Error("Razlog ručne korekcije DC stanja je obavezan.");
+  }
   return adjustInventory(tx, {
     idempotencyKey: input.idempotencyKey,
     productId: input.productId,
     warehouseId: warehouse.id,
     qtyDelta: delta,
     kind: StockMovementKind.ADJUSTMENT,
-    note: input.note,
+    note,
     actorId: input.actorId,
   });
 }

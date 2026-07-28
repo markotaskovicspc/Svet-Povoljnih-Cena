@@ -257,6 +257,21 @@ export default async function ProductPage({ params }: RouteProps) {
                   assemblyInstructions: product.pdpInfo?.assemblyInstructions,
                   maintenance: product.pdpInfo?.maintenance,
                 }}
+                attachments={{
+                  deliveryTerms: product.attachments?.filter(
+                    (attachment) => attachment.section === "delivery_terms",
+                  ),
+                  declaration: product.attachments?.filter(
+                    (attachment) => attachment.section === "declaration",
+                  ),
+                  assemblyInstructions: product.attachments?.filter(
+                    (attachment) =>
+                      attachment.section === "assembly_instructions",
+                  ),
+                  maintenance: product.attachments?.filter(
+                    (attachment) => attachment.section === "maintenance",
+                  ),
+                }}
               />
             </div>
           </div>
@@ -297,7 +312,8 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
-      {product.technicalSpecs?.length || product.attachments?.length ? (
+      {product.technicalSpecs?.length ||
+      product.attachments?.some((attachment) => attachment.section === "general") ? (
         <Reveal>
           <section className="mx-auto mt-8 grid w-full max-w-[var(--container-page)] gap-6 px-4 md:grid-cols-2 md:px-6">
             {product.technicalSpecs?.length ? (
@@ -320,13 +336,17 @@ export default async function ProductPage({ params }: RouteProps) {
                 </dl>
               </div>
             ) : null}
-            {product.attachments?.length ? (
+            {product.attachments?.some(
+              (attachment) => attachment.section === "general",
+            ) ? (
               <div>
                 <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
                   Dokumenti
                 </h2>
                 <ul className="mt-5 space-y-3">
-                  {product.attachments.map((attachment) => (
+                  {product.attachments
+                    .filter((attachment) => attachment.section === "general")
+                    .map((attachment) => (
                     <li key={`${attachment.kind}-${attachment.url}`}>
                       <a
                         href={attachment.url}
@@ -338,7 +358,7 @@ export default async function ProductPage({ params }: RouteProps) {
                         <span aria-hidden>↗</span>
                       </a>
                     </li>
-                  ))}
+                    ))}
                 </ul>
               </div>
             ) : null}

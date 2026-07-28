@@ -19,7 +19,7 @@ export const RABALUX_OVERRIDE_GROUPS = {
     "packHeightCm",
     "packGrossWeightKg",
   ],
-  delivery: ["deliveryDaysMin", "deliveryDaysMax", "allowsAssembly"],
+  delivery: ["allowsAssembly"],
   grouping: ["groupId", "collectionId"],
   specifications: [
     "technicalSpecs",

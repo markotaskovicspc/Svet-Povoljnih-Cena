@@ -16,6 +16,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  cancelInboundInvoice,
   createInboundInvoice,
   lockInboundInvoice,
   saveInboundInvoice,
@@ -158,6 +159,30 @@ async function lockAction(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
+async function cancelAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "inbound-invoice.cancel",
+      entity: "InboundInvoice",
+    },
+    async (_actorId, actionData: FormData) => {
+      const id = String(actionData.get("invoiceId") ?? "");
+      if (!id) return { ok: false as const, error: "Faktura nije izabrana." };
+      await cancelInboundInvoice(id);
+      revalidatePath(`/admin/erp/ulazne-fakture/${id}`);
+      revalidatePath("/admin/erp/ulazne-fakture");
+      revalidatePath("/admin/erp/artikli");
+      return {
+        ok: true as const,
+        entityId: id,
+        message: "Faktura je stornirana; COGS i količina u dolasku su preračunati.",
+      };
+    },
+  )(formData);
+}
+
 export default async function InboundInvoicePage({
   params,
   searchParams,
@@ -216,7 +241,9 @@ export default async function InboundInvoicePage({
   if (!invoice) notFound();
 
   const locked = Boolean(invoice.lockedAt);
-  const editing = query.mode === "edit" && !locked;
+  const cancelled = invoice.status === InboundInvoiceStatus.CANCELLED;
+  const immutable = locked || cancelled;
+  const editing = query.mode === "edit" && !immutable;
   const linkedCostRsd =
     invoice.purchaseOrder?.inboundInvoices
       .filter(
@@ -265,7 +292,7 @@ export default async function InboundInvoicePage({
                 Nova
               </SubmitButton>
             </form>
-            {!locked ? (
+            {!immutable ? (
               editing ? (
                 <Link
                   href={`/admin/erp/ulazne-fakture/${invoice.id}`}
@@ -293,11 +320,22 @@ export default async function InboundInvoicePage({
             <AdminActionForm action={lockAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
-                disabled={locked}
+                disabled={immutable}
                 confirm="Zaključati fakturu? Poslovni podaci više neće moći da se menjaju, a trošak će ući u COGS."
                 pendingLabel="Zaključavanje…"
               >
                 Zaključaj
+              </SubmitButton>
+            </AdminActionForm>
+            <AdminActionForm action={cancelAction}>
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <SubmitButton
+                variant="destructive"
+                disabled={cancelled}
+                confirm="Stornirati fakturu? COGS i količina u dolasku biće ponovo izračunati."
+                pendingLabel="Storniranje…"
+              >
+                Storniraj
               </SubmitButton>
             </AdminActionForm>
           </div>
@@ -309,7 +347,11 @@ export default async function InboundInvoicePage({
           <CardTitle description="Vrednosti fakture i obavezna veza sa porudžbenicom.">
             Podaci fakture
           </CardTitle>
-          {locked ? (
+          {cancelled ? (
+            <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">
+              Faktura je stornirana i više ne učestvuje u COGS-u ni količini u dolasku.
+            </p>
+          ) : locked ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
               Faktura je zaključana. Troškovi su raspoređeni po vrednosti artikala povezane porudžbenice.
             </p>
@@ -321,7 +363,7 @@ export default async function InboundInvoicePage({
           <AdminActionForm action={saveAction}>
             <fieldset
               key={`${invoice.updatedAt.toISOString()}-${editing}`}
-              disabled={!editing || locked}
+              disabled={!editing || immutable}
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
               <input type="hidden" name="invoiceId" value={invoice.id} />
@@ -431,7 +473,7 @@ export default async function InboundInvoicePage({
               <Field label="Napomena" className="md:col-span-2 xl:col-span-3">
                 <Textarea name="notes" rows={3} defaultValue={invoice.notes ?? ""} />
               </Field>
-              {editing && !locked ? (
+              {editing && !immutable ? (
                 <div className="flex justify-end md:col-span-2 xl:col-span-3">
                   <SubmitButton pendingLabel="Čuvanje…">Sačuvaj</SubmitButton>
                 </div>

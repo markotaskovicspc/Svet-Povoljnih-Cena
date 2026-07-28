@@ -36,9 +36,17 @@ export interface ProductMedia {
 }
 
 export interface ProductAttachment {
-  kind: "manual" | "energy_label";
+  kind: "manual" | "energy_label" | "document";
+  section:
+    | "general"
+    | "delivery_terms"
+    | "declaration"
+    | "assembly_instructions"
+    | "maintenance";
   label: string;
   url: string;
+  mimeType?: string;
+  sizeBytes?: number;
 }
 
 export interface TechnicalSpecification {

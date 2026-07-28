@@ -8,6 +8,7 @@ type SavedViewPayload = {
   module?: unknown;
   name?: unknown;
   query?: unknown;
+  searchColumn?: unknown;
   filters?: unknown;
   sorting?: unknown;
   visibleColumns?: unknown;
@@ -33,6 +34,8 @@ function toView(row: {
     id: row.id,
     name: row.name,
     query: typeof row.query === "string" ? row.query : "",
+    searchColumn:
+      typeof columns.searchColumn === "string" ? columns.searchColumn : "",
     filters: Array.isArray(row.filters) ? row.filters : [],
     sorting: Array.isArray(row.sorting) ? row.sorting : [],
     visibleColumns: Array.isArray(columns.visibleColumns)
@@ -97,6 +100,10 @@ export async function POST(request: Request) {
       ? value.filter((item): item is string => typeof item === "string" && knownColumns.has(item))
       : [];
   const visibleColumns = cleanColumns(body?.visibleColumns);
+  const searchColumn =
+    typeof body?.searchColumn === "string" && knownColumns.has(body.searchColumn)
+      ? body.searchColumn
+      : "";
   const columnOrder = cleanColumns(body?.columnOrder);
   const filters = Array.isArray(body?.filters) ? body.filters : [];
   const sorting = Array.isArray(body?.sorting) ? body.sorting : [];
@@ -152,6 +159,7 @@ export async function POST(request: Request) {
         visibleColumns,
         columnOrder,
         columnWidths,
+        searchColumn,
         context,
       } as Prisma.InputJsonValue,
       pageSize: 100,
@@ -165,6 +173,7 @@ export async function POST(request: Request) {
         visibleColumns,
         columnOrder,
         columnWidths,
+        searchColumn,
         context,
       } as Prisma.InputJsonValue,
       pageSize: 100,

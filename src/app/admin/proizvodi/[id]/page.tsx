@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { randomBytes } from "node:crypto";
@@ -24,9 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
+import { ProductCommercialTerms } from "@/components/admin/product-commercial-terms";
+import {
+  ProductAttachmentsEditor,
+  type EditableProductAttachment,
+} from "@/components/admin/product-attachments-editor";
 import {
   composedArticleName,
-  resolveArticleCategory,
   resolveNamedArticleRelation,
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
@@ -42,6 +46,15 @@ import {
   RABALUX_OVERRIDE_OPTIONS,
   type RabaluxOverrideGroup,
 } from "@/lib/rabalux/ownership";
+import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
+import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import {
+  getDeliveryWindows,
+  resolveDeliveryWindowForQuantity,
+} from "@/lib/delivery-windows";
+import { formatRsd } from "@/lib/format";
+import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
+import { productNewUntilIsActive } from "@/lib/product-newness";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -55,6 +68,7 @@ const overrideSchema = z.object({
   name: z.string().min(1).max(200),
   articleStatus: z.enum(["SP", "IT", "DTZ", "DOB", "ARH", "UZ"]),
   supplierId: z.string().optional().nullable(),
+  categoryId: z.string().optional().nullable(),
   groupId: z.string().optional().nullable(),
   newGroupName: z.string().max(120).optional().nullable(),
   collectionId: z.string().optional().nullable(),
@@ -71,25 +85,12 @@ const overrideSchema = z.object({
   certificates: z.string().max(2000).optional().nullable(),
   shortDescription: z.string().max(500).optional().nullable(),
   description: z.string().max(20000),
-  fullPrice: z.coerce.number().nonnegative(),
-  salePrice: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
-  loyaltyPrice: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
-  loyaltyDiscountPct: z
-    .union([z.coerce.number().int().min(0).max(99), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
   pdpDeliveryTerms: z.string().max(10000).optional().nullable(),
   declaration: z.string().max(10000).optional().nullable(),
   assemblyInstructions: z.string().max(10000).optional().nullable(),
   maintenance: z.string().max(10000).optional().nullable(),
   stock: z.coerce.number().int().min(0),
-  incomingStock: z.coerce.number().int().min(0),
+  stockAdjustmentReason: z.string().trim().max(500),
   widthCm: z.coerce.number().positive().max(10000),
   depthCm: z.coerce.number().positive().max(10000),
   heightCm: z.coerce.number().positive().max(10000),
@@ -100,7 +101,6 @@ const overrideSchema = z.object({
   packDepthCm: optionalNonnegativeNumber(),
   packHeightCm: optionalNonnegativeNumber(),
   packGrossWeightKg: optionalNonnegativeNumber(),
-  cogs: optionalNonnegativeNumber(),
   customsRate: optionalNonnegativeNumber(),
   supplierProductName: z.string().max(500).optional().nullable(),
   materialText: z.string().max(5000).optional().nullable(),
@@ -112,26 +112,10 @@ const overrideSchema = z.object({
   newUntil: z.string().max(10).optional().nullable(),
   tncFrom: z.string().max(10).optional().nullable(),
   tncUntil: z.string().max(10).optional().nullable(),
-  deliveryDaysMin: z.coerce.number().int().min(0).max(60),
-  deliveryDaysMax: z.coerce.number().int().min(0).max(60),
   allowsAssembly: z.coerce.boolean().default(false),
-  isActive: z.coerce.boolean().default(true),
-  isHero: z.coerce.boolean().default(false),
-  isNew: z.coerce.boolean().default(false),
-  isLimited: z.coerce.boolean().default(false),
-  isDtz: z.coerce.boolean().default(false),
-  inGoogleMerchant: z.coerce.boolean().default(false),
-  inMetaCatalog: z.coerce.boolean().default(false),
   availableWebManual: z.coerce.boolean().default(false),
   availableWholesaleManual: z.coerce.boolean().default(false),
   availableExportManual: z.coerce.boolean().default(false),
-});
-
-const categorySchema = z.object({
-  productId: z.string(),
-  categoryId: z.string().optional().nullable(),
-  newCategoryName: z.string().max(120).optional().nullable(),
-  parentCategoryId: z.string().optional().nullable(),
 });
 
 const pictogramAssignmentSchema = z.object({
@@ -255,6 +239,7 @@ async function revalidateProductSurfaces(productId: string, slug?: string | null
     const categoryPath = relation.category.path.replace(/^\/+/, "");
     if (categoryPath) revalidatePath(`/k/${categoryPath}`);
   }
+  updateTag("catalog-products");
 }
 
 async function uploadProductImage(productId: string, file: File) {
@@ -278,29 +263,6 @@ async function uploadProductImage(productId: string, file: File) {
   return key;
 }
 
-async function lockSupplierOwnedFields(
-  tx: Prisma.TransactionClient,
-  productId: string,
-  actorId: string,
-  fields: RabaluxOverrideGroup[],
-) {
-  const product = await tx.product.findUnique({
-    where: { id: productId },
-    select: { supplierId: true, syncOverrides: true },
-  });
-  if (!product?.supplierId || !fields.length) return;
-  await tx.product.update({
-    where: { id: productId },
-    data: {
-      syncOverrides: mergeOverrideFields(
-        product.syncOverrides,
-        fields,
-        actorId,
-      ),
-    },
-  });
-}
-
 function changedManualGroups(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
@@ -309,10 +271,9 @@ function changedManualGroups(
     ["name", ["name"]],
     ["identity", ["barcode"]],
     ["description", ["description", "shortDescription"]],
-    ["pricing", ["fullPrice", "salePrice", "discountPct"]],
     ["specifications", ["colorPrimary", "colorSecondary"]],
     ["dimensions", ["widthCm", "depthCm", "heightCm"]],
-    ["delivery", ["deliveryDaysMin", "deliveryDaysMax", "allowsAssembly"]],
+    ["delivery", ["allowsAssembly"]],
     ["flags", ["isActive", "isNew", "isDtz"]],
   ];
   return groups
@@ -341,13 +302,6 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
         const parsed = overrideSchema.safeParse({
           ...raw,
           allowsAssembly: bool("allowsAssembly"),
-          isActive: bool("isActive"),
-          isHero: bool("isHero"),
-          isNew: bool("isNew"),
-          isLimited: bool("isLimited"),
-          isDtz: bool("isDtz"),
-          inGoogleMerchant: bool("inGoogleMerchant"),
-          inMetaCatalog: bool("inMetaCatalog"),
           availableWebManual: bool("availableWebManual"),
           availableWholesaleManual: bool("availableWholesaleManual"),
           availableExportManual: bool("availableExportManual"),
@@ -356,20 +310,15 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         }
         const d = parsed.data;
-        if (d.deliveryDaysMin > d.deliveryDaysMax) {
-          return { ok: false as const, error: "Min. dani isporuke ne mogu biti veći od max." };
-        }
         const newUntil = optionalDateInput(d.newUntil);
-        const tncFrom = optionalDateInput(d.tncFrom);
-        const tncUntil = optionalDateInput(d.tncUntil);
+        const tncFrom = d.articleStatus === "DTZ" ? optionalDateInput(d.tncFrom) : null;
+        const tncUntil = d.articleStatus === "DTZ" ? optionalDateInput(d.tncUntil) : null;
         if (tncFrom && tncUntil && tncFrom > tncUntil) {
           return {
             ok: false as const,
             error: "T&C datum od ne može biti posle datuma do.",
           };
         }
-        const activeDateFloor = new Date();
-        activeDateFloor.setHours(0, 0, 0, 0);
         const statusFlags =
           d.articleStatus === "DTZ"
             ? { isActive: true, isDtz: true, isLimited: false }
@@ -392,23 +341,10 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           description: sanitizeRichText(d.description),
           articleStatus: d.articleStatus,
           supplierId: d.supplierId?.trim() || null,
-          fullPrice: d.fullPrice,
-          salePrice: d.salePrice ?? null,
-          loyaltyPrice: d.loyaltyPrice ?? null,
-          loyaltyDiscountPct: d.loyaltyDiscountPct ?? null,
-          discountPct:
-            d.salePrice && d.salePrice < d.fullPrice
-              ? Math.round(((d.fullPrice - d.salePrice) / d.fullPrice) * 100)
-              : d.loyaltyPrice && d.loyaltyPrice < d.fullPrice
-                ? Math.round(((d.fullPrice - d.loyaltyPrice) / d.fullPrice) * 100)
-                : d.loyaltyDiscountPct
-                  ? d.loyaltyDiscountPct
-              : null,
           pdpDeliveryTerms: d.pdpDeliveryTerms?.trim() || null,
           declaration: d.declaration?.trim() || null,
           assemblyInstructions: d.assemblyInstructions?.trim() || null,
           maintenance: d.maintenance?.trim() || null,
-          incomingStock: d.incomingStock,
           widthCm: d.widthCm,
           depthCm: d.depthCm,
           heightCm: d.heightCm,
@@ -419,7 +355,6 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           packDepthCm: d.packDepthCm ?? null,
           packHeightCm: d.packHeightCm ?? null,
           packGrossWeightKg: d.packGrossWeightKg ?? null,
-          cogs: d.cogs ?? null,
           customsRate: d.customsRate ?? null,
           supplierProductName: d.supplierProductName?.trim() || null,
           materialText: d.materialText?.trim() || null,
@@ -431,14 +366,9 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           newUntil,
           tncFrom,
           tncUntil,
-          deliveryDaysMin: d.deliveryDaysMin,
-          deliveryDaysMax: d.deliveryDaysMax,
           allowsAssembly: d.allowsAssembly,
           ...statusFlags,
-          isHero: d.isHero,
-          isNew: newUntil ? newUntil >= activeDateFloor : d.isNew,
-          inGoogleMerchant: d.inGoogleMerchant,
-          inMetaCatalog: d.inMetaCatalog,
+          isNew: productNewUntilIsActive(newUntil),
           availableWebManual: d.availableWebManual,
           availableWholesaleManual: d.availableWholesaleManual,
           availableExportManual: d.availableExportManual,
@@ -455,16 +385,11 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               barcode: true,
               description: true,
               shortDescription: true,
-              fullPrice: true,
-              salePrice: true,
-              discountPct: true,
               colorPrimary: true,
               colorSecondary: true,
               widthCm: true,
               depthCm: true,
               heightCm: true,
-              deliveryDaysMin: true,
-              deliveryDaysMax: true,
               allowsAssembly: true,
               isActive: true,
               isNew: true,
@@ -515,6 +440,24 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             },
             select: { slug: true },
           });
+          await tx.productCategory.deleteMany({ where: { productId: d.id } });
+          if (d.categoryId) {
+            await tx.productCategory.create({
+              data: { productId: d.id, categoryId: d.categoryId },
+            });
+            await tx.product.updateMany({
+              where: {
+                id: d.id,
+                supplierId: { not: null },
+                supplierApprovalStatus: "PENDING_MAPPING",
+              },
+              data: {
+                supplierApprovalStatus: "PENDING_APPROVAL",
+                isActive: false,
+              },
+            });
+          }
+          await lockSupplierOwnedFields(tx, d.id, actorId, ["categories"]);
           await syncArticleLookupAssignments(tx, d.id, {
             attributes: [d.attribute1, d.attribute2, d.attribute3, d.attribute4],
             colors: [d.colorPrimary, d.colorSecondary],
@@ -526,7 +469,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             productId: d.id,
             targetQty: d.stock,
             actorId,
-            note: "Ručno usklađivanje iz administracije proizvoda",
+            note: d.stockAdjustmentReason,
           });
           return saved;
         });
@@ -538,55 +481,6 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           message: "Proizvod je sačuvan.",
         };
       },
-  )(formData);
-}
-
-async function updateProductCategory(_state: AdminActionState, formData: FormData) {
-  "use server";
-
-  return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.category.update", entity: "Product" },
-    async (actorId, formData: FormData) => {
-      const parsed = categorySchema.safeParse(Object.fromEntries(formData));
-      if (!parsed.success) {
-        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-      }
-      const { productId, categoryId, newCategoryName, parentCategoryId } = parsed.data;
-      if (!categoryId && !newCategoryName?.trim()) {
-        return { ok: false as const, error: "Izaberite ili unesite novu kategoriju." };
-      }
-      await db.$transaction(async (tx) => {
-        const category = await resolveArticleCategory(tx, {
-          id: categoryId?.trim() || null,
-          name: newCategoryName,
-          parentId: parentCategoryId?.trim() || null,
-        });
-        if (!category) throw new Error("Kategorija nije izabrana.");
-        await tx.productCategory.deleteMany({ where: { productId } });
-        await tx.productCategory.create({
-          data: { productId, categoryId: category.id },
-        });
-        await lockSupplierOwnedFields(tx, productId, actorId, ["categories"]);
-        await tx.product.updateMany({
-          where: {
-            id: productId,
-            supplierId: { not: null },
-            supplierApprovalStatus: "PENDING_MAPPING",
-          },
-          data: {
-            supplierApprovalStatus: "PENDING_APPROVAL",
-            isActive: false,
-          },
-        });
-      });
-      await revalidateProductSurfaces(productId);
-      return {
-        ok: true as const,
-        entityId: productId,
-        diff: { categoryId, newCategoryName, parentCategoryId },
-        message: "Kategorija proizvoda je sačuvana.",
-      };
-    },
   )(formData);
 }
 
@@ -925,7 +819,19 @@ export default async function ProductDetail({
 }) {
   await requireAdminAction(["CONTENT", "OPS"]);
   const { id } = await params;
-  const [product, categories, suppliers, groups, collections, lookupValues, pictograms, defaultWarehouse] =
+  const now = new Date();
+  const [
+    product,
+    categories,
+    suppliers,
+    groups,
+    collections,
+    lookupValues,
+    pictograms,
+    defaultWarehouse,
+    loyaltyRule,
+    deliveryWindows,
+  ] =
     await Promise.all([
       db.product.findUnique({
         where: { id },
@@ -933,6 +839,31 @@ export default async function ProductDetail({
           categories: { include: { category: true } },
           pictograms: { include: { pictogram: true } },
           media: { orderBy: { order: "asc" } },
+          attachments: { orderBy: [{ section: "asc" }, { order: "asc" }] },
+          priceListEntries: {
+            where: { priceList: { kind: "RETAIL", active: true } },
+            include: { priceList: true },
+            orderBy: { validFrom: "desc" },
+          },
+          actionPrices: {
+            include: { action: true },
+            orderBy: { action: { priority: "desc" } },
+          },
+          purchaseOrderItems: {
+            where: {
+              purchaseOrder: {
+                status: { notIn: ["RECEIVED", "CANCELLED"] },
+                inboundInvoices: {
+                  some: { status: { in: ["RECEIVED", "POSTED"] } },
+                },
+              },
+            },
+            select: {
+              purchaseOrderId: true,
+              qty: true,
+              receivedQty: true,
+            },
+          },
           supplier: true,
           group: true,
           collection: true,
@@ -985,6 +916,17 @@ export default async function ProductDetail({
         orderBy: { createdAt: "asc" },
         select: { id: true, name: true },
       }),
+      db.loyaltyRule.findFirst({
+        where: {
+          active: true,
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
+          ],
+        },
+        orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+      }),
+      getDeliveryWindows(),
     ]);
   if (!product) notFound();
   const syncOverrideFields = parseOverrideFields(product.syncOverrides);
@@ -1006,6 +948,51 @@ export default async function ProductDetail({
   const defaultWarehouseStock = defaultWarehouseRow
     ? defaultWarehouseRow.qty + defaultWarehouseReserved
     : product.stock + defaultWarehouseReserved;
+  const retailPrice = resolveRetailPrice(product.priceListEntries, product.fullPrice, now);
+  const activeAction = product.actionPrices.find(
+    (entry) =>
+      (entry.action.isPermanent || entry.action.startsAt <= now) &&
+      (entry.action.isPermanent || entry.action.endsAt >= now),
+  );
+  const loyaltyDiscountPct = loyaltyRule ? Number(loyaltyRule.discountPct) : null;
+  const loyaltyPrice = loyaltyDiscountPct === null
+    ? null
+    : Math.max(0, retailPrice.price * (1 - loyaltyDiscountPct / 100));
+  const incomingStock = product.purchaseOrderItems.reduce(
+    (sum, item) => sum + Math.max(item.qty - item.receivedQty, 0),
+    0,
+  );
+  const availability = resolveRabaluxAvailability({
+    warehouseStock: product.dcAvailableQty,
+    supplierStock: product.supplierStock,
+    supplierReservedStock: product.supplierReservedStock,
+    lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+    supplierOperational:
+      product.supplier?.enabled === true &&
+      product.supplier.integrationKey === "RABALUX",
+    supplierApproved: product.supplierApprovalStatus === "APPROVED",
+    now,
+  });
+  const deliveryWindow = resolveDeliveryWindowForQuantity(
+    {
+      quantity: 1,
+      dcAvailable: availability.warehouseAvailable,
+      supplierAvailable: availability.supplierAvailable,
+    },
+    deliveryWindows,
+  );
+  const editableAttachments: EditableProductAttachment[] = product.attachments
+    .filter((attachment) => attachment.section !== "GENERAL")
+    .map((attachment) => ({
+      id: attachment.id,
+      section: attachment.section as EditableProductAttachment["section"],
+      label: attachment.label,
+      url: resolveSupabaseStorageUrl(attachment.url),
+      order: attachment.order,
+      origin: attachment.origin,
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes,
+    }));
 
   return (
     <>
@@ -1019,7 +1006,8 @@ export default async function ProductDetail({
         ]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
-        <Card>
+        <div className="space-y-6">
+          <Card>
           <CardTitle description="Override-i preko XML feed-a — ovo polje sledeći import može da prepiše ako je polje označeno kao auto-sync.">
             Osnovni podaci
           </CardTitle>
@@ -1034,7 +1022,13 @@ export default async function ProductDetail({
               Puni naziv se automatski formira kao: kolekcija + kratki opis + kratki naziv.
               Trenutno: <strong>{product.name}</strong>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <Field label="Šifra artikla">
+                <Input readOnly value={product.sku} className="font-mono" />
+                <p className="mt-1 text-xs text-ink-500">
+                  Šifra je zaključana nakon kreiranja artikla.
+                </p>
+              </Field>
               <Field label="Kratki naziv">
                 <Input name="name" required defaultValue={product.shortName ?? product.name} />
               </Field>
@@ -1064,8 +1058,34 @@ export default async function ProductDetail({
                 </select>
               </Field>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <Field label="Grupa">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="Kategorija sajta">
+                <select
+                  name="categoryId"
+                  defaultValue={product.categories[0]?.categoryId ?? ""}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">Bez kategorije</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {`${"— ".repeat(category.level)}${category.name}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-ink-500">
+                  Ova hijerarhija upravlja menijem, kategorijskim stranicama i PDP putanjom.
+                </p>
+              </Field>
+            </div>
+            <fieldset className="space-y-3 rounded-xl border border-border/60 bg-muted-bg/20 p-4">
+              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
+                Interna klasifikacija — ne menja kategorije sajta
+              </legend>
+              <p className="text-xs text-ink-500">
+                Grupe služe samo preporukama i promocijama; kolekcije učestvuju u nazivu i internom grupisanju.
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <Field label="Interna grupa — preporuke i promocije">
                 <select
                   name="groupId"
                   defaultValue={product.groupId ?? ""}
@@ -1095,7 +1115,8 @@ export default async function ProductDetail({
               <Field label="Nova kolekcija">
                 <Input name="newCollectionName" placeholder="Kreira se pri čuvanju" />
               </Field>
-            </div>
+              </div>
+            </fieldset>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <Field label="Bar kod">
                 <Input name="barcode" defaultValue={product.barcode ?? ""} />
@@ -1151,18 +1172,22 @@ export default async function ProductDetail({
             <datalist id="article-certificates">
               {lookupOptions("CERTIFICATE").map((value) => <option key={value} value={value} />)}
             </datalist>
-            <Field label="Kratak opis">
+            <Field label="Kratki opis za kartice, naziv i dokumente">
               <Textarea
                 name="shortDescription"
                 rows={2}
                 defaultValue={product.shortDescription ?? ""}
               />
+              <p className="mt-1 text-xs text-ink-500">
+                Koristi se na karticama proizvoda, u formiranju punog naziva i u prodajnim dokumentima.
+              </p>
             </Field>
             <div id="opis-za-sajt" className="scroll-mt-24">
               <Field label="Formatirani opis za sajt">
                 <RichTextEditor
                   name="description"
                   required
+                  productId={product.id}
                   defaultValue={sanitizeRichText(product.description)}
                 />
               </Field>
@@ -1171,13 +1196,22 @@ export default async function ProductDetail({
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 PDP info sekcije
               </legend>
-              <Field label="Uslovi isporuke">
-                <Textarea
-                  name="pdpDeliveryTerms"
-                  rows={3}
-                  defaultValue={product.pdpDeliveryTerms ?? ""}
-                />
-              </Field>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
+                <Field label="Uslovi isporuke">
+                  <Textarea
+                    name="pdpDeliveryTerms"
+                    rows={3}
+                    defaultValue={product.pdpDeliveryTerms ?? ""}
+                  />
+                </Field>
+                <div className="flex items-center rounded-lg border border-border/60 bg-muted-bg/30 p-3">
+                  <Toggle
+                    name="allowsAssembly"
+                    defaultChecked={product.allowsAssembly}
+                    label="Dozvoljena montaža"
+                  />
+                </div>
+              </div>
               <Field label="Deklaracija">
                 <Textarea
                   name="declaration"
@@ -1200,28 +1234,7 @@ export default async function ProductDetail({
                 />
               </Field>
             </fieldset>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Puna cena (RSD)">
-                <Input
-                  name="fullPrice"
-                  type="number"
-                  step="1"
-                  min={0}
-                  required
-                  defaultValue={num(product.fullPrice)}
-                />
-              </Field>
-              <Field label="Akcijska cena (RSD)">
-                <Input
-                  name="salePrice"
-                  type="number"
-                  step="1"
-                  min={0}
-                  defaultValue={
-                    product.salePrice ? num(product.salePrice) : ""
-                  }
-                />
-              </Field>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <Field label="Stanje">
                 <Input
                   name="stock"
@@ -1240,7 +1253,74 @@ export default async function ProductDetail({
                   </Link>
                 </p>
               </Field>
+              <Field label="Razlog ručne korekcije DC stanja">
+                <Input
+                  name="stockAdjustmentReason"
+                  maxLength={500}
+                  placeholder="Obavezno samo ako menjate stanje"
+                />
+                <p className="mt-1 text-xs text-ink-500">
+                  Najmanje 3 znaka kada se fizičko stanje menja.
+                </p>
+              </Field>
+              <div className="rounded-lg border border-warning/25 bg-warning/5 p-3 text-xs text-ink-600">
+                Promena stanja se knjiži kao auditovana korekcija. Za redovan prijem robe koristite ulaznu fakturu i prijem porudžbenice.
+              </div>
             </div>
+
+            <fieldset className="space-y-3 rounded-xl border border-brand-blue/20 bg-brand-blue-50/30 p-4">
+              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-brand-blue">
+                Cene, ulazi i isporuka — izvedeno iz izvora
+              </legend>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <SourceSummary
+                  label="MP cena"
+                  value={formatRsd(retailPrice.price)}
+                  source={
+                    retailPrice.source.type === "PRICE_LIST"
+                      ? `Cenovnik ${retailPrice.source.priceListCode}`
+                      : "Legacy cena artikla"
+                  }
+                  href={
+                    retailPrice.source.type === "PRICE_LIST"
+                      ? `/admin/cenovnici/${retailPrice.source.priceListId}?sku=${encodeURIComponent(product.sku)}`
+                      : "/admin/erp/cenovnici"
+                  }
+                  warning={retailPrice.source.type === "LEGACY_PRODUCT"}
+                />
+                <SourceSummary
+                  label="Akcijska cena"
+                  value={
+                    activeAction
+                      ? formatRsd(Number(activeAction.salePrice))
+                      : product.salePrice
+                        ? formatRsd(num(product.salePrice))
+                        : "Nema aktivne akcije"
+                  }
+                  source={activeAction?.action.name ?? (product.salePrice ? "Legacy fallback" : "Akcije")}
+                  href="/admin/akcije"
+                  warning={!activeAction && Boolean(product.salePrice)}
+                />
+                <SourceSummary
+                  label="Loyalty cena"
+                  value={loyaltyPrice === null ? "Nema aktivnog pravila" : formatRsd(loyaltyPrice)}
+                  source={loyaltyRule?.name ?? "Loyalty pravila"}
+                  href="/admin/erp/loyalty"
+                />
+                <SourceSummary
+                  label="U dolasku"
+                  value={`${incomingStock} kom`}
+                  source="Ulazne fakture / porudžbenice"
+                  href="/admin/erp/ulazne-fakture"
+                />
+                <SourceSummary
+                  label="Rok isporuke"
+                  value={`${deliveryWindow.min}–${deliveryWindow.max} dana`}
+                  source={availability.source === "SUPPLIER" ? "Dobavljački rok" : "DC rok"}
+                  href="/admin/dostava"
+                />
+              </div>
+            </fieldset>
 
             <div className="grid grid-cols-3 gap-3">
               <Field label="Širina (cm)">
@@ -1288,8 +1368,11 @@ export default async function ProductDetail({
                 Nabavka i deklaracija
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <Field label="COGS">
-                  <Input name="cogs" type="number" min={0} step="0.01" defaultValue={product.cogs ? num(product.cogs) : ""} />
+                <Field label="COGS — iz ulaznih dokumenata">
+                  <Input readOnly value={product.cogs ? formatRsd(num(product.cogs)) : "Nije obračunat"} />
+                  <Link href="/admin/erp/ulazne-fakture" className="mt-1 inline-block text-xs text-walnut hover:underline">
+                    Otvori ulazne fakture
+                  </Link>
                 </Field>
                 <Field label="Dobavljačev naziv">
                   <Input name="supplierProductName" defaultValue={product.supplierProductName ?? ""} />
@@ -1326,84 +1409,23 @@ export default async function ProductDetail({
                 </Field>
               </div>
             </fieldset>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Loyalty cena (RSD)">
-                <Input
-                  name="loyaltyPrice"
-                  type="number"
-                  step="1"
-                  min={0}
-                  defaultValue={
-                    product.loyaltyPrice ? num(product.loyaltyPrice) : ""
-                  }
-                />
-              </Field>
-              <Field label="Loyalty popust (%)">
-                <Input
-                  name="loyaltyDiscountPct"
-                  type="number"
-                  step="1"
-                  min={0}
-                  max={99}
-                  defaultValue={product.loyaltyDiscountPct ?? ""}
-                />
-              </Field>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Ulazi (komada)">
-                <Input
-                  name="incomingStock"
-                  type="number"
-                  min={0}
-                  defaultValue={product.incomingStock}
-                />
-              </Field>
-              <Field label="Min. dani isporuke">
-                <Input
-                  name="deliveryDaysMin"
-                  type="number"
-                  min={0}
-                  defaultValue={product.deliveryDaysMin}
-                />
-              </Field>
-              <Field label="Max. dani isporuke">
-                <Input
-                  name="deliveryDaysMax"
-                  type="number"
-                  min={0}
-                  defaultValue={product.deliveryDaysMax}
-                />
-              </Field>
-            </div>
-
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Komercijalni uslovi i kanali
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <Field label="Paritet (nasleđen od dobavljača)">
-                  <Input readOnly value={product.supplier?.parity ?? "—"} />
-                </Field>
-                <Field label="Rok isporuke (nasleđen)">
-                  <Input
-                    readOnly
-                    value={
-                      product.supplier?.deliveryDays != null
-                        ? `${product.supplier.deliveryDays} dana`
-                        : "—"
-                    }
-                  />
-                </Field>
                 <Field label="Novo do">
                   <Input name="newUntil" type="date" defaultValue={dateInputValue(product.newUntil)} />
                 </Field>
-                <Field label="T&C od">
-                  <Input name="tncFrom" type="date" defaultValue={dateInputValue(product.tncFrom)} />
-                </Field>
-                <Field label="T&C do">
-                  <Input name="tncUntil" type="date" defaultValue={dateInputValue(product.tncUntil)} />
-                </Field>
+                <ProductCommercialTerms
+                  initialStatus={product.articleStatus}
+                  tncFrom={dateInputValue(product.tncFrom)}
+                  tncUntil={dateInputValue(product.tncUntil)}
+                />
               </div>
+              <p className="text-xs text-ink-500">
+                T&C datumi se prikazuju i čuvaju samo kada je status artikla DTZ. „Novo“ se automatski izvodi isključivo iz datuma „Novo do“.
+              </p>
               <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
                 <Toggle name="availableWebManual" defaultChecked={product.availableWebManual} label="Web check" />
                 <Toggle name="availableWholesaleManual" defaultChecked={product.availableWholesaleManual} label="VP check" />
@@ -1414,83 +1436,31 @@ export default async function ProductDetail({
               </p>
             </fieldset>
 
-            <fieldset className="space-y-2 rounded-xl border border-border/60 p-4">
-              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
-                Oznake
-              </legend>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <Toggle name="isHero" defaultChecked={product.isHero} label="Hero meseca" />
-                <Toggle name="isNew" defaultChecked={product.isNew} label="Novo" />
-                <Toggle name="allowsAssembly" defaultChecked={product.allowsAssembly} label="Dozvoljena montaža" />
-                <Toggle
-                  name="inGoogleMerchant"
-                  defaultChecked={product.inGoogleMerchant}
-                  label="Google Merchant"
-                />
-                <Toggle
-                  name="inMetaCatalog"
-                  defaultChecked={product.inMetaCatalog}
-                  label="Meta katalog"
-                />
-              </div>
-            </fieldset>
+            <div className="grid gap-3 rounded-xl border border-border/60 bg-muted-bg/30 p-4 text-sm md:grid-cols-3">
+              <ReadOnlyFlag label="Hero meseca" enabled={product.isHero} href="/admin/heroji" />
+              <ReadOnlyFlag label="Google Merchant" enabled={product.inGoogleMerchant} href="/admin/oglasi" />
+              <ReadOnlyFlag label="Meta katalog" enabled={product.inMetaCatalog} href="/admin/oglasi" />
+            </div>
 
             <div className="flex justify-end">
               <SubmitButton>Sačuvaj izmene</SubmitButton>
             </div>
           </AdminActionForm>
-        </Card>
+          </Card>
+          <Card>
+            <CardTitle description="Tekst sekcija se čuva zajedno sa artiklom; ovde se dodaju dokumenti koji se prikazuju u istoj PDP info sekciji.">
+              Fajlovi u PDP info sekcijama
+            </CardTitle>
+            <div className="mt-4">
+              <ProductAttachmentsEditor
+                productId={product.id}
+                initialAttachments={editableAttachments}
+              />
+            </div>
+          </Card>
+        </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardTitle>Kategorije</CardTitle>
-            <ul className="space-y-1 text-sm">
-              {product.categories.map((c) => (
-                <li key={c.categoryId} className="font-mono text-xs text-ink-500">
-                  {c.category.path}
-                </li>
-              ))}
-              {product.categories.length === 0 ? (
-                <li className="text-sm text-ink-500">Bez kategorija.</li>
-              ) : null}
-            </ul>
-            <AdminActionForm action={updateProductCategory} className="mt-4 space-y-3">
-              <input type="hidden" name="productId" value={product.id} />
-              <Field label="Promeni kategoriju">
-                <select
-                  name="categoryId"
-                  defaultValue={product.categories[0]?.categoryId ?? ""}
-                  className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-                >
-                  <option value="">Nova kategorija / bez izbora</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.path}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Nova kategorija">
-                <Input name="newCategoryName" placeholder="Naziv nove kategorije" />
-              </Field>
-              <Field label="Nadređena kategorija za novu">
-                <select
-                  name="parentCategoryId"
-                  defaultValue={product.categories[0]?.category.parentId ?? ""}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                >
-                  <option value="">Korenska kategorija</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.path}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <SubmitButton>Sačuvaj kategoriju</SubmitButton>
-            </AdminActionForm>
-          </Card>
-
           <Card id="piktogrami">
             <CardTitle description="Prikazuju se kao benefit kartice pored cene na stranici proizvoda (najviše 6).">
               Piktogrami proizvoda
@@ -1711,6 +1681,52 @@ export default async function ProductDetail({
         </div>
       </div>
     </>
+  );
+}
+
+function SourceSummary({
+  label,
+  value,
+  source,
+  href,
+  warning = false,
+}: {
+  label: string;
+  value: string;
+  source: string;
+  href: string;
+  warning?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-surface p-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <p className="mt-1 font-semibold text-ink-900">{value}</p>
+      <Link
+        href={href}
+        className={`mt-1 inline-block text-xs hover:underline ${warning ? "text-warning" : "text-walnut"}`}
+      >
+        {source} →
+      </Link>
+    </div>
+  );
+}
+
+function ReadOnlyFlag({
+  label,
+  enabled,
+  href,
+}: {
+  label: string;
+  enabled: boolean;
+  href: string;
+}) {
+  return (
+    <Link href={href} className="flex items-center justify-between rounded-lg border border-border/60 bg-surface px-3 py-2 hover:border-walnut/40">
+      <span>{label}</span>
+      <span className={enabled ? "font-semibold text-success" : "text-ink-400"}>
+        {enabled ? "Da" : "Ne"} →
+      </span>
+    </Link>
   );
 }
 

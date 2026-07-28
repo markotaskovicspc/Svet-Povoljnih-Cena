@@ -29,9 +29,27 @@ export function isWebAutoAvailabilityEnforced() {
 }
 
 export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
+  const now = new Date();
   return {
     isActive: true,
     availableWebManual: true,
+    priceListEntries: {
+      some: {
+        price: { gt: 0 },
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gte: now } }],
+        priceList: {
+          is: {
+            kind: "RETAIL",
+            active: true,
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+            ],
+          },
+        },
+      },
+    },
     ...(isWebAutoAvailabilityEnforced() ? { availableWebAuto: true } : {}),
   };
 }

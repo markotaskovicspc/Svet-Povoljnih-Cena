@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import Link from "next/link";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -83,6 +84,10 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           : await db.category.create({ data: payload });
         revalidatePath("/admin/kategorije");
         revalidatePath("/");
+        revalidatePath("/k/[...slug]", "page");
+        revalidatePath("/p/[slug]", "page");
+        updateTag("storefront-categories");
+        updateTag("catalog-products");
         return {
           ok: true as const,
           entityId: saved.id,
@@ -107,6 +112,11 @@ async function remove(_state: AdminActionState, formData: FormData) {
         }
         await db.category.delete({ where: { id } });
         revalidatePath("/admin/kategorije");
+        revalidatePath("/");
+        revalidatePath("/k/[...slug]", "page");
+        revalidatePath("/p/[slug]", "page");
+        updateTag("storefront-categories");
+        updateTag("catalog-products");
         return { ok: true as const, entityId: id, message: "Kategorija je obrisana." };
       },
   )(formData);
@@ -141,12 +151,12 @@ export default async function CategoriesPage({
         <Card className="max-h-[calc(100vh-11rem)] overflow-y-auto">
           <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-start justify-between gap-3 bg-white px-1 pb-3">
             <CardTitle description="Klikom na kategoriju otvarate izmenu u desnom editoru.">Stablo</CardTitle>
-            <a
+            <Link
               href="/admin/kategorije?new=1"
               className="shrink-0 rounded-lg bg-walnut px-3 py-1.5 text-xs font-semibold text-white hover:bg-walnut/90"
             >
               Nova kategorija
-            </a>
+            </Link>
           </div>
           {flat.length === 0 ? (
             <p className="text-sm text-ink-500">Još nema kategorija.</p>

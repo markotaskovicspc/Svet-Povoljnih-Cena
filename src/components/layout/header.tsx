@@ -13,14 +13,17 @@ import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
 import { DesktopMenu } from "./desktop-menu";
 import { BRAND } from "@/lib/brand";
+import type { NavNode } from "@/data/site";
 
 const SCROLL_THRESHOLD = 16;
 
 export function Header({
   tabs,
+  categories,
   isCustomerLoggedIn = false,
 }: {
   tabs: Tab[];
+  categories: NavNode[];
   isCustomerLoggedIn?: boolean;
 }) {
   const pathname = usePathname();
@@ -46,7 +49,7 @@ export function Header({
     >
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-2 md:flex">
-        <DesktopMenu tabs={tabs} />
+        <DesktopMenu tabs={tabs} categories={categories} />
         <Link href="/" aria-label={`${BRAND.name} — početna`}>
           <div className="shrink-0 rounded-lg px-2 py-0">
             <Image
@@ -108,7 +111,11 @@ export function Header({
 
       {/* Mobile bar */}
       <div className="mx-auto flex max-w-[var(--container-page)] items-center justify-between gap-1 px-3 py-2.5 md:hidden">
-        <MobileNav tabs={tabs} isCustomerLoggedIn={isCustomerLoggedIn} />
+        <MobileNav
+          tabs={tabs}
+          categories={categories}
+          isCustomerLoggedIn={isCustomerLoggedIn}
+        />
         <Link
           href="/"
           aria-label={`${BRAND.name} — početna`}

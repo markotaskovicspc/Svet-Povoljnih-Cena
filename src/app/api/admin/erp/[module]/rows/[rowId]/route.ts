@@ -4,10 +4,8 @@ import {
   ArticleStatus,
   AllocationBasis,
   CampaignStatus,
-  CogsStatus,
   DiscountTarget,
   ErpCurrency,
-  InboundInvoiceStatus,
   InboundInvoiceType,
   LandingPageStatus,
   Prisma,
@@ -58,30 +56,6 @@ const currencyFromUi: Record<string, ErpCurrency> = {
   "€": "EUR",
   USD: "USD",
   "$": "USD",
-};
-
-const inboundStatusFromUi: Record<string, InboundInvoiceStatus> = {
-  "U pripremi": "DRAFT",
-  Primljena: "RECEIVED",
-  "Zaključana": "POSTED",
-  "Proknjižena": "POSTED",
-  Storno: "CANCELLED",
-  DRAFT: "DRAFT",
-  RECEIVED: "RECEIVED",
-  POSTED: "POSTED",
-  CANCELLED: "CANCELLED",
-};
-
-const cogsStatusFromUi: Record<string, CogsStatus> = {
-  "Čeka razradu": "PENDING",
-  "Ceka razradu": "PENDING",
-  "Razrađen": "CALCULATED",
-  Razradjen: "CALCULATED",
-  "Zaključan": "LOCKED",
-  Zakljucan: "LOCKED",
-  PENDING: "PENDING",
-  CALCULATED: "CALCULATED",
-  LOCKED: "LOCKED",
 };
 
 export async function PATCH(
@@ -245,8 +219,7 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
       data.colorSecondary = optionalString(value);
       break;
     case "cogs":
-      data.cogs = value === null ? null : decimalValue(value, "COGS mora biti broj.");
-      break;
+      throw new Error("COGS se računa iz prijema robe i ulaznih faktura i ne menja se ručno.");
     case "customsRate":
       data.customsRate =
         value === null ? null : decimalValue(value, "Carinska stopa mora biti broj.");
@@ -261,8 +234,7 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
       );
     case "incomingTotal":
     case "incomingAvailable":
-      data.incomingStock = intValue(value, "Količina u dolasku mora biti ceo broj.");
-      break;
+      throw new Error("Količina u dolasku se računa iz ulaznih faktura i porudžbenica.");
     case "widthCm":
       data.widthCm = decimalValue(value, "Širina mora biti broj.");
       break;
@@ -330,19 +302,14 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
       data.availableExportManual = Boolean(value);
       break;
     case "deliveryDays":
-      data.deliveryDaysMax = intValue(value, "Rok isporuke mora biti ceo broj.");
-      break;
+      throw new Error("Rok isporuke se podešava globalno u modulu Dostava.");
     case "calcRetailPrice":
     case "currentMpc":
-      data.salePrice = decimalValue(value, "Cena mora biti broj.");
-      break;
     case "fullPrice":
     case "calcMpc":
-      data.fullPrice = decimalValue(value, "Cena mora biti broj.");
-      break;
+      throw new Error("MP cena se menja kroz stavku RETAIL cenovnika.");
     case "bmPct":
-      data.discountPct = value === null ? null : intValue(value, "BM% mora biti ceo broj.");
-      break;
+      throw new Error("Procenat popusta se računa iz akcije ili loyalty pravila.");
     default:
       return null;
   }
@@ -538,8 +505,9 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
       data.type = enumFromMap(InboundInvoiceType, value, "Nepoznat tip fakture.");
       break;
     case "status":
-      data.status = enumFromMap(inboundStatusFromUi, value, "Nepoznat status fakture.");
-      break;
+      throw new Error(
+        "Status fakture se menja komandama Sačuvaj, Zaključaj ili Storniraj.",
+      );
     case "invoiceDate":
       data.invoiceDate = value === null ? null : dateValue(value, "Datum fakture je neispravan.");
       break;
@@ -569,8 +537,7 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
       );
       break;
     case "cogsStatus":
-      data.cogsStatus = enumFromMap(cogsStatusFromUi, value, "Nepoznat COGS status.");
-      break;
+      throw new Error("COGS status se menja isključivo knjiženjem ili stornom fakture.");
     default:
       return null;
   }

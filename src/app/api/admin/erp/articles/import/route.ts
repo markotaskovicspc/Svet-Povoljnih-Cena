@@ -14,6 +14,7 @@ import {
 import { articleSlug, optionalDateInput } from "@/lib/article-master";
 import { sanitizeRichText } from "@/lib/rich-text";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
+import { productNewUntilIsActive } from "@/lib/product-newness";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -38,8 +39,6 @@ type ArticleImportRow = {
   benefits: string | null;
   description: string | null;
   stock: number | null;
-  incomingStock: number | null;
-  cogs: number | null;
   weightKg: number | null;
   widthCm: number | null;
   depthCm: number | null;
@@ -66,7 +65,6 @@ type ArticleImportRow = {
   newUntil: Date | null;
   tncFrom: Date | null;
   tncUntil: Date | null;
-  fullPrice: number | null;
 };
 
 const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
@@ -128,10 +126,6 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   zalihe: "stock",
   fizickostanje: "stock",
   ukupnofizickostanje: "stock",
-  incomingstock: "incomingStock",
-  udolasku: "incomingStock",
-  kolicinaudolasku: "incomingStock",
-  cogs: "cogs",
   weightkg: "weightKg",
   tezinakg: "weightKg",
   tezinaartikla: "weightKg",
@@ -202,9 +196,6 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   tncdo: "tncUntil",
   tcuntil: "tncUntil",
   tcdo: "tncUntil",
-  fullprice: "fullPrice",
-  mpc: "fullPrice",
-  mpcena: "fullPrice",
 };
 
 function normalizeHeader(value: string) {
@@ -413,8 +404,6 @@ export async function POST(request: Request) {
       benefits: textAt("benefits") || null,
       description: textAt("description") || null,
       stock: numberCell(row, headers.get("stock"), "stock", errors, { integer: true, min: 0 }),
-      incomingStock: numberCell(row, headers.get("incomingStock"), "incomingStock", errors, { integer: true, min: 0 }),
-      cogs: numberCell(row, headers.get("cogs"), "cogs", errors, { min: 0 }),
       weightKg: numberCell(row, headers.get("weightKg"), "weightKg", errors, { min: 0 }),
       widthCm: numberCell(row, headers.get("widthCm"), "widthCm", errors, { min: 0 }),
       depthCm: numberCell(row, headers.get("depthCm"), "depthCm", errors, { min: 0 }),
@@ -441,7 +430,6 @@ export async function POST(request: Request) {
       newUntil: dateCell(row, headers.get("newUntil"), "newUntil", errors),
       tncFrom: dateCell(row, headers.get("tncFrom"), "tncFrom", errors),
       tncUntil: dateCell(row, headers.get("tncUntil"), "tncUntil", errors),
-      fullPrice: numberCell(row, headers.get("fullPrice"), "fullPrice", errors, { min: 0 }),
     };
     if (
       parsedRow.tncFrom &&
@@ -578,8 +566,6 @@ export async function POST(request: Request) {
         const newUntil = hasColumn("newUntil")
           ? row.newUntil
           : existing?.newUntil ?? null;
-        const activeDateFloor = new Date();
-        activeDateFloor.setHours(0, 0, 0, 0);
         const data = {
           barcode: hasColumn("barcode") ? row.barcode : existing?.barcode ?? null,
           name: composedArticleName({
@@ -614,8 +600,8 @@ export async function POST(request: Request) {
           colorSecondary: hasColumn("color2")
             ? row.color2
             : existing?.colorSecondary ?? null,
-          incomingStock: row.incomingStock ?? existing?.incomingStock ?? 0,
-          cogs: hasColumn("cogs") ? row.cogs : existing?.cogs ?? null,
+          incomingStock: existing?.incomingStock ?? 0,
+          cogs: existing?.cogs ?? null,
           weightKg: hasColumn("weightKg")
             ? row.weightKg
             : existing?.weightKg ?? null,
@@ -663,14 +649,20 @@ export async function POST(request: Request) {
           availableExportManual: row.exportCheck ?? existing?.availableExportManual ?? true,
           moq: hasColumn("moq") ? row.moq : existing?.moq ?? null,
           newUntil,
-          isNew: hasColumn("newUntil")
-            ? Boolean(newUntil && newUntil >= activeDateFloor)
-            : existing?.isNew ?? false,
-          tncFrom: hasColumn("tncFrom") ? row.tncFrom : existing?.tncFrom ?? null,
-          tncUntil: hasColumn("tncUntil")
-            ? row.tncUntil
-            : existing?.tncUntil ?? null,
-          fullPrice: row.fullPrice ?? existing?.fullPrice ?? 0,
+          isNew: productNewUntilIsActive(newUntil),
+          tncFrom:
+            status === "DTZ"
+              ? hasColumn("tncFrom")
+                ? row.tncFrom
+                : existing?.tncFrom ?? null
+              : null,
+          tncUntil:
+            status === "DTZ"
+              ? hasColumn("tncUntil")
+                ? row.tncUntil
+                : existing?.tncUntil ?? null
+              : null,
+          fullPrice: existing?.fullPrice ?? 0,
           ...statusFlags(status),
           deletedAt:
             status === "ARH" ? existing?.deletedAt ?? new Date() : null,

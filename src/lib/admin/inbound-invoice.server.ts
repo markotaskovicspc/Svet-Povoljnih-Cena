@@ -13,6 +13,7 @@ import {
   allocateInvoiceCostsByOrderValue,
   validateInboundInvoiceTotals,
 } from "@/lib/admin/inbound-invoice";
+import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 
 export type SaveInboundInvoiceInput = {
   id: string;
@@ -80,7 +81,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
 
   const current = await db.inboundInvoice.findUnique({
     where: { id: input.id },
-    select: { lockedAt: true },
+    select: { lockedAt: true, purchaseOrderId: true },
   });
   if (!current) throw new Error("Ulazna faktura ne postoji.");
   if (current.lockedAt) throw new Error("Zaključana faktura se ne može menjati.");
@@ -124,6 +125,12 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
     if (updated.count !== 1) {
       throw new Error("Faktura je u međuvremenu zaključana i nije izmenjena.");
     }
+    await recomputeIncomingStockForPurchaseOrders(
+      db,
+      [current.purchaseOrderId, input.purchaseOrderId].filter(
+        (value): value is string => Boolean(value),
+      ),
+    );
     return db.inboundInvoice.findUniqueOrThrow({ where: { id: input.id } });
   } catch (error) {
     if (isPrismaUniqueError(error)) {
@@ -189,71 +196,95 @@ export async function lockInboundInvoice(id: string) {
       return tx.inboundInvoice.findUniqueOrThrow({ where: { id } });
     }
 
-    const linkedInvoices = await tx.inboundInvoice.findMany({
-      where: {
-        purchaseOrderId: invoice.purchaseOrder.id,
-        lockedAt: { not: null },
-        status: InboundInvoiceStatus.POSTED,
-      },
-      select: { netValue: true, exchangeRate: true },
-    });
-    const linkedCostRsd = linkedInvoices.reduce(
-      (sum, linked) =>
-        sum + Number(linked.netValue) * Number(linked.exchangeRate),
-      0,
-    );
-    const allocations = allocateInvoiceCostsByOrderValue(
-      linkedCostRsd,
-      invoice.purchaseOrder.items.map((item) => ({
-        id: item.id,
-        sku: item.sku,
-        qty: item.qty,
-        purchasePrice:
-          Number(item.purchasePrice) * Number(invoice.purchaseOrder?.exchangeRate ?? 1),
-      })),
-    );
-
-    const lateCostByProduct = new Map<
-      string,
-      { delta: number; stock: number; currentCogs: number }
-    >();
-    for (const item of invoice.purchaseOrder.items) {
-      const previous = Number(item.additionalCostAllocated ?? 0);
-      const next = allocations.get(item.id) ?? 0;
-      await tx.purchaseOrderItem.update({
-        where: { id: item.id },
-        data: { additionalCostAllocated: next },
-      });
-      if (
-        invoice.purchaseOrder.status === PurchaseOrderStatus.RECEIVED &&
-        item.product
-      ) {
-        const current = lateCostByProduct.get(item.product.id) ?? {
-          delta: 0,
-          stock: item.product.stock,
-          currentCogs: Number(item.product.cogs ?? 0),
-        };
-        current.delta += next - previous;
-        lateCostByProduct.set(item.product.id, current);
-      }
-    }
-
-    // When an ancillary invoice arrives after goods receipt, capitalize the
-    // new delta over the units still on hand. The normal path remains invoice
-    // lock first, then receipt, where the full weighted-average formula runs.
-    for (const [productId, cost] of lateCostByProduct) {
-      if (cost.delta !== 0 && cost.stock > 0) {
-        await tx.product.update({
-          where: { id: productId },
-          data: {
-            cogs: Number(
-              (cost.currentCogs + cost.delta / cost.stock).toFixed(2),
-            ),
-          },
-        });
-      }
-    }
+    await rebuildInboundInvoiceAllocations(tx, invoice.purchaseOrder.id);
+    await recomputeIncomingStockForPurchaseOrders(tx, [invoice.purchaseOrder.id]);
 
     return tx.inboundInvoice.findUniqueOrThrow({ where: { id } });
   });
+}
+
+export async function cancelInboundInvoice(id: string) {
+  return db.$transaction(async (tx) => {
+    const invoice = await tx.inboundInvoice.findUnique({
+      where: { id },
+      select: { id: true, status: true, purchaseOrderId: true },
+    });
+    if (!invoice) throw new Error("Ulazna faktura ne postoji.");
+    if (invoice.status === InboundInvoiceStatus.CANCELLED) return invoice;
+
+    await tx.inboundInvoice.update({
+      where: { id },
+      data: { status: InboundInvoiceStatus.CANCELLED, cogsStatus: CogsStatus.PENDING },
+    });
+    if (invoice.purchaseOrderId) {
+      await rebuildInboundInvoiceAllocations(tx, invoice.purchaseOrderId);
+      await recomputeIncomingStockForPurchaseOrders(tx, [invoice.purchaseOrderId]);
+    }
+    return tx.inboundInvoice.findUniqueOrThrow({ where: { id } });
+  });
+}
+
+async function rebuildInboundInvoiceAllocations(
+  tx: Prisma.TransactionClient,
+  purchaseOrderId: string,
+) {
+  const order = await tx.purchaseOrder.findUnique({
+    where: { id: purchaseOrderId },
+    include: {
+      items: {
+        include: {
+          product: { select: { id: true, stock: true, cogs: true } },
+        },
+      },
+      inboundInvoices: {
+        where: { lockedAt: { not: null }, status: InboundInvoiceStatus.POSTED },
+        select: { netValue: true, exchangeRate: true },
+      },
+    },
+  });
+  if (!order) return;
+  const linkedCostRsd = order.inboundInvoices.reduce(
+    (sum, linked) => sum + Number(linked.netValue) * Number(linked.exchangeRate),
+    0,
+  );
+  const allocations = allocateInvoiceCostsByOrderValue(
+    linkedCostRsd,
+    order.items.map((item) => ({
+      id: item.id,
+      sku: item.sku,
+      qty: item.qty,
+      purchasePrice: Number(item.purchasePrice) * Number(order.exchangeRate),
+    })),
+  );
+  const lateCostByProduct = new Map<
+    string,
+    { delta: number; stock: number; currentCogs: number }
+  >();
+  for (const item of order.items) {
+    const previous = Number(item.additionalCostAllocated ?? 0);
+    const next = allocations.get(item.id) ?? 0;
+    await tx.purchaseOrderItem.update({
+      where: { id: item.id },
+      data: { additionalCostAllocated: next },
+    });
+    if (order.status === PurchaseOrderStatus.RECEIVED && item.product) {
+      const current = lateCostByProduct.get(item.product.id) ?? {
+        delta: 0,
+        stock: item.product.stock,
+        currentCogs: Number(item.product.cogs ?? 0),
+      };
+      current.delta += next - previous;
+      lateCostByProduct.set(item.product.id, current);
+    }
+  }
+  for (const [productId, cost] of lateCostByProduct) {
+    if (cost.delta !== 0 && cost.stock > 0) {
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          cogs: Number((cost.currentCogs + cost.delta / cost.stock).toFixed(2)),
+        },
+      });
+    }
+  }
 }

@@ -12,7 +12,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { primaryNav, type NavNode } from "@/data/site";
+import type { NavNode } from "@/data/site";
 import { getPromoTabPresentation } from "@/data/campaign-icons";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
@@ -30,16 +30,22 @@ const promoMenuIconImageClassByKey = {
   "niske-cene-pod-zastitom": "h-8 w-12",
 } as const;
 
-export function DesktopMenu({ tabs }: { tabs: Tab[] }) {
+export function DesktopMenu({
+  tabs,
+  categories,
+}: {
+  tabs: Tab[];
+  categories: NavNode[];
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([
-    { label: "Sve kategorije", nodes: primaryNav },
+    { label: "Sve kategorije", nodes: categories },
   ]);
 
   const current = stack[stack.length - 1];
 
-  const resetStack = () => setStack([{ label: "Sve kategorije", nodes: primaryNav }]);
+  const resetStack = () => setStack([{ label: "Sve kategorije", nodes: categories }]);
   const close = () => {
     setOpen(false);
     setTimeout(resetStack, 200);

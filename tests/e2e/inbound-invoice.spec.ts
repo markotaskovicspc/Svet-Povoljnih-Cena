@@ -157,7 +157,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(
         page.getByRole("heading", { name: "Ulazne fakture" }),
       ).toBeVisible();
-      for (const command of ["Nova", "Uredi", "Zaključaj", "Excel"]) {
+      for (const command of ["Nova", "Uredi", "Zaključaj", "Storniraj", "Excel"]) {
         await expect(
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
@@ -366,6 +366,21 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(
         page.getByRole("button", { name: "Uredi", exact: true }),
       ).toBeDisabled();
+    });
+
+    await test.step("storno removes the invoice from COGS without duplicating incoming stock", async () => {
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Storniraj", exact: true }).click();
+      await expect(page.getByText(/Faktura je stornirana/)).toBeVisible();
+      const [invoice, product, item] = await Promise.all([
+        db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
+        db.product.findUniqueOrThrow({ where: { id: productId } }),
+        db.purchaseOrderItem.findFirstOrThrow({ where: { purchaseOrderId } }),
+      ]);
+      expect(invoice.status).toBe("CANCELLED");
+      expect(Number(item.additionalCostAllocated)).toBe(0);
+      expect(product.incomingStock).toBe(0);
+      expect(Number(product.cogs)).toBe(190);
     });
 
     expect(pageErrors).toEqual([]);

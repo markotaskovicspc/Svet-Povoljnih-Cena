@@ -25,6 +25,7 @@ import {
   stableSourceHash,
 } from "./safety";
 import type { RabaluxSyncOptions } from "./sync";
+import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
 
 const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
@@ -56,6 +57,11 @@ export async function mirrorRabaluxProductMedia(
     select: {
       id: true,
       fullPrice: true,
+      priceListEntries: {
+        where: activeRetailPriceEntryWhere(),
+        take: 1,
+        select: { price: true },
+      },
       articleStatus: true,
       supplierApprovalStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
@@ -218,7 +224,11 @@ async function refreshRabaluxProductActivity(productId: string) {
   const product = await db.product.findUniqueOrThrow({
     where: { id: productId },
     select: {
-      fullPrice: true,
+      priceListEntries: {
+        where: activeRetailPriceEntryWhere(),
+        take: 1,
+        select: { price: true },
+      },
       articleStatus: true,
       supplierApprovalStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
@@ -234,7 +244,7 @@ async function refreshRabaluxProductActivity(productId: string) {
     data: {
       isActive:
         product.supplierApprovalStatus === "APPROVED" &&
-        Number(product.fullPrice) > 0 &&
+        product.priceListEntries.length > 0 &&
         product.articleStatus !== "ARH" &&
         product.categories.length > 0 &&
         product.media.length > 0,

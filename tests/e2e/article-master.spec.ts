@@ -218,9 +218,12 @@ test.describe("article master acceptance", () => {
     await shortNameInput.fill("N2212");
     await page.getByLabel("Status artikla").selectOption("SP");
     await page.locator('select[name="supplierId"]').selectOption(supplierId);
+    await page.locator('select[name="categoryId"]').selectOption(rootCategoryId);
     await page.getByLabel("Nova grupa").fill(`${tag} grupa`);
     await page.getByLabel("Nova kolekcija").fill(`${tag} kolekcija`);
-    await page.getByLabel("Kratak opis").fill("Otvorena polica");
+    await page
+      .getByLabel("Kratki opis za kartice, naziv i dokumente")
+      .fill("Otvorena polica");
     await page.getByLabel("Atribut 1").fill("Hrast");
     await page.getByLabel("Atribut 2").fill("Metal");
     await page.getByLabel("Boja 1").fill("Natur");
@@ -231,7 +234,13 @@ test.describe("article master acceptance", () => {
     await page.getByLabel("Novo do").fill("2027-12-31");
     await page.getByLabel("T&C od").fill("2026-08-01");
     await page.getByLabel("T&C do").fill("2026-12-31");
-    await page.getByRole("textbox", { name: "Formatirani opis za sajt" }).evaluate(
+    const richTextEditor = page.getByRole("textbox", {
+      name: "Formatirani opis za sajt",
+    });
+    await richTextEditor.click();
+    await richTextEditor.pressSequentially("Kursor ostaje stabilan", { delay: 10 });
+    await expect(richTextEditor).toContainText("Kursor ostaje stabilan");
+    await richTextEditor.evaluate(
       (element) => {
         element.innerHTML =
           '<h2 onclick="alert(1)">Naslov</h2><p>Bezbedan <strong>opis</strong></p>';
@@ -240,16 +249,6 @@ test.describe("article master acceptance", () => {
     );
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
     await expect(page.getByRole("status").first()).toContainText("Proizvod je sačuvan");
-    await page
-      .getByRole("textbox", { name: "Nova kategorija", exact: true })
-      .fill(`${tag} ručna podgrupa`);
-    await page
-      .locator('select[name="parentCategoryId"]')
-      .selectOption(rootCategoryId);
-    await page.getByRole("button", { name: "Sačuvaj kategoriju" }).click();
-    await expect(
-      page.getByRole("status").filter({ hasText: "Kategorija proizvoda je sačuvana" }),
-    ).toBeVisible();
 
     await expect
       .poll(async () => {
@@ -315,8 +314,8 @@ test.describe("article master acceptance", () => {
         channels: [true, true, true],
         parity: "DAP",
         deliveryDays: 14,
-        category: `${tag} ručna podgrupa`,
-        categoryParentId: rootCategoryId,
+        category: `${tag} korenska kategorija`,
+        categoryParentId: undefined,
         lookups: [
           "ATTRIBUTE:Hrast",
           "ATTRIBUTE:Metal",

@@ -12,6 +12,8 @@ import {
   CATALOG_READINESS_LABEL,
   getCatalogReadiness,
 } from "@/lib/catalog-readiness";
+import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import { getDeliveryWindows } from "@/lib/delivery-windows";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -54,7 +56,6 @@ const ownerDataIssueFilter: Prisma.ProductWhereInput = {
 const catalogNotReadyFilter: Prisma.ProductWhereInput = {
   OR: [
     { fullPrice: { lte: 0 } },
-    { salePrice: { lte: 0 } },
     { widthCm: null },
     { widthCm: { lte: 0 } },
     { depthCm: null },
@@ -62,7 +63,6 @@ const catalogNotReadyFilter: Prisma.ProductWhereInput = {
     { heightCm: null },
     { heightCm: { lte: 0 } },
     { media: { none: {} } },
-    { deliveryDaysMin: { lt: 0 } },
   ],
 };
 
@@ -130,6 +130,7 @@ export default async function ProductsPage({
     missingMediaCount,
     brokenDescriptionCount,
     catalogNotReadyCount,
+    deliveryWindows,
   ] = await Promise.all([
     db.product.findMany({
       where,
@@ -148,16 +149,32 @@ export default async function ProductsPage({
         colorSecondary: true,
         fullPrice: true,
         salePrice: true,
+        priceListEntries: {
+          where: { priceList: { kind: "RETAIL", active: true } },
+          include: { priceList: true },
+          orderBy: { validFrom: "desc" },
+        },
+        actionPrices: {
+          include: { action: true },
+          orderBy: { action: { priority: "desc" } },
+        },
         stock: true,
-        incomingStock: true,
+        purchaseOrderItems: {
+          where: {
+            purchaseOrder: {
+              status: { notIn: ["RECEIVED", "CANCELLED"] },
+              inboundInvoices: { some: { status: { in: ["RECEIVED", "POSTED"] } } },
+            },
+          },
+          select: { qty: true, receivedQty: true },
+        },
         widthCm: true,
         depthCm: true,
         heightCm: true,
-        deliveryDaysMin: true,
-        deliveryDaysMax: true,
         isActive: true,
         isHero: true,
         isNew: true,
+        newUntil: true,
         _count: { select: { media: true } },
       },
     }),
@@ -181,6 +198,7 @@ export default async function ProductsPage({
         ...catalogNotReadyFilter,
       },
     }),
+    getDeliveryWindows(),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
@@ -279,25 +297,36 @@ export default async function ProductsPage({
             { key: "name", label: "Naziv" },
             { key: "price", label: "Cena", align: "right" },
             { key: "stock", label: "Stanje", align: "right" },
-            { key: "flags", label: "Oznake" },
+            { key: "flags", label: "Status" },
             { key: "actions", label: "" },
           ]}
           rows={items.map((p) => {
             const similarityGroupSize = similarityByProductId.get(p.id) ?? 0;
-            const ownerIssues = productOwnerIssues(p);
+            const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
+            const activeAction = p.actionPrices.find(
+              (entry) =>
+                entry.action.isPermanent ||
+                (entry.action.startsAt <= new Date() && entry.action.endsAt >= new Date()),
+            );
+            const incomingStock = p.purchaseOrderItems.reduce(
+              (sum, item) => sum + Math.max(item.qty - item.receivedQty, 0),
+              0,
+            );
+            const ownerIssues = productOwnerIssues(p, retailPrice.price);
             const readiness = getCatalogReadiness({
-              fullPrice: num(p.fullPrice),
-              salePrice: p.salePrice === null ? null : num(p.salePrice),
+              fullPrice: retailPrice.price,
+              salePrice: activeAction
+                ? num(activeAction.salePrice)
+                : p.salePrice === null
+                  ? null
+                  : num(p.salePrice),
               dimensionsCm: {
                 w: p.widthCm === null ? 0 : num(p.widthCm),
                 d: p.depthCm === null ? 0 : num(p.depthCm),
                 h: p.heightCm === null ? 0 : num(p.heightCm),
               },
               media: { images: Array(p._count.media).fill(null) },
-              deliveryDays: {
-                min: p.deliveryDaysMin,
-                max: p.deliveryDaysMax,
-              },
+              deliveryDays: deliveryWindows.dc,
             });
 
             return {
@@ -315,23 +344,32 @@ export default async function ProductsPage({
                 ),
                 price: (
                   <div className="text-right">
-                    {p.salePrice ? (
+                    {activeAction || p.salePrice ? (
                       <>
-                        <p className="text-action">{formatRsd(num(p.salePrice))}</p>
-                        <p className="text-xs text-ink-500 line-through">
-                          {formatRsd(num(p.fullPrice))}
+                        <p className="text-action">
+                          {formatRsd(
+                            activeAction
+                              ? num(activeAction.salePrice)
+                              : num(p.salePrice!),
+                          )}
                         </p>
+                        <p className="text-xs text-ink-500 line-through">
+                          {formatRsd(retailPrice.price)}
+                        </p>
+                        {!activeAction && p.salePrice ? (
+                          <p className="text-[10px] text-warning">legacy fallback</p>
+                        ) : null}
                       </>
                     ) : (
-                      formatRsd(num(p.fullPrice))
+                      formatRsd(retailPrice.price)
                     )}
                   </div>
                 ),
                 stock: (
                   <div className="text-right">
                     <p className={p.stock === 0 ? "text-danger" : ""}>{p.stock}</p>
-                    {p.incomingStock > 0 ? (
-                      <p className="text-xs text-ink-500">+{p.incomingStock}</p>
+                    {incomingStock > 0 ? (
+                      <p className="text-xs text-ink-500">+{incomingStock}</p>
                     ) : null}
                   </div>
                 ),
@@ -347,7 +385,7 @@ export default async function ProductsPage({
                         Hero
                       </span>
                     ) : null}
-                    {p.isNew ? (
+                    {p.newUntil && p.newUntil >= new Date() ? (
                       <span className="rounded bg-info/15 px-1.5 py-0.5 text-info">
                         Novo
                       </span>
@@ -459,12 +497,11 @@ function productOwnerIssues(product: {
   colorPrimary: string | null;
   colorSecondary: string | null;
   description: string;
-  fullPrice: Prisma.Decimal;
   widthCm: Prisma.Decimal | null;
   depthCm: Prisma.Decimal | null;
   heightCm: Prisma.Decimal | null;
   _count: { media: number };
-}) {
+}, retailPrice: number) {
   const issues: string[] = [];
   if (product.stock <= 0) issues.push("Bez zaliha");
   if (product._count.media === 0) issues.push("Bez media");
@@ -472,7 +509,7 @@ function productOwnerIssues(product: {
   if (!product.collectionId) issues.push("Bez brenda");
   if (!product.colorPrimary) issues.push("Bez boje");
   if (!product.colorSecondary) issues.push("Bez druge boje");
-  if (num(product.fullPrice) <= 1) issues.push("Cena");
+  if (retailPrice <= 1) issues.push("Cena");
   if (
     product.widthCm === null ||
     product.depthCm === null ||

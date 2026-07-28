@@ -13,6 +13,7 @@ import {
   composePurchasePricePattern,
 } from "@/lib/admin/purchase-price";
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
+import { articleSearchWhere } from "@/lib/admin/article-search";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -52,6 +53,7 @@ export type AdminGridQuery = {
   page: number;
   pageSize: number;
   query: string;
+  searchColumn?: string;
   filters: AdminGridFilter[];
   sorting: AdminGridSort[];
   visibleColumns: string[];
@@ -171,8 +173,8 @@ const articleColumns: ErpColumn[] = [
   { key: "status", label: "Status", type: "status", options: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"], defaultVisible: true },
   { key: "sku", label: "Šifra", defaultVisible: true },
   { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
-  { key: "category", label: "Kategorija", options: ["Nameštaj", "Trpezarije", "Spavaće sobe"], defaultVisible: true },
-  { key: "group", label: "Grupa", options: ["Police", "Stolovi", "Ormari"], defaultVisible: true },
+  { key: "category", label: "Kategorija", defaultVisible: true },
+  { key: "group", label: "Interna grupa", defaultVisible: true },
   { key: "subgroup", label: "Podgrupa" },
   { key: "collection", label: "Kolekcija", defaultVisible: true },
   { key: "shortDescription", label: "Kratki opis", defaultVisible: true },
@@ -747,7 +749,15 @@ const coreErpModules: ErpModule[] = [
       "Centralni matični karton artikla: status, dobavljač, kategorije, dimenzije, pakovanja, kanali prodaje i povezani opisi za sajt.",
     status: "ready",
     commands: [
-      { label: "Unos novog", tone: "primary", action: "article.create" },
+      {
+        label: "Unos novog",
+        description: "Unesite jedinstvenu šifru pre kreiranja. Šifra se nakon toga ne menja.",
+        tone: "primary",
+        action: "article.create",
+        fields: [
+          { key: "sku", label: "Šifra artikla", type: "text", required: true },
+        ],
+      },
       { label: "Excel unos", tone: "neutral", href: "/admin/erp/artikli/import" },
       {
         label: "Arhiviraj",
@@ -768,9 +778,7 @@ const coreErpModules: ErpModule[] = [
       "attribute4",
       "color1",
       "color2",
-      "cogs",
       "customsRate",
-      "incomingTotal",
       "widthCm",
       "heightCm",
       "depthCm",
@@ -795,7 +803,7 @@ const coreErpModules: ErpModule[] = [
     detailHrefBase: "/admin/proizvodi",
     rows: articleRows,
     notes: [
-      "Šifra artikla se automatski popunjava kod novog unosa.",
+      "Šifra artikla je obavezna pri kreiranju i nakon toga je zaključana.",
       "Naziv za web i ostale module se formira od kolekcije, kratkog opisa i kratkog naziva.",
       "Atributi se formiraju iz polja Atribut 1-4, a dezen iz Boja 1-2.",
     ],
@@ -1005,6 +1013,13 @@ const coreErpModules: ErpModule[] = [
         confirm:
           "Zaključati izabrane ulazne fakture i uključiti njihove troškove u COGS?",
       },
+      {
+        label: "Storniraj",
+        tone: "danger",
+        action: "invoice.cancel",
+        needsSelection: true,
+        confirm: "Stornirati izabrane fakture i ponovo izračunati COGS i dolaz?",
+      },
     ],
     columns: inboundInvoiceColumns,
     editableColumns: [],
@@ -1025,24 +1040,16 @@ const coreErpModules: ErpModule[] = [
     status: "ready",
     commands: [
       {
-        label: "Novi predlog cene",
+        label: "Otvori cenovnike",
         tone: "primary",
-        action: "mp.proposal",
-        needsSelection: true,
-        confirm: "Kreirati predlog cene za izabrane artikle?",
-      },
-      {
-        label: "Objavi cene",
-        tone: "neutral",
-        action: "mp.publish",
-        needsSelection: true,
-        confirm: "Objaviti predložene cene za izabrane artikle? Cena na sajtu se menja.",
+        href: "/admin/erp/cenovnici",
       },
     ],
     columns: retailPriceColumns,
-    editableColumns: ["currentMpc", "calcMpc", "bmPct"],
+    editableColumns: [],
     rows: retailPriceRows,
     notes: [
+      "MP cena se više ne objavljuje u legacy Product.salePrice polje, već kroz važeće stavke RETAIL cenovnika.",
       "Prioritet: najviši prioritet artikalske akcije, inače loyalty za prijavljenog kupca, zatim najviša kvalifikovana linearna promocija.",
       "Kombinovani popust je ograničen admin podešavanjem; početna vrednost je 30%.",
     ],
@@ -1172,6 +1179,7 @@ export async function getErpModule(
     warehouseId?: string | null;
     includeLookupOptions?: boolean;
     query?: string;
+    searchColumn?: string;
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
@@ -1190,7 +1198,13 @@ export async function getErpModule(
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
   const includeLookupOptions = options.includeLookupOptions !== false;
   const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
-    getPersistedErpRows(slug, take, options.warehouseId, options.query),
+    getPersistedErpRows(
+      slug,
+      take,
+      options.warehouseId,
+      options.query,
+      options.searchColumn,
+    ),
     includeLookupOptions && slug === "artikli"
       ? getArticleModuleContext()
       : Promise.resolve(null),
@@ -1206,8 +1220,10 @@ export async function getErpModule(
     options: articleContext
       ? column.key === "supplier"
         ? articleContext.suppliers
-        : column.key === "category" || column.key === "subgroup"
+        : column.key === "category"
           ? articleContext.categories
+          : column.key === "subgroup"
+            ? articleContext.subgroups
           : column.key === "group"
             ? articleContext.groups
             : column.key === "collection"
@@ -1268,10 +1284,11 @@ async function getPersistedErpRows(
   take: number,
   warehouseId?: string | null,
   query?: string,
+  searchColumn?: string,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows(take, warehouseId, query);
+      return getArticleRows(take, warehouseId, query, searchColumn);
     case "dobavljaci":
       return getSupplierRows(take);
     case "nabavne-cene":
@@ -1297,7 +1314,10 @@ async function getArticleModuleContext() {
       select: { id: true, name: true, code: true, isDefault: true },
     }),
     db.supplier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    db.category.findMany({ orderBy: [{ level: "asc" }, { name: "asc" }], select: { name: true } }),
+    db.category.findMany({
+      orderBy: [{ level: "asc" }, { name: "asc" }],
+      select: { name: true, level: true },
+    }),
     db.group.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     db.collection.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
   ]);
@@ -1307,7 +1327,8 @@ async function getArticleModuleContext() {
       label: `${warehouse.name} (${warehouse.code})${warehouse.isDefault ? " · DC" : ""}`,
     })),
     suppliers: suppliers.map((row) => row.name),
-    categories: categories.map((row) => row.name),
+    categories: categories.filter((row) => row.level === 0).map((row) => row.name),
+    subgroups: categories.filter((row) => row.level > 0).map((row) => row.name),
     groups: groups.map((row) => row.name),
     collections: collections.map((row) => row.name),
   };
@@ -1346,38 +1367,9 @@ async function getArticleRows(
   take: number,
   selectedWarehouseId?: string | null,
   query?: string,
+  searchColumn?: string,
 ): Promise<ErpRow[]> {
-  const search = query?.trim();
-  const numericSearch = search ? Number(search.replace(",", ".")) : Number.NaN;
-  const where: Prisma.ProductWhereInput | undefined = search
-    ? {
-        OR: [
-          { sku: { contains: search, mode: "insensitive" } },
-          { barcode: { contains: search, mode: "insensitive" } },
-          { name: { contains: search, mode: "insensitive" } },
-          { shortName: { contains: search, mode: "insensitive" } },
-          { shortDescription: { contains: search, mode: "insensitive" } },
-          { supplier: { name: { contains: search, mode: "insensitive" } } },
-          { group: { name: { contains: search, mode: "insensitive" } } },
-          { collection: { name: { contains: search, mode: "insensitive" } } },
-          {
-            categories: {
-              some: {
-                category: {
-                  name: { contains: search, mode: "insensitive" },
-                },
-              },
-            },
-          },
-          ...(Number.isFinite(numericSearch) && Number.isInteger(numericSearch)
-            ? [
-                { stock: numericSearch },
-                { incomingStock: numericSearch },
-              ]
-            : []),
-        ],
-      }
-    : undefined;
+  const where = articleSearchWhere(query, searchColumn);
   const [products, activeWarehouses] = await Promise.all([db.product.findMany({
     where,
     orderBy: { updatedAt: "desc" },

@@ -35,7 +35,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { motion, AnimatePresence } from "framer-motion";
-import { primaryNav, type NavNode } from "@/data/site";
+import type { NavNode } from "@/data/site";
 import { getPromoTabPresentation } from "@/data/campaign-icons";
 import {
   AccountShortcutTile,
@@ -106,11 +106,6 @@ const navIconMap = {
   Waves,
 } as const;
 
-const categoryTiles = primaryNav.slice(0, 4).map((node) => ({
-  ...node,
-  imageUrl: categoryTileImages[node.label] ?? fallbackCategoryImage,
-}));
-
 const mobileMenuShortcutTabs = [
   {
     id: "ogranicena-ponuda",
@@ -144,15 +139,18 @@ const mobileMenuShortcutTabs = [
 
 export function MobileNav({
   tabs,
+  categories,
   isCustomerLoggedIn = false,
 }: {
   tabs: Tab[];
+  categories: NavNode[];
   isCustomerLoggedIn?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: primaryNav }]);
+  const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: categories }]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const shortcutTabs = tabs.length ? tabs : mobileMenuShortcutTabs;
 
   const current = stack[stack.length - 1];
 
@@ -166,7 +164,7 @@ export function MobileNav({
   const close = () => {
     setOpen(false);
     setSearchOpen(false);
-    setTimeout(() => setStack([{ label: "Sve kategorije", nodes: primaryNav }]), 250);
+    setTimeout(() => setStack([{ label: "Sve kategorije", nodes: categories }]), 250);
   };
 
   return (
@@ -278,13 +276,22 @@ export function MobileNav({
                   <>
                     <div className="shrink-0 bg-white px-[clamp(10px,3.2vw,14px)] pt-3 pb-[clamp(24px,7vw,34px)]">
                       <ul className="grid grid-cols-2 gap-x-[clamp(10px,3.2vw,14px)] gap-y-[clamp(24px,7vw,32px)]">
-                        {categoryTiles.map((tile) => (
+                        {categories.map((node) => {
+                          const tile = {
+                            ...node,
+                            imageUrl:
+                              node.imageUrl ??
+                              categoryTileImages[node.label] ??
+                              fallbackCategoryImage,
+                          };
+                          return (
                           <li key={tile.href}>
-                            <button
-                              type="button"
-                              onClick={() => enter(tile)}
-                              className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                            >
+                            {tile.children?.length ? (
+                              <button
+                                type="button"
+                                onClick={() => enter(tile)}
+                                className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              >
                               <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
                                 <Image
                                   src={tile.imageUrl}
@@ -297,15 +304,36 @@ export function MobileNav({
                               <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
                                 {tile.label}
                               </span>
-                            </button>
+                              </button>
+                            ) : (
+                              <Link
+                                href={tile.href}
+                                onClick={close}
+                                className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                              >
+                                <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                                  <Image
+                                    src={tile.imageUrl}
+                                    alt=""
+                                    fill
+                                    sizes="(max-width: 768px) 45vw, 320px"
+                                    className="object-cover transition duration-200 group-hover:scale-105"
+                                  />
+                                </span>
+                                <span className="mt-1.5 block min-h-[1.35em] px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black text-ink-800 uppercase">
+                                  {tile.label}
+                                </span>
+                              </Link>
+                            )}
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     </div>
 
                     <div className="min-h-fit flex-1 border-y border-brand-blue/10 bg-brand-blue px-[clamp(10px,3.2vw,14px)] pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                       <ul className="grid grid-cols-2 gap-[clamp(10px,3vw,13px)]">
-                        {mobileMenuShortcutTabs.map((t) => {
+                        {shortcutTabs.map((t) => {
                           const promoTab = getPromoTabPresentation(t);
                           const isActive = pathname === promoTab.href;
                           return (

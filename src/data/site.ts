@@ -80,6 +80,7 @@ export interface NavNode {
   label: string;
   href: string;
   iconName?: string;
+  imageUrl?: string;
   children?: NavNode[];
 }
 
