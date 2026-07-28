@@ -62,6 +62,10 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   experimental: {
+    serverActions: {
+      // A banner form can carry one 8 MB desktop and one 8 MB mobile image.
+      bodySizeLimit: "20mb",
+    },
     staticGenerationMaxConcurrency: 2,
     staticGenerationMinPagesPerWorker: 50,
   },

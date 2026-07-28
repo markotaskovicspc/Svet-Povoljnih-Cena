@@ -2,6 +2,7 @@
  * Truth-safe fallback banners used only when admin-managed content is absent.
  */
 import type { Banner } from "@/types";
+import { newCampaignSticker } from "@/data/campaign-icons";
 
 const day = 24 * 3600 * 1000;
 const now = Date.now();
@@ -82,6 +83,18 @@ export const protectedPricesBanner: Banner = {
     width: 1191,
     height: 895,
   },
+  order: 0,
+};
+
+export const newProductsBanner: Banner = {
+  id: "home-new-products",
+  title: "Novo u ponudi",
+  subtitle:
+    "Sveže pristigli artikli za dom, odmah izdvojeni da ih lako pronađeš.",
+  badgeLabel: "Novo",
+  ctaLabel: "Pogledaj novo",
+  ctaHref: "/novo",
+  imageDesktop: newCampaignSticker,
   order: 0,
 };
 

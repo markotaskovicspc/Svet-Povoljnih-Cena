@@ -13,7 +13,7 @@ import {
   listProducts,
   type ListProductsInput,
 } from "@/lib/api/catalog";
-import { protectedPricesBanner } from "@/data/banners";
+import { newProductsBanner, protectedPricesBanner } from "@/data/banners";
 import {
   hasBannerPlacementColumn,
   hasHomeSectionSlotTable,
@@ -160,18 +160,6 @@ export const LANDING_PAGE_OPTIONS: LandingPageConfig[] = [
 ];
 
 const landingByKey = new Map(LANDING_PAGE_OPTIONS.map((page) => [page.key, page]));
-
-const newProductsBanner: Banner = {
-  id: "home-new-products",
-  title: "Novo u ponudi",
-  subtitle:
-    "Sveže pristigli artikli za dom, odmah izdvojeni da ih lako pronađeš.",
-  badgeLabel: "Novo",
-  ctaLabel: "Pogledaj novo",
-  ctaHref: "/novo",
-  imageDesktop: newCampaignSticker,
-  order: 0,
-};
 
 export const DEFAULT_HOME_SECTION_SLOTS = {
   [HomeSectionSlotKey.FIRST]: {
