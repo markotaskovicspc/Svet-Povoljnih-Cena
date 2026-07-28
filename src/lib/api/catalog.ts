@@ -947,6 +947,35 @@ export async function getProductCardsBySlugs(
   }
 }
 
+/** Batch loader for CMS landing-page product blocks, preserving SKU order. */
+export async function getProductsBySkus(
+  skus: readonly string[],
+): Promise<ProductDTO[]> {
+  const orderedSkus = Array.from(
+    new Set(skus.map((sku) => sku.trim()).filter(Boolean)),
+  ).slice(0, 120);
+  if (!orderedSkus.length || !hasDatabaseConnection()) return [];
+
+  try {
+    const [rows, pricingRules] = await Promise.all([
+      db.product.findMany({
+        where: { sku: { in: orderedSkus }, ...webStorefrontProductWhere() },
+        select: productListSelect,
+      }),
+      getActivePricingRules(),
+    ]);
+    const productsBySku = new Map(
+      rows.map((row) => [row.sku, mapProductListItem(row, pricingRules)]),
+    );
+    return orderedSkus
+      .map((sku) => productsBySku.get(sku))
+      .filter((product): product is ProductDTO => Boolean(product));
+  } catch (error) {
+    console.error("[catalog] Failed to batch-load landing-page products.", error);
+    return [];
+  }
+}
+
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
   const [row, pricingRules] = await Promise.all([

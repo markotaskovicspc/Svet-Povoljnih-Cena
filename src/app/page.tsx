@@ -3,14 +3,17 @@ import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { SectionRail } from "@/components/home/section-rail";
 import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
 import { UspStrip } from "@/components/home/usp-strip";
-import { getActiveBanners, getActiveTabs } from "@/lib/storefront/content";
+import {
+  getActiveBanners,
+  getActiveMobileTabs,
+} from "@/lib/storefront/content";
 import { getHomeLayout } from "@/lib/storefront/homepage";
 import { HomeSectionSlotKey } from "@prisma/client";
 
 export default async function Home() {
-  const [banners, activeTabs, homeLayout] = await Promise.all([
+  const [banners, mobileTabs, homeLayout] = await Promise.all([
     getActiveBanners(),
-    getActiveTabs(),
+    getActiveMobileTabs(),
     getHomeLayout(),
   ]);
   const { sections, bannerAfterSecond, bannerAfterFourth } = homeLayout;
@@ -19,7 +22,7 @@ export default async function Home() {
     <>
       <HeroCarousel banners={banners} />
       <div className="md:hidden">
-        <ShortcutStrip tabs={activeTabs} />
+        <ShortcutStrip tabs={mobileTabs} />
       </div>
 
       <HomeSection section={sections[HomeSectionSlotKey.FIRST]} />

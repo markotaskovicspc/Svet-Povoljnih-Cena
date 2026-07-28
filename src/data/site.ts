@@ -39,6 +39,42 @@ export const headerTabs: Tab[] = [
   },
 ];
 
+/**
+ * Four fixed commercial shortcuts rendered directly below the homepage hero
+ * on mobile. Database-backed MobileTab rows replace these values once the CMS
+ * has been configured.
+ */
+export const mobileShortcutTabs: Tab[] = [
+  {
+    id: "mobile-mesecna-akcija",
+    label: "Mesečna akcija",
+    href: "/akcija",
+    order: 1,
+    icon: "/brand/promo-stickers/akcija.svg",
+  },
+  {
+    id: "mobile-heroji-meseca",
+    label: "Heroji meseca",
+    href: "/heroji-meseca",
+    order: 2,
+    icon: "/brand/heroji-meseca.png",
+  },
+  {
+    id: "mobile-trajno-niske-cene",
+    label: "Trajno niske cene",
+    href: "/niske-cene-pod-zastitom",
+    order: 3,
+    icon: "/brand/tnc-black.svg",
+  },
+  {
+    id: "mobile-dok-traju-zalihe",
+    label: "Dok traju zalihe",
+    href: "/ogranicena-ponuda",
+    order: 4,
+    icon: "/brand/promo-stickers/dtz2.svg",
+  },
+];
+
 /** Hamburger nav (mobile, also used as Hover mega-nav source later). 2–3 levels. */
 export interface NavNode {
   label: string;

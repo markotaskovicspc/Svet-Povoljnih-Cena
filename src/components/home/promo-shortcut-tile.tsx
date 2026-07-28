@@ -10,8 +10,12 @@ import {
   Tag,
   User2,
 } from "lucide-react";
-import type { Tab } from "@/types";
+import type { MediaAsset, Tab } from "@/types";
 import { getPromoTabPresentation } from "@/data/campaign-icons";
+import {
+  isExternalMobileShortcutHref,
+  isMobileShortcutIconUrl,
+} from "@/lib/mobile-shortcuts/shared";
 import { cn } from "@/lib/utils";
 
 const shortcutIconMap = {
@@ -35,23 +39,37 @@ export function PromoShortcutTile({
   compact = false,
   className,
   onClick,
+  canonicalize = true,
 }: {
   tab: Tab;
   active?: boolean;
   compact?: boolean;
   className?: string;
   onClick?: () => void;
+  canonicalize?: boolean;
 }) {
   const promoTab = getPromoTabPresentation(tab);
-  const Icon = shortcutIconMap[tab.icon as keyof typeof shortcutIconMap] ?? Sparkles;
-  const iconAsset = promoTab.iconAsset;
+  const Icon =
+    shortcutIconMap[tab.icon as keyof typeof shortcutIconMap] ?? Sparkles;
+  const presentation = canonicalize ? promoTab : tab;
+  const configuredIcon = tab.icon;
+  const iconAsset: MediaAsset | undefined =
+    configuredIcon && isMobileShortcutIconUrl(configuredIcon)
+      ? { url: configuredIcon, alt: "" }
+      : promoTab.iconAsset;
   const iconImageClass = promoTab.iconKey
     ? promoIconImageClassByKey[promoTab.iconKey as keyof typeof promoIconImageClassByKey]
     : undefined;
 
   return (
     <Link
-      href={promoTab.href}
+      href={presentation.href}
+      target={
+        isExternalMobileShortcutHref(presentation.href) ? "_blank" : undefined
+      }
+      rel={
+        isExternalMobileShortcutHref(presentation.href) ? "noreferrer" : undefined
+      }
       onClick={onClick}
       className={cn(
         "group flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
@@ -83,7 +101,7 @@ export function PromoShortcutTile({
           <Icon className={cn("size-5", compact && "size-4")} aria-hidden />
         )}
       </span>
-      <span className="min-w-0 flex-1 leading-[1.08] break-words">{promoTab.label}</span>
+      <span className="min-w-0 flex-1 leading-[1.08] break-words">{presentation.label}</span>
     </Link>
   );
 }

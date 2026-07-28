@@ -681,6 +681,7 @@ export const operationalErpModules: ErpModule[] = [
       text("seoTitle", "SEO naslov", false),
       text("seoDescription", "SEO opis", false),
       status("status", "Status", ["DRAFT", "PUBLISHED", "ARCHIVED"]),
+      text("preview", "Pregled"),
       number("sections", "Sekcije"),
       date("startsAt", "Početak"),
       date("endsAt", "Kraj"),
@@ -728,8 +729,8 @@ export const operationalErpModules: ErpModule[] = [
   {
     slug: "mobilni-tabovi",
     number: "25",
-    title: "Mobilni tabovi",
-    description: "Četiri jedinstvene mobilne pozicije povezane sa akcijom, landing stranom ili linkom.",
+    title: "Mobilni prečaci",
+    description: "Namenski editor za četiri boksa ispod hero sekcije na mobilnoj početnoj strani.",
     status: "ready",
     commands: [],
     columns: [
@@ -1667,11 +1668,13 @@ async function landingPageRows(take: number): Promise<ErpRow[]> {
       seoTitle: row.seoTitle,
       seoDescription: row.seoDescription,
       status: row.status,
+      preview: "Otvori stranu",
       sections: row._count.sections,
       startsAt: dateOnly(row.startsAt),
       endsAt: dateOnly(row.endsAt),
       publishedAt: dateTime(row.publishedAt),
     },
+    cellHrefs: { preview: `/ponuda/${row.slug}?preview=1` },
   }));
 }
 

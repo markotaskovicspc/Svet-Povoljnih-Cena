@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createHash, randomBytes } from "node:crypto";
 import {
   Prisma,
@@ -69,6 +69,10 @@ export async function POST(
 
   try {
     const result = await runCommand(module, action, ids, admin.id, input);
+    if (module === "landing-strane" || module === "landing-sekcije") {
+      revalidateTag("storefront-landing-pages", { expire: 0 });
+      revalidateTag("storefront-home", { expire: 0 });
+    }
     await logAudit({
       actorId: admin.id,
       action: `erp.command.${action}`,
@@ -522,6 +526,7 @@ async function createLandingPage(): Promise<CommandResult> {
       },
     });
   });
+  revalidatePath("/admin/erp/landing-strane");
   return { message: "Landing strana je kreirana kao nacrt.", createdId: landing.id };
 }
 

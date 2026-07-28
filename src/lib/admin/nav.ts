@@ -33,11 +33,11 @@ export const adminNav: AdminNavGroup[] = [
       { href: "/admin/sadrzaj", label: "Tekstovi", allowed: C },
       { href: "/admin/baneri", label: "Baneri", allowed: C },
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
-      { href: "/admin/tabovi", label: "Navigacija", allowed: C },
+      { href: "/admin/tabovi", label: "Desktop navigacija", allowed: C },
       { href: "/admin/kategorije", label: "Kategorije", allowed: C },
       { href: "/admin/piktogrami", label: "Piktogrami", allowed: C },
       { href: "/admin/erp/landing-strane", label: "Landing strane", allowed: C },
-      { href: "/admin/erp/mobilni-tabovi", label: "Mobilni tabovi", allowed: C },
+      { href: "/admin/erp/mobilni-tabovi", label: "Mobilni prečaci", allowed: C },
     ],
   },
   {

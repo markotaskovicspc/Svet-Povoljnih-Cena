@@ -13,6 +13,7 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
             <PromoShortcutTile
               key={tab.id}
               tab={tab}
+              canonicalize={false}
               className="h-20 text-brand-blue"
             />
           );

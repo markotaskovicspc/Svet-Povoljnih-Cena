@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import {
   ArticleStatus,
   AllocationBasis,
@@ -855,6 +856,10 @@ async function persistPartnerClientCell(
 }
 
 async function persistLandingPageCell(rowId: string, columnKey: string, value: CellValue) {
+  const previous = await db.landingPage.findUnique({
+    where: { id: rowId },
+    select: { slug: true },
+  });
   const data: Prisma.LandingPageUncheckedUpdateInput = {};
   switch (columnKey) {
     case "slug":
@@ -890,7 +895,12 @@ async function persistLandingPageCell(rowId: string, columnKey: string, value: C
     default:
       return null;
   }
-  await db.landingPage.update({ where: { id: rowId }, data });
+  const saved = await db.landingPage.update({
+    where: { id: rowId },
+    data,
+    select: { slug: true },
+  });
+  revalidateLandingContent(previous?.slug, saved.slug);
   return { value };
 }
 
@@ -922,7 +932,12 @@ async function persistLandingSectionCell(
     default:
       return null;
   }
-  await db.landingPageSection.update({ where: { id: rowId }, data });
+  const saved = await db.landingPageSection.update({
+    where: { id: rowId },
+    data,
+    select: { landingPage: { select: { slug: true } } },
+  });
+  revalidateLandingContent(saved.landingPage.slug);
   return { value };
 }
 
@@ -948,7 +963,17 @@ async function persistMobileTabCell(rowId: string, columnKey: string, value: Cel
       return null;
   }
   await db.mobileTab.update({ where: { id: rowId }, data });
+  revalidateTag("storefront-home", { expire: 0 });
+  revalidatePath("/");
   return { value };
+}
+
+function revalidateLandingContent(...slugs: Array<string | null | undefined>) {
+  revalidateTag("storefront-landing-pages", { expire: 0 });
+  revalidateTag("storefront-home", { expire: 0 });
+  for (const slug of new Set(slugs.filter((value): value is string => Boolean(value)))) {
+    revalidatePath(`/ponuda/${slug}`);
+  }
 }
 
 async function persistNewsletterCell(rowId: string, columnKey: string, value: CellValue) {

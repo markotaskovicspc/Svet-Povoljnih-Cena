@@ -4,10 +4,14 @@ import { unstable_cache } from "next/cache";
 import { BannerPlacement } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } from "@/data/banners";
-import { headerTabs, promoBar } from "@/data/site";
+import { headerTabs, mobileShortcutTabs, promoBar } from "@/data/site";
 import type { Banner, PromoBar, Tab } from "@/types";
 import { hasBannerPlacementColumn } from "@/lib/storefront/homepage-schema";
 import { normalizeStorefrontHref } from "@/lib/storefront/href";
+import {
+  landingPageIsLive,
+  resolveMobileTabHref,
+} from "@/lib/mobile-shortcuts/server";
 
 const activeWindow = (now: Date) => ({
   AND: [
@@ -249,3 +253,74 @@ const getActiveTabsAcrossRequests = unstable_cache(
 );
 
 export const getActiveTabs = cache(getActiveTabsAcrossRequests);
+
+async function loadActiveMobileTabs(): Promise<Tab[]> {
+  if (!hasDatabaseConnection()) return mobileShortcutTabs;
+
+  try {
+    const rows = await db.mobileTab.findMany({
+      where: { enabled: true },
+      orderBy: { position: "asc" },
+      take: 4,
+      include: {
+        action: {
+          select: {
+            slug: true,
+            kind: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        },
+        landingPage: {
+          select: {
+            slug: true,
+            status: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        },
+      },
+    });
+
+    if (!rows.length) {
+      const configuredCount = await db.mobileTab.count();
+      return configuredCount === 0 ? mobileShortcutTabs : [];
+    }
+
+    const now = new Date();
+    return rows.flatMap((row) => {
+      if (
+        (row.action &&
+          (row.action.startsAt > now || row.action.endsAt < now)) ||
+        (row.landingPage && !landingPageIsLive(row.landingPage))
+      ) {
+        return [];
+      }
+
+      const href = resolveMobileTabHref(row);
+      if (!href) return [];
+      return [
+        {
+          id: row.id,
+          label: row.label,
+          href,
+          order: row.position,
+          icon: row.icon ?? undefined,
+        },
+      ];
+    });
+  } catch (error) {
+    if (!isMissingSchemaError(error)) {
+      console.error("Failed to load active mobile shortcuts", error);
+    }
+    return mobileShortcutTabs;
+  }
+}
+
+const getActiveMobileTabsAcrossRequests = unstable_cache(
+  loadActiveMobileTabs,
+  ["storefront-active-mobile-shortcuts-v1"],
+  { revalidate: 60, tags: ["storefront-home"] },
+);
+
+export const getActiveMobileTabs = cache(getActiveMobileTabsAcrossRequests);
