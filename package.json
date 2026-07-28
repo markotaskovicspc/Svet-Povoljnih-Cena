@@ -41,7 +41,7 @@
     "rabalux:sync-media": "node scripts/rabalux-sync.mjs media",
     "media:variants": "node \"svet akcija/outputs/build-product-media-variants.mjs\"",
     "admin:create": "node scripts/create-admin.mjs",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/patch-brace-expansion-compat.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -87,6 +87,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "brace-expansion": "5.0.8",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "prisma": "^7.9.0",
@@ -99,9 +100,7 @@
     "body-parser": "^2.3.0",
     "fast-uri": "^3.1.4",
     "find-my-way": "^9.7.0",
-    "minimatch@3.1.5": {
-      "brace-expansion": "1.1.16"
-    },
+    "brace-expansion": "5.0.8",
     "postcss": "^8.5.10",
     "sharp": "^0.35.3",
     "uuid": "^11.1.1",
