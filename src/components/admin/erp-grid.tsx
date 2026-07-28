@@ -244,9 +244,11 @@ function matchesFilter(value: ErpValue, filter: AdminGridFilter) {
   }
 }
 
+const EMPTY_FIXED_FILTERS: AdminGridFilter[] = [];
+
 export function ErpGrid({
   module,
-  fixedFilters = [],
+  fixedFilters = EMPTY_FIXED_FILTERS,
   initialVisibleColumns,
 }: {
   module: ErpModule;
@@ -1627,6 +1629,19 @@ export function ErpGrid({
                     })}
                   </tr>
                 ))}
+                {!loadingRows && filteredRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visible.length + 1 + (module.detailHrefBase ? 1 : 0)}
+                      className="px-6 py-14 text-center"
+                    >
+                      <p className="font-medium text-ink-700">Nema rezultata.</p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        Promenite pretragu ili filtere, ili napravite novi unos.
+                      </p>
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

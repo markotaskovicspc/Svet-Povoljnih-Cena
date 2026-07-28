@@ -658,21 +658,9 @@ export const operationalErpModules: ErpModule[] = [
     description: "Landing page CRUD sa periodom objave, SEO poljima i uređenim sekcijama.",
     status: "ready",
     commands: [
-      { label: "Nova landing strana", tone: "primary", action: "landing.create" },
-      {
-        label: "Dodaj sekciju",
-        tone: "neutral",
-        action: "landing-section.create",
-        needsSelection: true,
-      },
-      {
-        label: "Obriši",
-        tone: "danger",
-        action: "row.delete",
-        needsSelection: true,
-        confirm: "Obrisati izabrane landing strane?",
-      },
+      { label: "Nova landing strana", tone: "primary", href: "/admin/erp/landing-strane/nova" },
     ],
+    detailHrefBase: "/admin/erp/landing-strane",
     columns: [
       text("slug", "Slug"),
       text("title", "Naslov"),
@@ -680,41 +668,22 @@ export const operationalErpModules: ErpModule[] = [
       text("heroImageUrl", "Hero slika", false),
       text("seoTitle", "SEO naslov", false),
       text("seoDescription", "SEO opis", false),
-      status("status", "Status", ["DRAFT", "PUBLISHED", "ARCHIVED"]),
+      status("status", "Status", ["DRAFT", "PUBLISHED", "PUBLISHED_CHANGES", "ARCHIVED"]),
       text("preview", "Pregled"),
-      number("sections", "Sekcije"),
+      number("sections", "Blokovi"),
       date("startsAt", "Početak"),
       date("endsAt", "Kraj"),
       date("publishedAt", "Objavljeno"),
-    ],
-    editableColumns: [
-      "slug",
-      "title",
-      "lead",
-      "heroImageUrl",
-      "seoTitle",
-      "seoDescription",
-      "status",
-      "startsAt",
-      "endsAt",
     ],
     rows: emptyRows,
   },
   {
     slug: "landing-sekcije",
     number: "24b",
-    title: "Sekcije landing strana",
-    description: "Uređene sadržajne sekcije, slike i liste artikala po landing strani.",
+    title: "Legacy sekcije landing strana",
+    description: "Pregled starih sekcija. Novi sadržaj se uređuje blokovima unutar landing strane.",
     status: "ready",
-    commands: [
-      {
-        label: "Obriši sekciju",
-        tone: "danger",
-        action: "row.delete",
-        needsSelection: true,
-        confirm: "Obrisati izabrane landing sekcije?",
-      },
-    ],
+    commands: [],
     columns: [
       text("landingPage", "Landing strana"),
       number("position", "Pozicija"),
@@ -723,7 +692,6 @@ export const operationalErpModules: ErpModule[] = [
       text("imageUrl", "Slika", false),
       text("productSkus", "SKU artikala"),
     ],
-    editableColumns: ["position", "title", "body", "imageUrl", "productSkus"],
     rows: emptyRows,
   },
   {
@@ -1667,9 +1635,16 @@ async function landingPageRows(take: number): Promise<ErpRow[]> {
       heroImageUrl: row.heroImageUrl,
       seoTitle: row.seoTitle,
       seoDescription: row.seoDescription,
-      status: row.status,
+      status:
+        row.status === "PUBLISHED" &&
+        row.draftRevisionId &&
+        row.draftRevisionId !== row.publishedRevisionId
+          ? "PUBLISHED_CHANGES"
+          : row.status,
       preview: "Otvori stranu",
-      sections: row._count.sections,
+      sections: Array.isArray(row.blocks) && row.blocks.length
+        ? row.blocks.length
+        : row._count.sections,
       startsAt: dateOnly(row.startsAt),
       endsAt: dateOnly(row.endsAt),
       publishedAt: dateTime(row.publishedAt),

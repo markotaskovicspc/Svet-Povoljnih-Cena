@@ -4,6 +4,7 @@ import { BRAND } from "@/lib/brand";
 import { getCmsSitemapState } from "@/lib/cms/pages";
 import { SYSTEM_CONTENT_SLUGS } from "@/lib/cms/system-pages";
 import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
+import { getPublishedLandingPagesForSitemap } from "@/lib/storefront/landing-pages";
 
 const STATIC_PATHS = [
   "", "/novo", "/outlet", "/sve-do-999", "/svet-akcija", "/o-nama",
@@ -43,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   );
   if (!hasDatabaseConnection()) return entries;
   try {
-    const [products, categories, collections] = await Promise.all([
+    const [products, categories, collections, landingPages] = await Promise.all([
       db.product.findMany({
         where: {
           ...webStorefrontProductWhere(),
@@ -53,11 +54,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }),
       db.category.findMany({ select: { path: true, updatedAt: true } }),
       db.collection.findMany({ select: { slug: true } }),
+      getPublishedLandingPagesForSitemap(),
     ]);
     entries.push(
       ...products.map((item) => ({ url: `${base}/p/${item.slug}`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: 0.8 })),
       ...categories.filter((item) => item.path).map((item) => ({ url: `${base}/k/${item.path.replace(/^\/+/, "")}`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: 0.7 })),
       ...collections.map((item) => ({ url: `${base}/kolekcija/${item.slug}`, changeFrequency: "weekly" as const, priority: 0.7 })),
+      ...landingPages.map((item) => ({ url: `${base}/ponuda/${item.slug}`, lastModified: item.publishedAt, changeFrequency: "weekly" as const, priority: 0.75 })),
     );
   } catch {
     // A sitemap should remain available during a transient catalog outage.

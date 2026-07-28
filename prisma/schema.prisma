@@ -2743,25 +2743,59 @@ enum LandingPageStatus {
 }
 
 model LandingPage {
-  id             String            @id @default(cuid())
-  slug           String            @unique
-  title          String
-  lead           String?           @db.Text
-  heroImageUrl   String?
-  seoTitle       String?
-  seoDescription String?           @db.Text
-  status         LandingPageStatus @default(DRAFT)
-  startsAt       DateTime?
-  endsAt         DateTime?
-  publishedAt    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                  String            @id @default(cuid())
+  slug                String            @unique
+  title               String
+  lead                String?           @db.Text
+  heroImageUrl        String?
+  heroMobileImageUrl  String?
+  heroImageAlt        String?
+  heroCtaLabel        String?
+  heroCtaHref         String?
+  ogImageUrl          String?
+  canonicalUrl        String?
+  robotsIndex         Boolean           @default(true)
+  blocks               Json              @default("[]")
+  seoTitle             String?
+  seoDescription       String?           @db.Text
+  status               LandingPageStatus @default(DRAFT)
+  startsAt             DateTime?
+  endsAt               DateTime?
+  publishedAt          DateTime?
+  draftRevisionId      String?           @unique
+  publishedRevisionId  String?           @unique
+  archivedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   sections            LandingPageSection[]
   pictogramPlacements PictogramPlacement[]
   mobileTabs          MobileTab[]
+  revisions           LandingPageRevision[] @relation("LandingPageRevisions")
+  draftRevision       LandingPageRevision?  @relation("LandingPageDraftRevision", fields: [draftRevisionId], references: [id], onDelete: SetNull)
+  publishedRevision   LandingPageRevision?  @relation("LandingPagePublishedRevision", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
 
   @@index([status, publishedAt])
+  @@index([status, startsAt, endsAt])
+  @@index([archivedAt, updatedAt])
+}
+
+model LandingPageRevision {
+  id          String   @id @default(cuid())
+  pageId      String
+  version     Int
+  snapshot    Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  page         LandingPage  @relation("LandingPageRevisions", fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy    AdminUser?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  draftFor     LandingPage? @relation("LandingPageDraftRevision")
+  publishedFor LandingPage? @relation("LandingPagePublishedRevision")
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model LandingPageSection {
@@ -3237,6 +3271,7 @@ model AdminUser {
   auditLogs        AuditLog[]
   savedViews       AdminSavedView[]
   contentRevisions ContentPageRevision[]
+  landingRevisions LandingPageRevision[]
 }
 
 model AdminSavedView {
