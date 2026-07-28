@@ -4,6 +4,7 @@ import { ListingShell } from "@/components/listing/listing-shell";
 import { getCategoryByPath, listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import type { Crumb } from "@/components/layout/breadcrumbs";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 /**
  * Catch-all category listing.
@@ -56,9 +57,10 @@ export default async function CategoryPage({ params }: RouteProps) {
   if (!slug?.length) notFound();
   const categoryPath = `/${slug.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
   const query = { categoryPath };
-  const [resolved, { items: products, nextCursor, total }] = await Promise.all([
+  const [resolved, { items: products, nextCursor, total }, titleIcon] = await Promise.all([
     resolveTrailAndTitle(slug),
     listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
+    getTabTitleIcon(`/k${categoryPath}`),
   ]);
   if (!resolved) notFound();
 
@@ -66,6 +68,7 @@ export default async function CategoryPage({ params }: RouteProps) {
     <ListingShell
       kind="kategorija"
       title={resolved.title}
+      titleIcon={titleIcon}
       subtitle={resolved.subtitle}
       trail={resolved.trail}
       source={products}

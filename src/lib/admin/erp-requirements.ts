@@ -81,5 +81,5 @@ export const ERP_REQUIREMENTS: readonly ErpRequirement[] = [
   { id: 64, section: "Neobjavljeno na sajtu", route: "/admin/erp/neobjavljeni-artikli", status: "implemented", acceptance: "QA-01", note: "Precizan razlog blokade za svaki artikal sa zalihom ili dolaskom." },
   { id: 65, section: "Landing pages", route: "/admin/erp/landing-strane", status: "implemented", acceptance: "CONTENT-08", note: "CRUD model sa sekcijama, periodom i statusom objave." },
   { id: 66, section: "Početna strana", route: "/admin/pocetna", status: "implemented", acceptance: "CONTENT-09", note: "Šest redova, dve baner pozicije i uklanjanje praznog prostora." },
-  { id: 67, section: "Mobile tabovi", route: "/admin/erp/mobilni-tabovi", status: "implemented", acceptance: "CONTENT-10", note: "Tačno četiri jedinstvena taba iz akcija ili landing strana." },
+  { id: 67, section: "Mobile tabovi", route: "/admin/tabovi#mobile-tabs", status: "implemented", acceptance: "CONTENT-10", note: "Prve četiri navigacione pozicije su mobilni tabovi ispod hero sekcije i biraju piktogram iz centralne biblioteke." },
 ] as const;

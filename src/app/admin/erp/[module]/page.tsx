@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { erpModules, getErpModule, getErpModuleDefinition } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
@@ -32,6 +32,7 @@ export default async function ErpModulePage({
 }) {
   const { module: slug } = await params;
   await requireAdminAction(allowedRolesForErpModule(slug));
+  if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
   const erpModule = await getErpModule(slug);
   if (!erpModule) notFound();
 

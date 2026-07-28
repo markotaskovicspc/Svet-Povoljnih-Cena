@@ -3,6 +3,7 @@ import { ListingShell } from "@/components/listing/listing-shell";
 import { limitedCampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Dok traju zalihe",
@@ -12,16 +13,15 @@ export const metadata: Metadata = {
 
 export default async function OgranicenaPonudaPage() {
   const query = { limitedOnly: true };
-  const { items: products, nextCursor, total } = await listProducts({
-    ...query,
-    limitedOnly: true,
-    limit: LISTING_PAGE_SIZE,
-  });
+  const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
+    listProducts({ ...query, limitedOnly: true, limit: LISTING_PAGE_SIZE }),
+    getTabTitleIcon("/ogranicena-ponuda"),
+  ]);
   return (
     <ListingShell
       kind="akcija"
       title="Dok traju zalihe"
-      titleIcon={limitedCampaignSticker}
+      titleIcon={titleIcon ?? limitedCampaignSticker}
       campaignSticker="limited"
       headerVariant="promo"
       trail={[{ label: "Dok traju zalihe" }]}

@@ -17,6 +17,7 @@ import { newProductsBanner, protectedPricesBanner } from "@/data/banners";
 import {
   hasBannerPlacementColumn,
   hasHomeSectionSlotTable,
+  hasTabPictogramColumn,
 } from "@/lib/storefront/homepage-schema";
 import { normalizeStorefrontHref } from "@/lib/storefront/href";
 import {
@@ -26,6 +27,7 @@ import {
   newCampaignSticker,
   protectedPricesIcon,
   under999CampaignSticker,
+  pictogramMediaAsset,
   type CampaignStickerKey,
 } from "@/data/campaign-icons";
 
@@ -314,6 +316,30 @@ async function getHomeBanner(placement: BannerPlacement, fallback: Banner | null
   }
 }
 
+async function getTabPictogramsByHref() {
+  const byHref = new Map<string, MediaAsset>();
+  if (!hasDatabaseConnection()) return byHref;
+  if (!(await hasTabPictogramColumn())) return byHref;
+
+  try {
+    const rows = await db.tab.findMany({
+      where: { enabled: true, pictogramId: { not: null } },
+      include: { pictogram: true },
+      orderBy: { order: "asc" },
+    });
+    for (const row of rows) {
+      const href = normalizeStorefrontHref(row.href) ?? row.href;
+      const asset = pictogramMediaAsset(row.pictogram ?? undefined);
+      if (asset && !byHref.has(href)) byHref.set(href, asset);
+    }
+  } catch (error) {
+    if (!isMissingSchemaError(error)) {
+      console.error("Failed to load navigation pictograms for homepage sections", error);
+    }
+  }
+  return byHref;
+}
+
 async function resolveSlot(slot: HomeSlotForRender) {
   if (!slot.enabled) return null;
 
@@ -369,12 +395,13 @@ async function resolveSlot(slot: HomeSlotForRender) {
 }
 
 async function loadHomeLayout(): Promise<HomeLayout> {
-  const [bannerAfterSecond, bannerAfterFourth] = await Promise.all([
+  const [bannerAfterSecond, bannerAfterFourth, tabPictogramsByHref] = await Promise.all([
     getHomeBanner(
       BannerPlacement.HOME_AFTER_SECOND_ROW,
       protectedPricesBanner,
     ),
     getHomeBanner(BannerPlacement.HOME_AFTER_FOURTH_ROW, newProductsBanner),
+    getTabPictogramsByHref(),
   ]);
 
   let slots: HomeSlotForRender[] = Object.values(DEFAULT_HOME_SECTION_SLOTS);
@@ -421,7 +448,19 @@ async function loadHomeLayout(): Promise<HomeLayout> {
   );
 
   return {
-    sections: Object.fromEntries(resolved.filter(([, section]) => section)),
+    sections: Object.fromEntries(
+      resolved
+        .filter(([, section]) => section)
+        .map(([slotKey, section]) => [
+          slotKey,
+          section
+            ? {
+                ...section,
+                icon: tabPictogramsByHref.get(section.href) ?? section.icon,
+              }
+            : section,
+        ]),
+    ),
     bannerAfterSecond,
     bannerAfterFourth,
   };

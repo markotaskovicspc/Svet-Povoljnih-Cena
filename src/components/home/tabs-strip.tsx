@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Tab } from "@/types";
+import { getPromoTabPresentation } from "@/data/campaign-icons";
 
 const ICONS: Record<string, LucideIcon> = {
   Tag,
@@ -26,8 +27,6 @@ const ICONS: Record<string, LucideIcon> = {
   ShieldCheck,
   Sparkles,
 };
-
-const HEROJI_MESECA_MARK_SRC = "/brand/heroji-meseca.png";
 
 interface TabsStripProps {
   tabs: Tab[];
@@ -41,8 +40,8 @@ export function TabsStrip({ tabs }: TabsStripProps) {
     >
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 xl:grid-cols-6">
         {tabs.map((t, i) => {
-          const Icon = (t.icon && ICONS[t.icon]) || Tag;
-          const isHerojiMeseca = t.id === "heroji-meseca";
+          const promoTab = getPromoTabPresentation(t);
+          const Icon = (promoTab.icon && ICONS[promoTab.icon]) || Tag;
           return (
             <motion.div
               key={t.id}
@@ -56,25 +55,26 @@ export function TabsStrip({ tabs }: TabsStripProps) {
               }}
             >
               <Link
-                href={t.href}
+                href={promoTab.href}
                 className="group bg-surface ring-border/60 hover:ring-walnut/40 focus-visible:ring-walnut/40 relative flex h-full items-center justify-between gap-3 rounded-lg px-4 py-4 ring-1 shadow-soft-1 transition hover:shadow-soft-3 focus-visible:ring-2 focus-visible:outline-none md:px-5 md:py-5 xl:flex-col xl:items-start"
               >
                 <span className="flex min-w-0 items-center gap-3 xl:flex-col xl:items-start">
                   <span className="bg-muted-bg text-walnut group-hover:bg-walnut grid size-10 shrink-0 place-items-center rounded-lg transition group-hover:text-canvas">
-                    {isHerojiMeseca ? (
+                    {promoTab.iconAsset ? (
                       <Image
-                        src={HEROJI_MESECA_MARK_SRC}
+                        src={promoTab.iconAsset.url}
                         alt=""
-                        width={36}
-                        height={30}
-                        className="h-7 w-8 object-contain transition group-hover:scale-105"
+                        width={promoTab.iconAsset.width ?? 96}
+                        height={promoTab.iconAsset.height ?? 96}
+                        unoptimized={promoTab.iconAsset.url.endsWith(".svg")}
+                        className="max-h-8 max-w-9 object-contain transition group-hover:scale-105"
                       />
                     ) : (
                       <Icon className="size-5" aria-hidden />
                     )}
                   </span>
                   <span className="text-sm leading-tight font-medium text-ink-900">
-                    {t.label}
+                    {promoTab.label}
                   </span>
                 </span>
                 <ArrowUpRight

@@ -38,3 +38,22 @@ export const hasHomeSectionSlotTable = cache(async () => {
     return false;
   }
 });
+
+export const hasTabPictogramColumn = cache(async () => {
+  if (!hasDatabaseConnection()) return false;
+
+  try {
+    const result = await db.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'Tab'
+          AND column_name = 'pictogramId'
+      ) AS "exists"
+    `;
+    return Boolean(result[0]?.exists);
+  } catch {
+    return false;
+  }
+});

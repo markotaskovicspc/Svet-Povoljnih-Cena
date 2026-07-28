@@ -3,6 +3,7 @@ import { ListingShell } from "@/components/listing/listing-shell";
 import { under999CampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Sve do 999",
@@ -12,15 +13,15 @@ export const metadata: Metadata = {
 
 export default async function SveDo999Page() {
   const query = { maxPrice: 999 };
-  const { items: products, nextCursor, total } = await listProducts({
-    ...query,
-    limit: LISTING_PAGE_SIZE,
-  });
+  const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
+    listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
+    getTabTitleIcon("/sve-do-999"),
+  ]);
   return (
     <ListingShell
       kind="akcija"
       title="Sve do 999"
-      titleIcon={under999CampaignSticker}
+      titleIcon={titleIcon ?? under999CampaignSticker}
       campaignSticker="under999"
       headerVariant="promo"
       subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."

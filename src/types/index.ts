@@ -196,6 +196,8 @@ export interface Tab {
   order: number;
   /** Match icon name from lucide-react, optional. */
   icon?: string;
+  /** Admin-managed image reused by mobile shortcuts and destination titles. */
+  pictogram?: Pictogram;
 }
 
 export interface DeliveryRule {

@@ -10,6 +10,7 @@ import {
   getLandingPageForAdminPreview,
   getLandingPageForStorefront,
 } from "@/lib/storefront/landing-pages";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 type RouteProps = {
   params: Promise<{ slug: string }>;
@@ -42,7 +43,10 @@ export default async function LandingPageRoute({
   if (!page) notFound();
 
   const skus = page.sections.flatMap((section) => section.productSkus);
-  const products = await getProductsBySkus(skus);
+  const [products, titleIcon] = await Promise.all([
+    getProductsBySkus(skus),
+    getTabTitleIcon(`/ponuda/${encodeURIComponent(slug)}`),
+  ]);
   const productBySku = new Map(products.map((product) => [product.sku, product]));
 
   return (
@@ -78,9 +82,21 @@ export default async function LandingPageRoute({
             />
           ) : null}
           <div className="relative z-10 max-w-3xl px-6 py-14 md:px-12 md:py-20">
-            <h1 className="font-display text-3xl font-bold tracking-tight md:text-5xl">
-              {page.title}
-            </h1>
+            <div className="flex items-center gap-4">
+              {titleIcon ? (
+                <Image
+                  src={titleIcon.url}
+                  alt={titleIcon.alt ?? ""}
+                  width={titleIcon.width ?? 96}
+                  height={titleIcon.height ?? 96}
+                  unoptimized={titleIcon.url.endsWith(".svg")}
+                  className="size-14 shrink-0 object-contain md:size-20"
+                />
+              ) : null}
+              <h1 className="font-display text-3xl font-bold tracking-tight md:text-5xl">
+                {page.title}
+              </h1>
+            </div>
             {page.lead ? (
               <p className="mt-4 max-w-[62ch] text-base leading-relaxed text-white/90 md:text-lg">
                 {page.lead}

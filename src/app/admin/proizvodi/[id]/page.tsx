@@ -134,6 +134,10 @@ const categorySchema = z.object({
   parentCategoryId: z.string().optional().nullable(),
 });
 
+const pictogramAssignmentSchema = z.object({
+  productId: z.string().min(1),
+});
+
 function optionalNonnegativeNumber() {
   return z
     .union([
@@ -586,6 +590,74 @@ async function updateProductCategory(_state: AdminActionState, formData: FormDat
   )(formData);
 }
 
+async function updateProductPictograms(_state: AdminActionState, formData: FormData) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["CONTENT", "OPS"], action: "product.pictograms.update", entity: "Product" },
+    async (actorId, formData: FormData) => {
+      const parsed = pictogramAssignmentSchema.safeParse(Object.fromEntries(formData));
+      if (!parsed.success) {
+        return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
+      }
+      const pictogramIds = Array.from(
+        new Set(
+          formData
+            .getAll("pictogramIds")
+            .map((value) => String(value).trim())
+            .filter(Boolean),
+        ),
+      );
+      if (pictogramIds.length > 6) {
+        return { ok: false as const, error: "Proizvod može da ima najviše 6 piktograma." };
+      }
+
+      const [product, pictogramCount] = await Promise.all([
+        db.product.findUnique({
+          where: { id: parsed.data.productId },
+          select: { id: true },
+        }),
+        pictogramIds.length
+          ? db.pictogram.count({ where: { id: { in: pictogramIds } } })
+          : Promise.resolve(0),
+      ]);
+      if (!product) return { ok: false as const, error: "Proizvod više ne postoji." };
+      if (pictogramCount !== pictogramIds.length) {
+        return { ok: false as const, error: "Jedan od izabranih piktograma više ne postoji." };
+      }
+
+      await db.$transaction(async (tx) => {
+        await tx.productPictogram.deleteMany({
+          where: { productId: parsed.data.productId },
+        });
+        if (pictogramIds.length) {
+          await tx.productPictogram.createMany({
+            data: pictogramIds.map((pictogramId) => ({
+              productId: parsed.data.productId,
+              pictogramId,
+            })),
+          });
+        }
+        await lockSupplierOwnedFields(
+          tx,
+          parsed.data.productId,
+          actorId,
+          ["pictograms"],
+        );
+      });
+      await revalidateProductSurfaces(parsed.data.productId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.productId,
+        diff: { pictogramIds },
+        message: pictogramIds.length
+          ? "Piktogrami proizvoda su sačuvani."
+          : "Svi piktogrami su uklonjeni sa proizvoda.",
+      };
+    },
+  )(formData);
+}
+
 async function addProductImage(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -853,7 +925,7 @@ export default async function ProductDetail({
 }) {
   await requireAdminAction(["CONTENT", "OPS"]);
   const { id } = await params;
-  const [product, categories, suppliers, groups, collections, lookupValues, defaultWarehouse] =
+  const [product, categories, suppliers, groups, collections, lookupValues, pictograms, defaultWarehouse] =
     await Promise.all([
       db.product.findUnique({
         where: { id },
@@ -903,6 +975,10 @@ export default async function ProductDetail({
         where: { active: true },
         orderBy: [{ kind: "asc" }, { value: "asc" }],
         select: { kind: true, value: true },
+      }),
+      db.pictogram.findMany({
+        orderBy: [{ label: "asc" }, { code: "asc" }],
+        select: { id: true, code: true, label: true, iconUrl: true },
       }),
       db.warehouse.findFirst({
         where: { active: true, isDefault: true },
@@ -1415,21 +1491,56 @@ export default async function ProductDetail({
             </AdminActionForm>
           </Card>
 
-          <Card id="mediji">
-            <CardTitle>Piktogrami</CardTitle>
-            <div className="flex flex-wrap gap-2 text-xs">
-              {product.pictograms.map((p) => (
-                <span
-                  key={p.pictogramId}
-                  className="rounded-full bg-muted-bg px-2 py-0.5"
-                >
-                  {p.pictogram.label}
-                </span>
-              ))}
-              {product.pictograms.length === 0 ? (
-                <span className="text-sm text-ink-500">Nema dodeljenih piktograma.</span>
-              ) : null}
-            </div>
+          <Card id="piktogrami">
+            <CardTitle description="Prikazuju se kao benefit kartice pored cene na stranici proizvoda (najviše 6).">
+              Piktogrami proizvoda
+            </CardTitle>
+            {pictograms.length ? (
+              <AdminActionForm action={updateProductPictograms} className="mt-4 space-y-4">
+                <input type="hidden" name="productId" value={product.id} />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {pictograms.map((pictogram) => (
+                    <label
+                      key={pictogram.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 p-2 text-sm transition hover:bg-muted-bg"
+                    >
+                      <input
+                        type="checkbox"
+                        name="pictogramIds"
+                        value={pictogram.id}
+                        defaultChecked={product.pictograms.some(
+                          (relation) => relation.pictogramId === pictogram.id,
+                        )}
+                        className="size-4 shrink-0 accent-walnut"
+                      />
+                      <Image
+                        src={pictogram.iconUrl}
+                        alt=""
+                        width={36}
+                        height={36}
+                        className="size-9 shrink-0 rounded object-contain"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{pictogram.label}</span>
+                        <span className="block truncate font-mono text-[10px] text-ink-500">
+                          {pictogram.code}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <SubmitButton>Sačuvaj piktograme</SubmitButton>
+                </div>
+              </AdminActionForm>
+            ) : (
+              <p className="mt-3 text-sm text-ink-500">
+                Biblioteka je prazna. Prvo dodajte piktogram na stranici{" "}
+                <Link href="/admin/piktogrami" className="text-walnut hover:underline">
+                  Piktogrami
+                </Link>.
+              </p>
+            )}
           </Card>
 
           <Card>

@@ -417,7 +417,7 @@ export default async function MobileShortcutsPage() {
     <>
       <PageHeader
         title="Mobilni prečaci"
-        description="Četiri boksa ispod hero banera na mobilnoj početnoj strani. Svaka pozicija ima svoj naziv, ikonu, status i provereno odredište."
+        description="Četiri boksa ispod hero banera na mobilnoj početnoj strani. Piktogram iz centralne biblioteke koristi se i uz naslov izabranog odredišta."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -605,7 +605,10 @@ function ShortcutEditor({
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Ikona">
+          <Field
+            label="Ikona / piktogram"
+            hint="Ako izaberete piktogram iz biblioteke, isti znak se prikazuje i levo od naslova odredišne stranice."
+          >
             <select
               name="icon"
               defaultValue={row.icon ?? ""}

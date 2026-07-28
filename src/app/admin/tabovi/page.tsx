@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import Image from "next/image";
 import { z } from "zod";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -23,6 +24,7 @@ const schema = z.object({
   label: z.string().min(1).max(40),
   href: z.string().min(1).max(200),
   icon: z.string().max(40).optional().nullable(),
+  pictogramId: z.string().optional().nullable(),
   order: z.coerce.number().int().min(1).max(10),
   enabled: z.coerce.boolean().default(true),
 });
@@ -38,15 +40,32 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           enabled: formData.get("enabled") === "on" || formData.get("enabled") === "true",
         });
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
-        const occupied = await db.tab.findFirst({
-          where: {
-            order: parsed.data.order,
-            NOT: parsed.data.id ? { id: parsed.data.id } : undefined,
-          },
-          select: { id: true },
-        });
+        const [occupied, current, pictogram] = await Promise.all([
+          db.tab.findFirst({
+            where: {
+              order: parsed.data.order,
+              NOT: parsed.data.id ? { id: parsed.data.id } : undefined,
+            },
+            select: { id: true },
+          }),
+          parsed.data.id
+            ? db.tab.findUnique({
+                where: { id: parsed.data.id },
+                select: { href: true },
+              })
+            : null,
+          parsed.data.pictogramId
+            ? db.pictogram.findUnique({
+                where: { id: parsed.data.pictogramId },
+                select: { id: true },
+              })
+            : null,
+        ]);
         if (occupied) {
           return { ok: false as const, error: `Pozicija ${parsed.data.order} je već zauzeta.` };
+        }
+        if (parsed.data.pictogramId && !pictogram) {
+          return { ok: false as const, error: "Izabrani piktogram više ne postoji." };
         }
 
         if (parsed.data.enabled) {
@@ -57,14 +76,37 @@ async function upsert(_state: AdminActionState, formData: FormData) {
             return { ok: false as const, error: "Maksimalno 10 aktivnih tabova." };
           }
         }
-        const { id, ...rest } = parsed.data;
+        const { id, pictogramId, ...rest } = parsed.data;
         const data = { ...rest, icon: rest.icon || null };
         const saved = id
-          ? await db.tab.update({ where: { id }, data })
-          : await db.tab.create({ data });
+          ? await db.tab.update({
+              where: { id },
+              data: {
+                ...data,
+                pictogram: pictogramId
+                  ? { connect: { id: pictogramId } }
+                  : { disconnect: true },
+              },
+            })
+          : await db.tab.create({
+              data: {
+                ...data,
+                ...(pictogramId
+                  ? { pictogram: { connect: { id: pictogramId } } }
+                  : {}),
+              },
+            });
         revalidatePath("/admin/tabovi");
         revalidatePath("/");
-        return { ok: true as const, entityId: saved.id, diff: data };
+        if (current?.href?.startsWith("/")) revalidatePath(current.href);
+        if (saved.href.startsWith("/")) revalidatePath(saved.href);
+        updateTag("storefront-home");
+        return {
+          ok: true as const,
+          entityId: saved.id,
+          diff: { ...data, pictogramId: pictogramId || null },
+          message: "Navigacija i povezani prikazi su sačuvani.",
+        };
       },
   )(formData);
 }
@@ -77,9 +119,11 @@ async function remove(formData: FormData) {
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
-        await db.tab.delete({ where: { id } });
+        const deleted = await db.tab.delete({ where: { id } });
         revalidatePath("/admin/tabovi");
         revalidatePath("/");
+        if (deleted.href.startsWith("/")) revalidatePath(deleted.href);
+        updateTag("storefront-home");
         return { ok: true as const, entityId: id };
       },
   )(formData);
@@ -92,9 +136,13 @@ export default async function TabsPage({
 }) {
   await requireAdminAction(["CONTENT"]);
   const params = await searchParams;
-  const [tabs, categories] = await Promise.all([
-    db.tab.findMany({ orderBy: [{ order: "asc" }, { label: "asc" }] }),
+  const [tabs, categories, pictograms] = await Promise.all([
+    db.tab.findMany({
+      orderBy: [{ order: "asc" }, { label: "asc" }],
+      include: { pictogram: true },
+    }),
     db.category.findMany({ orderBy: { path: "asc" }, select: { name: true, path: true } }),
+    db.pictogram.findMany({ orderBy: [{ label: "asc" }, { code: "asc" }] }),
   ]);
   const requestedSlot = Number(params.slot);
   const selected = tabs.find((tab) => tab.id === params.edit);
@@ -112,7 +160,7 @@ export default async function TabsPage({
     <>
       <PageHeader
         title="Navigacija"
-        description="Deset fiksnih desktop pozicija. Pozicija se ne može duplirati, a odredište se bira iz postojeće kategorije ili landing stranice."
+        description="Desktop navigacija sa najviše deset pozicija. Mobilni boksevi ispod hero sekcije podešavaju se u odvojenom ekranu „Mobilni prečaci“."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Navigacija" }]}
       />
       <div className="grid grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -125,6 +173,7 @@ export default async function TabsPage({
             columns={[
               { key: "order", label: "Poz.", align: "right" },
               { key: "label", label: "Naziv" },
+              { key: "pictogram", label: "Piktogram" },
               { key: "enabled", label: "Aktivan", align: "center" },
               { key: "actions", label: "" },
             ]}
@@ -141,6 +190,18 @@ export default async function TabsPage({
                       <p className="max-w-64 truncate font-mono text-[11px] text-ink-500" title={tab.href}>{tab.href}</p>
                     </div>
                   ) : <span className="text-ink-300">Prazna pozicija</span>,
+                  pictogram: tab?.pictogram ? (
+                    <div className="flex items-center gap-2">
+                      <Image
+                        src={tab.pictogram.iconUrl}
+                        alt=""
+                        width={28}
+                        height={28}
+                        className="size-7 rounded object-contain"
+                      />
+                      <span className="text-xs">{tab.pictogram.label}</span>
+                    </div>
+                  ) : <span className="text-ink-300">—</span>,
                   enabled: tab?.enabled ? "✓" : "—",
                   actions: tab ? (
                     <div className="flex justify-end gap-2">
@@ -161,11 +222,24 @@ export default async function TabsPage({
         <Card className="lg:sticky lg:top-6">
           <CardTitle>{selected ? `Izmena: ${selected.label}` : `Nova navigacija · pozicija ${editorSlot}`}</CardTitle>
           <TabForm
-            key={selected?.id ?? `new-${editorSlot}`}
+            key={
+              selected
+                ? [
+                    selected.id,
+                    selected.label,
+                    selected.href,
+                    selected.order,
+                    selected.enabled,
+                    selected.icon ?? "",
+                    selected.pictogramId ?? "",
+                  ].join(":")
+                : `new-${editorSlot}`
+            }
             action={upsert}
             values={selected ?? { order: editorSlot }}
             destinations={destinationOptions}
             usedOrders={tabs.filter((tab) => tab.id !== selected?.id).map((tab) => tab.order)}
+            pictograms={pictograms}
           />
         </Card>
       </div>
@@ -178,14 +252,16 @@ function TabForm({
   values,
   destinations,
   usedOrders,
+  pictograms,
 }: {
   action: (
     state: AdminActionState,
     formData: FormData,
   ) => Promise<AdminActionState>;
-  values?: { id?: string; label?: string; href?: string; icon?: string | null; order?: number; enabled?: boolean };
+  values?: { id?: string; label?: string; href?: string; icon?: string | null; pictogramId?: string | null; order?: number; enabled?: boolean };
   destinations: { value: string; label: string }[];
   usedOrders: number[];
+  pictograms: { id: string; code: string; label: string; iconUrl: string }[];
 }) {
   return (
     <AdminActionForm action={action} className="space-y-3">
@@ -202,8 +278,27 @@ function TabForm({
           {destinations.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </Field>
+      <Field label="Piktogram iz biblioteke">
+        <select
+          name="pictogramId"
+          defaultValue={values?.pictogramId ?? ""}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+        >
+          <option value="">Bez piktograma / podrazumevana ikona</option>
+          {pictograms.map((pictogram) => (
+            <option key={pictogram.id} value={pictogram.id}>
+              {pictogram.label} · {pictogram.code}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {values?.pictogramId ? (
+        <p className="text-xs text-ink-500">
+          Ovaj izbor se koristi uz naslov odredišne stranice. Četiri mobilna boksa imaju sopstveno podešavanje u „Mobilnim prečacima“.
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Ikona (opciono)">
+        <Field label="Rezervna Lucide ikona">
           <Input name="icon" defaultValue={values?.icon ?? ""} placeholder="lucide ime" />
         </Field>
         <Field label="Redosled">

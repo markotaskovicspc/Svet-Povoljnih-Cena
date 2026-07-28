@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import Image from "next/image";
-import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { logOperationalError } from "@/lib/monitoring";
 import {
@@ -13,11 +13,13 @@ import {
 } from "@/lib/pictograms/icon-file";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
+import { resolveMobileTabHref } from "@/lib/mobile-shortcuts/server";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +30,19 @@ export const metadata = {
 
 const schema = z.object({
   id: z.string().optional().nullable(),
-  code: z.string().min(1).max(40).regex(/^[a-z0-9_-]+$/i),
+  code: z.string().trim().min(1).max(40).regex(/^[a-z0-9_-]+$/i).transform((value) => value.toLowerCase()),
   label: z.string().min(1).max(80),
 });
+
+function formatMobileShortcutCount(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (last === 1 && lastTwo !== 11) return `${count} mobilni prečac`;
+  if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) {
+    return `${count} mobilna prečaca`;
+  }
+  return `${count} mobilnih prečaca`;
+}
 
 async function uploadPictogramIcon(code: string, file: File) {
   const extension = validatePictogramIconFile(file);
@@ -76,6 +88,33 @@ async function revalidatePictogramProducts(pictogramId: string) {
   }
 }
 
+async function revalidatePictogramNavigation(pictogramId: string, iconUrl: string) {
+  const [tabs, mobileTabs] = await Promise.all([
+    db.tab.findMany({
+      where: { pictogramId },
+      select: { href: true },
+    }),
+    db.mobileTab.findMany({
+      where: { icon: iconUrl },
+      select: {
+        href: true,
+        action: { select: { kind: true, slug: true } },
+        landingPage: { select: { slug: true } },
+      },
+    }),
+  ]);
+  if (!tabs.length && !mobileTabs.length) return;
+  revalidatePath("/");
+  for (const tab of tabs) {
+    if (tab.href.startsWith("/")) revalidatePath(tab.href);
+  }
+  for (const tab of mobileTabs) {
+    const href = resolveMobileTabHref(tab);
+    if (href?.startsWith("/")) revalidatePath(href.split("?")[0]!);
+  }
+  updateTag("storefront-home");
+}
+
 async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -118,7 +157,19 @@ async function upsert(_state: AdminActionState, formData: FormData) {
       let saved;
       try {
         saved = id
-          ? await db.pictogram.update({ where: { id }, data: { code, label, iconUrl } })
+          ? await db.$transaction(async (tx) => {
+              const updated = await tx.pictogram.update({
+                where: { id },
+                data: { code, label, iconUrl },
+              });
+              if (existing?.iconUrl !== iconUrl) {
+                await tx.mobileTab.updateMany({
+                  where: { icon: existing?.iconUrl },
+                  data: { icon: iconUrl },
+                });
+              }
+              return updated;
+            })
           : await db.pictogram.create({ data: { code, label, iconUrl } });
       } catch (error) {
         if (uploaded) {
@@ -140,6 +191,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
       }
       revalidatePath("/admin/piktogrami");
       await revalidatePictogramProducts(saved.id);
+      await revalidatePictogramNavigation(saved.id, saved.iconUrl);
       return {
         ok: true as const,
         entityId: saved.id,
@@ -150,10 +202,10 @@ async function upsert(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-async function remove(formData: FormData) {
+async function remove(_state: AdminActionState, formData: FormData) {
   "use server";
 
-  return withAdmin(
+  return withAdminState(
     { allowed: ["CONTENT"], action: "pictogram.delete", entity: "Pictogram" },
     async (_a, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
@@ -162,10 +214,27 @@ async function remove(formData: FormData) {
         where: { id },
         include: {
           products: { select: { product: { select: { slug: true } } } },
+          placements: { select: { id: true } },
+          tabs: { select: { id: true, label: true, href: true } },
         },
       });
       if (!pictogram) {
         return { ok: false as const, error: "Piktogram više ne postoji." };
+      }
+      const mobileTabs = await db.mobileTab.findMany({
+        where: { icon: pictogram.iconUrl },
+        select: { id: true, label: true, position: true },
+      });
+      const usageCount =
+        pictogram.products.length +
+        pictogram.placements.length +
+        pictogram.tabs.length +
+        mobileTabs.length;
+      if (usageCount > 0) {
+        return {
+          ok: false as const,
+          error: `Piktogram je u upotrebi (${pictogram.products.length} proizvoda, ${formatMobileShortcutCount(mobileTabs.length)}, ${pictogram.tabs.length} desktop navigacija, ${pictogram.placements.length} pozicija). Prvo uklonite te veze.`,
+        };
       }
       await db.pictogram.delete({ where: { id } });
       await removeManagedPictogramIcon(pictogram.iconUrl, {
@@ -177,20 +246,40 @@ async function remove(formData: FormData) {
       for (const relation of pictogram.products) {
         revalidatePath(`/p/${relation.product.slug}`);
       }
-      return { ok: true as const, entityId: id };
+      return {
+        ok: true as const,
+        entityId: id,
+        message: "Piktogram je obrisan.",
+      };
     },
   )(formData);
 }
 
 export default async function PictogramsPage() {
   await requireAdminAction(["CONTENT"]);
-  const items = await db.pictogram.findMany({ orderBy: { code: "asc" } });
+  const items = await db.pictogram.findMany({
+    orderBy: { code: "asc" },
+    include: {
+      _count: { select: { products: true, placements: true, tabs: true } },
+    },
+  });
+  const mobileTabIcons = items.length
+    ? await db.mobileTab.findMany({
+        where: { icon: { in: items.map((item) => item.iconUrl) } },
+        select: { icon: true },
+      })
+    : [];
+  const mobileUsageByIcon = new Map<string, number>();
+  for (const tab of mobileTabIcons) {
+    if (!tab.icon) continue;
+    mobileUsageByIcon.set(tab.icon, (mobileUsageByIcon.get(tab.icon) ?? 0) + 1);
+  }
 
   return (
     <>
       <PageHeader
         title="Piktogrami"
-        description={'Bedževi koje proizvod može da nosi (npr. „brza isporuka", „uštedi 20%").'}
+        description="Centralna biblioteka ikona. Piktogram kreirate jednom, a zatim ga birate na proizvodu, mobilnom prečacu ili desktop navigaciji; mobilni prečac ga prenosi i uz naslov odredišne stranice."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Piktogrami" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_360px]">
@@ -217,13 +306,20 @@ export default async function PictogramsPage() {
                     <p className="truncate font-mono text-[11px] text-ink-500">{p.code}</p>
                   </div>
                 </div>
+                <p className="mt-2 text-[11px] text-ink-500">
+                  Koristi se: {p._count.products} proizvoda · {formatMobileShortcutCount(mobileUsageByIcon.get(p.iconUrl) ?? 0)} · {p._count.tabs} desktop navigacija · {p._count.placements} pozicija
+                </p>
                 <PictogramForm action={upsert} values={p} />
-                <form action={remove} className="mt-2 flex justify-end">
+                <AdminActionForm action={remove} className="mt-2 flex justify-end">
                   <input type="hidden" name="id" value={p.id} />
-                  <SubmitButton variant="destructive" size="xs" pendingLabel="…">
+                  <ConfirmSubmitButton
+                    confirm={`Obrisati piktogram „${p.label}”?`}
+                    size="xs"
+                    pendingLabel="…"
+                  >
                     Obriši
-                  </SubmitButton>
-                </form>
+                  </ConfirmSubmitButton>
+                </AdminActionForm>
               </Card>
             ))
           )}

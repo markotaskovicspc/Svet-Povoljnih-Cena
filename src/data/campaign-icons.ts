@@ -76,6 +76,18 @@ export interface PromoTabPresentation extends Tab {
   iconKey?: PromoTabIconKey;
 }
 
+export function pictogramMediaAsset(
+  pictogram: Tab["pictogram"],
+): MediaAsset | undefined {
+  if (!pictogram?.iconUrl) return undefined;
+  return {
+    url: pictogram.iconUrl,
+    alt: pictogram.label,
+    width: 96,
+    height: 96,
+  };
+}
+
 const promoTabKeyByHref: Record<string, PromoTabIconKey> = {
   "/akcija": "mesecna-akcija",
   "/nedeljna-akcija": "nedeljna-akcija",
@@ -115,6 +127,14 @@ function normalizePromoTabHref(value: string) {
 }
 
 export function getPromoTabPresentation(tab: Tab): PromoTabPresentation {
+  const uploadedIcon = pictogramMediaAsset(tab.pictogram);
+  if (uploadedIcon) {
+    return {
+      ...tab,
+      iconAsset: uploadedIcon,
+    };
+  }
+
   const hrefKey = promoTabKeyByHref[normalizePromoTabHref(tab.href)];
   const labelKey = promoTabKeyByLabel[normalizePromoTabText(tab.label)];
   const iconKey = hrefKey ?? labelKey ?? (tab.id as PromoTabIconKey);

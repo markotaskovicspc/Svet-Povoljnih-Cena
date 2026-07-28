@@ -3,6 +3,7 @@ import { ListingShell } from "@/components/listing/listing-shell";
 import { newCampaignSticker } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Novo u ponudi — najsvežiji komadi",
@@ -22,15 +23,15 @@ const ROOM_TABS = [
 
 export default async function NovoPage() {
   const query = { newOnly: true };
-  const { items: products, nextCursor, total } = await listProducts({
-    ...query,
-    limit: LISTING_PAGE_SIZE,
-  });
+  const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
+    listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
+    getTabTitleIcon("/novo"),
+  ]);
   return (
     <ListingShell
       kind="novo"
       title="Novo u ponudi"
-      titleIcon={newCampaignSticker}
+      titleIcon={titleIcon ?? newCampaignSticker}
       campaignSticker="new"
       subtitle="Pristiglo u poslednjih 30 dana — najsvežiji komadi prvi."
       trail={[{ label: "Novo" }]}

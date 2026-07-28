@@ -3,6 +3,7 @@ import { ListingShell } from "@/components/listing/listing-shell";
 import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
+import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
   title: "Nedeljna akcija — sedam dana posebnih ponuda",
@@ -12,10 +13,10 @@ export const metadata: Metadata = {
 
 export default async function NedeljnaAkcijaPage() {
   const query = { actionSlug: "nedeljna-akcija" };
-  const { items: products, nextCursor, total } = await listProducts({
-    ...query,
-    limit: LISTING_PAGE_SIZE,
-  });
+  const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
+    listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
+    getTabTitleIcon("/nedeljna-akcija"),
+  ]);
   const period = products
     .flatMap((p) => (p.action ? [p.action] : []))
     .sort(
@@ -27,7 +28,7 @@ export default async function NedeljnaAkcijaPage() {
     <ListingShell
       kind="nedeljna-akcija"
       title="Nedeljna akcija"
-      titleIcon={akcijaIcon}
+      titleIcon={titleIcon ?? akcijaIcon}
       campaignSticker="action"
       headerVariant="promo"
       subtitle="Selekcija sedam dana — najatraktivnije ponude nedelje."

@@ -5,13 +5,18 @@ import { BannerPlacement } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { heroBanners, editorialBanner, protectedPricesBanner, sectionBanners } from "@/data/banners";
 import { headerTabs, mobileShortcutTabs, promoBar } from "@/data/site";
-import type { Banner, PromoBar, Tab } from "@/types";
-import { hasBannerPlacementColumn } from "@/lib/storefront/homepage-schema";
+import type { Banner, MediaAsset, PromoBar, Tab } from "@/types";
+import {
+  hasBannerPlacementColumn,
+  hasTabPictogramColumn,
+} from "@/lib/storefront/homepage-schema";
 import { normalizeStorefrontHref } from "@/lib/storefront/href";
 import {
   landingPageIsLive,
   resolveMobileTabHref,
 } from "@/lib/mobile-shortcuts/server";
+import { isMobileShortcutIconUrl } from "@/lib/mobile-shortcuts/shared";
+import { pictogramMediaAsset } from "@/data/campaign-icons";
 
 const activeWindow = (now: Date) => ({
   AND: [
@@ -223,16 +228,43 @@ async function loadActiveTabs(): Promise<Tab[]> {
   if (!hasDatabaseConnection()) return headerTabs;
 
   try {
+    const supportsPictograms = await hasTabPictogramColumn();
+    if (supportsPictograms) {
+      const rows = await db.tab.findMany({
+        where: { enabled: true },
+        orderBy: [{ order: "asc" }, { label: "asc" }],
+        include: { pictogram: true },
+      });
+      if (!rows.length) {
+        const configuredCount = await db.tab.count();
+        return configuredCount === 0 ? headerTabs : [];
+      }
+      return rows.map((row) => ({
+        id: row.id,
+        label: row.label,
+        href: normalizeStorefrontHref(row.href) ?? row.href,
+        order: row.order,
+        icon: row.icon ?? undefined,
+        pictogram: row.pictogram ?? undefined,
+      }));
+    }
+
     const rows = await db.tab.findMany({
       where: { enabled: true },
       orderBy: [{ order: "asc" }, { label: "asc" }],
+      select: {
+        id: true,
+        label: true,
+        href: true,
+        order: true,
+        icon: true,
+        enabled: true,
+      },
     });
-
     if (!rows.length) {
       const configuredCount = await db.tab.count();
       return configuredCount === 0 ? headerTabs : [];
     }
-
     return rows.map((row) => ({
       id: row.id,
       label: row.label,
@@ -324,3 +356,60 @@ const getActiveMobileTabsAcrossRequests = unstable_cache(
 );
 
 export const getActiveMobileTabs = cache(getActiveMobileTabsAcrossRequests);
+
+async function loadTabTitleIcon(href: string): Promise<MediaAsset | undefined> {
+  if (!hasDatabaseConnection()) return undefined;
+  const normalizedHref = normalizeStorefrontHref(href) ?? href;
+
+  try {
+    const mobileRows = await db.mobileTab.findMany({
+      where: { enabled: true, icon: { not: null } },
+      orderBy: { position: "asc" },
+      include: {
+        action: { select: { slug: true, kind: true } },
+        landingPage: { select: { slug: true } },
+      },
+    });
+    const mobileRow = mobileRows.find((candidate) => {
+      const candidateHref = resolveMobileTabHref(candidate);
+      return candidateHref
+        ? (normalizeStorefrontHref(candidateHref) ?? candidateHref) === normalizedHref
+        : false;
+    });
+    if (mobileRow?.icon && isMobileShortcutIconUrl(mobileRow.icon)) {
+      const pictogram = await db.pictogram.findFirst({
+        where: { iconUrl: mobileRow.icon },
+      });
+      return pictogramMediaAsset(pictogram ?? undefined) ?? {
+        url: mobileRow.icon,
+        alt: mobileRow.label,
+        width: 96,
+        height: 96,
+      };
+    }
+
+    if (!(await hasTabPictogramColumn())) return undefined;
+    const rows = await db.tab.findMany({
+      where: { pictogramId: { not: null } },
+      include: { pictogram: true },
+      orderBy: { order: "asc" },
+    });
+    const row = rows.find(
+      (candidate) =>
+        (normalizeStorefrontHref(candidate.href) ?? candidate.href) === normalizedHref,
+    );
+    return pictogramMediaAsset(row?.pictogram ?? undefined);
+  } catch (error) {
+    console.error(`Failed to load title pictogram for "${href}"`, error);
+    return undefined;
+  }
+}
+
+const getTabTitleIconAcrossRequests = unstable_cache(
+  loadTabTitleIcon,
+  ["storefront-tab-title-icon-v2"],
+  { revalidate: 60, tags: ["storefront-home"] },
+);
+
+/** Reuse a mobile-shortcut or desktop-navigation pictogram beside its destination title. */
+export const getTabTitleIcon = cache(getTabTitleIconAcrossRequests);

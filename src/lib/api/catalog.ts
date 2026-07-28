@@ -54,7 +54,10 @@ const productInclude = {
   actionPrices: { include: { action: true } },
   categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
   media: { where: { syncStatus: "READY" }, orderBy: { order: "asc" } },
-  pictograms: { include: { pictogram: true } },
+  pictograms: {
+    include: { pictogram: true },
+    orderBy: { pictogram: { label: "asc" } },
+  },
   materials: { include: { material: true } },
   assemblyCities: { include: { city: true } },
   attachments: {

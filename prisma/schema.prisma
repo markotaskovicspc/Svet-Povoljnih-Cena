@@ -603,6 +603,7 @@ model Pictogram {
 
   products   ProductPictogram[]
   placements PictogramPlacement[]
+  tabs       Tab[]
 }
 
 model ProductPictogram {
@@ -681,14 +682,18 @@ model PromoBar {
 }
 
 model Tab {
-  id      String  @id @default(cuid())
-  label   String
-  href    String
-  order   Int     @default(0)
-  icon    String?
-  enabled Boolean @default(true)
+  id          String  @id @default(cuid())
+  label       String
+  href        String
+  order       Int     @default(0)
+  icon        String?
+  pictogramId String?
+  enabled     Boolean @default(true)
+
+  pictogram Pictogram? @relation(fields: [pictogramId], references: [id], onDelete: SetNull)
 
   @@index([enabled, order])
+  @@index([pictogramId])
 }
 
 enum HomeSectionSlotKey {
