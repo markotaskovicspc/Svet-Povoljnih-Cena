@@ -131,8 +131,8 @@ test.describe("isolated admin mutation acceptance", () => {
     ]);
     await login(page);
 
-    await test.step("CMS create and confirmed delete", async () => {
-      await page.goto("/admin/sadrzaj", { waitUntil: "domcontentloaded" });
+    await test.step("CMS draft, publish and archive stay separated", async () => {
+      await page.goto("/admin/sadrzaj/nova", { waitUntil: "domcontentloaded" });
       const form = page
         .locator("form")
         .filter({ has: page.locator('input[name="slug"]') })
@@ -141,29 +141,178 @@ test.describe("isolated admin mutation acceptance", () => {
       await form.locator('input[name="title"]').fill(fixture.contentTitle);
       await form
         .locator('textarea[name="bodyMarkdown"]')
-        .fill("## QA\nPrivremeni sadržaj za proveru admin izmena.");
-      await form.getByRole("button", { name: "Sačuvaj stranicu" }).click();
-      await acceptanceExpect(form.getByRole("status")).toContainText("Sačuvano");
+        .fill("## QA {#qa}\n\nPrivremeni sadržaj za proveru admin izmena.");
+      await form.getByRole("button", { name: "Sačuvaj nacrt" }).click();
+      await acceptanceExpect(page).toHaveURL(/\/admin\/sadrzaj\/[^/]+$/);
+      const editUrl = page.url();
       await expect
-        .poll(() =>
-          db.contentPage.count({ where: { slug: fixture.contentSlug } }),
-        )
-        .toBe(1);
+        .poll(async () => {
+          const contentPage = await db.contentPage.findUnique({
+            where: { slug: fixture.contentSlug },
+            select: {
+              published: true,
+              draftRevisionId: true,
+              publishedRevisionId: true,
+              _count: { select: { revisions: true } },
+            },
+          });
+          return contentPage;
+        })
+        .toMatchObject({
+          published: false,
+          publishedRevisionId: null,
+          _count: { revisions: 1 },
+        });
 
-      const row = page.locator("tr").filter({ hasText: fixture.contentTitle });
-      const deleteButton = row.getByRole("button", { name: "Obriši" });
-      await clickConfirmation(page, deleteButton, false);
+      await page.goto(`${editUrl}/pregled`, { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        fixture.contentTitle,
+      );
+      await expect(page.getByText("Privremeni sadržaj za proveru admin izmena.")).toBeVisible();
+
+      const draftResponse = await page.goto(`/${fixture.contentSlug}`, {
+        waitUntil: "domcontentloaded",
+      });
+      expect(draftResponse?.status()).toBe(404);
+
+      await page.goto(editUrl, { waitUntil: "domcontentloaded" });
+      const editForm = page
+        .locator("form")
+        .filter({ has: page.locator('input[name="slug"]') })
+        .first();
+      const publishedTitle = `${fixture.contentTitle} objavljen`;
+      await editForm.locator('input[name="title"]').fill(publishedTitle);
+      await editForm
+        .locator('textarea[name="bodyMarkdown"]')
+        .fill("## Objavljena verzija {#objavljena}\n\nOvo je javni CMS sadržaj.");
+      await editForm.locator('input[name="seoTitle"]').fill(`${tag} SEO naslov`);
+      await editForm
+        .locator('textarea[name="seoDescription"]')
+        .fill(`${tag} SEO opis`);
+      await editForm
+        .getByRole("checkbox", { name: "Prikaži ovu stranicu u footeru" })
+        .check();
+      await editForm.locator('input[name="footerLabel"]').fill(`${tag} footer`);
+      await editForm.locator('select[name="footerColumn"]').selectOption("TERMS");
+      await editForm.locator('input[name="footerOrder"]').fill("25");
+      await clickConfirmation(
+        page,
+        editForm.getByRole("button", { name: "Objavi" }),
+        true,
+      );
+      await acceptanceExpect(editForm.getByRole("status")).toContainText(
+        "Stranica je objavljena",
+      );
       await expect
-        .poll(() =>
-          db.contentPage.count({ where: { slug: fixture.contentSlug } }),
-        )
-        .toBe(1);
-      await clickConfirmation(page, deleteButton, true);
+        .poll(async () => {
+          const contentPage = await db.contentPage.findUnique({
+            where: { slug: fixture.contentSlug },
+            select: {
+              published: true,
+              publishedRevisionId: true,
+              _count: { select: { revisions: true } },
+            },
+          });
+          return contentPage;
+        })
+        .toMatchObject({
+          published: true,
+          _count: { revisions: 2 },
+        });
+
+      const publicResponse = await page.goto(`/${fixture.contentSlug}`, {
+        waitUntil: "domcontentloaded",
+      });
+      expect(publicResponse?.status()).toBe(200);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        publishedTitle,
+      );
+      await expect(page).toHaveTitle(new RegExp(`${tag} SEO naslov`));
+      await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+        "content",
+        `${tag} SEO opis`,
+      );
+      await expect(
+        page.locator(`footer a[href="/${fixture.contentSlug}"]`),
+      ).toHaveText(`${tag} footer`);
+
+      await page.goto("/sitemap.xml", { waitUntil: "domcontentloaded" });
+      await expect(page.locator("body")).toContainText(`/${fixture.contentSlug}`);
+
+      const firstRevision = await db.contentPageRevision.findFirstOrThrow({
+        where: { page: { slug: fixture.contentSlug } },
+        orderBy: { version: "asc" },
+        select: { id: true },
+      });
+      await page.goto(editUrl, { waitUntil: "domcontentloaded" });
+      const restoreForm = page.locator("form").filter({
+        has: page.locator(
+          `input[name="revisionId"][value="${firstRevision.id}"]`,
+        ),
+      });
+      await clickConfirmation(
+        page,
+        restoreForm.getByRole("button", { name: "Vrati kao nacrt" }),
+        true,
+      );
+      await acceptanceExpect(restoreForm.getByRole("status")).toContainText(
+        "Verzija je vraćena kao novi nacrt",
+      );
       await expect
-        .poll(() =>
-          db.contentPage.count({ where: { slug: fixture.contentSlug } }),
-        )
-        .toBe(0);
+        .poll(async () => {
+          const contentPage = await db.contentPage.findUniqueOrThrow({
+            where: { slug: fixture.contentSlug },
+            select: {
+              draftRevisionId: true,
+              publishedRevisionId: true,
+              _count: { select: { revisions: true } },
+            },
+          });
+          return {
+            separated:
+              contentPage.draftRevisionId !== contentPage.publishedRevisionId,
+            revisions: contentPage._count.revisions,
+          };
+        })
+        .toEqual({ separated: true, revisions: 3 });
+
+      await page.goto(`/${fixture.contentSlug}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+        publishedTitle,
+      );
+
+      await page.goto(editUrl, { waitUntil: "domcontentloaded" });
+      await clickConfirmation(
+        page,
+        page.getByRole("button", { name: "Arhiviraj stranicu" }),
+        true,
+      );
+      await expect
+        .poll(async () => {
+          const contentPage = await db.contentPage.findUnique({
+            where: { slug: fixture.contentSlug },
+            select: { archivedAt: true, published: true },
+          });
+          return {
+            archived: Boolean(contentPage?.archivedAt),
+            published: contentPage?.published,
+          };
+        })
+        .toEqual({ archived: true, published: false });
+      const archivedResponse = await page.goto(`/${fixture.contentSlug}`, {
+        waitUntil: "domcontentloaded",
+      });
+      expect(archivedResponse?.status()).toBe(404);
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await expect(
+        page.locator(`footer a[href="/${fixture.contentSlug}"]`),
+      ).toHaveCount(0);
+      await page.goto("/sitemap.xml", { waitUntil: "domcontentloaded" });
+      await expect(page.locator("body")).not.toContainText(
+        `/${fixture.contentSlug}`,
+      );
     });
 
     await test.step("category create and product assignment", async () => {
@@ -546,8 +695,10 @@ test.describe("isolated admin mutation acceptance", () => {
       });
       const actions = new Set(audit.map((entry) => entry.action));
       for (const action of [
-        "content-page.upsert",
-        "content-page.delete",
+        "content-page.saveDraft",
+        "content-page.publish",
+        "content-page.restore",
+        "content-page.archive",
         "category.upsert",
         "product.update",
         "product.category.update",

@@ -3,6 +3,7 @@ import Image from "next/image";
 import { footerColumns, paymentMethods, socials } from "@/data/site";
 import { Marquee } from "@/components/motion/marquee";
 import { BRAND } from "@/lib/brand";
+import { getCmsFooterState } from "@/lib/cms/pages";
 
 const SOCIAL_ICON_SRC: Record<string, string> = {
   fb: "/icons/facebook.svg",
@@ -10,7 +11,60 @@ const SOCIAL_ICON_SRC: Record<string, string> = {
   tt: "/icons/tiktok.svg",
 };
 
-export function Footer() {
+const LOCKED_LINK_ORDER: Record<string, number> = {
+  "/o-nama": 10,
+  "/kontakt": 20,
+  "/pomoc": 30,
+  "/servis": 40,
+  "/reklamacije": 50,
+  "/komentari": 60,
+  "/uslovi-koriscenja": 10,
+  "/uslovi-isporuke": 20,
+  "/uslovi-kupovine": 30,
+  "/politika-privatnosti": 40,
+  "/brisanje-podataka": 50,
+};
+
+export async function Footer() {
+  const cmsFooter = await getCmsFooterState();
+  const resolvedFooterColumns = cmsFooter
+    ? footerColumns.map((column) => {
+        const cmsColumn =
+          column.title === BRAND.name
+            ? "COMPANY"
+            : column.title === "Uslovi"
+              ? "TERMS"
+              : null;
+        if (!cmsColumn) return column;
+
+        const lockedLinks = column.links
+          .filter(
+            (link) => !cmsFooter.managedSlugs.has(link.href.replace(/^\//, "")),
+          )
+          .map((link) => ({
+            ...link,
+            order: LOCKED_LINK_ORDER[link.href] ?? 999,
+          }));
+        const cmsLinks = cmsFooter.links
+          .filter((link) => link.column === cmsColumn)
+          .map((link) => ({
+            label: link.label,
+            href: `/${link.slug}`,
+            order: link.order,
+          }));
+
+        return {
+          ...column,
+          links: [...lockedLinks, ...cmsLinks]
+            .sort(
+              (left, right) =>
+                left.order - right.order || left.label.localeCompare(right.label, "sr"),
+            )
+            .map(({ label, href }) => ({ label, href })),
+        };
+      })
+    : footerColumns;
+
   return (
     <footer className="bg-white text-ink-900">
       <div className="mx-auto max-w-[var(--container-page)] px-6 py-12 md:py-16">
@@ -65,7 +119,7 @@ export function Footer() {
             aria-label="Footer navigacija"
             className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 md:col-span-8 md:grid-cols-4"
           >
-            {footerColumns.map((col) => (
+            {resolvedFooterColumns.map((col) => (
               <div key={col.title}>
                 <h3 className="font-display text-base font-bold tracking-normal text-brand-blue">
                   {col.title}

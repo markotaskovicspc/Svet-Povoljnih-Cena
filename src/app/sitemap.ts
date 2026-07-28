@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import { BRAND } from "@/lib/brand";
+import { getCmsSitemapState } from "@/lib/cms/pages";
+import { SYSTEM_CONTENT_SLUGS } from "@/lib/cms/system-pages";
 import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 
 const STATIC_PATHS = [
@@ -12,11 +14,33 @@ const STATIC_PATHS = [
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = BRAND.url.replace(/\/$/, "");
-  const entries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({
+  const cmsSitemap = await getCmsSitemapState();
+  const managedSlugs = cmsSitemap?.managedSlugs ?? new Set<string>();
+  const publishedSlugs = new Set(
+    cmsSitemap?.publishedPages.map((page) => page.slug) ?? [],
+  );
+  const entries: MetadataRoute.Sitemap = STATIC_PATHS.filter((path) => {
+    const slug = path.replace(/^\//, "");
+    return (
+      !SYSTEM_CONTENT_SLUGS.has(slug) ||
+      !managedSlugs.has(slug) ||
+      publishedSlugs.has(slug)
+    );
+  }).map((path) => ({
     url: `${base}${path}`,
     changeFrequency: path === "" ? "daily" : "monthly",
     priority: path === "" ? 1 : 0.6,
   }));
+  entries.push(
+    ...(cmsSitemap?.publishedPages ?? [])
+      .filter((page) => !SYSTEM_CONTENT_SLUGS.has(page.slug))
+      .map((page) => ({
+        url: `${base}/${page.slug}`,
+        lastModified: page.publishedAt,
+        changeFrequency: "monthly" as const,
+        priority: 0.6,
+      })),
+  );
   if (!hasDatabaseConnection()) return entries;
   try {
     const [products, categories, collections] = await Promise.all([

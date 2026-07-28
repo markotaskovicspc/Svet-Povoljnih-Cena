@@ -430,18 +430,18 @@ model Product {
   allowsAssembly  Boolean @default(false)
 
   // Supplier link (XML feed origin)
-  supplierId         String?
-  supplier           Supplier? @relation(fields: [supplierId], references: [id])
-  supplierExternalId String?
+  supplierId                  String?
+  supplier                    Supplier?                      @relation(fields: [supplierId], references: [id])
+  supplierExternalId          String?
   /// Field-level admin overrides that XML imports must not overwrite.
   /// Shape: { fields: ["name", "description", "media", ...], updatedBy, updatedAt }
-  syncOverrides      Json?
-  supplierApprovalStatus SupplierProductApprovalStatus?
-  supplierApprovedAt     DateTime?
-  supplierApprovedById   String?
-  supplierCatalogMissingCount Int       @default(0)
+  syncOverrides               Json?
+  supplierApprovalStatus      SupplierProductApprovalStatus?
+  supplierApprovedAt          DateTime?
+  supplierApprovedById        String?
+  supplierCatalogMissingCount Int                            @default(0)
   supplierCatalogMissingSince DateTime?
-  supplierStockMissingCount   Int       @default(0)
+  supplierStockMissingCount   Int                            @default(0)
   supplierStockMissingSince   DateTime?
   lastSupplierSyncAt          DateTime?
   /// Last successful item-level supplier stock observation. Catalog syncs do not update it.
@@ -942,27 +942,27 @@ enum ImportKind {
 }
 
 model ImportRun {
-  id           String       @id @default(cuid())
-  supplierId   String
-  kind         ImportKind   @default(GENERIC)
-  dryRun       Boolean      @default(false)
-  startedAt    DateTime     @default(now())
-  finishedAt   DateTime?
-  status       ImportStatus @default(RUNNING)
-  recordsRead  Int          @default(0)
-  recordsOk    Int          @default(0)
-  recordsFail  Int          @default(0)
-  errorMessage String?      @db.Text
-  errors       Json?
-  metadata     Json?
-  sourceHash   String?
-  heartbeatAt  DateTime?
-  previewRunId String?
+  id            String       @id @default(cuid())
+  supplierId    String
+  kind          ImportKind   @default(GENERIC)
+  dryRun        Boolean      @default(false)
+  startedAt     DateTime     @default(now())
+  finishedAt    DateTime?
+  status        ImportStatus @default(RUNNING)
+  recordsRead   Int          @default(0)
+  recordsOk     Int          @default(0)
+  recordsFail   Int          @default(0)
+  errorMessage  String?      @db.Text
+  errors        Json?
+  metadata      Json?
+  sourceHash    String?
+  heartbeatAt   DateTime?
+  previewRunId  String?
   requestedById String?
   rollbackOfId  String?
 
-  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  changes SupplierSyncChange[]
+  supplier Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  changes  SupplierSyncChange[]
 
   @@index([supplierId, startedAt])
   @@index([supplierId, kind, status, startedAt])
@@ -971,12 +971,12 @@ model ImportRun {
 /// Renewable lease used to prevent cron and administrators from running the
 /// same supplier sync concurrently. Acquisition is performed atomically.
 model SupplierSyncLease {
-  supplierId String
-  scope      String   @db.VarChar(32)
-  ownerRunId String
-  acquiredAt DateTime @default(now())
+  supplierId  String
+  scope       String   @db.VarChar(32)
+  ownerRunId  String
+  acquiredAt  DateTime @default(now())
   heartbeatAt DateTime @default(now())
-  expiresAt  DateTime
+  expiresAt   DateTime
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
@@ -1025,7 +1025,7 @@ model SupplierSyncChange {
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
 
-  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplier  Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   importRun ImportRun @relation(fields: [importRunId], references: [id], onDelete: Cascade)
   product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
 
@@ -1854,9 +1854,9 @@ model Warehouse {
   movements               StockMovement[]
   fiscalDocuments         FiscalDocument[]
   orderItems              OrderItem[]
-  purchaseOrdersReceiving PurchaseOrder[]  @relation("PurchaseOrderReceivingWarehouse")
-  outgoingDispatchNotes   DispatchNote[]   @relation("DispatchSourceWarehouse")
-  incomingDispatchNotes   DispatchNote[]   @relation("DispatchDestinationWarehouse")
+  purchaseOrdersReceiving PurchaseOrder[]      @relation("PurchaseOrderReceivingWarehouse")
+  outgoingDispatchNotes   DispatchNote[]       @relation("DispatchSourceWarehouse")
+  incomingDispatchNotes   DispatchNote[]       @relation("DispatchDestinationWarehouse")
   stockCounts             StockCount[]
   partnerReservations     PartnerReservation[]
 
@@ -2688,9 +2688,9 @@ model PartnerReservation {
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
 
-  client  PartnerApiClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  product Product          @relation(fields: [productId], references: [id])
-  warehouse Warehouse?     @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  client    PartnerApiClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product   Product          @relation(fields: [productId], references: [id])
+  warehouse Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
 
   @@unique([clientId, idempotencyKey])
   @@unique([clientId, externalRef])
@@ -3130,19 +3130,80 @@ model OnSaleAlert {
 // 8. CMS content pages
 // ──────────────────────────────────────────────────────────────────────
 
+enum ContentPageKind {
+  SYSTEM
+  CUSTOM
+}
+
+enum ContentPageTemplate {
+  STANDARD
+  FAQ
+}
+
+enum ContentFooterColumn {
+  COMPANY
+  TERMS
+}
+
 model ContentPage {
-  id             String   @id @default(cuid())
-  slug           String   @unique
-  title          String
-  lead           String?  @db.Text
-  bodyMarkdown   String   @db.Text
-  seoTitle       String?
-  seoDescription String?  @db.Text
-  published      Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String               @id @default(cuid())
+  slug                String               @unique
+  systemKey           String?              @unique
+  kind                ContentPageKind      @default(CUSTOM)
+  template            ContentPageTemplate  @default(STANDARD)
+  eyebrow             String?
+  heroNote            String?
+  title               String
+  lead                String?              @db.Text
+  bodyMarkdown        String               @db.Text
+  seoTitle            String?
+  seoDescription      String?              @db.Text
+  footerVisible       Boolean              @default(false)
+  footerLabel         String?
+  footerColumn        ContentFooterColumn?
+  footerOrder         Int?
+  published           Boolean              @default(false)
+  draftRevisionId     String?              @unique
+  publishedRevisionId String?              @unique
+  archivedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  revisions         ContentPageRevision[] @relation("ContentPageRevisions")
+  draftRevision     ContentPageRevision?  @relation("ContentPageDraftRevision", fields: [draftRevisionId], references: [id], onDelete: SetNull)
+  publishedRevision ContentPageRevision?  @relation("ContentPagePublishedRevision", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
 
   @@index([published, updatedAt])
+  @@index([kind, archivedAt])
+  @@index([footerVisible, footerColumn, footerOrder])
+}
+
+model ContentPageRevision {
+  id             String               @id @default(cuid())
+  pageId         String
+  version        Int
+  eyebrow        String?
+  heroNote       String?
+  title          String
+  lead           String?              @db.Text
+  bodyMarkdown   String               @db.Text
+  seoTitle       String?
+  seoDescription String?              @db.Text
+  footerVisible  Boolean              @default(false)
+  footerLabel    String?
+  footerColumn   ContentFooterColumn?
+  footerOrder    Int?
+  createdById    String?
+  createdAt      DateTime             @default(now())
+
+  page         ContentPage  @relation("ContentPageRevisions", fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy    AdminUser?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  draftFor     ContentPage? @relation("ContentPageDraftRevision")
+  publishedFor ContentPage? @relation("ContentPagePublishedRevision")
+
+  @@unique([pageId, version])
+  @@index([pageId, createdAt])
+  @@index([createdById, createdAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -3168,8 +3229,9 @@ model AdminUser {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  auditLogs  AuditLog[]
-  savedViews AdminSavedView[]
+  auditLogs        AuditLog[]
+  savedViews       AdminSavedView[]
+  contentRevisions ContentPageRevision[]
 }
 
 model AdminSavedView {
