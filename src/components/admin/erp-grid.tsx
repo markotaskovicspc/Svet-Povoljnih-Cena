@@ -916,6 +916,7 @@ export function ErpGrid({
       aria-busy={!clientReady}
       data-client-ready={clientReady ? "true" : "false"}
     >
+      <fieldset className="contents" disabled={!clientReady}>
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
         <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
@@ -1191,12 +1192,13 @@ export function ErpGrid({
                       value={commandInput[field.key] ?? ""}
                       required={field.required}
                       disabled={Boolean(runningCommand)}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
                         setCommandInput((current) => ({
                           ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
+                          [field.key]: value,
+                        }));
+                      }}
                       className="h-9 rounded-lg border border-input bg-surface px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
                     >
                       <option value="">Izaberite vrednost</option>
@@ -1215,12 +1217,13 @@ export function ErpGrid({
                       min={field.min}
                       step={field.step}
                       disabled={Boolean(runningCommand)}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
                         setCommandInput((current) => ({
                           ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
+                          [field.key]: value,
+                        }));
+                      }}
                     />
                   )}
                 </label>
@@ -1796,6 +1799,7 @@ export function ErpGrid({
           ) : null}
         </aside>
       </div>
+      </fieldset>
     </div>
   );
 }

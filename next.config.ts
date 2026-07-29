@@ -56,6 +56,32 @@ function getSupabaseImagePattern() {
 }
 
 const supabaseImagePattern = getSupabaseImagePattern();
+const supabaseOrigin = (() => {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.origin
+      : null;
+  } catch {
+    return null;
+  }
+})();
+const upgradeInsecureRequests = (() => {
+  const raw =
+    process.env.AUTH_URL ??
+    process.env.NEXTAUTH_URL ??
+    process.env.NEXT_PUBLIC_BASE_URL;
+  if (!raw) return process.env.NODE_ENV === "production";
+
+  try {
+    return new URL(raw).protocol === "https:";
+  } catch {
+    return process.env.NODE_ENV === "production";
+  }
+})();
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -66,11 +92,11 @@ const contentSecurityPolicy = [
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  "img-src 'self' data: blob: https://*.supabase.co https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com",
-  "connect-src 'self' https://*.supabase.co https://www.google-analytics.com https://region1.google-analytics.com",
-  "media-src 'self' https://*.supabase.co",
+  `img-src 'self' data: blob: https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com`,
+  `connect-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com`,
+  `media-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "worker-src 'self' blob:",
-  "upgrade-insecure-requests",
+  ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
 
 const securityHeaders = [

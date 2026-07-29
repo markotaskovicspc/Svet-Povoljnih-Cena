@@ -1,3 +1,4 @@
+// Acceptance: EXT-GLS-01
 import {
   expect as baseExpect,
   test,

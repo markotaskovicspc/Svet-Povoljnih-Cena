@@ -1,3 +1,4 @@
+// Acceptance: CONTENT-10
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";

@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import {
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -23,6 +28,16 @@ type EditableLine = SalesOrderFormLine & {
   loading: boolean;
   error: string;
 };
+
+const subscribeToClientRuntime = () => () => {};
+
+function useClientReady() {
+  return useSyncExternalStore(
+    subscribeToClientRuntime,
+    () => true,
+    () => false,
+  );
+}
 
 function emptyProduct(): SalesOrderProductData {
   return {
@@ -108,6 +123,7 @@ export function SalesOrderForm({
   readOnly?: boolean;
   initialChannel?: "VP" | "INO";
 }) {
+  const clientReady = useClientReady();
   const [channel, setChannel] = useState<"WEB" | "ANANAS" | "VP" | "INO">(
     detail?.channel === "WEB" ||
       detail?.channel === "ANANAS" ||
@@ -364,7 +380,14 @@ export function SalesOrderForm({
   };
 
   return (
-    <form className="space-y-6" onSubmit={submit}>
+    <form
+      className="space-y-6"
+      onSubmit={submit}
+      inert={!clientReady}
+      aria-busy={!clientReady}
+      data-client-ready={clientReady ? "true" : "false"}
+    >
+      <fieldset className="contents" disabled={!clientReady}>
       {message ? (
         <p
           role={message.ok ? "status" : "alert"}
@@ -781,6 +804,7 @@ export function SalesOrderForm({
           </div>
         </div>
       </Card>
+      </fieldset>
     </form>
   );
 }

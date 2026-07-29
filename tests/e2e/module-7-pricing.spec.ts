@@ -1,3 +1,9 @@
+// Acceptance: PRICE-01
+// Acceptance: PRICE-02
+// Acceptance: PRICE-03
+// Acceptance: PRICE-04
+// Acceptance: PRICE-05
+// Acceptance: ACC-05
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

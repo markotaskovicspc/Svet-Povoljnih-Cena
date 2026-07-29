@@ -1,3 +1,8 @@
+// Acceptance: BUY-02
+// Acceptance: BUY-03
+// Acceptance: BUY-04
+// Acceptance: BUY-05
+// Acceptance: BUY-07
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

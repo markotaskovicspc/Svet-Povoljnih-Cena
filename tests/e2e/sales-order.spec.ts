@@ -1,3 +1,5 @@
+// Acceptance: SALE-01
+// Acceptance: SALE-02
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -390,6 +392,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await expect(
         page.getByRole("heading", { name: "Nova porudžbina" }),
       ).toBeVisible();
+      await expect(page.locator('form[data-client-ready="true"]')).toHaveCount(1);
       await page.getByLabel("Kupac").selectOption(customerId);
       await page.getByLabel("Cenovnik").selectOption(priceListId);
       await expect(

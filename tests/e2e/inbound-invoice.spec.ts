@@ -1,3 +1,6 @@
+// Acceptance: COGS-01
+// Acceptance: COGS-02
+// Acceptance: ACC-04
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

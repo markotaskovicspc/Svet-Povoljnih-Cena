@@ -73,6 +73,9 @@ export async function POST(request: Request) {
     if (!product) throw new ReservationRequestError("Artikal nije pronađen.", 404);
 
     const outcome = await db.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${product.id} FOR UPDATE`,
+      );
       const existing = await tx.partnerReservation.findUnique({
         where: {
           clientId_idempotencyKey: {
@@ -83,9 +86,6 @@ export async function POST(request: Request) {
       });
       if (existing) return { reservation: existing, idempotent: true };
 
-      await tx.$queryRaw(
-        Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${product.id} FOR UPDATE`,
-      );
       const warehouse = await tx.warehouse.findFirst({
         where: { active: true },
         orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],

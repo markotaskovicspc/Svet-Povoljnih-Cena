@@ -1,3 +1,6 @@
+// Acceptance: CONTENT-04
+// Acceptance: EXISTING-01
+// Acceptance: EXISTING-02
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -161,7 +164,9 @@ test.describe("isolated admin mutation acceptance", () => {
         .locator('textarea[name="bodyMarkdown"]')
         .fill("## QA {#qa}\n\nPrivremeni sadržaj za proveru admin izmena.");
       await form.getByRole("button", { name: "Sačuvaj nacrt" }).click();
-      await acceptanceExpect(page).toHaveURL(/\/admin\/sadrzaj\/[^/]+$/);
+      await acceptanceExpect(page).toHaveURL(
+        /\/admin\/sadrzaj\/(?!nova(?:[/?#]|$))[^/?#]+$/,
+      );
       const editUrl = page.url();
       await expect
         .poll(async () => {
@@ -365,15 +370,18 @@ test.describe("isolated admin mutation acceptance", () => {
         });
     });
 
-    await test.step("product fields, price, stock and category", async () => {
+    await test.step("product fields, audited stock correction and category", async () => {
       await page.goto(`/admin/erp/artikli/${productId}`, {
         waitUntil: "domcontentloaded",
       });
       await page
         .getByRole("textbox", { name: "Kratki naziv", exact: true })
         .fill(fixture.productUpdatedName);
-      await page.getByLabel("Puna cena (RSD)").fill("1299");
-      await page.getByLabel("Stanje").fill("7");
+      await page.locator('input[name="stock"]').fill("7");
+      await page
+        .getByLabel("Razlog ručne korekcije DC stanja")
+        .fill("QA acceptance korekcija izolovanog DC stanja");
+      await page.locator('select[name="categoryId"]').selectOption(categoryId!);
       await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
       await acceptanceExpect(page.getByRole("status")).toContainText(
         "Proizvod je sačuvan",
@@ -399,19 +407,10 @@ test.describe("isolated admin mutation acceptance", () => {
         .toEqual({
           name: `QA fixture ${fixture.productUpdatedName}`,
           shortName: fixture.productUpdatedName,
-          fullPrice: 1299,
+          fullPrice: 1000,
           stock: 7,
         });
 
-      await page
-        .getByLabel("Promeni kategoriju")
-        .selectOption(categoryId!);
-      await page
-        .getByRole("button", { name: "Sačuvaj kategoriju" })
-        .click();
-      await acceptanceExpect(page.getByRole("status").last()).toContainText(
-        "Kategorija proizvoda je sačuvana",
-      );
       await expect
         .poll(() =>
           db.productCategory.count({
@@ -719,7 +718,6 @@ test.describe("isolated admin mutation acceptance", () => {
         "content-page.archive",
         "category.upsert",
         "product.update",
-        "product.category.update",
         "product.media.create",
         "product.media.delete",
         "delivery.upsert",

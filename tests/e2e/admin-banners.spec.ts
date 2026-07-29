@@ -1,3 +1,4 @@
+// Acceptance: CONTENT-01
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";

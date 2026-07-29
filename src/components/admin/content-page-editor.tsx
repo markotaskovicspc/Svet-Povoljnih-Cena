@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Field } from "@/components/admin/field";
@@ -35,6 +35,16 @@ type ContentPageEditorValues = {
   lockedSlug: boolean;
 };
 
+const subscribeToClientRuntime = () => () => {};
+
+function useClientReady() {
+  return useSyncExternalStore(
+    subscribeToClientRuntime,
+    () => true,
+    () => false,
+  );
+}
+
 export function ContentPageEditor({
   action,
   values,
@@ -44,6 +54,7 @@ export function ContentPageEditor({
   values: ContentPageEditorValues;
   previewHref?: string;
 }) {
+  const clientReady = useClientReady();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [slug, setSlug] = useState(values.slug);
   const [eyebrow, setEyebrow] = useState(values.eyebrow ?? "");
@@ -73,6 +84,7 @@ export function ContentPageEditor({
 
   return (
     <AdminActionForm action={action} className="space-y-6">
+      <fieldset className="contents" disabled={!clientReady}>
       {values.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.82fr)]">
         <div className="space-y-6">
@@ -285,6 +297,7 @@ export function ContentPageEditor({
           Čuvanje nacrta ne menja javni sajt.
         </p>
       </div>
+      </fieldset>
     </AdminActionForm>
   );
 }

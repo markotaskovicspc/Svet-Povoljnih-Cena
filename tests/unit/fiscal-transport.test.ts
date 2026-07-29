@@ -1,3 +1,6 @@
+// Acceptance: FISC-01
+// Acceptance: FISC-02
+// Acceptance: FISC-03
 import { afterEach, describe, expect, it } from "vitest";
 
 import { __resetFiscalConfig } from "@/lib/fiscal/config";

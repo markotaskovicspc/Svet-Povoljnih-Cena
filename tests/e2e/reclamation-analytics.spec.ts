@@ -1,3 +1,11 @@
+// Acceptance: DASH-01
+// Acceptance: SERVICE-01
+// Acceptance: REPORT-01
+// Acceptance: REPORT-02
+// Acceptance: REPORT-03
+// Acceptance: REPORT-04
+// Acceptance: REPORT-05
+// Acceptance: ANALYTICS-01
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

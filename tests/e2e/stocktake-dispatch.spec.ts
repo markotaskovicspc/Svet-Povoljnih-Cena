@@ -1,3 +1,5 @@
+// Acceptance: LOG-02
+// Acceptance: STOCK-03
 import { expect as baseExpect, test } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

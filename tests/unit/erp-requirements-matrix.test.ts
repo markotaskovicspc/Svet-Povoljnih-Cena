@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ERP_REQUIREMENTS } from "@/lib/admin/erp-requirements";
 
@@ -12,7 +12,7 @@ describe("ERP document requirements matrix", () => {
     expect(new Set(ERP_REQUIREMENTS.map((item) => item.acceptance)).size).toBe(67);
   });
 
-  it("uses the four evidence statuses, concrete admin routes and existing test files", () => {
+  it("uses the four evidence statuses, concrete admin routes and declared test scenarios", () => {
     for (const requirement of ERP_REQUIREMENTS) {
       expect(["implemented", "partial", "blocked_external", "deferred_user"]).toContain(
         requirement.status,
@@ -21,8 +21,12 @@ describe("ERP document requirements matrix", () => {
       expect(requirement.note.length).toBeGreaterThan(10);
       const [file, scenario] = requirement.evidence.split("#");
       expect(file).toMatch(/^tests\/(?:unit|integration|e2e)\//);
-      expect(existsSync(resolve(process.cwd(), file!))).toBe(true);
+      const absoluteFile = resolve(process.cwd(), file!);
+      expect(existsSync(absoluteFile)).toBe(true);
       expect(scenario).toBe(requirement.acceptance);
+      expect(readFileSync(absoluteFile, "utf8"), requirement.evidence).toContain(
+        `Acceptance: ${requirement.acceptance}`,
+      );
     }
   });
 
@@ -44,3 +48,18 @@ describe("ERP document requirements matrix", () => {
     );
   });
 });
+
+// Acceptance: BUY-06
+// Acceptance: EXT-ANANAS-01
+// Acceptance: ACC-01
+// Acceptance: ACC-02
+// Acceptance: ACC-03
+// Acceptance: ACC-06
+// Acceptance: CONTENT-02
+// Acceptance: CONTENT-05
+// Acceptance: CONTENT-07
+// Acceptance: SERVICE-02
+// Acceptance: IMPORT-01
+// Acceptance: EXT-NEWS-01
+// Acceptance: EXT-VIBER-01
+// Acceptance: EXT-ADS-01

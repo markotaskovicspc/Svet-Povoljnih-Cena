@@ -1,3 +1,4 @@
+// Acceptance: BUY-01
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";

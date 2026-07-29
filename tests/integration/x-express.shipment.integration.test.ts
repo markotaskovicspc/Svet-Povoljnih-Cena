@@ -1,3 +1,4 @@
+// Acceptance: LOG-03
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

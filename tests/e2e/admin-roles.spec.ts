@@ -1,3 +1,4 @@
+// Acceptance: SEC-01
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type AdminRole } from "@prisma/client";

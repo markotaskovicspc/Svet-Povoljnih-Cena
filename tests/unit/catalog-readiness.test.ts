@@ -1,3 +1,4 @@
+// Acceptance: QA-01
 import { describe, expect, it } from "vitest";
 import { getCatalogReadiness } from "@/lib/catalog-readiness";
 

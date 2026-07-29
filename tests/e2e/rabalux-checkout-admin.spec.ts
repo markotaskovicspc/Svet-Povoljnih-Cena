@@ -76,6 +76,9 @@ test.describe("Rabalux checkout and admin acceptance", () => {
         packHeightCm: 12,
         stock: 0,
         supplierStock: 3,
+        supplierApprovalStatus: "APPROVED",
+        supplierApprovedAt: new Date(),
+        lastSupplierStockSyncAt: new Date(),
         supplierId: supplier.id,
         supplierExternalId: fixture.sourceSku,
         isActive: true,
@@ -169,8 +172,8 @@ test.describe("Rabalux checkout and admin acceptance", () => {
         consent: true,
       },
     });
-    expect(checkout.status()).toBe(201);
     const payload = await checkout.json();
+    expect(checkout.status(), JSON.stringify(payload)).toBe(201);
     expect(payload.ok).toBe(true);
     orderId = payload.data.id;
 
