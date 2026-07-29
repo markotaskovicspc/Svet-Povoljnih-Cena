@@ -176,14 +176,14 @@ test.describe("Rabalux checkout and admin acceptance", () => {
 
     await page.goto(
       `/admin/prijava?callbackUrl=${encodeURIComponent(
-        `/admin/narudzbine/${orderId}`,
+        `/admin/erp/prodajni-nalozi/${orderId}`,
       )}`,
       { waitUntil: "domcontentloaded" },
     );
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/narudzbine/${orderId}$`), {
+    await expect(page).toHaveURL(new RegExp(`/admin/erp/prodajni-nalozi/${orderId}$`), {
       timeout: 30_000,
     });
     const pickupForms = page.locator("form").filter({

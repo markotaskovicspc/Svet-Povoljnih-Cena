@@ -202,6 +202,30 @@ describe("X Express official API contract", () => {
     expect(payload).not.toHaveProperty("Options");
   });
 
+  it("reverses customer and warehouse for a reclamation return without COD", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "reclamation-return-1",
+      trackingCodes: ["AAA0850300000"],
+      order,
+      townId: 791113,
+      officialStreetName: "Bulevar oslobođenja",
+      purpose: "RECLAMATION_RETURN",
+    });
+
+    expect(payload).not.toHaveProperty("Options");
+    expect(payload.Sender.Name).toBe("Petar Petrović");
+    expect(payload.Recipient.Name).toBe("Svet povoljnih cena");
+    expect(payload.Waypoints[0]).toMatchObject({
+      WaypointType: "PICKUP",
+      Address: { TownId: 791113, StreetName: "Bulevar oslobođenja" },
+    });
+    expect(payload.Waypoints[1]).toMatchObject({
+      WaypointType: "DELIVERY",
+      Address: { TownId: 703907, StreetName: "Vojvođanska" },
+    });
+  });
+
   it("normalizes Serbian phone and splits street number", () => {
     expect(normalizeXExpressPhone("+381 (64) 123-4567")).toBe("381641234567");
     expect(normalizeXExpressPhone("064 123 4567")).toBe("381641234567");

@@ -529,6 +529,7 @@ async function loadOrderForFiscal(orderId: string) {
               sizeLabel: true,
               colorPrimary: true,
               colorSecondary: true,
+              cogs: true,
               supplier: { select: { name: true } },
               group: { select: { name: true } },
               collection: { select: { name: true } },
@@ -694,11 +695,20 @@ function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: 
       sku: SHIPPING_SKU,
       shortName: SHIPPING_NAME,
       warehouseName,
+      unitCogs: null,
+      serviceGross: decimal(line.totalGross),
     };
   }
 
   const product = line.item.product;
   const category = product?.categories[0]?.category ?? null;
+  const assemblyUnit = line.item.withAssembly
+    ? num(line.item.assemblyPrice ?? 0)
+    : 0;
+  const undiscountedUnit = num(line.item.unitPriceSale) + assemblyUnit;
+  const serviceGross = undiscountedUnit > 0
+    ? money(line.totalGross * (assemblyUnit / undiscountedUnit))
+    : 0;
   return {
     ...customer,
     ...amounts,
@@ -720,6 +730,8 @@ function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: 
     color1: line.item.color1 ?? product?.colorPrimary ?? null,
     color2: line.item.color2 ?? product?.colorSecondary ?? null,
     warehouseName,
+    unitCogs: product?.cogs ?? null,
+    serviceGross: decimal(serviceGross),
   };
 }
 
@@ -757,6 +769,10 @@ function refundLineCreate(line: FiscalDocumentLine, qty: number, warehouseName: 
     color1: line.color1,
     color2: line.color2,
     warehouseName,
+    unitCogs: line.unitCogs,
+    serviceGross: decimal(
+      line.qty > 0 ? money((num(line.serviceGross) * qty) / line.qty) : 0,
+    ),
     qty,
     vatRate: line.vatRate,
     unitPriceGross: line.unitPriceGross,

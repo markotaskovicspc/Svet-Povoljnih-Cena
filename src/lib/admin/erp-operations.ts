@@ -1,6 +1,11 @@
 import { DispatchNoteType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import type { ErpColumn, ErpModule, ErpRow } from "@/lib/admin/erp";
+import type {
+  ErpColumn,
+  ErpModule,
+  ErpRow,
+  SalesOrderExportFilters,
+} from "@/lib/admin/erp";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
 import {
   STOCK_MOVEMENT_KIND_LABELS,
@@ -19,6 +24,7 @@ import {
   STOCKTAKE_DESTINATION_NAME,
   STOCKTAKE_STATUS_LABEL,
 } from "@/lib/admin/stocktake-dispatch";
+import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -106,6 +112,27 @@ export const operationalErpModules: ErpModule[] = [
     ],
     editableColumns: ["code", "name", "kind", "currency", "validFrom", "validTo", "active"],
     detailHrefBase: "/admin/cenovnici",
+    rows: emptyRows,
+  },
+  {
+    slug: "akcije",
+    number: "7",
+    title: "Akcije",
+    description: "Kanonski listovni pregled akcija; izbor reda otvara postojeći kompletan editor.",
+    status: "ready",
+    commands: [],
+    columns: [
+      text("name", "Naziv"),
+      text("slug", "Slug"),
+      status("kind", "Vrsta"),
+      number("priority", "Prioritet"),
+      number("sortOrder", "Redosled"),
+      number("products", "Artikli"),
+      bool("isHero", "Hero"),
+      bool("isPermanent", "Trajna"),
+      date("startsAt", "Početak"),
+      date("endsAt", "Kraj"),
+    ],
     rows: emptyRows,
   },
   {
@@ -626,7 +653,7 @@ export const operationalErpModules: ErpModule[] = [
     description: "QA izveštaj sa preciznim razlogom zbog kog artikal ne može na prodavnicu.",
     status: "ready",
     commands: [],
-    detailHrefBase: "/admin/proizvodi",
+    detailHrefBase: "/admin/erp/artikli",
     columns: [
       text("sku", "SKU"),
       text("name", "Naziv"),
@@ -645,7 +672,15 @@ export const operationalErpModules: ErpModule[] = [
     title: "Heroji meseca",
     description: "Mesečni izbor hero artikala povezan sa akcijom i redosledom prikaza.",
     status: "ready",
-    commands: [],
+    commands: [
+      {
+        label: "Obriši",
+        tone: "danger",
+        action: "row.delete",
+        needsSelection: true,
+        confirm: "Obrisati izabrane hero artikle meseca?",
+      },
+    ],
     columns: [
       number("year", "Godina"),
       number("month", "Mesec"),
@@ -785,11 +820,18 @@ export const operationalErpModules: ErpModule[] = [
       text("order", "Porudžbina"),
       text("customer", "Kupac"),
       text("sku", "SKU"),
+      text("productName", "Naziv artikla"),
+      number("quantity", "Količina"),
+      text("description", "Opis"),
       status("type", "Vrsta"),
       status("request", "Zahtev"),
       status("decision", "Odluka"),
       status("resolution", "Rešenje"),
       status("status", "Status"),
+      text("adminNote", "Interna napomena"),
+      text("resolutionNote", "Napomena o rešenju"),
+      text("warehouse", "Magacin"),
+      status("warehouseStatus", "Status pripreme"),
       date("respondedAt", "Odgovoreno"),
       date("resolvedAt", "Rešeno"),
       date("createdAt", "Primljeno"),
@@ -839,6 +881,7 @@ function dateTime(value: Date | null | undefined) {
 export async function getOperationalErpRows(
   slug: string,
   take = 100,
+  salesOrderFilters?: SalesOrderExportFilters,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "sifarnici-artikala":
@@ -847,6 +890,8 @@ export async function getOperationalErpRows(
       return priceListRows(take);
     case "akcijske-cene":
       return actionPriceRows(take);
+    case "akcije":
+      return actionRows(take);
     case "loyalty":
       return loyaltyRows(take);
     case "linearne-promocije":
@@ -860,7 +905,7 @@ export async function getOperationalErpRows(
     case "popisi":
       return stocktakeDispatchRows(take);
     case "prodajni-nalozi":
-      return salesOrderRows(take);
+      return salesOrderRows(take, salesOrderFilters);
     case "otpremnice":
       return dispatchRows(take);
     case "preuzimanja":
@@ -956,6 +1001,30 @@ async function actionPriceRows(take: number): Promise<ErpRow[]> {
       salePrice: decimal(row.salePrice),
       startsAt: dateOnly(row.action.startsAt),
       endsAt: dateOnly(row.action.endsAt),
+    },
+  }));
+}
+
+async function actionRows(take: number): Promise<ErpRow[]> {
+  const rows = await db.action.findMany({
+    take,
+    orderBy: [{ priority: "desc" }, { startsAt: "desc" }],
+    include: { _count: { select: { actionPrices: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    cellHrefs: { name: `/admin/erp/akcije?edit=${encodeURIComponent(row.id)}` },
+    values: {
+      name: row.name,
+      slug: row.slug,
+      kind: row.kind,
+      priority: row.priority,
+      sortOrder: row.sortOrder,
+      products: row._count.actionPrices,
+      isHero: row.isHero,
+      isPermanent: row.isPermanent,
+      startsAt: dateTime(row.startsAt),
+      endsAt: dateTime(row.endsAt),
     },
   }));
 }
@@ -1204,14 +1273,78 @@ async function stocktakeDispatchRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function salesOrderRows(take: number): Promise<ErpRow[]> {
+async function salesOrderRows(
+  take: number,
+  filters?: SalesOrderExportFilters,
+): Promise<ErpRow[]> {
+  const createdAt =
+    filters?.createdFrom || filters?.createdToExclusive
+      ? {
+          ...(filters.createdFrom ? { gte: filters.createdFrom } : {}),
+          ...(filters.createdToExclusive ? { lt: filters.createdToExclusive } : {}),
+        }
+      : undefined;
+  const fiscalizedWhere = filters?.fiscalized === true
+    ? {
+        OR: [
+          { fiscal: { isNot: null } },
+          { fiscalDocuments: { some: { kind: "SALE" as const, status: "ISSUED" as const } } },
+        ],
+      }
+    : filters?.fiscalized === false
+      ? {
+          fiscal: { is: null },
+          fiscalDocuments: { none: { kind: "SALE" as const, status: "ISSUED" as const } },
+        }
+      : {};
+  const fiscalIssuedWhere =
+    filters?.fiscalIssuedFrom || filters?.fiscalIssuedToExclusive
+      ? {
+          OR: [
+            {
+              fiscal: {
+                is: {
+                  fiscalizedAt: {
+                    ...(filters.fiscalIssuedFrom ? { gte: filters.fiscalIssuedFrom } : {}),
+                    ...(filters.fiscalIssuedToExclusive
+                      ? { lt: filters.fiscalIssuedToExclusive }
+                      : {}),
+                  },
+                },
+              },
+            },
+            {
+              fiscalDocuments: {
+                some: {
+                  kind: "SALE" as const,
+                  status: "ISSUED" as const,
+                  issuedAt: {
+                    ...(filters.fiscalIssuedFrom ? { gte: filters.fiscalIssuedFrom } : {}),
+                    ...(filters.fiscalIssuedToExclusive
+                      ? { lt: filters.fiscalIssuedToExclusive }
+                      : {}),
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {};
   const orders = await db.order.findMany({
+    where: {
+      ...(createdAt ? { createdAt } : {}),
+      ...(filters?.warehouseId
+        ? { items: { some: { warehouseId: filters.warehouseId } } }
+        : {}),
+      AND: [fiscalizedWhere, fiscalIssuedWhere],
+    },
     take,
     orderBy: { createdAt: "desc" },
     include: {
       customer: true,
       priceList: { select: { code: true, name: true, currency: true } },
       items: {
+        ...(filters?.warehouseId ? { where: { warehouseId: filters.warehouseId } } : {}),
         orderBy: { id: "asc" },
         include: {
           warehouse: { select: { name: true } },
@@ -1495,12 +1628,28 @@ function providerRow(provider: string, keys: string[]): ErpRow {
   };
 }
 
+function eotpremnicaProviderRow(): ErpRow {
+  const gate = resolveEotpremnicaGate();
+  const missing = ["EOTPREMNICA_BASE_URL", "EOTPREMNICA_API_KEY"].filter(
+    (key) => !configured(process.env[key]),
+  );
+  if (!gate.allowed) missing.unshift(gate.reason);
+  return {
+    id: "EOTPREMNICA",
+    values: {
+      provider: "EOTPREMNICA",
+      status: missing.length ? "NOT_CONFIGURED" : "HEALTHY",
+      missing: missing.join(", ") || "—",
+      message: missing.length
+        ? "Slanje je zaključano dok sandbox ili zasebno prihvaćena produkcija nisu potpuno konfigurisani."
+        : `Konfigurisan je ${gate.allowed ? gate.mode : "isključen"} režim; aktivni contract test tek potvrđuje spremnost.`,
+    },
+  };
+}
+
 async function integrationRows(): Promise<ErpRow[]> {
   return [
-    providerRow("EOTPREMNICA", [
-      "EOTPREMNICA_BASE_URL",
-      "EOTPREMNICA_API_KEY",
-    ]),
+    eotpremnicaProviderRow(),
     providerRow("ANANAS", ["ANANAS_BASE_URL", "ANANAS_API_KEY"]),
     providerRow("MYGLS_PICKUP", [
       "MYGLS_USERNAME",
@@ -1753,7 +1902,12 @@ async function reclamationRows(take: number): Promise<ErpRow[]> {
   const rows = await db.reclamation.findMany({
     take,
     orderBy: { createdAt: "desc" },
-    include: { order: { select: { number: true } } },
+    include: {
+      order: { select: { number: true } },
+      orderItem: { select: { name: true } },
+      product: { select: { name: true } },
+      warehouse: { select: { code: true, name: true } },
+    },
   });
   return rows.map((row) => ({
     id: row.id,
@@ -1762,11 +1916,20 @@ async function reclamationRows(take: number): Promise<ErpRow[]> {
       order: row.order.number,
       customer: `${row.customerFirst} ${row.customerLast}`.trim(),
       sku: row.sku,
+      productName: row.orderItem?.name ?? row.product?.name ?? row.sku,
+      quantity: row.quantity,
+      description: row.description,
       type: row.type,
       request: row.request,
       decision: row.decision,
       resolution: row.resolution,
       status: row.status,
+      adminNote: row.adminNote,
+      resolutionNote: row.resolutionNote,
+      warehouse: row.warehouse
+        ? `${row.warehouse.code} · ${row.warehouse.name}`
+        : null,
+      warehouseStatus: row.warehouseStatus,
       respondedAt: dateTime(row.respondedAt),
       resolvedAt: dateTime(row.resolvedAt),
       createdAt: dateTime(row.createdAt),

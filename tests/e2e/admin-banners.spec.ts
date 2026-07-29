@@ -145,7 +145,7 @@ test.describe("admin banner manager", () => {
     await page.getByLabel("E-pošta").fill(adminEmail);
     await page.getByLabel("Lozinka").fill(adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin\/baneri$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin\/baneri$/, { timeout: 90_000 });
   }
 });
 

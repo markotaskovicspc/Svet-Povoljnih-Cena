@@ -17,7 +17,7 @@ import {
 } from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { articleSlug } from "@/lib/article-master";
-import { normalizeArticleSku } from "@/lib/article-sku";
+import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 import {
   createPurchasePrice,
@@ -103,7 +103,7 @@ async function runCommand(
     case "row.delete":
       return deleteRows(module, ids);
     case "article.create":
-      return createArticle(input);
+      return createArticle();
     case "lookup.create":
       return createLookupValue();
     case "supplier.create":
@@ -300,6 +300,10 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
     case "landing-sekcije":
       count = (await db.landingPageSection.deleteMany({ where })).count;
       break;
+    case "heroji-meseca":
+      count = (await db.heroOfMonth.deleteMany({ where })).count;
+      revalidatePath("/heroji-meseca");
+      break;
     case "newsletter-kampanje":
       count = (
         await db.newsletterCampaign.deleteMany({
@@ -313,16 +317,10 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
   return { message: `Obrisano: ${count}.` };
 }
 
-async function createArticle(input: PurchasePriceCommandInput): Promise<CommandResult> {
-  const sku = normalizeArticleSku(input.sku);
-  const duplicate = await db.product.findFirst({
-    where: { sku: { equals: sku, mode: "insensitive" } },
-    select: { id: true },
-  });
-  if (duplicate) throw new Error(`Artikal sa šifrom ${sku} već postoji.`);
-  let product;
-  try {
-    product = await db.product.create({
+async function createArticle(): Promise<CommandResult> {
+  const product = await db.$transaction(async (tx) => {
+    const sku = await nextArticleSku(tx);
+    return tx.product.create({
       data: {
         sku,
         slug: `${articleSlug(sku)}-${randomBytes(3).toString("hex")}`,
@@ -334,16 +332,11 @@ async function createArticle(input: PurchasePriceCommandInput): Promise<CommandR
         isActive: false,
       },
     });
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new Error(`Artikal sa šifrom ${sku} već postoji.`);
-    }
-    throw error;
-  }
+  });
   return {
     message: `Artikal ${product.sku} je kreiran neobjavljen. Dopunite obavezna polja.`,
     createdId: product.id,
-    redirect: `/admin/proizvodi/${product.id}`,
+    redirect: `/admin/erp/artikli/${product.id}`,
   };
 }
 

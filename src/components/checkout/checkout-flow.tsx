@@ -42,6 +42,7 @@ import { VoucherSection } from "./voucher-section";
 import { PaymentMethodStep } from "./payment-method";
 import { NotesConsent } from "./notes-consent";
 import { OrderSummary, computeTotals } from "./order-summary";
+import { getConsentedAnalyticsContext } from "@/components/analytics/first-party-analytics";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -420,6 +421,7 @@ export function CheckoutFlow({
           data,
           lines,
           checkoutSessionId ?? getCheckoutSessionId(),
+          getConsentedAnalyticsContext(),
         ),
       ),
     });
@@ -919,6 +921,7 @@ function buildCreateOrderPayload(
   data: CheckoutFormData,
   lines: ReturnType<typeof useCart.getState>["lines"],
   checkoutSessionId?: string | null,
+  analytics?: ReturnType<typeof getConsentedAnalyticsContext>,
 ) {
   const shipping = addressForApi(data.shipping);
   const billing =
@@ -942,6 +945,7 @@ function buildCreateOrderPayload(
     voucherCode: data.voucherCode || undefined,
     notes: data.notes || undefined,
     consent: data.consent,
+    analytics,
   };
 }
 

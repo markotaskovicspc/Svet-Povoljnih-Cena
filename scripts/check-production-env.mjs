@@ -62,6 +62,12 @@ if (database) {
   }
 }
 
+if (enabled("ENFORCE_WEB_AUTO_AVAILABILITY")) {
+  errors.push(
+    "ENFORCE_WEB_AUTO_AVAILABILITY must remain false until DC stock is imported and audited",
+  );
+}
+
 const emailProvider = (value("EMAIL_PROVIDER") ?? "none").toLowerCase();
 if (emailProvider === "resend") {
   requireNames("Resend", [
@@ -92,12 +98,20 @@ if (enabled("RAIACCEPT_PRODUCTION_ACCEPTED")) {
   requireNames("RaiAccept", ["RAIACCEPT_PUBLIC_BASE_URL", "RAIACCEPT_MERCHANT_ID", "RAIACCEPT_TERMINAL_ID", "RAIACCEPT_CALLBACK_SECRET"]);
 }
 if (enabled("MYGLS_ENABLED") || enabled("MYGLS_PRODUCTION_ACCEPTED")) {
+  const myGlsEnv = (value("MYGLS_ENV") ?? "test").toLowerCase();
+  if (!["test", "production"].includes(myGlsEnv)) {
+    errors.push("MYGLS_ENV must be test or production");
+  }
   requireNames("MyGLS", [
     "MYGLS_USERNAME", "MYGLS_PASSWORD", "MYGLS_CLIENT_NUMBER",
     "MYGLS_PICKUP_NAME", "MYGLS_PICKUP_STREET", "MYGLS_PICKUP_CITY",
     "MYGLS_PICKUP_POSTAL_CODE", "MYGLS_PICKUP_CONTACT_NAME", "MYGLS_PICKUP_CONTACT_PHONE",
   ]);
-  if (!enabled("MYGLS_PRODUCTION_ACCEPTED")) errors.push("MyGLS is enabled without MYGLS_PRODUCTION_ACCEPTED");
+  if (myGlsEnv === "production" && !enabled("MYGLS_PRODUCTION_ACCEPTED")) {
+    errors.push("MyGLS production is enabled without MYGLS_PRODUCTION_ACCEPTED");
+  } else if (myGlsEnv === "test") {
+    warnings.push("MyGLS is using the provider test account; no production shipment is created");
+  }
 }
 if (enabled("X_EXPRESS_ENABLED") || enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
   const xExpressEnv = (value("X_EXPRESS_ENV") ?? "test").toLowerCase();
@@ -119,6 +133,10 @@ if (enabled("X_EXPRESS_ENABLED") || enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
   }
 }
 if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
+  const badiEnv = (value("BADI_ENV") ?? "sandbox").toLowerCase();
+  if (!["sandbox", "production"].includes(badiEnv)) {
+    errors.push("BADI_ENV must be sandbox or production");
+  }
   requireNames("BADI", [
     "BADI_API_KEY",
     "BADI_API_SECRET",
@@ -126,7 +144,11 @@ if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
     "FISCAL_TIN",
     "FISCAL_LOCATION_ID",
   ]);
-  if (!enabled("BADI_PRODUCTION_ACCEPTED")) errors.push("BADI is selected without BADI_PRODUCTION_ACCEPTED");
+  if (badiEnv === "production" && !enabled("BADI_PRODUCTION_ACCEPTED")) {
+    errors.push("BADI production is selected without BADI_PRODUCTION_ACCEPTED");
+  } else if (badiEnv === "sandbox") {
+    warnings.push("BADI is using sandbox; no production fiscal document is created");
+  }
   const vpfrNames = ["BADI_VPFR_PFX", "BADI_VPFR_PASSWORD", "BADI_VPFR_PAC"];
   const vpfrCount = vpfrNames.filter((name) => value(name)).length;
   const badiMode = (value("BADI_FISCAL_MODE") ?? (vpfrCount ? "vpfr" : "public")).toLowerCase();
@@ -156,6 +178,20 @@ if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
   } else {
     requireNames("BADI public API", ["BADI_CLIENT_ID"]);
     if (vpfrCount) errors.push("BADI VPFR credentials are set while BADI_FISCAL_MODE is public");
+  }
+}
+if (enabled("EOTPREMNICA_ENABLED") || enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")) {
+  const eotpremnicaEnv = (value("EOTPREMNICA_ENV") ?? "sandbox").toLowerCase();
+  if (!["sandbox", "production"].includes(eotpremnicaEnv)) {
+    errors.push("EOTPREMNICA_ENV must be sandbox or production");
+  }
+  requireNames("eOtpremnica", ["EOTPREMNICA_BASE_URL", "EOTPREMNICA_API_KEY"]);
+  if (eotpremnicaEnv === "production" && !enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")) {
+    errors.push(
+      "eOtpremnica production is enabled without EOTPREMNICA_PRODUCTION_ACCEPTED",
+    );
+  } else if (eotpremnicaEnv === "sandbox") {
+    warnings.push("eOtpremnica is using sandbox; no production document is submitted");
   }
 }
 if (enabled("RABALUX_ENABLED")) {

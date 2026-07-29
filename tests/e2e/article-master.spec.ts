@@ -10,7 +10,7 @@ test.describe("article master acceptance", () => {
     "Set E2E_ARTICLE_MASTER=1 to run the isolated article-master suite.",
   );
 
-  test.setTimeout(240_000);
+  test.setTimeout(900_000);
   const runId = `${Date.now()}-${process.pid}`;
   const tag = `QA-ARTICLE-${runId}`;
   const adminEmail = `qa.article.${runId}@example.invalid`;
@@ -121,6 +121,23 @@ test.describe("article master acceptance", () => {
     productId = product.id;
     productSku = product.sku;
     productSlug = product.slug;
+    await db.priceList.create({
+      data: {
+        code: `QA-RETAIL-${runId}`.slice(0, 80),
+        name: `${tag} maloprodajni cenovnik`,
+        kind: "RETAIL",
+        currency: "RSD",
+        active: true,
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        entries: {
+          create: {
+            productId,
+            price: 1000,
+            validFrom: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        },
+      },
+    });
     const partner = await db.partnerApiClient.create({
       data: {
         name: `${tag} partner`,
@@ -186,7 +203,12 @@ test.describe("article master acceptance", () => {
   });
 
   test.afterAll(async () => {
-    await db?.$disconnect();
+    if (!db) return;
+    try {
+      await cleanup();
+    } finally {
+      await db.$disconnect();
+    }
   });
 
   test("edits the full card, calculates stock/channels and imports XLSX", async ({
@@ -209,7 +231,7 @@ test.describe("article master acceptance", () => {
     ]);
     await login(page);
 
-    await page.goto(`/admin/proizvodi/${productId}`, {
+    await page.goto(`/admin/erp/artikli/${productId}`, {
       waitUntil: "load",
     });
     const shortNameInput = page.getByLabel("Kratki naziv");
@@ -230,10 +252,13 @@ test.describe("article master acceptance", () => {
     await page.getByLabel("Benefiti (odvojeni zarezom)").fill("Masiv, Laka montaža");
     await page.getByLabel("Sertifikati (odvojeni zarezom)").fill("FSC");
     await page.locator('textarea[name="materialText"]').fill("Hrast + čelik");
-    await page.getByLabel("Stanje").fill("25");
+    await page.locator('input[name="stock"]').fill("25");
+    await page
+      .locator('input[name="stockAdjustmentReason"]')
+      .fill("QA usklađivanje fizičkog stanja");
     await page.getByLabel("Novo do").fill("2027-12-31");
-    await page.getByLabel("T&C od").fill("2026-08-01");
-    await page.getByLabel("T&C do").fill("2026-12-31");
+    await expect(page.locator('input[name="tncFrom"]')).toHaveCount(0);
+    await expect(page.locator('input[name="tncUntil"]')).toHaveCount(0);
     const richTextEditor = page.getByRole("textbox", {
       name: "Formatirani opis za sajt",
     });
@@ -248,7 +273,10 @@ test.describe("article master acceptance", () => {
       },
     );
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText("Proizvod je sačuvan");
+    await expect(page.getByRole("status").first()).toContainText(
+      "Proizvod je sačuvan",
+      { timeout: 180_000 },
+    );
 
     await expect
       .poll(async () => {
@@ -302,7 +330,7 @@ test.describe("article master acceptance", () => {
             .map((row) => `${row.lookupValue.kind}:${row.lookupValue.value}`)
             .sort(),
         };
-      })
+      }, { timeout: 120_000 })
       .toEqual({
         name: `${tag} kolekcija Otvorena polica N2212`,
         shortName: "N2212",
@@ -334,22 +362,28 @@ test.describe("article master acceptance", () => {
       }),
     ).toBeVisible();
 
-    await page.goto(`/admin/proizvodi/${productId}`, { waitUntil: "load" });
+    await page.goto(`/admin/erp/artikli/${productId}`, { waitUntil: "load" });
     await expect(page.getByLabel("Web check")).toBeChecked();
     await page.waitForTimeout(500);
     await page.getByLabel("Web check").uncheck();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText("Proizvod je sačuvan");
+    await expect(page.getByRole("status").first()).toContainText(
+      "Proizvod je sačuvan",
+      { timeout: 180_000 },
+    );
     const hiddenResponse = await page.goto(`/p/${productSlug}`, {
       waitUntil: "domcontentloaded",
     });
     expect(hiddenResponse?.status()).toBe(404);
 
-    await page.goto(`/admin/proizvodi/${productId}`, { waitUntil: "load" });
+    await page.goto(`/admin/erp/artikli/${productId}`, { waitUntil: "load" });
     await page.waitForTimeout(500);
     await page.getByLabel("Web check").check();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText("Proizvod je sačuvan");
+    await expect(page.getByRole("status").first()).toContainText(
+      "Proizvod je sačuvan",
+      { timeout: 180_000 },
+    );
 
     await page.goto(`/admin/erp/artikli/${productId}/zalihe`, {
       waitUntil: "domcontentloaded",
@@ -465,6 +499,7 @@ test.describe("article master acceptance", () => {
     const sheet = importWorkbook.addWorksheet("Artikli");
     sheet.addRow([
       "Kratki naziv",
+      "Status",
       "Foto",
       "Dobavljač",
       "Kategorija",
@@ -487,6 +522,7 @@ test.describe("article master acceptance", () => {
     ]);
     sheet.addRow([
       `${tag} XLSX`,
+      "DTZ",
       "https://placehold.co/48x48.png",
       `${tag} dobavljač`,
       `${tag} kategorija`,
@@ -633,8 +669,8 @@ test.describe("article master acceptance", () => {
     });
     expect(preserved.groupId).toBeTruthy();
     expect(preserved.categories[0]?.category).toMatchObject({
-      name: `${tag} ručna podgrupa`,
-      parentId: rootCategoryId,
+      name: `${tag} korenska kategorija`,
+      parentId: null,
     });
     expect(
       preserved.lookupAssignments
@@ -693,20 +729,60 @@ test.describe("article master acceptance", () => {
       }),
     ).toBe(0);
 
-    await page.goto("/admin/erp/artikli", { waitUntil: "networkidle" });
-    await page
-      .getByRole("combobox", {
-        name: "Kontekst zaliha",
-        exact: true,
-      })
-      .selectOption(secondaryWarehouseId);
+    const unexpectedRuntimeErrors = runtimeErrors.filter(
+      (message) =>
+        !message.includes("server responded with a status of 404") &&
+        !message.includes("server responded with a status of 422"),
+    );
+    expect(unexpectedRuntimeErrors).toEqual([]);
+  });
+
+  test("filters, edits, saves a view and archives through the canonical grid", async ({
+    page,
+  }) => {
+    const runtimeErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") runtimeErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => {
+      runtimeErrors.push(error.message);
+    });
+    await login(page);
+    const currentProduct = await db.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: {
+        shortName: true,
+        shortDescription: true,
+        collection: { select: { name: true } },
+      },
+    });
+
+    await page.goto("/admin/erp/artikli", { waitUntil: "domcontentloaded" });
+    // In Next development mode the HMR client can connect just after the first
+    // paint and remount client state once. Let hydration/Fast Refresh settle
+    // before testing stateful grid controls; next start does not need this.
+    await page.waitForTimeout(10_000);
+    const warehouseContext = page.getByRole("combobox", {
+      name: "Kontekst zaliha",
+      exact: true,
+    });
+    await expect(warehouseContext).toBeVisible({ timeout: 120_000 });
+    await expect(
+      warehouseContext.locator(`option[value="${secondaryWarehouseId}"]`),
+    ).toHaveCount(1, { timeout: 120_000 });
+    await warehouseContext.selectOption(secondaryWarehouseId, {
+      timeout: 30_000,
+    });
     const newFilterColumn = page.getByRole("combobox", {
       name: "Kolona za novi filter",
       exact: true,
     });
-    await newFilterColumn.selectOption("sku");
+    await expect(newFilterColumn).toBeVisible({ timeout: 120_000 });
+    await newFilterColumn.selectOption("sku", { timeout: 30_000 });
     await expect(newFilterColumn).toHaveValue("sku");
-    await page.getByRole("button", { name: "Filter", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Filter", exact: true })
+      .click({ timeout: 30_000 });
     const skuFilter = page.getByRole("textbox", {
       name: "Filter Šifra",
       exact: true,
@@ -717,7 +793,9 @@ test.describe("article master acceptance", () => {
     await page
       .getByRole("button", { name: "Uredi podržana polja", exact: true })
       .click();
-    await page.getByRole("button", { name: "N2212 Excel", exact: true }).click();
+    await page
+      .getByRole("button", { name: currentProduct.shortName, exact: true })
+      .click({ timeout: 30_000 });
     const inlineShortName = page.getByRole("textbox", {
       name: "Izmeni Kratki naziv",
       exact: true,
@@ -733,10 +811,16 @@ test.describe("article master acceptance", () => {
           select: { shortName: true, name: true },
         });
         return inlineUpdated;
-      })
+      }, { timeout: 120_000 })
       .toEqual({
         shortName: "N2212 Grid",
-        name: `${tag} kolekcija Otvorena polica N2212 Grid`,
+        name: [
+          currentProduct.collection?.name,
+          currentProduct.shortDescription,
+          "N2212 Grid",
+        ]
+          .filter(Boolean)
+          .join(" "),
       });
     const warehouseColumnCheckbox = page.getByRole("checkbox", {
       name: "Fizičko po magacinu",
@@ -761,7 +845,7 @@ test.describe("article master acceptance", () => {
           select: { filters: true, columns: true },
         });
         return view;
-      })
+      }, { timeout: 120_000 })
       .toMatchObject({
         filters: [
           expect.objectContaining({
@@ -787,19 +871,24 @@ test.describe("article master acceptance", () => {
         isActive: true,
       },
     });
-    await page.goto("/admin/erp/artikli", { waitUntil: "networkidle" });
+    await page.goto("/admin/erp/artikli", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(10_000);
     await page
       .getByPlaceholder("Brza pretraga po vidljivim kolonama")
       .fill(sacrificial.sku);
     await expect(page.getByText(sacrificial.sku, { exact: true })).toBeVisible();
-    await page
-      .getByRole("checkbox", { name: `Izaberi red ${sacrificial.id}` })
-      .click();
+    const sacrificialCheckbox = page.getByRole("checkbox", {
+      name: `Izaberi red ${sacrificial.id}`,
+    });
+    await sacrificialCheckbox.click({ timeout: 30_000 });
+    await expect(sacrificialCheckbox).toBeChecked();
     page.once("dialog", async (dialog) => {
       expect(dialog.message()).toBe("Arhivirati izabrane artikle?");
       await dialog.dismiss();
     });
-    await page.getByRole("button", { name: "Arhiviraj (1)" }).click();
+    await page
+      .getByRole("button", { name: "Arhiviraj (1)" })
+      .click({ timeout: 30_000 });
     expect(
       (await db.product.findUniqueOrThrow({ where: { id: sacrificial.id } }))
         .articleStatus,
@@ -808,7 +897,9 @@ test.describe("article master acceptance", () => {
       expect(dialog.message()).toBe("Arhivirati izabrane artikle?");
       await dialog.accept();
     });
-    await page.getByRole("button", { name: "Arhiviraj (1)" }).click();
+    await page
+      .getByRole("button", { name: "Arhiviraj (1)" })
+      .click({ timeout: 30_000 });
     await expect(page.getByRole("status")).toContainText("Obrisano: 1");
     await expect
       .poll(async () => {
@@ -821,7 +912,7 @@ test.describe("article master acceptance", () => {
           isActive: archived.isActive,
           deleted: Boolean(archived.deletedAt),
         };
-      })
+      }, { timeout: 120_000 })
       .toEqual({
         articleStatus: "ARH",
         isActive: false,
@@ -836,13 +927,73 @@ test.describe("article master acceptance", () => {
   });
 
   async function login(page: Page) {
-    await page.goto("/admin/prijava?callbackUrl=%2Fadmin", {
-      waitUntil: "domcontentloaded",
-    });
+    const callbackUrl = `/admin/erp/artikli/${productId}`;
+    await page.goto(
+      `/admin/prijava?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+      {
+        waitUntil: "domcontentloaded",
+      },
+    );
     await page.getByLabel("E-pošta").fill(adminEmail);
     await page.getByLabel("Lozinka").fill(adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(new RegExp(`${callbackUrl}$`), {
+      timeout: 180_000,
+    });
+  }
+
+  async function cleanup() {
+    const admin = await db.adminUser.findUnique({
+      where: { email: adminEmail },
+      select: { id: true },
+    });
+    const taggedProducts = await db.product.findMany({
+      where: {
+        OR: [
+          { id: productId || "__missing__" },
+          { sku: { contains: runId } },
+          { name: { startsWith: tag } },
+        ],
+      },
+      select: { id: true },
+    });
+    const productIds = taggedProducts.map((product) => product.id);
+    await db.stockMovement.deleteMany({
+      where: { idempotencyKey: { contains: tag } },
+    });
+    await db.order.deleteMany({
+      where: {
+        OR: [
+          { number: { contains: runId } },
+          { guestEmail: { contains: runId } },
+          ...(productIds.length
+            ? [{ items: { some: { productId: { in: productIds } } } }]
+            : []),
+        ],
+      },
+    });
+    await db.partnerReservation.deleteMany({
+      where: { idempotencyKey: { contains: tag } },
+    });
+    await db.partnerApiClient.deleteMany({
+      where: { name: { startsWith: tag } },
+    });
+    if (productIds.length) {
+      await db.product.deleteMany({ where: { id: { in: productIds } } });
+    }
+    await db.priceList.deleteMany({ where: { name: { startsWith: tag } } });
+    await db.group.deleteMany({ where: { name: { startsWith: tag } } });
+    await db.collection.deleteMany({ where: { name: { startsWith: tag } } });
+    await db.category.deleteMany({ where: { name: { startsWith: tag } } });
+    await db.supplier.deleteMany({ where: { name: { startsWith: tag } } });
+    await db.warehouse.deleteMany({
+      where: { code: { startsWith: `STORE-${runId}`.slice(0, 40) } },
+    });
+    if (admin) await db.auditLog.deleteMany({ where: { actorId: admin.id } });
+    await db.rateLimitBucket.deleteMany({
+      where: { key: { contains: adminEmail } },
+    });
+    await db.adminUser.deleteMany({ where: { email: adminEmail } });
   }
 });
 

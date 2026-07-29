@@ -4,6 +4,7 @@ const CONTENT_MODULES = new Set([
   "artikli",
   "sifarnici-artikala",
   "cenovnici",
+  "akcije",
   "akcijske-cene",
   "loyalty",
   "linearne-promocije",

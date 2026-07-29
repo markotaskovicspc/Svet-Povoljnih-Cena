@@ -742,7 +742,7 @@ export default async function PurchaseOrderEditorPage({
                       <tr key={item.id} className={invalidPack ? "bg-danger/10" : "hover:bg-muted-bg/30"}>
                         <td className="px-3 py-2">
                           {photo ? (
-                            <Link href={`/admin/proizvodi/${item.productId}#mediji`}>
+                            <Link href={`/admin/erp/artikli/${item.productId}#mediji`}>
                               <Image src={photo} alt="" width={48} height={48} className="size-12 rounded-md object-cover" />
                             </Link>
                           ) : "—"}

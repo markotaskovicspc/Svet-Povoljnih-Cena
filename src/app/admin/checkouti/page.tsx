@@ -155,7 +155,7 @@ export default async function AdminCheckoutsPage({
                 status: <StatusPill status={derivedStatus} />,
                 order: session.order ? (
                   <Link
-                    href={`/admin/narudzbine/${session.order.id}`}
+                    href={`/admin/erp/prodajni-nalozi/${session.order.id}`}
                     className="text-xs text-walnut hover:underline"
                   >
                     {session.order.number}

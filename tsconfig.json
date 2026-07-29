@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,9 +23,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@prisma/client": ["./.generated/prisma-client"],
-      "@generated/*": ["./.generated/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -30,7 +32,14 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    ".next-erp-e2e/types/**/*.ts",
+    ".next-erp-e2e/dev/types/**/*.ts",
+    ".next-erp-e2e-webpack/types/**/*.ts",
+    ".next-erp-e2e-webpack/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "svet akcija/.worktrees"
+  ]
 }

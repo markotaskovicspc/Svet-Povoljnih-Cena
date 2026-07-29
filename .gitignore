@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 /.generated/
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -20,7 +21,12 @@
 
 # next.js
 /.next/
+/.next-*/
 /out/
+
+# Local git worktrees created inside the shared workspace.
+/.worktrees/
+/svet akcija/.worktrees/
 
 # production
 /build

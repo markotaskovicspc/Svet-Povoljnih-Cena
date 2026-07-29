@@ -24,6 +24,7 @@ export type InventoryImportPreviewResult = InventoryImportChangeSummary & {
   rows: number;
   dimensionsRows: number;
   applied: boolean;
+  previewToken?: string;
   samples: Array<{
     sku: string;
     current: number;

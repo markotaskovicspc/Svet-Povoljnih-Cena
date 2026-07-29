@@ -3,6 +3,7 @@ import "server-only";
 import {
   Prisma,
   type OrderStatus,
+  type ShipmentPurpose,
   type ShipmentService,
   type ShipmentStatus,
 } from "@prisma/client";
@@ -70,13 +71,35 @@ export function adapterFromSlug(slug: string): CourierAdapter | null {
  */
 export async function createShipmentForOrder(
   orderId: string,
-  options: { packageCount?: number } = {},
+  options: {
+    packageCount?: number;
+    purpose?: ShipmentPurpose;
+    reclamationId?: string;
+  } = {},
 ) {
+  const purpose = options.purpose ?? "ORDER_DELIVERY";
+  const reclamation =
+    purpose === "ORDER_DELIVERY"
+      ? null
+      : await db.reclamation.findUnique({
+          where: { id: options.reclamationId ?? "" },
+          select: {
+            id: true,
+            orderId: true,
+            orderItemId: true,
+            quantity: true,
+            warehouseId: true,
+          },
+        });
+  if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
+    throw new CourierConfigError("Reklamacija za kurirski nalog nije pronađena.");
+  }
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
       items: {
         select: {
+          id: true,
           withAssembly: true,
           qty: true,
           product: {
@@ -90,18 +113,33 @@ export async function createShipmentForOrder(
           },
         },
       },
-      shipments: { orderBy: { createdAt: "desc" }, take: 1 },
+      shipments: {
+        where: { purpose, reclamationId: reclamation?.id ?? null },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
 
   const existing = order.shipments[0];
   if (existing && existing.status !== "FAILED") return existing;
-  await assertSupplierPickupConfirmed(order.id);
+  if (purpose === "ORDER_DELIVERY") {
+    await assertSupplierPickupConfirmed(order.id);
+  }
+
+  const shipmentItems = reclamation
+    ? order.items
+        .filter((item) => item.id === reclamation.orderItemId)
+        .map((item) => ({ ...item, qty: reclamation.quantity }))
+    : order.items;
+  if (!shipmentItems.length) {
+    throw new CourierConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+  }
 
   const service = routeService({
     shippingMethod: order.shippingMethod,
-    items: order.items.map((item) => ({
+    items: shipmentItems.map((item) => ({
       withAssembly: item.withAssembly,
       qty: item.qty,
       packQty: item.product?.packQty,
@@ -113,7 +151,7 @@ export async function createShipmentForOrder(
   });
   if (service === "COURIER_SMALL") {
     const selectedProvider = await getSelectedSmallParcelProvider();
-    const derivedPackageCount = order.items.reduce(
+    const derivedPackageCount = shipmentItems.reduce(
       (sum, item) =>
         sum +
         Math.max(
@@ -123,21 +161,36 @@ export async function createShipmentForOrder(
       0,
     );
     return selectedProvider === "MYGLS"
-      ? createMyGlsShipmentForOrder(order.id)
+      ? createMyGlsShipmentForOrder(order.id, {
+          purpose,
+          reclamationId: reclamation?.id,
+        })
       : createXExpressShipmentForOrder(order.id, {
           packageCount: options.packageCount ?? derivedPackageCount,
+          purpose,
+          reclamationId: reclamation?.id,
         });
+  }
+
+  if (purpose === "RECLAMATION_RETURN") {
+    throw new CourierConfigError(
+      "Povrat kabaste robe zahteva ručni kamionski nalog; automatski obrnuti smer nije podržan.",
+    );
   }
 
   const adapter = getAdapter(service);
 
   const cashOnDelivery =
+    purpose === "ORDER_DELIVERY" &&
     order.paymentMethod === "POUZECE_GOTOVINA" ||
-    order.paymentMethod === "POUZECE_KARTICA";
+    (purpose === "ORDER_DELIVERY" && order.paymentMethod === "POUZECE_KARTICA");
 
   const result = await adapter.createWaybill({
-    orderNumber: order.number,
-    total: Number(order.total),
+    orderNumber:
+      purpose === "ORDER_DELIVERY"
+        ? order.number
+        : `${order.number}-ZAMENA-${reclamation?.id.slice(-6)}`,
+    total: purpose === "ORDER_DELIVERY" ? Number(order.total) : 0,
     cashOnDelivery,
     recipient: {
       firstName: order.shipFirstName,
@@ -150,7 +203,7 @@ export async function createShipmentForOrder(
       companyName: order.shipCompanyName,
     },
     notes: order.notes,
-    packageCount: order.items.reduce(
+    packageCount: shipmentItems.reduce(
       (sum, item) =>
         sum + Math.max(1, Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1))),
       0,
@@ -161,6 +214,10 @@ export async function createShipmentForOrder(
     data: {
       orderId: order.id,
       service,
+      purpose,
+      reclamationId: reclamation?.id ?? null,
+      reclamationQty: reclamation?.quantity ?? null,
+      warehouseId: reclamation?.warehouseId ?? null,
       trackingNo: result.trackingNo,
       labelUrl: result.labelUrl,
       status: "CREATED",
@@ -294,7 +351,7 @@ export async function applyShipmentEvent(
       },
     });
 
-    if (newOrderStatus) {
+    if (shipment.purpose === "ORDER_DELIVERY" && newOrderStatus) {
       await tx.order.update({
         where: { id: shipment.orderId },
         data: { status: newOrderStatus },
@@ -308,6 +365,7 @@ export async function applyShipmentEvent(
       });
     }
     if (
+      shipment.purpose === "ORDER_DELIVERY" &&
       ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
         event.status,
       )
@@ -315,6 +373,32 @@ export async function applyShipmentEvent(
       await releaseOrderSupplierReservations(tx, shipment.orderId, {
         cancelled: false,
       });
+    }
+    if (
+      shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+      shipment.reclamationId &&
+      event.status === "DELIVERED"
+    ) {
+      const resolved = await tx.reclamation.updateMany({
+        where: {
+          id: shipment.reclamationId,
+          status: { not: "RESENO" },
+        },
+        data: {
+          status: "RESENO",
+          resolvedAt: occurredAt,
+          warehouseStatus: "HANDED_OVER",
+        },
+      });
+      if (resolved.count > 0) {
+        await tx.reclamationStatusEvent.create({
+          data: {
+            reclamationId: shipment.reclamationId,
+            status: "RESENO",
+            note: `Zamena/deo potvrđeno isporučen (${shipment.trackingNo ?? shipment.id}).`,
+          },
+        });
+      }
     }
   });
 

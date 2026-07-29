@@ -1,6 +1,6 @@
 import "server-only";
 
-import { OrderStatus, Prisma, type MarketingContact } from "@generated/prisma-client";
+import { OrderStatus, Prisma, type MarketingContact } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 

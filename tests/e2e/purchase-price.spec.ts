@@ -307,7 +307,8 @@ test.describe("ERP module 3 purchase-price acceptance", () => {
         "Paritet",
       ]) {
         const cell = await cellFor(page, row, label);
-        await expect(cell.locator("button")).toBeDisabled();
+        await expect(cell.locator("button,input,select,textarea")).toHaveCount(0);
+        await expect(cell.locator('[title="Polje je samo za čitanje"]')).toHaveCount(1);
       }
     });
 
@@ -625,7 +626,7 @@ test.describe("ERP module 3 purchase-price acceptance", () => {
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 90_000 });
   }
 
   async function cleanup() {

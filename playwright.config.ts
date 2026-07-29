@@ -2,6 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const playwrightPort = process.env.PLAYWRIGHT_PORT ?? "3000";
 const localBaseUrl = `http://127.0.0.1:${playwrightPort}`;
+const requestedWebServerTimeout = Number(
+  process.env.PLAYWRIGHT_WEBSERVER_TIMEOUT_MS,
+);
+const webServerTimeout = Number.isFinite(requestedWebServerTimeout)
+  ? Math.max(30_000, Math.min(requestedWebServerTimeout, 600_000))
+  : 120_000;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -19,7 +25,7 @@ export default defineConfig({
         url: localBaseUrl,
         reuseExistingServer:
           process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1",
-        timeout: 120_000,
+        timeout: webServerTimeout,
       },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },

@@ -9,6 +9,7 @@ import {
   type ErpValue,
 } from "@/lib/admin/erp";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { resolveReportPeriod } from "@/lib/admin/report-period";
 
 function textValue(value: ErpValue) {
   if (value === null || value === undefined) return "";
@@ -24,6 +25,18 @@ function parseArray<T>(raw: string | null): T[] {
   } catch {
     return [];
   }
+}
+
+function parseDateRange(search: URLSearchParams) {
+  const from = search.get("from");
+  const to = search.get("to");
+  if (!from || !to) return undefined;
+  const period = resolveReportPeriod({ range: "custom", from, to });
+  if (period.preset !== "custom") return undefined;
+  return {
+    createdFrom: period.start,
+    createdToExclusive: period.endExclusive,
+  };
 }
 
 function matches(value: ErpValue, filter: AdminGridFilter) {
@@ -102,12 +115,31 @@ export async function GET(
   await requireAdminAction(allowedRolesForErpModule(slug));
   const search = new URL(request.url).searchParams;
   const requestedSearchColumn = search.get("searchColumn") ?? "";
+  const fiscalStatus = search.get("fiscalStatus");
+  const dateField = search.get("dateField");
+  const dateRange = parseDateRange(search);
   const erpModule = await getErpModule(slug, {
     take: 10_000,
     warehouseId: search.get("warehouseId"),
     includeLookupOptions: false,
     query: search.get("q") ?? undefined,
     searchColumn: requestedSearchColumn || undefined,
+    salesOrderFilters:
+      slug === "prodajni-nalozi"
+        ? {
+            ...(dateField === "fiscal-issued-at" && dateRange
+              ? {
+                  fiscalIssuedFrom: dateRange.createdFrom,
+                  fiscalIssuedToExclusive: dateRange.createdToExclusive,
+                }
+              : dateRange),
+            ...(fiscalStatus === "issued"
+              ? { fiscalized: true }
+              : fiscalStatus === "not-issued"
+                ? { fiscalized: false }
+                : {}),
+          }
+        : undefined,
   });
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });

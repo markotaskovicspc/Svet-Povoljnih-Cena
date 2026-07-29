@@ -4,6 +4,30 @@ import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 
+const GRID_OPERATORS = new Set([
+  "contains",
+  "equals",
+  "not_equals",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "before",
+  "after",
+]);
+
+const DASHBOARD_CONTEXT_KEYS = new Set([
+  "warehouseId",
+  "ordersFrom",
+  "ordersTo",
+  "fiscalFrom",
+  "fiscalTo",
+  "reclamationsFrom",
+  "reclamationsTo",
+  "topProductsFrom",
+  "topProductsTo",
+]);
+
 type SavedViewPayload = {
   module?: unknown;
   name?: unknown;
@@ -61,7 +85,7 @@ export async function GET(request: Request) {
   const admin = await requireAdminAction();
   const moduleSlug =
     new URL(request.url).searchParams.get("module")?.trim() ?? "";
-  if (!getErpModuleDefinition(moduleSlug)) {
+  if (moduleSlug !== "dashboard" && !getErpModuleDefinition(moduleSlug)) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 400 });
   }
   const rows = await db.adminSavedView.findMany({
@@ -85,16 +109,18 @@ export async function POST(request: Request) {
   const moduleSlug =
     typeof body?.module === "string" ? body.module.trim() : "";
   const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const query = typeof body?.query === "string" ? body.query : "";
+  const query = typeof body?.query === "string" ? body.query.slice(0, 500) : "";
   const definition = getErpModuleDefinition(moduleSlug);
-  if (!definition || !name || name.length > 80) {
+  if ((moduleSlug !== "dashboard" && !definition) || !name || name.length > 80) {
     return NextResponse.json(
       { error: "Modul i naziv pogleda su obavezni (najviše 80 znakova)." },
       { status: 400 },
     );
   }
 
-  const knownColumns = new Set(definition.columns.map((column) => column.key));
+  const knownColumns = new Set(
+    definition?.columns.map((column) => column.key) ?? [],
+  );
   const cleanColumns = (value: unknown) =>
     Array.isArray(value)
       ? value.filter((item): item is string => typeof item === "string" && knownColumns.has(item))
@@ -105,25 +131,91 @@ export async function POST(request: Request) {
       ? body.searchColumn
       : "";
   const columnOrder = cleanColumns(body?.columnOrder);
-  const filters = Array.isArray(body?.filters) ? body.filters : [];
-  const sorting = Array.isArray(body?.sorting) ? body.sorting : [];
+  const filters = Array.isArray(body?.filters)
+    ? body.filters.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const row = value as Record<string, unknown>;
+        if (
+          typeof row.id !== "string" ||
+          typeof row.columnKey !== "string" ||
+          !knownColumns.has(row.columnKey) ||
+          typeof row.operator !== "string" ||
+          !GRID_OPERATORS.has(row.operator) ||
+          typeof row.value !== "string" ||
+          row.value.length > 500
+        ) {
+          return [];
+        }
+        return [
+          {
+            id: row.id.slice(0, 100),
+            columnKey: row.columnKey,
+            operator: row.operator,
+            value: row.value,
+          },
+        ];
+      })
+    : [];
+  const sorting = Array.isArray(body?.sorting)
+    ? body.sorting.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const row = value as Record<string, unknown>;
+        if (
+          typeof row.columnKey !== "string" ||
+          !knownColumns.has(row.columnKey) ||
+          (row.direction !== "asc" && row.direction !== "desc")
+        ) {
+          return [];
+        }
+        return [{ columnKey: row.columnKey, direction: row.direction }];
+      })
+    : [];
   const columnWidths =
     body?.columnWidths &&
     typeof body.columnWidths === "object" &&
     !Array.isArray(body.columnWidths)
-      ? body.columnWidths
+      ? Object.fromEntries(
+          Object.entries(body.columnWidths).flatMap(([key, value]) =>
+            knownColumns.has(key) &&
+            typeof value === "number" &&
+            Number.isFinite(value) &&
+            value >= 60 &&
+            value <= 1_200
+              ? [[key, Math.round(value)]]
+              : [],
+          ),
+        )
       : {};
   const contextKeys = new Set(
-    moduleSlug === "artikli"
+    moduleSlug === "dashboard"
+      ? DASHBOARD_CONTEXT_KEYS
+      : moduleSlug === "artikli"
       ? ["warehouseId"]
-      : (definition.contextFilters ?? []).map((filter) => filter.key),
+      : (definition?.contextFilters ?? []).map((filter) => filter.key),
   );
-  const context =
+  const rawContextEntries =
     body?.context && typeof body.context === "object" && !Array.isArray(body.context)
+      ? Object.entries(body.context)
+      : [];
+  if (
+    moduleSlug === "dashboard" &&
+    rawContextEntries.some(
+      ([key, value]) =>
+        !contextKeys.has(key) || typeof value !== "string" || value.length > 120,
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Dashboard pogled sadrži nedozvoljen ili neispravan filter." },
+      { status: 400 },
+    );
+  }
+  const context =
+    rawContextEntries.length
       ? Object.fromEntries(
-          Object.entries(body.context).filter(
+          rawContextEntries.filter(
             ([key, value]) =>
               typeof value === "string" &&
+              value.length <= 120 &&
               contextKeys.has(key),
           ),
         )

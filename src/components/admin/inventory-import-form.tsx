@@ -46,6 +46,9 @@ export function InventoryImportForm({ action }: { action: InventoryImportAction 
           required
         />
       </Field>
+      {result?.previewToken ? (
+        <input type="hidden" name="previewToken" value={result.previewToken} />
+      ) : null}
       <p className="text-xs text-ink-500">
         Obavezne kolone su <code>sku</code> i <code>qty</code>. Dimenzije su opcione.
         Artikli kojih nema u fajlu ostaju nepromenjeni.
@@ -59,14 +62,16 @@ export function InventoryImportForm({ action }: { action: InventoryImportAction 
         >
           Proveri fajl
         </SubmitButton>
-        <SubmitButton
-          name="mode"
-          value="apply"
-          pendingLabel="Uvozim…"
-          confirm="Primeniti DC stanje iz fajla? Samo navedeni artikli biće promenjeni, a svaka razlika će ostaviti magacinski trag."
-        >
-          Primeni uvoz
-        </SubmitButton>
+        {result?.previewToken ? (
+          <SubmitButton
+            name="mode"
+            value="apply"
+            pendingLabel="Uvozim…"
+            confirm="Primeniti tačno pregledano DC stanje? Samo navedeni artikli biće promenjeni, a svaka razlika će ostaviti magacinski trag."
+          >
+            Primeni pregledani uvoz
+          </SubmitButton>
+        ) : null}
       </div>
       {result ? (
         <div className="space-y-3 rounded-lg border border-border p-3 text-sm">

@@ -130,11 +130,19 @@ export function getIntegrationReadiness(
   const badiProductionAccepted = enabledValues.has(
     normalized(env.BADI_PRODUCTION_ACCEPTED)?.toLowerCase() ?? "",
   );
+  const badiInvoiceTraining =
+    normalized(env.BADI_INVOICE_TYPE)?.toLowerCase() === "training";
   const badiTraining =
     !badiProductionAccepted ||
-    normalized(env.BADI_INVOICE_TYPE)?.toLowerCase() === "training";
+    badiInvoiceTraining;
   const xExpressProduction =
     normalized(env.X_EXPRESS_ENV)?.toLowerCase() === "production";
+  const myGlsProduction =
+    normalized(env.MYGLS_ENV)?.toLowerCase() === "production";
+  const eotpremnicaProduction =
+    normalized(env.EOTPREMNICA_ENV)?.toLowerCase() === "production";
+  const badiProduction =
+    normalized(env.BADI_ENV)?.toLowerCase() === "production";
 
   return [
     integration(env, {
@@ -179,7 +187,7 @@ export function getIntegrationReadiness(
       description: "Kreiranje pošiljki i praćenje isporuke.",
       requirements: [
         enabled("MYGLS_ENABLED"),
-        enabled("MYGLS_PRODUCTION_ACCEPTED"),
+        ...(myGlsProduction ? [enabled("MYGLS_PRODUCTION_ACCEPTED")] : []),
         present("MYGLS_USERNAME"),
         present("MYGLS_PASSWORD"),
         present("MYGLS_CLIENT_NUMBER"),
@@ -218,6 +226,20 @@ export function getIntegrationReadiness(
       ],
     }),
     integration(env, {
+      id: "eotpremnica",
+      label: "eOtpremnica",
+      description: "UBL validacija i slanje elektronskih otpremnica.",
+      requirements: [
+        enabled("EOTPREMNICA_ENABLED"),
+        present("EOTPREMNICA_ENV"),
+        ...(eotpremnicaProduction
+          ? [enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")]
+          : []),
+        present("EOTPREMNICA_BASE_URL"),
+        present("EOTPREMNICA_API_KEY"),
+      ],
+    }),
+    integration(env, {
       id: "ips",
       label: "IPS / banka",
       description: "Plaćanje IPS QR kodom.",
@@ -250,6 +272,9 @@ export function getIntegrationReadiness(
         : "Automatsko izdavanje fiskalnih računa u produkcionom režimu.",
       requirements: [
         equals("FISCAL_PROVIDER", "badi"),
+        ...(badiProduction && !badiInvoiceTraining
+          ? [enabled("BADI_PRODUCTION_ACCEPTED")]
+          : []),
         present("BADI_API_KEY"),
         present("BADI_API_SECRET"),
         present("FISCAL_TIN"),

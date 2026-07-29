@@ -42,6 +42,47 @@ type IncomingSummaryRow = {
 type IncomingBreakdownRow = IncomingSummaryRow & {
   supplier: string;
   status: string;
+  article_status: string;
+};
+
+type SalesKpisRow = {
+  merchandise_gross: number;
+  merchandise_qty: number;
+  distinct_orders: number;
+  repeat_customers: number;
+  identified_customers: number;
+  average_delivery_days: number;
+  daily_max: number;
+  daily_max_date: string | null;
+  monthly_max: number;
+  monthly_max_date: string | null;
+};
+
+type InventoryTurnoverRow = {
+  product_id: string;
+  sku: string;
+  name: string;
+  supplier: string;
+  article_status: string;
+  warehouse_id: string;
+  warehouse: string;
+  average_qty: number;
+  average_value: number;
+  cogs: number;
+  turnover: number;
+};
+
+type TopItemRow = {
+  sku: string;
+  short_name: string;
+  qty: number;
+  revenue: number;
+};
+
+type TopCategoryRow = {
+  category_name: string | null;
+  qty: number;
+  revenue: number;
 };
 
 const RECLAMATION_STATUS_LABELS: Record<string, string> = {
@@ -64,9 +105,6 @@ export default async function ReportsPage({
     status: "ISSUED",
     issuedAt: periodFilter,
   };
-  const fiscalLineSaleWhere: Prisma.FiscalDocumentLineWhereInput = {
-    fiscalDocument: { is: fiscalSaleWhere },
-  };
 
   const [
     fiscalSales,
@@ -79,6 +117,8 @@ export default async function ReportsPage({
     incomingSummaryRows,
     incomingBreakdown,
     reclamations,
+    salesKpiRows,
+    inventoryTurnover,
   ] = await Promise.all([
     db.fiscalDocument.aggregate({
       where: fiscalSaleWhere,
@@ -98,20 +138,39 @@ export default async function ReportsPage({
       by: ["orderId"],
       where: fiscalSaleWhere,
     }),
-    db.fiscalDocumentLine.groupBy({
-      by: ["sku", "shortName"],
-      where: fiscalLineSaleWhere,
-      _sum: { qty: true, totalGross: true },
-      orderBy: { _sum: { qty: "desc" } },
-      take: 10,
-    }),
-    db.fiscalDocumentLine.groupBy({
-      by: ["categoryName"],
-      where: fiscalLineSaleWhere,
-      _sum: { qty: true, totalGross: true },
-      orderBy: { _sum: { totalGross: "desc" } },
-      take: 10,
-    }),
+    db.$queryRaw<TopItemRow[]>(Prisma.sql`
+      SELECT
+        l.sku,
+        l."shortName" AS short_name,
+        COALESCE(SUM(l.qty), 0)::int AS qty,
+        COALESCE(SUM(GREATEST(l."totalGross" - l."serviceGross", 0)), 0)::double precision AS revenue
+      FROM "FiscalDocumentLine" l
+      JOIN "FiscalDocument" f ON f.id = l."fiscalDocumentId"
+      WHERE f.kind = 'SALE'
+        AND f.status = 'ISSUED'
+        AND f."issuedAt" >= ${period.start}
+        AND f."issuedAt" < ${period.endExclusive}
+        AND l."productId" IS NOT NULL
+      GROUP BY l.sku, l."shortName"
+      ORDER BY qty DESC, revenue DESC, l.sku ASC
+      LIMIT 10
+    `),
+    db.$queryRaw<TopCategoryRow[]>(Prisma.sql`
+      SELECT
+        l."categoryName" AS category_name,
+        COALESCE(SUM(l.qty), 0)::int AS qty,
+        COALESCE(SUM(GREATEST(l."totalGross" - l."serviceGross", 0)), 0)::double precision AS revenue
+      FROM "FiscalDocumentLine" l
+      JOIN "FiscalDocument" f ON f.id = l."fiscalDocumentId"
+      WHERE f.kind = 'SALE'
+        AND f.status = 'ISSUED'
+        AND f."issuedAt" >= ${period.start}
+        AND f."issuedAt" < ${period.endExclusive}
+        AND l."productId" IS NOT NULL
+      GROUP BY l."categoryName"
+      ORDER BY revenue DESC, category_name ASC NULLS LAST
+      LIMIT 10
+    `),
     db.$queryRaw<StockSummaryRow[]>(Prisma.sql`
       SELECT
         COALESCE(SUM(GREATEST(ws.qty, 0)), 0)::int AS total_qty,
@@ -170,6 +229,7 @@ export default async function ReportsPage({
       SELECT
         COALESCE(s.name, 'Bez dobavljača') AS supplier,
         po.status::text AS status,
+        COALESCE(p."articleStatus"::text, 'BEZ_ARTIKLA') AS article_status,
         COUNT(DISTINCT po.id)::int AS order_count,
         COALESCE(SUM(GREATEST(poi.qty - poi."receivedQty", 0)), 0)::int AS remaining_qty,
         COALESCE(SUM(
@@ -187,11 +247,12 @@ export default async function ReportsPage({
       FROM "PurchaseOrder" po
       LEFT JOIN "Supplier" s ON s.id = po."supplierId"
       LEFT JOIN "PurchaseOrderItem" poi ON poi."purchaseOrderId" = po.id
+      LEFT JOIN "Product" p ON p.id = poi."productId"
       WHERE po.status IN ('SENT', 'CONFIRMED')
         AND COALESCE(po."deliveryDate", po."orderDate", po."createdAt") >= ${period.start}
         AND COALESCE(po."deliveryDate", po."orderDate", po."createdAt") < ${period.endExclusive}
-      GROUP BY s.name, po.status
-      ORDER BY value_rsd DESC, supplier ASC
+      GROUP BY s.name, po.status, p."articleStatus"
+      ORDER BY value_rsd DESC, supplier ASC, article_status ASC
     `),
     db.reclamation.findMany({
       where: { createdAt: periodFilter },
@@ -202,8 +263,185 @@ export default async function ReportsPage({
         decision: true,
         createdAt: true,
         resolvedAt: true,
+        respondedAt: true,
+        quantity: true,
+        request: true,
+        resolution: true,
       },
     }),
+    db.$queryRaw<SalesKpisRow[]>(Prisma.sql`
+      WITH sale_lines AS (
+        SELECT
+          f."orderId",
+          f."issuedAt",
+          GREATEST(l."totalGross" - l."serviceGross", 0)::numeric AS merchandise_gross,
+          CASE WHEN l."productId" IS NOT NULL THEN l.qty ELSE 0 END AS merchandise_qty
+        FROM "FiscalDocument" f
+        JOIN "FiscalDocumentLine" l ON l."fiscalDocumentId" = f.id
+        WHERE f.kind = 'SALE'
+          AND f.status = 'ISSUED'
+          AND f."issuedAt" >= ${period.start}
+          AND f."issuedAt" < ${period.endExclusive}
+      ), order_sales AS (
+        SELECT
+          sl."orderId",
+          MIN(sl."issuedAt") AS issued_at,
+          SUM(sl.merchandise_gross)::double precision AS gross,
+          SUM(sl.merchandise_qty)::int AS qty
+        FROM sale_lines sl
+        GROUP BY sl."orderId"
+      ), customer_orders AS (
+        SELECT
+          os."orderId",
+          COALESCE(
+            o."userId",
+            o."customerId",
+            NULLIF(LOWER(BTRIM(COALESCE(o."guestEmail", ''))), '')
+          ) AS identity
+        FROM order_sales os
+        JOIN "Order" o ON o.id = os."orderId"
+      ), repeat_summary AS (
+        SELECT
+          COUNT(*) FILTER (WHERE purchases > 1)::int AS repeat_customers,
+          COUNT(*)::int AS identified_customers
+        FROM (
+          SELECT identity, COUNT(DISTINCT "orderId") AS purchases
+          FROM customer_orders
+          WHERE identity IS NOT NULL
+          GROUP BY identity
+        ) grouped
+      ), delivered AS (
+        SELECT DISTINCT ON (o.id)
+          o.id,
+          EXTRACT(EPOCH FROM (s."deliveredAt" - o."createdAt")) / 86400.0 AS days
+        FROM order_sales os
+        JOIN "Order" o ON o.id = os."orderId"
+        JOIN "Shipment" s ON s."orderId" = o.id
+        WHERE s.purpose = 'ORDER_DELIVERY'
+          AND s."deliveredAt" IS NOT NULL
+        ORDER BY o.id, s."deliveredAt" ASC
+      ), daily AS (
+        SELECT
+          (issued_at AT TIME ZONE 'Europe/Belgrade')::date AS bucket,
+          SUM(gross)::double precision AS gross
+        FROM order_sales
+        GROUP BY bucket
+      ), monthly AS (
+        SELECT
+          date_trunc('month', issued_at AT TIME ZONE 'Europe/Belgrade')::date AS bucket,
+          SUM(gross)::double precision AS gross
+        FROM order_sales
+        GROUP BY bucket
+      )
+      SELECT
+        COALESCE((SELECT SUM(gross) FROM order_sales), 0)::double precision AS merchandise_gross,
+        COALESCE((SELECT SUM(qty) FROM order_sales), 0)::int AS merchandise_qty,
+        (SELECT COUNT(*) FROM order_sales)::int AS distinct_orders,
+        COALESCE((SELECT repeat_customers FROM repeat_summary), 0)::int AS repeat_customers,
+        COALESCE((SELECT identified_customers FROM repeat_summary), 0)::int AS identified_customers,
+        COALESCE((SELECT AVG(days) FROM delivered), 0)::double precision AS average_delivery_days,
+        COALESCE((SELECT gross FROM daily ORDER BY gross DESC, bucket ASC LIMIT 1), 0)::double precision AS daily_max,
+        (SELECT bucket::text FROM daily ORDER BY gross DESC, bucket ASC LIMIT 1) AS daily_max_date,
+        COALESCE((SELECT gross FROM monthly ORDER BY gross DESC, bucket ASC LIMIT 1), 0)::double precision AS monthly_max,
+        (SELECT bucket::text FROM monthly ORDER BY gross DESC, bucket ASC LIMIT 1) AS monthly_max_date
+    `),
+    db.$queryRaw<InventoryTurnoverRow[]>(Prisma.sql`
+      WITH local_days AS (
+        SELECT day::date AS day
+        FROM generate_series(
+          (${period.start}::timestamptz AT TIME ZONE 'Europe/Belgrade')::date,
+          ((${period.endExclusive}::timestamptz - interval '1 second') AT TIME ZONE 'Europe/Belgrade')::date,
+          interval '1 day'
+        ) day
+      ), day_ends AS (
+        SELECT
+          day,
+          ((day + 1)::timestamp AT TIME ZONE 'Europe/Belgrade') AS day_end
+        FROM local_days
+      ), combinations AS (
+        SELECT ws."warehouseId", ws."productId"
+        FROM "WarehouseStock" ws
+        UNION
+        SELECT sm."warehouseId", sm."productId"
+        FROM "StockMovement" sm
+        WHERE sm."productId" IS NOT NULL
+          AND sm."createdAt" < ${period.endExclusive}
+        UNION
+        SELECT f."warehouseId", l."productId"
+        FROM "FiscalDocument" f
+        JOIN "FiscalDocumentLine" l ON l."fiscalDocumentId" = f.id
+        WHERE f."warehouseId" IS NOT NULL
+          AND l."productId" IS NOT NULL
+          AND f."issuedAt" >= ${period.start}
+          AND f."issuedAt" < ${period.endExclusive}
+      ), daily_closing AS (
+        SELECT
+          c."warehouseId",
+          c."productId",
+          d.day,
+          GREATEST(
+            COALESCE(ws.qty, 0) - COALESCE((
+              SELECT SUM(sm.qty)
+              FROM "StockMovement" sm
+              WHERE sm."warehouseId" = c."warehouseId"
+                AND sm."productId" = c."productId"
+                AND sm."createdAt" >= d.day_end
+            ), 0),
+            0
+          )::double precision AS closing_qty
+        FROM combinations c
+        CROSS JOIN day_ends d
+        LEFT JOIN "WarehouseStock" ws
+          ON ws."warehouseId" = c."warehouseId"
+          AND ws."productId" = c."productId"
+      ), average_stock AS (
+        SELECT
+          "warehouseId",
+          "productId",
+          AVG(closing_qty)::double precision AS average_qty
+        FROM daily_closing
+        GROUP BY "warehouseId", "productId"
+      ), period_cogs AS (
+        SELECT
+          f."warehouseId",
+          l."productId",
+          SUM(
+            CASE WHEN f.kind = 'REFUND' THEN -1 ELSE 1 END
+            * l.qty * COALESCE(l."unitCogs", p.cogs, 0)
+          )::double precision AS cogs
+        FROM "FiscalDocument" f
+        JOIN "FiscalDocumentLine" l ON l."fiscalDocumentId" = f.id
+        LEFT JOIN "Product" p ON p.id = l."productId"
+        WHERE f.status = 'ISSUED'
+          AND f."issuedAt" >= ${period.start}
+          AND f."issuedAt" < ${period.endExclusive}
+          AND f."warehouseId" IS NOT NULL
+          AND l."productId" IS NOT NULL
+        GROUP BY f."warehouseId", l."productId"
+      )
+      SELECT
+        p.id AS product_id,
+        p.sku,
+        p.name,
+        COALESCE(s.name, 'Bez dobavljača') AS supplier,
+        p."articleStatus"::text AS article_status,
+        w.id AS warehouse_id,
+        w.name AS warehouse,
+        a.average_qty,
+        (a.average_qty * COALESCE(p.cogs, 0))::double precision AS average_value,
+        COALESCE(c.cogs, 0)::double precision AS cogs,
+        CASE WHEN a.average_qty * COALESCE(p.cogs, 0) > 0
+          THEN COALESCE(c.cogs, 0) / (a.average_qty * COALESCE(p.cogs, 0))
+          ELSE 0 END::double precision AS turnover
+      FROM average_stock a
+      JOIN "Product" p ON p.id = a."productId"
+      JOIN "Warehouse" w ON w.id = a."warehouseId"
+      LEFT JOIN "Supplier" s ON s.id = p."supplierId"
+      LEFT JOIN period_cogs c
+        ON c."warehouseId" = a."warehouseId"
+        AND c."productId" = a."productId"
+      ORDER BY turnover DESC, p.sku ASC, w.name ASC
+    `),
   ]);
 
   const stockSummary = stockSummaryRows[0] ?? {
@@ -218,6 +456,61 @@ export default async function ReportsPage({
     value_rsd: 0,
     total_volume: 0,
   };
+  const salesKpis = salesKpiRows[0] ?? {
+    merchandise_gross: 0,
+    merchandise_qty: 0,
+    distinct_orders: 0,
+    repeat_customers: 0,
+    identified_customers: 0,
+    average_delivery_days: 0,
+    daily_max: 0,
+    daily_max_date: null,
+    monthly_max: 0,
+    monthly_max_date: null,
+  };
+  const averageMerchandisePrice = salesKpis.merchandise_qty
+    ? salesKpis.merchandise_gross / salesKpis.merchandise_qty
+    : 0;
+  const averageBasket = salesKpis.distinct_orders
+    ? salesKpis.merchandise_gross / salesKpis.distinct_orders
+    : 0;
+  const itemsPerBasket = salesKpis.distinct_orders
+    ? salesKpis.merchandise_qty / salesKpis.distinct_orders
+    : 0;
+  const repeatCustomerShare = salesKpis.identified_customers
+    ? (salesKpis.repeat_customers / salesKpis.identified_customers) * 100
+    : 0;
+  const inventorySummary = inventoryTurnover.reduce(
+    (summary, row) => ({
+      averageValue: summary.averageValue + row.average_value,
+      averageQty: summary.averageQty + row.average_qty,
+      cogs: summary.cogs + row.cogs,
+    }),
+    { averageValue: 0, averageQty: 0, cogs: 0 },
+  );
+  const totalTurnover = inventorySummary.averageValue
+    ? inventorySummary.cogs / inventorySummary.averageValue
+    : 0;
+  const turnoverByProduct = aggregateTurnover(
+    inventoryTurnover,
+    (row) => row.product_id,
+    (row) => `${row.sku} · ${row.name}`,
+  );
+  const turnoverBySupplier = aggregateTurnover(
+    inventoryTurnover,
+    (row) => row.supplier,
+    (row) => row.supplier,
+  );
+  const turnoverByWarehouse = aggregateTurnover(
+    inventoryTurnover,
+    (row) => row.warehouse_id,
+    (row) => row.warehouse,
+  );
+  const turnoverByStatus = aggregateTurnover(
+    inventoryTurnover,
+    (row) => row.article_status,
+    (row) => row.article_status,
+  );
   const saleGross = num(fiscalSales._sum.totalGross ?? 0);
   const refundGross = num(fiscalRefunds._sum.totalGross ?? 0);
   const netFiscalized = saleGross - refundGross;
@@ -239,6 +532,18 @@ export default async function ReportsPage({
   const averageResolutionDays = resolvedDurations.length
     ? resolvedDurations.reduce((sum, days) => sum + days, 0) / resolvedDurations.length
     : 0;
+  const responseDurations = reclamations.flatMap((item) =>
+    item.respondedAt
+      ? [(item.respondedAt.getTime() - item.createdAt.getTime()) / 86_400_000]
+      : [],
+  );
+  const averageResponseDays = responseDurations.length
+    ? responseDurations.reduce((sum, days) => sum + days, 0) / responseDurations.length
+    : 0;
+  const reclamationQuantity = reclamations.reduce((sum, item) => sum + item.quantity, 0);
+  const rejectedReclamations = reclamations.filter(
+    (item) => item.decision === "ODBIJENA",
+  ).length;
   const reclamationsByStatus = Object.entries(
     reclamations.reduce<Record<string, number>>((counts, item) => {
       counts[item.status] = (counts[item.status] ?? 0) + 1;
@@ -253,6 +558,20 @@ export default async function ReportsPage({
   )
     .sort(([, left], [, right]) => right - left)
     .slice(0, 10);
+  const reclamationsByRequest = Object.entries(
+    reclamations.reduce<Record<string, number>>((counts, item) => {
+      const key = item.request ?? "NIJE_ODABRAN";
+      counts[key] = (counts[key] ?? 0) + 1;
+      return counts;
+    }, {}),
+  ).sort(([, left], [, right]) => right - left);
+  const reclamationsByResolution = Object.entries(
+    reclamations.reduce<Record<string, number>>((counts, item) => {
+      const key = item.resolution ?? "NIJE_RESENO";
+      counts[key] = (counts[key] ?? 0) + 1;
+      return counts;
+    }, {}),
+  ).sort(([, left], [, right]) => right - left);
 
   return (
     <>
@@ -375,6 +694,15 @@ export default async function ReportsPage({
             />
           </div>
 
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Prosečna cena artikla" value={formatRsd(averageMerchandisePrice)} hint="Bruto roba / prodati komadi; bez dostave i uslužnog dela montaže" />
+            <StatCard label="Prosečan račun" value={formatRsd(averageBasket)} hint={`${itemsPerBasket.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} artikala po računu`} />
+            <StatCard label="Ponovljeni kupci" value={formatInteger(salesKpis.repeat_customers)} hint={`${formatPercent(repeatCustomerShare)} identifikovanih kupaca`} />
+            <StatCard label="Prosečan rok isporuke" value={`${salesKpis.average_delivery_days.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} dana`} hint="Order.createdAt → prva potvrđena Shipment.deliveredAt" />
+            <StatCard label="Dnevni maksimum" value={formatRsd(salesKpis.daily_max)} hint={salesKpis.daily_max_date ? formatIsoDate(salesKpis.daily_max_date) : "Bez prodaje"} />
+            <StatCard label="Mesečni maksimum" value={formatRsd(salesKpis.monthly_max)} hint={salesKpis.monthly_max_date ? formatMonth(salesKpis.monthly_max_date) : "Bez prodaje"} />
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardTitle>Top artikli po fiskalizovanoj količini</CardTitle>
@@ -386,12 +714,12 @@ export default async function ReportsPage({
                   { key: "revenue", label: "Promet", align: "right" },
                 ]}
                 rows={topItems.map((item) => ({
-                  id: `${item.sku}-${item.shortName}`,
+                  id: `${item.sku}-${item.short_name}`,
                   cells: {
                     sku: <span className="font-mono text-xs">{item.sku}</span>,
-                    name: item.shortName,
-                    qty: formatInteger(item._sum.qty ?? 0),
-                    revenue: formatRsd(num(item._sum.totalGross ?? 0)),
+                    name: item.short_name,
+                    qty: formatInteger(item.qty),
+                    revenue: formatRsd(item.revenue),
                   },
                 }))}
                 empty="Nema fiskalizovane prodaje u periodu."
@@ -407,11 +735,11 @@ export default async function ReportsPage({
                   { key: "revenue", label: "Promet", align: "right" },
                 ]}
                 rows={topCategories.map((item, index) => ({
-                  id: `${item.categoryName ?? "bez-kategorije"}-${index}`,
+                  id: `${item.category_name ?? "bez-kategorije"}-${index}`,
                   cells: {
-                    category: item.categoryName ?? "Bez kategorije",
-                    qty: formatInteger(item._sum.qty ?? 0),
-                    revenue: formatRsd(num(item._sum.totalGross ?? 0)),
+                    category: item.category_name ?? "Bez kategorije",
+                    qty: formatInteger(item.qty),
+                    revenue: formatRsd(item.revenue),
                   },
                 }))}
                 empty="Nema fiskalizovane prodaje po kategorijama u periodu."
@@ -424,13 +752,18 @@ export default async function ReportsPage({
           id="zalihe"
           number="02"
           title="Zalihe"
-          description="Trenutno stanje aktivnih magacina; ovaj deo je presek na današnji trenutak i ne menja se izborom perioda."
+          description="Trenutno stanje i prosečno završno stanje svakog kalendarskog dana u izabranom periodu, uključujući dane sa nulom."
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Komada na stanju" value={formatInteger(stockSummary.total_qty)} />
             <StatCard label="SKU-ova na stanju" value={formatInteger(stockSummary.sku_count)} />
             <StatCard label="COGS vrednost" value={formatRsd(stockSummary.stock_value)} />
             <StatCard label="Procenjena zapremina" value={formatVolume(stockSummary.total_volume)} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Prosečne zalihe" value={`${inventorySummary.averageQty.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} kom`} hint={formatRsd(inventorySummary.averageValue)} />
+            <StatCard label="KOZ perioda" value={totalTurnover.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 3 })} hint={`${formatRsd(inventorySummary.cogs)} neto COGS / prosečne zalihe`} />
           </div>
 
           <Card>
@@ -463,6 +796,14 @@ export default async function ReportsPage({
               empty="Nema aktivnih magacina."
             />
           </Card>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <TurnoverTable title="KOZ po dobavljaču" rows={turnoverBySupplier} />
+            <TurnoverTable title="KOZ po magacinu" rows={turnoverByWarehouse} />
+            <TurnoverTable title="KOZ po statusu artikla" rows={turnoverByStatus} />
+            <TurnoverTable title="Top 10 artikala po KOZ-u" rows={turnoverByProduct.slice(0, 10)} />
+            <TurnoverTable title="Bottom 10 artikala po KOZ-u" rows={[...turnoverByProduct].sort((left, right) => left.turnover - right.turnover).slice(0, 10)} />
+          </div>
         </ReportSection>
 
         <ReportSection
@@ -484,6 +825,7 @@ export default async function ReportsPage({
               columns={[
                 { key: "supplier", label: "Dobavljač" },
                 { key: "status", label: "Status" },
+                { key: "articleStatus", label: "Status artikla" },
                 { key: "orders", label: "Porudžbenice", align: "right" },
                 { key: "qty", label: "Preostalo komada", align: "right" },
                 { key: "value", label: "Vrednost", align: "right" },
@@ -494,6 +836,7 @@ export default async function ReportsPage({
                 cells: {
                   supplier: row.supplier,
                   status: row.status === "CONFIRMED" ? "Potvrđeno" : "Poslato",
+                  articleStatus: row.article_status,
                   orders: formatInteger(row.order_count),
                   qty: formatInteger(row.remaining_qty),
                   value: formatRsd(row.value_rsd),
@@ -528,6 +871,9 @@ export default async function ReportsPage({
               value={`${averageResolutionDays.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} dana`}
               hint={`${formatPercent(reclamationShare)} reklamiranih porudžbina prema fiskalizovanim u periodu`}
             />
+            <StatCard label="Reklamirana količina" value={formatInteger(reclamationQuantity)} hint={`${reclamations.length} zahteva`} />
+            <StatCard label="Prosečan odgovor" value={`${averageResponseDays.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} dana`} hint={`${responseDurations.length} odgovorenih zahteva`} />
+            <StatCard label="Odbijene" value={formatInteger(rejectedReclamations)} hint={reclamations.length ? formatPercent((rejectedReclamations / reclamations.length) * 100) : "Bez reklamacija"} />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
@@ -566,6 +912,36 @@ export default async function ReportsPage({
                   },
                 }))}
                 empty="Nema reklamiranih artikala u periodu."
+              />
+            </Card>
+
+            <Card>
+              <CardTitle>Po zahtevu kupca</CardTitle>
+              <DataTable
+                columns={[
+                  { key: "request", label: "Zahtev" },
+                  { key: "count", label: "Broj", align: "right" },
+                ]}
+                rows={reclamationsByRequest.map(([request, count]) => ({
+                  id: request,
+                  cells: { request, count: formatInteger(count) },
+                }))}
+                empty="Nema reklamacija u periodu."
+              />
+            </Card>
+
+            <Card>
+              <CardTitle>Po načinu rešenja</CardTitle>
+              <DataTable
+                columns={[
+                  { key: "resolution", label: "Rešenje" },
+                  { key: "count", label: "Broj", align: "right" },
+                ]}
+                rows={reclamationsByResolution.map(([resolution, count]) => ({
+                  id: resolution,
+                  cells: { resolution, count: formatInteger(count) },
+                }))}
+                empty="Nema rešenih reklamacija u periodu."
               />
             </Card>
           </div>
@@ -614,4 +990,90 @@ function formatVolume(value: number) {
 
 function formatPercent(value: number) {
   return `${value.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })}%`;
+}
+
+function formatIsoDate(value: string) {
+  return new Intl.DateTimeFormat("sr-Latn-RS", {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+}
+
+function formatMonth(value: string) {
+  return new Intl.DateTimeFormat("sr-Latn-RS", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+}
+
+function TurnoverTable({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<{
+    id: string;
+    label: string;
+    averageQty: number;
+    averageValue: number;
+    cogs: number;
+    turnover: number;
+  }>;
+}) {
+  return (
+    <Card>
+      <CardTitle>{title}</CardTitle>
+      <DataTable
+        columns={[
+          { key: "label", label: "Grupa" },
+          { key: "average", label: "Prosek zaliha", align: "right" },
+          { key: "cogs", label: "Neto COGS", align: "right" },
+          { key: "turnover", label: "KOZ", align: "right" },
+        ]}
+        rows={rows.map((row) => ({
+          id: row.id,
+          cells: {
+            label: row.label,
+            average: `${row.averageQty.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} · ${formatRsd(row.averageValue)}`,
+            cogs: formatRsd(row.cogs),
+            turnover: row.turnover.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 3 }),
+          },
+        }))}
+        empty="Nema podataka za izabrani period."
+      />
+    </Card>
+  );
+}
+
+function aggregateTurnover(
+  rows: InventoryTurnoverRow[],
+  keyFor: (row: InventoryTurnoverRow) => string,
+  labelFor: (row: InventoryTurnoverRow) => string,
+) {
+  const grouped = new Map<
+    string,
+    { id: string; label: string; averageQty: number; averageValue: number; cogs: number; turnover: number }
+  >();
+  for (const row of rows) {
+    const id = keyFor(row);
+    const current = grouped.get(id) ?? {
+      id,
+      label: labelFor(row),
+      averageQty: 0,
+      averageValue: 0,
+      cogs: 0,
+      turnover: 0,
+    };
+    current.averageQty += row.average_qty;
+    current.averageValue += row.average_value;
+    current.cogs += row.cogs;
+    grouped.set(id, current);
+  }
+  return [...grouped.values()]
+    .map((row) => ({
+      ...row,
+      turnover: row.averageValue ? row.cogs / row.averageValue : 0,
+    }))
+    .sort((left, right) => right.turnover - left.turnover || left.label.localeCompare(right.label, "sr-Latn"));
 }

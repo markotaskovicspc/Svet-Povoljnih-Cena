@@ -61,6 +61,15 @@ export type AdminGridQuery = {
   columnWidths: Record<string, number>;
 };
 
+export type SalesOrderExportFilters = {
+  warehouseId?: string;
+  createdFrom?: Date;
+  createdToExclusive?: Date;
+  fiscalIssuedFrom?: Date;
+  fiscalIssuedToExclusive?: Date;
+  fiscalized?: boolean;
+};
+
 export type ErpRow = {
   id: string;
   /** Optional entity id used by row/detail navigation when the grid row is a child record. */
@@ -172,7 +181,7 @@ const articleColumns: ErpColumn[] = [
   { key: "photo", label: "Foto", defaultVisible: true },
   { key: "status", label: "Status", type: "status", options: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"], defaultVisible: true },
   { key: "sku", label: "Šifra", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: [], defaultVisible: true },
   { key: "category", label: "Kategorija", defaultVisible: true },
   { key: "group", label: "Interna grupa", defaultVisible: true },
   { key: "subgroup", label: "Podgrupa" },
@@ -234,168 +243,7 @@ const articleColumns: ErpColumn[] = [
   { key: "tncUntil", label: "T&C do", type: "date" },
 ];
 
-const articleRows: ErpRow[] = [
-  {
-    id: "art-1",
-    values: {
-      photo: "IMG",
-      status: "SP",
-      sku: "BS-N2212",
-      supplier: "Nord Casa",
-      category: "Nameštaj",
-      group: "Police",
-      subgroup: "Otvorene police",
-      collection: "Björn",
-      shortDescription: "Otvorena polica",
-      shortName: "N2212",
-      attribute1: "Hrast",
-      attribute2: "Metal",
-      color1: "Natur",
-      color2: "Grafit",
-      benefits: "Masiv, laka montaža",
-      stockTotal: 12,
-      stockDc: 12,
-      availableTotal: 10,
-      availableDc: 10,
-      cogs: 18400,
-      incomingTotal: 24,
-      incomingAvailable: 18,
-      weightKg: 34,
-      widthCm: 80,
-      heightCm: 180,
-      depthCm: 32,
-      areaM2: 0.26,
-      volumeM3: 0.46,
-      grossWeightKg: 38,
-      packQty: 1,
-      packWidthCm: 88,
-      packDepthCm: 38,
-      packHeightCm: 188,
-      packVolumeM3: 0.63,
-      packGrossWeightKg: 41,
-      lastPurchasePrice: 158,
-      supplierName: "BJORN shelf N2212",
-      material: "Hrast + čelik",
-      certificates: "FSC",
-      barcode: "8600000122124",
-      hsCode: "940360",
-      customsRate: 10,
-      ananasBrokerage: 12,
-      ananasStorage: 4,
-      ananasDelivery: 6,
-      siteLink: "/p/polica-bjorn-n2212",
-      webAuto: true,
-      webCheck: true,
-      wholesaleAuto: true,
-      wholesaleCheck: true,
-      exportAuto: false,
-      exportCheck: true,
-      parity: "DAP",
-      deliveryDays: 21,
-      moq: 6,
-    },
-  },
-  {
-    id: "art-2",
-    values: {
-      photo: "IMG",
-      status: "DTZ",
-      sku: "ST-D1101",
-      supplier: "Forma Legno",
-      category: "Trpezarije",
-      group: "Stolovi",
-      subgroup: "Trpezarijski stolovi",
-      collection: "Dora",
-      shortDescription: "Sto za 6 osoba",
-      shortName: "D1101",
-      attribute1: "Jasen",
-      attribute2: "Masiv",
-      color1: "Natur",
-      benefits: "Ručni završetak",
-      stockTotal: 7,
-      stockDc: 7,
-      availableTotal: 6,
-      availableDc: 6,
-      cogs: 64400,
-      incomingTotal: 12,
-      incomingAvailable: 9,
-      weightKg: 58,
-      widthCm: 180,
-      heightCm: 76,
-      depthCm: 90,
-      areaM2: 1.62,
-      volumeM3: 1.23,
-      grossWeightKg: 66,
-      packQty: 1,
-      packWidthCm: 188,
-      packDepthCm: 98,
-      packHeightCm: 22,
-      packVolumeM3: 0.41,
-      packGrossWeightKg: 70,
-      lastPurchasePrice: 545,
-      supplierName: "DORA table 180",
-      material: "Masiv jasena",
-      certificates: "FSC",
-      barcode: "8600000111012",
-      hsCode: "940360",
-      customsRate: 10,
-      siteLink: "/p/trpezarijski-sto-dora-d1101",
-      webAuto: true,
-      webCheck: true,
-      wholesaleAuto: false,
-      wholesaleCheck: true,
-      exportAuto: false,
-      exportCheck: false,
-      parity: "EXW",
-      deliveryDays: 35,
-      moq: 4,
-    },
-  },
-  {
-    id: "art-3",
-    values: {
-      photo: "IMG",
-      status: "IT",
-      sku: "OR-G3140",
-      supplier: "Nord Casa",
-      category: "Spavaće sobe",
-      group: "Ormari",
-      subgroup: "Garderobni ormari",
-      collection: "Tora",
-      shortDescription: "Trokrilni ormar",
-      shortName: "G3140",
-      attribute1: "Ogledalo",
-      color1: "Hrast natur",
-      stockTotal: 4,
-      stockDc: 4,
-      availableTotal: 3,
-      availableDc: 3,
-      incomingTotal: 8,
-      incomingAvailable: 8,
-      widthCm: 150,
-      heightCm: 220,
-      depthCm: 60,
-      volumeM3: 1.98,
-      grossWeightKg: 110,
-      packQty: 2,
-      lastPurchasePrice: 420,
-      supplierName: "TORA wardrobe G3140",
-      barcode: "8600000131409",
-      hsCode: "940350",
-      customsRate: 10,
-      siteLink: "/p/garderobni-ormar-tora-g3140",
-      webAuto: true,
-      webCheck: true,
-      wholesaleAuto: false,
-      wholesaleCheck: true,
-      exportAuto: false,
-      exportCheck: true,
-      parity: "DAP",
-      deliveryDays: 28,
-      moq: 2,
-    },
-  },
-];
+const emptyRows: ErpRow[] = [];
 
 const supplierColumns: ErpColumn[] = [
   { key: "code", label: "Šifra dobavljača", defaultVisible: true },
@@ -424,48 +272,6 @@ const supplierColumns: ErpColumn[] = [
   { key: "loading3", label: "Mesto utovara 3", defaultVisible: true },
 ];
 
-const supplierRows: ErpRow[] = [
-  {
-    id: "sup-1",
-    values: {
-      code: "DOB-0001",
-      name: "Nord Casa",
-      address: "Industrivej 14",
-      city: "Aarhus",
-      country: "Danska",
-      email: "orders@nordcasa.example",
-      phone: "+45 11 22 33",
-      currency: "€",
-      parity: "DAP",
-      paymentTerms: "30% avans, 70% pre utovara",
-      deliveryDays: 28,
-      transitDays: 6,
-      bank: "Danske Bank",
-      swift: "DABADKKK",
-      iban: "DK5000400440116243",
-    },
-  },
-  {
-    id: "sup-2",
-    values: {
-      code: "DOB-0002",
-      name: "Forma Legno",
-      address: "Via Roma 22",
-      city: "Treviso",
-      country: "Italija",
-      email: "export@formalegno.example",
-      phone: "+39 0422 000",
-      currency: "€",
-      parity: "EXW",
-      paymentTerms: "Po fakturi 15 dana",
-      deliveryDays: 35,
-      transitDays: 4,
-      bank: "Intesa Sanpaolo",
-      swift: "BCITITMM",
-      iban: "IT60X0542811101000000123456",
-    },
-  },
-];
 
 const purchasePriceColumns: ErpColumn[] = [
   { key: "sku", label: "Šifra artikla", options: [], defaultVisible: true },
@@ -480,58 +286,11 @@ const purchasePriceColumns: ErpColumn[] = [
   { key: "validTo", label: "Važenje cene do", type: "date", defaultVisible: true },
 ];
 
-const purchasePriceRows: ErpRow[] = [
-  {
-    id: "pp-1",
-    values: {
-      sku: "BS-N2212",
-      supplier: "Nord Casa",
-      name: "Björn otvorena polica N2212",
-      attributes: "Hrast / metal / 80x32x180",
-      pattern: "Natur + grafit",
-      purchasePrice: 158,
-      currency: "€",
-      parity: "DAP",
-      validFrom: "2026-05-01",
-      validTo: "2026-08-31",
-    },
-  },
-  {
-    id: "pp-2",
-    values: {
-      sku: "BS-N2212",
-      supplier: "Nord Casa",
-      name: "Björn otvorena polica N2212",
-      attributes: "Hrast / metal / 80x32x180",
-      pattern: "Natur + grafit",
-      purchasePrice: 166,
-      currency: "€",
-      parity: "DAP",
-      validFrom: "2026-09-01",
-      validTo: "2026-12-31",
-    },
-  },
-  {
-    id: "pp-3",
-    values: {
-      sku: "ST-D1101",
-      supplier: "Forma Legno",
-      name: "Dora trpezarijski sto D1101",
-      attributes: "Masiv jasena / 180x90",
-      pattern: "Natur",
-      purchasePrice: 545,
-      currency: "€",
-      parity: "EXW",
-      validFrom: "2026-05-01",
-      validTo: "2026-12-31",
-    },
-  },
-];
 
 const purchaseOrderColumns: ErpColumn[] = [
   { key: "number", label: "Broj porudžbenice", defaultVisible: true },
   { key: "status", label: "Status", type: "status", options: ["U obradi", "Poslata", "Potvrđena", "Primljena"], defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: [], defaultVisible: true },
   { key: "createdAt", label: "Datum kreiranja", type: "date", defaultVisible: true },
   { key: "orderDate", label: "Datum porudžbine", type: "date", defaultVisible: true },
   { key: "loadingDate", label: "Datum utovara", type: "date", defaultVisible: true },
@@ -545,46 +304,6 @@ const purchaseOrderColumns: ErpColumn[] = [
   { key: "bmPct", label: "Ukupna BM%", type: "number", align: "right", defaultVisible: true },
 ];
 
-const purchaseOrderRows: ErpRow[] = [
-  {
-    id: "po-1",
-    values: {
-      number: "1/26",
-      status: "U obradi",
-      supplier: "Nord Casa",
-      createdAt: "2026-05-13",
-      orderDate: "2026-05-13",
-      loadingDate: "2026-05-24",
-      deliveryDate: "2026-05-30",
-      totalVolume: 18.4,
-      totalWeight: 4600,
-      totalPrice: 18420,
-      currency: "€",
-      transportType: "Šleper 90m3 / 24t",
-      parity: "DAP",
-      bmPct: 38.2,
-    },
-  },
-  {
-    id: "po-2",
-    values: {
-      number: "2/26",
-      status: "Poslata",
-      supplier: "Forma Legno",
-      createdAt: "2026-05-11",
-      orderDate: "2026-05-12",
-      loadingDate: "2026-05-20",
-      deliveryDate: "2026-05-24",
-      totalVolume: 42.7,
-      totalWeight: 11800,
-      totalPrice: 32700,
-      currency: "€",
-      transportType: "Solo kamion 45m3 / 12t",
-      parity: "EXW",
-      bmPct: 34.8,
-    },
-  },
-];
 
 const purchaseOrderItemColumns: ErpColumn[] = [
   { key: "poNumber", label: "Broj porudžbenice", defaultVisible: true },
@@ -599,7 +318,7 @@ const purchaseOrderItemColumns: ErpColumn[] = [
   { key: "headerParity", label: "Paritet (zaglavlje)", defaultVisible: true },
   { key: "sku", label: "Šifra artikla", defaultVisible: true },
   { key: "photo", label: "Fotografija artikla", defaultVisible: true },
-  { key: "supplier", label: "Dobavljač", options: ["Nord Casa", "Forma Legno"], defaultVisible: true },
+  { key: "supplier", label: "Dobavljač", options: [], defaultVisible: true },
   { key: "name", label: "Naziv artikla", defaultVisible: true },
   { key: "attributes", label: "Atributi artikla", defaultVisible: true },
   { key: "pattern", label: "Dezen artikla", defaultVisible: true },
@@ -620,58 +339,6 @@ const purchaseOrderItemColumns: ErpColumn[] = [
   { key: "barcode", label: "Bar kod", defaultVisible: true },
 ];
 
-const purchaseOrderItemRows: ErpRow[] = [
-  {
-    id: "poi-1",
-    values: {
-      poNumber: "1/26",
-      sku: "BS-N2212",
-      photo: "IMG",
-      supplier: "Nord Casa",
-      name: "Björn otvorena polica N2212",
-      attributes: "Hrast / metal",
-      pattern: "Natur + grafit",
-      purchasePrice: 158,
-      currency: "€",
-      parity: "DAP",
-      validFrom: "2026-05-01",
-      moq: 6,
-      packQty: 1,
-      qty: 24,
-      totalVolume: 15.12,
-      totalWeight: 984,
-      customsRate: 10,
-      calcRetailPrice: 39990,
-      bmPct: 41.4,
-      receivedQty: 0,
-    },
-  },
-  {
-    id: "poi-2",
-    values: {
-      poNumber: "2/26",
-      sku: "ST-D1101",
-      photo: "IMG",
-      supplier: "Forma Legno",
-      name: "Dora trpezarijski sto D1101",
-      attributes: "Masiv jasena",
-      pattern: "Natur",
-      purchasePrice: 545,
-      currency: "€",
-      parity: "EXW",
-      validFrom: "2026-05-01",
-      moq: 4,
-      packQty: 1,
-      qty: 12,
-      totalVolume: 4.92,
-      totalWeight: 840,
-      customsRate: 10,
-      calcRetailPrice: 119990,
-      bmPct: 36.1,
-      receivedQty: 0,
-    },
-  },
-];
 
 const inboundInvoiceColumns: ErpColumn[] = [
   { key: "number", label: "Broj fakture", defaultVisible: true },
@@ -695,25 +362,6 @@ const inboundInvoiceColumns: ErpColumn[] = [
   { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"] },
 ];
 
-const inboundInvoiceRows: ErpRow[] = [
-  {
-    id: "inv-1",
-    values: {
-      number: "IF-2026-001",
-      type: "INO",
-      supplier: "Nord Casa",
-      status: "U pripremi",
-      invoiceDate: "2026-05-13",
-      currency: "€",
-      netValue: 18420,
-      vatValue: 0,
-      grossValue: 18420,
-      allocationBasis: "AUTO_UTILIZATION",
-      cogsStatus: "Čeka razradu",
-      locked: false,
-    },
-  },
-];
 
 const retailPriceColumns: ErpColumn[] = [
   { key: "sku", label: "Šifra artikla", defaultVisible: true },
@@ -725,20 +373,6 @@ const retailPriceColumns: ErpColumn[] = [
   { key: "status", label: "Status", type: "status", options: ["Predlog", "Objavljeno", "Arhiva"], defaultVisible: true },
 ];
 
-const retailPriceRows: ErpRow[] = [
-  {
-    id: "mp-1",
-    values: {
-      sku: "BS-N2212",
-      name: "Björn otvorena polica N2212",
-      currentMpc: 39990,
-      calcMpc: 38990,
-      bmPct: 41.4,
-      validFrom: "2026-05-15",
-      status: "Predlog",
-    },
-  },
-];
 
 const coreErpModules: ErpModule[] = [
   {
@@ -751,12 +385,9 @@ const coreErpModules: ErpModule[] = [
     commands: [
       {
         label: "Unos novog",
-        description: "Unesite jedinstvenu šifru pre kreiranja. Šifra se nakon toga ne menja.",
+        description: "Sistem automatski dodeljuje sledeću internu šifru artikla.",
         tone: "primary",
         action: "article.create",
-        fields: [
-          { key: "sku", label: "Šifra artikla", type: "text", required: true },
-        ],
       },
       { label: "Excel unos", tone: "neutral", href: "/admin/erp/artikli/import" },
       {
@@ -800,10 +431,10 @@ const coreErpModules: ErpModule[] = [
       "exportCheck",
       "moq",
     ],
-    detailHrefBase: "/admin/proizvodi",
-    rows: articleRows,
+    detailHrefBase: "/admin/erp/artikli",
+    rows: emptyRows,
     notes: [
-      "Šifra artikla je obavezna pri kreiranju i nakon toga je zaključana.",
+      "Šifra artikla se dodeljuje automatski i nakon toga je zaključana.",
       "Naziv za web i ostale module se formira od kolekcije, kratkog opisa i kratkog naziva.",
       "Atributi se formiraju iz polja Atribut 1-4, a dezen iz Boja 1-2.",
     ],
@@ -847,7 +478,7 @@ const coreErpModules: ErpModule[] = [
       "loading2",
       "loading3",
     ],
-    rows: supplierRows,
+    rows: emptyRows,
     notes: [
       "Šifra dobavljača se automatski dodeljuje i nije ručno izmenljiva.",
       "Kontakt mail mora da sadrži @.",
@@ -912,7 +543,7 @@ const coreErpModules: ErpModule[] = [
       "validFrom",
       "validTo",
     ],
-    rows: purchasePriceRows,
+    rows: emptyRows,
     notes: [
       "Dobavljač, naziv, atributi, dezen, valuta i paritet se automatski preuzimaju iz baze artikala i dobavljača i ne mogu ručno da se menjaju.",
       "Ista šifra artikla može da se unese više puta sa različitim periodima važenja.",
@@ -949,7 +580,7 @@ const coreErpModules: ErpModule[] = [
     ],
     columns: purchaseOrderColumns,
     editableColumns: [],
-    rows: purchaseOrderRows,
+    rows: emptyRows,
     detailHrefBase: "/admin/erp/porudzbenice",
     notes: [
       "Statusi: U obradi, Poslata, Potvrđena, Primljena.",
@@ -984,7 +615,7 @@ const coreErpModules: ErpModule[] = [
     ],
     columns: purchaseOrderItemColumns,
     editableColumns: [],
-    rows: purchaseOrderItemRows,
+    rows: emptyRows,
     notes: [
       "Količina treba da se zacrveni kada nije deljiva brojem artikala u pakovanju.",
       "BM% se računa iz nabavne cene u RSD, transporta po jedinici i carine.",
@@ -1023,7 +654,7 @@ const coreErpModules: ErpModule[] = [
     ],
     columns: inboundInvoiceColumns,
     editableColumns: [],
-    rows: inboundInvoiceRows,
+    rows: emptyRows,
     detailHrefBase: "/admin/erp/ulazne-fakture",
     notes: [
       "Dvoklik na red otvara pojedinačnu fakturu.",
@@ -1047,7 +678,7 @@ const coreErpModules: ErpModule[] = [
     ],
     columns: retailPriceColumns,
     editableColumns: [],
-    rows: retailPriceRows,
+    rows: emptyRows,
     notes: [
       "MP cena se više ne objavljuje u legacy Product.salePrice polje, već kroz važeće stavke RETAIL cenovnika.",
       "Prioritet: najviši prioritet artikalske akcije, inače loyalty za prijavljenog kupca, zatim najviša kvalifikovana linearna promocija.",
@@ -1180,6 +811,7 @@ export async function getErpModule(
     includeLookupOptions?: boolean;
     query?: string;
     searchColumn?: string;
+    salesOrderFilters?: SalesOrderExportFilters;
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
@@ -1204,6 +836,7 @@ export async function getErpModule(
       options.warehouseId,
       options.query,
       options.searchColumn,
+      options.salesOrderFilters,
     ),
     includeLookupOptions && slug === "artikli"
       ? getArticleModuleContext()
@@ -1285,6 +918,7 @@ async function getPersistedErpRows(
   warehouseId?: string | null,
   query?: string,
   searchColumn?: string,
+  salesOrderFilters?: SalesOrderExportFilters,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
@@ -1302,7 +936,10 @@ async function getPersistedErpRows(
     case "mp-cene":
       return getRetailPriceRows(take);
     default:
-      return getOperationalErpRows(slug, take);
+      return getOperationalErpRows(slug, take, {
+        ...salesOrderFilters,
+        ...(warehouseId ? { warehouseId } : {}),
+      });
   }
 }
 
@@ -1791,7 +1428,7 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
   return items.map((item) => ({
     id: item.id,
     cellHrefs: item.productId
-      ? { photo: `/admin/proizvodi/${item.productId}#mediji` }
+      ? { photo: `/admin/erp/artikli/${item.productId}#mediji` }
       : undefined,
     values: {
       poNumber: item.purchaseOrder.number,

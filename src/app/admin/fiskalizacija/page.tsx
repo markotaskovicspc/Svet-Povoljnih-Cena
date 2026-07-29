@@ -44,7 +44,7 @@ async function manualFiscalizeAction(_state: AdminActionState, formData: FormDat
         orderItemIds,
       });
       revalidatePath("/admin/fiskalizacija");
-      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       if (!result.outcome.ok) return { ok: false as const, error: result.outcome.error };
       return {
         ok: true as const,

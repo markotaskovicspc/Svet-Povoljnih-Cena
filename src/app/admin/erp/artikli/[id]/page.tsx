@@ -231,8 +231,8 @@ async function revalidateProductSurfaces(productId: string, slug?: string | null
     },
   });
   const productSlug = slug ?? product?.slug;
-  revalidatePath("/admin/proizvodi");
-  revalidatePath(`/admin/proizvodi/${productId}`);
+  revalidatePath("/admin/erp/artikli");
+  revalidatePath(`/admin/erp/artikli/${productId}`);
   if (productSlug) revalidatePath(`/p/${productSlug}`);
   for (const path of COMMON_PRODUCT_SURFACES) revalidatePath(path);
   for (const relation of product?.categories ?? []) {
@@ -394,18 +394,31 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               isActive: true,
               isNew: true,
               isDtz: true,
+              group: { select: { id: true, name: true } },
+              collection: { select: { id: true, name: true } },
+              categories: { select: { categoryId: true } },
             },
           });
-          const [group, collection] = await Promise.all([
-            resolveNamedArticleRelation(tx, "group", {
-              id: d.groupId?.trim() || null,
-              name: d.newGroupName,
-            }),
-            resolveNamedArticleRelation(tx, "collection", {
-              id: d.collectionId?.trim() || null,
-              name: d.newCollectionName,
-            }),
-          ]);
+          // An interactive Prisma transaction owns one PostgreSQL connection;
+          // submitting concurrent queries to that connection can stall the pg
+          // adapter. Keep transaction-bound queries deliberately sequential.
+          const requestedGroupId = d.groupId?.trim() || null;
+          const requestedCollectionId = d.collectionId?.trim() || null;
+          const group =
+            !d.newGroupName && existing.group?.id === requestedGroupId
+              ? existing.group
+              : await resolveNamedArticleRelation(tx, "group", {
+                  id: requestedGroupId,
+                  name: d.newGroupName,
+                });
+          const collection =
+            !d.newCollectionName &&
+            existing.collection?.id === requestedCollectionId
+              ? existing.collection
+              : await resolveNamedArticleRelation(tx, "collection", {
+                  id: requestedCollectionId,
+                  name: d.newCollectionName,
+                });
           const completeData = {
             ...data,
             name: composedArticleName({
@@ -440,24 +453,35 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             },
             select: { slug: true },
           });
-          await tx.productCategory.deleteMany({ where: { productId: d.id } });
-          if (d.categoryId) {
-            await tx.productCategory.create({
-              data: { productId: d.id, categoryId: d.categoryId },
-            });
-            await tx.product.updateMany({
-              where: {
-                id: d.id,
-                supplierId: { not: null },
-                supplierApprovalStatus: "PENDING_MAPPING",
-              },
-              data: {
-                supplierApprovalStatus: "PENDING_APPROVAL",
-                isActive: false,
-              },
-            });
+          const currentCategoryIds = existing.categories
+            .map(({ categoryId }) => categoryId)
+            .sort();
+          const requestedCategoryIds = d.categoryId ? [d.categoryId] : [];
+          const categoryChanged =
+            currentCategoryIds.length !== requestedCategoryIds.length ||
+            currentCategoryIds.some(
+              (categoryId, index) => categoryId !== requestedCategoryIds[index],
+            );
+          if (categoryChanged) {
+            await tx.productCategory.deleteMany({ where: { productId: d.id } });
+            if (d.categoryId) {
+              await tx.productCategory.create({
+                data: { productId: d.id, categoryId: d.categoryId },
+              });
+              await tx.product.updateMany({
+                where: {
+                  id: d.id,
+                  supplierId: { not: null },
+                  supplierApprovalStatus: "PENDING_MAPPING",
+                },
+                data: {
+                  supplierApprovalStatus: "PENDING_APPROVAL",
+                  isActive: false,
+                },
+              });
+            }
+            await lockSupplierOwnedFields(tx, d.id, actorId, ["categories"]);
           }
-          await lockSupplierOwnedFields(tx, d.id, actorId, ["categories"]);
           await syncArticleLookupAssignments(tx, d.id, {
             attributes: [d.attribute1, d.attribute2, d.attribute3, d.attribute4],
             colors: [d.colorPrimary, d.colorSecondary],
@@ -1001,7 +1025,8 @@ export default async function ProductDetail({
         description={`SKU ${product.sku}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
-          { href: "/admin/proizvodi", label: "Proizvodi" },
+          { href: "/admin/erp", label: "ERP" },
+          { href: "/admin/erp/artikli", label: "Artikli" },
           { label: product.sku },
         ]}
       />
@@ -1298,7 +1323,7 @@ export default async function ProductDetail({
                         : "Nema aktivne akcije"
                   }
                   source={activeAction?.action.name ?? (product.salePrice ? "Legacy fallback" : "Akcije")}
-                  href="/admin/akcije"
+                  href="/admin/erp/akcije"
                   warning={!activeAction && Boolean(product.salePrice)}
                 />
                 <SourceSummary
@@ -1437,7 +1462,7 @@ export default async function ProductDetail({
             </fieldset>
 
             <div className="grid gap-3 rounded-xl border border-border/60 bg-muted-bg/30 p-4 text-sm md:grid-cols-3">
-              <ReadOnlyFlag label="Hero meseca" enabled={product.isHero} href="/admin/heroji" />
+              <ReadOnlyFlag label="Hero meseca" enabled={product.isHero} href="/admin/erp/heroji-meseca" />
               <ReadOnlyFlag label="Google Merchant" enabled={product.inGoogleMerchant} href="/admin/oglasi" />
               <ReadOnlyFlag label="Meta katalog" enabled={product.inMetaCatalog} href="/admin/oglasi" />
             </div>

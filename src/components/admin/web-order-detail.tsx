@@ -129,8 +129,8 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         ) {
           await createShipmentForOrder(id);
         }
-        revalidatePath(`/admin/narudzbine/${id}`);
-        revalidatePath("/admin/narudzbine");
+        revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
         return {
           ok: true as const,
           entityId: id,
@@ -167,8 +167,8 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
           }).`,
         };
       } finally {
-        revalidatePath(`/admin/narudzbine/${id}`);
-        revalidatePath("/admin/narudzbine");
+        revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
       }
     },
   )(formData);
@@ -194,8 +194,8 @@ async function syncCourierShipment(_state: AdminActionState, formData: FormData)
           message: "Status pošiljke je sinhronizovan.",
         };
       } finally {
-        revalidatePath(`/admin/narudzbine/${orderId}`);
-        revalidatePath("/admin/narudzbine");
+        revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
       }
     },
   )(formData);
@@ -221,8 +221,8 @@ async function deleteMyGlsShipment(_state: AdminActionState, formData: FormData)
           message: "MyGLS nalog je otkazan.",
         };
       } finally {
-        revalidatePath(`/admin/narudzbine/${orderId}`);
-        revalidatePath("/admin/narudzbine");
+        revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
       }
     },
   )(formData);
@@ -249,8 +249,8 @@ async function modifyMyGlsCOD(_state: AdminActionState, formData: FormData) {
           message: "COD iznos je izmenjen.",
         };
       } finally {
-        revalidatePath(`/admin/narudzbine/${orderId}`);
-        revalidatePath("/admin/narudzbine");
+        revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
       }
     },
   )(formData);
@@ -272,7 +272,7 @@ async function issueFiscalReceiptAction(_state: AdminActionState, formData: Form
         forceEmail: Boolean(existing),
         source: "MANUAL",
       });
-      revalidatePath(`/admin/narudzbine/${id}`);
+      revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
       if (!result.outcome.ok) {
         return {
           ok: false as const,
@@ -307,7 +307,7 @@ async function resendBuyerReceiptAction(_state: AdminActionState, formData: Form
         sendEmail: true,
         forceEmail: true,
       });
-      revalidatePath(`/admin/narudzbine/${id}`);
+      revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
       return result.ok
         ? {
             ok: true as const,
@@ -435,7 +435,7 @@ async function confirmSupplierFulfillmentAction(
           },
         });
       });
-      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       return {
         ok: true as const,
         entityId: fulfillmentId,
@@ -533,7 +533,7 @@ async function resendSupplierOrderAction(
         });
         return { alreadyQueued: false };
       });
-      revalidatePath(`/admin/narudzbine/${orderId}`);
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       return {
         ok: true as const,
         entityId: fulfillmentId,
@@ -568,7 +568,7 @@ async function markFiscalized(_state: AdminActionState, formData: FormData) {
           create: { orderId: id, receiptNumber },
           update: { receiptNumber },
         });
-        revalidatePath(`/admin/narudzbine/${id}`);
+        revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
         return {
           ok: true as const,
           entityId: id,
@@ -652,8 +652,8 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
         throw err;
       }
 
-      revalidatePath(`/admin/narudzbine/${id}`);
-      revalidatePath("/admin/narudzbine");
+      revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
       return {
         ok: true as const,
         entityId: id,
@@ -670,13 +670,8 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
   )(formData);
 }
 
-export default async function OrderDetail({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export async function WebOrderDetail({ id }: { id: string }) {
   await requireAdminAction(["OPS"]);
-  const { id } = await params;
   const order = await db.order.findUnique({
     where: { id },
     include: {
@@ -734,16 +729,44 @@ export default async function OrderDetail({
   return (
     <>
       <PageHeader
-        title={`Narudžbina ${order.number}`}
+        title={`Porudžbina ${order.number}`}
         description={`${order.shipFirstName} ${order.shipLastName} · ${order.shipCity}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
-          { href: "/admin/narudzbine", label: "Narudžbine" },
+          { href: "/admin/erp", label: "ERP" },
+          { href: "/admin/erp/prodajni-nalozi", label: "Prodajni nalozi" },
           { label: order.number },
         ]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
+            Ova porudžbina je samo za pregled: osnovni WEB podaci i stavke se
+            ne menjaju, dok operativne komande ostaju dostupne.
+          </p>
+          <Card>
+            <CardTitle>Identitet prodajnog naloga</CardTitle>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Broj porudžbine">
+                <input
+                  value={order.number}
+                  readOnly
+                  disabled
+                  className="h-9 rounded-lg border border-input bg-muted-bg px-3 text-sm disabled:opacity-70"
+                />
+              </Field>
+              <Field label="Vrsta porudžbine">
+                <select
+                  value="WEB"
+                  disabled
+                  aria-label="Vrsta porudžbine"
+                  className="h-9 rounded-lg border border-input bg-muted-bg px-3 text-sm disabled:opacity-70"
+                >
+                  <option value="WEB">WEB</option>
+                </select>
+              </Field>
+            </div>
+          </Card>
           <Card>
             <CardTitle>Stavke</CardTitle>
             <DataTable

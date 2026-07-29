@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type SetStateAction,
 } from "react";
@@ -63,6 +64,16 @@ type EditingCell = {
   rowId: string;
   columnKey: string;
 } | null;
+
+const subscribeToClientRuntime = () => () => {};
+
+function useClientReady() {
+  return useSyncExternalStore(
+    subscribeToClientRuntime,
+    () => true,
+    () => false,
+  );
+}
 
 function isActionableGridControl(target: EventTarget) {
   if (!(target instanceof HTMLElement)) return false;
@@ -257,6 +268,7 @@ export function ErpGrid({
   initialVisibleColumns?: string[];
 }) {
   const router = useRouter();
+  const clientReady = useClientReady();
   const defaultColumns = useMemo(
     () => {
       const knownColumns = new Set(module.columns.map((column) => column.key));
@@ -898,9 +910,14 @@ export function ErpGrid({
   };
 
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      inert={!clientReady}
+      aria-busy={!clientReady}
+      data-client-ready={clientReady ? "true" : "false"}
+    >
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <select
@@ -1545,7 +1562,7 @@ export function ErpGrid({
                             <Link
                               href={
                                 row.cellHrefs?.photo ??
-                                `/admin/proizvodi/${row.id}#mediji`
+                                `/admin/erp/artikli/${row.id}#mediji`
                               }
                               className="inline-flex size-12 items-center justify-center overflow-hidden rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:ring-walnut/40"
                               title={value ? "Otvori fotografije artikla" : "Dodaj fotografiju"}
@@ -1602,7 +1619,7 @@ export function ErpGrid({
                             </Link>
                           ) : column.key === "siteDescription" ? (
                             <Link
-                              href={`/admin/proizvodi/${row.id}#opis-za-sajt`}
+                              href={`/admin/erp/artikli/${row.id}#opis-za-sajt`}
                               className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                               title="Otvori formatirani opis artikla"
                             >
@@ -1610,7 +1627,7 @@ export function ErpGrid({
                             </Link>
                           ) : column.key === "benefits" || column.key === "certificates" ? (
                             <Link
-                              href={`/admin/proizvodi/${row.id}#sifarnici`}
+                              href={`/admin/erp/artikli/${row.id}#sifarnici`}
                               className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                             >
                               <span className="truncate">{formatValue(value, column)}</span>

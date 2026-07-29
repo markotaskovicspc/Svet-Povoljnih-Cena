@@ -4,7 +4,7 @@ import {
   NewsletterCampaignStatus,
   NewsletterRecipientStatus,
   Prisma,
-} from "@generated/prisma-client";
+} from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";

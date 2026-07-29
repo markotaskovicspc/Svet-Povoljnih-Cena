@@ -1,5 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@generated/prisma-client";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * Prisma client singleton — avoids exhausting connections during HMR in dev.
@@ -62,6 +62,37 @@ function databasePoolMax() {
   return Number.isFinite(configured) ? Math.max(1, Math.min(configured, 10)) : 1;
 }
 
+function databaseConnectionTimeoutMillis() {
+  const configured = Number.parseInt(
+    process.env.DATABASE_CONNECTION_TIMEOUT_MS ?? "",
+    10,
+  );
+  if (configured === 0) return 0;
+  return Number.isFinite(configured)
+    ? Math.max(1_000, Math.min(configured, 60_000))
+    : 15_000;
+}
+
+function databaseTransactionMaxWaitMillis() {
+  const configured = Number.parseInt(
+    process.env.DATABASE_TRANSACTION_MAX_WAIT_MS ?? "",
+    10,
+  );
+  return Number.isFinite(configured)
+    ? Math.max(2_000, Math.min(configured, 30_000))
+    : 5_000;
+}
+
+function databaseTransactionTimeoutMillis() {
+  const configured = Number.parseInt(
+    process.env.DATABASE_TRANSACTION_TIMEOUT_MS ?? "",
+    10,
+  );
+  return Number.isFinite(configured)
+    ? Math.max(5_000, Math.min(configured, 60_000))
+    : 15_000;
+}
+
 export function getDatabaseConnectionString() {
   return [
     process.env.DATABASE_URL,
@@ -83,17 +114,39 @@ function createClient(): PrismaClient {
     );
   }
   const adapterOptions = databaseAdapterOptions(connectionString);
-  const adapter = new PrismaPg({
-    connectionString: adapterOptions.connectionString,
-    // Next.js build workers and serverless instances each create a process-local
-    // pool. Keep the default at one so Supabase's session-mode limit is not
-    // multiplied by the worker count; deployments may raise it explicitly.
-    max: databasePoolMax(),
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 15_000,
-  }, { schema: adapterOptions.schema });
+  if (process.env.E2E_DATABASE_DIAGNOSTICS === "1") {
+    try {
+      const target = new URL(connectionString);
+      console.info(
+        "[db-target]",
+        JSON.stringify({
+          host: target.hostname,
+          port: target.port || "5432",
+          database: target.pathname.replace(/^\//, ""),
+        }),
+      );
+    } catch {
+      console.info("[db-target]", JSON.stringify({ invalidUrl: true }));
+    }
+  }
+  const adapter = new PrismaPg(
+    {
+      connectionString: adapterOptions.connectionString,
+      // Next.js build workers and serverless instances each create a process-local
+      // pool. Keep the default at one so Supabase's session-mode limit is not
+      // multiplied by the worker count; deployments may raise it explicitly.
+      max: databasePoolMax(),
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
+    },
+    { schema: adapterOptions.schema },
+  );
   return new PrismaClient({
     adapter,
+    transactionOptions: {
+      maxWait: databaseTransactionMaxWaitMillis(),
+      timeout: databaseTransactionTimeoutMillis(),
+    },
     log:
       process.env.NODE_ENV === "development"
         ? ["warn", "error"]

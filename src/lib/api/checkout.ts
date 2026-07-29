@@ -120,6 +120,14 @@ export const createOrderSchema = z.object({
   useSavedCard: z.boolean().optional(),
   notes: z.string().max(500).optional(),
   consent: z.literal(true),
+  analytics: z
+    .object({
+      anonymousId: z.string().min(3).max(96),
+      sessionId: z.string().min(3).max(96),
+      consentVersion: z.string().min(1).max(40),
+      path: z.string().max(500),
+    })
+    .optional(),
 }).superRefine((input, context) => {
   const seen = new Set<string>();
   input.lines.forEach((line, index) => {
@@ -278,6 +286,35 @@ async function ensureCheckoutSessionForOrder(args: {
       guestEmail: userId ? null : input.guestEmail ?? null,
       identity: userId ? "login" : "guest",
     },
+  });
+}
+
+async function recordCheckoutCompleted(
+  tx: Prisma.TransactionClient,
+  input: CreateOrderInput,
+  order: { id: string; total: Prisma.Decimal },
+) {
+  if (!input.analytics) return;
+  const expiresAt = new Date();
+  expiresAt.setMonth(expiresAt.getMonth() + 13);
+  await tx.analyticsEvent.createMany({
+    data: [
+      {
+        type: "CHECKOUT_COMPLETED",
+        anonymousId: input.analytics.anonymousId,
+        sessionId: input.analytics.sessionId,
+        path: input.analytics.path,
+        orderId: order.id,
+        quantity: input.lines.reduce((sum, line) => sum + line.qty, 0),
+        value: order.total,
+        consentVersion: input.analytics.consentVersion,
+        metadata: input.checkoutSessionId
+          ? { checkoutSessionId: input.checkoutSessionId }
+          : undefined,
+        expiresAt,
+      },
+    ],
+    skipDuplicates: true,
   });
 }
 
@@ -710,6 +747,7 @@ export async function createOrder(
               publicAccessTokenCreatedAt: new Date(),
             },
           });
+          await recordCheckoutCompleted(tx, input, existingOrder);
           return { ...existingOrder, reusedExisting: true };
         }
       }
@@ -804,6 +842,7 @@ export async function createOrder(
           shippingMethod: true,
         },
       });
+      await recordCheckoutCompleted(tx, input, order);
 
       const lockedRows = await tx.$queryRaw<
         Array<{

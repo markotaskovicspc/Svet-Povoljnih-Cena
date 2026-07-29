@@ -229,12 +229,12 @@ export default async function ArticleStockPage({
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp/artikli", label: "Artikli" },
-          { href: `/admin/proizvodi/${product.id}`, label: product.sku },
+          { href: `/admin/erp/artikli/${product.id}`, label: product.sku },
           { label: "Zalihe" },
         ]}
         actions={
           <Link
-            href={`/admin/proizvodi/${product.id}`}
+            href={`/admin/erp/artikli/${product.id}`}
             className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
           >
             Matični karton
@@ -307,7 +307,7 @@ export default async function ArticleStockPage({
                   <tr key={item.id}>
                     <td className="px-3 py-2">
                       <Link
-                        href={`/admin/narudzbine/${item.order.id}`}
+                        href={`/admin/erp/prodajni-nalozi/${item.order.id}`}
                         className="text-walnut hover:underline"
                       >
                         {item.order.number}
@@ -399,7 +399,7 @@ export default async function ArticleStockPage({
                     <td className="px-3 py-2">
                       {movement.order ? (
                         <Link
-                          href={`/admin/narudzbine/${movement.order.id}`}
+                          href={`/admin/erp/prodajni-nalozi/${movement.order.id}`}
                           className="text-walnut hover:underline"
                         >
                           {movement.order.number} · {customerLabel(movement.order)}

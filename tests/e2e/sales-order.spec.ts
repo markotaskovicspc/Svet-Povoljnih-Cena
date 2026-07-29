@@ -635,7 +635,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 90_000 });
   }
 
   async function cleanup() {

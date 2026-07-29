@@ -11,6 +11,10 @@ import {
 } from "@/lib/inventory-csv";
 import { parseOpeningInventoryFile } from "@/lib/inventory-file";
 import { mergeOverrideFields } from "@/lib/rabalux/ownership";
+import {
+  createInventoryImportToken,
+  verifyInventoryImportToken,
+} from "@/lib/admin/inventory-import-token";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -19,6 +23,8 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { InventoryImportForm } from "@/components/admin/inventory-import-form";
 import { DataTable } from "@/components/admin/data-table";
+import { ErpGrid } from "@/components/admin/erp-grid";
+import { getErpModule } from "@/lib/admin/erp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lager", robots: { index: false, follow: false } };
@@ -48,7 +54,6 @@ async function adjustStock(_state: AdminActionState, formData: FormData) {
           actorId,
         });
       });
-      revalidatePath("/admin/lager");
       revalidatePath("/admin/erp/stanje-po-magacinima");
       return {
         ok: true as const,
@@ -131,6 +136,15 @@ async function importOpeningInventory(
           return [product.sku, (warehouseRow?.qty ?? product.stock) + reserved] as const;
         }),
       );
+      const fileHash = createHash("sha256").update(bytes).digest("hex");
+      const stateHash = createHash("sha256")
+        .update(
+          [...currentPhysicalBySku.entries()]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([sku, qty]) => `${sku}:${qty}`)
+            .join("|"),
+        )
+        .digest("hex");
       const summary = summarizeInventoryImportChanges(
         parsed.rows,
         currentPhysicalBySku,
@@ -140,6 +154,15 @@ async function importOpeningInventory(
         rows: parsed.rows.length,
         dimensionsRows: parsed.rows.filter((row) => row.widthCm !== null).length,
         applied: apply,
+        ...(!apply
+          ? {
+              previewToken: createInventoryImportToken({
+                adminId: actorId,
+                fileHash,
+                stateHash,
+              }),
+            }
+          : {}),
         ...summary,
         samples: parsed.rows
           .map((row) => {
@@ -155,7 +178,31 @@ async function importOpeningInventory(
           .slice(0, 12),
       };
       if (apply) {
-        const fileHash = createHash("sha256").update(bytes).digest("hex");
+        const previewToken = String(formData.get("previewToken") ?? "");
+        const movementKeys = parsed.rows.map(
+          (row) => `dc-import:${fileHash}:${bySku.get(row.sku)!.id}`,
+        );
+        const alreadyApplied = await db.stockMovement.count({
+          where: { idempotencyKey: { in: movementKeys } },
+        });
+        if (alreadyApplied === movementKeys.length) {
+          return {
+            ok: true as const,
+            diff: { file: file.name, rows: parsed.rows.length, apply, idempotent: true },
+            message: "Ovaj identičan lager fajl je već primenjen; dupli upis nije napravljen.",
+            result: { ...result, applied: true, changed: 0, unchanged: result.rows },
+          };
+        }
+        if (
+          !previewToken ||
+          !verifyInventoryImportToken(previewToken, { adminId: actorId, fileHash, stateHash })
+        ) {
+          return {
+            ok: false as const,
+            error:
+              "Fajl ili lager su promenjeni od pregleda. Ponovo pokrenite Proveri fajl pre uvoza.",
+          };
+        }
         await db.$transaction(async (tx) => {
           await ensureDefaultWarehouse(tx);
           for (const row of parsed.rows) {
@@ -188,9 +235,8 @@ async function importOpeningInventory(
             });
           }
         }, { timeout: 30_000 });
-        revalidatePath("/admin/lager");
         revalidatePath("/admin/erp/stanje-po-magacinima");
-        revalidatePath("/admin/proizvodi");
+        revalidatePath("/admin/erp/artikli");
       }
       return {
         ok: true as const,
@@ -206,13 +252,9 @@ async function importOpeningInventory(
 
 export default async function InventoryPage() {
   await requireAdminAction(["OPS"]);
-  const [warehouse, stocks, movements, productCount, stockedCount] = await Promise.all([
+  const [warehouse, stockModule, movements, productCount, stockedCount] = await Promise.all([
     db.warehouse.findFirst({ where: { active: true, isDefault: true } }),
-    db.warehouseStock.findMany({
-      orderBy: [{ qty: "desc" }, { product: { sku: "asc" } }],
-      take: 250,
-      include: { product: { select: { sku: true, name: true, stock: true } }, warehouse: true },
-    }),
+    getErpModule("stanje-po-magacinima", { take: 10_000 }),
     db.stockMovement.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -255,13 +297,7 @@ export default async function InventoryPage() {
             </AdminActionForm>
           </Card>
         </div>
-        <Card className="p-0">
-          <DataTable
-            columns={[{ key: "sku", label: "SKU" }, { key: "name", label: "Naziv" }, { key: "warehouse", label: "Magacin" }, { key: "qty", label: "Količina", align: "right" }, { key: "aggregate", label: "Web zbir", align: "right" }]}
-            rows={stocks.map((stock) => ({ id: stock.id, cells: { sku: stock.product.sku, name: stock.product.name, warehouse: stock.warehouse.code, qty: stock.qty, aggregate: stock.product.stock } }))}
-            empty="Nema magacinskih stanja. Uvezite početno stanje."
-          />
-        </Card>
+        {stockModule ? <ErpGrid module={stockModule} /> : null}
         <Card className="p-0">
           <DataTable
             columns={[{ key: "time", label: "Vreme" }, { key: "sku", label: "SKU" }, { key: "warehouse", label: "Magacin" }, { key: "kind", label: "Vrsta" }, { key: "qty", label: "Promena", align: "right" }, { key: "note", label: "Razlog" }]}

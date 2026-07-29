@@ -108,25 +108,106 @@ export async function syncArticleLookupAssignments(
     CERTIFICATE: splitArticleValues(input.certificates),
   } as const;
   const kinds = Object.keys(byKind) as Array<keyof typeof byKind>;
+  const desired = kinds.flatMap((kind) =>
+    byKind[kind].map((value) => ({
+      kind,
+      value,
+      slug: articleSlug(value),
+    })),
+  );
+  const desiredWhere = desired.map(({ kind, value }) => ({ kind, value }));
+
+  const currentAssignments = await tx.productLookupAssignment.findMany({
+    where: { productId, lookupValue: { kind: { in: kinds } } },
+    select: {
+      lookupValue: {
+        select: { kind: true, value: true, slug: true, active: true },
+      },
+    },
+  });
+  const desiredSignature = desired
+    .map(({ kind, value, slug }) => `${kind}\u0000${value}\u0000${slug}`)
+    .sort();
+  const currentSignature = currentAssignments
+    .filter(({ lookupValue }) => lookupValue.active)
+    .map(
+      ({ lookupValue }) =>
+        `${lookupValue.kind}\u0000${lookupValue.value}\u0000${lookupValue.slug}`,
+    )
+    .sort();
+  if (
+    currentAssignments.length === currentSignature.length &&
+    currentSignature.length === desiredSignature.length &&
+    currentSignature.every((value, index) => value === desiredSignature[index])
+  ) {
+    return byKind;
+  }
+
+  if (desired.length) {
+    // Keep the transaction bounded: a full article can have dozens of lookup
+    // values, so serial upserts make the save time grow linearly. createMany is
+    // also safe when two admins introduce the same dictionary value at once.
+    await tx.productLookupValue.createMany({
+      data: desired.map(({ kind, value, slug }) => ({
+        kind,
+        value,
+        slug,
+        active: true,
+      })),
+      skipDuplicates: true,
+    });
+    await tx.productLookupValue.updateMany({
+      where: { OR: desiredWhere },
+      data: { active: true },
+    });
+  }
+
+  let lookups = desired.length
+    ? await tx.productLookupValue.findMany({
+        where: { OR: desiredWhere },
+        select: { id: true, kind: true, value: true, slug: true },
+      })
+    : [];
+  const found = new Map(
+    lookups.map((lookup) => [`${lookup.kind}\u0000${lookup.value}`, lookup]),
+  );
+  const missing = desired.filter(
+    ({ kind, value }) => !found.has(`${kind}\u0000${value}`),
+  );
+  if (missing.length) {
+    throw new Error(
+      `Vrednosti šifarnika nisu sačuvane: ${missing.map(({ value }) => value).join(", ")}.`,
+    );
+  }
+
+  // Slugs are deterministic, but repair legacy rows that predate the current
+  // normalizer. This is normally zero queries and preserves the old upsert
+  // behavior without penalizing every save.
+  const staleSlugs = desired.filter(({ kind, value, slug }) => {
+    return found.get(`${kind}\u0000${value}`)?.slug !== slug;
+  });
+  for (const entry of staleSlugs) {
+    await tx.productLookupValue.update({
+      where: { kind_value: { kind: entry.kind, value: entry.value } },
+      data: { slug: entry.slug },
+    });
+  }
+  if (staleSlugs.length) {
+    lookups = await tx.productLookupValue.findMany({
+      where: { OR: desiredWhere },
+      select: { id: true, kind: true, value: true, slug: true },
+    });
+  }
+
   await tx.productLookupAssignment.deleteMany({
     where: { productId, lookupValue: { kind: { in: kinds } } },
   });
-  const ids: string[] = [];
-  for (const kind of kinds) {
-    for (const value of byKind[kind]) {
-      const slug = articleSlug(value);
-      const lookup = await tx.productLookupValue.upsert({
-        where: { kind_value: { kind, value } },
-        create: { kind, value, slug, active: true },
-        update: { slug, active: true },
-        select: { id: true },
-      });
-      ids.push(lookup.id);
-    }
-  }
-  if (ids.length) {
+  if (lookups.length) {
     await tx.productLookupAssignment.createMany({
-      data: ids.map((lookupValueId) => ({ productId, lookupValueId })),
+      data: lookups.map(({ id: lookupValueId }) => ({
+        productId,
+        lookupValueId,
+      })),
       skipDuplicates: true,
     });
   }

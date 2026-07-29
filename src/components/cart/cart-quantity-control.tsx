@@ -30,6 +30,7 @@ export function CartQuantityControl({
   fullWidth = false,
   addDisabled = false,
 }: CartQuantityControlProps) {
+  const cartHydrated = useCart((s) => s.hydrated);
   const setQty = useCart((s) => s.setQty);
   const qty = Math.min(
     MAX_CART_QTY,
@@ -47,7 +48,7 @@ export function CartQuantityControl({
       <button
         type="button"
         onClick={onAdd}
-        disabled={addDisabled}
+        disabled={addDisabled || !cartHydrated}
         className={cn(
           "focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45",
           size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs",
@@ -81,6 +82,7 @@ export function CartQuantityControl({
       <button
         type="button"
         onClick={() => setQty(sku, qty - 1)}
+        disabled={!cartHydrated}
         aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
         title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
         className={cn(
@@ -102,7 +104,7 @@ export function CartQuantityControl({
       <button
         type="button"
         onClick={() => setQty(sku, qty + 1)}
-        disabled={qty >= MAX_CART_QTY}
+        disabled={!cartHydrated || qty >= MAX_CART_QTY}
         aria-label="Povećaj količinu"
         className={cn(
           "focus-visible:ring-walnut/40 inline-flex items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40",

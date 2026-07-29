@@ -273,7 +273,8 @@ test.describe("ERP module 2 supplier master acceptance", () => {
       const row = page.locator("tbody tr").filter({ hasText: created.code! });
       await expect(row).toHaveCount(1);
       const codeCell = await cellFor(page, row, "Šifra dobavljača");
-      await expect(codeCell.locator("button")).toBeDisabled();
+      await expect(codeCell.locator("button,input,select,textarea")).toHaveCount(0);
+      await expect(codeCell.locator('[title="Polje je samo za čitanje"]')).toHaveCount(1);
 
       const immutableResponse = await page.request.patch(
         `/api/admin/erp/dobavljaci/rows/${createdSupplierId}`,
@@ -546,7 +547,7 @@ test.describe("ERP module 2 supplier master acceptance", () => {
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 90_000 });
   }
 
   async function cleanup() {

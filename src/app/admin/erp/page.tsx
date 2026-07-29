@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { requireAdminAction, isAuthorized } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { ERP_REQUIREMENTS } from "@/lib/admin/erp-requirements";
+import { DataTable } from "@/components/admin/data-table";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,10 @@ export default async function ErpDashboardPage() {
   );
   const ready = visibleModules.filter((m) => m.status === "ready");
   const blocked = visibleModules.filter((m) => m.status === "blocked_external");
+  const implementedRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "implemented").length;
+  const partialRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "partial").length;
+  const externalRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "blocked_external").length;
+  const deferredRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "deferred_user").length;
 
   return (
     <>
@@ -103,7 +109,51 @@ export default async function ErpDashboardPage() {
             })}
           </div>
         </Card>
+
+        <Card>
+          <CardTitle description="Status se zasniva na konkretnom acceptance scenariju; postojanje rute samo po sebi nije dokaz implementacije.">
+            Dokaziva matrica stanja
+          </CardTitle>
+          <p className="mb-4 text-sm text-ink-500">
+            Implementirano {implementedRequirements} · delimično {partialRequirements} · spoljno blokirano {externalRequirements} · odloženo odlukom korisnika {deferredRequirements}
+          </p>
+          <DataTable
+            columns={[
+              { key: "id", label: "#", align: "right" },
+              { key: "section", label: "Stavka" },
+              { key: "status", label: "Status" },
+              { key: "route", label: "Kanonska ruta" },
+              { key: "evidence", label: "Acceptance dokaz" },
+              { key: "note", label: "Napomena" },
+            ]}
+            rows={ERP_REQUIREMENTS.map((requirement) => ({
+              id: String(requirement.id),
+              cells: {
+                id: requirement.id,
+                section: requirement.section,
+                status: requirementStatusLabel(requirement.status),
+                route: <Link href={requirement.route} className="font-mono text-xs text-walnut hover:underline">{requirement.route}</Link>,
+                evidence: <code className="text-[11px] text-ink-600">{requirement.evidence}</code>,
+                note: requirement.note,
+              },
+            }))}
+            empty="Matrica nije učitana."
+          />
+        </Card>
       </div>
     </>
   );
+}
+
+function requirementStatusLabel(status: (typeof ERP_REQUIREMENTS)[number]["status"]) {
+  switch (status) {
+    case "implemented":
+      return "Implementirano";
+    case "partial":
+      return "Delimično";
+    case "blocked_external":
+      return "Spolja blokirano";
+    case "deferred_user":
+      return "Odloženo odlukom korisnika";
+  }
 }

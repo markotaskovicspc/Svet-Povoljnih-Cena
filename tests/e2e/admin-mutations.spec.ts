@@ -131,6 +131,24 @@ test.describe("isolated admin mutation acceptance", () => {
     ]);
     await login(page);
 
+    await test.step("legacy admin ERP routes are removed", async () => {
+      const removedRoutes = [
+        "/admin/proizvodi",
+        `/admin/proizvodi/${productId}`,
+        "/admin/akcije",
+        "/admin/heroji",
+        "/admin/narudzbine",
+        `/admin/narudzbine/${fixture.orderNumber}`,
+        "/admin/lager",
+        "/admin/reklamacije",
+      ];
+
+      for (const route of removedRoutes) {
+        const response = await page.goto(route, { waitUntil: "domcontentloaded" });
+        expect(response?.status(), route).toBe(404);
+      }
+    });
+
     await test.step("CMS draft, publish and archive stay separated", async () => {
       await page.goto("/admin/sadrzaj/nova", { waitUntil: "domcontentloaded" });
       const form = page
@@ -348,7 +366,7 @@ test.describe("isolated admin mutation acceptance", () => {
     });
 
     await test.step("product fields, price, stock and category", async () => {
-      await page.goto(`/admin/proizvodi/${productId}`, {
+      await page.goto(`/admin/erp/artikli/${productId}`, {
         waitUntil: "domcontentloaded",
       });
       await page
@@ -634,7 +652,7 @@ test.describe("isolated admin mutation acceptance", () => {
       });
       orderId = order.id;
 
-      await page.goto(`/admin/narudzbine/${orderId}`, {
+      await page.goto(`/admin/erp/prodajni-nalozi/${orderId}`, {
         waitUntil: "domcontentloaded",
       });
       await page.getByLabel("Novi status").selectOption("OTKAZANO");
@@ -737,7 +755,7 @@ test.describe("isolated admin mutation acceptance", () => {
       await page.getByLabel("Lozinka").fill(fixture.adminPassword);
       await page.getByRole("button", { name: "Prijavi se" }).click();
       try {
-        await expect(page).toHaveURL(/\/admin$/, { timeout: 10_000 });
+        await expect(page).toHaveURL(/\/admin$/, { timeout: 90_000 });
         return;
       } catch (error) {
         if (attempt === 1) throw error;

@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
+import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 import { adjustInventory } from "@/lib/inventory";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import {
@@ -1236,8 +1237,9 @@ function validationErrorMessages(value: unknown) {
 }
 
 async function validateDispatchUbl(
-  config: ReturnType<typeof sefConfiguration>,
+  config: EotpremnicaTransportConfig,
   ubl: string,
+  request: typeof fetch = fetch,
 ) {
   const form = new FormData();
   form.append(
@@ -1245,7 +1247,7 @@ async function validateDispatchUbl(
     new Blob([ubl], { type: "text/xml;charset=utf-8" }),
     "otpremnica.xml",
   );
-  const response = await fetch(
+  const response = await request(
     `${config.baseUrl}/public/xml-validator/validate-document`,
     {
       method: "POST",
@@ -1281,7 +1283,46 @@ async function validateDispatchUbl(
   return parsed as Prisma.InputJsonValue;
 }
 
+export type EotpremnicaTransportConfig = {
+  baseUrl: string;
+  apiKey: string;
+};
+
+export async function submitEotpremnicaDocument(
+  config: EotpremnicaTransportConfig,
+  input: { requestId: string; number: string; ubl: string },
+  request: typeof fetch = fetch,
+) {
+  const validation = await validateDispatchUbl(config, input.ubl, request);
+  const form = new FormData();
+  form.append("RequestId", input.requestId);
+  form.append(
+    "File",
+    new Blob([input.ubl], { type: "text/xml;charset=utf-8" }),
+    `otpremnica-${input.number.replaceAll("/", "-")}.xml`,
+  );
+  const response = await request(`${config.baseUrl}/public/documents/requests`, {
+    method: "POST",
+    headers: { accept: "*/*", "Api-key": config.apiKey },
+    body: form,
+    signal: AbortSignal.timeout(30_000),
+    cache: "no-store",
+  });
+  const responseText = await response.text();
+  const submission = safeResponse(responseText);
+  if (!response.ok) {
+    throw new Error(
+      `eOtpremnica je vratila HTTP ${response.status}${
+        responseText ? `: ${responseText.slice(0, 500)}` : ""
+      }`,
+    );
+  }
+  return { validation, submission };
+}
+
 function sefConfiguration() {
+  const gate = resolveEotpremnicaGate();
+  if (!gate.allowed) throw new Error(`eOtpremnica je isključena: ${gate.reason}`);
   const baseUrl =
     envValue("EOTPREMNICA_BASE_URL") ??
     envValue("SEO_BASE_URL") ??
@@ -1295,7 +1336,7 @@ function sefConfiguration() {
       "eOtpremnica nije konfigurisana. Nedostaju EOTPREMNICA_BASE_URL i EOTPREMNICA_API_KEY.",
     );
   }
-  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey };
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, mode: gate.mode };
 }
 
 export async function sendDispatchNoteToSef(id: string) {
@@ -1437,41 +1478,19 @@ export async function sendDispatchNoteToSef(id: string) {
   }
 
   try {
-    const validationData = await validateDispatchUbl(config, ubl);
-    const form = new FormData();
-    form.append("RequestId", requestId);
-    form.append(
-      "File",
-      new Blob([ubl], { type: "text/xml;charset=utf-8" }),
-      `otpremnica-${dispatch.number.replaceAll("/", "-")}.xml`,
-    );
-    const response = await fetch(`${config.baseUrl}/public/documents/requests`, {
-      method: "POST",
-      headers: {
-        accept: "*/*",
-        "Api-key": config.apiKey,
-      },
-      body: form,
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
+    const responseData = await submitEotpremnicaDocument(config, {
+      requestId,
+      number: dispatch.number,
+      ubl,
     });
-    const responseText = await response.text();
-    const responseData = safeResponse(responseText);
-    if (!response.ok) {
-      throw new Error(
-        `eOtpremnica je vratila HTTP ${response.status}${
-          responseText ? `: ${responseText.slice(0, 500)}` : ""
-        }`,
-      );
-    }
     return db.dispatchNote.update({
       where: { id },
       data: {
         sefStatus: "SUBMITTED",
         sefSentAt: new Date(),
         sefResponse: {
-          validation: validationData,
-          submission: responseData ?? null,
+          validation: responseData.validation,
+          submission: responseData.submission ?? null,
         },
         sefError: null,
       },

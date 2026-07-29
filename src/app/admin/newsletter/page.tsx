@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MarketingContactStatus, NewsletterCampaignStatus } from "@generated/prisma-client";
+import type { MarketingContactStatus, NewsletterCampaignStatus } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";

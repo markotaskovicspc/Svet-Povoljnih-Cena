@@ -56,6 +56,9 @@ beforeAll(async () => {
   process.env.RABALUX_STOCK_PASS = "integration-pass";
   process.env.RABALUX_MIN_CATALOG_ROWS = "1";
   process.env.RABALUX_MIN_STOCK_ROWS = "1";
+  await db.analyticsEvent.deleteMany({
+    where: { anonymousId: { startsWith: "rabalux-integration-" } },
+  });
   await db.reclamation.deleteMany({
     where: { number: { startsWith: "R-IT-" } },
   });
@@ -124,6 +127,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.analyticsEvent.deleteMany({
+    where: { anonymousId: { startsWith: "rabalux-integration-" } },
+  });
   await db.reclamation.deleteMany({
     where: { number: { startsWith: "R-IT-" } },
   });
@@ -767,6 +773,12 @@ describe("Rabalux checkout integration", () => {
       ],
       "rabalux-integration-idempotent-001",
     );
+    input.analytics = {
+      anonymousId: "rabalux-integration-anonymous",
+      sessionId: "rabalux-integration-session",
+      consentVersion: "2026-07",
+      path: "/checkout",
+    };
 
     const first = await createOrder(input, null);
     expect(first.ok).toBe(true);
@@ -793,6 +805,15 @@ describe("Rabalux checkout integration", () => {
     expect(order.supplierFulfillments).toHaveLength(1);
     expect(order.supplierFulfillments[0].items).toHaveLength(2);
     expect(order.supplierFulfillments[0].status).toBe("SENT");
+    expect(
+      await db.analyticsEvent.count({
+        where: {
+          orderId: order.id,
+          type: "CHECKOUT_COMPLETED",
+          anonymousId: "rabalux-integration-anonymous",
+        },
+      }),
+    ).toBe(1);
     expect(
       await db.emailMessage.count({
         where: {

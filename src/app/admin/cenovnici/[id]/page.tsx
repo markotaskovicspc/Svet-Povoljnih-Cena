@@ -217,7 +217,7 @@ export default async function PriceListDetail({
               {priceList.entries.map((entry) => (
                 <tr key={entry.id}>
                   <td className="py-3 font-mono">
-                    <Link href={`/admin/proizvodi/${entry.product.id}`} className="text-walnut hover:underline">
+                    <Link href={`/admin/erp/artikli/${entry.product.id}`} className="text-walnut hover:underline">
                       {entry.product.sku}
                     </Link>
                   </td>

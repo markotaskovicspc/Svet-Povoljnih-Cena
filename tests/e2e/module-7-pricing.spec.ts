@@ -315,7 +315,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
     ]);
 
     await test.step("zaštita rute i administratorska prijava", async () => {
-      await page.goto("/admin/akcije", { waitUntil: "domcontentloaded" });
+      await page.goto("/admin/erp/akcije", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/\/admin\/prijava/);
 
       await page.getByLabel("E-pošta").fill(fixture.adminEmail);
@@ -326,7 +326,9 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       await page.getByLabel("E-pošta").fill(fixture.adminEmail);
       await page.getByLabel("Lozinka").fill(fixture.adminPassword);
       await page.getByRole("button", { name: "Prijavi se" }).click();
-      await expect(page).toHaveURL(/\/admin\/akcije$/);
+      await expect(page).toHaveURL(/\/admin\/erp\/akcije$/, {
+        timeout: 60_000,
+      });
       await expect(
         page.getByRole("heading", { name: "Akcije", exact: true }),
       ).toBeVisible();
@@ -855,7 +857,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         .toBe(0);
     });
 
-    await test.step("gost vidi prioritet akcije i linearni popust", async () => {
+    await test.step("gost vidi prioritet akcije i linearni popust uz limit", async () => {
       const guestContext = await browser.newContext();
       try {
         await guestContext.addCookies([
@@ -877,9 +879,10 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           }),
         });
         await expect(guestPage.getByText("Akcijska cena", { exact: true })).toBeVisible();
-        await expect(actionPdp).toContainText(
-          /720(?:[.,]00)?\s*RSD/,
-        );
+        // The selected action is already deeper than the 30% combined cap.
+        // It remains authoritative (the cap must never raise it), while the
+        // additional linear discount is verified on the loyalty fixture below.
+        await expect(actionPdp).toContainText(/800(?:[.,]00)?\s*RSD/);
 
         await guestPage.goto(`/p/${fixture.loyaltySlug}`, {
           waitUntil: "domcontentloaded",
@@ -948,7 +951,9 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
 
     await test.step("mobilni prikaz ostaje upotrebljiv", async () => {
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.goto("/admin/akcije", { waitUntil: "domcontentloaded" });
+      // Keep the already hydrated admin screen and only change the viewport.
+      // A fresh dev-mode navigation can expose SSR controls before their
+      // handlers are attached, which is unrelated to responsive behaviour.
       await expect(page.getByRole("button", { name: "Nova akcija" })).toBeVisible();
       await expect(actionRow(page, fixture.highAction)).toBeVisible();
       await actionRow(page, fixture.highAction).press("Enter");

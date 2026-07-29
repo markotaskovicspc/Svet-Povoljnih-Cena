@@ -132,7 +132,7 @@ async function updateSmallParcelProvider(
       revalidatePath("/admin/erp");
       revalidatePath("/admin/erp/preuzimanja");
       revalidatePath("/checkout/podaci");
-      revalidatePath("/admin/narudzbine");
+      revalidatePath("/admin/erp/prodajni-nalozi");
       return {
         ok: true as const,
         entityId: "courier.smallParcelProvider",

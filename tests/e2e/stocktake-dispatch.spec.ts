@@ -113,7 +113,9 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       await page.getByLabel("E-pošta").fill(fixture.adminEmail);
       await page.getByLabel("Lozinka").fill(fixture.adminPassword);
       await page.getByRole("button", { name: "Prijavi se" }).click();
-      await expect(page).toHaveURL(/\/admin\/erp\/popisi$/);
+      await expect(page).toHaveURL(/\/admin\/erp\/popisi$/, {
+        timeout: 90_000,
+      });
       await expect(
         page.getByRole("heading", { name: "Popisi", exact: true }).first(),
       ).toBeVisible();

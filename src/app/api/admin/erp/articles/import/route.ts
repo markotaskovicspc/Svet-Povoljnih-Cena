@@ -523,19 +523,19 @@ export async function POST(request: Request) {
               },
             })
           : null;
-        const [group, collection] = await Promise.all([
-          hasColumn("group")
-            ? resolveNamedArticleRelation(tx, "group", { name: row.group })
-            : existing?.groupId
-              ? tx.group.findUnique({
-                  where: { id: existing.groupId },
-                  select: { id: true, name: true },
-                })
-              : null,
-          hasColumn("collection")
-            ? resolveNamedArticleRelation(tx, "collection", { name: row.collection })
-            : existing?.collection ?? null,
-        ]);
+        const group = hasColumn("group")
+          ? await resolveNamedArticleRelation(tx, "group", { name: row.group })
+          : existing?.groupId
+            ? await tx.group.findUnique({
+                where: { id: existing.groupId },
+                select: { id: true, name: true },
+              })
+            : null;
+        const collection = hasColumn("collection")
+          ? await resolveNamedArticleRelation(tx, "collection", {
+              name: row.collection,
+            })
+          : existing?.collection ?? null;
         const shouldReplaceCategory =
           hasColumn("category") || hasColumn("subgroup");
         const currentCategory = existing?.categories[0]?.category ?? null;

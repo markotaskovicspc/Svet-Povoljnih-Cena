@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
 import { PageHeader } from "@/components/admin/page-header";
 import { ActionsAdmin } from "./actions-admin";
+import { getErpModule } from "@/lib/admin/erp";
+import { ErpGrid } from "@/components/admin/erp-grid";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -21,7 +23,7 @@ export default async function ActionsPage({
 }) {
   await requireAdminAction(["CONTENT"]);
   const params = await searchParams;
-  const [actions, loyaltyRules, linearPromotions, categories, groups] =
+  const [actions, loyaltyRules, linearPromotions, categories, groups, erpModule] =
     await Promise.all([
       db.action.findMany({
         orderBy: [{ priority: "desc" }, { startsAt: "desc" }],
@@ -67,6 +69,7 @@ export default async function ActionsPage({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       }),
+      getErpModule("akcije", { take: 10_000 }),
     ]);
 
   const productIds = Array.from(
@@ -169,9 +172,15 @@ export default async function ActionsPage({
         description="MP i akcijske MP cene, heroji meseca, loyalty i linearni popusti."
         crumbs={[
           { href: "/admin", label: "Admin" },
+          { href: "/admin/erp", label: "ERP" },
           { label: "Akcije" },
         ]}
       />
+      {erpModule ? (
+        <div className="px-4 pt-6 md:px-8">
+          <ErpGrid module={erpModule} />
+        </div>
+      ) : null}
       <ActionsAdmin
         actions={actionRows}
         initialSelectedId={params.edit}

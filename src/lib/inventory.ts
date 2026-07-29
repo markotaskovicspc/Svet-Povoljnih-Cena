@@ -185,9 +185,16 @@ export async function setDefaultWarehouseStock(
     throw new Error("Ciljna količina mora biti nenegativan ceo broj.");
   }
   const warehouse = await ensureDefaultWarehouse(tx);
+  await tx.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${input.productId} FOR UPDATE`,
+  );
+  const existingMovement = await tx.stockMovement.findUnique({
+    where: { idempotencyKey: input.idempotencyKey },
+  });
+  if (existingMovement) return existingMovement;
   const product = await tx.product.findUnique({
     where: { id: input.productId },
-    select: { stock: true },
+    select: { sku: true, stock: true },
   });
   if (!product) throw new Error("Proizvod ne postoji.");
   const row = await tx.warehouseStock.upsert({
@@ -224,20 +231,83 @@ export async function setDefaultWarehouseStock(
     row.qty + (checkoutReservations._sum.warehouseReservedQty ?? 0);
   const delta = input.targetQty - currentPhysical;
   if (delta === 0) {
-    await syncProductChannelAvailability(tx, input.productId);
+    // No inventory fact changed. Channel availability was synchronized by the
+    // command that produced the current balances; re-reading every reservation
+    // here only lengthens unrelated article edits and holds the product lock.
     return null;
   }
   const note = input.note.trim();
   if (note.length < 3) {
     throw new Error("Razlog ručne korekcije DC stanja je obavezan.");
   }
-  return adjustInventory(tx, {
-    idempotencyKey: input.idempotencyKey,
-    productId: input.productId,
-    warehouseId: warehouse.id,
-    qtyDelta: delta,
-    kind: StockMovementKind.ADJUSTMENT,
-    note,
-    actorId: input.actorId,
+
+  let warehouseBalance: number;
+  let productBalance: number;
+  if (delta < 0) {
+    const required = Math.abs(delta);
+    const warehouseUpdate = await tx.warehouseStock.updateMany({
+      where: {
+        warehouseId: warehouse.id,
+        productId: input.productId,
+        qty: { gte: required },
+      },
+      data: { qty: { decrement: required } },
+    });
+    const productUpdate = await tx.product.updateMany({
+      where: { id: input.productId, stock: { gte: required } },
+      data: { stock: { decrement: required } },
+    });
+    if (warehouseUpdate.count !== 1 || productUpdate.count !== 1) {
+      throw new InsufficientInventoryError(product.sku);
+    }
+    const updatedWarehouse = await tx.warehouseStock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: input.productId,
+        },
+      },
+      select: { qty: true },
+    });
+    const updatedProduct = await tx.product.findUniqueOrThrow({
+      where: { id: input.productId },
+      select: { stock: true },
+    });
+    warehouseBalance = updatedWarehouse.qty;
+    productBalance = updatedProduct.stock;
+  } else {
+    const updatedWarehouse = await tx.warehouseStock.update({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: input.productId,
+        },
+      },
+      data: { qty: { increment: delta } },
+      select: { qty: true },
+    });
+    const updatedProduct = await tx.product.update({
+      where: { id: input.productId },
+      data: { stock: { increment: delta } },
+      select: { stock: true },
+    });
+    warehouseBalance = updatedWarehouse.qty;
+    productBalance = updatedProduct.stock;
+  }
+
+  await syncProductChannelAvailability(tx, input.productId);
+  return tx.stockMovement.create({
+    data: {
+      idempotencyKey: input.idempotencyKey,
+      warehouseId: warehouse.id,
+      productId: input.productId,
+      kind: StockMovementKind.ADJUSTMENT,
+      sku: product.sku,
+      qty: delta,
+      note,
+      actorId: input.actorId ?? null,
+      balanceAfterWarehouse: warehouseBalance,
+      balanceAfterTotal: productBalance,
+    },
   });
 }

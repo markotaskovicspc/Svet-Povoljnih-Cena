@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import type { NewsletterCampaignStatus, NewsletterRecipientStatus } from "@generated/prisma-client";
+import type { NewsletterCampaignStatus, NewsletterRecipientStatus } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";

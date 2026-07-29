@@ -17,7 +17,12 @@ export default function Template({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduced = useReducedMotion();
 
-  if (reduced) return <>{children}</>;
+  // Admin screens contain dense forms and destructive controls. Keeping the
+  // exiting route mounted during an animation temporarily duplicates those
+  // controls in the accessibility tree and can submit a stale form after a
+  // navigation. The storefront keeps the transition; admin navigation is
+  // intentionally immediate and deterministic.
+  if (reduced || pathname.startsWith("/admin")) return <>{children}</>;
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>

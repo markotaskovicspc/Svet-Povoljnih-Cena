@@ -15,8 +15,8 @@ import {
   ReclamationResolution,
   ReclamationStatus,
   ReclamationType,
+  NewsletterCampaignStatus,
 } from "@prisma/client";
-import { NewsletterCampaignStatus } from "@generated/prisma-client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";

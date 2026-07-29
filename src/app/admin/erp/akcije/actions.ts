@@ -89,7 +89,7 @@ function dateRange(startsAt: string, endsAt: string) {
 function refreshPricing() {
   updateTag("catalog-pricing");
   updateTag("catalog-products");
-  revalidatePath("/admin/akcije");
+  revalidatePath("/admin/erp/akcije");
   revalidatePath("/akcija");
   revalidatePath("/nedeljna-akcija");
   revalidatePath("/", "layout");

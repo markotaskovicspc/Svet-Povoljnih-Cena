@@ -1,7 +1,11 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { Prisma, type PaymentStatus } from "@prisma/client";
+import {
+  Prisma,
+  type PaymentStatus,
+  type ShipmentPurpose,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   X_EXPRESS_PROVIDER,
@@ -21,14 +25,36 @@ const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
 export async function createXExpressShipmentForOrder(
   orderId: string,
-  options: { packageCount?: number } = {},
+  options: {
+    packageCount?: number;
+    purpose?: ShipmentPurpose;
+    reclamationId?: string;
+  } = {},
 ) {
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
+  const purpose = options.purpose ?? "ORDER_DELIVERY";
+  const reclamation =
+    purpose === "ORDER_DELIVERY"
+      ? null
+      : await db.reclamation.findUnique({
+          where: { id: options.reclamationId ?? "" },
+          select: {
+            id: true,
+            orderId: true,
+            orderItemId: true,
+            quantity: true,
+            warehouseId: true,
+          },
+        });
+  if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
+    throw new XExpressConfigError("Reklamacija za kurirski nalog nije pronađena.");
+  }
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
       items: {
         select: {
+          id: true,
           name: true,
           qty: true,
           withAssembly: true,
@@ -47,14 +73,29 @@ export async function createXExpressShipmentForOrder(
         orderBy: { createdAt: "desc" },
         select: { status: true, method: true, providerRef: true },
       },
-      shipments: { orderBy: { createdAt: "desc" }, take: 1 },
+      shipments: {
+        where: {
+          purpose,
+          reclamationId: reclamation?.id ?? null,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
   if (order.shippingMethod !== "KURIR") {
     throw new XExpressConfigError("X Express se koristi samo za kurirsku isporuku.");
   }
-  if (order.items.some((item) => item.withAssembly)) {
+  const shipmentItems = reclamation
+    ? order.items
+        .filter((item) => item.id === reclamation.orderItemId)
+        .map((item) => ({ ...item, qty: reclamation.quantity }))
+    : order.items;
+  if (!shipmentItems.length) {
+    throw new XExpressConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+  }
+  if (shipmentItems.some((item) => item.withAssembly)) {
     throw new XExpressConfigError(
       "Porudžbina ima montažu/kamionsku logiku i ne šalje se kroz X Express.",
     );
@@ -69,7 +110,7 @@ export async function createXExpressShipmentForOrder(
     return existing;
   }
 
-  if (!isXExpressCashOnDelivery(order.paymentMethod)) {
+  if (purpose === "ORDER_DELIVERY" && !isXExpressCashOnDelivery(order.paymentMethod)) {
     const paid = order.payments.some((p) => PAID_STATUSES.includes(p.status));
     if (!paid) {
       throw new XExpressConfigError(
@@ -78,7 +119,7 @@ export async function createXExpressShipmentForOrder(
     }
   }
   const cfg = requireXExpressShipmentConfig(
-    isXExpressCashOnDelivery(order.paymentMethod),
+    purpose === "ORDER_DELIVERY" && isXExpressCashOnDelivery(order.paymentMethod),
   );
 
   const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);
@@ -134,7 +175,8 @@ export async function createXExpressShipmentForOrder(
       cfg,
       reference: shipmentId,
       trackingCodes: allocated,
-      order,
+      purpose,
+      order: { ...order, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
     });
@@ -148,6 +190,10 @@ export async function createXExpressShipmentForOrder(
     };
     const data = {
       provider: X_EXPRESS_PROVIDER,
+      purpose,
+      reclamationId: reclamation?.id ?? null,
+      reclamationQty: reclamation?.quantity ?? null,
+      warehouseId: reclamation?.warehouseId ?? null,
       providerOrderId: providerResult.providerOrderId ?? null,
       providerShipmentId: providerResult.providerShipmentId ?? null,
       trackingNo: providerResult.trackingNo,
@@ -207,6 +253,10 @@ export async function createXExpressShipmentForOrder(
       trackingNo,
       trackingCodes: allocated,
       packageCount,
+      purpose,
+      reclamationId: reclamation?.id,
+      reclamationQty: reclamation?.quantity,
+      warehouseId: reclamation?.warehouseId,
       message,
       raw: err instanceof XExpressProviderError ? err.raw : undefined,
     });
@@ -268,6 +318,10 @@ async function persistFailedShipment(args: {
   trackingNo: string;
   trackingCodes: string[];
   packageCount: number;
+  purpose: ShipmentPurpose;
+  reclamationId?: string;
+  reclamationQty?: number;
+  warehouseId?: string | null;
   message: string;
   raw?: unknown;
 }) {
@@ -296,6 +350,10 @@ async function persistFailedShipment(args: {
       orderId: args.orderId,
       service: "COURIER_SMALL",
       provider: X_EXPRESS_PROVIDER,
+      purpose: args.purpose,
+      reclamationId: args.reclamationId ?? null,
+      reclamationQty: args.reclamationQty ?? null,
+      warehouseId: args.warehouseId ?? null,
       trackingNo: args.trackingNo,
       packageCount: args.packageCount,
       providerParcelNumbers: args.trackingCodes as Prisma.InputJsonValue,

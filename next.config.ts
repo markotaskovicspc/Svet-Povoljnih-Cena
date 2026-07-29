@@ -25,6 +25,15 @@ function commonAncestor(left: string, right: string) {
   }
 }
 
+const requestedDistDir = process.env.NEXT_DIST_DIR?.trim();
+const distDir =
+  requestedDistDir &&
+  requestedDistDir !== "." &&
+  requestedDistDir !== ".." &&
+  /^[A-Za-z0-9._-]+$/.test(requestedDistDir)
+    ? requestedDistDir
+    : ".next";
+
 function getSupabaseImagePattern() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   if (!url) return null;
@@ -77,6 +86,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  distDir,
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1"],
   turbopack: {
@@ -122,13 +132,6 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
-  },
-  async redirects() {
-    return [
-      { source: "/admin/proizvodi", destination: "/admin/erp/artikli", permanent: false },
-      { source: "/admin/heroji", destination: "/admin/erp/heroji-meseca", permanent: false },
-      { source: "/admin/narudzbine", destination: "/admin/erp/prodajni-nalozi", permanent: false },
-    ];
   },
 };
 

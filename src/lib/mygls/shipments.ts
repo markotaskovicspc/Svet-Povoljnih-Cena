@@ -1,7 +1,11 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { Prisma, type PaymentStatus } from "@prisma/client";
+import {
+  Prisma,
+  type PaymentStatus,
+  type ShipmentPurpose,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled } from "./config";
@@ -11,25 +15,63 @@ import { buildMyGlsParcelForOrder, isMyGlsCashOnDelivery } from "./payload";
 
 const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
-export async function createMyGlsShipmentForOrder(orderId: string) {
+export async function createMyGlsShipmentForOrder(
+  orderId: string,
+  options: {
+    purpose?: ShipmentPurpose;
+    reclamationId?: string;
+  } = {},
+) {
   const cfg = requireMyGlsEnabled();
+  const purpose = options.purpose ?? "ORDER_DELIVERY";
+  const reclamation =
+    purpose === "ORDER_DELIVERY"
+      ? null
+      : await db.reclamation.findUnique({
+          where: { id: options.reclamationId ?? "" },
+          select: {
+            id: true,
+            orderId: true,
+            orderItemId: true,
+            quantity: true,
+            warehouseId: true,
+          },
+        });
+  if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
+    throw new MyGlsConfigError("Reklamacija za kurirski nalog nije pronađena.");
+  }
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
       user: { select: { email: true } },
-      items: { select: { qty: true, name: true, withAssembly: true } },
+      items: { select: { id: true, qty: true, name: true, withAssembly: true } },
       payments: {
         orderBy: { createdAt: "desc" },
         select: { status: true, method: true, providerRef: true },
       },
-      shipments: { orderBy: { createdAt: "desc" }, take: 1 },
+      shipments: {
+        where: {
+          purpose,
+          reclamationId: reclamation?.id ?? null,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
   if (order.shippingMethod !== "KURIR") {
     throw new MyGlsConfigError("MyGLS se koristi samo za kurirsku isporuku.");
   }
-  if (order.items.some((item) => item.withAssembly)) {
+  const shipmentItems = reclamation
+    ? order.items
+        .filter((item) => item.id === reclamation.orderItemId)
+        .map((item) => ({ ...item, qty: reclamation.quantity }))
+    : order.items;
+  if (!shipmentItems.length) {
+    throw new MyGlsConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+  }
+  if (shipmentItems.some((item) => item.withAssembly)) {
     throw new MyGlsConfigError("Porudžbina sa montažom/kamionskom logikom ne šalje se kroz MyGLS.");
   }
 
@@ -38,7 +80,7 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
     return existing;
   }
 
-  if (!isMyGlsCashOnDelivery(order.paymentMethod)) {
+  if (purpose === "ORDER_DELIVERY" && !isMyGlsCashOnDelivery(order.paymentMethod)) {
     const paid = order.payments.some((p) => PAID_STATUSES.includes(p.status));
     if (!paid) {
       throw new MyGlsConfigError(
@@ -48,7 +90,11 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
   }
 
   const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
-  const parcel = buildMyGlsParcelForOrder({ cfg, order });
+  const parcel = buildMyGlsParcelForOrder({
+    cfg,
+    order: { ...order, items: shipmentItems },
+    purpose,
+  });
 
   try {
     const response = await new MyGlsClient(cfg).printLabels({ parcelList: [parcel] });
@@ -68,6 +114,10 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
 
     const data = {
       provider: MYGLS_PROVIDER,
+      purpose,
+      reclamationId: reclamation?.id ?? null,
+      reclamationQty: reclamation?.quantity ?? null,
+      warehouseId: reclamation?.warehouseId ?? null,
       providerOrderId: first.ClientReference ?? order.number,
       providerShipmentId: first.ParcelId ? String(first.ParcelId) : null,
       providerParcelId: first.ParcelId ? String(first.ParcelId) : null,
@@ -102,8 +152,8 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
     return db.shipment.create({
       data: {
         id: shipmentId,
-        orderId: order.id,
-        service: "COURIER_SMALL",
+      orderId: order.id,
+      service: "COURIER_SMALL",
         ...data,
         events: {
           create: {
@@ -124,6 +174,10 @@ export async function createMyGlsShipmentForOrder(orderId: string) {
     await persistFailedShipment({
       orderId: order.id,
       existingShipmentId: existing?.provider === MYGLS_PROVIDER ? existing.id : undefined,
+      purpose,
+      reclamationId: reclamation?.id,
+      reclamationQty: reclamation?.quantity,
+      warehouseId: reclamation?.warehouseId,
       message,
       raw: err instanceof MyGlsProviderError ? err.raw : undefined,
     });
@@ -215,6 +269,10 @@ export function parcelNumberList(shipment: {
 async function persistFailedShipment(args: {
   orderId: string;
   existingShipmentId?: string;
+  purpose: ShipmentPurpose;
+  reclamationId?: string;
+  reclamationQty?: number;
+  warehouseId?: string | null;
   message: string;
   raw?: unknown;
 }) {
@@ -240,6 +298,10 @@ async function persistFailedShipment(args: {
       orderId: args.orderId,
       service: "COURIER_SMALL",
       provider: MYGLS_PROVIDER,
+      purpose: args.purpose,
+      reclamationId: args.reclamationId ?? null,
+      reclamationQty: args.reclamationQty ?? null,
+      warehouseId: args.warehouseId ?? null,
       status: "FAILED",
       syncError: args.message,
       events: { create: event },

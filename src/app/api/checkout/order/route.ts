@@ -11,6 +11,13 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function hasAnalyticsConsent(request: Request) {
+  return (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .includes("spc_cookie_consent=analytics");
+}
+
 export async function POST(req: Request) {
   const limited = await checkRateLimitForRequest(
     req,
@@ -31,7 +38,13 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   const userId = user?.userType === "customer" ? user.id : null;
   try {
-    const result = await createOrder(parsed.data, userId);
+    const result = await createOrder(
+      {
+        ...parsed.data,
+        analytics: hasAnalyticsConsent(req) ? parsed.data.analytics : undefined,
+      },
+      userId,
+    );
     return NextResponse.json(result, { status: result.ok ? 201 : 422 });
   } catch (err) {
     logOperationalError("checkout.order.create_failed", err, {

@@ -3,8 +3,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { ClipboardList } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
-import { listOrders } from "@/lib/api/orders";
-import { listReclamationsForUser } from "@/lib/api/reclamations";
+import {
+  listOrdersForReclamation,
+  listReclamationsForUser,
+} from "@/lib/api/reclamations";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { db } from "@/lib/db";
 import { ReclamationForm } from "./reclamation-form";
@@ -35,7 +37,7 @@ export default async function AccountReclamationsPage() {
   const user = await requireUser("/nalog/reklamacije");
   const [reclamations, orders, account] = await Promise.all([
     listReclamationsForUser(user.id),
-    listOrders(user.id),
+    listOrdersForReclamation(user.id),
     db.user.findUnique({
       where: { id: user.id },
       select: { firstName: true, lastName: true, name: true, email: true, phone: true },
@@ -58,10 +60,16 @@ export default async function AccountReclamationsPage() {
   const orderOptions = orders.map((order) => ({
     number: order.number,
     createdAt: order.createdAt.toISOString(),
-    items: order.items.map((item) => ({
+    items: order.items.map((item: {
+      sku: string;
+      name: string;
+      purchasedQty: number;
+      remainingQty: number;
+    }) => ({
       sku: item.sku,
       name: item.name,
-      qty: item.qty,
+      purchasedQty: item.purchasedQty,
+      remainingQty: item.remainingQty,
     })),
   }));
 
@@ -140,6 +148,9 @@ export default async function AccountReclamationsPage() {
                       </p>
                       <p className="mt-2 text-sm leading-relaxed text-ink-700">
                         {r.description}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        SKU {r.sku} · količina {r.quantity}
                       </p>
                       {r.photos.length ? (
                         <div className="mt-3 flex flex-wrap gap-2">

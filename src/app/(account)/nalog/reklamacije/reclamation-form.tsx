@@ -10,7 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 type OrderOption = {
   number: string;
   createdAt: string;
-  items: { sku: string; name: string; qty: number }[];
+  items: {
+    sku: string;
+    name: string;
+    purchasedQty: number;
+    remainingQty: number;
+  }[];
 };
 
 type Defaults = {
@@ -36,6 +41,7 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const FIELD_ERROR_MESSAGES: Record<string, string> = {
   orderNumberOrFiscal: "Izaberite porudžbinu.",
   sku: "Izaberite artikal iz porudžbine.",
+  quantity: "Količina mora biti u okviru preostale kupljene količine.",
   customerFirst: "Unesite ime (najmanje 2 slova).",
   customerLast: "Unesite prezime (najmanje 2 slova).",
   customerEmail: "Unesite ispravnu e-adresu.",
@@ -54,6 +60,7 @@ export function ReclamationForm({
 }) {
   const [orderNumber, setOrderNumber] = useState(orders[0]?.number ?? "");
   const [sku, setSku] = useState(orders[0]?.items[0]?.sku ?? "");
+  const [quantity, setQuantity] = useState(1);
   const [firstName, setFirstName] = useState(defaults.firstName);
   const [lastName, setLastName] = useState(defaults.lastName);
   const [email, setEmail] = useState(defaults.email);
@@ -73,9 +80,11 @@ export function ReclamationForm({
     () => orders.find((o) => o.number === orderNumber) ?? orders[0],
     [orders, orderNumber],
   );
+  const selectedItem = selectedOrder?.items.find((item) => item.sku === sku);
 
   function resetForm() {
     setDescription("");
+    setQuantity(1);
     setPhotos([]);
     setFieldErrors({});
     setFormError(null);
@@ -132,6 +141,7 @@ export function ReclamationForm({
           bytes: photo.file.size,
           orderNumberOrFiscal: selectedOrder.number,
           sku,
+          quantity,
         }),
       });
       const presignData = await presignRes.json().catch(() => null);
@@ -240,6 +250,10 @@ export function ReclamationForm({
           setFormError("Porudžbina nije pronađena.");
         } else if (data?.reason === "ITEM_NOT_FOUND") {
           setFormError("Izabrani artikal nije pronađen u porudžbini.");
+        } else if (data?.reason === "QUANTITY_EXCEEDED") {
+          setFormError(
+            "Izabrana količina prelazi preostalu kupljenu količinu. Osvežite stranicu i pokušajte ponovo.",
+          );
         } else if (res.status === 429) {
           setFormError(
             "Previše pokušaja u kratkom vremenu. Pokušajte ponovo kasnije.",
@@ -294,6 +308,7 @@ export function ReclamationForm({
             setOrderNumber(e.target.value);
             const next = orders.find((o) => o.number === e.target.value);
             setSku(next?.items[0]?.sku ?? "");
+            setQuantity(1);
           }}
           className="h-11 rounded-lg border border-input bg-white px-2.5 text-sm"
         >
@@ -311,17 +326,40 @@ export function ReclamationForm({
         <select
           id="sku"
           value={sku}
-          onChange={(e) => setSku(e.target.value)}
+          onChange={(e) => {
+            setSku(e.target.value);
+            setQuantity(1);
+          }}
           className="h-11 rounded-lg border border-input bg-white px-2.5 text-sm"
         >
           {selectedOrder?.items.map((item) => (
             <option key={item.sku} value={item.sku}>
-              {item.name} ({item.qty} kom)
+              {item.name} ({item.remainingQty} od {item.purchasedQty} kom dostupno)
             </option>
           ))}
         </select>
         {fieldErrors.sku ? (
           <p className="text-xs text-destructive">{fieldErrors.sku}</p>
+        ) : null}
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="quantity">Količina za reklamaciju</Label>
+        <Input
+          id="quantity"
+          type="number"
+          min={1}
+          max={selectedItem?.remainingQty ?? 1}
+          value={quantity}
+          onChange={(event) => setQuantity(Number(event.target.value))}
+          required
+          className="h-11 bg-white"
+        />
+        <p className="text-xs text-ink-500">
+          Preostalo za ovaj artikal: {selectedItem?.remainingQty ?? 0} kom.
+        </p>
+        {fieldErrors.quantity ? (
+          <p className="text-xs text-destructive">{fieldErrors.quantity}</p>
         ) : null}
       </div>
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { SalesOrderForm } from "@/components/admin/sales-order-form";
+import { WebOrderDetail } from "@/components/admin/web-order-detail";
 import { requireAdminAction } from "@/lib/admin";
 import {
   getSalesOrderDetail,
@@ -26,6 +27,9 @@ export default async function SalesOrderDetailPage({
   const search = await searchParams;
   const detail = await getSalesOrderDetail(id);
   if (!detail) notFound();
+  if (detail.channel === "WEB") {
+    return <WebOrderDetail id={id} />;
+  }
   const options = await getSalesOrderFormOptions();
   const wantsEdit = search.mode === "edit";
   const readOnly = !wantsEdit || !detail.canEdit;

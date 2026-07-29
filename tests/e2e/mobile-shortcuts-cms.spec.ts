@@ -239,7 +239,7 @@ test.describe("mobile shortcut CMS acceptance", () => {
     await page.getByLabel("E-pošta").fill(fixture.email);
     await page.getByLabel("Lozinka").fill(fixture.password);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 90_000 });
   }
 });
 

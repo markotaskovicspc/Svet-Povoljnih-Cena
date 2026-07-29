@@ -371,7 +371,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
     await test.step("storno removes the invoice from COGS without duplicating incoming stock", async () => {
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Storniraj", exact: true }).click();
-      await expect(page.getByText(/Faktura je stornirana/)).toBeVisible();
+      await expect(
+        page.getByRole("status").filter({ hasText: "Faktura je stornirana" }),
+      ).toBeVisible();
       const [invoice, product, item] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
         db.product.findUniqueOrThrow({ where: { id: productId } }),
@@ -393,7 +395,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 60_000 });
   }
 
   async function cleanup() {

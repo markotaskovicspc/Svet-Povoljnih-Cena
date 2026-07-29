@@ -2,12 +2,13 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { getErpModule } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
-import { DataTable } from "@/components/admin/data-table";
+import { ErpGrid } from "@/components/admin/erp-grid";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -54,25 +55,9 @@ async function upsert(formData: FormData) {
           create: data,
           update: data,
         });
-        revalidatePath("/admin/heroji");
+        revalidatePath("/admin/erp/heroji-meseca");
         revalidatePath("/heroji-meseca");
         return { ok: true as const, entityId: saved.id, diff: data };
-      },
-  )(formData);
-}
-
-async function remove(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    { allowed: ["CONTENT"], action: "hero.delete", entity: "HeroOfMonth" },
-    async (_a, formData: FormData) => {
-        const id = String(formData.get("id") ?? "");
-        if (!id) return { ok: false as const, error: "Nedostaje ID." };
-        await db.heroOfMonth.delete({ where: { id } });
-        revalidatePath("/admin/heroji");
-        revalidatePath("/heroji-meseca");
-        return { ok: true as const, entityId: id };
       },
   )(formData);
 }
@@ -80,12 +65,8 @@ async function remove(formData: FormData) {
 export default async function HeroesPage() {
   await requireAdminAction(["CONTENT"]);
   const now = new Date();
-  const [heroes, actions] = await Promise.all([
-    db.heroOfMonth.findMany({
-      orderBy: [{ year: "desc" }, { month: "desc" }, { order: "asc" }],
-      take: 50,
-      include: { action: { select: { name: true } } },
-    }),
+  const [erpModule, actions] = await Promise.all([
+    getErpModule("heroji-meseca", { take: 10_000 }),
     db.action.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
@@ -94,37 +75,15 @@ export default async function HeroesPage() {
       <PageHeader
         title="Heroji meseca"
         description={'Istaknuti proizvodi koji se prikazuju na početnoj i u sekciji „Heroji meseca".'}
-        crumbs={[{ href: "/admin", label: "Admin" }, { label: "Heroji" }]}
+        crumbs={[
+          { href: "/admin", label: "Admin" },
+          { href: "/admin/erp", label: "ERP" },
+          { label: "Heroji meseca" },
+        ]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_400px]">
         <Card className="p-0">
-          <DataTable
-            columns={[
-              { key: "month", label: "Mesec" },
-              { key: "sku", label: "SKU" },
-              { key: "action", label: "Akcija" },
-              { key: "order", label: "Red.", align: "right" },
-              { key: "actions", label: "" },
-            ]}
-            rows={heroes.map((h) => ({
-              id: h.id,
-              cells: {
-                month: `${MONTHS[h.month - 1]} ${h.year}`,
-                sku: <span className="font-mono text-xs">{h.productSku}</span>,
-                action: h.action?.name ?? "—",
-                order: h.order,
-                actions: (
-                  <form action={remove}>
-                    <input type="hidden" name="id" value={h.id} />
-                    <SubmitButton variant="destructive" size="xs" pendingLabel="…">
-                      Obriši
-                    </SubmitButton>
-                  </form>
-                ),
-              },
-            }))}
-            empty="Još nema heroja."
-          />
+          {erpModule ? <ErpGrid module={erpModule} /> : null}
         </Card>
         <Card>
           <CardTitle>Dodaj heroja</CardTitle>

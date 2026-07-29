@@ -1,7 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import ExcelJS from "exceljs";
 import { config as loadEnv } from "dotenv";
 
 loadEnv({ path: ".env.local" });
@@ -35,6 +36,7 @@ test.describe("Admin analitika reklamacija", () => {
 
   let db: PrismaClient;
   let mutableReclamationId = "";
+  let createdWarehouseId = "";
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -62,24 +64,44 @@ test.describe("Admin analitika reklamacija", () => {
       createProduct(fixture.skuC, fixture.productC, supplierA.id),
     ]);
 
+    let warehouse = await db.warehouse.findFirst({
+      where: { active: true, isDefault: true },
+      select: { id: true },
+    });
+    if (!warehouse) {
+      warehouse = await db.warehouse.create({
+        data: {
+          code: `QA-REK-DC-${runId}`.slice(0, 40),
+          name: `${prefix} DC`,
+          active: true,
+          isDefault: true,
+        },
+        select: { id: true },
+      });
+      createdWarehouseId = warehouse.id;
+    }
+
     const deliveredOrder = await db.order.create({
       data: {
         ...orderData(fixture.deliveredOrder, "ISPORUCENO"),
         items: {
           create: [
-            orderItemData(productA, fixture.supplierA, 100),
-            orderItemData(productB, fixture.supplierB, 50),
-            orderItemData(productC, fixture.supplierA, 20),
+            orderItemData(productA, fixture.supplierA, 100, warehouse.id),
+            orderItemData(productB, fixture.supplierB, 50, warehouse.id),
+            orderItemData(productC, fixture.supplierA, 20, warehouse.id),
           ],
         },
       },
       include: { items: true },
     });
-    await db.order.create({
+    const activeOrder = await db.order.create({
       data: {
         ...orderData(fixture.activeOrder, "U_ISPORUCI"),
-        items: { create: orderItemData(productA, fixture.supplierA, 900) },
+        items: {
+          create: orderItemData(productA, fixture.supplierA, 900, warehouse.id),
+        },
       },
+      include: { items: true },
     });
 
     const itemA = deliveredOrder.items.find((item) => item.sku === fixture.skuA)!;
@@ -145,7 +167,53 @@ test.describe("Admin analitika reklamacija", () => {
         }),
       ],
     });
-  });
+
+    await Promise.all([
+      createFiscalSale({
+        orderId: deliveredOrder.id,
+        item: itemA,
+        warehouseId: warehouse.id,
+        suffix: "SALE-A",
+        qty: 2,
+        totalGross: 2_500,
+        serviceGross: 500,
+      }),
+      createFiscalSale({
+        orderId: activeOrder.id,
+        item: activeOrder.items[0]!,
+        warehouseId: warehouse.id,
+        suffix: "SALE-B",
+        qty: 1,
+        totalGross: 1_000,
+        serviceGross: 0,
+      }),
+      db.shipment.create({
+        data: {
+          orderId: deliveredOrder.id,
+          warehouseId: warehouse.id,
+          service: "COURIER_SMALL",
+          purpose: "ORDER_DELIVERY",
+          status: "DELIVERED",
+          deliveredAt: new Date(),
+        },
+      }),
+      db.analyticsEvent.createMany({
+        data: [
+          analyticsEvent("PAGE_VIEW", "anon-a", { sessionId: `${prefix}-session-a` }),
+          analyticsEvent("PAGE_VIEW", "anon-b", { sessionId: `${prefix}-session-b` }),
+          analyticsEvent("PRODUCT_VIEW", "anon-a", { productId: productA.id }),
+          analyticsEvent("ADD_TO_CART", "anon-a", {
+            productId: productA.id,
+            quantity: 2,
+          }),
+          analyticsEvent("CHECKOUT_COMPLETED", "anon-a", {
+            orderId: deliveredOrder.id,
+            value: 2_500,
+          }),
+        ],
+      }),
+    ]);
+  }, 120_000);
 
   test.afterAll(async () => {
     try {
@@ -173,10 +241,10 @@ test.describe("Admin analitika reklamacija", () => {
     ]);
 
     await test.step("ruta zahteva admina i prijava radi", async () => {
-      await page.goto("/admin/reklamacije", { waitUntil: "domcontentloaded" });
+      await page.goto("/admin/erp/reklamacije-dnevnik", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/\/admin\/prijava/);
       await login(page);
-      await expect(page).toHaveURL(/\/admin\/reklamacije$/);
+      await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-dnevnik$/);
       const pageHeading = page.getByRole("heading", {
         name: "Reklamacije",
         exact: true,
@@ -273,7 +341,7 @@ test.describe("Admin analitika reklamacija", () => {
     });
 
     await test.step("status filter utiče samo na operativni spisak", async () => {
-      await page.locator('a[href="/admin/reklamacije?status=RESENO"]').click();
+      await page.locator('a[href="/admin/erp/reklamacije-dnevnik?status=RESENO"]').click();
       await expect(page).toHaveURL(/status=RESENO/);
       const operations = page.locator(
         'section[aria-labelledby="reclamation-operations"]',
@@ -287,7 +355,7 @@ test.describe("Admin analitika reklamacija", () => {
     });
 
     await test.step("postojeća promena statusa i istorija nisu pokvarene", async () => {
-      await page.goto("/admin/reklamacije?status=PRIMLJENO", {
+      await page.goto("/admin/erp/reklamacije-dnevnik?status=PRIMLJENO", {
         waitUntil: "domcontentloaded",
       });
       const operations = page.locator(
@@ -299,7 +367,7 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(card).toHaveCount(1);
       await card.locator('select[name="status"]').selectOption("U_OBRADI");
       await card.locator('textarea[name="note"]').fill("QA provera analitike");
-      await card.getByRole("button", { name: "Sačuvaj" }).click();
+      await card.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect
         .poll(async () =>
           db.reclamation.findUnique({
@@ -308,7 +376,7 @@ test.describe("Admin analitika reklamacija", () => {
           }),
         )
         .toEqual({ status: "U_OBRADI" });
-      await page.goto("/admin/reklamacije?status=U_OBRADI", {
+      await page.goto("/admin/erp/reklamacije-dnevnik?status=U_OBRADI", {
         waitUntil: "domcontentloaded",
       });
       await expect(
@@ -316,6 +384,121 @@ test.describe("Admin analitika reklamacija", () => {
           .locator('section[aria-labelledby="reclamation-operations"]')
           .getByText(`${prefix}-A-OPEN-31`, { exact: true }),
       ).toBeVisible();
+    });
+
+    await test.step("dashboard periodi, strogo sačuvani pogledi i XLSX izvozi rade", async () => {
+      await page.goto("/admin", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Kontrolna tabla" })).toBeVisible();
+      for (const label of [
+        "Porudžbine od",
+        "Porudžbine do",
+        "Fiskalni promet od",
+        "Fiskalni promet do",
+        "Reklamacije od",
+        "Reklamacije do",
+        "Top proizvodi od",
+        "Top proizvodi do",
+      ]) {
+        await expect(page.getByLabel(label)).toBeVisible();
+      }
+      for (const label of [
+        "Zalihe po COGS-u",
+        "Roba u dolasku",
+        "Trenutne posete",
+        "Današnje posete",
+      ]) {
+        await expect(page.getByText(label, { exact: true })).toBeVisible();
+      }
+
+      const viewName = `${prefix} dashboard`;
+      const baseView = {
+        module: "dashboard",
+        name: viewName,
+        query: "",
+        filters: [],
+        sorting: [],
+        visibleColumns: [],
+        columnOrder: [],
+        columnWidths: {},
+        context: {
+          ordersFrom: "2026-07-01",
+          ordersTo: "2026-07-31",
+          fiscalFrom: "2026-07-01",
+          fiscalTo: "2026-07-31",
+          reclamationsFrom: "2026-07-01",
+          reclamationsTo: "2026-07-31",
+          topProductsFrom: "2026-07-01",
+          topProductsTo: "2026-07-31",
+        },
+      };
+      const rejectedView = await page.request.post("/api/admin/saved-views", {
+        data: { ...baseView, name: `${viewName} invalid`, context: { root: "/tmp" } },
+      });
+      expect(rejectedView.status()).toBe(400);
+
+      const savedView = await page.request.post("/api/admin/saved-views", {
+        data: baseView,
+      });
+      expect(savedView.ok()).toBe(true);
+      const savedPayload = (await savedView.json()) as {
+        view: { id: string; name: string; context: Record<string, string> };
+      };
+      expect(savedPayload.view.name).toBe(viewName);
+      expect(savedPayload.view.context).toEqual(baseView.context);
+
+      const listedViews = await page.request.get(
+        "/api/admin/saved-views?module=dashboard",
+      );
+      expect(listedViews.ok()).toBe(true);
+      expect(JSON.stringify(await listedViews.json())).toContain(viewName);
+
+      const deletedView = await page.request.delete("/api/admin/saved-views", {
+        data: { id: savedPayload.view.id },
+      });
+      expect(deletedView.ok()).toBe(true);
+
+      await assertWorkbookContains(
+        await page.request.get(
+          "/api/admin/erp/prodajni-nalozi/export?from=2026-07-01&to=2026-07-31&dateField=fiscal-issued-at&fiscalStatus=issued",
+        ),
+        "Broj porudžbine",
+        fixture.deliveredOrder,
+      );
+      await assertWorkbookContains(
+        await page.request.get("/api/admin/erp/reklamacije-dnevnik/export"),
+        "Naziv artikla",
+        `${prefix}-A-OPEN-31`,
+      );
+    });
+
+    await test.step("izveštaji i namenski analytics ekran izvršavaju stvarne agregate", async () => {
+      await page.goto("/admin/izvestaji?range=30d", {
+        waitUntil: "domcontentloaded",
+      });
+      for (const heading of [
+        "Porudžbine i prodaja (Fiskalizovano)",
+        "Zalihe",
+        "Roba u dolasku",
+        "Reklamacije",
+      ]) {
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+      }
+      await expect(
+        page.getByText("Prosečna cena artikla", { exact: true }).locator(".."),
+      ).toContainText("1.000 RSD");
+      await expect(page.getByText(fixture.skuA, { exact: true }).first()).toBeVisible();
+
+      await page.goto("/admin/erp/posete-konverzije", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByRole("heading", { name: "Posete i konverzije" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Top 50 proizvoda" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Korpa po kupcu i artiklu" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Raw drilldown" })).toBeVisible();
+      await expect(page.getByText(fixture.skuA, { exact: true }).first()).toBeVisible();
+      await expect(
+        page.getByText("Poseta → kupovina", { exact: true }).locator(".."),
+      ).toContainText("50%");
     });
 
     await test.step("mobilni prikaz nema horizontalni overflow stranice", async () => {
@@ -358,7 +541,9 @@ test.describe("Admin analitika reklamacija", () => {
     await page.getByLabel("E-pošta").fill(fixture.adminEmail);
     await page.getByLabel("Lozinka").fill(fixture.adminPassword);
     await page.getByRole("button", { name: "Prijavi se" }).click();
-    await expect(page).toHaveURL(/\/admin\/reklamacije$/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-dnevnik$/, {
+      timeout: 30_000,
+    });
   }
 
   function orderData(number: string, status: "ISPORUCENO" | "U_ISPORUCI") {
@@ -385,6 +570,7 @@ test.describe("Admin analitika reklamacija", () => {
     product: { id: string; sku: string; name: string },
     supplierName: string,
     qty: number,
+    warehouseId: string,
   ) {
     return {
       productId: product.id,
@@ -394,6 +580,88 @@ test.describe("Admin analitika reklamacija", () => {
       qty,
       unitPriceFull: 1_000,
       unitPriceSale: 1_000,
+      warehouseId,
+    };
+  }
+
+  async function createFiscalSale(input: {
+    orderId: string;
+    item: { id: string; productId: string | null; sku: string; name: string };
+    warehouseId: string;
+    suffix: string;
+    qty: number;
+    totalGross: number;
+    serviceGross: number;
+  }) {
+    const document = await db.fiscalDocument.create({
+      data: {
+        orderId: input.orderId,
+        kind: "SALE",
+        status: "ISSUED",
+        source: "MANUAL",
+        warehouseId: input.warehouseId,
+        receiptNumber: `${prefix}-${input.suffix}`,
+        idempotencyKey: `${prefix}:fiscal:${input.suffix}`,
+        totalNet: input.totalGross / 1.2,
+        totalVat: input.totalGross - input.totalGross / 1.2,
+        totalGross: input.totalGross,
+        issuedAt: new Date(),
+      },
+    });
+    const line = await db.fiscalDocumentLine.create({
+      data: {
+        fiscalDocument: { connect: { id: document.id } },
+        orderItem: { connect: { id: input.item.id } },
+        ...(input.item.productId
+          ? { product: { connect: { id: input.item.productId } } }
+          : {}),
+        orderNumber: input.orderId,
+        customerName: "QA Kupac",
+        address: "Test 1",
+        city: "Beograd",
+        postalCode: "11000",
+        phone: "+381600000000",
+        email: `kupac.${runId}@example.invalid`,
+        sku: input.item.sku,
+        shortName: input.item.name,
+        qty: input.qty,
+        vatRate: 20,
+        unitPriceGross: input.totalGross / input.qty,
+        totalNet: input.totalGross / 1.2,
+        totalVat: input.totalGross - input.totalGross / 1.2,
+        totalGross: input.totalGross,
+      },
+    });
+    await db.$executeRaw`
+      UPDATE "FiscalDocumentLine"
+      SET "unitCogs" = 400, "serviceGross" = ${input.serviceGross}
+      WHERE id = ${line.id}
+    `;
+    return document;
+  }
+
+  function analyticsEvent(
+    type:
+      | "PAGE_VIEW"
+      | "PRODUCT_VIEW"
+      | "ADD_TO_CART"
+      | "CHECKOUT_COMPLETED",
+    identity: string,
+    extra: {
+      sessionId?: string;
+      productId?: string;
+      orderId?: string;
+      quantity?: number;
+      value?: number;
+    },
+  ) {
+    return {
+      type,
+      anonymousId: `${prefix}-${identity}`,
+      consentVersion: "qa-e2e",
+      occurredAt: new Date(),
+      expiresAt: new Date(Date.now() + 31 * DAY_MS),
+      ...extra,
     };
   }
 
@@ -427,6 +695,14 @@ test.describe("Admin analitika reklamacija", () => {
 
   async function cleanup() {
     if (!db) return;
+    await db.analyticsEvent.deleteMany({
+      where: { anonymousId: { startsWith: prefix } },
+    });
+    const fixtureOrders = await db.order.findMany({
+      where: { number: { startsWith: prefix } },
+      select: { id: true },
+    });
+    const fixtureOrderIds = fixtureOrders.map(({ id }) => id);
     const reclamations = await db.reclamation.findMany({
       where: { number: { startsWith: prefix } },
       select: { id: true },
@@ -442,7 +718,14 @@ test.describe("Admin analitika reklamacija", () => {
         },
       });
     }
-    await db.reclamation.deleteMany({ where: { number: { startsWith: prefix } } });
+    await db.reclamation.deleteMany({
+      where: {
+        OR: [
+          { number: { startsWith: prefix } },
+          ...(fixtureOrderIds.length ? [{ orderId: { in: fixtureOrderIds } }] : []),
+        ],
+      },
+    });
     await db.order.deleteMany({ where: { number: { startsWith: prefix } } });
     await db.product.deleteMany({ where: { sku: { startsWith: prefix } } });
     await db.supplier.deleteMany({ where: { name: { startsWith: prefix } } });
@@ -454,9 +737,34 @@ test.describe("Admin analitika reklamacija", () => {
       await db.auditLog.deleteMany({ where: { actorId: admin.id } });
       await db.adminUser.delete({ where: { id: admin.id } });
     }
+    if (createdWarehouseId) {
+      await db.warehouse.deleteMany({ where: { id: createdWarehouseId } });
+    }
     mutableReclamationId = "";
+    createdWarehouseId = "";
   }
 });
+
+async function assertWorkbookContains(
+  response: APIResponse,
+  expectedHeader: string,
+  expectedCell: string,
+) {
+  expect(response.ok()).toBe(true);
+  expect(response.headers()["content-type"]).toContain(
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load((await response.body()) as never);
+  const sheet = workbook.worksheets[0]!;
+  const headers = (sheet.getRow(1).values as unknown[]).map(String);
+  expect(headers).toContain(expectedHeader);
+  expect(
+    sheet
+      .getRows(2, Math.max(sheet.rowCount - 1, 0))
+      ?.some((row) => row.values.some((cell) => String(cell) === expectedCell)),
+  ).toBe(true);
+}
 
 function normalize(value: string) {
   return value.replace(/\s+/g, " ").trim();

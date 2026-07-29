@@ -291,7 +291,7 @@ async function reviewRabaluxProductAction(
         reason: String(formData.get("reason") ?? ""),
       });
       revalidatePath("/admin/xml-import");
-      revalidatePath("/admin/proizvodi");
+      revalidatePath("/admin/erp/artikli");
       return {
         ok: true as const,
         entityId: result.productId,
@@ -322,7 +322,7 @@ async function reviewRabaluxPriceAction(
         reason: String(formData.get("reason") ?? ""),
       });
       revalidatePath("/admin/xml-import");
-      revalidatePath("/admin/proizvodi");
+      revalidatePath("/admin/erp/artikli");
       return {
         ok: true as const,
         entityId: result.changeId,
@@ -353,7 +353,7 @@ async function rollbackRabaluxAction(
         reason: String(formData.get("reason") ?? ""),
       });
       revalidatePath("/admin/xml-import");
-      revalidatePath("/admin/proizvodi");
+      revalidatePath("/admin/erp/artikli");
       return {
         ok: true as const,
         entityId: result.runId,
@@ -610,7 +610,7 @@ export default async function XmlImportPage({
                     >
                       <input type="hidden" name="productId" value={product.id} />
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                        <a href={`/admin/proizvodi/${product.id}`} className="font-medium text-walnut hover:underline">
+                        <a href={`/admin/erp/artikli/${product.id}`} className="font-medium text-walnut hover:underline">
                           {product.name}
                         </a>
                         <span className="font-mono text-xs text-ink-500">

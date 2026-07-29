@@ -32,6 +32,7 @@ export const createReclamationSchema = z.object({
   /** Either an order number (`SPC-2026-…`) or a fiscal receipt number. */
   orderNumberOrFiscal: z.string().min(3).max(80),
   sku: z.string().min(1).max(64),
+  quantity: z.int().min(1).max(999),
   customerFirst: z.string().trim().min(2).max(80),
   customerLast: z.string().trim().min(2).max(80),
   customerEmail: z.email().optional(),
@@ -48,7 +49,13 @@ export type CreateReclamationResult =
   | { ok: true; number: string; id: string }
   | {
       ok: false;
-      reason: "ORDER_NOT_FOUND" | "ITEM_NOT_FOUND" | "MISSING_CONTACT" | "UNAUTHORIZED" | "INVALID_PHOTO";
+      reason:
+        | "ORDER_NOT_FOUND"
+        | "ITEM_NOT_FOUND"
+        | "MISSING_CONTACT"
+        | "UNAUTHORIZED"
+        | "INVALID_PHOTO"
+        | "QUANTITY_EXCEEDED";
     };
 
 export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
@@ -99,11 +106,27 @@ export async function createReclamation(
   }
 
   const result = await db.$transaction(async (tx) => {
-    const updated = await tx.orderItem.update({
-      where: { id: item.id },
-      data: { reclamationCount: { increment: 1 } },
-      select: { reclamationCount: true, productId: true },
+    // The counter update serializes concurrent requests for the same purchased
+    // line. The following SUM therefore sees every earlier committed quantity
+    // before deciding whether this request still fits in the purchased amount.
+    const [updated] = await tx.$queryRaw<
+      Array<{ reclamationCount: number; productId: string | null; qty: number }>
+    >`
+      UPDATE "OrderItem"
+      SET "reclamationCount" = "reclamationCount" + 1
+      WHERE id = ${item.id}
+      RETURNING "reclamationCount", "productId", qty
+    `;
+    if (!updated) throw new Error("Stavka porudžbine više ne postoji.");
+
+    const aggregate = await tx.reclamation.aggregate({
+      where: { orderItemId: item.id },
+      _sum: { quantity: true },
     });
+    const alreadyReclaimed = aggregate._sum.quantity ?? 0;
+    if (alreadyReclaimed + input.quantity > updated.qty) {
+      throw new ReclamationQuantityError();
+    }
 
     const number = `R-${updated.reclamationCount}-${order.number}`;
 
@@ -114,6 +137,7 @@ export async function createReclamation(
         orderItemId: item.id,
         productId: updated.productId,
         sku: input.sku,
+        quantity: input.quantity,
         customerFirst: input.customerFirst,
         customerLast: input.customerLast,
         customerEmail: input.customerEmail ?? null,
@@ -141,7 +165,12 @@ export async function createReclamation(
     });
 
     return reclamation;
+  }).catch((error: unknown) => {
+    if (error instanceof ReclamationQuantityError) return null;
+    throw error;
   });
+
+  if (!result) return { ok: false, reason: "QUANTITY_EXCEEDED" };
 
   // Phase 4D: confirm receipt to the customer (only when they opted into
   // the email channel). BCC to the admin inbox is added by the sender.
@@ -182,3 +211,41 @@ export async function listReclamationsForUser(userId: string) {
     },
   });
 }
+
+export async function listOrdersForReclamation(userId: string) {
+  const orders = await db.order.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      number: true,
+      createdAt: true,
+      items: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          qty: true,
+          reclamations: { select: { quantity: true } },
+        },
+      },
+    },
+  });
+
+  return orders
+    .map((order) => ({
+      ...order,
+      items: order.items
+        .map((item) => ({
+          sku: item.sku,
+          name: item.name,
+          purchasedQty: item.qty,
+          remainingQty:
+            item.qty - item.reclamations.reduce((sum, row) => sum + row.quantity, 0),
+        }))
+        .filter((item) => item.remainingQty > 0),
+    }))
+    .filter((order) => order.items.length > 0);
+}
+
+class ReclamationQuantityError extends Error {}

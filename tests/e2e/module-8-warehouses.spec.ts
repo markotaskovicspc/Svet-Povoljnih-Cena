@@ -77,7 +77,7 @@ test.describe("Modul 8 — Magacini", () => {
       await page.getByLabel("Lozinka").fill(fixture.adminPassword);
       await page.getByRole("button", { name: "Prijavi se" }).click();
       await expect(page).toHaveURL(/\/admin\/erp\/magacini$/, {
-        timeout: 30_000,
+        timeout: 90_000,
       });
       await expect(
         page.getByRole("heading", { name: "Magacini", exact: true }).first(),

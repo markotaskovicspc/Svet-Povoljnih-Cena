@@ -17,25 +17,41 @@ import {
 
 const CONSENT_COOKIE = "spc_cookie_consent=analytics";
 const CONSENT_VERSION = "2026-07";
+const ANALYTICS_IDENTITY_KEY = "spc_analytics_identity";
+const ANALYTICS_ID_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 
 function hasConsent() {
   return document.cookie.split(";").some((part) => part.trim() === CONSENT_COOKIE);
 }
 
 function rotatingAnonymousId() {
-  const month = new Date().toISOString().slice(0, 7);
-  const key = `spc_analytics_id:${month}`;
-  let id = window.localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.localStorage.setItem(key, id);
+  const now = Date.now();
+  let identity: { id: string; createdAt: number } | null = null;
+  try {
+    const raw = window.localStorage.getItem(ANALYTICS_IDENTITY_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+    if (
+      parsed &&
+      typeof parsed.id === "string" &&
+      typeof parsed.createdAt === "number" &&
+      parsed.createdAt <= now &&
+      now - parsed.createdAt < ANALYTICS_ID_MAX_AGE_MS
+    ) {
+      identity = { id: parsed.id, createdAt: parsed.createdAt };
+    }
+  } catch {
+    identity = null;
+  }
+  if (!identity) {
+    identity = { id: crypto.randomUUID(), createdAt: now };
+    window.localStorage.setItem(ANALYTICS_IDENTITY_KEY, JSON.stringify(identity));
   }
   for (const existingKey of Object.keys(window.localStorage)) {
-    if (existingKey.startsWith("spc_analytics_id:") && existingKey !== key) {
+    if (existingKey.startsWith("spc_analytics_id:")) {
       window.localStorage.removeItem(existingKey);
     }
   }
-  return `${month}:${id}`;
+  return `v2:${identity.id}`;
 }
 
 function sessionId() {
@@ -46,6 +62,27 @@ function sessionId() {
     window.sessionStorage.setItem(key, id);
   }
   return id;
+}
+
+export type ConsentedAnalyticsContext = {
+  anonymousId: string;
+  sessionId: string;
+  consentVersion: string;
+  path: string;
+};
+
+export function getConsentedAnalyticsContext(): ConsentedAnalyticsContext | undefined {
+  if (typeof window === "undefined" || !hasConsent()) return undefined;
+  try {
+    return {
+      anonymousId: rotatingAnonymousId(),
+      sessionId: sessionId(),
+      consentVersion: CONSENT_VERSION,
+      path: `${window.location.pathname}${window.location.search}`,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function recordFirstPartyEvent(input: {

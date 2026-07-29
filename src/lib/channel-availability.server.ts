@@ -38,47 +38,50 @@ export async function syncProductChannelAvailability(
   productId: string,
 ) {
   const warehouse = await defaultWarehouse(tx);
-  const [product, stock, warehouseStockCount, partnerReservations] = await Promise.all([
-    tx.product.findUnique({
-      where: { id: productId },
-      select: {
-        stock: true,
-        availableWebManual: true,
-        availableWholesaleManual: true,
-        availableExportManual: true,
-        supplierStock: true,
-        supplierReservedStock: true,
-        supplierApprovalStatus: true,
-        lastSupplierStockSyncAt: true,
-        supplier: {
-          select: { integrationKey: true, enabled: true },
-        },
+  // Transaction clients use one physical connection. Avoid Promise.all here:
+  // concurrent submissions are queued by PostgreSQL and can outlive the
+  // interactive transaction timeout under load.
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: {
+      stock: true,
+      availableWebManual: true,
+      availableWholesaleManual: true,
+      availableExportManual: true,
+      supplierStock: true,
+      supplierReservedStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
+      supplier: {
+        select: { integrationKey: true, enabled: true },
       },
-    }),
-    tx.warehouseStock.findUnique({
-      where: {
-        warehouseId_productId: {
-          warehouseId: warehouse.id,
-          productId,
-        },
-      },
-      select: { qty: true },
-    }),
-    tx.warehouseStock.count({ where: { productId } }),
-    tx.partnerReservation.aggregate({
-      where: {
+    },
+  });
+  const stock = await tx.warehouseStock.findUnique({
+    where: {
+      warehouseId_productId: {
+        warehouseId: warehouse.id,
         productId,
-        status: "ACTIVE",
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        AND: [
-          {
-            OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
-          },
-        ],
       },
-      _sum: { qty: true },
-    }),
-  ]);
+    },
+    select: { qty: true },
+  });
+  const warehouseStockCount = await tx.warehouseStock.count({
+    where: { productId },
+  });
+  const partnerReservations = await tx.partnerReservation.aggregate({
+    where: {
+      productId,
+      status: "ACTIVE",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      AND: [
+        {
+          OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
+        },
+      ],
+    },
+    _sum: { qty: true },
+  });
   if (!product) throw new Error("Proizvod ne postoji.");
   const dcPhysical = stock?.qty ?? (warehouseStockCount ? 0 : product.stock);
   const dcAvailable = Math.max(

@@ -1,6 +1,10 @@
 import "server-only";
 
-import { Prisma, type PaymentMethod } from "@prisma/client";
+import {
+  Prisma,
+  type PaymentMethod,
+  type ShipmentPurpose,
+} from "@prisma/client";
 import { num } from "@/lib/api/_helpers";
 import type { MyGlsConfig } from "./config";
 import { MyGlsConfigError, toMyGlsDate } from "./config";
@@ -38,8 +42,10 @@ export function buildMyGlsParcelForOrder(args: {
   cfg: MyGlsConfig;
   order: OrderForMyGlsPayload;
   pickupDate?: Date;
+  purpose?: ShipmentPurpose;
 }): MyGlsParcel {
   const { cfg, order } = args;
+  const purpose = args.purpose ?? "ORDER_DELIVERY";
   if (!cfg.clientNumber) {
     throw new MyGlsConfigError("MyGLS client number nije podešen.");
   }
@@ -47,7 +53,8 @@ export function buildMyGlsParcelForOrder(args: {
   const recipientName = `${order.shipFirstName} ${order.shipLastName}`.trim();
   const contactEmail = order.user?.email ?? order.guestEmail ?? null;
   const content = buildContent(order, cfg.defaultContent);
-  const cod = isMyGlsCashOnDelivery(order.paymentMethod);
+  const cod =
+    purpose === "ORDER_DELIVERY" && isMyGlsCashOnDelivery(order.paymentMethod);
   const services: MyGlsService[] = [
     { Code: "CS1", CS1Parameter: { Value: normalizePhone(order.shipPhone) } },
   ];
@@ -63,17 +70,25 @@ export function buildMyGlsParcelForOrder(args: {
     });
   }
 
+  const merchantAddress = addressFromPickup(cfg);
+  const customerAddress = addressFromOrder(order, recipientName, contactEmail);
+  const reverse = purpose === "RECLAMATION_RETURN";
+  const reference =
+    purpose === "ORDER_DELIVERY"
+      ? order.number
+      : `${order.number}-${purpose === "RECLAMATION_RETURN" ? "POVRAT" : "ZAMENA"}`;
+
   const parcel: MyGlsParcel = {
     ClientNumber: cfg.clientNumber,
-    ClientReference: order.number,
+    ClientReference: reference.slice(0, 40),
     Count: packageCount(order.items),
     Content: content,
     CODAmount: cod ? num(order.total) : 0,
     CODReference: cod ? order.number : undefined,
     CODCurrency: cod ? "RSD" : undefined,
     PickupDate: toMyGlsDate(args.pickupDate ?? nextBusinessDay()),
-    PickupAddress: addressFromPickup(cfg),
-    DeliveryAddress: addressFromOrder(order, recipientName, contactEmail),
+    PickupAddress: reverse ? customerAddress : merchantAddress,
+    DeliveryAddress: reverse ? merchantAddress : customerAddress,
     ServiceList: services,
     SenderIdentityCardNumber: cfg.senderIdentityCardNumber,
     ParcelPropertyList: [
@@ -91,7 +106,7 @@ export function buildMyGlsParcelForOrder(args: {
     ],
   };
 
-  if (order.glsDeliveryPointId) {
+  if (order.glsDeliveryPointId && !reverse) {
     parcel.FinalDeliveryAddress = parcel.DeliveryAddress;
   }
 

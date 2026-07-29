@@ -14,6 +14,7 @@ describe("admin system status", () => {
       EMAIL_FROM: "prodavnica@svetpovoljnihcena.rs",
       EMAIL_REPLY_TO: "podrska@svetpovoljnihcena.rs",
       MYGLS_ENABLED: "true",
+      MYGLS_ENV: "production",
       MYGLS_PRODUCTION_ACCEPTED: "false",
     });
     const resend = readiness.find((item) => item.id === "resend");
@@ -25,6 +26,35 @@ describe("admin system status", () => {
       "RESEND_WEBHOOK_SECRET",
     ]);
     expect(mygls?.missing).toContain("MYGLS_PRODUCTION_ACCEPTED");
+  });
+
+  it("allows provider sandbox modes without production acceptance", () => {
+    const readiness = getIntegrationReadiness({
+      MYGLS_ENABLED: "true",
+      MYGLS_ENV: "test",
+      MYGLS_PRODUCTION_ACCEPTED: "false",
+      MYGLS_USERNAME: "sandbox-user",
+      MYGLS_PASSWORD: "sandbox-password",
+      MYGLS_CLIENT_NUMBER: "123",
+      MYGLS_PICKUP_NAME: "DC",
+      MYGLS_PICKUP_STREET: "Test 1",
+      MYGLS_PICKUP_CITY: "Beograd",
+      MYGLS_PICKUP_POSTAL_CODE: "11000",
+      MYGLS_PICKUP_CONTACT_NAME: "QA",
+      MYGLS_PICKUP_CONTACT_PHONE: "+381600000000",
+      FISCAL_PROVIDER: "badi",
+      BADI_ENV: "sandbox",
+      BADI_PRODUCTION_ACCEPTED: "false",
+      BADI_API_KEY: "sandbox-key",
+      BADI_API_SECRET: "sandbox-secret",
+      BADI_CLIENT_ID: "sandbox-client",
+      BADI_FISCAL_MODE: "public",
+      FISCAL_TIN: "123456789",
+      FISCAL_LOCATION_ID: "sandbox-location",
+    });
+
+    expect(readiness.find((item) => item.id === "mygls")?.ready).toBe(true);
+    expect(readiness.find((item) => item.id === "badi")?.ready).toBe(true);
   });
 
   it("reports a complete Resend setup without exposing secret values", () => {
@@ -99,7 +129,7 @@ describe("admin system status", () => {
   });
 
   it("reports a complete badi training setup as connected without enabling real receipts", () => {
-    const badi = getIntegrationReadiness({
+    const env = {
       FISCAL_PROVIDER: "badi",
       BADI_ENV: "production",
       BADI_INVOICE_TYPE: "training",
@@ -114,11 +144,19 @@ describe("admin system status", () => {
       BADI_VPFR_PFX: "base64-pfx",
       BADI_VPFR_PASSWORD: "password",
       BADI_VPFR_PAC: "ABC123",
-    }).find((item) => item.id === "badi");
+    };
+    const badi = getIntegrationReadiness(env).find((item) => item.id === "badi");
 
     expect(badi?.ready).toBe(true);
     expect(badi?.missing).toEqual([]);
     expect(badi?.description).toContain("training režimu");
+
+    const realReceipts = getIntegrationReadiness({
+      ...env,
+      BADI_INVOICE_TYPE: "normal",
+    }).find((item) => item.id === "badi");
+    expect(realReceipts?.ready).toBe(false);
+    expect(realReceipts?.missing).toContain("BADI_PRODUCTION_ACCEPTED");
   });
 
   it("recognizes supported external monitoring configurations", () => {

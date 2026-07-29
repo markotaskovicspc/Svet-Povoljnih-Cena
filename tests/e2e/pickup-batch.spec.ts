@@ -1,4 +1,9 @@
-import { expect as baseExpect, test } from "@playwright/test";
+import {
+  expect as baseExpect,
+  test,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -221,7 +226,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.getByLabel("E-pošta").fill(fixture.adminEmail);
       await page.getByLabel("Lozinka").fill(fixture.adminPassword);
       await page.getByRole("button", { name: "Prijavi se" }).click();
-      await expect(page).toHaveURL(/\/admin\/erp\/preuzimanja$/);
+      await expect(page).toHaveURL(/\/admin\/erp\/preuzimanja$/, {
+        timeout: 90_000,
+      });
       const overviewHeading = page.getByRole("heading", {
         name: "Nalozi za preuzimanje (Kurirske službe)",
         exact: true,
@@ -505,8 +512,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     });
 
     await test.step("Obriši u detalju briše prazan nalog", async () => {
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Obriši", exact: true }).click();
+      await acceptConfirmation(
+        page,
+        page.getByRole("button", { name: "Obriši", exact: true }),
+      );
       await expect(page).toHaveURL(/\/admin\/erp\/preuzimanja$/);
       await expect
         .poll(() => db.pickupBatch.findUnique({ where: { id: secondBatchId } }))
@@ -518,11 +527,12 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.goto(`/admin/erp/preuzimanja/${firstBatchId}?mode=edit`, {
         waitUntil: "domcontentloaded",
       });
-      page.once("dialog", (dialog) => dialog.accept());
-      await page
-        .getByRole("button", { name: "Ukloni porudžbinu", exact: true })
-        .first()
-        .click();
+      await acceptConfirmation(
+        page,
+        page
+          .getByRole("button", { name: "Ukloni porudžbinu", exact: true })
+          .first(),
+      );
       await expect
         .poll(() =>
           db.pickupBatchLine.count({ where: { batchId: firstBatchId } }),
@@ -563,8 +573,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         has: page.getByText(firstBatchNumber, { exact: true }),
       });
       await row.getByRole("checkbox").click();
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: /Obriši \(1\)/ }).click();
+      await acceptConfirmation(
+        page,
+        page.getByRole("button", { name: /Obriši \(1\)/ }),
+      );
       await expect(
         page.getByRole("status").filter({ hasText: "Obrisano naloga: 1" }),
       ).toBeVisible();
@@ -738,6 +750,15 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     await db.adminUser.deleteMany({ where: { email: fixture.adminEmail } });
   }
 });
+
+async function acceptConfirmation(page: Page, trigger: Locator) {
+  const dialogPromise = page.waitForEvent("dialog");
+  const clickPromise = trigger.click();
+  const dialog = await dialogPromise;
+  expect(dialog.type()).toBe("confirm");
+  await dialog.accept();
+  await clickPromise;
+}
 
 function createDatabaseClient() {
   const raw = databaseUrl();

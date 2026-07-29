@@ -21,7 +21,7 @@ type RouteContext = {
 };
 
 function refreshProduct(productId: string, slug: string) {
-  revalidatePath(`/admin/proizvodi/${productId}`);
+  revalidatePath(`/admin/erp/artikli/${productId}`);
   revalidatePath(`/p/${slug}`);
   revalidateTag("catalog-products", { expire: 0 });
 }

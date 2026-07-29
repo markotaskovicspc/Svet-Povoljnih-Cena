@@ -1,6 +1,10 @@
 import "server-only";
 
-import { Prisma, type PaymentMethod } from "@prisma/client";
+import {
+  Prisma,
+  type PaymentMethod,
+  type ShipmentPurpose,
+} from "@prisma/client";
 import { num } from "@/lib/api/_helpers";
 import type { XExpressConfig } from "./config";
 import type {
@@ -79,9 +83,13 @@ export function buildXExpressCreateOrderPayload(args: {
   order: OrderForPayload;
   townId: number;
   officialStreetName?: string | null;
+  purpose?: ShipmentPurpose;
 }): XExpressCreateOrderPayload {
   const { cfg, order } = args;
-  const cod = isXExpressCashOnDelivery(order.paymentMethod);
+  const purpose = args.purpose ?? "ORDER_DELIVERY";
+  const reverse = purpose === "RECLAMATION_RETURN";
+  const cod =
+    purpose === "ORDER_DELIVERY" && isXExpressCashOnDelivery(order.paymentMethod);
   const recipientName = providerText(
     order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`,
     50,
@@ -125,45 +133,68 @@ export function buildXExpressCreateOrderPayload(args: {
   return {
     ContractCode: cfg.contractCode,
     Reference: providerText(args.reference, 36),
-    Sender: {
-      Name: providerText(cfg.pickup.name, 50),
-      Phone: senderPhone,
-      ...(cfg.pickup.contactEmail
-        ? { Email: providerText(cfg.pickup.contactEmail, 100) }
-        : {}),
-    },
-    Recipient: {
-      Name: recipientName,
-      Phone: recipientPhone,
-      ...((order.user?.email || order.guestEmail)
-        ? { Email: providerText(order.user?.email || order.guestEmail || "", 100) }
-        : {}),
-    },
+    Sender: reverse
+      ? {
+          Name: recipientName,
+          Phone: recipientPhone,
+          ...((order.user?.email || order.guestEmail)
+            ? { Email: providerText(order.user?.email || order.guestEmail || "", 100) }
+            : {}),
+        }
+      : {
+          Name: providerText(cfg.pickup.name, 50),
+          Phone: senderPhone,
+          ...(cfg.pickup.contactEmail
+            ? { Email: providerText(cfg.pickup.contactEmail, 100) }
+            : {}),
+        },
+    Recipient: reverse
+      ? {
+          Name: providerText(cfg.pickup.name, 50),
+          Phone: senderPhone,
+          ...(cfg.pickup.contactEmail
+            ? { Email: providerText(cfg.pickup.contactEmail, 100) }
+            : {}),
+        }
+      : {
+          Name: recipientName,
+          Phone: recipientPhone,
+          ...((order.user?.email || order.guestEmail)
+            ? { Email: providerText(order.user?.email || order.guestEmail || "", 100) }
+            : {}),
+        },
     ServicePayerId: cfg.servicePayerId,
     TypeId: cfg.serviceTypeId,
     Content: content,
     Waypoints: [
       {
-        Address: pickupAddress,
-        Contact: {
-          Name: providerText(cfg.pickup.contactName, 50),
-          Phone: senderPhone,
-        },
+        Address: reverse ? deliveryAddress : pickupAddress,
+        Contact: reverse
+          ? { Name: recipientName, Phone: recipientPhone }
+          : {
+              Name: providerText(cfg.pickup.contactName, 50),
+              Phone: senderPhone,
+            },
         WaypointType: "PICKUP",
       },
       {
-        Address: deliveryAddress,
-        Contact: { Name: recipientName, Phone: recipientPhone },
+        Address: reverse ? pickupAddress : deliveryAddress,
+        Contact: reverse
+          ? {
+              Name: providerText(cfg.pickup.contactName, 50),
+              Phone: senderPhone,
+            }
+          : { Name: recipientName, Phone: recipientPhone },
         WaypointType: "DELIVERY",
       },
       {
-        Address: {
-          ...returnAddress,
-        },
-        Contact: {
-          Name: providerText(cfg.pickup.contactName, 50),
-          Phone: senderPhone,
-        },
+        Address: reverse ? deliveryAddress : { ...returnAddress },
+        Contact: reverse
+          ? { Name: recipientName, Phone: recipientPhone }
+          : {
+              Name: providerText(cfg.pickup.contactName, 50),
+              Phone: senderPhone,
+            },
         WaypointType: "RETURN",
       },
     ],
