@@ -127,7 +127,13 @@ export default async function NewsletterCampaignPage({
         {editable ? (
           <Card>
             <CardTitle description="Čuvanje uvek pravi novu verziju. Izmena kampanje koja je na proveri vraća je u nacrt.">Sadržaj i podešavanja</CardTitle>
-            <AdminActionForm action={saveNewsletterCampaignAction} className="space-y-6" id="newsletter-campaign-editor" testId="newsletter-campaign-editor">
+            <AdminActionForm
+              key={`${campaign.id}:${campaign.updatedAt.getTime()}`}
+              action={saveNewsletterCampaignAction}
+              className="space-y-6"
+              id="newsletter-campaign-editor"
+              testId="newsletter-campaign-editor"
+            >
               <input type="hidden" name="id" value={campaign.id} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <Field label="Interni naziv"><Input name="title" required maxLength={160} defaultValue={campaign.title} /></Field>

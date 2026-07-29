@@ -107,6 +107,8 @@ test.describe("newsletter admin acceptance", () => {
       await editorForm.locator('select[name="audienceMode"]').selectOption("FIXED");
       await editorForm.getByRole("button", { name: "Sačuvaj novu verziju" }).click();
       await acceptanceExpect.poll(async () => db.newsletterCampaignVersion.count({ where: { campaignId: campaignId! } })).toBe(2);
+      await acceptanceExpect(editorForm.locator('select[name="audienceId"]')).toHaveValue(audienceId!);
+      await acceptanceExpect(editorForm.locator('select[name="audienceMode"]')).toHaveValue("FIXED");
 
       const testForms = page.locator("form#newsletter-campaign-test-send:visible");
       await acceptanceExpect.poll(() => testForms.count()).toBe(1);
