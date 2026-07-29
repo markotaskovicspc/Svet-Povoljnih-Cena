@@ -98,6 +98,29 @@ describe("admin system status", () => {
     expect(badi?.missing).toEqual(["BADI_VPFR_PAC"]);
   });
 
+  it("reports a complete badi training setup as connected without enabling real receipts", () => {
+    const badi = getIntegrationReadiness({
+      FISCAL_PROVIDER: "badi",
+      BADI_ENV: "production",
+      BADI_INVOICE_TYPE: "training",
+      BADI_PRODUCTION_ACCEPTED: "false",
+      BADI_API_KEY: "api-key",
+      BADI_API_SECRET: "api-secret",
+      FISCAL_TIN: "123456789",
+      FISCAL_LOCATION_ID: "1234567",
+      BADI_FISCAL_MODE: "vpfr",
+      BADI_STORE_ID: "store-id",
+      BADI_CASHIER_ID: "cashier-id",
+      BADI_VPFR_PFX: "base64-pfx",
+      BADI_VPFR_PASSWORD: "password",
+      BADI_VPFR_PAC: "ABC123",
+    }).find((item) => item.id === "badi");
+
+    expect(badi?.ready).toBe(true);
+    expect(badi?.missing).toEqual([]);
+    expect(badi?.description).toContain("training režimu");
+  });
+
   it("recognizes supported external monitoring configurations", () => {
     expect(
       externalMonitoringIsConnected({

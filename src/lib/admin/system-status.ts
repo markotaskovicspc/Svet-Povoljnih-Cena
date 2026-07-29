@@ -127,6 +127,12 @@ export function getIntegrationReadiness(
         present("BADI_VPFR_PAC"),
       ]
     : [present("BADI_CLIENT_ID")];
+  const badiProductionAccepted = enabledValues.has(
+    normalized(env.BADI_PRODUCTION_ACCEPTED)?.toLowerCase() ?? "",
+  );
+  const badiTraining =
+    !badiProductionAccepted ||
+    normalized(env.BADI_INVOICE_TYPE)?.toLowerCase() === "training";
   const xExpressProduction =
     normalized(env.X_EXPRESS_ENV)?.toLowerCase() === "production";
 
@@ -239,10 +245,11 @@ export function getIntegrationReadiness(
     integration(env, {
       id: "badi",
       label: "BADI fiskalizacija",
-      description: "Automatsko izdavanje fiskalnih računa.",
+      description: badiTraining
+        ? "Povezano u training režimu; pravi fiskalni računi su zaključani."
+        : "Automatsko izdavanje fiskalnih računa u produkcionom režimu.",
       requirements: [
         equals("FISCAL_PROVIDER", "badi"),
-        enabled("BADI_PRODUCTION_ACCEPTED"),
         present("BADI_API_KEY"),
         present("BADI_API_SECRET"),
         present("FISCAL_TIN"),
