@@ -128,7 +128,6 @@ export default async function NewsletterCampaignPage({
           <Card>
             <CardTitle description="Čuvanje uvek pravi novu verziju. Izmena kampanje koja je na proveri vraća je u nacrt.">Sadržaj i podešavanja</CardTitle>
             <AdminActionForm
-              key={`${campaign.id}:${campaign.updatedAt.getTime()}`}
               action={saveNewsletterCampaignAction}
               className="space-y-6"
               id="newsletter-campaign-editor"
@@ -140,13 +139,13 @@ export default async function NewsletterCampaignPage({
                 <Field label="Naslov mejla"><Input name="subject" required maxLength={200} defaultValue={campaign.subject} /></Field>
                 <Field label="Preview tekst"><Input name="previewText" maxLength={240} defaultValue={campaign.previewText ?? ""} /></Field>
                 <Field label="Publika">
-                  <select name="audienceId" required defaultValue={campaign.audienceId ?? ""} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
+                  <select key={`audience:${campaign.updatedAt.getTime()}`} name="audienceId" required defaultValue={campaign.audienceId ?? ""} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
                     <option value="">Izaberite publiku</option>
                     {audiences.map((audience) => <option key={audience.id} value={audience.id}>{audience.name}{typeof audience.estimatedCount === "number" ? ` (${audience.estimatedCount})` : ""}</option>)}
                   </select>
                 </Field>
                 <Field label="Način publike" hint="Dinamička se preračunava neposredno pre slanja; fiksna se zamrzava pri zakazivanju.">
-                  <select name="audienceMode" defaultValue={campaign.audienceMode} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
+                  <select key={`audience-mode:${campaign.updatedAt.getTime()}`} name="audienceMode" defaultValue={campaign.audienceMode} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
                     <option value="DYNAMIC">Dinamička</option>
                     <option value="FIXED">Fiksna lista</option>
                   </select>

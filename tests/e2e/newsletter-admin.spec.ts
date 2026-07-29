@@ -107,6 +107,7 @@ test.describe("newsletter admin acceptance", () => {
       await editorForm.locator('select[name="audienceMode"]').selectOption("FIXED");
       await editorForm.getByRole("button", { name: "Sačuvaj novu verziju" }).click();
       await acceptanceExpect.poll(async () => db.newsletterCampaignVersion.count({ where: { campaignId: campaignId! } })).toBe(2);
+      await acceptanceExpect(editorForm.getByRole("status")).toContainText("Nacrt i nova verzija su sačuvani");
       await acceptanceExpect(editorForm.locator('select[name="audienceId"]')).toHaveValue(audienceId!);
       await acceptanceExpect(editorForm.locator('select[name="audienceMode"]')).toHaveValue("FIXED");
 
