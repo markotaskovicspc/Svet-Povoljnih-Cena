@@ -158,22 +158,49 @@ async function badiRequest<T>(
     message?: string;
     error?: string;
     validation?: unknown;
+    body?: unknown;
   } & T;
 
   if (!res.ok) {
-    const code = typeof json.code === "number" ? json.code : null;
-    const detail = json.message ?? json.error ?? "unknown";
-    const validation = json.validation ? ` ${JSON.stringify(json.validation)}` : "";
+    const nested = isRecord(json.body) ? json.body : null;
+    const code =
+      typeof json.code === "number"
+        ? json.code
+        : typeof nested?.code === "number"
+          ? nested.code
+          : null;
+    const detail = firstString(
+      json.message,
+      json.error,
+      nested?.message,
+      nested?.error,
+      nested?.name,
+    ) ?? "unknown";
+    const validationPayload = json.validation ?? nested?.validation ?? null;
+    const validation = validationPayload
+      ? ` ${JSON.stringify(validationPayload)}`
+      : "";
     return {
       ok: false,
       status: res.status,
       code,
-      validation: json.validation ?? null,
+      validation: validationPayload,
       error: `fiscal:${res.status}:${code ?? "-"} ${detail}${validation}`,
     };
   }
 
   return { ok: true, data: json };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
 }
 
 export async function fiscalizeWithBadi(

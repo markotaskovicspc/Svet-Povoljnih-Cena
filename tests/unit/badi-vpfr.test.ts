@@ -99,4 +99,43 @@ describe("badi VPFR transport", () => {
     });
     expect(JSON.parse(String(init?.body))).not.toHaveProperty("clientId");
   });
+
+  it("surfaces nested BADI error messages without leaking provider stacks", async () => {
+    process.env.BADI_API_KEY = "api-key";
+    process.env.BADI_API_SECRET = "api-secret";
+    process.env.BADI_BASE_URL = "https://badi.example.test/v2";
+    process.env.BADI_STORE_ID = "store-id";
+    process.env.BADI_CASHIER_ID = "cashier-id";
+    process.env.BADI_FISCAL_MODE = "vpfr";
+    process.env.BADI_VPFR_PFX = fakePfxBase64();
+    process.env.BADI_VPFR_PASSWORD = "certificate-password";
+    process.env.BADI_VPFR_PAC = "ABC123";
+    __resetFiscalConfig();
+
+    global.fetch = vi.fn(async () => new Response(
+      JSON.stringify({
+        code: 404,
+        body: {
+          name: "NotFoundError",
+          message: "Cashier not found",
+          stack: ["internal provider stack"],
+        },
+      }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    )) as typeof fetch;
+
+    const result = await fiscalizeWithBadi({
+      invoiceRef: "ORDER-2",
+      total: 100,
+      paymentMethod: "CASH",
+      lines: [{ sku: "1001", name: "Test", qty: 1, unitPrice: 100 }],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      provider: "badi",
+      error: "fiscal:404:404 Cashier not found",
+    });
+    if (!result.ok) expect(result.error).not.toContain("provider stack");
+  });
 });
