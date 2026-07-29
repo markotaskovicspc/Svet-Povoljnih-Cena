@@ -738,19 +738,7 @@ export const operationalErpModules: ErpModule[] = [
     description: "Autorstvo, zakazivanje, slanje i rezultati newsletter kampanja.",
     status: "ready",
     commands: [
-      { label: "Nova kampanja", tone: "primary", action: "newsletter.create" },
-      {
-        label: "Pošalji",
-        confirm: "Poslati izabranu newsletter kampanju primaocima? Proverite naslov, sadržaj i publiku pre potvrde.",
-        disabledReason: "Slanje je dostupno tek kada EMAIL_PROVIDER i marketing pošiljalac prođu health check.",
-      },
-      {
-        label: "Obriši nacrt",
-        tone: "danger",
-        action: "row.delete",
-        needsSelection: true,
-        confirm: "Obrisati izabrane newsletter nacrte?",
-      },
+      { label: "Otvori Newsletter centar", tone: "primary", href: "/admin/newsletter" },
     ],
     columns: [
       text("title", "Naziv"),
@@ -763,7 +751,7 @@ export const operationalErpModules: ErpModule[] = [
       number("delivered", "Isporučeno"),
       number("failed", "Greške"),
     ],
-    editableColumns: ["title", "subject", "body", "status", "scheduledAt"],
+    editableColumns: [],
     rows: emptyRows,
   },
   {

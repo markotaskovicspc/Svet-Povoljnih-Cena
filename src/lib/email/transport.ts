@@ -19,6 +19,8 @@ export interface EmailAttachment {
 }
 
 export interface DispatchInput {
+  /** Optional verified sender override (marketing uses a dedicated sender). */
+  from?: string;
   to: string | string[];
   subject: string;
   html: string;
@@ -74,7 +76,7 @@ async function dispatchResend(
   if (input.idempotencyKey) headers["Idempotency-Key"] = input.idempotencyKey;
 
   const body: Record<string, unknown> = {
-    from,
+    from: input.from ?? from,
     to: Array.isArray(input.to) ? input.to : [input.to],
     subject: input.subject,
     html: input.html,
@@ -124,7 +126,7 @@ async function dispatchPostmark(
   replyTo: string | null,
 ): Promise<DispatchResult> {
   const body: Record<string, unknown> = {
-    From: from,
+    From: input.from ?? from,
     To: Array.isArray(input.to) ? input.to.join(",") : input.to,
     Subject: input.subject,
     HtmlBody: input.html,

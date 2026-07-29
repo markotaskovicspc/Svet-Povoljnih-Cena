@@ -19,6 +19,7 @@ const schemas = {
   NEWSLETTER_SYNC: z.object({ email: z.email() }),
   MARKETING_SYNC: z.object({ userId: z.string().min(1) }),
   RESEND_CONTACT_UNSUBSCRIBE: z.object({ email: z.email() }),
+  NEWSLETTER_CAMPAIGN_SEND: z.object({ campaignId: z.string().min(1) }),
   FISCAL_RECEIPT: z.object({
     orderId: z.string().min(1),
     source: z.enum(["AUTO_ADVANCE", "AUTO_PICKUP", "MANUAL"]).optional(),
@@ -106,21 +107,36 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
 }
 
 export async function processBackgroundJob(id: string) {
-  const rows = await db.$queryRaw<JobRow[]>`
-    UPDATE "BackgroundJob"
-       SET "status" = 'RUNNING',
-           "attempts" = "attempts" + 1,
-           "lockedAt" = NOW(),
-           "updatedAt" = NOW()
-     WHERE "id" = ${id}
-       AND "availableAt" <= NOW()
-       AND (
-         "status" IN ('QUEUED', 'RETRY')
-         OR ("status" = 'RUNNING' AND "lockedAt" < NOW() - INTERVAL '15 minutes')
-       )
-    RETURNING "id", "kind", "payload", "attempts", "maxAttempts"
-  `;
-  const job = rows[0];
+  // Compare application-authored timestamps against the same application clock.
+  // A hosted Postgres server can be a few seconds behind the worker; mixing
+  // `availableAt` from Node with database NOW() made an immediately queued job
+  // visible to findMany but temporarily impossible to claim.
+  const claimAt = new Date();
+  const staleBefore = new Date(claimAt.getTime() - 15 * 60 * 1000);
+  // Keep the guarded transition schema-aware. Raw SQL against
+  // `"BackgroundJob"` silently targets the connection's default schema and
+  // breaks isolated/non-public deployments even though Prisma reads find the
+  // job correctly.
+  const claimed = await db.backgroundJob.updateMany({
+    where: {
+      id,
+      availableAt: { lte: claimAt },
+      OR: [
+        { status: { in: ["QUEUED", "RETRY"] } },
+        { status: "RUNNING", lockedAt: { lt: staleBefore } },
+      ],
+    },
+    data: {
+      status: "RUNNING",
+      attempts: { increment: 1 },
+      lockedAt: claimAt,
+    },
+  });
+  if (claimed.count !== 1) return { claimed: false as const };
+  const job = await db.backgroundJob.findUnique({
+    where: { id },
+    select: { id: true, kind: true, payload: true, attempts: true, maxAttempts: true },
+  });
   if (!job) return { claimed: false as const };
 
   try {
@@ -159,6 +175,8 @@ export async function processBackgroundJob(id: string) {
 }
 
 export async function processPendingBackgroundJobs(limit = 20) {
+  const { enqueueDueNewsletterCampaigns } = await import("@/lib/newsletter/campaigns");
+  await enqueueDueNewsletterCampaigns();
   const now = new Date();
   const stale = new Date(now.getTime() - 15 * 60 * 1000);
   const candidates = await db.backgroundJob.findMany({
@@ -241,7 +259,8 @@ async function dispatchJob(job: JobRow) {
     }
     case "NEWSLETTER_SYNC": {
       const { syncNewsletterSubscriberToResend } = await import("@/lib/email/resend-marketing");
-      await syncNewsletterSubscriberToResend((payload as z.infer<typeof schemas.NEWSLETTER_SYNC>).email);
+      const result = await syncNewsletterSubscriberToResend((payload as z.infer<typeof schemas.NEWSLETTER_SYNC>).email);
+      if (!result.ok) throw new Error(result.error);
       return;
     }
     case "MARKETING_SYNC": {
@@ -259,6 +278,17 @@ async function dispatchJob(job: JobRow) {
         source: "account-deletion",
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "NEWSLETTER_CAMPAIGN_SEND": {
+      const { failNewsletterCampaign, sendNewsletterCampaign } = await import("@/lib/newsletter/campaigns");
+      const campaignId = (payload as z.infer<typeof schemas.NEWSLETTER_CAMPAIGN_SEND>).campaignId;
+      try {
+        await sendNewsletterCampaign(campaignId);
+      } catch (error) {
+        await failNewsletterCampaign(campaignId, error);
+        throw error;
+      }
       return;
     }
     case "FISCAL_RECEIPT": {

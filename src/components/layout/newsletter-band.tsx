@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Check, Mail } from "lucide-react";
@@ -77,7 +78,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                 <span className="inline-flex size-8 items-center justify-center rounded-full bg-success/20 text-success">
                   <Check className="size-4" aria-hidden />
                 </span>
-                Hvala! Uspešno ste prijavljeni na newsletter.
+                Proverite e-poštu i potvrdite newsletter prijavu.
               </motion.div>
             ) : (
               <motion.div
@@ -121,9 +122,9 @@ export function NewsletterBand({ className }: { className?: string }) {
                 ) : (
                   <p className="mt-2 pl-4 text-xs text-ink-500">
                     Prijavom prihvatate{" "}
-                    <a href="/politika-privatnosti" className="underline underline-offset-4">
+                    <Link href="/politika-privatnosti" className="underline underline-offset-4">
                       politiku privatnosti
-                    </a>
+                    </Link>
                     .
                   </p>
                 )}

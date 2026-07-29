@@ -16,10 +16,14 @@ export function AdminActionForm({
   action,
   children,
   className,
+  id,
+  testId,
 }: {
   action: AdminFormAction;
   children: React.ReactNode | ((state: AdminActionState) => React.ReactNode);
   className?: string;
+  id?: string;
+  testId?: string;
 }) {
   const [state, formAction] = useActionState(
     action,
@@ -28,7 +32,7 @@ export function AdminActionForm({
   const hasMessage = Boolean(state.message);
 
   return (
-    <form action={formAction} className={className}>
+    <form action={formAction} className={className} id={id} data-testid={testId}>
       {hasMessage ? (
         <p
           role={state.ok ? "status" : "alert"}

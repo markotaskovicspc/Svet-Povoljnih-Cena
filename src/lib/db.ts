@@ -1,5 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@generated/prisma-client";
 
 /**
  * Prisma client singleton — avoids exhausting connections during HMR in dev.
@@ -39,6 +39,20 @@ function withDatabaseSsl(connectionString: string) {
   }
 }
 
+function databaseAdapterOptions(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const schema = url.searchParams.get("schema")?.trim() || undefined;
+    // `schema` is a Prisma URL option, not a node-postgres connection option.
+    // The driver adapter needs it explicitly so isolated schemas and non-public
+    // deployments generate qualified queries correctly.
+    url.searchParams.delete("schema");
+    return { connectionString: withDatabaseSsl(url.toString()), schema };
+  } catch {
+    return { connectionString: withDatabaseSsl(connectionString), schema: undefined };
+  }
+}
+
 function usesLibpqCompatibleSsl(sslMode: string) {
   return ["prefer", "require", "verify-ca"].includes(sslMode.toLowerCase());
 }
@@ -68,15 +82,16 @@ function createClient(): PrismaClient {
       "Database connection string is not set. Expected DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING.",
     );
   }
+  const adapterOptions = databaseAdapterOptions(connectionString);
   const adapter = new PrismaPg({
-    connectionString: withDatabaseSsl(connectionString),
+    connectionString: adapterOptions.connectionString,
     // Next.js build workers and serverless instances each create a process-local
     // pool. Keep the default at one so Supabase's session-mode limit is not
     // multiplied by the worker count; deployments may raise it explicitly.
     max: databasePoolMax(),
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 15_000,
-  });
+  }, { schema: adapterOptions.schema });
   return new PrismaClient({
     adapter,
     log:

@@ -55,34 +55,34 @@ export function getEmailConfig(): EmailConfig {
           ? envValue("POSTMARK_SERVER_TOKEN")
           : null,
     from:
-      process.env.EMAIL_FROM ??
+      envValue("EMAIL_FROM") ??
       `${BRAND.name} <no-reply@svetpovoljnihcena.rs>`,
     marketingFrom:
-      process.env.EMAIL_MARKETING_FROM ??
-      process.env.EMAIL_FROM ??
+      envValue("EMAIL_MARKETING_FROM") ??
+      envValue("EMAIL_FROM") ??
       `${BRAND.name} <no-reply@svetpovoljnihcena.rs>`,
-    replyTo: process.env.EMAIL_REPLY_TO ?? null,
-    orderBcc: process.env.EMAIL_ORDER_BCC ?? null,
+    replyTo: envValue("EMAIL_REPLY_TO"),
+    orderBcc: envValue("EMAIL_ORDER_BCC"),
     reclamationsInbox:
-      process.env.EMAIL_RECLAMATIONS_INBOX ?? "reklamacije@svetpovoljnihcena.rs",
+      envValue("EMAIL_RECLAMATIONS_INBOX") ?? "reklamacije@svetpovoljnihcena.rs",
     commentsInbox:
-      process.env.EMAIL_COMMENTS_INBOX ?? "komentar@svetpovoljnihcena.rs",
-    inboundSecret: process.env.EMAIL_INBOUND_SECRET ?? null,
+      envValue("EMAIL_COMMENTS_INBOX") ?? "komentar@svetpovoljnihcena.rs",
+    inboundSecret: envValue("EMAIL_INBOUND_SECRET"),
     resendWebhookSecret: envValue("RESEND_WEBHOOK_SECRET"),
     promotionsTopicId: envValue("RESEND_TOPIC_PROMOTIONS_ID"),
     newsletterSegmentId: envValue("RESEND_SEGMENT_NEWSLETTER_ID"),
     unsubscribeSecret:
-      process.env.EMAIL_UNSUBSCRIBE_SECRET ??
-      process.env.AUTH_SECRET ??
-      process.env.NEXTAUTH_SECRET ??
+      envValue("EMAIL_UNSUBSCRIBE_SECRET") ??
+      envValue("AUTH_SECRET") ??
+      envValue("NEXTAUTH_SECRET") ??
       (process.env.NODE_ENV === "development"
         ? "development-only-email-unsubscribe-secret"
         : null),
     alertsCronSecret:
-      process.env.EMAIL_ALERTS_CRON_SECRET ?? process.env.CRON_SECRET ?? null,
+      envValue("EMAIL_ALERTS_CRON_SECRET") ?? envValue("CRON_SECRET"),
     baseUrl:
-      process.env.NEXT_PUBLIC_BASE_URL ??
-      process.env.NEXTAUTH_URL ??
+      envValue("NEXT_PUBLIC_BASE_URL") ??
+      envValue("NEXTAUTH_URL") ??
       "https://www.svetpovoljnihcena.rs",
   };
   return cached;

@@ -1,8 +1,29 @@
 import type { NextConfig } from "next";
-import { dirname } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
+const nextPackageRoot = dirname(
+  createRequire(import.meta.url).resolve("next/package.json"),
+);
+const turbopackRoot = commonAncestor(projectRoot, nextPackageRoot);
+
+function commonAncestor(left: string, right: string) {
+  let candidate = left;
+  while (true) {
+    const pathFromCandidate = relative(candidate, right);
+    if (
+      pathFromCandidate === "" ||
+      (!pathFromCandidate.startsWith("..") && !isAbsolute(pathFromCandidate))
+    ) {
+      return candidate;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) return candidate;
+    candidate = parent;
+  }
+}
 
 function getSupabaseImagePattern() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -59,7 +80,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1"],
   turbopack: {
-    root: projectRoot,
+    // Worktrees may share dependencies from a parent checkout. Next 16 only
+    // resolves files inside this root, so use the smallest ancestor that
+    // contains both the application and the resolved Next.js package.
+    root: turbopackRoot,
   },
   experimental: {
     serverActions: {

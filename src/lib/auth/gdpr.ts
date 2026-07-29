@@ -141,6 +141,8 @@ export async function setMarketingConsent(
     },
   });
   if (channels.email !== undefined) {
+    const { syncAccountMarketingContact } = await import("@/lib/newsletter/contacts");
+    await syncAccountMarketingContact(userId, channels.email);
     await enqueueBackgroundJob({
       kind: "MARKETING_SYNC",
       payload: { userId },

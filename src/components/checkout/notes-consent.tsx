@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useFormContext } from "react-hook-form";
 import {
@@ -71,12 +72,12 @@ export function NotesConsent() {
               Uslovima kupovine
             </button>{" "}
             i obradom mojih podataka u skladu sa{" "}
-            <a
+            <Link
               href="/politika-privatnosti"
               className="text-walnut hover:text-ink-900 underline-offset-2 hover:underline"
             >
               Politikom privatnosti
-            </a>
+            </Link>
             .<span className="text-action ml-0.5">*</span>
           </span>
         </label>
@@ -122,12 +123,12 @@ function TermsDialog({
           <p>
             Ovo je sažet prikaz uslova kupovine. Kompletan tekst je dostupan na
             stranici{" "}
-            <a
+            <Link
               href="/uslovi-kupovine"
               className="text-walnut hover:text-ink-900 underline"
             >
               Uslovi kupovine
-            </a>
+            </Link>
             .
           </p>
           <ul className="list-inside list-disc space-y-1">

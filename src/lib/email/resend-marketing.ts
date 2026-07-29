@@ -101,16 +101,26 @@ export async function syncResendContact(input: SyncContactInput) {
 
 export async function syncNewsletterSubscriberToResend(emailRaw: string) {
   const email = emailRaw.trim().toLowerCase();
-  const sub = await db.newsletterSubscriber.findUnique({ where: { email } });
-  if (!sub) return { ok: true as const, skipped: true as const };
+  const [contact, sub] = await Promise.all([
+    db.marketingContact.findUnique({ where: { email } }),
+    db.newsletterSubscriber.findUnique({ where: { email } }),
+  ]);
+  if (!contact && !sub) return { ok: true as const, skipped: true as const };
+  const active = contact
+    ? contact.status === "ACTIVE"
+    : Boolean(sub?.consent && !sub.unsubscribedAt);
   return syncResendContact({
-    email: sub.email,
-    unsubscribed: !sub.consent || Boolean(sub.unsubscribedAt),
-    promotionalAudience: true,
-    source: sub.source ?? "newsletter",
+    email,
+    firstName: contact?.firstName,
+    lastName: contact?.lastName,
+    userId: contact?.userId,
+    unsubscribed: !active,
+    promotionalAudience: active,
+    source: contact?.source ?? sub?.source ?? "newsletter",
     properties: {
-      consent_source: sub.source ?? "newsletter",
-      subscribed_at: sub.createdAt.toISOString(),
+      consent_source: contact?.source ?? sub?.source ?? "newsletter",
+      subscribed_at: contact?.subscribedAt?.toISOString() ?? sub?.createdAt.toISOString(),
+      preferred_locale: contact?.language,
     },
   });
 }

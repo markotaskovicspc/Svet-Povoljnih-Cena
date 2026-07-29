@@ -119,7 +119,12 @@ export default async function AccountSettingsPage({ searchParams }: { searchPara
 
       <section className="rounded-xl border border-border/70 bg-surface p-5 md:p-7">
         <h2 className="font-display text-2xl">Privatnost</h2>
-        <div className="mt-4 flex flex-wrap gap-3"><a href="/api/account/export" className={cn(buttonVariants({ variant: "outline" }))}>Preuzmi moje podatke</a><Link href="/podesavanja-kolacica" className={cn(buttonVariants({ variant: "outline" }))}>Podešavanja kolačića</Link></div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {/* This is a file download endpoint, not client-side page navigation. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/api/account/export" className={cn(buttonVariants({ variant: "outline" }))}>Preuzmi moje podatke</a>
+          <Link href="/podesavanja-kolacica" className={cn(buttonVariants({ variant: "outline" }))}>Podešavanja kolačića</Link>
+        </div>
       </section>
 
       <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 md:p-7">

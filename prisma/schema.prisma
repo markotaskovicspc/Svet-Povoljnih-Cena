@@ -8,6 +8,14 @@ generator client {
   previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
 }
 
+// A repository-local client keeps Next.js builds and acceptance tests stable
+// when multiple Git worktrees share the parent checkout's node_modules.
+generator workspaceClient {
+  provider        = "prisma-client-js"
+  output          = "../.generated/prisma-client"
+  previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
+}
+
 datasource db {
   provider   = "postgresql"
   extensions = [pg_trgm]
@@ -56,6 +64,7 @@ model User {
   cart               Cart?
   checkoutSessions   CheckoutSession[]
   customer           Customer?
+  marketingContact   MarketingContact?
 
   @@index([createdAt])
 }
@@ -3063,21 +3072,238 @@ model NewsletterSubscriber {
   unsubscribedAt DateTime?
 }
 
+enum MarketingContactStatus {
+  PENDING
+  ACTIVE
+  UNSUBSCRIBED
+  SUPPRESSED
+}
+
+enum MarketingConsentEventType {
+  REQUESTED
+  CONFIRMED
+  GRANTED
+  WITHDRAWN
+  SUPPRESSED
+  RESTORED
+  MIGRATED
+}
+
+enum NewsletterAudienceMode {
+  DYNAMIC
+  FIXED
+}
+
+enum NewsletterCampaignStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  SCHEDULED
+  PREPARING
+  SENDING
+  SENT
+  CANCELLED
+  PARTIAL_FAILED
+  FAILED
+}
+
+enum NewsletterRecipientStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  FAILED
+  UNSUBSCRIBED
+}
+
+model MarketingContact {
+  id             String                 @id @default(cuid())
+  email          String                 @unique
+  userId         String?                @unique
+  firstName      String?
+  lastName       String?
+  language       String                 @default("sr-Latn")
+  status         MarketingContactStatus @default(PENDING)
+  source         String?
+  consentVersion String?
+  subscribedAt   DateTime?
+  confirmedAt    DateTime?
+  unsubscribedAt DateTime?
+  suppressedAt   DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  user          User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  consentEvents MarketingConsentEvent[]
+  optInTokens   NewsletterOptInToken[]
+  recipients    NewsletterCampaignRecipient[]
+
+  @@index([status, subscribedAt])
+  @@index([source, createdAt])
+}
+
+model MarketingConsentEvent {
+  id             String                    @id @default(cuid())
+  contactId      String
+  type           MarketingConsentEventType
+  source         String
+  consentVersion String?
+  policyVersion  String?
+  actorId        String?
+  evidence       Json?
+  occurredAt     DateTime                  @default(now())
+
+  contact MarketingContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model NewsletterOptInToken {
+  id        String    @id @default(cuid())
+  contactId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  contact MarketingContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, expiresAt])
+  @@index([expiresAt, usedAt])
+}
+
+model NewsletterAudience {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  description    String?
+  filter         Json
+  estimatedCount Int?
+  estimatedAt    DateTime?
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  campaigns NewsletterCampaign[]
+
+  @@index([updatedAt])
+}
+
+model NewsletterTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subject     String?
+  previewText String?
+  content     Json
+  html        String?  @db.Text
+  text        String?  @db.Text
+  createdById String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
 model NewsletterCampaign {
-  id          String         @id @default(cuid())
-  title       String
-  subject     String
-  body        String         @db.Text
-  status      CampaignStatus @default(DRAFT)
-  scheduledAt DateTime?
-  sentAt      DateTime?
-  recipients  Int?
-  delivered   Int?
-  failed      Int?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                     String                   @id @default(cuid())
+  title                  String
+  subject                String
+  previewText            String?
+  body                   String                   @db.Text
+  content                Json                     @default("[]")
+  html                   String?                  @db.Text
+  text                   String?                  @db.Text
+  fromName               String?
+  fromEmail              String?
+  replyTo                String?
+  audienceId             String?
+  audienceMode           NewsletterAudienceMode   @default(DYNAMIC)
+  audienceFilterSnapshot Json?
+  audienceBreakdown      Json?
+  topicKey               String                   @default("promotions")
+  status                 NewsletterCampaignStatus @default(DRAFT)
+  approvedAt             DateTime?
+  approvedById           String?
+  scheduledAt            DateTime?
+  sentAt                 DateTime?
+  cancelledAt            DateTime?
+  providerBroadcastId    String?                  @unique
+  providerSegmentId      String?
+  failureReason          String?                  @db.Text
+  recipients             Int?
+  delivered              Int?
+  opened                 Int?
+  clicked                Int?
+  bounced                Int?
+  complained             Int?
+  unsubscribed           Int?
+  failed                 Int?
+  createdById            String?
+  updatedById            String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  audience           NewsletterAudience?           @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+  versions           NewsletterCampaignVersion[]
+  campaignRecipients NewsletterCampaignRecipient[]
 
   @@index([status, scheduledAt])
+  @@index([audienceId, createdAt])
+  @@index([providerBroadcastId])
+}
+
+model NewsletterCampaignVersion {
+  id             String   @id @default(cuid())
+  campaignId     String
+  version        Int
+  subject        String
+  previewText    String?
+  content        Json
+  html           String   @db.Text
+  text           String   @db.Text
+  audienceFilter Json?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  campaign NewsletterCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, version])
+  @@index([campaignId, createdAt])
+}
+
+model NewsletterCampaignRecipient {
+  id                String                    @id @default(cuid())
+  campaignId        String
+  contactId         String?
+  email             String
+  firstName         String?
+  lastName          String?
+  language          String                    @default("sr-Latn")
+  status            NewsletterRecipientStatus @default(QUEUED)
+  providerMessageId String?                   @unique
+  failureReason     String?                   @db.Text
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  bouncedAt         DateTime?
+  complainedAt      DateTime?
+  unsubscribedAt    DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  campaign NewsletterCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  MarketingContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, email])
+  @@index([campaignId, status])
+  @@index([contactId, createdAt])
+  @@index([email, createdAt])
 }
 
 model ViberAudienceQuery {

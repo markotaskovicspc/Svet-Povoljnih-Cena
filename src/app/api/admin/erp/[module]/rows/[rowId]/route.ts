@@ -3,7 +3,6 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import {
   ArticleStatus,
   AllocationBasis,
-  CampaignStatus,
   DiscountTarget,
   ErpCurrency,
   InboundInvoiceType,
@@ -17,6 +16,7 @@ import {
   ReclamationStatus,
   ReclamationType,
 } from "@prisma/client";
+import { NewsletterCampaignStatus } from "@generated/prisma-client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
@@ -956,7 +956,7 @@ async function persistNewsletterCell(rowId: string, columnKey: string, value: Ce
       data.body = requiredString(value, "Sadržaj kampanje je obavezan.");
       break;
     case "status":
-      data.status = enumFromMap(CampaignStatus, value, "Nepoznat status kampanje.");
+      data.status = enumFromMap(NewsletterCampaignStatus, value, "Nepoznat status kampanje.");
       break;
     case "scheduledAt":
       data.scheduledAt = value === null ? null : dateValue(value, "Datum slanja nije ispravan.");

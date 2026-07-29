@@ -66,10 +66,8 @@ export function verifyEmailUnsubscribeToken(
 export async function applyEmailUnsubscribe(payload: EmailUnsubscribePayload) {
   if (payload.purpose === "newsletter") {
     const email = payload.email.trim().toLowerCase();
-    await db.newsletterSubscriber.updateMany({
-      where: { email },
-      data: { consent: false, unsubscribedAt: new Date() },
-    });
+    const { withdrawMarketingEmail } = await import("@/lib/newsletter/contacts");
+    await withdrawMarketingEmail(email, "email-link");
     return { ok: true as const, email, kind: "newsletter" as const };
   }
 
@@ -85,10 +83,8 @@ export async function applyEmailUnsubscribe(payload: EmailUnsubscribePayload) {
     });
     const email = (payload.email ?? user?.email ?? "").trim().toLowerCase();
     if (email) {
-      await db.newsletterSubscriber.updateMany({
-        where: { email },
-        data: { consent: false, unsubscribedAt: new Date() },
-      });
+      const { withdrawMarketingEmail } = await import("@/lib/newsletter/contacts");
+      await withdrawMarketingEmail(email, "account-email-link");
     }
     return { ok: true as const, email: email || null, kind: "marketing" as const };
   }

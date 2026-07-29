@@ -27,7 +27,7 @@ test("newsletter only shows success after the API accepts the signup", async ({ 
   ]);
   await expect(section.getByText("Uspešno ste prijavljeni")).toHaveCount(0);
   releaseResponse();
-  await expect(section.getByText("Uspešno ste prijavljeni na newsletter.")).toBeVisible();
+  await expect(section.getByText("Proverite e-poštu i potvrdite newsletter prijavu.")).toBeVisible();
 });
 
 test("newsletter exposes an API failure instead of a false success", async ({ page }) => {

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { z } from "zod";
 import { VoucherKind } from "@prisma/client";
 import { withAdmin, requireAdminAction } from "@/lib/admin";
@@ -123,9 +124,9 @@ export default async function VouchersPage({
               <p className="font-display text-lg font-semibold text-ink-900">Lista vaučera</p>
               <p className="text-xs text-ink-500">Izaberite vaučer za izmenu.</p>
             </div>
-            <a href="/admin/vauceri?new=1" className="rounded-lg bg-walnut px-3 py-1.5 text-xs font-semibold text-white hover:bg-walnut/90">
+            <Link href="/admin/vauceri?new=1" className="rounded-lg bg-walnut px-3 py-1.5 text-xs font-semibold text-white hover:bg-walnut/90">
               Novi vaučer
-            </a>
+            </Link>
           </div>
           <DataTable
             columns={[
@@ -152,9 +153,9 @@ export default async function VouchersPage({
                 used: `${v._count.redemptions}${v.usageLimit ? ` / ${v.usageLimit}` : ""}`,
                 actions: (
                   <div className="flex justify-end gap-2">
-                    <a href={`/admin/vauceri?edit=${encodeURIComponent(v.code)}`} className="text-xs text-walnut hover:underline">
+                    <Link href={`/admin/vauceri?edit=${encodeURIComponent(v.code)}`} className="text-xs text-walnut hover:underline">
                       Izmeni
-                    </a>
+                    </Link>
                     <form action={remove}>
                       <input type="hidden" name="code" value={v.code} />
                       <SubmitButton variant="destructive" size="xs" pendingLabel="…">

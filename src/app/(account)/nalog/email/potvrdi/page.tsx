@@ -22,6 +22,10 @@ export default async function ConfirmEmailPage({
   const result = token
     ? await consumeEmailConfirmationToken(token)
     : { ok: false as const, reason: "invalid" as const };
+  if (result.ok) {
+    const { confirmAccountMarketingContact } = await import("@/lib/newsletter/contacts");
+    await confirmAccountMarketingContact(result.userId);
+  }
   const ok = result.ok;
   const Icon = ok ? MailCheck : MailX;
 

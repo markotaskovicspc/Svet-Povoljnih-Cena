@@ -173,6 +173,8 @@ export async function recordProviderEvent(input: ProviderEventInput) {
           providerEventId: input.eventId,
         },
       });
+      const { suppressMarketingEmail } = await import("@/lib/newsletter/contacts");
+      await suppressMarketingEmail(email, input.type, input.provider);
     }
   }
 

@@ -64,8 +64,16 @@ if (database) {
 
 const emailProvider = (value("EMAIL_PROVIDER") ?? "none").toLowerCase();
 if (emailProvider === "resend") {
-  requireNames("Resend", ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "EMAIL_FROM", "EMAIL_REPLY_TO"]);
+  requireNames("Resend", [
+    "RESEND_API_KEY",
+    "RESEND_WEBHOOK_SECRET",
+    "RESEND_TOPIC_PROMOTIONS_ID",
+    "EMAIL_FROM",
+    "EMAIL_MARKETING_FROM",
+    "EMAIL_REPLY_TO",
+  ]);
   if ((value("EMAIL_FROM") ?? "").includes("example.com")) errors.push("EMAIL_FROM still uses example.com");
+  if ((value("EMAIL_MARKETING_FROM") ?? "").includes("example.com")) errors.push("EMAIL_MARKETING_FROM still uses example.com");
 } else if (emailProvider === "none") {
   warnings.push("Transactional email is disabled");
 }

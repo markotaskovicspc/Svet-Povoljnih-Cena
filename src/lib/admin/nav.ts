@@ -80,7 +80,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Marketing",
     items: [
-      { href: "/admin/erp/newsletter-kampanje", label: "Newsletter", allowed: A },
+      { href: "/admin/newsletter", label: "Newsletter", allowed: A },
       { href: "/admin/viber", label: "Viber kampanje", allowed: A },
       { href: "/admin/oglasi", label: "Oglasi (GMC/Meta)", allowed: A },
     ],

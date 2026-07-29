@@ -25,8 +25,14 @@ export async function POST(req: Request) {
   if (!limited.ok) {
     return rateLimitJson(limited);
   }
-  const sub = await subscribeNewsletter(parsed.data);
-  return NextResponse.json({ ok: true, email: sub.email }, { status: 201 });
+  const result = await subscribeNewsletter(parsed.data, {
+    userAgent: req.headers.get("user-agent"),
+    forwardedFor: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+  });
+  return NextResponse.json(
+    { ok: true, status: result.status },
+    { status: result.status === "pending" ? 202 : 200 },
+  );
 }
 
 const unsubBody = z.object({ email: z.email() });

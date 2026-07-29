@@ -61,10 +61,21 @@ export async function POST(req: Request) {
     providerMessageId,
     payload: payload as Prisma.InputJsonValue,
   });
+  const { recordNewsletterProviderEvent } = await import("@/lib/newsletter/campaigns");
+  const newsletter = await recordNewsletterProviderEvent(payload);
+  if (
+    payload.type === "contact.updated" &&
+    payload.data?.unsubscribed === true &&
+    typeof payload.data?.email === "string"
+  ) {
+    const { withdrawMarketingEmail } = await import("@/lib/newsletter/contacts");
+    await withdrawMarketingEmail(payload.data.email, "resend-preference-page");
+  }
 
   return NextResponse.json({
     ok: true,
     duplicate: recorded.duplicate,
+    newsletterMatched: newsletter.matched,
   });
 }
 
@@ -75,6 +86,9 @@ interface ResendWebhookEvent {
     email_id?: string;
     emailId?: string;
     to?: string[] | string;
+    broadcast_id?: string;
+    email?: string;
+    unsubscribed?: boolean;
   };
   [key: string]: unknown;
 }
