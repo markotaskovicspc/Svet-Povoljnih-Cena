@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   parseBatch: vi.fn(),
   verifyContract: vi.fn(),
   stageBatch: vi.fn(),
-  processIds: vi.fn(),
 }));
 
 vi.mock("@/lib/x-express/webhook", () => ({
@@ -13,7 +12,6 @@ vi.mock("@/lib/x-express/webhook", () => ({
   parseXExpressWebhookBatch: mocks.parseBatch,
   isXExpressWebhookContractValid: mocks.verifyContract,
   stageXExpressWebhookBatch: mocks.stageBatch,
-  processXExpressWebhookNotifyIds: mocks.processIds,
 }));
 
 import { POST } from "@/app/api/x-express/webhook/route";
@@ -31,11 +29,10 @@ beforeEach(() => {
   mocks.parseBatch.mockReturnValue([event]);
   mocks.verifyContract.mockReturnValue(true);
   mocks.stageBatch.mockResolvedValue(undefined);
-  mocks.processIds.mockResolvedValue({ read: 1, processed: 1, failed: 0 });
 });
 
 describe("X Express webhook route response", () => {
-  it("stages and processes the event but returns the required empty HTTP 200", async () => {
+  it("stages the event and immediately returns the required empty HTTP 200", async () => {
     const response = await POST(
       new Request("https://example.invalid/api/x-express/webhook", {
         method: "POST",
@@ -46,7 +43,6 @@ describe("X Express webhook route response", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("");
     expect(mocks.stageBatch).toHaveBeenCalledWith([event]);
-    expect(mocks.processIds).toHaveBeenCalledWith([event.NotifyId]);
   });
 
   it("rejects authentication, invalid JSON and the wrong contract", async () => {

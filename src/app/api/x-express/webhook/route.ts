@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import {
   isXExpressWebhookContractValid,
   parseXExpressWebhookBatch,
-  processXExpressWebhookNotifyIds,
   stageXExpressWebhookBatch,
   verifyXExpressWebhookHeaders,
 } from "@/lib/x-express/webhook";
@@ -27,11 +26,9 @@ export async function POST(req: Request) {
   }
 
   await stageXExpressWebhookBatch(batch);
-  await processXExpressWebhookNotifyIds(
-    batch.map((item) => item.NotifyId),
-  );
-  // X Express explicitly expects an empty HTTP 200 response. Processing is
-  // idempotent by NotifyId, so a provider retry is safe after a timeout.
+  // X Express explicitly requires a fast, empty HTTP 200 response. The event
+  // is only staged here; the cron/background processor interprets it later.
+  // NotifyId is unique, so provider retries remain idempotent.
   return new NextResponse(null, { status: 200 });
 }
 

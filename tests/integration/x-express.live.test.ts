@@ -1,9 +1,10 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { config as loadEnv } from "dotenv";
 import { describe, expect, it } from "vitest";
 import { XExpressClient } from "@/lib/x-express/client";
 import { formatXExpressTrackingCode } from "@/lib/x-express/code";
-import { getXExpressConfig } from "@/lib/x-express/config";
+import { requireXExpressShipmentConfig } from "@/lib/x-express/config";
+import { normalizeXExpressPhone } from "@/lib/x-express/payload";
 import type { XExpressCreateOrderPayload } from "@/lib/x-express/types";
 
 loadEnv({ path: ".env.local" });
@@ -12,8 +13,8 @@ loadEnv();
 const enabled = process.env.X_EXPRESS_LIVE_TEST === "1";
 
 describe.skipIf(!enabled)("X Express provider test account", () => {
-  it("accepts official check-address and add payloads", async () => {
-    const cfg = getXExpressConfig();
+  it("authenticates and downloads the official status dictionary", async () => {
+    const cfg = requireXExpressShipmentConfig();
     expect(cfg.env).toBe("test");
     expect(cfg.apiUser).not.toBe("");
     expect(cfg.apiKey).not.toBe("");
@@ -30,60 +31,72 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
     expect(
       statuses.find((item) => item.code === "PUDO_RETRIEVED")?.shipmentStatus,
     ).toBe("DELIVERED");
+  });
+
+  it("accepts the configured pickup address", async () => {
+    const cfg = requireXExpressShipmentConfig();
+    const client = new XExpressClient({ ...cfg, enabled: true });
     const address = await client.checkAddress({
-      Name: "Codex QA test",
-      TownId: 703907,
-      StreetName: "Vojvođanska",
-      StreetNumber: "401",
+      Name: cfg.pickup.name,
+      TownId: cfg.pickup.townId!,
+      StreetName: cfg.pickup.streetName,
+      StreetNumber: cfg.pickup.streetNumber,
       Description: null,
     });
-    expect(address.area).toMatch(/^[A-Z0-9-]+$/i);
+    expect(address.area).toBe("SM-5");
+  });
 
-    const value = randomInt(cfg.codeRangeStart!, cfg.codeRangeEnd! + 1);
+  it("accepts order/add with the first sequentially assigned package code", async () => {
+    const cfg = requireXExpressShipmentConfig();
+    const client = new XExpressClient({ ...cfg, enabled: true });
+    // X Express requires strict sequential allocation beginning with the first
+    // assigned value. The test account does not consume the code.
+    const value = cfg.codeRangeStart!;
     const code = formatXExpressTrackingCode(cfg.codePrefix, value);
     const reference = randomUUID();
+    const pickupPhone = normalizeXExpressPhone(cfg.pickup.contactPhone);
     const payload: XExpressCreateOrderPayload = {
       ContractCode: cfg.contractCode,
       Reference: reference,
-      Sender: { Name: "Codex QA test", Phone: "381641234567" },
-      Recipient: { Name: "Codex QA test", Phone: "381641234567" },
-      ServicePayerId: 1,
-      TypeId: 1,
+      Sender: { Name: cfg.pickup.name, Phone: pickupPhone },
+      Recipient: { Name: "Codex QA test", Phone: pickupPhone },
+      ServicePayerId: cfg.servicePayerId,
+      TypeId: cfg.serviceTypeId,
       Content: "API acceptance test",
       Waypoints: [
         {
           Address: {
-            Name: "Codex QA test",
-            TownId: 703907,
-            StreetName: "Vojvođanska",
-            StreetNumber: "401",
-            Latitude: 44.8001239,
-            Longitude: 20.3253489,
-            Description: "Provider test account only",
+            Name: cfg.pickup.name,
+            TownId: cfg.pickup.townId!,
+            StreetName: cfg.pickup.streetName,
+            StreetNumber: cfg.pickup.streetNumber,
+            Latitude: cfg.pickup.latitude!,
+            Longitude: cfg.pickup.longitude!,
+            Description: cfg.pickup.description,
           },
-          Contact: { Name: "Codex QA test", Phone: "381641234567" },
+          Contact: { Name: cfg.pickup.contactName, Phone: pickupPhone },
           WaypointType: "PICKUP",
         },
         {
           Address: {
             Name: "Codex QA test",
-            TownId: 703907,
-            StreetName: "Vojvođanska",
-            StreetNumber: "401",
+            TownId: cfg.pickup.townId!,
+            StreetName: cfg.pickup.streetName,
+            StreetNumber: cfg.pickup.streetNumber,
             Description: "Provider test account only",
           },
-          Contact: { Name: "Codex QA test", Phone: "381641234567" },
+          Contact: { Name: "Codex QA test", Phone: pickupPhone },
           WaypointType: "DELIVERY",
         },
         {
           Address: {
-            Name: "Codex QA test",
-            TownId: 703907,
-            StreetName: "Vojvođanska",
-            StreetNumber: "401",
+            Name: cfg.pickup.name,
+            TownId: cfg.pickup.townId!,
+            StreetName: cfg.pickup.streetName,
+            StreetNumber: cfg.pickup.streetNumber,
             Description: "Provider test return",
           },
-          Contact: { Name: "Codex QA test", Phone: "381641234567" },
+          Contact: { Name: cfg.pickup.contactName, Phone: pickupPhone },
           WaypointType: "RETURN",
         },
       ],

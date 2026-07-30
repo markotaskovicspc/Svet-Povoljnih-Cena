@@ -22,12 +22,16 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/x-express/webhook-events",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/mygls/master-data",
       "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/x-express/dictionaries",
-      "schedule": "30 4 * * *"
+      "schedule": "30 4 * * 1"
     },
     {
       "path": "/api/cron/email-alerts",

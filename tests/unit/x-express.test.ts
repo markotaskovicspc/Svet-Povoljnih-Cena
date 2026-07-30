@@ -10,6 +10,7 @@ import {
   buildXExpressAddressCheckPayload,
   buildXExpressCreateOrderPayload,
   normalizeXExpressPhone,
+  normalizeXExpressStreetNumber,
   splitXExpressStreet,
 } from "@/lib/x-express/payload";
 import {
@@ -181,7 +182,7 @@ describe("X Express official API contract", () => {
           Name: "Svet povoljnih cena",
           Amount: 12_345.67,
           Account: "265-3310310005375-34",
-          Address: "Vojvođanska 401, Surčin",
+          Address: "Vojvođanska 401 Surčin",
         },
       },
     ]);
@@ -202,28 +203,18 @@ describe("X Express official API contract", () => {
     expect(payload).not.toHaveProperty("Options");
   });
 
-  it("reverses customer and warehouse for a reclamation return without COD", () => {
-    const payload = buildXExpressCreateOrderPayload({
-      cfg: config,
-      reference: "reclamation-return-1",
-      trackingCodes: ["AAA0850300000"],
-      order,
-      townId: 791113,
-      officialStreetName: "Bulevar oslobođenja",
-      purpose: "RECLAMATION_RETURN",
-    });
-
-    expect(payload).not.toHaveProperty("Options");
-    expect(payload.Sender.Name).toBe("Petar Petrović");
-    expect(payload.Recipient.Name).toBe("Svet povoljnih cena");
-    expect(payload.Waypoints[0]).toMatchObject({
-      WaypointType: "PICKUP",
-      Address: { TownId: 791113, StreetName: "Bulevar oslobođenja" },
-    });
-    expect(payload.Waypoints[1]).toMatchObject({
-      WaypointType: "DELIVERY",
-      Address: { TownId: 703907, StreetName: "Vojvođanska" },
-    });
+  it("blocks reclamation pickup until exact customer coordinates are available", () => {
+    expect(() =>
+      buildXExpressCreateOrderPayload({
+        cfg: config,
+        reference: "reclamation-return-1",
+        trackingCodes: ["AAA0850300000"],
+        order,
+        townId: 791113,
+        officialStreetName: "Bulevar oslobođenja",
+        purpose: "RECLAMATION_RETURN",
+      }),
+    ).toThrow(/pickup koordinate kupca/);
   });
 
   it("normalizes Serbian phone and splits street number", () => {
@@ -233,7 +224,79 @@ describe("X Express official API contract", () => {
       streetName: "Vojvođanska",
       streetNumber: "401",
     });
+    expect(splitXExpressStreet("Bulevar oslobođenja 10 A")).toEqual({
+      streetName: "Bulevar oslobođenja",
+      streetNumber: "10A",
+    });
+    expect(normalizeXExpressStreetNumber("25a / 3 / 29")).toBe("25a/3/29");
+    expect(splitXExpressStreet("Cara Dušana BB")).toEqual({
+      streetName: "Cara Dušana",
+      streetNumber: "BB",
+    });
     expect(() => normalizeXExpressPhone("123")).toThrow(/formatu 381/);
+    expect(() => normalizeXExpressPhone("381001234567890")).toThrow(/formatu 381/);
+  });
+
+  it("rejects a COD bank account outside the documented 3-13-2 format", () => {
+    expect(() =>
+      buildXExpressCreateOrderPayload({
+        cfg: { ...config, cod: { ...config.cod, account: "123456" } },
+        reference: "order-100",
+        trackingCodes: ["AAA0850300000"],
+        order,
+        townId: 791113,
+      }),
+    ).toThrow(/3-13-2/);
+
+    expect(() =>
+      buildXExpressCreateOrderPayload({
+        cfg: {
+          ...config,
+          cod: { ...config.cod, account: "265-3310310005375-35" },
+        },
+        reference: "order-101",
+        trackingCodes: ["AAA0850300000"],
+        order,
+        townId: 791113,
+      }),
+    ).toThrow(/MOD97/);
+  });
+
+  it("sanitizes provider text and omits overlong optional email fields", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: {
+        ...config,
+        pickup: {
+          ...config.pickup,
+          contactEmail: `${"a".repeat(45)}@example.com`,
+        },
+        cod: {
+          ...config.cod,
+          address: "Vojvođanska 401, 11000 Beograd",
+        },
+      },
+      reference: "order#100/1",
+      trackingCodes: ["AAA0850300000"],
+      order: {
+        ...order,
+        shipCompanyName: "Kupac & partner (maloprodaja)",
+        notes: "Pozvati! ulaz #2 + sprat",
+        guestEmail: `${"b".repeat(45)}@example.com`,
+        items: [{ ...order.items[0]!, name: "LED 10.5W & zidna lampa ©" }],
+      },
+      townId: 791113,
+    });
+
+    expect(payload.Sender).not.toHaveProperty("Email");
+    expect(payload.Recipient).not.toHaveProperty("Email");
+    expect(payload.Recipient.Name).toBe("Kupac i partner maloprodaja");
+    expect(payload.Content).toBe("LED 10 5W i zidna lampa");
+    expect(payload.Waypoints[1]?.Address.Description).toBe(
+      "Pozvati ulaz 2 plus sprat",
+    );
+    expect(payload.Options?.[0]?.Data.Address).toBe(
+      "Vojvođanska 401 11000 Beograd",
+    );
   });
 
   it("accepts area as a successful address result and requestGuid as create result", async () => {

@@ -33,6 +33,11 @@ export async function createXExpressShipmentForOrder(
 ) {
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
   const purpose = options.purpose ?? "ORDER_DELIVERY";
+  if (purpose === "RECLAMATION_RETURN") {
+    throw new XExpressConfigError(
+      "X Express povrat od kupca zahteva tačne pickup koordinate kupca. Koristite MyGLS ili ručni nalog dok koordinate nisu evidentirane.",
+    );
+  }
   const reclamation =
     purpose === "ORDER_DELIVERY"
       ? null
