@@ -360,7 +360,6 @@ async function resolveSlot(slot: HomeSlotForRender) {
       limit,
       includeTotal: false,
     });
-    if (!products.items.length) return null;
 
     return {
       slotKey: slot.slotKey,
@@ -382,7 +381,6 @@ async function resolveSlot(slot: HomeSlotForRender) {
     limit,
     includeTotal: false,
   });
-  if (!products.items.length) return null;
 
   return {
     slotKey: slot.slotKey,

@@ -49,6 +49,11 @@ import {
   productNewUntilFloor,
   productNewUntilIsActive,
 } from "@/lib/product-newness";
+import {
+  heroProductsWhere,
+  limitedOfferProductsWhere,
+  storefrontMonth,
+} from "@/lib/storefront/promotion-filters";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -732,9 +737,17 @@ export async function listProducts(
 
   const where: Prisma.ProductWhereInput = webStorefrontProductWhere();
   const now = new Date();
-  const [pricingRules, deliveryWindows] = await Promise.all([
+  const heroPeriod = input.heroOnly ? storefrontMonth(now) : null;
+  const [pricingRules, deliveryWindows, monthlyHeroes] = await Promise.all([
     getActivePricingRules(),
     getDeliveryWindows(),
+    heroPeriod
+      ? db.heroOfMonth.findMany({
+          where: heroPeriod,
+          orderBy: { order: "asc" },
+          select: { productSku: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   if (input.categoryPath) {
@@ -812,25 +825,15 @@ export async function listProducts(
     }
   }
   if (input.heroOnly) {
-    appendAnd(where, {
-      OR: [
-        { isHero: true },
-        {
-          actionPrices: {
-            some: {
-              action: {
-                is: {
-                  kind: "HEROJI",
-                  ...liveActionWhere(now),
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
+    appendAnd(
+      where,
+      heroProductsWhere(
+        now,
+        monthlyHeroes.map((hero) => hero.productSku),
+      ),
+    );
   }
-  if (input.limitedOnly) where.isLimited = true;
+  if (input.limitedOnly) appendAnd(where, limitedOfferProductsWhere());
   if (input.newOnly) {
     appendAnd(where, { newUntil: { gte: productNewUntilFloor(now) } });
   }

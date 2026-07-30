@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import {
   HomeSectionSlotKey,
@@ -103,6 +103,7 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
         update: payload,
       });
 
+      updateTag("storefront-home");
       revalidatePath("/admin/pocetna");
       revalidatePath("/");
 
@@ -165,7 +166,7 @@ export default async function HomeAdminPage() {
           return (
             <Card key={slotKey}>
               <CardTitle
-                description="Izaberite akciju ili postojeću landing stranicu. Prazna sekcija se neće prikazati na sajtu."
+                description="Izaberite akciju ili postojeću landing stranicu. Aktivna sekcija ostaje na svom mestu i kada trenutno nema dostupnih proizvoda."
               >
                 {HOME_SECTION_SLOT_LABELS[slotKey]}
               </CardTitle>

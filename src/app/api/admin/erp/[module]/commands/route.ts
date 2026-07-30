@@ -71,6 +71,10 @@ export async function POST(
       revalidateTag("storefront-landing-pages", { expire: 0 });
       revalidateTag("storefront-home", { expire: 0 });
     }
+    if (module === "heroji-meseca") {
+      revalidateTag("storefront-home", { expire: 0 });
+      revalidatePath("/");
+    }
     await logAudit({
       actorId: admin.id,
       action: `erp.command.${action}`,

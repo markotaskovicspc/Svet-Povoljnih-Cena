@@ -63,6 +63,7 @@ function HomeSection({
       products={section.products}
       minimalHeader
       dense
+      emptyMessage="Trenutno nema dostupnih proizvoda u ovoj sekciji."
     />
   );
 }

@@ -50,6 +50,12 @@ interface SectionRailProps {
    * Keeps the mobile title and CTA on one compact row for PDP rails.
    */
   compactMobileHeader?: boolean;
+  /**
+   * Keeps a deliberately configured section visible when its source currently
+   * has no storefront-eligible products. Other consumers still collapse empty
+   * rails unless they opt in with this message.
+   */
+  emptyMessage?: string;
 }
 
 export function SectionRail({
@@ -67,9 +73,11 @@ export function SectionRail({
   dense,
   mobileMinimal,
   compactMobileHeader,
+  emptyMessage,
 }: SectionRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
-  if (!products.length) return null;
+  const isEmpty = products.length === 0;
+  if (isEmpty && !emptyMessage) return null;
 
   const LucideIcon = iconName ? sectionIconMap[iconName as keyof typeof sectionIconMap] : null;
   const titleIcon = icon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
@@ -178,46 +186,58 @@ export function SectionRail({
         </Link>
       </header>
 
-      <div
-        ref={railRef}
-        className={cn(
-          "relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 [&::-webkit-scrollbar]:hidden",
-          dense ? "mt-2 md:mt-3" : "mt-3 md:mt-5",
-        )}
-      >
-        <DragHint scopeRef={railRef} />
-        <motion.ul
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.1 }}
-          variants={{
-            hidden: {},
-            show: { transition: { staggerChildren: 0.05 } },
-          }}
-          className="flex snap-x snap-mandatory gap-3 pb-2 md:gap-4"
+      {isEmpty ? (
+        <div
+          role="status"
+          className={cn(
+            "mt-3 rounded-xl border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-600 md:mt-4 md:px-5",
+            dense && "mt-2 md:mt-3",
+          )}
         >
-          {products.map((p) => (
-            <motion.li
-              key={p.sku}
-              variants={{
-                hidden: { opacity: 0, y: 12 },
-                show: {
-                  opacity: 1,
-                  y: 0,
-                  transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
-                },
-              }}
-              className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_80px)/5)] md:min-w-[180px] 2xl:w-[calc((100%_-_80px)/6)]"
-            >
-              <ProductCard
-                product={p}
-                campaignSticker={campaignSticker}
-                className="h-full"
-              />
-            </motion.li>
-          ))}
-        </motion.ul>
-      </div>
+          {emptyMessage}
+        </div>
+      ) : (
+        <div
+          ref={railRef}
+          className={cn(
+            "relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 [&::-webkit-scrollbar]:hidden",
+            dense ? "mt-2 md:mt-3" : "mt-3 md:mt-5",
+          )}
+        >
+          <DragHint scopeRef={railRef} />
+          <motion.ul
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.1 }}
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.05 } },
+            }}
+            className="flex snap-x snap-mandatory gap-3 pb-2 md:gap-4"
+          >
+            {products.map((p) => (
+              <motion.li
+                key={p.sku}
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  show: {
+                    opacity: 1,
+                    y: 0,
+                    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+                  },
+                }}
+                className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_80px)/5)] md:min-w-[180px] 2xl:w-[calc((100%_-_80px)/6)]"
+              >
+                <ProductCard
+                  product={p}
+                  campaignSticker={campaignSticker}
+                  className="h-full"
+                />
+              </motion.li>
+            ))}
+          </motion.ul>
+        </div>
+      )}
     </section>
   );
 }

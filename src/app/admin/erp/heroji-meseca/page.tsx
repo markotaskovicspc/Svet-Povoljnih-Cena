@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
@@ -61,8 +61,10 @@ async function upsert(
           create: data,
           update: data,
         });
+        updateTag("storefront-home");
         revalidatePath("/admin/erp/heroji-meseca");
         revalidatePath("/heroji-meseca");
+        revalidatePath("/");
         return {
           ok: true as const,
           entityId: saved.id,
