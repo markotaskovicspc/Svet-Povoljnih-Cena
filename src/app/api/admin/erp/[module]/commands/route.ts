@@ -36,7 +36,7 @@ import {
 } from "@/lib/admin/stocktake-dispatch.server";
 import {
   customerGenderLabel,
-  normalizeCustomerDetails,
+  normalizeCustomerMasterDetails,
 } from "@/lib/admin/customer-master";
 import {
   deleteDispatchNotes,
@@ -485,21 +485,28 @@ async function postPickupBatchCommand(
 async function createCustomer(
   input: Record<string, unknown>,
 ): Promise<CommandResult> {
-  const details = normalizeCustomerDetails(input);
+  const details = normalizeCustomerMasterDetails(input);
   const customer = await db.customer.create({
     data: {
-      firstName: details.firstName,
+      firstName: details.firstName || null,
       lastName: details.lastName,
+      companyName: details.companyName,
+      pib: details.pib,
+      registrationNumber: details.registrationNumber,
       address: details.address,
       city: details.city,
       postalCode: details.postalCode,
+      country: details.country,
       phone: details.phone,
       email: details.email,
       gender: details.gender,
     },
   });
   return {
-    message: `Kupac „${details.fullName}” je kreiran. Pol: ${customerGenderLabel(details.gender)}.`,
+    message:
+      details.customerType === "COMPANY"
+        ? `Firma „${details.fullName}” je kreirana i dostupna za VP/INO naloge i otpremnice.`
+        : `Kupac „${details.fullName}” je kreiran. Pol: ${customerGenderLabel(details.gender)}.`,
     createdId: customer.id,
   };
 }

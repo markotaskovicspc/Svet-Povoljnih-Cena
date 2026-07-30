@@ -433,6 +433,52 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         });
     });
 
+    await test.step("hero meseca prikazuje grešku i osvežava listu bez reload-a", async () => {
+      await page.goto("/admin/erp/heroji-meseca", {
+        waitUntil: "domcontentloaded",
+      });
+      const heroForm = page
+        .locator("form")
+        .filter({ has: page.getByRole("button", { name: "Sačuvaj", exact: true }) });
+
+      await heroForm.locator('input[name="productSku"]').fill(`${fixture.actionSku}-NEPOSTOJI`);
+      await heroForm.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+      await expect(heroForm.getByRole("alert")).toContainText(
+        "SKU nije pronađen u katalogu.",
+      );
+
+      await heroForm.locator('input[name="productSku"]').fill(fixture.actionSku);
+      await heroForm.locator('select[name="month"]').selectOption("12");
+      await heroForm.locator('input[name="year"]').fill("2099");
+      await heroForm.locator('select[name="actionId"]').selectOption({
+        label: fixture.highAction,
+      });
+      await heroForm.locator('input[name="order"]').fill("4");
+      await heroForm.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+
+      await expect(page.getByRole("status")).toContainText(
+        "Hero meseca je sačuvan.",
+      );
+      await expect(page.getByRole("row", { name: new RegExp(fixture.actionSku) })).toBeVisible();
+      await expect
+        .poll(() =>
+          db.heroOfMonth.findUnique({
+            where: {
+              productSku_month_year: {
+                productSku: fixture.actionSku,
+                month: 12,
+                year: 2099,
+              },
+            },
+            select: { order: true, action: { select: { name: true } } },
+          }),
+        )
+        .toEqual({ order: 4, action: { name: fixture.highAction } });
+
+      await page.goto("/admin/erp/akcije", { waitUntil: "domcontentloaded" });
+      await expect(actionRow(page, fixture.highAction)).toBeVisible();
+    });
+
     await test.step("dupli klik, nepostojeći SKU i automatska polja sa MP cenom na datum", async () => {
       await actionRow(page, fixture.lowAction).dblclick();
       const dialog = page.getByRole("dialog");
@@ -992,10 +1038,12 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         "loyalty.delete",
         "linear-promotion.upsert",
         "linear-promotion.delete",
+        "hero.upsert",
       ]) {
         expect(auditActions).toContain(action);
       }
       expect(auditActions).toContain("action.upsert.error");
+      expect(auditActions).toContain("hero.upsert.error");
       expect(formActionWarnings).toEqual([]);
     });
   });
@@ -1013,6 +1061,9 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
   }
 
   async function cleanup() {
+    await db.heroOfMonth.deleteMany({
+      where: { productSku: fixture.actionSku },
+    });
     await db.linearPromotion.deleteMany({
       where: { name: { startsWith: tag } },
     });

@@ -54,7 +54,7 @@ const ERP_REQUIREMENT_ROWS: readonly Omit<ErpRequirement, "evidence">[] = [
   { id: 32, section: "KEP knjiga", route: "/admin/erp/racunovodstveni-registri", status: "deferred_user", acceptance: "ACC-06", note: "KEP je izričito odložen; interni prikaz se ne predstavlja kao zakonski prihvaćen registar." },
   { id: 33, section: "API za razmenu lagera i rezervacije", route: "/admin/erp/partner-klijenti", status: "implemented", acceptance: "PARTNER-01", note: "Scope-ovani bearer ključevi, rate limit, audit i idempotentne rezervacije." },
   { id: 34, section: "Popisi", route: "/admin/erp/popisi", status: "implemented", acceptance: "STOCK-03", note: "Očekivano/prebrojano/razlika i transakciono knjiženje." },
-  { id: 35, section: "Baza kupaca", route: "/admin/erp/kupci", status: "implemented", acceptance: "CRM-01", note: "Ime i prezime, adresa, mesto, poštanski broj, telefon i e-mail; pol se automatski određuje na osnovu imena." },
+  { id: 35, section: "Baza kupaca", route: "/admin/erp/kupci", status: "implemented", acceptance: "CRM-01", note: "Fizička lica i firme; adresa, poreski i kontaktni podaci, uz automatsko određivanje pola fizičkog lica." },
   { id: 36, section: "Postojeći moduli u admin panelu", route: "/admin", status: "implemented", acceptance: "ADMIN-01", note: "Postojeći moduli su sačuvani, a duple legacy ERP rute su uklonjene i vraćaju 404 bez redirect-a." },
   { id: 37, section: "Kontrolna tabla", route: "/admin", status: "implemented", acceptance: "DASH-01", note: "Operativne metrike i linkovi ka filtriranim ERP pregledima." },
   { id: 38, section: "Baneri", route: "/admin/baneri", status: "implemented", acceptance: "CONTENT-01", note: "Tri pozicije, višestruki HERO slajdovi, periodi, dimenzije i brisanje sa potvrdom." },

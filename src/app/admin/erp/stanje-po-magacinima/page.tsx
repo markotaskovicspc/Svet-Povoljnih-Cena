@@ -286,7 +286,7 @@ export default async function InventoryPage() {
           </Card>
           <Card>
             <CardTitle>Ručna korekcija</CardTitle>
-            <AdminActionForm action={adjustStock} className="space-y-3">
+            <AdminActionForm action={adjustStock} className="space-y-3" refreshOnSuccess>
               <input type="hidden" name="operationId" value={randomUUID()} />
               <Field label="SKU"><Input name="sku" required /></Field>
               <Field label="Promena količine" hint="Pozitivno za ulaz, negativno za izlaz."><Input name="qtyDelta" type="number" step="1" required /></Field>

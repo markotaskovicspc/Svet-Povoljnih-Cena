@@ -12,8 +12,19 @@ export type CustomerDetails = {
   gender: CustomerGenderValue;
 };
 
+export type CustomerMasterDetails = CustomerDetails & {
+  customerType: "PERSON" | "COMPANY";
+  companyName: string | null;
+  pib: string | null;
+  registrationNumber: string | null;
+  country: string;
+};
+
 const LIMITS = {
   name: 240,
+  companyName: 240,
+  pib: 32,
+  registrationNumber: 32,
   address: 240,
   city: 120,
   postalCode: 20,
@@ -146,6 +157,51 @@ export function normalizeCustomerEmail(value: unknown) {
   return email;
 }
 
+export function normalizeCustomerCompanyName(value: unknown) {
+  const companyName = optionalText(value, "Naziv firme", LIMITS.companyName);
+  if (!companyName) throw new Error("Naziv firme je obavezan.");
+  return companyName;
+}
+
+export function normalizeCustomerPib(value: unknown, required = false) {
+  const pib = optionalText(value, "PIB", LIMITS.pib);
+  if (!pib) {
+    if (required) throw new Error("PIB firme je obavezan.");
+    return null;
+  }
+  if (!/^[A-Za-z0-9./-]{5,32}$/.test(pib)) {
+    throw new Error("PIB mora imati 5–32 slova, cifre ili znakove . / -.");
+  }
+  return pib.toUpperCase();
+}
+
+export function normalizeCustomerRegistrationNumber(
+  value: unknown,
+  required = false,
+) {
+  const registrationNumber = optionalText(
+    value,
+    "Matični broj",
+    LIMITS.registrationNumber,
+  );
+  if (!registrationNumber) {
+    if (required) throw new Error("Matični broj firme je obavezan.");
+    return null;
+  }
+  if (!/^[A-Za-z0-9./-]{5,32}$/.test(registrationNumber)) {
+    throw new Error("Matični broj mora imati 5–32 slova, cifre ili znakove . / -.");
+  }
+  return registrationNumber.toUpperCase();
+}
+
+export function normalizeCustomerCountry(value: unknown) {
+  const country = textValue(value).toUpperCase() || "RS";
+  if (!/^[A-Z]{2}$/.test(country)) {
+    throw new Error("Država mora biti ISO oznaka od dva slova, na primer RS.");
+  }
+  return country;
+}
+
 export function normalizeCustomerDetails(
   input: Record<string, unknown>,
 ): CustomerDetails {
@@ -156,5 +212,55 @@ export function normalizeCustomerDetails(
     postalCode: normalizeCustomerPostalCode(input.postalCode),
     phone: normalizeCustomerPhone(input.phone),
     email: normalizeCustomerEmail(input.email),
+  };
+}
+
+export function normalizeCustomerMasterDetails(
+  input: Record<string, unknown>,
+): CustomerMasterDetails {
+  if (input.customerType !== "Fizičko lice" && input.customerType !== "Firma") {
+    throw new Error("Izaberite vrstu kupca.");
+  }
+
+  const customerType = input.customerType === "Firma" ? "COMPANY" : "PERSON";
+  const common = {
+    address: normalizeCustomerAddress(input.address),
+    city: normalizeCustomerCity(input.city),
+    postalCode: normalizeCustomerPostalCode(input.postalCode),
+    phone: normalizeCustomerPhone(input.phone),
+    email: normalizeCustomerEmail(input.email),
+    country: normalizeCustomerCountry(input.country),
+  };
+
+  if (customerType === "COMPANY") {
+    const companyName = normalizeCustomerCompanyName(input.name);
+    if (!common.address || !common.city || !common.postalCode) {
+      throw new Error(
+        "Adresa, mesto i poštanski broj firme su obavezni za otpremnice.",
+      );
+    }
+    return {
+      customerType,
+      fullName: companyName,
+      firstName: "",
+      lastName: null,
+      companyName,
+      pib: normalizeCustomerPib(input.pib, true),
+      registrationNumber: normalizeCustomerRegistrationNumber(
+        input.registrationNumber,
+        true,
+      ),
+      gender: "NEPOZNATO",
+      ...common,
+    };
+  }
+
+  return {
+    customerType,
+    ...normalizeCustomerName(input.name),
+    companyName: null,
+    pib: null,
+    registrationNumber: null,
+    ...common,
   };
 }

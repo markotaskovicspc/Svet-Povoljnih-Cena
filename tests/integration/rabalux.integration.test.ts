@@ -160,6 +160,7 @@ afterAll(async () => {
       kind: {
         in: [
           "RABALUX_MEDIA_PRODUCT",
+          "BUYER_RECEIPT",
           "SUPPLIER_ORDER_EMAIL",
           "SUPPLIER_CANCEL_EMAIL",
           "SUPPLIER_RECLAMATION_EMAIL",

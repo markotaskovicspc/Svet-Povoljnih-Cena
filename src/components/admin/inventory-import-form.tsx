@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   EMPTY_ADMIN_ACTION_STATE,
   type AdminActionState,
@@ -17,11 +18,20 @@ type InventoryImportAction = (
 ) => Promise<AdminActionState<InventoryImportPreviewResult>>;
 
 export function InventoryImportForm({ action }: { action: InventoryImportAction }) {
+  const router = useRouter();
   const [state, formAction] = useActionState(
     action,
     EMPTY_ADMIN_ACTION_STATE as AdminActionState<InventoryImportPreviewResult>,
   );
+  const refreshedState = useRef(state);
   const result = state.ok ? state.result : undefined;
+
+  useEffect(() => {
+    if (!state.ok || !state.result?.applied || refreshedState.current === state) return;
+    refreshedState.current = state;
+    window.dispatchEvent(new Event("spc:erp-grid-refresh"));
+    router.refresh();
+  }, [router, state]);
 
   return (
     <form action={formAction} className="space-y-3">
@@ -53,6 +63,12 @@ export function InventoryImportForm({ action }: { action: InventoryImportAction 
         Obavezne kolone su <code>sku</code> i <code>qty</code>. Dimenzije su opcione.
         Artikli kojih nema u fajlu ostaju nepromenjeni.
       </p>
+      {result?.previewToken ? (
+        <p className="rounded-md border border-border/70 bg-muted-bg/40 px-3 py-2 text-xs text-ink-600">
+          Za primenu ponovo izaberite isti fajl. Sistem proverava njegov hash i trenutno
+          stanje lagera pre atomskog upisa.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <SubmitButton
           name="mode"

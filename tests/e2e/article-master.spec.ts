@@ -1,6 +1,7 @@
 // Acceptance: CAT-01
 import ExcelJS from "exceljs";
-import { expect, test, type Page } from "@playwright/test";
+import path from "node:path";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -109,10 +110,10 @@ test.describe("article master acceptance", () => {
         media: {
           create: {
             kind: "IMAGE",
-            url: "/logo.svg",
-            thumbUrl: "/logo.svg",
-            cardUrl: "/logo.svg",
-            pdpUrl: "/logo.svg",
+            url: `products/${runId}/qa.jpg`,
+            thumbUrl: `products/${runId}/qa-thumb.jpg`,
+            cardUrl: `products/${runId}/qa-card.jpg`,
+            pdpUrl: `products/${runId}/qa-pdp.jpg`,
             alt: `${tag} fotografija`,
             order: 0,
           },
@@ -355,6 +356,84 @@ test.describe("article master acceptance", () => {
         ],
       });
 
+    const mediaForm = page
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Sačuvaj medij" }) });
+    await expect(mediaForm).toHaveCount(1);
+    await mediaForm.locator('input[name="order"]').fill("2");
+    await mediaForm.locator('input[name="alt"]').fill(`${tag} izmenjen alt`);
+    await mediaForm.getByRole("button", { name: "Sačuvaj medij" }).click();
+    await expect(mediaForm.getByRole("status")).toContainText("Medij je sačuvan");
+    await page.reload({ waitUntil: "load" });
+    await expect(
+      page
+        .locator("form")
+        .filter({ has: page.getByRole("button", { name: "Sačuvaj medij" }) })
+        .locator('input[name="alt"]'),
+    ).toHaveValue(`${tag} izmenjen alt`);
+    await expect
+      .poll(() =>
+        db.productMedia.findFirst({
+          where: { productId },
+          select: { alt: true, order: true },
+        }),
+      )
+      .toEqual({ alt: `${tag} izmenjen alt`, order: 2 });
+
+    const declarationSection = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Deklaracija", exact: true }),
+    });
+    await expect(declarationSection).toHaveCount(1);
+    await declarationSection
+      .locator('input[name="label"]')
+      .fill(`${tag} deklaracija`);
+    await declarationSection
+      .locator('input[name="file"]')
+      .setInputFiles(path.resolve("public/logo.jpeg"));
+    await declarationSection
+      .getByRole("button", { name: "Dodaj dokument", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Dokument je dodat.");
+    await expect
+      .poll(() =>
+        db.productAttachment.count({
+          where: { productId, label: `${tag} deklaracija` },
+        }),
+      )
+      .toBe(1);
+
+    const attachmentLabel = declarationSection.locator(
+      'input[aria-label="Naziv dokumenta"]',
+    );
+    await expect(attachmentLabel).toHaveCount(1);
+    await attachmentLabel.fill(`${tag} deklaracija v2`);
+    await declarationSection
+      .getByRole("button", { name: "Sačuvaj naziv dokumenta", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Dokument je sačuvan.");
+    await page.reload({ waitUntil: "load" });
+    const reloadedDeclarationSection = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Deklaracija", exact: true }),
+    });
+    await expect(
+      reloadedDeclarationSection.locator(
+        'input[aria-label="Naziv dokumenta"]',
+      ),
+    ).toHaveValue(`${tag} deklaracija v2`);
+
+    await clickConfirmation(
+      page,
+      reloadedDeclarationSection.getByRole("button", {
+        name: "Obriši dokument",
+        exact: true,
+      }),
+      true,
+    );
+    await expect(page.getByRole("status")).toContainText("Dokument je obrisan.");
+    await expect
+      .poll(() => db.productAttachment.count({ where: { productId } }))
+      .toBe(0);
+
     await page.goto(`/p/${productSlug}`, { waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("heading", {
@@ -494,7 +573,9 @@ test.describe("article master acceptance", () => {
     const exportedProductRow = exportedSheet
       .getRows(2, exportedSheet.rowCount - 1)
       ?.find((row) => row.getCell(exportedSkuColumn).text === productSku);
-    expect(exportedProductRow?.getCell(exportedPhotoColumn).text).toBe("/logo.svg");
+    expect(exportedProductRow?.getCell(exportedPhotoColumn).text).toContain(
+      `/products/${runId}/qa-thumb.jpg`,
+    );
 
     const importWorkbook = new ExcelJS.Workbook();
     const sheet = importWorkbook.addWorksheet("Artikli");
@@ -831,11 +912,9 @@ test.describe("article master acceptance", () => {
       await warehouseColumnCheckbox.click();
     }
     const viewName = `${tag} dnevni pogled`;
-    page.once("dialog", async (dialog) => {
-      expect(dialog.type()).toBe("prompt");
-      await dialog.accept(viewName);
-    });
     await page.getByRole("button", { name: "Snimi pogled" }).click();
+    await page.getByRole("textbox", { name: "Naziv ERP pogleda" }).fill(viewName);
+    await page.getByRole("button", { name: "Sačuvaj pogled", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(
       `Pogled „${viewName}” je snimljen`,
     );
@@ -859,6 +938,34 @@ test.describe("article master acceptance", () => {
           context: { warehouseId: secondaryWarehouseId },
         }),
       });
+
+    await page
+      .getByRole("button", { name: `Obriši pogled ${viewName}`, exact: true })
+      .click();
+    await page
+      .getByRole("button", {
+        name: `Otkaži brisanje pogleda ${viewName}`,
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("button", { name: viewName, exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: `Obriši pogled ${viewName}`, exact: true })
+      .click();
+    await page
+      .getByRole("button", {
+        name: `Potvrdi brisanje pogleda ${viewName}`,
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("status")).toContainText(
+      `Pogled „${viewName}” je obrisan`,
+    );
+    await expect
+      .poll(async () =>
+        db.adminSavedView.count({ where: { module: "artikli", name: viewName } }),
+      )
+      .toBe(0);
 
     const sacrificial = await db.product.create({
       data: {
@@ -997,6 +1104,20 @@ test.describe("article master acceptance", () => {
     await db.adminUser.deleteMany({ where: { email: adminEmail } });
   }
 });
+
+async function clickConfirmation(
+  page: Page,
+  locator: Locator,
+  accept: boolean,
+) {
+  const dialogPromise = page.waitForEvent("dialog");
+  const clickPromise = locator.click();
+  const dialog = await dialogPromise;
+  expect(dialog.type()).toBe("confirm");
+  if (accept) await dialog.accept();
+  else await dialog.dismiss();
+  await clickPromise;
+}
 
 function createDatabaseClient() {
   const raw = process.env.DATABASE_URL;

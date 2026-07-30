@@ -38,10 +38,14 @@ import {
 import {
   normalizeCustomerAddress,
   normalizeCustomerCity,
+  normalizeCustomerCompanyName,
+  normalizeCustomerCountry,
   normalizeCustomerEmail,
   normalizeCustomerName,
+  normalizeCustomerPib,
   normalizeCustomerPhone,
   normalizeCustomerPostalCode,
+  normalizeCustomerRegistrationNumber,
 } from "@/lib/admin/customer-master";
 
 type CellValue = string | number | boolean | null;
@@ -736,13 +740,38 @@ async function persistCustomerCell(rowId: string, columnKey: string, value: Cell
   let refreshRow = false;
   switch (columnKey) {
     case "name": {
-      const name = normalizeCustomerName(value);
-      data.firstName = name.firstName;
-      data.lastName = name.lastName;
-      data.companyName = null;
-      data.gender = name.gender;
-      persistedValue = name.fullName;
+      const existing = await db.customer.findUniqueOrThrow({
+        where: { id: rowId },
+        select: { companyName: true },
+      });
+      if (existing.companyName) {
+        const companyName = normalizeCustomerCompanyName(value);
+        data.companyName = companyName;
+        data.firstName = null;
+        data.lastName = null;
+        data.gender = "NEPOZNATO";
+        persistedValue = companyName;
+      } else {
+        const name = normalizeCustomerName(value);
+        data.firstName = name.firstName;
+        data.lastName = name.lastName;
+        data.companyName = null;
+        data.gender = name.gender;
+        persistedValue = name.fullName;
+      }
       refreshRow = true;
+      break;
+    }
+    case "pib": {
+      const pib = normalizeCustomerPib(value);
+      data.pib = pib;
+      persistedValue = pib;
+      break;
+    }
+    case "registrationNumber": {
+      const registrationNumber = normalizeCustomerRegistrationNumber(value);
+      data.registrationNumber = registrationNumber;
+      persistedValue = registrationNumber;
       break;
     }
     case "email": {
@@ -773,6 +802,12 @@ async function persistCustomerCell(rowId: string, columnKey: string, value: Cell
       const postalCode = normalizeCustomerPostalCode(value);
       data.postalCode = postalCode;
       persistedValue = postalCode;
+      break;
+    }
+    case "country": {
+      const country = normalizeCustomerCountry(value);
+      data.country = country;
+      persistedValue = country;
       break;
     }
     default:

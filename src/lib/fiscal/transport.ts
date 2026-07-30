@@ -79,8 +79,9 @@ export type FiscalDispatchResult =
 /**
  * Submit a fiscal invoice to the configured gateway.
  *
- * Logical errors (4xx with a JSON body) are returned as `ok:false`;
- * network failures bubble up so the caller can decide whether to retry.
+ * Provider and network failures are returned as `ok:false` so callers can
+ * persist a terminal FAILED attempt instead of leaving a dispatched document
+ * stuck in PENDING when an adapter throws before it receives a receipt.
  */
 export async function fiscalize(
   input: FiscalInvoiceInput,
@@ -138,7 +139,18 @@ export async function fiscalize(
   }
 
   if (cfg.provider === "badi") {
-    return fiscalizeWithBadi(input);
+    try {
+      return await fiscalizeWithBadi(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        provider: "badi",
+        error: message.startsWith("fiscal:")
+          ? message
+          : `fiscal:badi ${message}`,
+      };
+    }
   }
 
   const body = {

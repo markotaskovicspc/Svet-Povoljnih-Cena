@@ -429,6 +429,7 @@ test.describe("Admin analitika reklamacija", () => {
         columnOrder: [],
         columnWidths: {},
         context: {
+          warehouseId: "",
           ordersFrom: "2026-07-01",
           ordersTo: "2026-07-31",
           fiscalFrom: "2026-07-01",
@@ -444,26 +445,42 @@ test.describe("Admin analitika reklamacija", () => {
       });
       expect(rejectedView.status()).toBe(400);
 
-      const savedView = await page.request.post("/api/admin/saved-views", {
-        data: baseView,
-      });
-      expect(savedView.ok()).toBe(true);
-      const savedPayload = (await savedView.json()) as {
-        view: { id: string; name: string; context: Record<string, string> };
-      };
-      expect(savedPayload.view.name).toBe(viewName);
-      expect(savedPayload.view.context).toEqual(baseView.context);
+      for (const [key, value] of Object.entries(baseView.context)) {
+        if (key === "warehouseId") continue;
+        await page.locator(`input[name="${key}"]`).fill(value);
+      }
+      await page.getByRole("button", { name: "Primeni filtere" }).click();
+      await expect(page).toHaveURL(/ordersFrom=2026-07-01/);
+      await expect(page.locator('[data-client-ready="true"]')).toBeVisible();
+      await page.getByRole("button", { name: "Sačuvaj pogled" }).click();
+      await page.getByLabel("Naziv dashboard pogleda").fill(viewName);
+      await page.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText(
+        `Pogled „${viewName}” je sačuvan.`,
+      );
+      await page.getByLabel("Porudžbine od").fill("2026-06-15");
+      await page.getByRole("button", { name: viewName, exact: true }).click();
+      await expect(page.getByLabel("Porudžbine od")).toHaveValue("2026-07-01");
 
       const listedViews = await page.request.get(
         "/api/admin/saved-views?module=dashboard",
       );
       expect(listedViews.ok()).toBe(true);
-      expect(JSON.stringify(await listedViews.json())).toContain(viewName);
+      const listedPayload = (await listedViews.json()) as {
+        views: Array<{ id: string; name: string; context: Record<string, string> }>;
+      };
+      const savedPayload = listedPayload.views.find((view) => view.name === viewName);
+      expect(savedPayload?.context).toEqual(baseView.context);
 
-      const deletedView = await page.request.delete("/api/admin/saved-views", {
-        data: { id: savedPayload.view.id },
-      });
-      expect(deletedView.ok()).toBe(true);
+      await page
+        .getByRole("button", { name: `Obriši pogled ${viewName}` })
+        .click();
+      await page
+        .getByRole("button", { name: `Potvrdi brisanje ${viewName}` })
+        .click();
+      await expect(page.getByRole("status")).toContainText(
+        `Pogled „${viewName}” je obrisan.`,
+      );
 
       await assertWorkbookContains(
         await page.request.get(

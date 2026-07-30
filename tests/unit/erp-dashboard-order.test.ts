@@ -40,15 +40,19 @@ describe("ERP dashboard module order", () => {
     });
   });
 
-  it("shows exactly the requested customer columns", () => {
+  it("shows the complete person and company customer-master columns", () => {
     const customerModule = getErpModuleDefinition("kupci");
 
     expect(customerModule?.number).toBe("19");
     expect(customerModule?.columns.map((column) => column.label)).toEqual([
-      "Ime i prezime kupca",
+      "Vrsta",
+      "Ime i prezime / firma",
+      "PIB",
+      "Matični broj",
       "Adresa",
       "Mesto",
       "Poštanski broj",
+      "Država",
       "Telefon",
       "E-mail",
       "Pol",

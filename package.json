@@ -36,6 +36,7 @@
     "db:harden": "node scripts/db-harden.mjs",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "db:seed:erp-qa": "node scripts/seed-erp-qa-fixtures.mjs",
     "import:book12": "node scripts/import-book12-products.mjs",
     "catalog:backfill-dimensions": "node scripts/backfill-product-dimensions.mjs",
     "catalog:article-master-audit": "node scripts/article-master-audit.mjs",

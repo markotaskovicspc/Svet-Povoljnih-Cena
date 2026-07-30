@@ -8,6 +8,10 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 const connectionString = getConnectionString();
+const missingStorageSchemaRequested =
+  process.env.RUNTIME_READINESS_ALLOW_MISSING_STORAGE_SCHEMA === "true";
+const missingStorageSchemaAllowed =
+  missingStorageSchemaRequested && isLocalDatabase(connectionString);
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
     connectionString: withDatabaseSsl(connectionString),
@@ -19,6 +23,12 @@ const prisma = new PrismaClient({
 
 const errors = [];
 const warnings = [];
+
+if (missingStorageSchemaRequested && !missingStorageSchemaAllowed) {
+  errors.push(
+    "RUNTIME_READINESS_ALLOW_MISSING_STORAGE_SCHEMA is restricted to localhost QA databases.",
+  );
+}
 
 try {
   const [
@@ -32,7 +42,6 @@ try {
     migrationRows,
     rlsViolations,
     apiGrants,
-    storageBuckets,
   ] = await Promise.all([
     prisma.product.findMany({
       where: { isActive: true, deletedAt: null },
@@ -84,7 +93,12 @@ try {
          AND grantee IN ('anon', 'authenticated')
        ORDER BY grantee, table_name, privilege_type
     `),
-    prisma.$queryRawUnsafe(`
+  ]);
+
+  let storageSchemaAvailable = true;
+  let storageBuckets = [];
+  try {
+    storageBuckets = await prisma.$queryRawUnsafe(`
       SELECT id, public
         FROM storage.buckets
        WHERE id IN (
@@ -95,8 +109,20 @@ try {
          'shipment-labels'
        )
        ORDER BY id
-    `),
-  ]);
+    `);
+  } catch (error) {
+    if (!isMissingStorageSchemaError(error)) throw error;
+    storageSchemaAvailable = false;
+    if (missingStorageSchemaAllowed) {
+      warnings.push(
+        "Supabase storage schema is unavailable in this isolated localhost QA database; bucket policy requires a separate Supabase environment check.",
+      );
+    } else {
+      errors.push(
+        "Supabase storage schema is missing; set up storage before release readiness can pass.",
+      );
+    }
+  }
 
   const catalog = products.map((product) => {
     const reasons = [];
@@ -187,17 +213,19 @@ try {
   const bucketById = new Map(
     storageBuckets.map((bucket) => [bucket.id, bucket.public]),
   );
-  for (const id of [
-    "fiscal-receipts",
-    "order-receipts",
-    "reclamation-uploads",
-    "shipment-labels",
-  ]) {
-    if (!bucketById.has(id)) errors.push(`Private storage bucket is missing: ${id}.`);
-    else if (bucketById.get(id) !== false) errors.push(`Sensitive storage bucket is public: ${id}.`);
-  }
-  if (bucketById.get("product-media") !== true) {
-    errors.push("Public product-media bucket is missing or private.");
+  if (storageSchemaAvailable) {
+    for (const id of [
+      "fiscal-receipts",
+      "order-receipts",
+      "reclamation-uploads",
+      "shipment-labels",
+    ]) {
+      if (!bucketById.has(id)) errors.push(`Private storage bucket is missing: ${id}.`);
+      else if (bucketById.get(id) !== false) errors.push(`Sensitive storage bucket is public: ${id}.`);
+    }
+    if (bucketById.get("product-media") !== true) {
+      errors.push("Public product-media bucket is missing or private.");
+    }
   }
 
   const failedEmails = countGroup(emailStatuses, "status", "FAILED");
@@ -237,7 +265,10 @@ try {
       publicTablesWithoutRls: rlsViolations.length,
       anonAuthenticatedGrants: apiGrants.length,
     },
-    storage: Object.fromEntries(bucketById),
+    storage: {
+      schemaAvailable: storageSchemaAvailable,
+      buckets: Object.fromEntries(bucketById),
+    },
     operations: {
       email: groupCounts(emailStatuses, ["status"]),
       shipments: groupCounts(shipmentStatuses, ["provider", "status"]),
@@ -293,4 +324,22 @@ function withDatabaseSsl(value) {
     url.searchParams.set("uselibpqcompat", "true");
   }
   return url.toString();
+}
+
+function isLocalDatabase(value) {
+  return ["localhost", "127.0.0.1", "::1"].includes(new URL(value).hostname);
+}
+
+function isMissingStorageSchemaError(error) {
+  const details = [
+    error?.code,
+    error?.message,
+    error?.meta?.code,
+    error?.meta?.message,
+    error?.cause?.code,
+    error?.cause?.message,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return details.includes("42P01") && details.includes("storage.buckets");
 }

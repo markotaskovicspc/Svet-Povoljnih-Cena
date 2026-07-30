@@ -142,6 +142,16 @@ function optionalNonnegativeInteger() {
     .optional();
 }
 
+function isAllowedMediaReference(value: string) {
+  if (value.startsWith("/") || /^https?:\/\//.test(value)) return true;
+  if (!value || value.startsWith(".") || value.includes("\\")) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+  return value.split("/").every((segment) => segment && segment !== "." && segment !== "..");
+}
+
+const MEDIA_REFERENCE_ERROR =
+  "URL mora biti puna adresa, putanja koja počinje sa / ili bezbedan storage ključ.";
+
 const mediaSchema = z.object({
   productId: z.string(),
   url: z
@@ -151,11 +161,8 @@ const mediaSchema = z.object({
     .optional()
     .nullable()
     .refine(
-      (value) =>
-        !value ||
-        value.startsWith("/") ||
-        /^https?:\/\//.test(value),
-      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+      (value) => !value || isAllowedMediaReference(value),
+      MEDIA_REFERENCE_ERROR,
     ),
   thumbUrl: optionalMediaUrlSchema(),
   cardUrl: optionalMediaUrlSchema(),
@@ -171,8 +178,8 @@ const mediaUpdateSchema = z.object({
     .trim()
     .max(2000)
     .refine(
-      (value) => value.startsWith("/") || /^https?:\/\//.test(value),
-      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+      isAllowedMediaReference,
+      MEDIA_REFERENCE_ERROR,
     ),
   thumbUrl: optionalMediaUrlSchema(),
   cardUrl: optionalMediaUrlSchema(),
@@ -189,11 +196,8 @@ function optionalMediaUrlSchema() {
     .optional()
     .nullable()
     .refine(
-      (value) =>
-        !value ||
-        value.startsWith("/") ||
-        /^https?:\/\//.test(value),
-      "URL mora biti puna adresa ili putanja koja počinje sa /.",
+      (value) => !value || isAllowedMediaReference(value),
+      MEDIA_REFERENCE_ERROR,
     );
 }
 

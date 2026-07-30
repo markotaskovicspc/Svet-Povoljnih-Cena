@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   EMPTY_ADMIN_ACTION_STATE,
   type AdminActionState,
@@ -17,19 +18,30 @@ export function AdminActionForm({
   children,
   className,
   id,
+  refreshOnSuccess = false,
   testId,
 }: {
   action: AdminFormAction;
   children: React.ReactNode | ((state: AdminActionState) => React.ReactNode);
   className?: string;
   id?: string;
+  refreshOnSuccess?: boolean;
   testId?: string;
 }) {
+  const router = useRouter();
   const [state, formAction] = useActionState(
     action,
     EMPTY_ADMIN_ACTION_STATE,
   );
+  const refreshedState = useRef(state);
   const hasMessage = Boolean(state.message);
+
+  useEffect(() => {
+    if (!refreshOnSuccess || !state.ok || refreshedState.current === state) return;
+    refreshedState.current = state;
+    window.dispatchEvent(new Event("spc:erp-grid-refresh"));
+    router.refresh();
+  }, [refreshOnSuccess, router, state]);
 
   return (
     <form action={formAction} className={className} id={id} data-testid={testId}>

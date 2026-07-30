@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ExternalLink, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, Save, Trash2 } from "lucide-react";
 import {
   PRODUCT_ATTACHMENT_SECTION_OPTIONS,
   PRODUCT_DOCUMENT_ACCEPT,
@@ -191,18 +191,36 @@ export function ProductAttachmentsEditor({
                       key={attachment.id}
                       className="rounded-lg border border-border/60 bg-muted-bg/30 p-2"
                     >
-                      <div className="flex items-center gap-2">
+                      <form
+                        className="flex items-center gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const label = new FormData(event.currentTarget)
+                            .get("label")
+                            ?.toString()
+                            .trim();
+                          if (label && label !== attachment.label) {
+                            void patch(attachment.id, { label });
+                          }
+                        }}
+                      >
                         <Input
                           aria-label="Naziv dokumenta"
+                          name="label"
                           defaultValue={attachment.label}
                           disabled={attachment.origin !== "ADMIN_UPLOAD" || busy === attachment.id}
-                          onBlur={(event) => {
-                            const label = event.currentTarget.value.trim();
-                            if (label && label !== attachment.label) {
-                              void patch(attachment.id, { label });
-                            }
-                          }}
                         />
+                        {attachment.origin === "ADMIN_UPLOAD" ? (
+                          <Button
+                            type="submit"
+                            size="icon"
+                            variant="outline"
+                            disabled={busy !== null}
+                            aria-label="Sačuvaj naziv dokumenta"
+                          >
+                            <Save className="size-3.5" />
+                          </Button>
+                        ) : null}
                         <a
                           href={attachment.url}
                           target="_blank"
@@ -212,7 +230,7 @@ export function ProductAttachmentsEditor({
                         >
                           <ExternalLink className="size-4" />
                         </a>
-                      </div>
+                      </form>
                       <div className="mt-2 flex items-center gap-1">
                         {attachment.origin === "ADMIN_UPLOAD" ? (
                           <>

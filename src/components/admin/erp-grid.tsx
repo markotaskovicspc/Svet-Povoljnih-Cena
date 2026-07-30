@@ -293,6 +293,10 @@ export function ErpGrid({
     readColumnOrder(module.slug, module.columns),
   );
   const [views, setViews] = useState<SavedView[]>([]);
+  const [showSaveViewForm, setShowSaveViewForm] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+  const [savingView, setSavingView] = useState(false);
+  const [pendingDeleteViewId, setPendingDeleteViewId] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
@@ -363,6 +367,12 @@ export function ErpGrid({
       cancelled = true;
     };
   }, [module.slug]);
+
+  useEffect(() => {
+    const refreshRows = () => setReloadToken((current) => current + 1);
+    window.addEventListener("spc:erp-grid-refresh", refreshRows);
+    return () => window.removeEventListener("spc:erp-grid-refresh", refreshRows);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -707,10 +717,13 @@ export function ErpGrid({
   };
 
   const saveView = async () => {
-    const name = window.prompt("Naziv pogleda");
-    if (!name?.trim()) return;
+    const name = saveViewName.trim();
+    if (!name) {
+      setCommandMessage({ ok: false, text: "Unesite naziv pogleda." });
+      return;
+    }
     const view: SavedView = {
-      name: name.trim(),
+      name,
       visibleColumns,
       columnOrder,
       columnWidths,
@@ -720,6 +733,8 @@ export function ErpGrid({
       searchColumn,
       context,
     };
+    setSavingView(true);
+    setCommandMessage(null);
     try {
       const response = await fetch("/api/admin/saved-views", {
         method: "POST",
@@ -732,21 +747,52 @@ export function ErpGrid({
       if (!response.ok || !payload?.view) {
         throw new Error(payload?.error ?? "Pogled nije snimljen.");
       }
-      setViews((current) => [
-        ...current.filter((item) => item.name !== view.name),
-        payload.view!,
-      ]);
-      writeViews(module.slug, [
-        ...views.filter((item) => item.name !== view.name),
-        payload.view,
-      ]);
+      setViews((current) => {
+        const next = [
+          ...current.filter((item) => item.name !== view.name),
+          payload.view!,
+        ];
+        writeViews(module.slug, next);
+        return next;
+      });
+      setSaveViewName("");
+      setShowSaveViewForm(false);
       setCommandMessage({ ok: true, text: `Pogled „${view.name}” je snimljen u bazu.` });
     } catch (error) {
       setCommandMessage({
         ok: false,
         text: error instanceof Error ? error.message : "Pogled nije snimljen.",
       });
+    } finally {
+      setSavingView(false);
     }
+  };
+
+  const deleteView = async (view: SavedView) => {
+    if (!view.id) return;
+    setCommandMessage(null);
+    const response = await fetch("/api/admin/saved-views", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: view.id }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    if (!response.ok) {
+      setCommandMessage({
+        ok: false,
+        text: payload?.error ?? "Pogled nije obrisan.",
+      });
+      return;
+    }
+    setViews((current) => {
+      const next = current.filter((item) => item.id !== view.id);
+      writeViews(module.slug, next);
+      return next;
+    });
+    setPendingDeleteViewId(null);
+    setCommandMessage({ ok: true, text: `Pogled „${view.name}” je obrisan.` });
   };
 
   const applyView = (view: SavedView) => {
@@ -1308,7 +1354,14 @@ export function ErpGrid({
               {isEditMode ? " · uređivanje uključeno" : ""}
             </p>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={saveView}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowSaveViewForm(true);
+                  setCommandMessage(null);
+                }}
+              >
                 <Save className="size-4" aria-hidden />
                 Snimi pogled
               </Button>
@@ -1317,6 +1370,38 @@ export function ErpGrid({
               </Button>
             </div>
           </div>
+
+          {showSaveViewForm ? (
+            <div
+              role="group"
+              aria-label="Novi sačuvani ERP pogled"
+              className="flex flex-wrap items-end gap-2 border-b border-border/60 bg-muted-bg/40 px-4 py-3"
+            >
+              <label className="min-w-64 flex-1 text-xs font-medium text-ink-600">
+                Naziv ERP pogleda
+                <Input
+                  autoFocus
+                  value={saveViewName}
+                  onChange={(event) => setSaveViewName(event.currentTarget.value)}
+                  className="mt-1 h-9 bg-surface"
+                />
+              </label>
+              <Button type="button" disabled={savingView} onClick={() => void saveView()}>
+                {savingView ? "Čuvanje…" : "Sačuvaj pogled"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingView}
+                onClick={() => {
+                  setShowSaveViewForm(false);
+                  setSaveViewName("");
+                }}
+              >
+                Otkaži
+              </Button>
+            </div>
+          ) : null}
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -1770,14 +1855,51 @@ export function ErpGrid({
             {views.length ? (
               <div className="space-y-2">
                 {views.map((view) => (
-                  <button
-                    key={view.name}
-                    type="button"
-                    onClick={() => applyView(view)}
-                    className="block w-full rounded-lg border border-border/60 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
+                  <div
+                    key={view.id ?? view.name}
+                    className="flex overflow-hidden rounded-lg border border-border/60"
                   >
-                    {view.name}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => applyView(view)}
+                      className="min-w-0 flex-1 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
+                    >
+                      {view.name}
+                    </button>
+                    {view.id ? (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={
+                            pendingDeleteViewId === view.id
+                              ? `Potvrdi brisanje pogleda ${view.name}`
+                              : `Obriši pogled ${view.name}`
+                          }
+                          onClick={() => {
+                            if (pendingDeleteViewId === view.id) void deleteView(view);
+                            else setPendingDeleteViewId(view.id ?? null);
+                          }}
+                          className="border-l border-border/60 px-2 text-danger transition hover:bg-danger/5"
+                        >
+                          {pendingDeleteViewId === view.id ? (
+                            <span className="text-xs">Potvrdi</span>
+                          ) : (
+                            <Trash2 className="size-4" aria-hidden />
+                          )}
+                        </button>
+                        {pendingDeleteViewId === view.id ? (
+                          <button
+                            type="button"
+                            aria-label={`Otkaži brisanje pogleda ${view.name}`}
+                            onClick={() => setPendingDeleteViewId(null)}
+                            className="border-l border-border/60 px-2 text-xs text-ink-500 transition hover:bg-muted-bg"
+                          >
+                            Otkaži
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ) : (

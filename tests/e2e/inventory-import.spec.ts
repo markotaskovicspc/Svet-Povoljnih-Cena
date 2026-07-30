@@ -290,6 +290,13 @@ test.describe("STOCK-02 — bezbedan DC lager import", () => {
         product: 8,
         warehouse: 8,
       });
+      const stockTable = page.locator("table").filter({
+        has: page.getByRole("button", { name: "Fizičko", exact: true }),
+      });
+      const successRow = stockTable
+        .getByRole("row")
+        .filter({ hasText: fixture.successA });
+      await expect(successRow.getByRole("cell").nth(4)).toHaveText("8");
       await expect(stock(productIds.successB)).resolves.toEqual({
         product: 2,
         warehouse: 2,
@@ -339,6 +346,35 @@ test.describe("STOCK-02 — bezbedan DC lager import", () => {
       );
       expect(actions).toContain("inventory.openingImport");
       expect(actions).toContain("inventory.openingImport.error");
+    });
+
+    await test.step("ručna korekcija odmah osvežava lager tabelu", async () => {
+      const correctionForm = page.locator("form").filter({
+        has: page.getByRole("button", { name: "Proknjiži promenu" }),
+      });
+      await correctionForm.locator('input[name="sku"]').fill(fixture.successA);
+      await correctionForm.locator('input[name="qtyDelta"]').fill("1");
+      await correctionForm.locator('input[name="note"]').fill("QA refresh regresija");
+      await confirmSubmit(
+        page,
+        correctionForm.getByRole("button", { name: "Proknjiži promenu" }),
+        true,
+      );
+
+      await expect(correctionForm.getByRole("status")).toContainText(
+        `Lager za ${fixture.successA} je promenjen za 1`,
+      );
+      await expect(stock(productIds.successA)).resolves.toEqual({
+        product: 9,
+        warehouse: 9,
+      });
+      const stockTable = page.locator("table").filter({
+        has: page.getByRole("button", { name: "Fizičko", exact: true }),
+      });
+      const stockRow = stockTable
+        .getByRole("row")
+        .filter({ hasText: fixture.successA });
+      await expect(stockRow.getByRole("cell").nth(4)).toHaveText("9");
     });
   });
 

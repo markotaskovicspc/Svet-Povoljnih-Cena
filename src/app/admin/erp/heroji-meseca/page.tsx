@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import { withAdminState, requireAdminAction } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { getErpModule } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -9,6 +11,7 @@ import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { ErpGrid } from "@/components/admin/erp-grid";
+import { AdminActionForm } from "@/components/admin/action-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -29,13 +32,16 @@ const schema = z.object({
   actionId: z.string().optional().nullable(),
 });
 
-async function upsert(formData: FormData) {
+async function upsert(
+  _state: AdminActionState,
+  formData: FormData,
+) {
   "use server";
 
-  return withAdmin(
+  const state = await withAdminState(
     { allowed: ["CONTENT"], action: "hero.upsert", entity: "HeroOfMonth" },
-    async (_a, formData: FormData) => {
-        const parsed = schema.safeParse(Object.fromEntries(formData));
+    async (_a, actionData: FormData) => {
+        const parsed = schema.safeParse(Object.fromEntries(actionData));
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         const data = {
           ...parsed.data,
@@ -57,13 +63,25 @@ async function upsert(formData: FormData) {
         });
         revalidatePath("/admin/erp/heroji-meseca");
         revalidatePath("/heroji-meseca");
-        return { ok: true as const, entityId: saved.id, diff: data };
+        return {
+          ok: true as const,
+          entityId: saved.id,
+          diff: data,
+          message: "Hero meseca je sačuvan.",
+        };
       },
   )(formData);
+  if (state.ok) redirect("/admin/erp/heroji-meseca?saved=1");
+  return state;
 }
 
-export default async function HeroesPage() {
+export default async function HeroesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string }>;
+}) {
   await requireAdminAction(["CONTENT"]);
+  const saved = (await searchParams).saved === "1";
   const now = new Date();
   const [erpModule, actions] = await Promise.all([
     getErpModule("heroji-meseca", { take: 10_000 }),
@@ -87,7 +105,15 @@ export default async function HeroesPage() {
         </Card>
         <Card>
           <CardTitle>Dodaj heroja</CardTitle>
-          <form action={upsert} className="space-y-3">
+          {saved ? (
+            <p
+              role="status"
+              className="mb-3 rounded-md border border-success/25 bg-success/10 px-3 py-2 text-sm text-success"
+            >
+              Hero meseca je sačuvan.
+            </p>
+          ) : null}
+          <AdminActionForm action={upsert} className="space-y-3">
             <Field label="SKU proizvoda">
               <Input name="productSku" required />
             </Field>
@@ -136,7 +162,7 @@ export default async function HeroesPage() {
             <div className="flex justify-end">
               <SubmitButton>Sačuvaj</SubmitButton>
             </div>
-          </form>
+          </AdminActionForm>
         </Card>
       </div>
     </>

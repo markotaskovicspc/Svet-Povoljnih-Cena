@@ -1,5 +1,6 @@
 // Acceptance: SALE-01
 // Acceptance: SALE-02
+// Acceptance: CRM-01
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -26,6 +27,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
     customerEmail: `qa.customer.${runId}@example.invalid`,
     customerCompany: `QA kupac ${runId}`,
     customerPib: `${runId.replace(/\D/g, "").slice(-9).padStart(9, "1")}`,
+    uiCompany: `QA otpremnica firma ${runId}`,
+    uiCompanyPib: `8${runId.replace(/\D/g, "").slice(-8).padStart(8, "2")}`,
+    uiCompanyRegistration: `7${runId.replace(/\D/g, "").slice(-7).padStart(7, "3")}`,
     supplierName: `QA prodajni dobavljač ${runId}`,
     priceListCode: `QA-VP-${runId}`.slice(0, 70),
     dcSku: `QA-SALE-DC-${runId}`.slice(0, 90),
@@ -35,6 +39,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
   let db: PrismaClient;
   let adminId = "";
   let customerId = "";
+  let uiCompanyId = "";
   let supplierId = "";
   let priceListId = "";
   let dcWarehouseId = "";
@@ -260,6 +265,56 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       },
     ]);
     await login(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    await test.step("admin kreira firmu spremnu za VP/INO i otpremnice", async () => {
+      await page.goto("/admin/erp/kupci", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Novi kupac / firma" }).click();
+      const dialog = page.getByRole("dialog", { name: "Novi kupac / firma" });
+      await dialog.getByLabel("Vrsta kupca *").selectOption("Firma");
+      await dialog.getByLabel("Ime i prezime / naziv firme *").fill(fixture.uiCompany);
+      await dialog.getByLabel("PIB firme").fill(fixture.uiCompanyPib);
+      await dialog
+        .getByLabel("Matični broj firme")
+        .fill(fixture.uiCompanyRegistration);
+      await dialog.getByLabel("Adresa").fill("Bulevar otpremnica 12");
+      await dialog.getByLabel("Mesto").fill("Beograd");
+      await dialog.getByLabel("Poštanski broj").fill("11000");
+      await dialog.getByLabel("Država (ISO 2)").fill("RS");
+      await dialog.getByLabel("Telefon").fill("+381601234567");
+      await dialog
+        .getByLabel("E-mail")
+        .fill(`qa.dispatch.company.${runId}@example.invalid`);
+      const submitCompany = dialog.getByRole("button", {
+        name: "Novi kupac / firma",
+      });
+      await expect(submitCompany).toBeVisible();
+      await submitCompany.click();
+      await expect(page.getByRole("status")).toContainText(
+        `Firma „${fixture.uiCompany}” je kreirana`,
+      );
+
+      const company = await db.customer.findFirstOrThrow({
+        where: { companyName: fixture.uiCompany },
+        select: { id: true, pib: true, registrationNumber: true, country: true },
+      });
+      uiCompanyId = company.id;
+      expect(company).toMatchObject({
+        pib: fixture.uiCompanyPib,
+        registrationNumber: fixture.uiCompanyRegistration,
+        country: "RS",
+      });
+
+      await page.goto("/admin/erp/otpremnice/nova", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByLabel("Firma koja izdaje", { exact: true })).toContainText(
+        fixture.uiCompany,
+      );
+      await expect(page.getByLabel("Firma koja prima", { exact: true })).toContainText(
+        fixture.uiCompany,
+      );
+    });
 
     await test.step("pregled sadrži sve zahtevane komande i kolone", async () => {
       await page.goto("/admin/erp/prodajni-nalozi", {
@@ -665,7 +720,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       where: { id: { in: [dcProductId, supplierProductId].filter(Boolean) } },
     });
     await db.priceList.deleteMany({ where: { id: priceListId } });
-    await db.customer.deleteMany({ where: { id: customerId } });
+    await db.customer.deleteMany({
+      where: { id: { in: [customerId, uiCompanyId].filter(Boolean) } },
+    });
     await db.supplier.deleteMany({ where: { id: supplierId } });
     await db.group.deleteMany({ where: { slug: `qa-sales-group-${runId}` } });
     await db.collection.deleteMany({
