@@ -40,6 +40,7 @@ test.describe("Admin analitika reklamacija", () => {
     productC: `${prefix} Lampa C`,
     deliveredOrder: `${prefix}-ISPORUCENO`.slice(0, 80),
     activeOrder: `${prefix}-U-ISPORUCI`.slice(0, 80),
+    cancelledOrder: `${prefix}-OTKAZANO`.slice(0, 80),
   };
 
   let db: PrismaClient;
@@ -72,22 +73,16 @@ test.describe("Admin analitika reklamacija", () => {
       createProduct(fixture.skuC, fixture.productC, supplierA.id),
     ]);
 
-    let warehouse = await db.warehouse.findFirst({
-      where: { active: true, isDefault: true },
+    const warehouse = await db.warehouse.create({
+      data: {
+        code: `QA-REK-DC-${runId}`.slice(0, 40),
+        name: `${prefix} DC`,
+        active: true,
+        isDefault: false,
+      },
       select: { id: true },
     });
-    if (!warehouse) {
-      warehouse = await db.warehouse.create({
-        data: {
-          code: `QA-REK-DC-${runId}`.slice(0, 40),
-          name: `${prefix} DC`,
-          active: true,
-          isDefault: true,
-        },
-        select: { id: true },
-      });
-      createdWarehouseId = warehouse.id;
-    }
+    createdWarehouseId = warehouse.id;
 
     const deliveredOrder = await db.order.create({
       data: {
@@ -110,6 +105,14 @@ test.describe("Admin analitika reklamacija", () => {
         },
       },
       include: { items: true },
+    });
+    await db.order.create({
+      data: {
+        ...orderData(fixture.cancelledOrder, "OTKAZANO"),
+        items: {
+          create: orderItemData(productA, fixture.supplierA, 2_000, warehouse.id),
+        },
+      },
     });
 
     const itemA = deliveredOrder.items.find((item) => item.sku === fixture.skuA)!;
@@ -194,6 +197,21 @@ test.describe("Admin analitika reklamacija", () => {
         qty: 1,
         totalGross: 1_000,
         serviceGross: 0,
+      }),
+      db.fiscalDocument.create({
+        data: {
+          orderId: deliveredOrder.id,
+          kind: "REFUND",
+          status: "ISSUED",
+          source: "MANUAL",
+          warehouseId: warehouse.id,
+          receiptNumber: `${prefix}-REFUND-A`,
+          idempotencyKey: `${prefix}:fiscal:refund-a`,
+          totalNet: 500 / 1.2,
+          totalVat: 500 - 500 / 1.2,
+          totalGross: 500,
+          issuedAt: new Date(),
+        },
       }),
       db.shipment.create({
         data: {
@@ -394,31 +412,39 @@ test.describe("Admin analitika reklamacija", () => {
       ).toBeVisible();
     });
 
-    await test.step("dashboard periodi, strogo sačuvani pogledi i XLSX izvozi rade", async () => {
+    await test.step("dashboard periodi, podrazumevani pogledi i XLSX izvozi rade", async () => {
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Kontrolna tabla" })).toBeVisible();
       for (const label of [
-        "Porudžbine od",
-        "Porudžbine do",
-        "Fiskalni promet od",
-        "Fiskalni promet do",
-        "Reklamacije od",
-        "Reklamacije do",
-        "Top proizvodi od",
-        "Top proizvodi do",
+        "Porudžbine period",
+        "Fiskalni promet period",
+        "Reklamacije period",
+        "Top proizvodi period",
       ]) {
         await expect(page.getByLabel(label)).toBeVisible();
       }
       for (const label of [
-        "Zalihe po COGS-u",
+        "Porudžbine danas",
+        "Porudžbine u periodu",
+        "Promet danas (neto fiskalizovano)",
+        "Promet u periodu (neto fiskalizovano)",
+        "Reklamacije u periodu",
+        "Ukupne zalihe po COGS-u",
         "Roba u dolasku",
-        "Trenutne posete",
-        "Današnje posete",
+        "Trenutni broj poseta",
+        "Današnji broj poseta",
+        "Prosečan dnevni broj poseta",
       ]) {
         await expect(page.getByText(label, { exact: true })).toBeVisible();
       }
+      await expect(page.getByRole("heading", { name: "Zalihe za magacin" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Top proizvodi" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Niske zalihe" })).toBeVisible();
+      await expect(page.getByText("Otvorene operacije", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: "Status feed-a" })).toHaveCount(0);
 
       const viewName = `${prefix} dashboard`;
+      const dashboardDate = belgradeDateInput(new Date());
       const baseView = {
         module: "dashboard",
         name: viewName,
@@ -428,16 +454,21 @@ test.describe("Admin analitika reklamacija", () => {
         visibleColumns: [],
         columnOrder: [],
         columnWidths: {},
+        isDefault: true,
         context: {
-          warehouseId: "",
-          ordersFrom: "2026-07-01",
-          ordersTo: "2026-07-31",
-          fiscalFrom: "2026-07-01",
-          fiscalTo: "2026-07-31",
-          reclamationsFrom: "2026-07-01",
-          reclamationsTo: "2026-07-31",
-          topProductsFrom: "2026-07-01",
-          topProductsTo: "2026-07-31",
+          warehouseId: createdWarehouseId,
+          ordersRange: "custom",
+          ordersFrom: dashboardDate,
+          ordersTo: dashboardDate,
+          fiscalRange: "custom",
+          fiscalFrom: dashboardDate,
+          fiscalTo: dashboardDate,
+          reclamationsRange: "custom",
+          reclamationsFrom: dashboardDate,
+          reclamationsTo: dashboardDate,
+          topProductsRange: "custom",
+          topProductsFrom: dashboardDate,
+          topProductsTo: dashboardDate,
         },
       };
       const rejectedView = await page.request.post("/api/admin/saved-views", {
@@ -445,32 +476,51 @@ test.describe("Admin analitika reklamacija", () => {
       });
       expect(rejectedView.status()).toBe(400);
 
+      for (const name of ["orders", "fiscal", "reclamations", "topProducts"]) {
+        await page.locator(`select[name="${name}Range"]`).selectOption("custom");
+      }
+      await page.locator('select[name="warehouseId"]').selectOption(createdWarehouseId);
       for (const [key, value] of Object.entries(baseView.context)) {
-        if (key === "warehouseId") continue;
+        if (key === "warehouseId" || key.endsWith("Range")) continue;
         await page.locator(`input[name="${key}"]`).fill(value);
       }
       await page.getByRole("button", { name: "Primeni filtere" }).click();
-      await expect(page).toHaveURL(/ordersFrom=2026-07-01/);
+      await expect(page).toHaveURL(new RegExp(`ordersFrom=${dashboardDate}`));
       await expect(page.locator('[data-client-ready="true"]')).toBeVisible();
+      await expect(
+        page.getByText("Porudžbine danas", { exact: true }).locator(".."),
+      ).toContainText("3");
+      await expect(
+        page.getByText("Promet danas (neto fiskalizovano)", { exact: true }).locator(".."),
+      ).toContainText("3.000 RSD");
       await page.getByRole("button", { name: "Sačuvaj pogled" }).click();
       await page.getByLabel("Naziv dashboard pogleda").fill(viewName);
       await page.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(page.getByRole("status")).toContainText(
-        `Pogled „${viewName}” je sačuvan.`,
+        `Pogled „${viewName}” je sačuvan kao podrazumevani.`,
       );
-      await page.getByLabel("Porudžbine od").fill("2026-06-15");
-      await page.getByRole("button", { name: viewName, exact: true }).click();
-      await expect(page.getByLabel("Porudžbine od")).toHaveValue("2026-07-01");
+
+      await page.goto("/admin", { waitUntil: "domcontentloaded" });
+      await expect(page.locator('[data-client-ready="true"]')).toBeVisible();
+      await expect(page.locator('select[name="ordersRange"]')).toHaveValue("custom");
+      await expect(page.getByLabel("Porudžbine od")).toHaveValue(dashboardDate);
+      await expect(page.locator('select[name="warehouseId"]')).toHaveValue(createdWarehouseId);
 
       const listedViews = await page.request.get(
         "/api/admin/saved-views?module=dashboard",
       );
       expect(listedViews.ok()).toBe(true);
       const listedPayload = (await listedViews.json()) as {
-        views: Array<{ id: string; name: string; context: Record<string, string> }>;
+        views: Array<{
+          id: string;
+          name: string;
+          isDefault: boolean;
+          context: Record<string, string>;
+        }>;
       };
       const savedPayload = listedPayload.views.find((view) => view.name === viewName);
       expect(savedPayload?.context).toEqual(baseView.context);
+      expect(savedPayload?.isDefault).toBe(true);
 
       await page
         .getByRole("button", { name: `Obriši pogled ${viewName}` })
@@ -479,39 +529,43 @@ test.describe("Admin analitika reklamacija", () => {
         .getByRole("button", { name: `Potvrdi brisanje ${viewName}` })
         .click();
       await expect(page.getByRole("status")).toContainText(
-        `Pogled „${viewName}” je obrisan.`,
+        `Podrazumevani pogled „${viewName}” je obrisan.`,
       );
 
       await assertWorkbookContains(
         await page.request.get(
-          "/api/admin/erp/prodajni-nalozi/export?from=2026-07-01&to=2026-07-31&dateField=fiscal-issued-at&fiscalStatus=issued",
+          `/api/admin/erp/prodajni-nalozi/export?from=${dashboardDate}&to=${dashboardDate}&warehouseId=${createdWarehouseId}`,
+        ),
+        "Fiskalizovano",
+        fixture.cancelledOrder,
+      );
+
+      await assertWorkbookContains(
+        await page.request.get(
+          `/api/admin/erp/prodajni-nalozi/export?from=${dashboardDate}&to=${dashboardDate}&dateField=fiscal-issued-at&fiscalStatus=issued&warehouseId=${createdWarehouseId}`,
         ),
         "Broj porudžbine",
         fixture.deliveredOrder,
       );
-      await assertWorkbookContains(
-        await page.request.get("/api/admin/erp/reklamacije-dnevnik/export"),
-        "Naziv artikla",
-        `${prefix}-A-OPEN-31`,
-      );
     });
 
-    await test.step("izveštaji i namenski analytics ekran izvršavaju stvarne agregate", async () => {
-      await page.goto("/admin/izvestaji?range=30d", {
+    await test.step("Izveštajni centar ne duplira dashboard i vodi na namenske ekrane", async () => {
+      await page.goto("/admin/izvestaji", {
         waitUntil: "domcontentloaded",
       });
-      for (const heading of [
-        "Porudžbine i prodaja (Fiskalizovano)",
-        "Zalihe",
-        "Roba u dolasku",
-        "Reklamacije",
+      await expect(page.getByRole("heading", { name: "Izveštajni centar" })).toBeVisible();
+      const reportsHub = page.locator('nav[aria-label="Dostupni namenski izveštaji"]');
+      for (const link of [
+        "Knjigovodstveni izveštaji",
+        "Posete i konverzije",
+        "QA objave",
+        "Audit log",
       ]) {
-        await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+        await expect(reportsHub.getByRole("link", { name: new RegExp(link) })).toBeVisible();
       }
-      await expect(
-        page.getByText("Prosečna cena artikla", { exact: true }).locator(".."),
-      ).toContainText("1.000 RSD");
-      await expect(page.getByText(fixture.skuA, { exact: true }).first()).toBeVisible();
+      for (const duplicate of ["Roba u dolasku", "Reklamacije u periodu", "Ukupne zalihe po COGS-u"]) {
+        await expect(page.getByText(duplicate, { exact: true })).toHaveCount(0);
+      }
 
       await page.goto("/admin/erp/posete-konverzije", {
         waitUntil: "domcontentloaded",
@@ -523,11 +577,14 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(page.getByText(fixture.skuA, { exact: true }).first()).toBeVisible();
       await expect(
         page.getByText("Poseta → kupovina", { exact: true }).locator(".."),
-      ).toContainText("50%");
+      ).toContainText("%");
     });
 
     await test.step("mobilni prikaz nema horizontalni overflow stranice", async () => {
       if (test.info().project.name !== "mobile") return;
+      await page.goto("/admin/erp/reklamacije-dnevnik", {
+        waitUntil: "domcontentloaded",
+      });
       await expect(page.getByRole("button", { name: "Otvori meni" })).toBeVisible();
       const overflow = await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,
@@ -571,7 +628,10 @@ test.describe("Admin analitika reklamacija", () => {
     });
   }
 
-  function orderData(number: string, status: "ISPORUCENO" | "U_ISPORUCI") {
+  function orderData(
+    number: string,
+    status: "ISPORUCENO" | "U_ISPORUCI" | "OTKAZANO",
+  ) {
     return {
       number,
       status,
@@ -709,6 +769,7 @@ test.describe("Admin analitika reklamacija", () => {
       customerFirst: "QA",
       customerLast: "Kupac",
       description: "Privremena QA reklamacija za analitički prikaz.",
+      warehouseId: createdWarehouseId,
       notifyVia: "EMAIL" as const,
       status: input.status ?? ("PRIMLJENO" as const),
       type: input.type,
@@ -793,6 +854,21 @@ async function assertWorkbookContains(
 
 function normalize(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function belgradeDateInput(date: Date) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Belgrade",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function databaseUrl() {

@@ -9,23 +9,21 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { REPORT_PERIOD_PRESETS } from "@/lib/admin/report-period";
+import {
+  DASHBOARD_PERIOD_NAMES,
+  type DashboardFilterContext,
+  type DashboardFilterParams,
+  type DashboardPeriodName,
+} from "@/lib/admin/dashboard-context";
 
-export type DashboardFilterContext = {
-  warehouseId: string;
-  ordersFrom: string;
-  ordersTo: string;
-  fiscalFrom: string;
-  fiscalTo: string;
-  reclamationsFrom: string;
-  reclamationsTo: string;
-  topProductsFrom: string;
-  topProductsTo: string;
-};
+export type { DashboardFilterContext } from "@/lib/admin/dashboard-context";
 
 type DashboardSavedView = {
   id?: string;
   name: string;
-  context?: Partial<DashboardFilterContext>;
+  isDefault?: boolean;
+  context?: DashboardFilterParams;
 };
 
 const subscribeToClientRuntime = () => () => {};
@@ -36,6 +34,53 @@ function useClientReady() {
     () => true,
     () => false,
   );
+}
+
+function savedViewPayload(
+  name: string,
+  context: DashboardFilterParams,
+  isDefault: boolean,
+) {
+  return {
+    module: "dashboard",
+    name,
+    query: "",
+    filters: [],
+    sorting: [],
+    visibleColumns: [],
+    columnOrder: [],
+    columnWidths: {},
+    context,
+    isDefault,
+  };
+}
+
+function normalizeLegacyContext(context: DashboardFilterParams) {
+  const normalized: DashboardFilterParams = { ...context };
+  for (const name of DASHBOARD_PERIOD_NAMES) {
+    const rangeKey = `${name}Range` as const;
+    const fromKey = `${name}From` as const;
+    const toKey = `${name}To` as const;
+    if (!normalized[rangeKey] && normalized[fromKey] && normalized[toKey]) {
+      normalized[rangeKey] = "custom";
+    }
+  }
+  return normalized;
+}
+
+function replaceSavedView(
+  current: DashboardSavedView[],
+  saved: DashboardSavedView,
+) {
+  const next = current
+    .filter((view) => view.name !== saved.name)
+    .map((view) => (saved.isDefault ? { ...view, isDefault: false } : view));
+  return [saved, ...next].sort((left, right) => {
+    if (Boolean(left.isDefault) !== Boolean(right.isDefault)) {
+      return left.isDefault ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name, "sr-Latn");
+  });
 }
 
 export function DashboardFilters({
@@ -51,20 +96,14 @@ export function DashboardFilters({
   const [message, setMessage] = useState<string | null>(null);
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [saveAsDefault, setSaveAsDefault] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const contextKey = [
-    context.warehouseId,
-    context.ordersFrom,
-    context.ordersTo,
-    context.fiscalFrom,
-    context.fiscalTo,
-    context.reclamationsFrom,
-    context.reclamationsTo,
-    context.topProductsFrom,
-    context.topProductsTo,
-  ].join("|");
-  const [draftState, setDraftState] = useState({ sourceKey: contextKey, value: context });
+  const contextKey = Object.values(context).join("|");
+  const [draftState, setDraftState] = useState({
+    sourceKey: contextKey,
+    value: context,
+  });
   const draft = draftState.sourceKey === contextKey ? draftState.value : context;
   const setDraft: Dispatch<SetStateAction<DashboardFilterContext>> = (nextDraft) => {
     setDraftState({
@@ -89,8 +128,11 @@ export function DashboardFilters({
     };
   }, []);
 
-  const navigateTo = (next: Partial<DashboardFilterContext>) => {
-    const appliedContext = { ...context, ...next };
+  const navigateTo = (next: DashboardFilterParams) => {
+    const appliedContext = {
+      ...context,
+      ...normalizeLegacyContext(next),
+    };
     setDraft(appliedContext);
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(appliedContext)) {
@@ -111,17 +153,7 @@ export function DashboardFilters({
       const response = await fetch("/api/admin/saved-views", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          module: "dashboard",
-          name,
-          query: "",
-          filters: [],
-          sorting: [],
-          visibleColumns: [],
-          columnOrder: [],
-          columnWidths: {},
-          context,
-        }),
+        body: JSON.stringify(savedViewPayload(name, context, saveAsDefault)),
       });
       const payload = (await response.json().catch(() => null)) as
         | { view?: DashboardSavedView; error?: string }
@@ -130,13 +162,40 @@ export function DashboardFilters({
         setMessage(payload?.error ?? "Pogled nije sačuvan.");
         return;
       }
-      setViews((current) => [
-        ...current.filter((view) => view.name !== payload.view!.name),
-        payload.view!,
-      ]);
+      setViews((current) => replaceSavedView(current, payload.view!));
       setSaveName("");
+      setSaveAsDefault(true);
       setShowSaveForm(false);
-      setMessage(`Pogled „${payload.view.name}” je sačuvan.`);
+      setMessage(
+        payload.view.isDefault
+          ? `Pogled „${payload.view.name}” je sačuvan kao podrazumevani.`
+          : `Pogled „${payload.view.name}” je sačuvan.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setDefaultView = async (view: DashboardSavedView) => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/saved-views", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          savedViewPayload(view.name, view.context ?? {}, true),
+        ),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { view?: DashboardSavedView; error?: string }
+        | null;
+      if (!response.ok || !payload?.view) {
+        setMessage(payload?.error ?? "Podrazumevani pogled nije promenjen.");
+        return;
+      }
+      setViews((current) => replaceSavedView(current, payload.view!));
+      setMessage(`Pogled „${payload.view.name}” je sada podrazumevani.`);
     } finally {
       setSaving(false);
     }
@@ -155,7 +214,11 @@ export function DashboardFilters({
     }
     setViews((current) => current.filter((item) => item.id !== view.id));
     setPendingDeleteId(null);
-    setMessage(`Pogled „${view.name}” je obrisan.`);
+    setMessage(
+      view.isDefault
+        ? `Podrazumevani pogled „${view.name}” je obrisan. Pri sledećem otvaranju koristiće se ugrađeni izbor.`
+        : `Pogled „${view.name}” je obrisan.`,
+    );
   };
 
   return (
@@ -165,176 +228,225 @@ export function DashboardFilters({
       data-client-ready={clientReady ? "true" : "false"}
     >
       <fieldset className="contents" disabled={!clientReady || saving}>
-      <form method="get" className="grid gap-3 lg:grid-cols-5">
-        <label className="text-xs font-medium text-ink-600">
-          Magacin
-          <select
-            name="warehouseId"
-            value={draft.warehouseId}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, warehouseId: event.currentTarget.value }))
-            }
-            className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm"
-          >
-            <option value="">Svi magacini</option>
-            {warehouses.map((warehouse) => (
-              <option key={warehouse.id} value={warehouse.id}>
-                {warehouse.name} ({warehouse.code})
-              </option>
-            ))}
-          </select>
-        </label>
-        <DateRange label="Porudžbine" from="ordersFrom" to="ordersTo" draft={draft} setDraft={setDraft} />
-        <DateRange label="Fiskalni promet" from="fiscalFrom" to="fiscalTo" draft={draft} setDraft={setDraft} />
-        <DateRange
-          label="Reklamacije"
-          from="reclamationsFrom"
-          to="reclamationsTo"
-          draft={draft}
-          setDraft={setDraft}
-        />
-        <DateRange
-          label="Top proizvodi"
-          from="topProductsFrom"
-          to="topProductsTo"
-          draft={draft}
-          setDraft={setDraft}
-        />
-        <div className="flex flex-wrap gap-2 lg:col-span-5">
-          <button className="rounded-lg bg-walnut px-4 py-2 text-sm font-medium text-white">
-            Primeni filtere
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowSaveForm(true);
-              setMessage(null);
-            }}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-700"
-          >
-            Sačuvaj pogled
-          </button>
-        </div>
-      </form>
-
-      {showSaveForm ? (
-        <div
-          role="group"
-          aria-label="Novi sačuvani dashboard pogled"
-          className="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-muted-bg/40 p-3"
-        >
-          <label className="min-w-64 flex-1 text-xs font-medium text-ink-600">
-            Naziv dashboard pogleda
-            <Input
-              autoFocus
-              value={saveName}
-              onChange={(event) => setSaveName(event.currentTarget.value)}
-              className="mt-1 h-9 bg-surface"
-            />
+        <form method="get" className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-5">
+          <label className="text-xs font-medium text-ink-600">
+            Magacin
+            <select
+              name="warehouseId"
+              value={draft.warehouseId}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  warehouseId: event.currentTarget.value,
+                }))
+              }
+              className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm"
+            >
+              <option value="">Svi magacini</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name} ({warehouse.code})
+                </option>
+              ))}
+            </select>
           </label>
-          <button
-            type="button"
-            onClick={saveView}
-            className="rounded-lg bg-walnut px-4 py-2 text-sm font-medium text-white"
-          >
-            {saving ? "Čuvanje…" : "Sačuvaj"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowSaveForm(false);
-              setSaveName("");
-            }}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-700"
-          >
-            Otkaži
-          </button>
-        </div>
-      ) : null}
+          <DateRange name="orders" label="Porudžbine" draft={draft} setDraft={setDraft} />
+          <DateRange name="fiscal" label="Fiskalni promet" draft={draft} setDraft={setDraft} />
+          <DateRange name="reclamations" label="Reklamacije" draft={draft} setDraft={setDraft} />
+          <DateRange name="topProducts" label="Top proizvodi" draft={draft} setDraft={setDraft} />
+          <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-5">
+            <button className="rounded-lg bg-walnut px-4 py-2 text-sm font-medium text-white">
+              Primeni filtere
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSaveForm(true);
+                setMessage(null);
+              }}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-700"
+            >
+              Sačuvaj pogled
+            </button>
+          </div>
+        </form>
 
-      {views.length ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-ink-500">Sačuvani pogledi:</span>
-          {views.map((view) => (
-            <span key={view.id ?? view.name} className="inline-flex rounded-full border border-border">
-              <button
-                type="button"
-                onClick={() => navigateTo(view.context ?? {})}
-                className="px-3 py-1.5 text-ink-700 hover:text-walnut"
+        {showSaveForm ? (
+          <div
+            role="group"
+            aria-label="Novi sačuvani dashboard pogled"
+            className="flex flex-wrap items-end gap-3 rounded-lg border border-border/60 bg-muted-bg/40 p-3"
+          >
+            <label className="min-w-64 flex-1 text-xs font-medium text-ink-600">
+              Naziv dashboard pogleda
+              <Input
+                autoFocus
+                value={saveName}
+                onChange={(event) => setSaveName(event.currentTarget.value)}
+                className="mt-1 h-9 bg-surface"
+              />
+            </label>
+            <label className="flex h-9 items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={saveAsDefault}
+                onChange={(event) => setSaveAsDefault(event.currentTarget.checked)}
+              />
+              Učitaj automatski
+            </label>
+            <button
+              type="button"
+              onClick={saveView}
+              className="rounded-lg bg-walnut px-4 py-2 text-sm font-medium text-white"
+            >
+              {saving ? "Čuvanje…" : "Sačuvaj"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSaveForm(false);
+                setSaveName("");
+              }}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-700"
+            >
+              Otkaži
+            </button>
+          </div>
+        ) : null}
+
+        {views.length ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-ink-500">Sačuvani pogledi:</span>
+            {views.map((view) => (
+              <span
+                key={view.id ?? view.name}
+                className="inline-flex items-center rounded-full border border-border"
               >
-                {view.name}
-              </button>
-              <button
-                type="button"
-                aria-label={
-                  pendingDeleteId === view.id
-                    ? `Potvrdi brisanje ${view.name}`
-                    : `Obriši pogled ${view.name}`
-                }
-                onClick={() => {
-                  if (pendingDeleteId === view.id) void deleteView(view);
-                  else setPendingDeleteId(view.id ?? null);
-                }}
-                className="border-l border-border px-2 text-danger"
-              >
-                {pendingDeleteId === view.id ? "Potvrdi" : "×"}
-              </button>
-              {pendingDeleteId === view.id ? (
                 <button
                   type="button"
-                  aria-label={`Otkaži brisanje ${view.name}`}
-                  onClick={() => setPendingDeleteId(null)}
-                  className="border-l border-border px-2 text-ink-500"
+                  onClick={() => navigateTo(view.context ?? {})}
+                  className="px-3 py-1.5 text-ink-700 hover:text-walnut"
                 >
-                  Otkaži
+                  {view.name}
+                  {view.isDefault ? " · podrazumevani" : ""}
                 </button>
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {message ? <p role="status" className="text-xs text-ink-500">{message}</p> : null}
+                {!view.isDefault ? (
+                  <button
+                    type="button"
+                    aria-label={`Postavi pogled ${view.name} kao podrazumevani`}
+                    onClick={() => void setDefaultView(view)}
+                    className="border-l border-border px-2 text-ink-500 hover:text-walnut"
+                  >
+                    ★
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={
+                    pendingDeleteId === view.id
+                      ? `Potvrdi brisanje ${view.name}`
+                      : `Obriši pogled ${view.name}`
+                  }
+                  onClick={() => {
+                    if (pendingDeleteId === view.id) void deleteView(view);
+                    else setPendingDeleteId(view.id ?? null);
+                  }}
+                  className="border-l border-border px-2 text-danger"
+                >
+                  {pendingDeleteId === view.id ? "Potvrdi" : "×"}
+                </button>
+                {pendingDeleteId === view.id ? (
+                  <button
+                    type="button"
+                    aria-label={`Otkaži brisanje ${view.name}`}
+                    onClick={() => setPendingDeleteId(null)}
+                    className="border-l border-border px-2 text-ink-500"
+                  >
+                    Otkaži
+                  </button>
+                ) : null}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {message ? <p role="status" className="text-xs text-ink-500">{message}</p> : null}
       </fieldset>
     </div>
   );
 }
 
 function DateRange({
+  name,
   label,
-  from,
-  to,
   draft,
   setDraft,
 }: {
+  name: DashboardPeriodName;
   label: string;
-  from: keyof DashboardFilterContext;
-  to: keyof DashboardFilterContext;
   draft: DashboardFilterContext;
   setDraft: Dispatch<SetStateAction<DashboardFilterContext>>;
 }) {
+  const rangeKey = `${name}Range` as const;
+  const fromKey = `${name}From` as const;
+  const toKey = `${name}To` as const;
+  const custom = draft[rangeKey] === "custom";
+
   return (
-    <fieldset className="grid grid-cols-2 gap-2">
+    <fieldset className="space-y-1">
       <legend className="text-xs font-medium text-ink-600">{label}</legend>
-      <Input
-        aria-label={`${label} od`}
-        name={from}
-        type="date"
-        value={draft[from]}
+      <select
+        aria-label={`${label} period`}
+        name={rangeKey}
+        value={draft[rangeKey]}
         onChange={(event) =>
-          setDraft((current) => ({ ...current, [from]: event.currentTarget.value }))
+          setDraft((current) => ({
+            ...current,
+            [rangeKey]: event.currentTarget.value,
+          }))
         }
-        className="mt-1 h-9"
-      />
-      <Input
-        aria-label={`${label} do`}
-        name={to}
-        type="date"
-        value={draft[to]}
-        onChange={(event) =>
-          setDraft((current) => ({ ...current, [to]: event.currentTarget.value }))
-        }
-        className="mt-1 h-9"
-      />
+        className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm"
+      >
+        {REPORT_PERIOD_PRESETS.map((preset) => (
+          <option key={preset.key} value={preset.key}>{preset.label}</option>
+        ))}
+        <option value="custom">Tačan raspon</option>
+      </select>
+      {custom ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            aria-label={`${label} od`}
+            name={fromKey}
+            type="date"
+            required
+            value={draft[fromKey]}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                [fromKey]: event.currentTarget.value,
+              }))
+            }
+            className="h-9"
+          />
+          <Input
+            aria-label={`${label} do`}
+            name={toKey}
+            type="date"
+            required
+            value={draft[toKey]}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                [toKey]: event.currentTarget.value,
+              }))
+            }
+            className="h-9"
+          />
+        </div>
+      ) : (
+        <p className="px-1 text-[11px] text-ink-500">
+          {draft[fromKey]} – {draft[toKey]}
+        </p>
+      )}
     </fieldset>
   );
 }

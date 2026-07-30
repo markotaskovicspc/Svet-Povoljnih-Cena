@@ -38,6 +38,15 @@ describe("admin report period", () => {
     expect(period.start.toISOString()).toBe("2025-12-31T23:00:00.000Z");
   });
 
+  it("starts month-to-date at the first Belgrade calendar day of the month", () => {
+    const period = resolveReportPeriod({ range: "mtd" }, julyNow);
+
+    expect(period.preset).toBe("mtd");
+    expect(period.fromInput).toBe("2026-07-01");
+    expect(period.toInput).toBe("2026-07-27");
+    expect(period.start.toISOString()).toBe("2026-06-30T22:00:00.000Z");
+  });
+
   it("falls back to the 30-day preset for invalid custom input", () => {
     const period = resolveReportPeriod(
       { range: "custom", from: "2026-02-31", to: "not-a-date" },

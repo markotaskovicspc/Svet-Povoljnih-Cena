@@ -3,6 +3,10 @@ import { Prisma } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
+import {
+  DASHBOARD_CONTEXT_KEYS,
+  isDashboardContextEntry,
+} from "@/lib/admin/dashboard-context";
 
 const GRID_OPERATORS = new Set([
   "contains",
@@ -14,18 +18,6 @@ const GRID_OPERATORS = new Set([
   "lte",
   "before",
   "after",
-]);
-
-const DASHBOARD_CONTEXT_KEYS = new Set([
-  "warehouseId",
-  "ordersFrom",
-  "ordersTo",
-  "fiscalFrom",
-  "fiscalTo",
-  "reclamationsFrom",
-  "reclamationsTo",
-  "topProductsFrom",
-  "topProductsTo",
 ]);
 
 type SavedViewPayload = {
@@ -49,6 +41,7 @@ function toView(row: {
   filters: Prisma.JsonValue;
   sorting: Prisma.JsonValue;
   columns: Prisma.JsonValue;
+  isDefault: boolean;
 }) {
   const columns =
     row.columns && typeof row.columns === "object" && !Array.isArray(row.columns)
@@ -78,6 +71,7 @@ function toView(row: {
       !Array.isArray(columns.context)
         ? columns.context
         : {},
+    isDefault: row.isDefault,
   };
 }
 
@@ -98,6 +92,7 @@ export async function GET(request: Request) {
       filters: true,
       sorting: true,
       columns: true,
+      isDefault: true,
     },
   });
   return NextResponse.json({ views: rows.map(toView) });
@@ -201,7 +196,7 @@ export async function POST(request: Request) {
     moduleSlug === "dashboard" &&
     rawContextEntries.some(
       ([key, value]) =>
-        !contextKeys.has(key) || typeof value !== "string" || value.length > 120,
+        !contextKeys.has(key) || !isDashboardContextEntry(key, value),
     )
   ) {
     return NextResponse.json(
@@ -221,64 +216,73 @@ export async function POST(request: Request) {
         )
       : {};
 
-  if (body?.isDefault === true) {
-    await db.adminSavedView.updateMany({
-      where: {
-        adminUserId: admin.id,
-        module: moduleSlug,
-        isDefault: true,
-      },
-      data: { isDefault: false },
-    });
-  }
+  const row = await db.$transaction(async (tx) => {
+    if (body?.isDefault === true) {
+      // Serialize default changes per admin/module without adding a migration.
+      await tx.$executeRaw(Prisma.sql`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${`${admin.id}:${moduleSlug}`}, 0)
+        )
+      `);
+      await tx.adminSavedView.updateMany({
+        where: {
+          adminUserId: admin.id,
+          module: moduleSlug,
+          isDefault: true,
+        },
+        data: { isDefault: false },
+      });
+    }
 
-  const row = await db.adminSavedView.upsert({
-    where: {
-      adminUserId_module_name: {
+    return tx.adminSavedView.upsert({
+      where: {
+        adminUserId_module_name: {
+          adminUserId: admin.id,
+          module: moduleSlug,
+          name,
+        },
+      },
+      create: {
         adminUserId: admin.id,
         module: moduleSlug,
         name,
+        query,
+        filters: filters as Prisma.InputJsonValue,
+        sorting: sorting as Prisma.InputJsonValue,
+        columns: {
+          visibleColumns,
+          columnOrder,
+          columnWidths,
+          searchColumn,
+          context,
+        } as Prisma.InputJsonValue,
+        pageSize: 100,
+        isDefault: body?.isDefault === true,
       },
-    },
-    create: {
-      adminUserId: admin.id,
-      module: moduleSlug,
-      name,
-      query,
-      filters: filters as Prisma.InputJsonValue,
-      sorting: sorting as Prisma.InputJsonValue,
-      columns: {
-        visibleColumns,
-        columnOrder,
-        columnWidths,
-        searchColumn,
-        context,
-      } as Prisma.InputJsonValue,
-      pageSize: 100,
-      isDefault: body?.isDefault === true,
-    },
-    update: {
-      query,
-      filters: filters as Prisma.InputJsonValue,
-      sorting: sorting as Prisma.InputJsonValue,
-      columns: {
-        visibleColumns,
-        columnOrder,
-        columnWidths,
-        searchColumn,
-        context,
-      } as Prisma.InputJsonValue,
-      pageSize: 100,
-      isDefault: body?.isDefault === true,
-    },
-    select: {
-      id: true,
-      name: true,
-      query: true,
-      filters: true,
-      sorting: true,
-      columns: true,
-    },
+      update: {
+        query,
+        filters: filters as Prisma.InputJsonValue,
+        sorting: sorting as Prisma.InputJsonValue,
+        columns: {
+          visibleColumns,
+          columnOrder,
+          columnWidths,
+          searchColumn,
+          context,
+        } as Prisma.InputJsonValue,
+        pageSize: 100,
+        isDefault: body?.isDefault === true,
+      },
+      select: {
+        id: true,
+        name: true,
+        query: true,
+        filters: true,
+        sorting: true,
+        columns: true,
+        isDefault: true,
+      },
+    });
   });
 
   return NextResponse.json({ view: toView(row) });

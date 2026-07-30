@@ -2,16 +2,19 @@ import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
-import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { resolveReportPeriod, type ReportPeriod } from "@/lib/admin/report-period";
+import {
+  cleanDashboardContext,
+  dashboardContextFromSavedColumns,
+  hasDashboardContext,
+  resolveDashboardFilters,
+  type DashboardFilterContext,
+} from "@/lib/admin/dashboard-context";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
-import {
-  DashboardFilters,
-  type DashboardFilterContext,
-} from "@/components/admin/dashboard-filters";
+import { DashboardFilters } from "@/components/admin/dashboard-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +25,10 @@ export const metadata = {
 
 type DashboardParams = Partial<DashboardFilterContext> & { forbidden?: string };
 
-type StockSummary = {
+type WarehouseStockRow = {
+  id: string;
+  code: string;
+  name: string;
   total_qty: number;
   sku_count: number;
   stock_value: number;
@@ -42,6 +48,11 @@ type VisitSummary = {
   daily_average_30d: number;
 };
 
+type FiscalTurnoverSummary = {
+  today_net: number;
+  period_net: number;
+};
+
 type LowStockRow = {
   id: string;
   sku: string;
@@ -54,19 +65,14 @@ type DashboardTopProduct = {
   sku: string;
   name: string;
   qty: number;
-  revenue: number;
 };
-
-function dashboardPeriod(from?: string, to?: string, now = new Date()) {
-  if (from && to) {
-    const custom = resolveReportPeriod({ range: "custom", from, to }, now);
-    if (custom.preset === "custom") return custom;
-  }
-  return resolveReportPeriod({ range: "30d" }, now);
-}
 
 function periodFilter(period: ReportPeriod) {
   return { gte: period.start, lt: period.endExclusive };
+}
+
+function formatVolume(value: number) {
+  return `${value.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} m³`;
 }
 
 export default async function AdminDashboard({
@@ -74,128 +80,151 @@ export default async function AdminDashboard({
 }: {
   searchParams: Promise<DashboardParams>;
 }) {
-  await requireAdminAction();
+  const admin = await requireAdminAction();
   const sp = await searchParams;
+  const explicitContext = cleanDashboardContext(sp);
+  const hasExplicitContext = hasDashboardContext(sp);
+
+  const [warehouses, defaultView] = await Promise.all([
+    db.warehouse.findMany({
+      where: { active: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, code: true, name: true },
+    }),
+    hasExplicitContext
+      ? Promise.resolve(null)
+      : db.adminSavedView.findFirst({
+          where: {
+            adminUserId: admin.id,
+            module: "dashboard",
+            isDefault: true,
+          },
+          orderBy: { updatedAt: "desc" },
+          select: { columns: true },
+        }),
+  ]);
+
+  const savedContext = dashboardContextFromSavedColumns(defaultView?.columns);
   const now = new Date();
-  const ordersPeriod = dashboardPeriod(sp.ordersFrom, sp.ordersTo, now);
-  const fiscalPeriod = dashboardPeriod(sp.fiscalFrom, sp.fiscalTo, now);
-  const reclamationsPeriod = dashboardPeriod(
-    sp.reclamationsFrom,
-    sp.reclamationsTo,
+  const resolved = resolveDashboardFilters(
+    hasExplicitContext ? explicitContext : savedContext,
     now,
   );
-  const topProductsPeriod = dashboardPeriod(
-    sp.topProductsFrom,
-    sp.topProductsTo,
-    now,
-  );
-  const todayPeriod = resolveReportPeriod({ range: "today" }, now);
-  const warehouses = await db.warehouse.findMany({
-    where: { active: true },
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-    select: { id: true, code: true, name: true },
-  });
-  const warehouseId = warehouses.some((warehouse) => warehouse.id === sp.warehouseId)
-    ? sp.warehouseId!
+  const warehouseId = warehouses.some(
+    (warehouse) => warehouse.id === resolved.context.warehouseId,
+  )
+    ? resolved.context.warehouseId
     : "";
   const context: DashboardFilterContext = {
+    ...resolved.context,
     warehouseId,
-    ordersFrom: ordersPeriod.fromInput,
-    ordersTo: ordersPeriod.toInput,
-    fiscalFrom: fiscalPeriod.fromInput,
-    fiscalTo: fiscalPeriod.toInput,
-    reclamationsFrom: reclamationsPeriod.fromInput,
-    reclamationsTo: reclamationsPeriod.toInput,
-    topProductsFrom: topProductsPeriod.fromInput,
-    topProductsTo: topProductsPeriod.toInput,
   };
-  const orderWarehouseWhere = warehouseId
+  const {
+    orders: ordersPeriod,
+    fiscal: fiscalPeriod,
+    reclamations: reclamationsPeriod,
+    topProducts: topProductsPeriod,
+  } = resolved.periods;
+  const todayPeriod = resolveReportPeriod({ range: "today" }, now);
+  const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
+  const warehouseLabel = selectedWarehouse?.name ?? "Svi magacini";
+
+  const orderWarehouseWhere: Prisma.OrderWhereInput = warehouseId
     ? { items: { some: { warehouseId } } }
     : {};
-  const fiscalWarehouseWhere = warehouseId ? { warehouseId } : {};
-  const reclamationWarehouseWhere = warehouseId ? { warehouseId } : {};
-  const warehouseSql = warehouseId
+  const reclamationWarehouseWhere: Prisma.ReclamationWhereInput = warehouseId
+    ? { warehouseId }
+    : {};
+  const fiscalWarehouseSql = warehouseId
+    ? Prisma.sql`AND f."warehouseId" = ${warehouseId}`
+    : Prisma.empty;
+  const orderItemWarehouseSql = warehouseId
+    ? Prisma.sql`AND oi."warehouseId" = ${warehouseId}`
+    : Prisma.empty;
+  const stockWarehouseSql = warehouseId
     ? Prisma.sql`AND w.id = ${warehouseId}`
     : Prisma.empty;
   const purchaseWarehouseSql = warehouseId
     ? Prisma.sql`AND po."receivingWarehouseId" = ${warehouseId}`
     : Prisma.empty;
-  const fiscalWarehouseSql = warehouseId
-    ? Prisma.sql`AND f."warehouseId" = ${warehouseId}`
-    : Prisma.empty;
 
   const [
-    orderAggregate,
-    fiscalAggregate,
+    ordersToday,
+    ordersInPeriod,
+    fiscalRows,
     reclamationCount,
-    openOrders,
-    openReclamations,
-    pendingComments,
     topProducts,
-    stockRows,
+    warehouseStockRows,
     incomingRows,
     visitRows,
     lowStock,
-    lastImports,
   ] = await Promise.all([
-    db.order.aggregate({
+    db.order.count({
       where: {
-        createdAt: periodFilter(ordersPeriod),
-        status: { not: "OTKAZANO" },
+        createdAt: periodFilter(todayPeriod),
         ...orderWarehouseWhere,
       },
-      _count: { id: true },
-      _sum: { total: true },
     }),
-    db.fiscalDocument.aggregate({
+    db.order.count({
       where: {
-        kind: "SALE",
-        status: "ISSUED",
-        issuedAt: periodFilter(fiscalPeriod),
-        ...fiscalWarehouseWhere,
+        createdAt: periodFilter(ordersPeriod),
+        ...orderWarehouseWhere,
       },
-      _count: { id: true },
-      _sum: { totalGross: true },
     }),
+    db.$queryRaw<FiscalTurnoverSummary[]>(Prisma.sql`
+      SELECT
+        COALESCE(SUM(
+          CASE
+            WHEN f."issuedAt" >= ${todayPeriod.start}
+              AND f."issuedAt" < ${todayPeriod.endExclusive}
+            THEN CASE WHEN f.kind = 'SALE' THEN f."totalGross" ELSE -f."totalGross" END
+            ELSE 0
+          END
+        ), 0)::double precision AS today_net,
+        COALESCE(SUM(
+          CASE
+            WHEN f."issuedAt" >= ${fiscalPeriod.start}
+              AND f."issuedAt" < ${fiscalPeriod.endExclusive}
+            THEN CASE WHEN f.kind = 'SALE' THEN f."totalGross" ELSE -f."totalGross" END
+            ELSE 0
+          END
+        ), 0)::double precision AS period_net
+      FROM "FiscalDocument" f
+      WHERE f.status = 'ISSUED'
+        AND f.kind IN ('SALE', 'REFUND')
+        AND (
+          (f."issuedAt" >= ${todayPeriod.start} AND f."issuedAt" < ${todayPeriod.endExclusive})
+          OR
+          (f."issuedAt" >= ${fiscalPeriod.start} AND f."issuedAt" < ${fiscalPeriod.endExclusive})
+        )
+        ${fiscalWarehouseSql}
+    `),
     db.reclamation.count({
       where: {
         createdAt: periodFilter(reclamationsPeriod),
         ...reclamationWarehouseWhere,
       },
     }),
-    db.order.count({
-      where: {
-        status: { in: ["KREIRANO", "POTVRDJENO", "U_PRIPREMI"] },
-        ...orderWarehouseWhere,
-      },
-    }),
-    db.reclamation.count({
-      where: {
-        status: { in: ["PRIMLJENO", "U_OBRADI"] },
-        ...reclamationWarehouseWhere,
-      },
-    }),
-    db.comment.count({ where: { reviewed: false } }),
     db.$queryRaw<DashboardTopProduct[]>(Prisma.sql`
       SELECT
-        l.sku,
-        l."shortName" AS name,
-        COALESCE(SUM(l.qty), 0)::int AS qty,
-        COALESCE(SUM(GREATEST(l."totalGross" - l."serviceGross", 0)), 0)::double precision AS revenue
-      FROM "FiscalDocumentLine" l
-      JOIN "FiscalDocument" f ON f.id = l."fiscalDocumentId"
-      WHERE f.kind = 'SALE'
-        AND f.status = 'ISSUED'
-        AND f."issuedAt" >= ${topProductsPeriod.start}
-        AND f."issuedAt" < ${topProductsPeriod.endExclusive}
-        AND l."productId" IS NOT NULL
-        ${fiscalWarehouseSql}
-      GROUP BY l.sku, l."shortName"
-      ORDER BY qty DESC, revenue DESC, l.sku ASC
+        oi.sku,
+        oi.name,
+        COALESCE(SUM(oi.qty), 0)::int AS qty
+      FROM "OrderItem" oi
+      JOIN "Order" o ON o.id = oi."orderId"
+      WHERE o.status <> 'OTKAZANO'
+        AND o."createdAt" >= ${topProductsPeriod.start}
+        AND o."createdAt" < ${topProductsPeriod.endExclusive}
+        ${orderItemWarehouseSql}
+      GROUP BY oi.sku, oi.name
+      ORDER BY qty DESC, oi.sku ASC
       LIMIT 10
     `),
-    db.$queryRaw<StockSummary[]>(Prisma.sql`
+    db.$queryRaw<WarehouseStockRow[]>(Prisma.sql`
       SELECT
+        w.id,
+        w.code,
+        w.name,
         COALESCE(SUM(GREATEST(ws.qty, 0)), 0)::int AS total_qty,
         COUNT(DISTINCT CASE WHEN ws.qty > 0 THEN ws."productId" END)::int AS sku_count,
         COALESCE(SUM(GREATEST(ws.qty, 0) * COALESCE(p.cogs, 0)), 0)::double precision AS stock_value,
@@ -203,10 +232,12 @@ export default async function AdminDashboard({
           GREATEST(ws.qty, 0)
           * COALESCE(p."widthCm" * p."depthCm" * p."heightCm" / 1000000, 0)
         ), 0)::double precision AS total_volume
-      FROM "WarehouseStock" ws
-      JOIN "Warehouse" w ON w.id = ws."warehouseId" AND w.active = true
-      JOIN "Product" p ON p.id = ws."productId"
-      WHERE true ${warehouseSql}
+      FROM "Warehouse" w
+      LEFT JOIN "WarehouseStock" ws ON ws."warehouseId" = w.id
+      LEFT JOIN "Product" p ON p.id = ws."productId"
+      WHERE w.active = true
+      GROUP BY w.id, w.code, w.name
+      ORDER BY w.name ASC
     `),
     db.$queryRaw<IncomingSummary[]>(Prisma.sql`
       SELECT
@@ -246,7 +277,8 @@ export default async function AdminDashboard({
       SELECT
         (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))
           FROM "AnalyticsEvent"
-          WHERE type = 'PAGE_VIEW' AND "occurredAt" >= ${new Date(now.getTime() - 300_000)})::int AS active_now,
+          WHERE type = 'PAGE_VIEW'
+            AND "occurredAt" >= ${new Date(now.getTime() - 300_000)})::int AS active_now,
         (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))
           FROM "AnalyticsEvent"
           WHERE type = 'PAGE_VIEW'
@@ -264,24 +296,41 @@ export default async function AdminDashboard({
       FROM "Product" p
       LEFT JOIN "WarehouseStock" ws ON ws."productId" = p.id
       LEFT JOIN "Warehouse" w
-        ON w.id = ws."warehouseId" AND w.active = true ${warehouseSql}
+        ON w.id = ws."warehouseId" AND w.active = true ${stockWarehouseSql}
       WHERE p."isActive" = true
       GROUP BY p.id, p.sku, p.name, p."incomingStock"
       HAVING COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0) <= 2
       ORDER BY qty ASC, p.name ASC
       LIMIT 8
     `),
-    db.importRun.findMany({
-      orderBy: { startedAt: "desc" },
-      take: 5,
-      include: { supplier: { select: { name: true } } },
-    }),
   ]);
 
-  const stock = stockRows[0] ?? { total_qty: 0, sku_count: 0, stock_value: 0, total_volume: 0 };
-  const incoming = incomingRows[0] ?? { order_count: 0, remaining_qty: 0, value_rsd: 0, total_volume: 0 };
-  const visits = visitRows[0] ?? { active_now: 0, today: 0, daily_average_30d: 0 };
-  const exportWarehouse = warehouseId ? `&warehouseId=${encodeURIComponent(warehouseId)}` : "";
+  const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
+  const incoming = incomingRows[0] ?? {
+    order_count: 0,
+    remaining_qty: 0,
+    value_rsd: 0,
+    total_volume: 0,
+  };
+  const visits = visitRows[0] ?? {
+    active_now: 0,
+    today: 0,
+    daily_average_30d: 0,
+  };
+  const totalStock = warehouseStockRows.reduce(
+    (total, row) => ({
+      total_qty: total.total_qty + row.total_qty,
+      stock_value: total.stock_value + row.stock_value,
+      total_volume: total.total_volume + row.total_volume,
+    }),
+    { total_qty: 0, stock_value: 0, total_volume: 0 },
+  );
+  const visibleWarehouseStock = warehouseId
+    ? warehouseStockRows.filter((row) => row.id === warehouseId)
+    : warehouseStockRows;
+  const exportWarehouse = warehouseId
+    ? `&warehouseId=${encodeURIComponent(warehouseId)}`
+    : "";
   const orderExport = `/api/admin/erp/prodajni-nalozi/export?from=${context.ordersFrom}&to=${context.ordersTo}${exportWarehouse}`;
   const fiscalExport = `/api/admin/erp/prodajni-nalozi/export?from=${context.fiscalFrom}&to=${context.fiscalTo}&dateField=fiscal-issued-at&fiscalStatus=issued${exportWarehouse}`;
 
@@ -289,7 +338,7 @@ export default async function AdminDashboard({
     <>
       <PageHeader
         title="Kontrolna tabla"
-        description="Odvojeni poslovni periodi, magacinski kontekst i fiskalizovani promet."
+        description="Dnevni pregled, sačuvani poslovni periodi i jedinstven magacinski kontekst."
       />
       <div className="space-y-8 px-8 py-6">
         {sp.forbidden ? (
@@ -300,41 +349,75 @@ export default async function AdminDashboard({
 
         <DashboardFilters context={context} warehouses={warehouses} />
 
-        <div className="flex flex-wrap gap-2">
-          <Link href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
-            XLSX porudžbine
-          </Link>
-          <Link href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
-            XLSX fiskalizovani nalozi
-          </Link>
-          <Link href="/admin/erp/reklamacije-dnevnik" className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
-            XLSX reklamacije
-          </Link>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <Link href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+              XLSX porudžbine
+            </Link>
+            <Link href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+              XLSX fiskalizovane porudžbine
+            </Link>
+          </div>
+          <p className="text-xs text-ink-500">
+            Fiskalizovani XLSX prati izdate prodajne dokumente; refundacije umanjuju neto kartice, ali nisu zasebni redovi izvoza porudžbina.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Porudžbine" value={String(orderAggregate._count.id)} hint={`${formatRsd(num(orderAggregate._sum.total))} · ${ordersPeriod.label}`} />
-          <StatCard label="Fiskalizovani promet" value={formatRsd(num(fiscalAggregate._sum.totalGross))} hint={`${fiscalAggregate._count.id} računa · ${fiscalPeriod.label}`} />
-          <StatCard label="Reklamacije" value={String(reclamationCount)} hint={reclamationsPeriod.label} tone={reclamationCount > 0 ? "warning" : "default"} />
-          <StatCard label="Otvorene operacije" value={`${openOrders} / ${openReclamations}`} hint={`Nalozi / reklamacije · komentari ${pendingComments}`} />
+          <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={warehouseLabel} />
+          <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${ordersPeriod.label} · ${warehouseLabel}`} />
+          <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
+          <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Zalihe po COGS-u" value={formatRsd(stock.stock_value)} hint={`${stock.total_qty} kom · ${stock.total_volume.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} m³`} />
-          <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${incoming.total_volume.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} m³`} />
-          <StatCard label="Trenutne posete" value={String(visits.active_now)} hint="Jedinstvene aktivne sesije u poslednjih 5 min" />
-          <StatCard label="Današnje posete" value={String(visits.today)} hint={`30-dnevni dnevni prosek ${visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })}`} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <StatCard label="Reklamacije u periodu" value={String(reclamationCount)} hint={`${reclamationsPeriod.label} · ${warehouseLabel}`} tone={reclamationCount > 0 ? "warning" : "default"} />
+          <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
+          <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${formatVolume(incoming.total_volume)} · ${warehouseLabel}`} />
+        </div>
+
+        <Card>
+          <CardTitle description={warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."}>
+            Zalihe za magacin
+          </CardTitle>
+          <DataTable
+            columns={[
+              { key: "warehouse", label: "Magacin" },
+              { key: "skus", label: "SKU-ova", align: "right" },
+              { key: "qty", label: "Komada", align: "right" },
+              { key: "value", label: "COGS vrednost", align: "right" },
+              { key: "volume", label: "Zapremina", align: "right" },
+            ]}
+            rows={visibleWarehouseStock.map((row) => ({
+              id: row.id,
+              cells: {
+                warehouse: `${row.name} (${row.code})`,
+                skus: row.sku_count,
+                qty: row.total_qty,
+                value: formatRsd(row.stock_value),
+                volume: formatVolume(row.total_volume),
+              },
+            }))}
+            empty="Nema aktivnih magacina."
+          />
+        </Card>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
+          <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
+          <StatCard label="Prosečan dnevni broj poseta" value={visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} hint="Poslednjih 30 kalendarskih dana, uključujući dane bez poseta" />
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
-            <CardTitle description={topProductsPeriod.label}>Top fiskalizovani proizvodi</CardTitle>
+            <CardTitle description={`${topProductsPeriod.label} · ${warehouseLabel}`}>
+              Top proizvodi
+            </CardTitle>
             <DataTable
               columns={[
                 { key: "sku", label: "SKU" },
                 { key: "name", label: "Naziv" },
                 { key: "qty", label: "Komada", align: "right" },
-                { key: "revenue", label: "Promet", align: "right" },
               ]}
               rows={topProducts.map((product) => ({
                 id: `${product.sku}-${product.name}`,
@@ -342,15 +425,16 @@ export default async function AdminDashboard({
                   sku: <span className="font-mono text-xs">{product.sku}</span>,
                   name: product.name,
                   qty: product.qty,
-                  revenue: formatRsd(product.revenue),
                 },
               }))}
-              empty="Nema fiskalizovane prodaje u periodu."
+              empty="Nema neotkazanih porudžbina u periodu."
             />
           </Card>
 
           <Card>
-            <CardTitle description="Aktivni artikli sa stanjem ≤ 2 u izabranom magacinskom kontekstu">Niske zalihe</CardTitle>
+            <CardTitle description={`Aktivni artikli sa stanjem ≤ 2 · ${warehouseLabel}`}>
+              Niske zalihe
+            </CardTitle>
             <DataTable
               columns={[
                 { key: "sku", label: "SKU" },
@@ -371,30 +455,6 @@ export default async function AdminDashboard({
             />
           </Card>
         </div>
-
-        <Card>
-          <CardTitle description="Poslednjih 5 pokretanja XML feed importera">Status feed-a</CardTitle>
-          <DataTable
-            columns={[
-              { key: "supplier", label: "Dobavljač" },
-              { key: "started", label: "Pokrenuto" },
-              { key: "status", label: "Status" },
-              { key: "ok", label: "OK", align: "right" },
-              { key: "fail", label: "Grešaka", align: "right" },
-            ]}
-            rows={lastImports.map((run) => ({
-              id: run.id,
-              cells: {
-                supplier: run.supplier?.name ?? "—",
-                started: new Intl.DateTimeFormat("sr-Latn-RS", { dateStyle: "short", timeStyle: "short" }).format(run.startedAt),
-                status: run.status,
-                ok: run.recordsOk,
-                fail: run.recordsFail,
-              },
-            }))}
-            empty="Importer još nije pokrenut."
-          />
-        </Card>
       </div>
     </>
   );
