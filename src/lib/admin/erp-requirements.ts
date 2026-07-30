@@ -73,7 +73,7 @@ const ERP_REQUIREMENT_ROWS: readonly Omit<ErpRequirement, "evidence">[] = [
   { id: 51, section: "Reklamacije", route: "/admin/erp/reklamacije-dnevnik", status: "implemented", acceptance: "SERVICE-01", note: "Zakonski dnevnik, numeracija, odluka, rešenje, rokovi i operativni zadaci." },
   { id: 52, section: "Komentari", route: "/admin/komentari", status: "deferred_user", acceptance: "SERVICE-02", note: "Modul je eksplicitno isključen i sama postojeća ruta se ne računa kao implementacija." },
   { id: 53, section: "XML feed", route: "/admin/xml-import", status: "deferred_user", acceptance: "IMPORT-01", note: "Postojeći import ostaje; stroga konačna lista obaveznih XML/XLSX polja čeka posebnu Lukinu odluku." },
-  { id: 54, section: "Newsletter", route: "/admin/erp/newsletter-kampanje", status: "deferred_user", acceptance: "EXT-NEWS-01", note: "Newsletter je izričito izdvojen u poseban chat; logika nije menjana." },
+  { id: 54, section: "Newsletter", route: "/admin/newsletter", status: "deferred_user", acceptance: "EXT-NEWS-01", note: "Kampanje i svi povezani newsletter podaci vode se iz jedinstvenog Newsletter centra." },
   { id: 55, section: "Viber kampanje", route: "/admin/viber", status: "deferred_user", acceptance: "EXT-VIBER-01", note: "Viber je izričito van obuhvata ovog ERP rada." },
   { id: 56, section: "Oglasi (GMS/Meta)", route: "/admin/oglasi", status: "deferred_user", acceptance: "EXT-ADS-01", note: "Google/Meta oglasi su izričito van obuhvata ovog ERP rada." },
   { id: 57, section: "Izveštaji", route: "/admin/izvestaji", status: "implemented", acceptance: "REPORT-01", note: "Periodski pregledi prodaje, zaliha, dolazne robe i reklamacija." },

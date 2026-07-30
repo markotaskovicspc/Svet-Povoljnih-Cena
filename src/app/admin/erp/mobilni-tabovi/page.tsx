@@ -432,12 +432,6 @@ export default async function MobileShortcutsPage() {
               Landing strane
             </Link>
             <Link
-              href="/admin/erp/landing-sekcije"
-              className={buttonVariants({ variant: "outline" })}
-            >
-              Sekcije strana
-            </Link>
-            <Link
               href="/admin/piktogrami"
               className={buttonVariants({ variant: "outline" })}
             >

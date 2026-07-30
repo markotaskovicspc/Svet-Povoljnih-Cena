@@ -33,6 +33,8 @@ export default async function ErpModulePage({
   const { module: slug } = await params;
   await requireAdminAction(allowedRolesForErpModule(slug));
   if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
+  const definition = getErpModuleDefinition(slug);
+  if (definition?.redirectHref) redirect(definition.redirectHref);
   const erpModule = await getErpModule(slug);
   if (!erpModule) notFound();
 

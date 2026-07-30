@@ -750,6 +750,7 @@ export const operationalErpModules: ErpModule[] = [
     title: "Legacy sekcije landing strana",
     description: "Pregled starih sekcija. Novi sadržaj se uređuje blokovima unutar landing strane.",
     status: "ready",
+    redirectHref: "/admin/erp/landing-strane",
     commands: [],
     columns: [
       text("landingPage", "Landing strana"),
@@ -800,6 +801,7 @@ export const operationalErpModules: ErpModule[] = [
     title: "Newsletter kampanje",
     description: "Autorstvo, zakazivanje, slanje i rezultati newsletter kampanja.",
     status: "ready",
+    redirectHref: "/admin/newsletter",
     commands: [
       { label: "Otvori Newsletter centar", tone: "primary", href: "/admin/newsletter" },
     ],

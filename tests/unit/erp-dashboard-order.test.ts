@@ -67,4 +67,16 @@ describe("ERP dashboard module order", () => {
       secondaryModules.map((_, index) => String(20 + index)),
     );
   });
+
+  it("keeps legacy landing and newsletter routes as aliases without duplicate dashboard cards", () => {
+    expect(getErpModuleDefinition("landing-sekcije")?.redirectHref).toBe(
+      "/admin/erp/landing-strane",
+    );
+    expect(getErpModuleDefinition("newsletter-kampanje")?.redirectHref).toBe(
+      "/admin/newsletter",
+    );
+    expect(erpDashboardModules.map((item) => item.slug)).not.toEqual(
+      expect.arrayContaining(["landing-sekcije", "newsletter-kampanje"]),
+    );
+  });
 });

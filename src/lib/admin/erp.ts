@@ -119,6 +119,8 @@ export type ErpModule = {
   rows: ErpRow[];
   notes?: string[];
   blockedReason?: string;
+  /** Canonical admin screen for legacy modules that should no longer render their generic ERP grid. */
+  redirectHref?: string;
   /** Only columns with a complete server-side write mapping may enter edit mode. */
   editableColumns?: string[];
   /** When set, each row gets an "Otvori" link to its detailId (or row id). */
@@ -773,11 +775,18 @@ const fiscalizationDashboardModule: ErpDashboardModule = {
   href: "/admin/fiskalizacija",
 };
 
+let secondaryDashboardModuleNumber = 20;
+
 export const erpDashboardModules: ErpDashboardModule[] = erpModules.flatMap(
   (routeModule) => {
+    if (routeModule.redirectHref) return [];
+
+    const dashboardNumber = primaryErpModuleSlugs.has(routeModule.slug)
+      ? routeModule.number
+      : String(secondaryDashboardModuleNumber++);
     const dashboardModule = {
       slug: routeModule.slug,
-      number: routeModule.number,
+      number: dashboardNumber,
       title: routeModule.title,
       description: routeModule.description,
       status: routeModule.status,
