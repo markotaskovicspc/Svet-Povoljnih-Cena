@@ -5,6 +5,7 @@ import { ArticleStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import {
+  assertArticleSkuAvailable,
   composedArticleName,
   nextArticleSku,
   resolveArticleCategory,
@@ -523,6 +524,9 @@ export async function POST(request: Request) {
               },
             })
           : null;
+        if (row.sku && !existing) {
+          await assertArticleSkuAvailable(tx, row.sku);
+        }
         const group = hasColumn("group")
           ? await resolveNamedArticleRelation(tx, "group", { name: row.group })
           : existing?.groupId

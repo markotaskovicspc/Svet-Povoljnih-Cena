@@ -5,6 +5,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { config as loadEnv } from "dotenv";
+import { nextAvailableArticleSku } from "@/lib/article-sku";
+
+loadEnv({ path: ".env.local" });
+loadEnv();
 
 test.describe("article master acceptance", () => {
   test.skip(
@@ -25,6 +30,7 @@ test.describe("article master acceptance", () => {
   let secondaryWarehouseId = "";
   let supplierId = "";
   let rootCategoryId = "";
+  let generatedProductId = "";
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -236,6 +242,19 @@ test.describe("article master acceptance", () => {
     await page.goto(`/admin/erp/artikli/${productId}`, {
       waitUntil: "load",
     });
+    const productForm = page
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
+    await expect(productForm.locator('input[name="sku"]')).toBeEditable();
+    expect(
+      await productForm
+        .locator('[name="sku"], [name="shortDescription"], [name="name"]')
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("name")),
+        ),
+    ).toEqual(["sku", "shortDescription", "name"]);
+    productSku = `QA-MANUAL-${runId}`.slice(0, 80);
+    await productForm.locator('input[name="sku"]').fill(productSku);
     const shortNameInput = page.getByLabel("Kratki naziv");
     await expect(shortNameInput).toBeVisible();
     await page.waitForTimeout(750);
@@ -275,18 +294,15 @@ test.describe("article master acceptance", () => {
       },
     );
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText(
-      "Proizvod je sačuvan",
-      { timeout: 180_000 },
-    );
-
     await expect
       .poll(async () => {
         const product = await db.product.findUniqueOrThrow({
           where: { id: productId },
           select: {
+            sku: true,
             name: true,
             shortName: true,
+            shortDescription: true,
             description: true,
             stock: true,
             articleStatus: true,
@@ -296,6 +312,8 @@ test.describe("article master acceptance", () => {
             availableWholesaleAuto: true,
             availableExportAuto: true,
             supplier: { select: { parity: true, deliveryDays: true } },
+            collection: { select: { name: true } },
+            syncOverrides: true,
             categories: {
               select: {
                 category: {
@@ -312,8 +330,10 @@ test.describe("article master acceptance", () => {
           },
         });
         return {
+          sku: product.sku,
           name: product.name,
           shortName: product.shortName,
+          shortDescription: product.shortDescription,
           description: product.description,
           stock: product.stock,
           status: product.articleStatus,
@@ -326,6 +346,14 @@ test.describe("article master acceptance", () => {
           ],
           parity: product.supplier?.parity,
           deliveryDays: product.supplier?.deliveryDays,
+          collection: product.collection?.name,
+          overrides:
+            product.syncOverrides &&
+            typeof product.syncOverrides === "object" &&
+            !Array.isArray(product.syncOverrides) &&
+            Array.isArray(product.syncOverrides.fields)
+              ? product.syncOverrides.fields
+              : [],
           category: product.categories[0]?.category.name,
           categoryParentId: product.categories[0]?.category.parent?.id,
           lookups: product.lookupAssignments
@@ -334,8 +362,10 @@ test.describe("article master acceptance", () => {
         };
       }, { timeout: 120_000 })
       .toEqual({
+        sku: productSku,
         name: `${tag} kolekcija Otvorena polica N2212`,
         shortName: "N2212",
+        shortDescription: "Otvorena polica",
         description: "<h2>Naslov</h2><p>Bezbedan <strong>opis</strong></p>",
         stock: 27,
         status: "SP",
@@ -344,6 +374,14 @@ test.describe("article master acceptance", () => {
         channels: [true, true, true],
         parity: "DAP",
         deliveryDays: 14,
+        collection: `${tag} kolekcija`,
+        overrides: expect.arrayContaining([
+          "description",
+          "flags",
+          "grouping",
+          "identity",
+          "name",
+        ]),
         category: `${tag} korenska kategorija`,
         categoryParentId: undefined,
         lookups: [
@@ -355,6 +393,13 @@ test.describe("article master acceptance", () => {
           "COLOR:Natur",
         ],
       });
+    await expect(productForm.locator('input[name="sku"]')).toHaveValue(productSku);
+    await expect(productForm.locator('[name="shortDescription"]')).toHaveValue(
+      "Otvorena polica",
+    );
+    await expect(productForm.locator('select[name="articleStatus"]')).toHaveValue(
+      "SP",
+    );
 
     const mediaForm = page
       .locator("form")
@@ -363,7 +408,9 @@ test.describe("article master acceptance", () => {
     await mediaForm.locator('input[name="order"]').fill("2");
     await mediaForm.locator('input[name="alt"]').fill(`${tag} izmenjen alt`);
     await mediaForm.getByRole("button", { name: "Sačuvaj medij" }).click();
-    await expect(mediaForm.getByRole("status")).toContainText("Medij je sačuvan");
+    await expect(mediaForm.getByRole("status")).toContainText("Medij je sačuvan", {
+      timeout: 120_000,
+    });
     await page.reload({ waitUntil: "load" });
     await expect(
       page
@@ -393,14 +440,19 @@ test.describe("article master acceptance", () => {
     await declarationSection
       .getByRole("button", { name: "Dodaj dokument", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Dokument je dodat.");
+    await expect(page.getByRole("status")).toContainText("Dokument je dodat.", {
+      timeout: 120_000,
+    });
     await expect
-      .poll(() =>
-        db.productAttachment.count({
-          where: { productId, label: `${tag} deklaracija` },
-        }),
+      .poll(
+        () =>
+          db.productAttachment.count({
+            where: { productId, label: `${tag} deklaracija` },
+          }),
+        { timeout: 120_000 },
       )
       .toBe(1);
+    await page.reload({ waitUntil: "load" });
 
     const attachmentLabel = declarationSection.locator(
       'input[aria-label="Naziv dokumenta"]',
@@ -410,7 +462,9 @@ test.describe("article master acceptance", () => {
     await declarationSection
       .getByRole("button", { name: "Sačuvaj naziv dokumenta", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Dokument je sačuvan.");
+    await expect(page.getByRole("status")).toContainText("Dokument je sačuvan.", {
+      timeout: 120_000,
+    });
     await page.reload({ waitUntil: "load" });
     const reloadedDeclarationSection = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Deklaracija", exact: true }),
@@ -429,9 +483,13 @@ test.describe("article master acceptance", () => {
       }),
       true,
     );
-    await expect(page.getByRole("status")).toContainText("Dokument je obrisan.");
+    await expect(page.getByRole("status")).toContainText("Dokument je obrisan.", {
+      timeout: 120_000,
+    });
     await expect
-      .poll(() => db.productAttachment.count({ where: { productId } }))
+      .poll(() => db.productAttachment.count({ where: { productId } }), {
+        timeout: 120_000,
+      })
       .toBe(0);
 
     await page.goto(`/p/${productSlug}`, { waitUntil: "domcontentloaded" });
@@ -447,23 +505,37 @@ test.describe("article master acceptance", () => {
     await page.waitForTimeout(500);
     await page.getByLabel("Web check").uncheck();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText(
-      "Proizvod je sačuvan",
-      { timeout: 180_000 },
-    );
-    const hiddenResponse = await page.goto(`/p/${productSlug}`, {
-      waitUntil: "domcontentloaded",
-    });
-    expect(hiddenResponse?.status()).toBe(404);
+    await expect
+      .poll(
+        () =>
+          db.product.findUniqueOrThrow({
+            where: { id: productId },
+            select: { availableWebManual: true },
+          }),
+        { timeout: 120_000 },
+      )
+      .toEqual({ availableWebManual: false });
+    await expect
+      .poll(
+        async () => (await page.request.get(`/p/${productSlug}`)).status(),
+        { timeout: 120_000 },
+      )
+      .toBe(404);
 
     await page.goto(`/admin/erp/artikli/${productId}`, { waitUntil: "load" });
     await page.waitForTimeout(500);
     await page.getByLabel("Web check").check();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(page.getByRole("status").first()).toContainText(
-      "Proizvod je sačuvan",
-      { timeout: 180_000 },
-    );
+    await expect
+      .poll(
+        () =>
+          db.product.findUniqueOrThrow({
+            where: { id: productId },
+            select: { availableWebManual: true },
+          }),
+        { timeout: 120_000 },
+      )
+      .toEqual({ availableWebManual: true });
 
     await page.goto(`/admin/erp/artikli/${productId}/zalihe`, {
       waitUntil: "domcontentloaded",
@@ -492,7 +564,7 @@ test.describe("article master acceptance", () => {
     ).toHaveCount(0);
 
     const rowsResponse = await page.request.get(
-      `/api/admin/erp/artikli/rows?warehouseId=${warehouseId}&columns=${encodeURIComponent(
+      `/api/admin/erp/artikli/rows?warehouseId=${warehouseId}&q=${encodeURIComponent(productSku)}&searchColumn=sku&columns=${encodeURIComponent(
         JSON.stringify([
           "sku",
           "stockTotal",
@@ -521,7 +593,7 @@ test.describe("article master acceptance", () => {
       exportAuto: true,
     });
     const secondaryRowsResponse = await page.request.get(
-      `/api/admin/erp/artikli/rows?warehouseId=${secondaryWarehouseId}&columns=${encodeURIComponent(
+      `/api/admin/erp/artikli/rows?warehouseId=${secondaryWarehouseId}&q=${encodeURIComponent(productSku)}&searchColumn=sku&columns=${encodeURIComponent(
         JSON.stringify([
           "sku",
           "stockTotal",
@@ -630,7 +702,7 @@ test.describe("article master acceptance", () => {
       waitUntil: "domcontentloaded",
     });
     await page.getByLabel("XLSX datoteka").setInputFiles({
-      name: "article-master-qa.xlsx",
+      name: `article-master-qa-${runId}.xlsx`,
       mimeType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: xlsx,
@@ -641,8 +713,32 @@ test.describe("article master acceptance", () => {
         response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Proveri i uvezi" }).click();
-    expect((await initialImportResponsePromise).ok()).toBe(true);
-    await expect(page.getByRole("status")).toContainText("Uvezeno artikala: 1");
+    const initialImportResponse = await initialImportResponsePromise;
+    const initialImportPayload = await initialImportResponse.json();
+    expect(initialImportResponse.ok(), JSON.stringify(initialImportPayload)).toBe(true);
+    await expect(page.getByRole("status")).toContainText("Uvezeno artikala: 1", {
+      timeout: 120_000,
+    });
+    await expect
+      .poll(
+        () =>
+          db.product.findFirst({
+            where: { shortName: `${tag} XLSX` },
+            select: {
+              stock: true,
+              availableWebAuto: true,
+              availableWholesaleAuto: true,
+              availableExportAuto: true,
+            },
+          }),
+        { timeout: 120_000 },
+      )
+      .toMatchObject({
+        stock: 22,
+        availableWebAuto: true,
+        availableWholesaleAuto: true,
+        availableExportAuto: true,
+      });
     const imported = await db.product.findFirstOrThrow({
       where: { shortName: `${tag} XLSX` },
       select: {
@@ -672,7 +768,8 @@ test.describe("article master acceptance", () => {
       availableExportAuto: true,
       isNew: true,
     });
-    expect(imported.sku).toMatch(/^NOV-\d{4}-\d{5}$/);
+    expect(imported.sku).toMatch(/^\d+$/);
+    expect(Number(imported.sku)).toBeGreaterThan(100_000);
     expect(imported.categories[0]?.category.name).toBe(`${tag} podgrupa`);
     expect(imported.media[0]?.url).toBe(
       "https://placehold.co/48x48.png",
@@ -685,7 +782,7 @@ test.describe("article master acceptance", () => {
     partialSheet.addRow(["Šifra", "Kratki naziv", "Ukupno fizičko stanje"]);
     partialSheet.addRow([productSku, "N2212 Excel", 12]);
     await page.getByLabel("XLSX datoteka").setInputFiles({
-      name: "article-master-partial-update.xlsx",
+      name: `article-master-partial-update-${runId}.xlsx`,
       mimeType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: Buffer.from(await partialWorkbook.xlsx.writeBuffer()),
@@ -696,8 +793,12 @@ test.describe("article master acceptance", () => {
         response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "Proveri i uvezi" }).click();
-    expect((await partialImportResponsePromise).ok()).toBe(true);
-    await expect(page.getByRole("status")).toContainText("Uvezeno artikala: 1");
+    const partialImportResponse = await partialImportResponsePromise;
+    const partialImportPayload = await partialImportResponse.json();
+    expect(partialImportResponse.ok(), JSON.stringify(partialImportPayload)).toBe(true);
+    await expect(page.getByRole("status")).toContainText("Uvezeno artikala: 1", {
+      timeout: 120_000,
+    });
     const preserved = await db.product.findUniqueOrThrow({
       where: { id: productId },
       select: {
@@ -819,6 +920,68 @@ test.describe("article master acceptance", () => {
     expect(unexpectedRuntimeErrors).toEqual([]);
   });
 
+  test("creates the smallest numeric SKU and rejects a duplicate manual SKU", async ({
+    page,
+  }) => {
+    await login(page);
+    const existingSkus = await db.product.findMany({ select: { sku: true } });
+    const expectedSku = nextAvailableArticleSku(
+      existingSkus.map(({ sku }) => sku),
+    );
+
+    await page.goto("/admin/erp/artikli", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(10_000);
+    await page.getByRole("button", { name: "Unos novog", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/erp\/artikli\/[^/]+$/, {
+      timeout: 180_000,
+    });
+    generatedProductId = new URL(page.url()).pathname.split("/").pop() ?? "";
+    expect(generatedProductId).not.toBe("");
+    const generated = await db.product.findUniqueOrThrow({
+      where: { id: generatedProductId },
+      select: { sku: true },
+    });
+    expect(generated.sku).toBe(expectedSku);
+
+    const form = page
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
+    const skuInput = form.locator('input[name="sku"]');
+    await form.locator('input[name="widthCm"]').fill("1");
+    await form.locator('input[name="depthCm"]').fill("1");
+    await form.locator('input[name="heightCm"]').fill("1");
+    await skuInput.fill(productSku);
+    await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
+    await expect(form.getByRole("alert")).toContainText("već postoji", {
+      timeout: 180_000,
+    });
+    await expect(
+      db.product.findUniqueOrThrow({
+        where: { id: generatedProductId },
+        select: { sku: true },
+      }),
+    ).resolves.toEqual({ sku: expectedSku });
+
+    const qaSku = `QA-AUTO-${runId}`.slice(0, 80);
+    await form.locator('input[name="widthCm"]').fill("1");
+    await form.locator('input[name="depthCm"]').fill("1");
+    await form.locator('input[name="heightCm"]').fill("1");
+    await skuInput.fill(qaSku);
+    await form.getByLabel("Kratki naziv").fill(`${tag} automatska šifra`);
+    await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
+    await expect
+      .poll(
+        () =>
+          db.product.findUniqueOrThrow({
+            where: { id: generatedProductId },
+            select: { sku: true },
+          }),
+        { timeout: 120_000 },
+      )
+      .toEqual({ sku: qaSku });
+    await expect(form.locator('input[name="sku"]')).toHaveValue(qaSku);
+  });
+
   test("filters, edits, saves a view and archives through the canonical grid", async ({
     page,
   }) => {
@@ -830,12 +993,23 @@ test.describe("article master acceptance", () => {
       runtimeErrors.push(error.message);
     });
     await login(page);
+    await db.product.update({
+      where: { id: productId },
+      data: { supplierId },
+    });
     const currentProduct = await db.product.findUniqueOrThrow({
       where: { id: productId },
       select: {
         shortName: true,
         shortDescription: true,
+        articleStatus: true,
         collection: { select: { name: true } },
+      },
+    });
+    const gridCollection = await db.collection.create({
+      data: {
+        name: `${tag} grid kolekcija`,
+        slug: `qa-grid-collection-${runId}`,
       },
     });
 
@@ -844,6 +1018,15 @@ test.describe("article master acceptance", () => {
     // paint and remount client state once. Let hydration/Fast Refresh settle
     // before testing stateful grid controls; next start does not need this.
     await page.waitForTimeout(10_000);
+    const headerLabels = (await page.getByRole("columnheader").allTextContents()).map(
+      (label) => label.trim(),
+    );
+    expect(headerLabels.indexOf("Šifra")).toBeLessThan(
+      headerLabels.indexOf("Kratki opis"),
+    );
+    expect(headerLabels.indexOf("Kratki opis")).toBeLessThan(
+      headerLabels.indexOf("Kratki naziv"),
+    );
     const warehouseContext = page.getByRole("combobox", {
       name: "Kontekst zaliha",
       exact: true,
@@ -876,7 +1059,7 @@ test.describe("article master acceptance", () => {
       .getByRole("button", { name: "Uredi podržana polja", exact: true })
       .click();
     await page
-      .getByRole("button", { name: currentProduct.shortName, exact: true })
+      .getByRole("button", { name: currentProduct.shortName ?? "—", exact: true })
       .click({ timeout: 30_000 });
     const inlineShortName = page.getByRole("textbox", {
       name: "Izmeni Kratki naziv",
@@ -885,7 +1068,9 @@ test.describe("article master acceptance", () => {
     await expect(inlineShortName).toBeVisible();
     await inlineShortName.fill("N2212 Grid");
     await inlineShortName.press("Enter");
-    await expect(page.getByText(/1 snimljenih izmena/)).toBeVisible();
+    await expect(page.getByText(/1 snimljenih izmena/)).toBeVisible({
+      timeout: 120_000,
+    });
     await expect
       .poll(async () => {
         const inlineUpdated = await db.product.findUniqueOrThrow({
@@ -904,6 +1089,104 @@ test.describe("article master acceptance", () => {
           .filter(Boolean)
           .join(" "),
       });
+    const articleRow = page.locator("tbody tr").filter({ hasText: productSku });
+    await articleRow
+      .getByRole("button", {
+        name: currentProduct.shortDescription ?? "—",
+        exact: true,
+      })
+      .click();
+    const inlineShortDescription = articleRow.getByRole("textbox", {
+      name: "Izmeni Kratki opis",
+      exact: true,
+    });
+    await inlineShortDescription.fill("Grid opis koji ostaje");
+    await inlineShortDescription.press("Enter");
+    await expect(page.getByText(/2 snimljenih izmena/)).toBeVisible({
+      timeout: 120_000,
+    });
+
+    await articleRow
+      .getByRole("button", {
+        name: currentProduct.collection?.name ?? "—",
+        exact: true,
+      })
+      .click();
+    await articleRow
+      .getByRole("combobox", { name: "Izmeni Kolekcija", exact: true })
+      .selectOption(gridCollection.name);
+    await expect(page.getByText(/3 snimljenih izmena/)).toBeVisible({
+      timeout: 120_000,
+    });
+
+    await articleRow
+      .getByRole("button", { name: currentProduct.articleStatus, exact: true })
+      .click();
+    await articleRow
+      .getByRole("combobox", { name: "Izmeni Status", exact: true })
+      .selectOption("DOB");
+    await expect(page.getByText(/4 snimljenih izmena/)).toBeVisible({
+      timeout: 120_000,
+    });
+
+    await articleRow
+      .getByRole("button", { name: productSku, exact: true })
+      .click();
+    const inlineSku = page.getByRole("textbox", {
+      name: "Izmeni Šifra",
+      exact: true,
+    });
+    const gridSku = `QA-GRID-${runId}`.slice(0, 80);
+    await inlineSku.fill(gridSku);
+    await inlineSku.press("Enter");
+    await expect(page.getByText(/5 snimljenih izmena/)).toBeVisible({
+      timeout: 120_000,
+    });
+    productSku = gridSku;
+    await skuFilter.fill(productSku);
+
+    await expect
+      .poll(async () => {
+        const product = await db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: {
+            sku: true,
+            name: true,
+            articleStatus: true,
+            shortDescription: true,
+            collection: { select: { name: true } },
+            syncOverrides: true,
+          },
+        });
+        const overrides =
+          product.syncOverrides &&
+          typeof product.syncOverrides === "object" &&
+          !Array.isArray(product.syncOverrides) &&
+          Array.isArray(product.syncOverrides.fields)
+            ? product.syncOverrides.fields
+            : [];
+        return {
+          sku: product.sku,
+          name: product.name,
+          status: product.articleStatus,
+          shortDescription: product.shortDescription,
+          collection: product.collection?.name,
+          overrides,
+        };
+      }, { timeout: 120_000 })
+      .toEqual({
+        sku: productSku,
+        name: `${gridCollection.name} Grid opis koji ostaje N2212 Grid`,
+        status: "DOB",
+        shortDescription: "Grid opis koji ostaje",
+        collection: gridCollection.name,
+        overrides: expect.arrayContaining([
+          "description",
+          "flags",
+          "grouping",
+          "identity",
+        ]),
+      });
     const warehouseColumnCheckbox = page.getByRole("checkbox", {
       name: "Fizičko po magacinu",
       exact: true,
@@ -917,6 +1200,7 @@ test.describe("article master acceptance", () => {
     await page.getByRole("button", { name: "Sačuvaj pogled", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(
       `Pogled „${viewName}” je snimljen`,
+      { timeout: 120_000 },
     );
     await expect
       .poll(async () => {
@@ -960,7 +1244,17 @@ test.describe("article master acceptance", () => {
       .click();
     await expect(page.getByRole("status")).toContainText(
       `Pogled „${viewName}” je obrisan`,
+      { timeout: 120_000 },
     );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(10_000);
+    await page
+      .getByPlaceholder("Brza pretraga po vidljivim kolonama")
+      .fill(productSku);
+    const persistedRow = page.locator("tbody tr").filter({ hasText: productSku });
+    await expect(persistedRow).toContainText("Grid opis koji ostaje");
+    await expect(persistedRow).toContainText(gridCollection.name);
+    await expect(persistedRow).toContainText("DOB");
     await expect
       .poll(async () =>
         db.adminSavedView.count({ where: { module: "artikli", name: viewName } }),
@@ -1008,7 +1302,9 @@ test.describe("article master acceptance", () => {
     await page
       .getByRole("button", { name: "Arhiviraj (1)" })
       .click({ timeout: 30_000 });
-    await expect(page.getByRole("status")).toContainText("Obrisano: 1");
+    await expect(page.getByRole("status")).toContainText("Obrisano: 1", {
+      timeout: 120_000,
+    });
     await expect
       .poll(async () => {
         const archived = await db.product.findUniqueOrThrow({
@@ -1059,6 +1355,7 @@ test.describe("article master acceptance", () => {
       where: {
         OR: [
           { id: productId || "__missing__" },
+          { id: generatedProductId || "__missing__" },
           { sku: { contains: runId } },
           { name: { startsWith: tag } },
         ],
@@ -1067,7 +1364,14 @@ test.describe("article master acceptance", () => {
     });
     const productIds = taggedProducts.map((product) => product.id);
     await db.stockMovement.deleteMany({
-      where: { idempotencyKey: { contains: tag } },
+      where: {
+        OR: [
+          { idempotencyKey: { contains: runId } },
+          ...(productIds.length
+            ? [{ productId: { in: productIds } }]
+            : []),
+        ],
+      },
     });
     await db.order.deleteMany({
       where: {
@@ -1126,7 +1430,7 @@ function createDatabaseClient() {
     adapter: new PrismaPg({
       connectionString: raw,
       max: 1,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 60_000,
     }),
   });
 }

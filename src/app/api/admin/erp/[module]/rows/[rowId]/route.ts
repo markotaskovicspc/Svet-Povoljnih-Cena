@@ -21,9 +21,13 @@ import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import {
+  assertArticleSkuAvailable,
   composedArticleName,
+  resolveNamedArticleRelation,
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
+import { normalizeArticleSku } from "@/lib/article-sku";
+import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
 import { sanitizeRichText } from "@/lib/rich-text";
 import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
@@ -79,7 +83,7 @@ export async function PATCH(
   }
 
   try {
-    const result = await persistErpCell(module, rowId, columnKey, value);
+    const result = await persistErpCell(module, rowId, columnKey, value, admin.id);
     if (!result) {
       return NextResponse.json(
         { ok: false, error: "Ovo ERP polje još nema direktno mapiranje na bazu." },
@@ -94,6 +98,12 @@ export async function PATCH(
       entityId: rowId,
       diff: { columnKey, value },
     });
+
+    if (module === "artikli") {
+      revalidatePath("/admin/erp/artikli");
+      revalidatePath(`/admin/erp/artikli/${rowId}`);
+      revalidateTag("catalog-products", { expire: 0 });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -118,11 +128,12 @@ async function persistErpCell(
   rowId: string,
   columnKey: string,
   value: CellValue,
+  actorId: string,
 ): Promise<PersistedCellResult | null> {
   switch (module) {
     case "artikli":
     case "mp-cene":
-      return persistProductCell(rowId, columnKey, value);
+      return persistProductCell(rowId, columnKey, value, actorId);
     case "dobavljaci":
       return persistSupplierCell(rowId, columnKey, value);
     case "nabavne-cene":
@@ -165,7 +176,27 @@ async function persistErpCell(
   }
 }
 
-async function persistProductCell(rowId: string, columnKey: string, value: CellValue) {
+async function persistProductCell(
+  rowId: string,
+  columnKey: string,
+  value: CellValue,
+  actorId: string,
+) {
+  if (columnKey === "sku") {
+    const sku = normalizeArticleSku(value);
+    await db.$transaction(async (tx) => {
+      const current = await tx.product.findUniqueOrThrow({
+        where: { id: rowId },
+        select: { sku: true },
+      });
+      if (current.sku === sku) return;
+      await assertArticleSkuAvailable(tx, sku, rowId);
+      await tx.product.update({ where: { id: rowId }, data: { sku } });
+      await lockSupplierOwnedFields(tx, rowId, actorId, ["identity"]);
+    });
+    return { value: sku };
+  }
+
   if (columnKey === "status") {
     const status = asString(value).toUpperCase();
     const articleStatuses: Record<string, ArticleStatus> = {
@@ -188,8 +219,38 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
             : status === "ARH" || status === "UZ"
               ? { articleStatus, isActive: false, isDtz: false, isLimited: false }
               : { articleStatus, isActive: true, isDtz: false, isLimited: false };
-    await db.product.update({ where: { id: rowId }, data });
+    await db.$transaction(async (tx) => {
+      await tx.product.update({ where: { id: rowId }, data });
+      await lockSupplierOwnedFields(tx, rowId, actorId, ["flags"]);
+    });
     return { value: status };
+  }
+
+  if (columnKey === "collection") {
+    const collectionName = optionalString(value);
+    const persisted = await db.$transaction(async (tx) => {
+      const collection = await resolveNamedArticleRelation(tx, "collection", {
+        name: collectionName,
+      });
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: rowId },
+        select: { shortName: true, shortDescription: true },
+      });
+      await tx.product.update({
+        where: { id: rowId },
+        data: {
+          collectionId: collection?.id ?? null,
+          name: composedArticleName({
+            collectionName: collection?.name,
+            shortDescription: product.shortDescription,
+            shortName: product.shortName,
+          }),
+        },
+      });
+      await lockSupplierOwnedFields(tx, rowId, actorId, ["grouping"]);
+      return collection?.name ?? null;
+    });
+    return { value: persisted };
   }
 
   const data: Prisma.ProductUncheckedUpdateInput = {};
@@ -377,6 +438,9 @@ async function persistProductCell(rowId: string, columnKey: string, value: CellV
     }
     if (["webCheck", "wholesaleCheck", "exportCheck"].includes(columnKey)) {
       await syncProductChannelAvailability(tx, rowId);
+    }
+    if (["shortDescription", "siteDescription"].includes(columnKey)) {
+      await lockSupplierOwnedFields(tx, rowId, actorId, ["description"]);
     }
   });
   return { value };

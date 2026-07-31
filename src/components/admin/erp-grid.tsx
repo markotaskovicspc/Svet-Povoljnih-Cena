@@ -152,6 +152,10 @@ function columnOrderKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:column-order`;
 }
 
+function columnOrderVersionKey(moduleSlug: string) {
+  return `svet-akcija:erp:${moduleSlug}:column-order-version`;
+}
+
 function readViews(moduleSlug: string): SavedView[] {
   if (typeof window === "undefined") return [];
   try {
@@ -176,7 +180,26 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     const known = new Set(defaultOrder);
     const validStored = stored.filter((key) => known.has(key));
     const missing = defaultOrder.filter((key) => !validStored.includes(key));
-    return [...validStored, ...missing];
+    const completeOrder = [...validStored, ...missing];
+    if (
+      moduleSlug === "artikli" &&
+      window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !== "2"
+    ) {
+      const migrated = completeOrder.filter(
+        (key) => key !== "shortDescription" && key !== "shortName",
+      );
+      const skuIndex = migrated.indexOf("sku");
+      migrated.splice(
+        skuIndex >= 0 ? skuIndex + 1 : 0,
+        0,
+        "shortDescription",
+        "shortName",
+      );
+      window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
+      window.localStorage.setItem(columnOrderVersionKey(moduleSlug), "2");
+      return migrated;
+    }
+    return completeOrder;
   } catch {
     return defaultOrder;
   }

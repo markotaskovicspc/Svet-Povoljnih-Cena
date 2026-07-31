@@ -30,11 +30,13 @@ import {
   type EditableProductAttachment,
 } from "@/components/admin/product-attachments-editor";
 import {
+  assertArticleSkuAvailable,
   composedArticleName,
   resolveNamedArticleRelation,
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
 import { optionalDateInput, dateInputValue } from "@/lib/article-master";
+import { normalizeArticleSku } from "@/lib/article-sku";
 import { sanitizeRichText } from "@/lib/rich-text";
 import {
   retryFailedRabaluxProductMedia,
@@ -65,6 +67,7 @@ export const metadata = {
 const overrideSchema = z.object({
   id: z.string(),
   operationId: z.string().min(16),
+  sku: z.string().min(1).max(80),
   name: z.string().min(1).max(200),
   articleStatus: z.enum(["SP", "IT", "DTZ", "DOB", "ARH", "UZ"]),
   supplierId: z.string().optional().nullable(),
@@ -273,12 +276,13 @@ function changedManualGroups(
 ) {
   const groups: Array<[RabaluxOverrideGroup, string[]]> = [
     ["name", ["name"]],
-    ["identity", ["barcode"]],
+    ["identity", ["sku", "barcode"]],
     ["description", ["description", "shortDescription"]],
+    ["grouping", ["groupId", "collectionId"]],
     ["specifications", ["colorPrimary", "colorSecondary"]],
     ["dimensions", ["widthCm", "depthCm", "heightCm"]],
     ["delivery", ["allowsAssembly"]],
-    ["flags", ["isActive", "isNew", "isDtz"]],
+    ["flags", ["articleStatus", "isActive", "isNew", "isDtz"]],
   ];
   return groups
     .filter(([, keys]) =>
@@ -314,6 +318,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         }
         const d = parsed.data;
+        const sku = normalizeArticleSku(d.sku);
         const newUntil = optionalDateInput(d.newUntil);
         const tncFrom = d.articleStatus === "DTZ" ? optionalDateInput(d.tncFrom) : null;
         const tncUntil = d.articleStatus === "DTZ" ? optionalDateInput(d.tncUntil) : null;
@@ -332,6 +337,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
                 ? { isActive: false, isDtz: false, isLimited: false }
                 : { isActive: true, isDtz: false, isLimited: false };
         const data = {
+          sku,
           shortName: d.name.trim(),
           barcode: d.barcode?.trim() || null,
           sizeLabel: d.sizeLabel?.trim() || null,
@@ -381,6 +387,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           const existing = await tx.product.findUniqueOrThrow({
             where: { id: d.id },
             select: {
+              sku: true,
+              articleStatus: true,
               supplierId: true,
               supplierExternalId: true,
               supplierApprovalStatus: true,
@@ -398,6 +406,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               isActive: true,
               isNew: true,
               isDtz: true,
+              groupId: true,
+              collectionId: true,
               group: { select: { id: true, name: true } },
               collection: { select: { id: true, name: true } },
               categories: { select: { categoryId: true } },
@@ -406,6 +416,9 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           // An interactive Prisma transaction owns one PostgreSQL connection;
           // submitting concurrent queries to that connection can stall the pg
           // adapter. Keep transaction-bound queries deliberately sequential.
+          if (existing.sku !== sku) {
+            await assertArticleSkuAvailable(tx, sku, d.id);
+          }
           const requestedGroupId = d.groupId?.trim() || null;
           const requestedCollectionId = d.collectionId?.trim() || null;
           const group =
@@ -1034,13 +1047,18 @@ export default async function ProductDetail({
           { label: product.sku },
         ]}
       />
-      <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-6 px-8 py-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <Card>
           <CardTitle description="Override-i preko XML feed-a — ovo polje sledeći import može da prepiše ako je polje označeno kao auto-sync.">
             Osnovni podaci
           </CardTitle>
-          <AdminActionForm action={updateProduct} className="space-y-4">
+          <AdminActionForm
+            key={product.updatedAt.toISOString()}
+            action={updateProduct}
+            className="space-y-4"
+            refreshOnSuccess
+          >
             <input type="hidden" name="id" value={product.id} />
             <input
               type="hidden"
@@ -1051,11 +1069,26 @@ export default async function ProductDetail({
               Puni naziv se automatski formira kao: kolekcija + kratki opis + kratki naziv.
               Trenutno: <strong>{product.name}</strong>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[140px_minmax(200px,1.4fr)_minmax(180px,1fr)_100px_minmax(170px,1fr)]">
               <Field label="Šifra artikla">
-                <Input readOnly value={product.sku} className="font-mono" />
+                <Input
+                  name="sku"
+                  required
+                  defaultValue={product.sku}
+                  className="font-mono"
+                />
                 <p className="mt-1 text-xs text-ink-500">
-                  Šifra je zaključana nakon kreiranja artikla.
+                  Možete uneti postojeću šifru sa magacinske deklaracije.
+                </p>
+              </Field>
+              <Field label="Kratki opis za kartice, naziv i dokumente">
+                <Textarea
+                  name="shortDescription"
+                  rows={2}
+                  defaultValue={product.shortDescription ?? ""}
+                />
+                <p className="mt-1 text-xs text-ink-500">
+                  Koristi se na karticama proizvoda, u formiranju punog naziva i u prodajnim dokumentima.
                 </p>
               </Field>
               <Field label="Kratki naziv">
@@ -1201,16 +1234,6 @@ export default async function ProductDetail({
             <datalist id="article-certificates">
               {lookupOptions("CERTIFICATE").map((value) => <option key={value} value={value} />)}
             </datalist>
-            <Field label="Kratki opis za kartice, naziv i dokumente">
-              <Textarea
-                name="shortDescription"
-                rows={2}
-                defaultValue={product.shortDescription ?? ""}
-              />
-              <p className="mt-1 text-xs text-ink-500">
-                Koristi se na karticama proizvoda, u formiranju punog naziva i u prodajnim dokumentima.
-              </p>
-            </Field>
             <div id="opis-za-sajt" className="scroll-mt-24">
               <Field label="Formatirani opis za sajt">
                 <RichTextEditor

@@ -7,24 +7,43 @@ import {
   normalizeArticleText,
   splitArticleValues,
 } from "@/lib/article-master";
+import {
+  nextAvailableArticleSku,
+  normalizeArticleSku,
+  numericArticleSku,
+} from "@/lib/article-sku";
 
-export async function nextArticleSku(tx: Prisma.TransactionClient, date = new Date()) {
-  const year = date.getFullYear();
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const sequence = await tx.articleSequence.upsert({
-      where: { year },
-      create: { year, lastValue: 1 },
-      update: { lastValue: { increment: 1 } },
-      select: { lastValue: true },
-    });
-    const sku = `NOV-${year}-${String(sequence.lastValue).padStart(5, "0")}`;
-    const exists = await tx.product.findUnique({
-      where: { sku },
-      select: { id: true },
-    });
-    if (!exists) return sku;
-  }
-  throw new Error("Automatska šifra artikla nije mogla da se rezerviše.");
+const ARTICLE_SKU_LOCK_KEY = "spc:article-sku";
+
+async function lockArticleSkuSpace(tx: Prisma.TransactionClient) {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${ARTICLE_SKU_LOCK_KEY}))::text AS "lock"`;
+}
+
+export async function nextArticleSku(tx: Prisma.TransactionClient) {
+  await lockArticleSkuSpace(tx);
+  const products = await tx.product.findMany({ select: { sku: true } });
+  return nextAvailableArticleSku(products.map(({ sku }) => sku));
+}
+
+export async function assertArticleSkuAvailable(
+  tx: Prisma.TransactionClient,
+  value: unknown,
+  currentProductId?: string,
+) {
+  const sku = normalizeArticleSku(value);
+  await lockArticleSkuSpace(tx);
+  const products = await tx.product.findMany({
+    where: currentProductId ? { id: { not: currentProductId } } : undefined,
+    select: { sku: true },
+  });
+  const numeric = numericArticleSku(sku);
+  const foldedSku = sku.toLocaleLowerCase("sr-Latn");
+  const conflict = products.some(({ sku: existingSku }) =>
+    existingSku.toLocaleLowerCase("sr-Latn") === foldedSku ||
+    (numeric !== null && numericArticleSku(existingSku) === numeric),
+  );
+  if (conflict) throw new Error(`Šifra artikla ${sku} već postoji.`);
+  return sku;
 }
 
 export async function resolveNamedArticleRelation(
@@ -115,7 +134,10 @@ export async function syncArticleLookupAssignments(
       slug: articleSlug(value),
     })),
   );
-  const desiredWhere = desired.map(({ kind, value }) => ({ kind, value }));
+  const desiredWhere = desired.flatMap(({ kind, value, slug }) => [
+    { kind, value },
+    { kind, slug },
+  ]);
 
   const currentAssignments = await tx.productLookupAssignment.findMany({
     where: { productId, lookupValue: { kind: { in: kinds } } },
@@ -126,14 +148,11 @@ export async function syncArticleLookupAssignments(
     },
   });
   const desiredSignature = desired
-    .map(({ kind, value, slug }) => `${kind}\u0000${value}\u0000${slug}`)
+    .map(({ kind, slug }) => `${kind}\u0000${slug}`)
     .sort();
   const currentSignature = currentAssignments
     .filter(({ lookupValue }) => lookupValue.active)
-    .map(
-      ({ lookupValue }) =>
-        `${lookupValue.kind}\u0000${lookupValue.value}\u0000${lookupValue.slug}`,
-    )
+    .map(({ lookupValue }) => `${lookupValue.kind}\u0000${lookupValue.slug}`)
     .sort();
   if (
     currentAssignments.length === currentSignature.length &&
@@ -156,46 +175,41 @@ export async function syncArticleLookupAssignments(
       })),
       skipDuplicates: true,
     });
-    await tx.productLookupValue.updateMany({
-      where: { OR: desiredWhere },
-      data: { active: true },
-    });
   }
 
-  let lookups = desired.length
+  const candidates = desired.length
     ? await tx.productLookupValue.findMany({
         where: { OR: desiredWhere },
         select: { id: true, kind: true, value: true, slug: true },
       })
     : [];
-  const found = new Map(
-    lookups.map((lookup) => [`${lookup.kind}\u0000${lookup.value}`, lookup]),
+  const foundByValue = new Map(
+    candidates.map((lookup) => [`${lookup.kind}\u0000${lookup.value}`, lookup]),
   );
-  const missing = desired.filter(
-    ({ kind, value }) => !found.has(`${kind}\u0000${value}`),
+  const foundBySlug = new Map(
+    candidates.map((lookup) => [`${lookup.kind}\u0000${lookup.slug}`, lookup]),
   );
+  const resolved = desired.map(({ kind, value, slug }) =>
+    foundByValue.get(`${kind}\u0000${value}`) ??
+    foundBySlug.get(`${kind}\u0000${slug}`),
+  );
+  const missing = desired.filter((_entry, index) => !resolved[index]);
   if (missing.length) {
     throw new Error(
       `Vrednosti šifarnika nisu sačuvane: ${missing.map(({ value }) => value).join(", ")}.`,
     );
   }
-
-  // Slugs are deterministic, but repair legacy rows that predate the current
-  // normalizer. This is normally zero queries and preserves the old upsert
-  // behavior without penalizing every save.
-  const staleSlugs = desired.filter(({ kind, value, slug }) => {
-    return found.get(`${kind}\u0000${value}`)?.slug !== slug;
-  });
-  for (const entry of staleSlugs) {
-    await tx.productLookupValue.update({
-      where: { kind_value: { kind: entry.kind, value: entry.value } },
-      data: { slug: entry.slug },
-    });
-  }
-  if (staleSlugs.length) {
-    lookups = await tx.productLookupValue.findMany({
-      where: { OR: desiredWhere },
-      select: { id: true, kind: true, value: true, slug: true },
+  const lookups = Array.from(
+    new Map(
+      resolved
+        .filter((lookup): lookup is NonNullable<typeof lookup> => Boolean(lookup))
+        .map((lookup) => [lookup.id, lookup]),
+    ).values(),
+  );
+  if (lookups.length) {
+    await tx.productLookupValue.updateMany({
+      where: { id: { in: lookups.map(({ id }) => id) } },
+      data: { active: true },
     });
   }
 

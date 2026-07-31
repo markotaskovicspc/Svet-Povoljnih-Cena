@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { normalizeArticleSku } from "@/lib/article-sku";
+import {
+  nextAvailableArticleSku,
+  normalizeArticleSku,
+  numericArticleSku,
+} from "@/lib/article-sku";
 import { articleSearchWhere } from "@/lib/admin/article-search";
 import {
   DEFAULT_DELIVERY_WINDOWS,
@@ -18,6 +22,26 @@ describe("unos artikala", () => {
     expect(normalizeArticleSku("  ABC-123  ")).toBe("ABC-123");
     expect(() => normalizeArticleSku("ABC 123")).toThrow(/razmake/i);
     expect(() => normalizeArticleSku("ABC\u0000")).toThrow(/kontrolni/i);
+  });
+
+  it("dodeljuje najmanju slobodnu šifru veću od 100000", () => {
+    expect(nextAvailableArticleSku([])).toBe("100001");
+    expect(
+      nextAvailableArticleSku([
+        "100001",
+        "100.002",
+        "100004",
+        "NOV-2026-00001",
+        "100000",
+      ]),
+    ).toBe("100003");
+  });
+
+  it("tretira tačkaste i netačkaste numeričke šifre kao isti broj", () => {
+    expect(numericArticleSku("100.001")).toBe(100001);
+    expect(numericArticleSku("100001")).toBe(100001);
+    expect(numericArticleSku("10.00.1")).toBeNull();
+    expect(numericArticleSku("LEGACY-100001")).toBeNull();
   });
 
   it("ograničava pretragu na SKU kada je izabrana Šifra", () => {
