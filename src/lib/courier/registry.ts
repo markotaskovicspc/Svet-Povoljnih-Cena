@@ -30,6 +30,10 @@ import {
 import { SHIPMENT_STATUS_LABEL } from "./status";
 import { routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
+import {
+  derivePhysicalPackages,
+  type PhysicalPackage,
+} from "./packages";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -73,6 +77,8 @@ export async function createShipmentForOrder(
   orderId: string,
   options: {
     packageCount?: number;
+    packages?: readonly PhysicalPackage[];
+    pickupDate?: Date;
     purpose?: ShipmentPurpose;
     reclamationId?: string;
   } = {},
@@ -100,6 +106,7 @@ export async function createShipmentForOrder(
       items: {
         select: {
           id: true,
+          name: true,
           withAssembly: true,
           qty: true,
           product: {
@@ -109,7 +116,22 @@ export async function createShipmentForOrder(
               packDepthCm: true,
               packHeightCm: true,
               packGrossWeightKg: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              grossWeightKg: true,
+              weightKg: true,
             },
+          },
+        },
+      },
+      pickupBatchLines: {
+        where: { batch: { status: { in: ["DRAFT", "BOOKED"] } } },
+        orderBy: { packageNo: "asc" },
+        take: 1,
+        select: {
+          batch: {
+            select: { pickupDate: true, provider: true },
           },
         },
       },
@@ -151,6 +173,16 @@ export async function createShipmentForOrder(
   });
   if (service === "COURIER_SMALL") {
     const selectedProvider = await getSelectedSmallParcelProvider();
+    const packages =
+      options.packages ??
+      derivePhysicalPackages(
+        shipmentItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          qty: item.qty,
+          product: item.product,
+        })),
+      );
     const derivedPackageCount = shipmentItems.reduce(
       (sum, item) =>
         sum +
@@ -164,6 +196,13 @@ export async function createShipmentForOrder(
       ? createMyGlsShipmentForOrder(order.id, {
           purpose,
           reclamationId: reclamation?.id,
+          pickupDate:
+            options.pickupDate ??
+            (order.pickupBatchLines[0]?.batch.provider === MYGLS_PROVIDER ||
+            order.pickupBatchLines[0]?.batch.provider == null
+              ? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined
+              : undefined),
+          packages,
         })
       : createXExpressShipmentForOrder(order.id, {
           packageCount: options.packageCount ?? derivedPackageCount,
@@ -402,6 +441,16 @@ export async function applyShipmentEvent(
     }
   });
 
+  if (
+    eventCreated &&
+    shipment.provider === MYGLS_PROVIDER &&
+    ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
+      event.status,
+    )
+  ) {
+    await markCompletedMyGlsPickupBatches(shipment.orderId);
+  }
+
   return {
     shipmentId: shipment.id,
     orderId: shipment.orderId,
@@ -410,6 +459,45 @@ export async function applyShipmentEvent(
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
     eventCreated,
   };
+}
+
+async function markCompletedMyGlsPickupBatches(orderId: string) {
+  const batches = await db.pickupBatch.findMany({
+    where: {
+      provider: MYGLS_PROVIDER,
+      status: "BOOKED",
+      lines: { some: { orderId } },
+    },
+    select: {
+      id: true,
+      lines: { select: { orderId: true } },
+    },
+  });
+  const pickedUpStatuses: ShipmentStatus[] = [
+    "PICKED_UP",
+    "IN_TRANSIT",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+  ];
+  for (const batch of batches) {
+    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
+    const shipments = await db.shipment.findMany({
+      where: {
+        orderId: { in: orderIds },
+        provider: MYGLS_PROVIDER,
+        purpose: "ORDER_DELIVERY",
+        status: { in: pickedUpStatuses },
+      },
+      select: { orderId: true },
+    });
+    const pickedUpOrderIds = new Set(shipments.map((item) => item.orderId));
+    if (orderIds.every((id) => pickedUpOrderIds.has(id))) {
+      await db.pickupBatch.updateMany({
+        where: { id: batch.id, status: "BOOKED" },
+        data: { status: "PICKED_UP" },
+      });
+    }
+  }
 }
 
 export async function syncCourierShipmentById(shipmentId: string) {

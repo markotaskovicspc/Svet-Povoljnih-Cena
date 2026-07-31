@@ -2666,9 +2666,21 @@ model PickupBatch {
   id                 String            @id @default(cuid())
   number             String            @unique
   courier            ShipmentService?
+  /// Provider is snapshotted when the batch is created so a later global
+  /// provider switch cannot send an existing batch to the wrong courier.
+  provider            String?
   status             PickupBatchStatus @default(DRAFT)
   manifestRef        String?
+  /// Start and end of the agreed local pickup window (stored as UTC instants).
   pickupDate         DateTime?
+  pickupWindowEnd    DateTime?
+  labelsCreationStartedAt DateTime?
+  labelsCreatedAt    DateTime?
+  labelsCreatedById  String?
+  externalBookedAt   DateTime?
+  externalBookingChannel String?
+  externalBookingReference String?
+  externalBookedById String?
   configurationIssue String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt

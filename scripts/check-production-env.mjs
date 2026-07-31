@@ -15,6 +15,13 @@ function enabled(name) {
   return ["1", "true", "yes", "on"].includes((value(name) ?? "").toLowerCase());
 }
 
+function validBoolean(name) {
+  const item = value(name);
+  if (item && !["0", "1", "true", "false", "yes", "no", "on", "off"].includes(item.toLowerCase())) {
+    errors.push(`${name} must be a boolean value`);
+  }
+}
+
 function requireNames(scope, names) {
   for (const name of names) if (!value(name)) errors.push(`${scope}: ${name} is missing or a placeholder`);
 }
@@ -104,9 +111,37 @@ if (enabled("MYGLS_ENABLED") || enabled("MYGLS_PRODUCTION_ACCEPTED")) {
   }
   requireNames("MyGLS", [
     "MYGLS_USERNAME", "MYGLS_PASSWORD", "MYGLS_CLIENT_NUMBER",
-    "MYGLS_PICKUP_NAME", "MYGLS_PICKUP_STREET", "MYGLS_PICKUP_CITY",
+    "MYGLS_SENDER_IDENTITY_CARD_NUMBER", "MYGLS_SENDER_IDENTITY_TYPE",
+    "MYGLS_PICKUP_NAME", "MYGLS_PICKUP_STREET", "MYGLS_PICKUP_HOUSE_NUMBER", "MYGLS_PICKUP_CITY",
     "MYGLS_PICKUP_POSTAL_CODE", "MYGLS_PICKUP_CONTACT_NAME", "MYGLS_PICKUP_CONTACT_PHONE",
   ]);
+  for (const name of [
+    "MYGLS_AUTO_CREATE",
+    "MYGLS_COD_CARD_ENABLED",
+    "MYGLS_CONTACT_SERVICE_ENABLED",
+    "MYGLS_FLEX_DELIVERY_SERVICE_ENABLED",
+  ]) validBoolean(name);
+  const identityType = (value("MYGLS_SENDER_IDENTITY_TYPE") ?? "").toUpperCase();
+  if (identityType && !["PIB", "ID_CARD"].includes(identityType)) {
+    errors.push("MYGLS_SENDER_IDENTITY_TYPE must be PIB or ID_CARD");
+  }
+  const senderIdentity = value("MYGLS_SENDER_IDENTITY_CARD_NUMBER");
+  if (identityType === "PIB" && senderIdentity && !/^\d{9}$/.test(senderIdentity)) {
+    errors.push("MYGLS_SENDER_IDENTITY_CARD_NUMBER must contain exactly 9 digits when identity type is PIB");
+  }
+  if (identityType === "PIB" && value("FISCAL_TIN") && senderIdentity !== value("FISCAL_TIN")) {
+    errors.push("MyGLS sender PIB does not match FISCAL_TIN");
+  }
+  const pickupHouseNumber = value("MYGLS_PICKUP_HOUSE_NUMBER");
+  if (pickupHouseNumber && !/^\d/.test(pickupHouseNumber)) {
+    errors.push("MYGLS_PICKUP_HOUSE_NUMBER must start with a digit; confirm a numeric house number with GLS");
+  }
+  if (enabled("MYGLS_COD_CARD_ENABLED")) {
+    warnings.push("MyGLS card COD is enabled; keep it on only with written GLS contract confirmation");
+  }
+  if (enabled("MYGLS_CONTACT_SERVICE_ENABLED") || enabled("MYGLS_FLEX_DELIVERY_SERVICE_ENABLED")) {
+    warnings.push("Optional MyGLS notification services are enabled; verify contract availability and charges");
+  }
   if (myGlsEnv === "production" && !enabled("MYGLS_PRODUCTION_ACCEPTED")) {
     errors.push("MyGLS production is enabled without MYGLS_PRODUCTION_ACCEPTED");
   } else if (myGlsEnv === "test") {

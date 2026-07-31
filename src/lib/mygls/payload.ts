@@ -6,6 +6,10 @@ import {
   type ShipmentPurpose,
 } from "@prisma/client";
 import { num } from "@/lib/api/_helpers";
+import {
+  type PhysicalPackage,
+  requireCompleteMyGlsPackages,
+} from "@/lib/courier/packages";
 import type { MyGlsConfig } from "./config";
 import { MyGlsConfigError, toMyGlsDate } from "./config";
 import type { MyGlsAddress, MyGlsParcel, MyGlsService } from "./types";
@@ -42,6 +46,7 @@ export function buildMyGlsParcelForOrder(args: {
   cfg: MyGlsConfig;
   order: OrderForMyGlsPayload;
   pickupDate?: Date;
+  packages: readonly PhysicalPackage[];
   purpose?: ShipmentPurpose;
 }): MyGlsParcel {
   const { cfg, order } = args;
@@ -53,13 +58,24 @@ export function buildMyGlsParcelForOrder(args: {
   const recipientName = `${order.shipFirstName} ${order.shipLastName}`.trim();
   const contactEmail = order.user?.email ?? order.guestEmail ?? null;
   const content = buildContent(order, cfg.defaultContent);
+  const packages = completePackages(args.packages);
   const cod =
     purpose === "ORDER_DELIVERY" && isMyGlsCashOnDelivery(order.paymentMethod);
-  const services: MyGlsService[] = [
-    { Code: "CS1", CS1Parameter: { Value: normalizePhone(order.shipPhone) } },
-  ];
+  if (order.paymentMethod === "POUZECE_KARTICA" && !cfg.codCardEnabled) {
+    throw new MyGlsConfigError(
+      "MyGLS kartično pouzeće nije ugovorno potvrđeno (MYGLS_COD_CARD_ENABLED=false).",
+    );
+  }
+  const services: MyGlsService[] = [];
 
-  if (contactEmail) {
+  if (cfg.contactServiceEnabled) {
+    services.push({
+      Code: "CS1",
+      CS1Parameter: { Value: normalizePhone(order.shipPhone) },
+    });
+  }
+
+  if (contactEmail && cfg.flexDeliveryServiceEnabled) {
     services.push({ Code: "FDS", FDSParameter: { Value: contactEmail } });
   }
 
@@ -81,7 +97,7 @@ export function buildMyGlsParcelForOrder(args: {
   const parcel: MyGlsParcel = {
     ClientNumber: cfg.clientNumber,
     ClientReference: reference.slice(0, 40),
-    Count: packageCount(order.items),
+    Count: packages.length,
     Content: content,
     CODAmount: cod ? num(order.total) : 0,
     CODReference: cod ? order.number : undefined,
@@ -89,21 +105,16 @@ export function buildMyGlsParcelForOrder(args: {
     PickupDate: toMyGlsDate(args.pickupDate ?? nextBusinessDay()),
     PickupAddress: reverse ? customerAddress : merchantAddress,
     DeliveryAddress: reverse ? merchantAddress : customerAddress,
-    ServiceList: services,
+    ServiceList: services.length ? services : undefined,
     SenderIdentityCardNumber: cfg.senderIdentityCardNumber,
-    ParcelPropertyList: [
-      {
-        Content: content,
-        PackageType: 2,
-        Weight: Math.max(1, packageCount(order.items) * 3),
-        // Production PrintLabels rejects parcels without dimensions
-        // (ErrorCode 13 "Invalid data in 'Height'/'Width'/'Length'",
-        // verified live 2026-07-10). Default box in cm.
-        Height: 30,
-        Width: 40,
-        Length: 50,
-      },
-    ],
+    ParcelPropertyList: packages.map((pkg) => ({
+      Content: (pkg.content?.trim() || content).slice(0, 120),
+      PackageType: 2,
+      Weight: pkg.weightKg,
+      Height: pkg.heightCm,
+      Width: pkg.widthCm,
+      Length: pkg.depthCm,
+    })),
   };
 
   if (order.glsDeliveryPointId && !reverse) {
@@ -114,12 +125,11 @@ export function buildMyGlsParcelForOrder(args: {
 }
 
 function addressFromPickup(cfg: MyGlsConfig): MyGlsAddress {
-  const street = splitStreet(cfg.pickup.street, "MyGLS pickup adresa");
   return {
     Name: cfg.pickup.name,
-    Street: street.street,
-    HouseNumber: street.houseNumber,
-    HouseNumberInfo: street.houseNumberInfo,
+    Street: cfg.pickup.street,
+    HouseNumber: cfg.pickup.houseNumber,
+    HouseNumberInfo: cfg.pickup.houseNumberInfo || null,
     City: cfg.pickup.city,
     ZipCode: cfg.pickup.postalCode,
     CountryIsoCode: cfg.pickup.country,
@@ -173,13 +183,19 @@ function normalizePhone(value: string) {
   return digits;
 }
 
-function packageCount(items: { qty: number }[]) {
-  return Math.max(1, Math.min(99, items.reduce((sum, item) => sum + item.qty, 0)));
-}
-
 function buildContent(order: OrderForMyGlsPayload, fallback: string) {
   const itemNames = order.items.map((item) => item.name).filter(Boolean).slice(0, 3);
   return (itemNames.join(", ") || fallback).slice(0, 120);
+}
+
+function completePackages(packages: readonly PhysicalPackage[]) {
+  try {
+    return requireCompleteMyGlsPackages(packages);
+  } catch (error) {
+    throw new MyGlsConfigError(
+      error instanceof Error ? error.message : "MyGLS paketi nisu ispravni.",
+    );
+  }
 }
 
 function nextBusinessDay() {

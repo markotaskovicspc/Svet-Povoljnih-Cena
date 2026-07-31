@@ -8,6 +8,12 @@ interface RouteProps {
   params: Promise<{ slug: string }>;
 }
 
+export const revalidate = 30;
+
+export function generateStaticParams() {
+  return [];
+}
+
 function normalizeSlug(slug: string) {
   return decodeURIComponent(slug).toLowerCase();
 }

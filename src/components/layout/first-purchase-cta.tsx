@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronUp, Gift, X } from "lucide-react";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 const CLOSED_KEY = "svet-akcija:first-purchase-cta-closed-until";
 const MINIMIZED_KEY = "svet-akcija:first-purchase-cta-minimized";
@@ -10,6 +12,8 @@ const CLOSE_MS = 7 * 24 * 60 * 60 * 1000;
 const SHOW_DELAY_MS = 8000;
 
 export function FirstPurchaseCta() {
+  const pathname = usePathname();
+  const isCustomerLoggedIn = useLoyaltyEligibility();
   const [visible, setVisible] = useState(false);
   const [minimized, setMinimized] = useState(false);
 
@@ -36,7 +40,14 @@ export function FirstPurchaseCta() {
     setMinimized(next);
   }
 
-  if (!visible) return null;
+  if (
+    !visible ||
+    isCustomerLoggedIn ||
+    pathname.startsWith("/nalog") ||
+    pathname.startsWith("/checkout")
+  ) {
+    return null;
+  }
 
   if (minimized) {
     return (

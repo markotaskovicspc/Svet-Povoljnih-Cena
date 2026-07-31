@@ -13,15 +13,21 @@ import type { AdminActionState } from "@/lib/admin/action-state";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
 import {
   createPickupBatch,
+  confirmMyGlsPickupAnnouncement,
   deletePickupBatches,
   getPickupPostingAvailability,
   loadEligibleOrders,
   postPickupBatches,
   removeOrderFromPickupBatch,
-  savePickupDate,
+  savePickupPackage,
+  savePickupWindow,
 } from "@/lib/admin/pickup-batch.server";
 import {
+  formatBelgradeDateTimeLocal,
   isPickupBatchEditable,
+  MYGLS_BOOKING_CHANNEL_LABEL,
+  MYGLS_BOOKING_CHANNELS,
+  parseBelgradeDateTimeLocal,
   PICKUP_BATCH_STATUS_LABEL,
 } from "@/lib/admin/pickup-batch";
 import { db } from "@/lib/db";
@@ -34,11 +40,23 @@ export const metadata = {
 
 const saveDateSchema = z.object({
   batchId: z.string().min(1),
-  pickupDate: z.iso.date("Datum preuzimanja je obavezan."),
+  pickupStart: z.string().min(1, "Početak preuzimanja je obavezan."),
+  pickupEnd: z.string().min(1, "Kraj preuzimanja je obavezan."),
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
 const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
+const packageSchema = batchSchema.extend({
+  lineId: z.string().min(1),
+  weightKg: z.coerce.number().positive().max(40),
+  widthCm: z.coerce.number().positive().max(200),
+  depthCm: z.coerce.number().positive().max(200),
+  heightCm: z.coerce.number().positive().max(200),
+});
+const bookingSchema = batchSchema.extend({
+  channel: z.enum(MYGLS_BOOKING_CHANNELS),
+  reference: z.string().trim().min(1).max(120),
+});
 
 async function createAction() {
   "use server";
@@ -85,13 +103,84 @@ async function saveDateAction(
             parsed.error.issues[0]?.message ?? "Datum preuzimanja nije ispravan.",
         };
       }
-      const date = new Date(`${parsed.data.pickupDate}T00:00:00.000Z`);
-      await savePickupDate(parsed.data.batchId, date);
+      const start = parseBelgradeDateTimeLocal(parsed.data.pickupStart);
+      const end = parseBelgradeDateTimeLocal(parsed.data.pickupEnd);
+      await savePickupWindow(parsed.data.batchId, start, end);
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
         entityId: parsed.data.batchId,
-        message: "Datum preuzimanja je sačuvan.",
+        message: "Termin preuzimanja je sačuvan.",
+      };
+    },
+  )(formData);
+}
+
+async function savePackageAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.save",
+      entity: "PickupBatchLine",
+    },
+    async (_actorId, actionData: FormData) => {
+      const parsed = packageSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error: parsed.error.issues[0]?.message ?? "Mere paketa nisu ispravne.",
+        };
+      }
+      await savePickupPackage(parsed.data.batchId, parsed.data.lineId, {
+        weightKg: parsed.data.weightKg,
+        widthCm: parsed.data.widthCm,
+        depthCm: parsed.data.depthCm,
+        heightCm: parsed.data.heightCm,
+      });
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        message: "Stvarne mere paketa su sačuvane.",
+      };
+    },
+  )(formData);
+}
+
+async function confirmMyGlsBookingAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.mygls-booking.confirm",
+      entity: "PickupBatch",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = bookingSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error: parsed.error.issues[0]?.message ?? "Podaci GLS najave nisu ispravni.",
+        };
+      }
+      const result = await confirmMyGlsPickupAnnouncement(
+        parsed.data.batchId,
+        actorId,
+        { channel: parsed.data.channel, reference: parsed.data.reference },
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.batchId,
+        diff: result,
+        message: `Ručna MyGLS najava je evidentirana za ${result.orderCount} porudžbina.`,
       };
     },
   )(formData);
@@ -206,13 +295,21 @@ async function postAction(
       if (!parsed.success) {
         return { ok: false as const, error: "Nalog nije izabran." };
       }
+      const batch = await db.pickupBatch.findUnique({
+        where: { id: parsed.data.batchId },
+        select: { provider: true },
+      });
+      const availability = await getPickupPostingAvailability(batch?.provider);
       const result = await postPickupBatches([parsed.data.batchId], actorId);
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
         entityId: parsed.data.batchId,
         diff: result,
-        message: `Nalog je proknjižen; X Express pošiljki: ${result.shipmentCount}.`,
+        message:
+          availability.provider === "MYGLS"
+            ? `MyGLS adresnice su kreirane za ${result.shipmentCount} porudžbina. Prikup još nije najavljen.`
+            : `Nalog je proknjižen; X Express pošiljki: ${result.shipmentCount}.`,
       };
     },
   )(formData);
@@ -258,8 +355,13 @@ export default async function PickupBatchPage({
   });
   if (!batch) notFound();
 
-  const editable = isPickupBatchEditable(batch.status);
-  const posting = await getPickupPostingAvailability();
+  const posting = await getPickupPostingAvailability(batch.provider);
+  const myGls = posting.provider === "MYGLS";
+  const editable =
+    isPickupBatchEditable(batch.status) && !batch.labelsCreationStartedAt;
+  const canPost =
+    isPickupBatchEditable(batch.status) &&
+    (myGls ? !batch.labelsCreatedAt : editable);
   const editing = query.mode === "edit" && editable;
   const rows = batch.lines
     .map((line) => pickupLineRow(line))
@@ -273,6 +375,15 @@ export default async function PickupBatchPage({
           numeric: true,
         }),
     );
+  const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
+  const postingBlockReason =
+    (batch.labelsCreationStartedAt ? batch.configurationIssue : null) ??
+    posting.reason ??
+    (myGls && completePackageCount !== rows.length
+      ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
+      : myGls && !batch.pickupWindowEnd
+        ? "Unesite kompletan vremenski prozor preuzimanja."
+        : null);
 
   return (
     <>
@@ -329,16 +440,22 @@ export default async function PickupBatchPage({
               <SubmitButton
                 variant="outline"
                 disabled={
-                  !editable ||
+                  !canPost ||
                   !rows.length ||
                   !batch.pickupDate ||
-                  !posting.available
+                  !posting.available ||
+                  (myGls &&
+                    (!batch.pickupWindowEnd || completePackageCount !== rows.length))
                 }
-                pendingLabel="Knjiženje…"
-                confirm="Proknjižiti nalog i poslati po jednu najavu za svaku porudžbinu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
-                title={posting.reason ?? undefined}
+                pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
+                confirm={
+                  myGls
+                    ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
+                    : "Proknjižiti nalog i poslati po jednu najavu za svaku porudžbinu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
+                }
+                title={postingBlockReason ?? undefined}
               >
-                Proknjiži
+                {myGls ? "Kreiraj adresnice" : "Proknjiži"}
               </SubmitButton>
             </AdminActionForm>
           </div>
@@ -350,7 +467,7 @@ export default async function PickupBatchPage({
           <CardTitle description="Zaglavlje naloga koje ostaje izmenjivo dok nalog nije proknjižen.">
             Podaci naloga
           </CardTitle>
-          <div className="mb-4 grid gap-3 text-sm sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-lg bg-muted-bg/50 p-3">
               <p className="text-ink-500">Status</p>
               <p className="font-semibold">{PICKUP_BATCH_STATUS_LABEL[batch.status]}</p>
@@ -363,28 +480,55 @@ export default async function PickupBatchPage({
               <p className="text-ink-500">Datum naloga</p>
               <p className="font-semibold">{formatDate(batch.createdAt)}</p>
             </div>
+            <div className="rounded-lg bg-muted-bg/50 p-3">
+              <p className="text-ink-500">Kurir</p>
+              <p className="font-semibold">{posting.provider === "MYGLS" ? "MyGLS" : "X Express"}</p>
+            </div>
+            <div className="rounded-lg bg-muted-bg/50 p-3">
+              <p className="text-ink-500">Adresnice</p>
+              <p className="font-semibold">
+                {batch.labelsCreatedAt
+                  ? formatDateTime(batch.labelsCreatedAt)
+                  : batch.labelsCreationStartedAt
+                    ? `Delimično / pokušaj ${formatDateTime(batch.labelsCreationStartedAt)}`
+                    : "Nisu kreirane"}
+              </p>
+            </div>
           </div>
           <AdminActionForm action={saveDateAction}>
-            <fieldset disabled={!editing} className="grid gap-4 md:grid-cols-[minmax(0,320px)_auto] md:items-end">
+            <fieldset disabled={!editing} className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_auto] md:items-end">
               <input type="hidden" name="batchId" value={batch.id} />
-              <Field label="Datum preuzimanja">
+              <Field label="Početak preuzimanja" hint={myGls ? "Za prvi prikup: najmanje 24 sata od trenutka najave." : undefined}>
                 <Input
-                  name="pickupDate"
-                  type="date"
+                  name="pickupStart"
+                  type="datetime-local"
                   required
-                  defaultValue={dateOnly(batch.pickupDate)}
+                  defaultValue={formatBelgradeDateTimeLocal(batch.pickupDate)}
+                />
+              </Field>
+              <Field label="Kraj preuzimanja" hint={myGls ? "Prozor mora trajati najmanje 2 sata." : undefined}>
+                <Input
+                  name="pickupEnd"
+                  type="datetime-local"
+                  required
+                  defaultValue={formatBelgradeDateTimeLocal(batch.pickupWindowEnd)}
                 />
               </Field>
               {editing ? (
                 <div>
-                  <SubmitButton pendingLabel="Čuvanje…">Sačuvaj datum</SubmitButton>
+                  <SubmitButton pendingLabel="Čuvanje…">Sačuvaj termin</SubmitButton>
                 </div>
               ) : null}
             </fieldset>
           </AdminActionForm>
-          {posting.reason ? (
+          {postingBlockReason ? (
             <p className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning">
-              {posting.reason}
+              {postingBlockReason}
+            </p>
+          ) : myGls ? (
+            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
+              MyGLS je spreman za kreiranje adresnica. Adresnica nije najava
+              dolaska kurira; ručna najava se potvrđuje kao poseban korak ispod.
             </p>
           ) : (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
@@ -392,6 +536,45 @@ export default async function PickupBatchPage({
               spakovani, označeni i spremni za preuzimanje.
             </p>
           )}
+
+          {myGls && batch.labelsCreatedAt ? (
+            <div className="mt-4 rounded-lg border border-border p-4">
+              <h3 className="font-semibold">Ručна најava MyGLS prikupa</h3>
+              {batch.externalBookedAt ? (
+                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                  <div><dt className="text-ink-500">Потврђено</dt><dd>{formatDateTime(batch.externalBookedAt)}</dd></div>
+                  <div><dt className="text-ink-500">Канал</dt><dd>{bookingChannelLabel(batch.externalBookingChannel)}</dd></div>
+                  <div><dt className="text-ink-500">Референца</dt><dd className="font-mono">{batch.externalBookingReference ?? "—"}</dd></div>
+                </dl>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-ink-500">
+                    Ово поље попунити тек након што је GLS стварно примио најаву
+                    преко портала, имејла, телефона или договореног сталног термина.
+                  </p>
+                  <AdminActionForm action={confirmMyGlsBookingAction} className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
+                    <input type="hidden" name="batchId" value={batch.id} />
+                    <Field label="Канал најаве">
+                      <select name="channel" required className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
+                        {MYGLS_BOOKING_CHANNELS.map((channel) => (
+                          <option key={channel} value={channel}>{MYGLS_BOOKING_CHANNEL_LABEL[channel]}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="GLS референца / број потврде">
+                      <Input name="reference" required maxLength={120} />
+                    </Field>
+                    <SubmitButton
+                      pendingLabel="Евидентирање…"
+                      confirm="Потврдити да је GLS заиста примио најаву? Само креирана адресница није довољна."
+                    >
+                      Потврди најаву
+                    </SubmitButton>
+                  </AdminActionForm>
+                </>
+              )}
+            </div>
+          ) : null}
         </Card>
 
         <Card>
@@ -411,7 +594,7 @@ export default async function PickupBatchPage({
 
           {rows.length ? (
             <div className="overflow-x-auto">
-              <table className="min-w-[1900px] text-sm">
+              <table className="min-w-[2200px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
                     <th className="px-3 py-3">Broj porudžbine</th>
@@ -426,6 +609,7 @@ export default async function PickupBatchPage({
                     <th className="px-3 py-3">Atribut 4</th>
                     <th className="px-3 py-3">Boja 1</th>
                     <th className="px-3 py-3">Boja 2</th>
+                    <th className="px-3 py-3">Paket / stvarne mere</th>
                     <th className="px-3 py-3 text-right">Količina</th>
                     {editing ? <th className="px-3 py-3">Komanda</th> : null}
                   </tr>
@@ -452,6 +636,23 @@ export default async function PickupBatchPage({
                       <td className="px-3 py-3">{display(row.attribute4)}</td>
                       <td className="px-3 py-3">{display(row.color1)}</td>
                       <td className="px-3 py-3">{display(row.color2)}</td>
+                      <td className="px-3 py-3">
+                        {editing ? (
+                          <AdminActionForm action={savePackageAction} className="flex min-w-[500px] items-end gap-2">
+                            <input type="hidden" name="batchId" value={batch.id} />
+                            <input type="hidden" name="lineId" value={row.lineId} />
+                            <PackageMeasureInput name="weightKg" label="kg" max={40} step="0.001" value={row.weightKg} />
+                            <PackageMeasureInput name="widthCm" label="Š" max={200} value={row.widthCm} />
+                            <PackageMeasureInput name="depthCm" label="D" max={200} value={row.depthCm} />
+                            <PackageMeasureInput name="heightCm" label="V" max={200} value={row.heightCm} />
+                            <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj mere</SubmitButton>
+                          </AdminActionForm>
+                        ) : (
+                          <span className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
+                            #{row.packageNo} · {formatPackageMeasurements(row)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
                       {editing ? (
                         <td className="px-3 py-3">
@@ -495,6 +696,11 @@ export default async function PickupBatchPage({
 function pickupLineRow(line: {
   id: string;
   orderId: string;
+  packageNo: number;
+  weightKg: unknown;
+  widthCm: unknown;
+  depthCm: unknown;
+  heightCm: unknown;
   order: { id: string; number: string };
   orderItem: {
     sku: string;
@@ -526,6 +732,10 @@ function pickupLineRow(line: {
 }) {
   const item = line.orderItem;
   const product = item?.product;
+  const weightKg = measureNumber(line.weightKg);
+  const widthCm = measureNumber(line.widthCm);
+  const depthCm = measureNumber(line.depthCm);
+  const heightCm = measureNumber(line.heightCm);
   return {
     lineId: line.id,
     orderId: line.order.id,
@@ -543,11 +753,15 @@ function pickupLineRow(line: {
     color1: product?.colorPrimary ?? item?.color1 ?? "",
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: item?.qty ?? 0,
+    packageNo: line.packageNo,
+    weightKg,
+    widthCm,
+    depthCm,
+    heightCm,
+    measurementsComplete: [weightKg, widthCm, depthCm, heightCm].every(
+      (value) => value != null && value > 0,
+    ),
   };
-}
-
-function dateOnly(value: Date | null) {
-  return value?.toISOString().slice(0, 10) ?? "";
 }
 
 function formatDate(value: Date) {
@@ -555,6 +769,70 @@ function formatDate(value: Date) {
     dateStyle: "medium",
     timeZone: "Europe/Belgrade",
   }).format(value);
+}
+
+function formatDateTime(value: Date) {
+  return new Intl.DateTimeFormat("sr-Latn-RS", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Belgrade",
+  }).format(value);
+}
+
+function bookingChannelLabel(value: string | null) {
+  return value && value in MYGLS_BOOKING_CHANNEL_LABEL
+    ? MYGLS_BOOKING_CHANNEL_LABEL[
+        value as keyof typeof MYGLS_BOOKING_CHANNEL_LABEL
+      ]
+    : "—";
+}
+
+function measureNumber(value: unknown) {
+  if (value == null) return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function formatPackageMeasurements(row: {
+  weightKg: number | null;
+  widthCm: number | null;
+  depthCm: number | null;
+  heightCm: number | null;
+}) {
+  if ([row.weightKg, row.widthCm, row.depthCm, row.heightCm].some((value) => value == null)) {
+    return "mere nisu kompletne";
+  }
+  return `${row.weightKg} kg · ${row.widthCm}×${row.depthCm}×${row.heightCm} cm`;
+}
+
+function PackageMeasureInput({
+  name,
+  label,
+  max,
+  step = "0.01",
+  value,
+}: {
+  name: string;
+  label: string;
+  max: number;
+  step?: string;
+  value: number | null;
+}) {
+  return (
+    <label className="grid gap-1 text-xs text-ink-500">
+      {label}
+      <input
+        name={name}
+        type="number"
+        min="0.001"
+        max={max}
+        step={step}
+        required
+        defaultValue={value ?? ""}
+        className="h-7 w-16 rounded-md border border-input bg-transparent px-2 text-xs text-ink-900"
+      />
+    </label>
+  );
 }
 
 function display(value: string) {

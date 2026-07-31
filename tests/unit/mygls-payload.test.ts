@@ -10,15 +10,21 @@ const config: MyGlsConfig = {
   username: "qa",
   password: "secret",
   clientNumber: 123,
-  senderIdentityCardNumber: "QA-ID",
+  senderIdentityCardNumber: "123456789",
+  senderIdentityType: "PIB",
   webshopEngine: "QA",
   defaultContent: "Webshop porudžbina",
   typeOfPrinter: "A4_2x2",
   labelBucket: "shipment-labels",
   statusCronSecret: "",
+  codCardEnabled: false,
+  contactServiceEnabled: false,
+  flexDeliveryServiceEnabled: false,
   pickup: {
     name: "Svet povoljnih cena",
-    street: "Vojvođanska 401",
+    street: "Vojvođanska",
+    houseNumber: "401",
+    houseNumberInfo: "",
     city: "Surčin",
     postalCode: "11271",
     country: "RS",
@@ -45,11 +51,33 @@ const order = {
   items: [{ name: "Stolica", qty: 2 }],
 };
 
+const packages = [
+  {
+    packageNo: 1,
+    orderItemId: "item-1",
+    content: "Stolica",
+    weightKg: 7.5,
+    widthCm: 40,
+    depthCm: 50,
+    heightCm: 30,
+  },
+  {
+    packageNo: 2,
+    orderItemId: "item-1",
+    content: "Stolica",
+    weightKg: 7.5,
+    widthCm: 40,
+    depthCm: 50,
+    heightCm: 30,
+  },
+];
+
 describe("MyGLS reclamation payload", () => {
   it("reverses pickup and delivery and suppresses COD for a return", () => {
     const parcel = buildMyGlsParcelForOrder({
       cfg: config,
       order,
+      packages,
       purpose: "RECLAMATION_RETURN",
       pickupDate: new Date("2026-07-30T08:00:00.000Z"),
     });
@@ -75,6 +103,7 @@ describe("MyGLS reclamation payload", () => {
     const parcel = buildMyGlsParcelForOrder({
       cfg: config,
       order,
+      packages,
       purpose: "RECLAMATION_REPLACEMENT",
     });
 
@@ -82,5 +111,66 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.CODAmount).toBe(0);
     expect(parcel.PickupAddress.City).toBe("Surčin");
     expect(parcel.DeliveryAddress.City).toBe("Novi Sad");
+  });
+
+  it("maps every physical package to one real ParcelProperty and never invents dimensions", () => {
+    const parcel = buildMyGlsParcelForOrder({ cfg: config, order, packages });
+
+    expect(parcel.Count).toBe(2);
+    expect(parcel.ParcelPropertyList).toEqual([
+      {
+        Content: "Stolica",
+        PackageType: 2,
+        Weight: 7.5,
+        Height: 30,
+        Width: 40,
+        Length: 50,
+      },
+      {
+        Content: "Stolica",
+        PackageType: 2,
+        Weight: 7.5,
+        Height: 30,
+        Width: 40,
+        Length: 50,
+      },
+    ]);
+    expect(parcel.ServiceList).toBeUndefined();
+  });
+
+  it("blocks incomplete measurements before any provider call", () => {
+    expect(() =>
+      buildMyGlsParcelForOrder({
+        cfg: config,
+        order,
+        packages: [{ ...packages[0], weightKg: null }],
+      }),
+    ).toThrow("Paket 1 nema kompletne stvarne mere: težina");
+  });
+
+  it("keeps card COD and optional notification services behind explicit flags", () => {
+    expect(() =>
+      buildMyGlsParcelForOrder({
+        cfg: config,
+        order: { ...order, paymentMethod: "POUZECE_KARTICA" as const },
+        packages,
+      }),
+    ).toThrow("MYGLS_COD_CARD_ENABLED=false");
+
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: {
+        ...config,
+        codCardEnabled: true,
+        contactServiceEnabled: true,
+        flexDeliveryServiceEnabled: true,
+      },
+      order: { ...order, paymentMethod: "POUZECE_KARTICA" as const },
+      packages,
+    });
+    expect(parcel.CODAmount).toBe(12_000);
+    expect(parcel.ServiceList?.map((service) => service.Code)).toEqual([
+      "CS1",
+      "FDS",
+    ]);
   });
 });

@@ -7,6 +7,7 @@ import {
   type ShipmentPurpose,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import type { PhysicalPackage } from "@/lib/courier/packages";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled } from "./config";
 import { MyGlsClient, bytesFromMyGls } from "./client";
@@ -20,6 +21,8 @@ export async function createMyGlsShipmentForOrder(
   options: {
     purpose?: ShipmentPurpose;
     reclamationId?: string;
+    pickupDate?: Date;
+    packages?: readonly PhysicalPackage[];
   } = {},
 ) {
   const cfg = requireMyGlsEnabled();
@@ -93,6 +96,8 @@ export async function createMyGlsShipmentForOrder(
   const parcel = buildMyGlsParcelForOrder({
     cfg,
     order: { ...order, items: shipmentItems },
+    pickupDate: options.pickupDate,
+    packages: options.packages ?? [],
     purpose,
   });
 
@@ -114,6 +119,7 @@ export async function createMyGlsShipmentForOrder(
 
     const data = {
       provider: MYGLS_PROVIDER,
+      packageCount: parcel.Count,
       purpose,
       reclamationId: reclamation?.id ?? null,
       reclamationQty: reclamation?.quantity ?? null,

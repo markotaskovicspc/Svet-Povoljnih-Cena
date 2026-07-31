@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
   isPickupBatchEditable,
+  formatBelgradeDateTimeLocal,
   nextPickupBatchNumber,
+  parseBelgradeDateTimeLocal,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
+  validateMyGlsPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
 describe("ERP module 13 pickup batches", () => {
@@ -59,5 +62,34 @@ describe("ERP module 13 pickup batches", () => {
     expect(isPickupBatchEditable("CANCELLED")).toBe(false);
     expect(PICKUP_BATCH_STATUS_LABEL.DRAFT).toBe("Novi");
     expect(PICKUP_BATCH_STATUS_LABEL.POSTING).toBe("Slanje kuriru");
+  });
+
+  it("parses the Belgrade wall clock and enforces the 24h/2h MyGLS window", () => {
+    const start = parseBelgradeDateTimeLocal("2026-07-31T14:00");
+    const end = parseBelgradeDateTimeLocal("2026-07-31T16:00");
+
+    expect(start.toISOString()).toBe("2026-07-31T12:00:00.000Z");
+    expect(formatBelgradeDateTimeLocal(start)).toBe("2026-07-31T14:00");
+    expect(() =>
+      validateMyGlsPickupWindow(
+        start,
+        end,
+        new Date("2026-07-30T11:59:59.000Z"),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateMyGlsPickupWindow(
+        start,
+        end,
+        new Date("2026-07-30T12:00:01.000Z"),
+      ),
+    ).toThrow("najmanje 24 sata");
+    expect(() =>
+      validateMyGlsPickupWindow(
+        start,
+        new Date("2026-07-31T13:59:59.000Z"),
+        new Date("2026-07-30T10:00:00.000Z"),
+      ),
+    ).toThrow("najmanje 2 sata");
   });
 });

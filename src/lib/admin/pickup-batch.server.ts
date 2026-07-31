@@ -7,13 +7,27 @@ import {
   getSelectedSmallParcelProvider,
 } from "@/lib/courier";
 import {
+  derivePhysicalPackages,
+  requireCompleteMyGlsPackages,
+  type PhysicalPackage,
+} from "@/lib/courier/packages";
+import {
+  getMyGlsConfig,
+  MYGLS_PROVIDER,
+  requireMyGlsEnabled,
+  type SmallParcelProvider,
+} from "@/lib/mygls/config";
+import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
 } from "@/lib/x-express/config";
 import {
   isPickupBatchEditable,
+  type MyGlsBookingChannel,
+  MYGLS_BOOKING_CHANNEL_LABEL,
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
+  validateMyGlsPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
 type Transaction = Prisma.TransactionClient;
@@ -24,13 +38,34 @@ const TRANSACTION_OPTIONS = {
   timeout: 30_000,
 } as const;
 
-export async function getPickupPostingAvailability() {
-  if ((await getSelectedSmallParcelProvider()) !== "X_EXPRESS") {
-    return {
-      available: false as const,
-      reason: PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
-      provider: "MYGLS" as const,
-    };
+export async function getPickupPostingAvailability(
+  providerOverride?: string | null,
+) {
+  const provider = normalizeProvider(providerOverride) ??
+    (await getSelectedSmallParcelProvider());
+  if (provider === "MYGLS") {
+    try {
+      requireMyGlsEnabled();
+      return {
+        available: true as const,
+        reason: null,
+        provider: "MYGLS" as const,
+        mode: "LABELS_THEN_MANUAL_BOOKING" as const,
+      };
+    } catch (error) {
+      const cfg = getMyGlsConfig();
+      return {
+        available: false as const,
+        reason:
+          cfg.env === "production" && !cfg.enabled
+            ? PICKUP_BATCH_EXTERNAL_BLOCK_REASON
+            : error instanceof Error
+              ? error.message
+              : "MyGLS konfiguracija nije kompletna.",
+        provider: "MYGLS" as const,
+        mode: "LABELS_THEN_MANUAL_BOOKING" as const,
+      };
+    }
   }
   try {
     requireXExpressShipmentConfig(true);
@@ -38,6 +73,7 @@ export async function getPickupPostingAvailability() {
       available: true as const,
       reason: null,
       provider: "X_EXPRESS" as const,
+      mode: "AUTOMATIC_BOOKING" as const,
     };
   } catch (error) {
     return {
@@ -47,6 +83,7 @@ export async function getPickupPostingAvailability() {
           ? error.message
           : "X Express konfiguracija nije kompletna.",
       provider: "X_EXPRESS" as const,
+      mode: "AUTOMATIC_BOOKING" as const,
     };
   }
 }
@@ -68,6 +105,7 @@ export async function createPickupBatch() {
               year,
             ),
             courier: "COURIER_SMALL",
+            provider: availability.provider,
             configurationIssue: availability.reason,
           },
         });
@@ -79,19 +117,77 @@ export async function createPickupBatch() {
   throw new Error("Broj naloga za preuzimanje nije mogao da se generiše.");
 }
 
-export async function savePickupDate(batchId: string, pickupDate: Date) {
+export async function savePickupWindow(
+  batchId: string,
+  pickupDate: Date,
+  pickupWindowEnd: Date,
+) {
   if (!batchId) throw new Error("Nalog za preuzimanje nije izabran.");
-  if (Number.isNaN(pickupDate.getTime())) {
-    throw new Error("Datum preuzimanja nije ispravan.");
-  }
   const batch = await db.pickupBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      provider: true,
+      labelsCreationStartedAt: true,
+      labelsCreatedAt: true,
+    },
   });
   assertEditableBatch(batch);
+  const provider = normalizeProvider(batch.provider) ??
+    (await getSelectedSmallParcelProvider());
+  if (provider === "MYGLS") {
+    const priorMyGlsPickupCount = await db.pickupBatch.count({
+      where: {
+        id: { not: batchId },
+        provider: MYGLS_PROVIDER,
+        status: { in: ["BOOKED", "PICKED_UP"] },
+        externalBookedAt: { not: null },
+      },
+    });
+    validateMyGlsPickupWindow(pickupDate, pickupWindowEnd, new Date(), {
+      requireLeadTime: priorMyGlsPickupCount === 0,
+    });
+  } else if (pickupWindowEnd <= pickupDate) {
+    throw new Error("Kraj termina mora biti posle početka preuzimanja.");
+  }
   return db.pickupBatch.update({
     where: { id: batchId },
-    data: { pickupDate },
+    data: { pickupDate, pickupWindowEnd },
+  });
+}
+
+export async function savePickupPackage(
+  batchId: string,
+  lineId: string,
+  input: Omit<PhysicalPackage, "packageNo" | "orderItemId" | "content">,
+) {
+  const line = await db.pickupBatchLine.findFirst({
+    where: { id: lineId, batchId },
+    include: {
+      batch: {
+        select: {
+          id: true,
+          status: true,
+          labelsCreationStartedAt: true,
+          labelsCreatedAt: true,
+        },
+      },
+    },
+  });
+  if (!line) throw new Error("Paket nije pronađen u ovom nalogu.");
+  assertEditableBatch(line.batch);
+  const [pkg] = requireCompleteMyGlsPackages([
+    { ...input, packageNo: line.packageNo },
+  ]);
+  return db.pickupBatchLine.update({
+    where: { id: line.id },
+    data: {
+      weightKg: pkg.weightKg,
+      widthCm: pkg.widthCm,
+      depthCm: pkg.depthCm,
+      heightCm: pkg.heightCm,
+    },
   });
 }
 
@@ -103,7 +199,13 @@ export async function loadEligibleOrders(
     await lockBatch(tx, batchId);
     const batch = await tx.pickupBatch.findUnique({
       where: { id: batchId },
-      select: { id: true, status: true, number: true },
+      select: {
+        id: true,
+        status: true,
+        number: true,
+        labelsCreationStartedAt: true,
+        labelsCreatedAt: true,
+      },
     });
     assertEditableBatch(batch);
 
@@ -127,6 +229,15 @@ export async function loadEligibleOrders(
         )
         AND NOT EXISTS (
           SELECT 1
+          FROM "OrderItem" AS mixed_items
+          WHERE mixed_items."orderId" = orders."id"
+            AND (
+              mixed_items."warehouseId" IS NULL
+              OR mixed_items."warehouseId" <> ${dc.id}
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
           FROM "PickupBatchLine" AS pickup_lines
           WHERE pickup_lines."orderId" = orders."id"
         )
@@ -142,21 +253,45 @@ export async function loadEligibleOrders(
         orderId: { in: orderIds },
         warehouseId: dc.id,
       },
-      select: { id: true, orderId: true, sku: true },
+      select: {
+        id: true,
+        orderId: true,
+        sku: true,
+        name: true,
+        qty: true,
+        product: {
+          select: {
+            packQty: true,
+            packWidthCm: true,
+            packDepthCm: true,
+            packHeightCm: true,
+            packGrossWeightKg: true,
+            widthCm: true,
+            depthCm: true,
+            heightCm: true,
+            grossWeightKg: true,
+            weightKg: true,
+          },
+        },
+      },
       orderBy: [{ orderId: "asc" }, { sku: "asc" }, { id: "asc" }],
     });
-    const packageByOrder = new Map<string, number>();
+    const packages = orderIds.flatMap((orderId) =>
+      derivePhysicalPackages(items.filter((item) => item.orderId === orderId)).map(
+        (pkg) => ({ ...pkg, orderId }),
+      ),
+    );
     await tx.pickupBatchLine.createMany({
-      data: items.map((item) => {
-        const packageNo = (packageByOrder.get(item.orderId) ?? 0) + 1;
-        packageByOrder.set(item.orderId, packageNo);
-        return {
+      data: packages.map((pkg) => ({
           batchId,
-          orderId: item.orderId,
-          orderItemId: item.id,
-          packageNo,
-        };
-      }),
+          orderId: pkg.orderId,
+          orderItemId: pkg.orderItemId,
+          packageNo: pkg.packageNo,
+          weightKg: pkg.weightKg,
+          widthCm: pkg.widthCm,
+          depthCm: pkg.depthCm,
+          heightCm: pkg.heightCm,
+        })),
     });
     await tx.order.updateMany({
       where: { id: { in: orderIds }, status: "KREIRANO" },
@@ -170,7 +305,7 @@ export async function loadEligibleOrders(
         actorId,
       })),
     });
-    return { orderCount: orderIds.length, lineCount: items.length };
+    return { orderCount: orderIds.length, lineCount: packages.length };
   }, TRANSACTION_OPTIONS);
 }
 
@@ -184,7 +319,13 @@ export async function removeOrderFromPickupBatch(
     await lockOrders(tx, [orderId]);
     const batch = await tx.pickupBatch.findUnique({
       where: { id: batchId },
-      select: { id: true, status: true, number: true },
+      select: {
+        id: true,
+        status: true,
+        number: true,
+        labelsCreationStartedAt: true,
+        labelsCreatedAt: true,
+      },
     });
     assertEditableBatch(batch);
     const removed = await tx.pickupBatchLine.deleteMany({
@@ -239,8 +380,6 @@ export async function deletePickupBatches(
 
 export async function postPickupBatches(batchIds: string[], actorId: string) {
   if (!batchIds.length) throw new Error("Izaberite bar jedan nalog.");
-  const availability = await getPickupPostingAvailability();
-  if (!availability.available) throw new Error(availability.reason);
 
   const uniqueIds = Array.from(new Set(batchIds));
   let posted = 0;
@@ -254,6 +393,23 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
 }
 
 async function postPickupBatch(batchId: string, actorId: string) {
+  const summary = await db.pickupBatch.findUnique({
+    where: { id: batchId },
+    select: { provider: true },
+  });
+  if (!summary) throw new Error("Nalog za preuzimanje ne postoji.");
+  const availability = await getPickupPostingAvailability(summary.provider);
+  if (!availability.available) throw new Error(availability.reason);
+  if (!summary.provider) {
+    await db.pickupBatch.update({
+      where: { id: batchId },
+      data: { provider: availability.provider },
+    });
+  }
+  if (availability.provider === "MYGLS") {
+    return createMyGlsLabelsForPickupBatch(batchId, actorId);
+  }
+
   const stalePosting = new Date(Date.now() - 30 * 60_000);
   await db.pickupBatch.updateMany({
     where: { id: batchId, status: "POSTING", updatedAt: { lt: stalePosting } },
@@ -296,7 +452,9 @@ async function postPickupBatch(batchId: string, actorId: string) {
 
     const shipmentIds: string[] = [];
     for (const orderId of orderIds) {
-      const shipment = await createShipmentForOrder(orderId);
+      const shipment = await createShipmentForOrder(orderId, {
+        packageCount: batch.lines.filter((line) => line.orderId === orderId).length,
+      });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
           `Porudžbina ${orderId} nije uspešno najavljena X Express-u.`,
@@ -337,6 +495,225 @@ async function postPickupBatch(batchId: string, actorId: string) {
     });
     throw error;
   }
+}
+
+async function createMyGlsLabelsForPickupBatch(
+  batchId: string,
+  actorId: string,
+) {
+  const existing = await db.pickupBatch.findUnique({
+    where: { id: batchId },
+    select: {
+      labelsCreationStartedAt: true,
+      labelsCreatedAt: true,
+      lines: { select: { orderId: true } },
+    },
+  });
+  if (existing?.labelsCreatedAt) {
+    return {
+      shipmentCount: new Set(existing.lines.map((line) => line.orderId)).size,
+      shipmentIds: [] as string[],
+    };
+  }
+
+  const claimed = await db.pickupBatch.updateMany({
+    where: { id: batchId, status: "DRAFT" },
+    data: {
+      status: "POSTING",
+      labelsCreationStartedAt: existing?.labelsCreationStartedAt ?? new Date(),
+      configurationIssue: null,
+    },
+  });
+  if (!claimed.count) {
+    throw new Error(
+      "Nalog nije nov ili drugi administrator trenutno kreira MyGLS adresnice.",
+    );
+  }
+
+  try {
+    const batch = await db.pickupBatch.findUnique({
+      where: { id: batchId },
+      include: {
+        lines: {
+          include: {
+            orderItem: { select: { name: true } },
+          },
+          orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
+        },
+      },
+    });
+    if (!batch || batch.status !== "POSTING") {
+      throw new Error("Nalog nije dostupan za kreiranje MyGLS adresnica.");
+    }
+    if (normalizeProvider(batch.provider) !== "MYGLS") {
+      throw new Error("Nalog nije namenjen MyGLS kuriru.");
+    }
+    if (!batch.pickupDate || !batch.pickupWindowEnd) {
+      throw new Error("Početak i kraj termina preuzimanja su obavezni.");
+    }
+    const priorMyGlsPickupCount = await db.pickupBatch.count({
+      where: {
+        id: { not: batch.id },
+        provider: MYGLS_PROVIDER,
+        status: { in: ["BOOKED", "PICKED_UP"] },
+        externalBookedAt: { not: null },
+      },
+    });
+    validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
+      requireLeadTime: priorMyGlsPickupCount === 0,
+    });
+    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
+    if (!orderIds.length) {
+      throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
+    }
+
+    const shipmentIds: string[] = [];
+    for (const orderId of orderIds) {
+      const packageLines = batch.lines.filter((line) => line.orderId === orderId);
+      const packages = requireCompleteMyGlsPackages(
+        packageLines.map((line) => ({
+          packageNo: line.packageNo,
+          orderItemId: line.orderItemId,
+          content: line.orderItem?.name,
+          weightKg: Number(line.weightKg ?? 0),
+          widthCm: Number(line.widthCm ?? 0),
+          depthCm: Number(line.depthCm ?? 0),
+          heightCm: Number(line.heightCm ?? 0),
+        })),
+      );
+      const shipment = await createShipmentForOrder(orderId, {
+        pickupDate: batch.pickupDate,
+        packages,
+        packageCount: packages.length,
+      });
+      if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
+        throw new Error(
+          `Porudžbina ${orderId} nema uspešno kreiranu MyGLS adresnicu.`,
+        );
+      }
+      shipmentIds.push(shipment.id);
+    }
+
+    await db.$transaction(async (tx) => {
+      await lockBatch(tx, batch.id);
+      const completed = await tx.pickupBatch.updateMany({
+        where: { id: batch.id, status: "POSTING" },
+        data: {
+          status: "DRAFT",
+          labelsCreatedAt: new Date(),
+          labelsCreatedById: actorId,
+          configurationIssue: null,
+        },
+      });
+      if (!completed.count) {
+        throw new Error("Status naloga promenjen je tokom kreiranja adresnica.");
+      }
+      await tx.orderStatusEvent.createMany({
+        data: orderIds.map((orderId) => ({
+          orderId,
+          status: "U_PRIPREMI" as const,
+          note: `MyGLS adresnica je kreirana za nalog ${batch.number}; prikup još nije najavljen.`,
+          actorId,
+        })),
+      });
+    }, TRANSACTION_OPTIONS);
+    return { shipmentCount: shipmentIds.length, shipmentIds };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "MyGLS adresnice nisu kreirane.";
+    await db.pickupBatch.updateMany({
+      where: { id: batchId, status: "POSTING" },
+      data: { status: "DRAFT", configurationIssue: message },
+    });
+    throw error;
+  }
+}
+
+export async function confirmMyGlsPickupAnnouncement(
+  batchId: string,
+  actorId: string,
+  input: {
+    channel: MyGlsBookingChannel;
+    reference: string;
+  },
+) {
+  if (!input.reference.trim()) {
+    throw new Error("Referenca GLS najave je obavezna.");
+  }
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const batch = await tx.pickupBatch.findUnique({
+      where: { id: batchId },
+      include: { lines: { select: { orderId: true } } },
+    });
+    if (!batch) throw new Error("Nalog za preuzimanje ne postoji.");
+    if (normalizeProvider(batch.provider) !== "MYGLS") {
+      throw new Error("Ručna potvrda najave dozvoljena je samo za MyGLS nalog.");
+    }
+    if (batch.status !== "DRAFT") {
+      throw new Error("Samo novi MyGLS nalog može biti potvrđen kao najavljen.");
+    }
+    if (!batch.labelsCreatedAt) {
+      throw new Error("Prvo moraju biti kreirane MyGLS adresnice za sve pakete.");
+    }
+    if (!batch.pickupDate || !batch.pickupWindowEnd) {
+      throw new Error("Termin preuzimanja nije kompletan.");
+    }
+    const priorMyGlsPickupCount = await tx.pickupBatch.count({
+      where: {
+        id: { not: batch.id },
+        provider: MYGLS_PROVIDER,
+        status: { in: ["BOOKED", "PICKED_UP"] },
+        externalBookedAt: { not: null },
+      },
+    });
+    validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
+      requireLeadTime: priorMyGlsPickupCount === 0,
+    });
+    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
+    if (!orderIds.length) throw new Error("Nalog nema pakete za preuzimanje.");
+
+    const shipments = await tx.shipment.findMany({
+      where: {
+        orderId: { in: orderIds },
+        provider: MYGLS_PROVIDER,
+        purpose: "ORDER_DELIVERY",
+        status: { not: "FAILED" },
+      },
+      select: { orderId: true },
+    });
+    const shipmentOrders = new Set(shipments.map((shipment) => shipment.orderId));
+    const missing = orderIds.filter((orderId) => !shipmentOrders.has(orderId));
+    if (missing.length) {
+      throw new Error(
+        `Nedostaje uspešna MyGLS adresnica za ${missing.length} porudžbina.`,
+      );
+    }
+
+    const reference = input.reference.trim().slice(0, 120);
+    const bookedAt = new Date();
+    await tx.pickupBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: "BOOKED",
+        manifestRef: `MYGLS:${input.channel}:${reference}`,
+        externalBookedAt: bookedAt,
+        externalBookingChannel: input.channel,
+        externalBookingReference: reference,
+        externalBookedById: actorId,
+        configurationIssue: null,
+      },
+    });
+    await tx.orderStatusEvent.createMany({
+      data: orderIds.map((orderId) => ({
+        orderId,
+        status: "U_PRIPREMI" as const,
+        note: `MyGLS prikup ${batch.number} ručno potvrđen preko ${MYGLS_BOOKING_CHANNEL_LABEL[input.channel]} (ref. ${reference}).`,
+        actorId,
+      })),
+    });
+    return { orderCount: orderIds.length, bookedAt };
+  }, TRANSACTION_OPTIONS);
 }
 
 async function findDcWarehouse(tx: Transaction) {
@@ -398,12 +775,34 @@ async function lockOrders(tx: Transaction, orderIds: string[]) {
 }
 
 function assertEditableBatch(
-  batch: { id: string; status: PickupBatchStatus } | null,
-): asserts batch is { id: string; status: PickupBatchStatus } {
+  batch: {
+    id: string;
+    status: PickupBatchStatus;
+    labelsCreationStartedAt?: Date | null;
+    labelsCreatedAt?: Date | null;
+  } | null,
+): asserts batch is {
+  id: string;
+  status: PickupBatchStatus;
+  labelsCreationStartedAt?: Date | null;
+  labelsCreatedAt?: Date | null;
+} {
   if (!batch) throw new Error("Nalog za preuzimanje ne postoji.");
   if (!isPickupBatchEditable(batch.status)) {
     throw new Error("Samo novi nalog može da se menja ili obriše.");
   }
+  if (batch.labelsCreationStartedAt || batch.labelsCreatedAt) {
+    throw new Error(
+      "Nalog je zaključan jer je kreiranje MyGLS adresnica već započeto.",
+    );
+  }
+}
+
+function normalizeProvider(value: string | null | undefined): SmallParcelProvider | null {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === "MYGLS") return "MYGLS";
+  if (normalized === "X_EXPRESS" || normalized === "XPRESS") return "X_EXPRESS";
+  return null;
 }
 
 function isRetryableCreateError(error: unknown) {

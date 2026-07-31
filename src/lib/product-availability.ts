@@ -99,3 +99,5 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     readiness,
   };
 }
+
+export type ProductAvailability = ReturnType<typeof getProductAvailability>;

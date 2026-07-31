@@ -42,6 +42,12 @@ interface RouteProps {
   params: Promise<{ slug: string[] }>;
 }
 
+export const revalidate = 30;
+
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const resolved = await resolveTrailAndTitle(slug);

@@ -883,6 +883,10 @@ export async function getErpModule(
   }));
   const commands = runtimeDefinition.commands.map((command) => ({
     ...command,
+    label:
+      pickupAvailability?.provider === "MYGLS" && command.action === "pickup.post"
+        ? "Kreiraj adresnice"
+        : command.label,
     disabledReason:
       pickupAvailability && command.action === "pickup.post"
         ? pickupAvailability.reason ?? undefined

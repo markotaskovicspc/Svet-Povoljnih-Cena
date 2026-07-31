@@ -23,6 +23,8 @@ export class MyGlsProviderError extends Error {
 export interface MyGlsPickupAddress {
   name: string;
   street: string;
+  houseNumber: string;
+  houseNumberInfo: string;
   city: string;
   postalCode: string;
   country: string;
@@ -40,11 +42,15 @@ export interface MyGlsConfig {
   password: string;
   clientNumber: number | null;
   senderIdentityCardNumber: string;
+  senderIdentityType: "PIB" | "ID_CARD";
   webshopEngine: string;
   defaultContent: string;
   typeOfPrinter: string;
   labelBucket: string;
   statusCronSecret: string;
+  codCardEnabled: boolean;
+  contactServiceEnabled: boolean;
+  flexDeliveryServiceEnabled: boolean;
   pickup: MyGlsPickupAddress;
 }
 
@@ -87,14 +93,23 @@ export function getMyGlsConfig(): MyGlsConfig {
     password: trim(process.env.MYGLS_PASSWORD),
     clientNumber: int(process.env.MYGLS_CLIENT_NUMBER),
     senderIdentityCardNumber: trim(process.env.MYGLS_SENDER_IDENTITY_CARD_NUMBER),
+    senderIdentityType:
+      trim(process.env.MYGLS_SENDER_IDENTITY_TYPE).toUpperCase() === "ID_CARD"
+        ? "ID_CARD"
+        : "PIB",
     webshopEngine: trim(process.env.MYGLS_WEBSHOP_ENGINE) || "Svet povoljnih cena",
     defaultContent: trim(process.env.MYGLS_DEFAULT_CONTENT) || "Webshop order",
     typeOfPrinter: trim(process.env.MYGLS_TYPE_OF_PRINTER) || "A4_2x2",
     labelBucket: trim(process.env.MYGLS_LABEL_BUCKET) || "shipment-labels",
     statusCronSecret: trim(process.env.MYGLS_STATUS_CRON_SECRET),
+    codCardEnabled: bool(process.env.MYGLS_COD_CARD_ENABLED),
+    contactServiceEnabled: bool(process.env.MYGLS_CONTACT_SERVICE_ENABLED),
+    flexDeliveryServiceEnabled: bool(process.env.MYGLS_FLEX_DELIVERY_SERVICE_ENABLED),
     pickup: {
       name: trim(process.env.MYGLS_PICKUP_NAME),
       street: trim(process.env.MYGLS_PICKUP_STREET),
+      houseNumber: trim(process.env.MYGLS_PICKUP_HOUSE_NUMBER),
+      houseNumberInfo: trim(process.env.MYGLS_PICKUP_HOUSE_NUMBER_INFO),
       city: trim(process.env.MYGLS_PICKUP_CITY),
       postalCode: trim(process.env.MYGLS_PICKUP_POSTAL_CODE),
       country: trim(process.env.MYGLS_PICKUP_COUNTRY) || "RS",
@@ -118,10 +133,44 @@ export function requireMyGlsEnabled() {
   if (!cfg.senderIdentityCardNumber) {
     throw new MyGlsConfigError("MYGLS_SENDER_IDENTITY_CARD_NUMBER je obavezan za Srbiju.");
   }
-  const missingPickup = Object.entries(cfg.pickup).filter(([, value]) => !value);
+  if (
+    cfg.senderIdentityType === "PIB" &&
+    !/^\d{9}$/.test(cfg.senderIdentityCardNumber)
+  ) {
+    throw new MyGlsConfigError(
+      "MyGLS identitet tipa PIB mora sadržati tačno 9 cifara.",
+    );
+  }
+  const fiscalTin = trim(process.env.FISCAL_TIN);
+  if (
+    cfg.senderIdentityType === "PIB" &&
+    fiscalTin &&
+    cfg.senderIdentityCardNumber !== fiscalTin
+  ) {
+    throw new MyGlsConfigError(
+      "MyGLS PIB pošiljaoca se ne poklapa sa FISCAL_TIN.",
+    );
+  }
+  const requiredPickupFields = [
+    "name",
+    "street",
+    "houseNumber",
+    "city",
+    "postalCode",
+    "country",
+    "contactName",
+    "contactPhone",
+    "contactEmail",
+  ] as const;
+  const missingPickup = requiredPickupFields.filter((key) => !cfg.pickup[key]);
   if (missingPickup.length) {
     throw new MyGlsConfigError(
-      `MyGLS pickup adresa nije kompletna: ${missingPickup.map(([key]) => key).join(", ")}.`,
+      `MyGLS pickup adresa nije kompletna: ${missingPickup.join(", ")}.`,
+    );
+  }
+  if (!/^\d/.test(cfg.pickup.houseNumber)) {
+    throw new MyGlsConfigError(
+      "MYGLS_PICKUP_HOUSE_NUMBER mora početi cifrom; GLS mora potvrditi numeričku vrednost za adresu 'bb'.",
     );
   }
   return cfg;

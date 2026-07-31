@@ -16,18 +16,18 @@ import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
+import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
 import { getProductBySlug, listProductRail } from "@/lib/api/catalog";
-import { formatDate, formatDimensions, formatRsd } from "@/lib/format";
+import { formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
-import { getCurrentUser } from "@/lib/auth/session";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -50,6 +50,14 @@ interface RouteProps {
   params: Promise<{ slug: string }>;
 }
 
+// Product pages are generated on first visit, then served from the CDN and
+// refreshed in the background. No user/session data may be read in this route.
+export const revalidate = 30;
+
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
@@ -63,18 +71,10 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 
 export default async function ProductPage({ params }: RouteProps) {
   const { slug } = await params;
-  const [catalogProduct, currentUser] = await Promise.all([
-    getProductBySlug(slug),
-    getCurrentUser(),
-  ]);
+  const catalogProduct = await getProductBySlug(slug);
   if (!catalogProduct) notFound();
-  const product: Product = {
-    ...catalogProduct,
-    loyaltyEligible: currentUser?.userType === "customer",
-  };
-
-  const price = effectiveUnitPrice(product);
-  const hasReducedPrice = price.effective < price.full;
+  const product: Product = catalogProduct;
+  const publicPrice = effectiveUnitPrice(product);
 
   // Row I — Breadcrumbs
   const trail: Crumb[] = [
@@ -130,8 +130,8 @@ export default async function ProductPage({ params }: RouteProps) {
         item={{
           sku: product.sku,
           name: product.name,
-          unitPrice: price.effective,
-          fullUnitPrice: price.full,
+          unitPrice: publicPrice.effective,
+          fullUnitPrice: publicPrice.full,
           categories: product.categoryPath,
         }}
       />
@@ -179,47 +179,7 @@ export default async function ProductPage({ params }: RouteProps) {
           {/* Price block — only the effective price is emphasised. */}
           <div className="grid gap-1.5 md:grid-cols-[minmax(0,1fr)_minmax(270px,0.9fr)] md:items-end md:gap-2.5">
             <div>
-              <p className="mb-0.5 text-xs font-semibold text-ink-500 md:mb-1">
-                {price.kind === "loyalty"
-                  ? "Loyalty cena"
-                  : price.kind === "sale" || price.kind === "linear"
-                    ? "Akcijska cena"
-                    : "Cena"}
-              </p>
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                {hasReducedPrice ? (
-                  <>
-                    <span className="text-action text-[30px] leading-none font-black md:text-[34px]">
-                      {formatRsd(price.effective)}
-                    </span>
-                    <span className="text-sm text-ink-500 line-through">
-                      {formatRsd(price.full)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[28px] leading-none font-black text-ink-900 md:text-[30px]">
-                    {formatRsd(price.full)}
-                  </span>
-                )}
-              </div>
-              {price.kind === "sale" && product.action?.isPermanent ? (
-                <p className="mt-1 text-xs text-ink-500">
-                  Trajno niska cena od 01.05.2026.
-                </p>
-              ) : price.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
-                <p className="mt-1 text-xs text-ink-500">
-                  Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
-                  {formatDate(product.action.endsAt)}
-                </p>
-              ) : price.kind === "loyalty" ? (
-                <p className="mt-1 text-xs text-ink-500">
-                  Cena za kupce sa nalogom.
-                </p>
-              ) : price.kind === "linear" ? (
-                <p className="mt-1 text-xs text-ink-500">
-                  Dodatni akcijski popust na izabrani asortiman.
-                </p>
-              ) : null}
+              <PdpPrice product={product} />
             </div>
             <PdpAddToCart product={product} variant="desktop" />
           </div>

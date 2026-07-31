@@ -10,6 +10,8 @@ import {
 import { getHomeLayout } from "@/lib/storefront/homepage";
 import { HomeSectionSlotKey } from "@prisma/client";
 
+export const revalidate = 60;
+
 export default async function Home() {
   const [banners, mobileTabs, homeLayout] = await Promise.all([
     getActiveBanners(),

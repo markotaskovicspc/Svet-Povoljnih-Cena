@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 interface Crumb {
   label: string;
@@ -140,13 +141,12 @@ const mobileMenuShortcutTabs = [
 export function MobileNav({
   tabs,
   categories,
-  isCustomerLoggedIn = false,
 }: {
   tabs: Tab[];
   categories: NavNode[];
-  isCustomerLoggedIn?: boolean;
 }) {
   const pathname = usePathname();
+  const isCustomerLoggedIn = useLoyaltyEligibility();
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: categories }]);
   const [searchOpen, setSearchOpen] = useState(false);

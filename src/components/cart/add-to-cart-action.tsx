@@ -10,7 +10,10 @@ import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
 import { getMediaVariantUrl } from "@/lib/media";
 import { effectiveUnitPrice } from "@/lib/pricing";
-import { getProductAvailability } from "@/lib/product-availability";
+import {
+  getProductAvailability,
+  type ProductAvailability,
+} from "@/lib/product-availability";
 import {
   recordFirstPartyEvent,
   recordGa4AddToCart,
@@ -26,10 +29,14 @@ import {
  *
  * Returns the resolved sale unit price for callers that need it.
  */
-export function commitAddToCart(product: Product, qty = 1): number {
+export function commitAddToCart(
+  product: Product,
+  qty = 1,
+  options?: { availability?: ProductAvailability },
+): number {
   const price = effectiveUnitPrice(product);
   const sale = price.effective;
-  const availability = getProductAvailability(product);
+  const availability = options?.availability ?? getProductAvailability(product);
 
   if (!availability.canAddToCart) {
     toast.error(availability.message);

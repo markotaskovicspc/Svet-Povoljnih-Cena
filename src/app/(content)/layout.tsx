@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ScrollProgress } from "@/components/motion/scroll-progress";
+import { StorefrontShell } from "@/components/layout/storefront-shell";
 
 /**
  * Shared chrome for editorial / static content pages (Phase 1G):
@@ -7,9 +8,9 @@ import { ScrollProgress } from "@/components/motion/scroll-progress";
  */
 export default function ContentLayout({ children }: { children: ReactNode }) {
   return (
-    <>
+    <StorefrontShell>
       <ScrollProgress />
       {children}
-    </>
+    </StorefrontShell>
   );
 }

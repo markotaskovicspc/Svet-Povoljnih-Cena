@@ -313,18 +313,23 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(heading).toHaveCount(1);
       await expect(heading).toBeVisible();
       await expect(page.getByText("Datum naloga", { exact: true })).toBeVisible();
-      await page.getByLabel("Datum preuzimanja").fill("2026-07-30");
-      await page.getByRole("button", { name: "Sačuvaj datum" }).click();
+      const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
+      const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
+      await page.getByLabel("Početak preuzimanja").fill(pickupStart.toISOString().slice(0, 16));
+      await page.getByLabel("Kraj preuzimanja").fill(pickupEnd.toISOString().slice(0, 16));
+      await page.getByRole("button", { name: "Sačuvaj termin" }).click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Datum preuzimanja je sačuvan",
+          hasText: "Termin preuzimanja je sačuvan",
         }),
       ).toBeVisible();
-      expect(
-        (
-          await db.pickupBatch.findUniqueOrThrow({ where: { id: firstBatchId } })
-        ).pickupDate?.toISOString().slice(0, 10),
-      ).toBe("2026-07-30");
+      const savedWindow = await db.pickupBatch.findUniqueOrThrow({
+        where: { id: firstBatchId },
+      });
+      expect(savedWindow.pickupDate).not.toBeNull();
+      expect(savedWindow.pickupWindowEnd?.getTime()).toBeGreaterThan(
+        savedWindow.pickupDate!.getTime(),
+      );
     });
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
@@ -495,7 +500,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("Proknjiži je blokiran i direktni API ne može da ga zaobiđe", async () => {
       await expect(
-        page.getByRole("button", { name: "Proknjiži", exact: true }),
+        page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
       ).toBeDisabled();
       const response = await page.request.post(
         "/api/admin/erp/preuzimanja/commands",
@@ -504,7 +509,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         },
       );
       expect(response.status()).toBe(400);
-      expect((await response.json()).error).toContain("Čeka se GLS API");
+      expect((await response.json()).error).toContain("MYGLS_PRODUCTION_ACCEPTED=false");
       expect(
         (
           await db.pickupBatch.findUniqueOrThrow({ where: { id: secondBatchId } })

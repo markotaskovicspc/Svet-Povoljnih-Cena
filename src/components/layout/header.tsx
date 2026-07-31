@@ -14,19 +14,19 @@ import { MobileNav } from "./mobile-nav";
 import { DesktopMenu } from "./desktop-menu";
 import { BRAND } from "@/lib/brand";
 import type { NavNode } from "@/data/site";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 const SCROLL_THRESHOLD = 16;
 
 export function Header({
   tabs,
   categories,
-  isCustomerLoggedIn = false,
 }: {
   tabs: Tab[];
   categories: NavNode[];
-  isCustomerLoggedIn?: boolean;
 }) {
   const pathname = usePathname();
+  const isCustomerLoggedIn = useLoyaltyEligibility();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -114,7 +114,6 @@ export function Header({
         <MobileNav
           tabs={tabs}
           categories={categories}
-          isCustomerLoggedIn={isCustomerLoggedIn}
         />
         <Link
           href="/"

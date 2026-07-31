@@ -8,12 +8,16 @@
  * Keeps the purchase control visible on desktop and mobile; stock messaging can
  * be layered into the same control when backend availability rules are final.
  */
+import { useEffect, useState } from "react";
 import { Heart } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
-import { getProductAvailability } from "@/lib/product-availability";
+import {
+  getProductAvailability,
+  type ProductAvailability,
+} from "@/lib/product-availability";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
@@ -26,6 +30,9 @@ interface PdpAddToCartProps {
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const loyaltyEligible = useLoyaltyEligibility();
+  const [isActiveVariant, setIsActiveVariant] = useState(false);
+  const [liveAvailability, setLiveAvailability] =
+    useState<ProductAvailability | null>(null);
   const pricingProduct =
     product.loyaltyEligible === loyaltyEligible
       ? product
@@ -35,11 +42,61 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const lineQty = useCart(
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
-  const availability = getProductAvailability(product);
+  const availability = liveAvailability ?? getProductAvailability(product);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const update = () =>
+      setIsActiveVariant(
+        variant === "desktop" ? desktop.matches : !desktop.matches,
+      );
+
+    update();
+    desktop.addEventListener("change", update);
+    return () => desktop.removeEventListener("change", update);
+  }, [variant]);
+
+  useEffect(() => {
+    if (!isActiveVariant) return;
+
+    let cancelled = false;
+    let activeController: AbortController | null = null;
+
+    async function refreshAvailability() {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+      try {
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(product.slug)}/availability`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          availability?: ProductAvailability;
+        };
+        if (!cancelled && payload.availability) {
+          setLiveAvailability(payload.availability);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn("[availability] Failed to refresh PDP availability.", error);
+        }
+      }
+    }
+
+    void refreshAvailability();
+    const interval = window.setInterval(refreshAvailability, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      activeController?.abort();
+    };
+  }, [isActiveVariant, product.slug]);
 
   function handleAdd() {
     if (!availability.canAddToCart) return;
-    commitAddToCart(pricingProduct, 1);
+    commitAddToCart(pricingProduct, 1, { availability });
   }
 
   const ctas = (
@@ -76,7 +133,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
     return (
       <div className="hidden flex-col gap-2 md:flex">
         {ctas}
-        <p className="text-xs text-ink-500">
+        <p className="text-xs text-ink-500" aria-live="polite">
           {availability.isSupplierSourced
             ? availability.message
             : availability.canAddToCart
