@@ -947,14 +947,25 @@ test.describe("article master acceptance", () => {
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
     const skuInput = form.locator('input[name="sku"]');
+    await skuInput.fill(productSku);
+    await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
+    const requiredFieldsAlert = form.getByRole("alert");
+    await expect(requiredFieldsAlert).toContainText(
+      "Popunite obavezna polja pre čuvanja",
+    );
+    await expect(requiredFieldsAlert).toContainText("Širina (cm)");
+    await expect(requiredFieldsAlert).toContainText("Dubina (cm)");
+    await expect(requiredFieldsAlert).toContainText("Visina (cm)");
+    await expect(requiredFieldsAlert).toBeFocused();
+
     await form.locator('input[name="widthCm"]').fill("1");
     await form.locator('input[name="depthCm"]').fill("1");
     await form.locator('input[name="heightCm"]').fill("1");
-    await skuInput.fill(productSku);
     await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
     await expect(form.getByRole("alert")).toContainText("već postoji", {
       timeout: 180_000,
     });
+    await expect(form.getByRole("alert")).toBeFocused();
     await expect(
       db.product.findUniqueOrThrow({
         where: { id: generatedProductId },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   EMPTY_ADMIN_ACTION_STATE,
@@ -12,6 +12,47 @@ type AdminFormAction = (
   state: AdminActionState,
   formData: FormData,
 ) => Promise<AdminActionState>;
+
+type NativeFormControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+function isNativeFormControl(element: Element): element is NativeFormControl {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement
+  );
+}
+
+function controlLabel(control: NativeFormControl) {
+  const explicitLabel = control.getAttribute("aria-label")?.trim();
+  if (explicitLabel) return explicitLabel;
+
+  const label = control.labels?.[0];
+  if (label) {
+    const copy = label.cloneNode(true) as HTMLLabelElement;
+    copy
+      .querySelectorAll("input, select, textarea, button, p, small")
+      .forEach((element) => element.remove());
+    const text = copy.textContent?.replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+
+  return control.name || "Polje";
+}
+
+function nativeValidationMessage(form: HTMLFormElement) {
+  const invalidLabels = Array.from(form.elements)
+    .filter(isNativeFormControl)
+    .filter((control) => control.willValidate && !control.validity.valid)
+    .map(controlLabel)
+    .filter((label, index, labels) => labels.indexOf(label) === index);
+
+  if (invalidLabels.length === 0) return "";
+  if (invalidLabels.length === 1) {
+    return `Popunite obavezno polje pre čuvanja: ${invalidLabels[0]}.`;
+  }
+  return `Popunite obavezna polja pre čuvanja: ${invalidLabels.join(", ")}.`;
+}
 
 export function AdminActionForm({
   action,
@@ -33,8 +74,12 @@ export function AdminActionForm({
     action,
     EMPTY_ADMIN_ACTION_STATE,
   );
+  const [clientValidationMessage, setClientValidationMessage] = useState("");
   const refreshedState = useRef(state);
-  const hasMessage = Boolean(state.message);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  const message = clientValidationMessage || state.message;
+  const messageIsSuccess = !clientValidationMessage && Boolean(state.message) && state.ok;
+  const hasMessage = Boolean(message);
 
   useEffect(() => {
     if (!refreshOnSuccess || !state.ok || refreshedState.current === state) return;
@@ -43,19 +88,41 @@ export function AdminActionForm({
     router.refresh();
   }, [refreshOnSuccess, router, state]);
 
+  useEffect(() => {
+    if (!message) return;
+    const frame = window.requestAnimationFrame(() => {
+      messageRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [clientValidationMessage, message, state]);
+
   return (
-    <form action={formAction} className={className} id={id} data-testid={testId}>
+    <form
+      action={formAction}
+      className={className}
+      id={id}
+      data-testid={testId}
+      onInvalid={(event) => {
+        setClientValidationMessage(nativeValidationMessage(event.currentTarget));
+      }}
+      onInput={(event) => {
+        if (!clientValidationMessage) return;
+        setClientValidationMessage(nativeValidationMessage(event.currentTarget));
+      }}
+    >
       {hasMessage ? (
         <p
-          role={state.ok ? "status" : "alert"}
+          ref={messageRef}
+          role={messageIsSuccess ? "status" : "alert"}
+          tabIndex={-1}
           className={cn(
-            "mb-3 rounded-md border px-3 py-2 text-sm",
-            state.ok
+            "mb-3 scroll-mt-6 rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+            messageIsSuccess
               ? "border-success/25 bg-success/10 text-success"
               : "border-destructive/25 bg-destructive/10 text-destructive",
           )}
         >
-          {state.message}
+          {message}
         </p>
       ) : null}
       {typeof children === "function" ? children(state) : children}
