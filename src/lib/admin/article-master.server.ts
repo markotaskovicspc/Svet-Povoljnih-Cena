@@ -12,6 +12,7 @@ import {
   normalizeArticleSku,
   numericArticleSku,
 } from "@/lib/article-sku";
+import { ensureCategoryGroup } from "@/lib/category-groups.server";
 
 const ARTICLE_SKU_LOCK_KEY = "spc:article-sku";
 
@@ -88,6 +89,7 @@ export async function resolveArticleCategory(
   if (input.id && !name) {
     const category = await tx.category.findUnique({ where: { id: input.id } });
     if (!category) throw new Error("Izabrana kategorija ne postoji.");
+    await ensureCategoryGroup(tx, category);
     return category;
   }
   if (!name) return null;
@@ -97,7 +99,7 @@ export async function resolveArticleCategory(
   if (input.parentId && !parent) throw new Error("Nadređena kategorija ne postoji.");
   const slug = articleSlug(name);
   const path = `${parent?.path ?? ""}/${slug}`.replace(/\/+/g, "/");
-  return tx.category.upsert({
+  const category = await tx.category.upsert({
     where: { path },
     create: {
       name,
@@ -108,6 +110,8 @@ export async function resolveArticleCategory(
     },
     update: { name },
   });
+  await ensureCategoryGroup(tx, category);
+  return category;
 }
 
 export async function syncArticleLookupAssignments(

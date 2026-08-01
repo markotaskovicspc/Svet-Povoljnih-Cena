@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
+import { ensureCategoryGroup } from "@/lib/category-groups.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -79,10 +80,15 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           level,
           path,
         };
-        const saved = data.id
-          ? await db.category.update({ where: { id: data.id }, data: payload })
-          : await db.category.create({ data: payload });
+        const saved = await db.$transaction(async (tx) => {
+          const category = data.id
+            ? await tx.category.update({ where: { id: data.id }, data: payload })
+            : await tx.category.create({ data: payload });
+          await ensureCategoryGroup(tx, category);
+          return category;
+        });
         revalidatePath("/admin/kategorije");
+        revalidatePath("/admin/erp/artikli");
         revalidatePath("/");
         revalidatePath("/k/[...slug]", "page");
         revalidatePath("/p/[slug]", "page");

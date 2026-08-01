@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { connectorFor } from "./connector";
 import { productNewUntilIsActive } from "@/lib/product-newness";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
+import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import type {
   FeedItem,
   ImportSummary,
@@ -486,6 +487,7 @@ async function ensureCategory(
     path = `${path}/${slug}`;
     const existing = await tx.category.findUnique({ where: { path } });
     if (existing) {
+      await ensureCategoryGroup(tx, existing);
       parentId = existing.id;
       lastId = existing.id;
     } else {
@@ -499,6 +501,7 @@ async function ensureCategory(
         },
         select: { id: true },
       });
+      await ensureCategoryGroup(tx, { name: segment, slug });
       parentId = created.id;
       lastId = created.id;
     }
