@@ -75,6 +75,7 @@ export function AdminActionForm({
     EMPTY_ADMIN_ACTION_STATE,
   );
   const [clientValidationMessage, setClientValidationMessage] = useState("");
+  const [validationFocusRequest, setValidationFocusRequest] = useState(0);
   const refreshedState = useRef(state);
   const messageRef = useRef<HTMLParagraphElement>(null);
   const message = clientValidationMessage || state.message;
@@ -89,12 +90,20 @@ export function AdminActionForm({
   }, [refreshOnSuccess, router, state]);
 
   useEffect(() => {
-    if (!message) return;
+    if (!state.message) return;
     const frame = window.requestAnimationFrame(() => {
       messageRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [clientValidationMessage, message, state]);
+  }, [state]);
+
+  useEffect(() => {
+    if (validationFocusRequest === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      messageRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [validationFocusRequest]);
 
   return (
     <form
@@ -104,6 +113,7 @@ export function AdminActionForm({
       data-testid={testId}
       onInvalid={(event) => {
         setClientValidationMessage(nativeValidationMessage(event.currentTarget));
+        setValidationFocusRequest((current) => current + 1);
       }}
       onInput={(event) => {
         if (!clientValidationMessage) return;

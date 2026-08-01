@@ -1080,9 +1080,15 @@ test.describe("article master acceptance", () => {
     await expect(requiredFieldsAlert).toContainText("Visina (cm)");
     await expect(requiredFieldsAlert).toBeFocused();
 
-    await form.locator('input[name="widthCm"]').fill("1");
-    await form.locator('input[name="depthCm"]').fill("1");
-    await form.locator('input[name="heightCm"]').fill("1");
+    const widthInput = form.locator('input[name="widthCm"]');
+    const depthInput = form.locator('input[name="depthCm"]');
+    const heightInput = form.locator('input[name="heightCm"]');
+    await widthInput.fill("1");
+    await expect(widthInput).toBeFocused();
+    await depthInput.fill("1");
+    await expect(depthInput).toBeFocused();
+    await heightInput.fill("1");
+    await expect(heightInput).toBeFocused();
     await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
     await expect(form.getByRole("alert")).toContainText("već postoji", {
       timeout: 180_000,
