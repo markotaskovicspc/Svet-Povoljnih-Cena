@@ -19,6 +19,7 @@ export function parseListProductsInput(
   return {
     categoryPath: text(searchParams, "categoryPath"),
     actionSlug: text(searchParams, "actionSlug"),
+    permanentOnly: bool(searchParams, "permanentOnly"),
     groupSlug: text(searchParams, "groupSlug"),
     collectionSlug: text(searchParams, "collectionSlug"),
     cursor: text(searchParams, "cursor"),

@@ -118,7 +118,7 @@ export const LANDING_PAGE_OPTIONS: LandingPageConfig[] = [
     key: "niske-cene-pod-zastitom",
     label: "Niske cene pod trajnom zaštitom",
     href: "/niske-cene-pod-zastitom",
-    query: { actionSlug: "niske-cene-pod-zastitom" },
+    query: { permanentOnly: true },
     icon: protectedPricesIcon,
   },
   {

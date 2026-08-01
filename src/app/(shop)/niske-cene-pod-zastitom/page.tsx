@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NiskeCenePodZastitomPage() {
-  const query = { actionSlug: "niske-cene-pod-zastitom" };
+  const query = { permanentOnly: true };
   const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
     listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
     getTabTitleIcon("/niske-cene-pod-zastitom"),

@@ -549,13 +549,13 @@ function ActionProductsDialog({
                     {column.label}
                   </th>
                 ))}
-                <th className="min-w-40 border-b border-border px-3 py-2.5 text-right">
+                <th className="sticky right-72 z-30 min-w-40 border-b border-l border-border bg-muted-bg px-3 py-2.5 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                   Važeća MP cena
                 </th>
-                <th className="min-w-44 border-b border-border px-3 py-2.5 text-right">
+                <th className="sticky right-28 z-30 min-w-44 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
                   Akcijska MP cena
                 </th>
-                <th className="min-w-28 border-b border-border px-3 py-2.5">
+                <th className="sticky right-0 z-30 min-w-28 border-b border-border bg-muted-bg px-3 py-2.5">
                   Radnje
                 </th>
               </tr>
@@ -605,10 +605,10 @@ function ActionProductsDialog({
                     {preview?.[column.key] ?? "—"}
                   </td>
                 ))}
-                <td className="border-b border-border px-3 py-3 text-right font-medium tabular-nums">
+                <td className="sticky right-72 z-10 border-b border-l border-border bg-brand-blue-50 px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                   {preview ? money.format(preview.validMpPrice) : "—"}
                 </td>
-                <td className="border-b border-border px-3 py-3">
+                <td className="sticky right-28 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
                   <Input
                     form="add-action-product"
                     name="salePrice"
@@ -621,7 +621,7 @@ function ActionProductsDialog({
                     placeholder="0,00"
                   />
                 </td>
-                <td className="border-b border-border px-3 py-3">
+                <td className="sticky right-0 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
                   <form id="add-action-product" action={addFormAction}>
                     <input type="hidden" name="actionId" value={action.id} />
                     <SubmitButton size="sm" disabled={!preview}>
@@ -645,10 +645,10 @@ function ActionProductsDialog({
                         {product[column.key]}
                       </td>
                     ))}
-                    <td className="border-b border-border px-3 py-3 text-right font-medium tabular-nums">
+                    <td className="sticky right-72 z-10 border-b border-l border-border bg-white px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       {money.format(product.validMpPrice)}
                     </td>
-                    <td className="border-b border-border px-3 py-3">
+                    <td className="sticky right-28 z-10 border-b border-border bg-white px-3 py-3">
                       <Input
                         form={saveFormId}
                         name="salePrice"
@@ -660,7 +660,7 @@ function ActionProductsDialog({
                         className="text-right tabular-nums"
                       />
                     </td>
-                    <td className="border-b border-border px-3 py-3">
+                    <td className="sticky right-0 z-10 border-b border-border bg-white px-3 py-3">
                       <ActionProductControls
                         actionId={action.id}
                         product={product}

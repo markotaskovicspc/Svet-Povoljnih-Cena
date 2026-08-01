@@ -26,4 +26,17 @@ describe("product list query parsing", () => {
     expect(input.maxPrice).toBeUndefined();
     expect(input.limit).toBe(36);
   });
+
+  it("parses the permanent protected-price filter for paginated listings", () => {
+    expect(
+      parseListProductsInput(
+        new URLSearchParams({ permanentOnly: "true" }),
+      ).permanentOnly,
+    ).toBe(true);
+    expect(
+      parseListProductsInput(
+        new URLSearchParams({ permanentOnly: "false" }),
+      ).permanentOnly,
+    ).toBe(false);
+  });
 });

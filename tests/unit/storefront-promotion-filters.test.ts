@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   heroProductsWhere,
   limitedOfferProductsWhere,
+  permanentPriceProductsWhere,
   storefrontMonth,
 } from "@/lib/storefront/promotion-filters";
 
@@ -47,6 +48,19 @@ describe("storefront promotion filters", () => {
   it("treats both limited and ERP DTZ articles as 'Dok traju zalihe'", () => {
     expect(limitedOfferProductsWhere()).toEqual({
       OR: [{ isLimited: true }, { isDtz: true }],
+    });
+  });
+
+  it("selects permanent-price products by the action flag, not its slug", () => {
+    expect(permanentPriceProductsWhere()).toEqual({
+      OR: [
+        { action: { is: { isPermanent: true } } },
+        {
+          actionPrices: {
+            some: { action: { is: { isPermanent: true } } },
+          },
+        },
+      ],
     });
   });
 });

@@ -47,3 +47,16 @@ export function limitedOfferProductsWhere(): Prisma.ProductWhereInput {
     OR: [{ isLimited: true }, { isDtz: true }],
   };
 }
+
+export function permanentPriceProductsWhere(): Prisma.ProductWhereInput {
+  return {
+    OR: [
+      { action: { is: { isPermanent: true } } },
+      {
+        actionPrices: {
+          some: { action: { is: { isPermanent: true } } },
+        },
+      },
+    ],
+  };
+}

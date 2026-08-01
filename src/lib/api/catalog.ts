@@ -53,6 +53,7 @@ import {
 import {
   heroProductsWhere,
   limitedOfferProductsWhere,
+  permanentPriceProductsWhere,
   storefrontMonth,
 } from "@/lib/storefront/promotion-filters";
 
@@ -672,6 +673,8 @@ export interface ListProductsInput {
   categoryPath?: string;
   /** Filter by promo action slug (akcija / nedeljna-akcija / heroji-meseca / outlet…). */
   actionSlug?: string;
+  /** Restrict to products assigned to a permanent protected-price action. */
+  permanentOnly?: boolean;
   /** Restrict to currently-on-sale items (any action OR `salePrice` set). */
   onSaleOnly?: boolean;
   /** Restrict to hero-of-month products. */
@@ -784,6 +787,9 @@ export async function listProducts(
         },
       ],
     });
+  }
+  if (input.permanentOnly) {
+    appendAnd(where, permanentPriceProductsWhere());
   }
   if (input.onSaleOnly) {
     const hasGlobalLinearPromotion = pricingRules.linearPromotions.some(

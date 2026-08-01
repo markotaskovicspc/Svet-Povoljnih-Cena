@@ -58,6 +58,7 @@ import {
 export interface ListingPageQuery {
   categoryPath?: string;
   actionSlug?: string;
+  permanentOnly?: boolean;
   onSaleOnly?: boolean;
   heroOnly?: boolean;
   newOnly?: boolean;
