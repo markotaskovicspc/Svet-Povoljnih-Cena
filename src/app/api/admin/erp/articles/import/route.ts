@@ -16,6 +16,7 @@ import { articleSlug, optionalDateInput } from "@/lib/article-master";
 import { sanitizeRichText } from "@/lib/rich-text";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
 import { productNewUntilIsActive } from "@/lib/product-newness";
+import { ensureCategoryGroup } from "@/lib/category-groups.server";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -512,7 +513,13 @@ export async function POST(request: Request) {
                   take: 1,
                   include: {
                     category: {
-                      include: { parent: { select: { id: true, name: true } } },
+                      include: {
+                        parent: {
+                          include: {
+                            parent: { select: { id: true, name: true, slug: true } },
+                          },
+                        },
+                      },
                     },
                   },
                 },
@@ -527,35 +534,71 @@ export async function POST(request: Request) {
         if (row.sku && !existing) {
           await assertArticleSkuAvailable(tx, row.sku);
         }
-        const group = hasColumn("group")
-          ? await resolveNamedArticleRelation(tx, "group", { name: row.group })
-          : existing?.groupId
-            ? await tx.group.findUnique({
-                where: { id: existing.groupId },
-                select: { id: true, name: true },
-              })
-            : null;
         const collection = hasColumn("collection")
           ? await resolveNamedArticleRelation(tx, "collection", {
               name: row.collection,
             })
           : existing?.collection ?? null;
         const shouldReplaceCategory =
-          hasColumn("category") || hasColumn("subgroup");
+          hasColumn("category") || hasColumn("group") || hasColumn("subgroup");
         const currentCategory = existing?.categories[0]?.category ?? null;
-        const parentCategory = hasColumn("category")
+        const currentRootCategory = currentCategory?.parent?.parent
+          ? currentCategory.parent.parent
+          : currentCategory?.parent ?? currentCategory;
+        const currentGroupCategory = currentCategory?.parent?.parent
+          ? currentCategory.parent
+          : currentCategory?.parent
+            ? currentCategory
+            : null;
+        const currentSubgroupCategory = currentCategory?.parent?.parent
+          ? currentCategory
+          : null;
+        const rootCategory = hasColumn("category")
           ? row.category
             ? await resolveArticleCategory(tx, { name: row.category })
             : null
-          : currentCategory?.parent ?? currentCategory;
-        const category = hasColumn("subgroup")
+          : currentRootCategory;
+        if (row.group && !rootCategory) {
+          throw new Error(
+            `Red ${row.row}: grupa ne može biti zadata bez kategorije.`,
+          );
+        }
+        const groupCategory = hasColumn("group")
+          ? row.group
+            ? await resolveArticleCategory(tx, {
+                name: row.group,
+                parentId: rootCategory?.id ?? null,
+              })
+            : null
+          : rootCategory?.id === currentRootCategory?.id
+            ? currentGroupCategory
+            : null;
+        if (row.subgroup && !groupCategory) {
+          throw new Error(
+            `Red ${row.row}: podgrupa ne može biti zadata bez grupe.`,
+          );
+        }
+        const subgroupCategory = hasColumn("subgroup")
           ? row.subgroup
             ? await resolveArticleCategory(tx, {
                 name: row.subgroup,
-                parentId: parentCategory?.id ?? null,
+                parentId: groupCategory?.id ?? null,
               })
-            : parentCategory
-          : parentCategory;
+            : null
+          : groupCategory?.id === currentGroupCategory?.id
+            ? currentSubgroupCategory
+            : null;
+        const category = subgroupCategory ?? groupCategory ?? rootCategory;
+        const group = shouldReplaceCategory
+          ? category
+            ? await ensureCategoryGroup(tx, category)
+            : null
+          : existing?.groupId
+            ? await tx.group.findUnique({
+                where: { id: existing.groupId },
+                select: { id: true, name: true, slug: true },
+              })
+            : null;
         const supplierId = hasColumn("supplier")
           ? row.supplier
             ? supplierByKey.get(row.supplier.trim().toLocaleLowerCase("sr-Latn")) ?? null

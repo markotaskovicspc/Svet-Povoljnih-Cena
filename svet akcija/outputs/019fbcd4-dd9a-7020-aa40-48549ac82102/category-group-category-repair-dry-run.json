@@ -1,0 +1,516 @@
+{
+  "mode": "DRY_RUN",
+  "generatedAt": "2026-08-01T11:07:25.058Z",
+  "before": {
+    "total": 34,
+    "safe": 22,
+    "askMarko": 12
+  },
+  "applied": [],
+  "skippedAfterRecheck": [],
+  "remaining": {
+    "total": 34,
+    "safe": 22,
+    "askMarko": 12,
+    "rows": [
+      {
+        "productId": "cmp68wws2002t2ugn2gbgprh2",
+        "sku": "1003",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1004",
+        "sku": "1004",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1005",
+        "sku": "1005",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wyz4002x2ugng2ew186r",
+        "sku": "1006",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1007",
+        "sku": "1007",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1008",
+        "sku": "1008",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wtbh002n2ugnqu8sylmb",
+        "sku": "1009",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1010",
+        "sku": "1010",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1011",
+        "sku": "1011",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wvnl002r2ugnm3jcf5ki",
+        "sku": "1012",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1013",
+        "sku": "1013",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "sa-prod-1014",
+        "sku": "1014",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wr3q002j2ugn06v0ahwd",
+        "sku": "1015",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68ws7u002l2ugn60jxqrgv",
+        "sku": "1016",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wovt002f2ugn605twfid",
+        "sku": "1017",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wq0d002h2ugnbgwbtmku",
+        "sku": "1018",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cms9an0p8000004i5e3k6dce2",
+        "sku": "110088",
+        "name": "Trpezarijska stolica DIAMOND SEAT",
+        "groupName": "Trpezarijske stolice i stolovi",
+        "groupSlug": "trpezarijske-stolice-i-stolovi",
+        "targetCategoryId": "cmsa1h3rl000104l43obj777g",
+        "targetPath": "/namestaj/trpezarijske-stolice-i-stolovi",
+        "currentCategoryIds": [
+          "cmsa1gfqo000104juljecz2ga"
+        ],
+        "currentPaths": [
+          "/namestaj"
+        ],
+        "classification": "SAFE",
+        "reason": "CURRENT_IS_ANCESTOR"
+      },
+      {
+        "productId": "cmp68wxw6002v2ugn8urz1kpm",
+        "sku": "1139",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68x17o00312ugnwc80z7yl",
+        "sku": "1140",
+        "name": "TRAVEL MATE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68wuk5002p2ugnxq4q3ql9",
+        "sku": "1141",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cmp68x04k002z2ugnxekx9bxm",
+        "sku": "1142",
+        "name": "ADVENTURE",
+        "groupName": "Koferi",
+        "groupSlug": "koferi",
+        "targetCategoryId": "cmsa5hejo000104kws7gn5aaj",
+        "targetPath": "/moda-putovanja/koferi",
+        "currentCategoryIds": [],
+        "currentPaths": [],
+        "classification": "SAFE",
+        "reason": "NO_PUBLIC_CATEGORY"
+      },
+      {
+        "productId": "cms78vlr8000004k1i99gg2dq",
+        "sku": "NOV-2026-00004",
+        "name": "TEST Stona LED lampa sa tri nivoa osvetljenja TEST NORD — OBRISATI",
+        "groupName": "Stone lampe",
+        "groupSlug": "stone-lampe",
+        "targetCategoryId": "cmrtv5bj8001o04l8j3aocpba",
+        "targetPath": "/unutrasnja-rasveta/stone-lampe",
+        "currentCategoryIds": [
+          "cmrtv5bc3000g04l8fe1v0m5f"
+        ],
+        "currentPaths": [
+          "/rasveta/unutrasnja-rasveta"
+        ],
+        "classification": "SAFE",
+        "reason": "CURRENT_IS_ANCESTOR"
+      },
+      {
+        "productId": "cmrtvoqno08fm04jvgmj3g9fb",
+        "sku": "RAB-2137",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvn7az03la04jvvyenspgs",
+        "sku": "RAB-2138",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvmtbo02d904jvxg82r221",
+        "sku": "RAB-2139",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvnwnm05tn04jvsfd84pkc",
+        "sku": "RAB-2140",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvobod074d04jv7r4jxd6h",
+        "sku": "RAB-2141",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvp2fm09gw04jvyyvi5mjs",
+        "sku": "RAB-2142",
+        "name": "SMD-LED",
+        "groupName": "LED ploče",
+        "groupSlug": "led-ploce",
+        "targetCategoryId": "cmrtv5gg901ac04l84z1v0kyh",
+        "targetPath": "/unutrasnja-rasveta/led-ploce",
+        "currentCategoryIds": [
+          "cmrtvmtbc02d704jvhx9pq1hm"
+        ],
+        "currentPaths": [
+          "/sijalice/led-ploce"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvnmfh04xu04jv81a6wt1s",
+        "sku": "RAB-7040",
+        "name": "Odera",
+        "groupName": "Stone lampe",
+        "groupSlug": "stone-lampe",
+        "targetCategoryId": "cmrtv5bj8001o04l8j3aocpba",
+        "targetPath": "/unutrasnja-rasveta/stone-lampe",
+        "currentCategoryIds": [
+          "cmrtvnmf604xs04jvlo0snqo5"
+        ],
+        "currentPaths": [
+          "/spoljna-rasveta/stone-lampe"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvniep04ka04jv16w2fggv",
+        "sku": "RAB-77123",
+        "name": "Biri",
+        "groupName": "\"Pametna\" rasveta",
+        "groupSlug": "pametna-rasveta",
+        "targetCategoryId": "cmrtv65cp07pt04l85u706yqo",
+        "targetPath": "/rasveta/unutrasnja-rasveta/pametna-rasveta",
+        "currentCategoryIds": [
+          "cmrtvnief04k804jvwq0rmaeb"
+        ],
+        "currentPaths": [
+          "/rasveta/spoljna-rasveta/pametna-rasveta-7c4a06a7"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvp66409sz04jv35x18e97",
+        "sku": "RAB-77124",
+        "name": "Biri",
+        "groupName": "\"Pametna\" rasveta",
+        "groupSlug": "pametna-rasveta",
+        "targetCategoryId": "cmrtv65cp07pt04l85u706yqo",
+        "targetPath": "/rasveta/unutrasnja-rasveta/pametna-rasveta",
+        "currentCategoryIds": [
+          "cmrtvnief04k804jvwq0rmaeb"
+        ],
+        "currentPaths": [
+          "/rasveta/spoljna-rasveta/pametna-rasveta-7c4a06a7"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvnl3g04td04jvstaobojn",
+        "sku": "RAB-79231",
+        "name": "SMD-LED",
+        "groupName": "LED sijalice",
+        "groupSlug": "led-sijalice",
+        "targetCategoryId": "cmrtv5gcz019p04l8oscxmw7v",
+        "targetPath": "/sijalice/led-sijalice",
+        "currentCategoryIds": [
+          "cmrtvnl3604tb04jvqk8n524e"
+        ],
+        "currentPaths": [
+          "/unutrasnja-rasveta/led-sijalice"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvmx4c02p904jvm24hbwo8",
+        "sku": "RAB-7979",
+        "name": "Eric",
+        "groupName": "Spoljna plafonska rasveta",
+        "groupSlug": "spoljna-plafonska-rasveta",
+        "targetCategoryId": "cmrtv5bou002o04l814uhh3ck",
+        "targetPath": "/spoljna-rasveta/spoljna-plafonska-rasveta",
+        "currentCategoryIds": [
+          "cmrtvmx4102p704jvdcrbb1ak"
+        ],
+        "currentPaths": [
+          "/unutrasnja-rasveta/spoljna-plafonska-rasveta"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      },
+      {
+        "productId": "cmrtvos8k08kt04jvggqcrgvt",
+        "sku": "RAB-8799",
+        "name": "Sevilla",
+        "groupName": "Zidne lampe",
+        "groupSlug": "zidne-lampe",
+        "targetCategoryId": "cmrtv5bxe004n04l8jtashd2y",
+        "targetPath": "/unutrasnja-rasveta/zidne-lampe",
+        "currentCategoryIds": [
+          "cmrtvos8908kr04jv0xd413ln"
+        ],
+        "currentPaths": [
+          "/spoljna-rasveta/zidne-lampe"
+        ],
+        "classification": "ASK_MARKO",
+        "reason": "DIFFERENT_BRANCH_OR_LEAF"
+      }
+    ]
+  }
+}

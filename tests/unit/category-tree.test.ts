@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   categoryDescendantPathUpdates,
+  categoryTreeDepth,
   collectCategoryDescendantIds,
   flattenCategoryTree,
   type CategoryTreeItem,
@@ -62,5 +63,17 @@ describe("category tree", () => {
       { id: "child", path: "/new-root/child", level: 1 },
       { id: "grandchild", path: "/new-root/child/grandchild", level: 2 },
     ]);
+  });
+
+  it("calculates depth from parent relations instead of stale level values", () => {
+    const rows = [
+      category({ id: "root", name: "Root", level: 9 }),
+      category({ id: "group", name: "Group", parentId: "root", level: 0 }),
+      category({ id: "subgroup", name: "Subgroup", parentId: "group", level: 1 }),
+    ];
+
+    expect(categoryTreeDepth(rows, "root")).toBe(0);
+    expect(categoryTreeDepth(rows, "group")).toBe(1);
+    expect(categoryTreeDepth(rows, "subgroup")).toBe(2);
   });
 });

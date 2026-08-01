@@ -14,6 +14,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import {
   categoryDescendantPathUpdates,
+  categoryTreeDepth,
   collectCategoryDescendantIds,
   flattenCategoryTree,
 } from "@/lib/admin/category-tree";
@@ -82,7 +83,14 @@ async function upsert(_state: AdminActionState, formData: FormData) {
         if (data.parentId && !parent) {
           return { ok: false as const, error: "Izabrani roditelj više ne postoji." };
         }
-        const level = parent ? parent.level + 1 : 0;
+        const parentDepth = parent ? categoryTreeDepth(categories, parent.id) : null;
+        if (parent && (parentDepth === null || parentDepth >= 2)) {
+          return {
+            ok: false as const,
+            error: "Navigacija podržava najviše tri nivoa: kategoriju, grupu i podgrupu.",
+          };
+        }
+        const level = parent ? (parentDepth ?? 0) + 1 : 0;
         const path = parent ? `${parent.path}/${slug}` : `/${slug}`;
 
         const existing = await db.category.findFirst({
@@ -183,7 +191,9 @@ export default async function CategoriesPage({
     : new Set<string>();
   const allowedParents = flat.filter(
     (category) =>
-      category.id !== selected?.id && !selectedDescendants.has(category.id),
+      category.id !== selected?.id &&
+      !selectedDescendants.has(category.id) &&
+      (categoryTreeDepth(cats, category.id) ?? 3) < 2,
   );
 
   return (

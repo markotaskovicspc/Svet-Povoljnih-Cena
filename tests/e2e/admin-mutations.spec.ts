@@ -381,7 +381,7 @@ test.describe("isolated admin mutation acceptance", () => {
       await page
         .getByLabel("Razlog ručne korekcije DC stanja")
         .fill("QA acceptance korekcija izolovanog DC stanja");
-      await page.locator('select[name="categoryId"]').selectOption(categoryId!);
+      await page.locator('select[name="siteCategoryId"]').selectOption(categoryId!);
       await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
       await acceptanceExpect(page.getByRole("status")).toContainText(
         "Proizvod je sačuvan",

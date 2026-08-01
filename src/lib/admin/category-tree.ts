@@ -96,6 +96,27 @@ export function collectCategoryDescendantIds<T extends CategoryTreeItem>(
   return descendants;
 }
 
+export function categoryTreeDepth<T extends CategoryTreeItem>(
+  categories: T[],
+  categoryId: string,
+) {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const visited = new Set<string>();
+  let current = byId.get(categoryId);
+  let depth = 0;
+
+  if (!current) return null;
+  while (current.parentId) {
+    if (visited.has(current.id)) return null;
+    visited.add(current.id);
+    const parent = byId.get(current.parentId);
+    if (!parent) return null;
+    current = parent;
+    depth += 1;
+  }
+  return depth;
+}
+
 export function categoryDescendantPathUpdates<T extends CategoryTreeItem>(
   categories: T[],
   categoryId: string,

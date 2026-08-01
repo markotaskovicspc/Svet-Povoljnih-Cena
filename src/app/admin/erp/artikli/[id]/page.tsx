@@ -25,6 +25,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { ProductCommercialTerms } from "@/components/admin/product-commercial-terms";
+import { ProductCategorySelector } from "@/components/admin/product-category-selector";
 import {
   ProductAttachmentsEditor,
   type EditableProductAttachment,
@@ -61,6 +62,11 @@ import {
 import { formatRsd } from "@/lib/format";
 import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
 import { productNewUntilIsActive } from "@/lib/product-newness";
+import { ensureCategoryGroup } from "@/lib/category-groups.server";
+import {
+  articleCategorySelectionFromLeaf,
+  resolveArticleCategorySelection,
+} from "@/lib/admin/article-category-hierarchy";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -75,9 +81,9 @@ const overrideSchema = z.object({
   name: z.string().min(1).max(200),
   articleStatus: z.enum(["SP", "IT", "DTZ", "DOB", "ARH", "UZ"]),
   supplierId: z.string().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
-  groupId: z.string().optional().nullable(),
-  newGroupName: z.string().max(120).optional().nullable(),
+  siteCategoryId: z.string().optional().nullable(),
+  siteGroupId: z.string().optional().nullable(),
+  siteSubgroupId: z.string().optional().nullable(),
   collectionId: z.string().optional().nullable(),
   newCollectionName: z.string().max(120).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),
@@ -423,15 +429,52 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           if (existing.sku !== sku) {
             await assertArticleSkuAvailable(tx, sku, d.id);
           }
-          const requestedGroupId = d.groupId?.trim() || null;
+          const categoryRows = await tx.category.findMany({
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              parentId: true,
+              order: true,
+            },
+          });
+          let categorySelection;
+          try {
+            categorySelection = resolveArticleCategorySelection(categoryRows, {
+              siteCategoryId: d.siteCategoryId ?? "",
+              siteGroupId: d.siteGroupId ?? "",
+              siteSubgroupId: d.siteSubgroupId ?? "",
+            });
+          } catch (error) {
+            return {
+              validationError:
+                error instanceof Error
+                  ? error.message
+                  : "Izabrana pozicija u navigaciji nije ispravna.",
+            };
+          }
+          const requestedCategoryIds = categorySelection.leafCategoryId
+            ? [categorySelection.leafCategoryId]
+            : [];
+          const currentCategoryIds = existing.categories
+            .map(({ categoryId }) => categoryId)
+            .sort();
+          const categoryChanged =
+            currentCategoryIds.length !== requestedCategoryIds.length ||
+            currentCategoryIds.some(
+              (categoryId, index) => categoryId !== requestedCategoryIds[index],
+            );
           const requestedCollectionId = d.collectionId?.trim() || null;
-          const group =
-            !d.newGroupName && existing.group?.id === requestedGroupId
-              ? existing.group
-              : await resolveNamedArticleRelation(tx, "group", {
-                  id: requestedGroupId,
-                  name: d.newGroupName,
-                });
+          const selectedCategory = categorySelection.leafCategoryId
+            ? categoryRows.find(
+                (category) => category.id === categorySelection.leafCategoryId,
+              ) ?? null
+            : null;
+          const group = categoryChanged
+            ? selectedCategory
+              ? await ensureCategoryGroup(tx, selectedCategory)
+              : null
+            : existing.group;
           const collection =
             !d.newCollectionName &&
             existing.collection?.id === requestedCollectionId
@@ -488,20 +531,14 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               });
             }
           }
-          const currentCategoryIds = existing.categories
-            .map(({ categoryId }) => categoryId)
-            .sort();
-          const requestedCategoryIds = d.categoryId ? [d.categoryId] : [];
-          const categoryChanged =
-            currentCategoryIds.length !== requestedCategoryIds.length ||
-            currentCategoryIds.some(
-              (categoryId, index) => categoryId !== requestedCategoryIds[index],
-            );
           if (categoryChanged) {
             await tx.productCategory.deleteMany({ where: { productId: d.id } });
-            if (d.categoryId) {
+            if (categorySelection.leafCategoryId) {
               await tx.productCategory.create({
-                data: { productId: d.id, categoryId: d.categoryId },
+                data: {
+                  productId: d.id,
+                  categoryId: categorySelection.leafCategoryId,
+                },
               });
               await tx.product.updateMany({
                 where: {
@@ -530,9 +567,12 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             actorId,
             note: d.stockAdjustmentReason,
           });
-          return saved;
+          return { saved };
         });
-        await revalidateProductSurfaces(d.id, updated.slug);
+        if ("validationError" in updated) {
+          return { ok: false as const, error: updated.validationError };
+        }
+        await revalidateProductSurfaces(d.id, updated.saved.slug);
         return {
           ok: true as const,
           entityId: d.id,
@@ -883,7 +923,6 @@ export default async function ProductDetail({
     product,
     categories,
     suppliers,
-    groups,
     collections,
     lookupValues,
     pictograms,
@@ -948,15 +987,22 @@ export default async function ProductDetail({
         },
       }),
       db.category.findMany({
-        orderBy: [{ level: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, path: true, level: true },
+        orderBy: [{ order: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          path: true,
+          level: true,
+          parentId: true,
+          order: true,
+        },
       }),
       db.supplier.findMany({
         where: { enabled: true },
         orderBy: { name: "asc" },
         select: { id: true, code: true, name: true, parity: true, deliveryDays: true },
       }),
-      db.group.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
       db.collection.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
@@ -1058,6 +1104,16 @@ export default async function ProductDetail({
       mimeType: attachment.mimeType,
       sizeBytes: attachment.sizeBytes,
     }));
+  const categorySelection = articleCategorySelectionFromLeaf(
+    categories,
+    product.categories[0]?.categoryId,
+  );
+  const selectedLeafCategory = product.categories[0]?.category ?? null;
+  const categoryGroupMismatch = Boolean(
+    product.group &&
+      selectedLeafCategory &&
+      product.group.slug !== selectedLeafCategory.slug,
+  );
 
   return (
     <>
@@ -1080,7 +1136,7 @@ export default async function ProductDetail({
           <AdminActionForm
             key={product.updatedAt.toISOString()}
             action={updateProduct}
-            className="space-y-4"
+            className="space-y-4 pb-24"
             refreshOnSuccess
           >
             <input type="hidden" name="id" value={product.id} />
@@ -1144,48 +1200,26 @@ export default async function ProductDetail({
                 </select>
               </Field>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Kategorija sajta">
-                <select
-                  name="categoryId"
-                  defaultValue={product.categories[0]?.categoryId ?? ""}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                >
-                  <option value="">Bez kategorije</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {`${"— ".repeat(category.level)}${category.name}`}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-ink-500">
-                  Ova hijerarhija upravlja menijem, kategorijskim stranicama i PDP putanjom.
-                </p>
-              </Field>
-            </div>
+            <ProductCategorySelector
+              categories={categories}
+              initialSelection={categorySelection}
+            />
+            {categoryGroupMismatch ? (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-ink-700">
+                Interna grupa „{product.group?.name}” i javna pozicija „
+                {selectedLeafCategory?.name}” se ne poklapaju. Ovaj sporni stari
+                podatak neće biti automatski promenjen dok se ne promeni izbor u
+                javnoj hijerarhiji.
+              </div>
+            ) : null}
             <fieldset className="space-y-3 rounded-xl border border-border/60 bg-muted-bg/20 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
-                Interna klasifikacija — ne menja kategorije sajta
+                Interna kolekcija
               </legend>
               <p className="text-xs text-ink-500">
-                Grupe služe samo preporukama i promocijama; kolekcije učestvuju u nazivu i internom grupisanju.
+                Kolekcija učestvuje u nazivu i internom grupisanju artikala.
               </p>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <Field label="Interna grupa — preporuke i promocije">
-                <select
-                  name="groupId"
-                  defaultValue={product.groupId ?? ""}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                >
-                  <option value="">Bez grupe</option>
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.id}>{group.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Nova grupa">
-                <Input name="newGroupName" placeholder="Kreira se pri čuvanju" />
-              </Field>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="Kolekcija">
                 <select
                   name="collectionId"
@@ -1550,8 +1584,10 @@ export default async function ProductDetail({
               <ReadOnlyFlag label="Meta katalog" enabled={product.inMetaCatalog} href="/admin/oglasi" />
             </div>
 
-            <div className="flex justify-end">
-              <SubmitButton>Sačuvaj izmene</SubmitButton>
+            <div className="pointer-events-none fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-40 flex justify-end sm:left-auto sm:right-8">
+              <SubmitButton className="pointer-events-auto w-full min-w-48 shadow-xl sm:w-auto">
+                Sačuvaj izmene
+              </SubmitButton>
             </div>
           </AdminActionForm>
           </Card>

@@ -13,6 +13,7 @@ const headers = [
   "Dobavljač",
   "Kategorija",
   "Grupa",
+  "Podgrupa",
   "Kolekcija",
   "Kratki opis",
   "Atribut 1",
@@ -57,6 +58,7 @@ const sampleRow = [
   "TEST DOBAVLJAČ UPUTSTVO",
   "Sve za kuću",
   "TEST UPUTSTVO",
+  "",
   "TEST",
   "Stona LED lampa sa tri nivoa osvetljenja",
   "LED 8W",
@@ -94,64 +96,64 @@ const sampleRow = [
   new Date("2026-08-30T00:00:00.000Z"),
 ];
 
-sheet.getRange("A1:AO2").values = [headers, sampleRow];
+sheet.getRange("A1:AP2").values = [headers, sampleRow];
 sheet.showGridLines = false;
 sheet.freezePanes.freezeRows(1);
 sheet.freezePanes.freezeColumns(2);
 
-sheet.getRange("A1:AO1").format = {
+sheet.getRange("A1:AP1").format = {
   fill: "#1F4E78",
   font: { bold: true, color: "#FFFFFF", size: 10 },
   wrapText: true,
   verticalAlignment: "center",
   borders: { preset: "outside", style: "thin", color: "#15324D" },
 };
-sheet.getRange("A2:AO2").format = {
+sheet.getRange("A2:AP2").format = {
   fill: "#F7FAFC",
   font: { color: "#172B4D", size: 10 },
   verticalAlignment: "center",
   wrapText: true,
   borders: { preset: "inside", style: "thin", color: "#D9E2F3" },
 };
-sheet.getRange("A1:AO2").format.rowHeight = 48;
-sheet.getRange("A2:AO2").format.rowHeight = 66;
+sheet.getRange("A1:AP2").format.rowHeight = 48;
+sheet.getRange("A2:AP2").format.rowHeight = 66;
 
 for (const [range, fill] of [
-  ["A1:G1", "#1F4E78"],
-  ["H1:P1", "#7F6000"],
-  ["Q1:Q1", "#548235"],
-  ["R1:AA1", "#0F6B78"],
-  ["AB1:AJ1", "#9E480E"],
-  ["AK1:AO1", "#5B5B5B"],
+  ["A1:H1", "#1F4E78"],
+  ["I1:Q1", "#7F6000"],
+  ["R1:R1", "#548235"],
+  ["S1:AB1", "#0F6B78"],
+  ["AC1:AK1", "#9E480E"],
+  ["AL1:AP1", "#5B5B5B"],
 ]) {
   sheet.getRange(range).format.fill = fill;
 }
 
 const widths = {
-  A: 17, B: 20, C: 15, D: 26, E: 20, F: 18, G: 15, H: 38,
-  I: 21, J: 18, K: 23, L: 20, M: 16, N: 14, O: 38, P: 48,
-  Q: 11, R: 12, S: 12, T: 12, U: 12, V: 15, W: 10, X: 14,
-  Y: 14, Z: 14, AA: 14, AB: 28, AC: 25, AD: 18, AE: 18, AF: 14,
-  AG: 10, AH: 14, AI: 14, AJ: 14, AK: 12, AL: 12, AM: 12, AN: 8, AO: 13,
+  A: 17, B: 20, C: 15, D: 26, E: 20, F: 18, G: 18, H: 15,
+  I: 38, J: 21, K: 18, L: 23, M: 20, N: 16, O: 14, P: 38, Q: 48,
+  R: 11, S: 12, T: 12, U: 12, V: 12, W: 15, X: 10, Y: 14,
+  Z: 14, AA: 14, AB: 14, AC: 28, AD: 25, AE: 18, AF: 18, AG: 14,
+  AH: 10, AI: 14, AJ: 14, AK: 14, AL: 12, AM: 12, AN: 12, AO: 8, AP: 13,
 };
 for (const [column, width] of Object.entries(widths)) {
   sheet.getRange(`${column}1:${column}2`).format.columnWidth = width;
 }
 
 sheet.getRange("A2:A2").format.numberFormat = "@";
-sheet.getRange("AE2:AF2").format.numberFormat = "@";
-sheet.getRange("Q2:Q2").format.numberFormat = "0";
-sheet.getRange("R2:V2").format.numberFormat = "0.00";
-sheet.getRange("W2:W2").format.numberFormat = "0";
-sheet.getRange("X2:AA2").format.numberFormat = "0.00";
-sheet.getRange("AG2:AJ2").format.numberFormat = "0.00";
-sheet.getRange("AN2:AN2").format.numberFormat = "0";
-sheet.getRange("AO2:AO2").format.numberFormat = "yyyy-mm-dd";
+sheet.getRange("AF2:AG2").format.numberFormat = "@";
+sheet.getRange("R2:R2").format.numberFormat = "0";
+sheet.getRange("S2:W2").format.numberFormat = "0.00";
+sheet.getRange("X2:X2").format.numberFormat = "0";
+sheet.getRange("Y2:AB2").format.numberFormat = "0.00";
+sheet.getRange("AH2:AK2").format.numberFormat = "0.00";
+sheet.getRange("AO2:AO2").format.numberFormat = "0";
+sheet.getRange("AP2:AP2").format.numberFormat = "yyyy-mm-dd";
 
 sheet.getRange("C2:C200").dataValidation = {
   rule: { type: "list", values: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"] },
 };
-for (const range of ["AK2:AK200", "AL2:AL200", "AM2:AM200"]) {
+for (const range of ["AL2:AL200", "AM2:AM200", "AN2:AN200"]) {
   sheet.getRange(range).dataValidation = {
     rule: { type: "list", values: ["Da", "Ne"] },
   };
@@ -180,8 +182,8 @@ const steps = [
   ["2", "Ne menjajte nazive kolona u prvom redu."],
   ["3", "Jedan proizvod unosite u jedan red. Primer je već popunjen u redu 2."],
   ["4", "SKU može ostati prazan. Sistem će automatski dodeliti šifru NOV-…"],
-  ["5", "Sačuvajte fajl kao Excel Workbook (.xlsx), ne kao CSV."],
-  ["6", "U admin panelu otvorite Artikli → Excel unos → izaberite fajl → Proveri i uvezi."],
+  ["5", "Kategorija, grupa i podgrupa moraju pratiti isti redosled kao navigacija sajta; podgrupa može ostati prazna."],
+  ["6", "Sačuvajte fajl kao Excel Workbook (.xlsx), pa ga uvezite kroz Artikli → Excel unos."],
   ["!", "Slike sa računara i MP cena dodaju se posle uvoza, na kartonu proizvoda i u RETAIL cenovniku."],
 ];
 instructions.getRange("A3:B9").values = steps;
@@ -227,7 +229,7 @@ console.log(errors.ndjson);
 await fs.mkdir(outputDir, { recursive: true });
 const inputPreview = await workbook.render({
   sheetName: "Artikli",
-  range: "A1:AO2",
+  range: "A1:AP2",
   scale: 1,
   format: "png",
 });

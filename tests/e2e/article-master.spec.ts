@@ -30,6 +30,7 @@ test.describe("article master acceptance", () => {
   let secondaryWarehouseId = "";
   let supplierId = "";
   let rootCategoryId = "";
+  let groupCategoryId = "";
   let generatedProductId = "";
 
   test.beforeAll(async () => {
@@ -80,6 +81,16 @@ test.describe("article master acceptance", () => {
       },
     });
     rootCategoryId = rootCategory.id;
+    const groupCategory = await db.category.create({
+      data: {
+        name: `${tag} grupa`,
+        slug: `qa-group-${runId}`,
+        path: `/qa-root-${runId}/qa-group-${runId}`,
+        level: 1,
+        parentId: rootCategory.id,
+      },
+    });
+    groupCategoryId = groupCategory.id;
     const supplier = await db.supplier.create({
       data: {
         code: `DOB-${runId}`.slice(0, 40),
@@ -246,11 +257,8 @@ test.describe("article master acceptance", () => {
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
     await expect(productForm.locator('input[name="sku"]')).toBeEditable();
-    await expect(
-      productForm
-        .locator('select[name="groupId"] option')
-        .filter({ hasText: "Trpezarijske stolice i stolovi" }),
-    ).toHaveCount(1);
+    const saveButton = productForm.getByRole("button", { name: "Sačuvaj izmene" });
+    await expect(saveButton).toBeInViewport();
     expect(
       await productForm
         .locator('[name="sku"], [name="shortDescription"], [name="name"]')
@@ -266,8 +274,11 @@ test.describe("article master acceptance", () => {
     await shortNameInput.fill("N2212");
     await page.getByLabel("Status artikla").selectOption("SP");
     await page.locator('select[name="supplierId"]').selectOption(supplierId);
-    await page.locator('select[name="categoryId"]').selectOption(rootCategoryId);
-    await page.getByLabel("Nova grupa").fill(`${tag} grupa`);
+    await page.locator('select[name="siteCategoryId"]').selectOption(rootCategoryId);
+    await expect(
+      page.locator(`select[name="siteGroupId"] option[value="${groupCategoryId}"]`),
+    ).toHaveCount(1);
+    await page.locator('select[name="siteGroupId"]').selectOption(groupCategoryId);
     await page.getByLabel("Nova kolekcija").fill(`${tag} kolekcija`);
     await page
       .getByLabel("Kratki opis za kartice, naziv i dokumente")
@@ -298,7 +309,16 @@ test.describe("article master acceptance", () => {
         element.dispatchEvent(new InputEvent("input", { bubbles: true }));
       },
     );
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(saveButton).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
+    await expect(saveButton).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(saveButton).toBeInViewport();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
+    await expect(
+      productForm.getByRole("button", { name: "Čuvanje…" }),
+    ).toBeVisible();
     await expect
       .poll(async () => {
         const product = await db.product.findUniqueOrThrow({
@@ -388,8 +408,8 @@ test.describe("article master acceptance", () => {
           "identity",
           "name",
         ]),
-        category: `${tag} korenska kategorija`,
-        categoryParentId: undefined,
+        category: `${tag} grupa`,
+        categoryParentId: rootCategoryId,
         lookups: [
           "ATTRIBUTE:Hrast",
           "ATTRIBUTE:Metal",
@@ -399,6 +419,15 @@ test.describe("article master acceptance", () => {
           "COLOR:Natur",
         ],
       });
+    const storefrontPage = await context.newPage();
+    await storefrontPage.goto(
+      `/k/qa-root-${runId}/qa-group-${runId}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await expect(storefrontPage.getByText("N2212", { exact: false }).first()).toBeVisible({
+      timeout: 120_000,
+    });
+    await storefrontPage.close();
     await expect(productForm.locator('input[name="sku"]')).toHaveValue(productSku);
     await expect(productForm.locator('[name="shortDescription"]')).toHaveValue(
       "Otvorena polica",
@@ -808,6 +837,29 @@ test.describe("article master acceptance", () => {
     );
     expect(imported.tncFrom?.toISOString().slice(0, 10)).toBe("2026-08-01");
     expect(imported.tncUntil?.toISOString().slice(0, 10)).toBe("2026-12-31");
+
+    const invalidHierarchyWorkbook = new ExcelJS.Workbook();
+    const invalidHierarchySheet = invalidHierarchyWorkbook.addWorksheet("Artikli");
+    invalidHierarchySheet.addRow(["Kratki naziv", "Grupa"]);
+    invalidHierarchySheet.addRow([`${tag} bez kategorije`, `${tag} grupa`]);
+    await page.getByLabel("XLSX datoteka").setInputFiles({
+      name: `article-master-invalid-hierarchy-${runId}.xlsx`,
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from(await invalidHierarchyWorkbook.xlsx.writeBuffer()),
+    });
+    const invalidHierarchyResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/erp/articles/import") &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    const invalidHierarchyResponse = await invalidHierarchyResponsePromise;
+    const invalidHierarchyPayload = await invalidHierarchyResponse.json();
+    expect(invalidHierarchyResponse.status()).toBe(409);
+    expect(invalidHierarchyPayload.error).toContain(
+      "grupa ne može biti zadata bez kategorije",
+    );
 
     const partialWorkbook = new ExcelJS.Workbook();
     const partialSheet = partialWorkbook.addWorksheet("Artikli");
