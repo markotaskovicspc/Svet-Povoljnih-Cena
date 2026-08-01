@@ -39,6 +39,10 @@ import { optionalDateInput, dateInputValue } from "@/lib/article-master";
 import { normalizeArticleSku } from "@/lib/article-sku";
 import { sanitizeRichText } from "@/lib/rich-text";
 import {
+  PRODUCT_ATTACHMENT_SECTION_OPTIONS,
+  productAttachmentAdminLabel,
+} from "@/lib/product-documents";
+import {
   retryFailedRabaluxProductMedia,
   syncRabaluxCatalogProduct,
 } from "@/lib/rabalux";
@@ -470,6 +474,20 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             },
             select: { slug: true },
           });
+          if (existing.sku !== sku) {
+            for (const section of PRODUCT_ATTACHMENT_SECTION_OPTIONS) {
+              await tx.productAttachment.updateMany({
+                where: {
+                  productId: d.id,
+                  section: section.value,
+                  origin: "ADMIN_UPLOAD",
+                },
+                data: {
+                  label: productAttachmentAdminLabel(sku, section.value),
+                },
+              });
+            }
+          }
           const currentCategoryIds = existing.categories
             .map(({ categoryId }) => categoryId)
             .sort();
@@ -1027,7 +1045,13 @@ export default async function ProductDetail({
     .map((attachment) => ({
       id: attachment.id,
       section: attachment.section as EditableProductAttachment["section"],
-      label: attachment.label,
+      label:
+        attachment.origin === "ADMIN_UPLOAD"
+          ? productAttachmentAdminLabel(
+              product.sku,
+              attachment.section as EditableProductAttachment["section"],
+            )
+          : attachment.label,
       url: resolveSupabaseStorageUrl(attachment.url),
       order: attachment.order,
       origin: attachment.origin,
@@ -1249,13 +1273,21 @@ export default async function ProductDetail({
                 PDP info sekcije
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
-                <Field label="Uslovi isporuke">
-                  <Textarea
-                    name="pdpDeliveryTerms"
-                    rows={3}
-                    defaultValue={product.pdpDeliveryTerms ?? ""}
+                <div className="space-y-2">
+                  <Field label="Uslovi isporuke">
+                    <Textarea
+                      name="pdpDeliveryTerms"
+                      rows={3}
+                      defaultValue={product.pdpDeliveryTerms ?? ""}
+                    />
+                  </Field>
+                  <ProductAttachmentsEditor
+                    productId={product.id}
+                    productSku={product.sku}
+                    section="DELIVERY_TERMS"
+                    initialAttachments={editableAttachments}
                   />
-                </Field>
+                </div>
                 <div className="flex items-center rounded-lg border border-border/60 bg-muted-bg/30 p-3">
                   <Toggle
                     name="allowsAssembly"
@@ -1264,27 +1296,51 @@ export default async function ProductDetail({
                   />
                 </div>
               </div>
-              <Field label="Deklaracija">
-                <Textarea
-                  name="declaration"
-                  rows={3}
-                  defaultValue={product.declaration ?? ""}
+              <div className="space-y-2">
+                <Field label="Deklaracija">
+                  <Textarea
+                    name="declaration"
+                    rows={3}
+                    defaultValue={product.declaration ?? ""}
+                  />
+                </Field>
+                <ProductAttachmentsEditor
+                  productId={product.id}
+                  productSku={product.sku}
+                  section="DECLARATION"
+                  initialAttachments={editableAttachments}
                 />
-              </Field>
-              <Field label="Uputstvo za sastavljanje">
-                <Textarea
-                  name="assemblyInstructions"
-                  rows={3}
-                  defaultValue={product.assemblyInstructions ?? ""}
+              </div>
+              <div className="space-y-2">
+                <Field label="Uputstvo za sastavljanje">
+                  <Textarea
+                    name="assemblyInstructions"
+                    rows={3}
+                    defaultValue={product.assemblyInstructions ?? ""}
+                  />
+                </Field>
+                <ProductAttachmentsEditor
+                  productId={product.id}
+                  productSku={product.sku}
+                  section="ASSEMBLY_INSTRUCTIONS"
+                  initialAttachments={editableAttachments}
                 />
-              </Field>
-              <Field label="Kako održavati">
-                <Textarea
-                  name="maintenance"
-                  rows={3}
-                  defaultValue={product.maintenance ?? ""}
+              </div>
+              <div className="space-y-2">
+                <Field label="Kako održavati">
+                  <Textarea
+                    name="maintenance"
+                    rows={3}
+                    defaultValue={product.maintenance ?? ""}
+                  />
+                </Field>
+                <ProductAttachmentsEditor
+                  productId={product.id}
+                  productSku={product.sku}
+                  section="MAINTENANCE"
+                  initialAttachments={editableAttachments}
                 />
-              </Field>
+              </div>
             </fieldset>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <Field label="Stanje">
@@ -1498,17 +1554,6 @@ export default async function ProductDetail({
               <SubmitButton>Sačuvaj izmene</SubmitButton>
             </div>
           </AdminActionForm>
-          </Card>
-          <Card>
-            <CardTitle description="Tekst sekcija se čuva zajedno sa artiklom; ovde se dodaju dokumenti koji se prikazuju u istoj PDP info sekciji.">
-              Fajlovi u PDP info sekcijama
-            </CardTitle>
-            <div className="mt-4">
-              <ProductAttachmentsEditor
-                productId={product.id}
-                initialAttachments={editableAttachments}
-              />
-            </div>
           </Card>
         </div>
 

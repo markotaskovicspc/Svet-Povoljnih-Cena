@@ -101,6 +101,7 @@ export interface Product {
   packageDimensionsCm?: Dimensions;
   colorPrimary?: string;
   colorSecondary?: string;
+  attributes?: string[];
   materials: Material[];
   pictograms: Pictogram[];
 

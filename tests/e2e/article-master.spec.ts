@@ -246,6 +246,11 @@ test.describe("article master acceptance", () => {
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
     await expect(productForm.locator('input[name="sku"]')).toBeEditable();
+    await expect(
+      productForm
+        .locator('select[name="groupId"] option')
+        .filter({ hasText: "Trpezarijske stolice i stolovi" }),
+    ).toHaveCount(1);
     expect(
       await productForm
         .locator('[name="sku"], [name="shortDescription"], [name="name"]')
@@ -289,7 +294,7 @@ test.describe("article master acceptance", () => {
     await richTextEditor.evaluate(
       (element) => {
         element.innerHTML =
-          '<h2 onclick="alert(1)">Naslov</h2><p>Bezbedan <strong>opis</strong></p>';
+          '<h2 onclick="alert(1)">Naslov</h2><p>Bezbedan <strong>opis</strong></p><ul><li>Stavka</li></ul>';
         element.dispatchEvent(new InputEvent("input", { bubbles: true }));
       },
     );
@@ -366,7 +371,8 @@ test.describe("article master acceptance", () => {
         name: `${tag} kolekcija Otvorena polica N2212`,
         shortName: "N2212",
         shortDescription: "Otvorena polica",
-        description: "<h2>Naslov</h2><p>Bezbedan <strong>opis</strong></p>",
+        description:
+          "<h2>Naslov</h2><p>Bezbedan <strong>opis</strong></p><ul><li>Stavka</li></ul>",
         stock: 27,
         status: "SP",
         isNew: true,
@@ -427,57 +433,72 @@ test.describe("article master acceptance", () => {
       )
       .toEqual({ alt: `${tag} izmenjen alt`, order: 2 });
 
-    const declarationSection = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Deklaracija", exact: true }),
-    });
+    const declarationSection = page.locator(
+      '[data-pdp-attachment-section="DECLARATION"]',
+    );
     await expect(declarationSection).toHaveCount(1);
+    await expect(page.getByLabel("Naziv dokumenta")).toHaveCount(0);
     await declarationSection
-      .locator('input[name="label"]')
-      .fill(`${tag} deklaracija`);
-    await declarationSection
-      .locator('input[name="file"]')
+      .locator('input[type="file"]')
       .setInputFiles(path.resolve("public/logo.jpeg"));
     await declarationSection
       .getByRole("button", { name: "Dodaj dokument", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Dokument je dodat.", {
-      timeout: 120_000,
-    });
+    await expect(declarationSection.getByRole("status")).toContainText(
+      "Dokument je dodat.",
+      { timeout: 120_000 },
+    );
     await expect
       .poll(
-        () =>
-          db.productAttachment.count({
-            where: { productId, label: `${tag} deklaracija` },
-          }),
+        async () => {
+          const attachments = await db.productAttachment.findMany({
+            where: { productId, section: "DECLARATION", origin: "ADMIN_UPLOAD" },
+            select: { label: true, url: true },
+          });
+          return attachments.length === 1 ? attachments[0]!.label : null;
+        },
         { timeout: 120_000 },
       )
-      .toBe(1);
-    await page.reload({ waitUntil: "load" });
+      .toBe(`${productSku} deklaracija`);
+    const firstAttachmentUrl = (
+      await db.productAttachment.findFirstOrThrow({
+        where: { productId, section: "DECLARATION", origin: "ADMIN_UPLOAD" },
+        select: { url: true },
+      })
+    ).url;
+    await expect(declarationSection).toContainText(`${productSku} deklaracija`);
 
-    const attachmentLabel = declarationSection.locator(
-      'input[aria-label="Naziv dokumenta"]',
-    );
-    await expect(attachmentLabel).toHaveCount(1);
-    await attachmentLabel.fill(`${tag} deklaracija v2`);
     await declarationSection
-      .getByRole("button", { name: "Sačuvaj naziv dokumenta", exact: true })
+      .locator('input[type="file"]')
+      .setInputFiles(path.resolve("public/logo.jpeg"));
+    await declarationSection
+      .getByRole("button", { name: "Zameni dokument", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Dokument je sačuvan.", {
-      timeout: 120_000,
-    });
-    await page.reload({ waitUntil: "load" });
-    const reloadedDeclarationSection = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Deklaracija", exact: true }),
-    });
-    await expect(
-      reloadedDeclarationSection.locator(
-        'input[aria-label="Naziv dokumenta"]',
-      ),
-    ).toHaveValue(`${tag} deklaracija v2`);
+    await expect(declarationSection.getByRole("status")).toContainText(
+      "Dokument je zamenjen.",
+      { timeout: 120_000 },
+    );
+    await expect
+      .poll(
+        async () => {
+          const attachments = await db.productAttachment.findMany({
+            where: { productId, section: "DECLARATION", origin: "ADMIN_UPLOAD" },
+            select: { label: true, url: true },
+          });
+          return attachments.length === 1
+            ? {
+                label: attachments[0]!.label,
+                urlChanged: attachments[0]!.url !== firstAttachmentUrl,
+              }
+            : null;
+        },
+        { timeout: 120_000 },
+      )
+      .toEqual({ label: `${productSku} deklaracija`, urlChanged: true });
 
     await clickConfirmation(
       page,
-      reloadedDeclarationSection.getByRole("button", {
+      declarationSection.getByRole("button", {
         name: "Obriši dokument",
         exact: true,
       }),
@@ -499,6 +520,17 @@ test.describe("article master acceptance", () => {
         name: `${tag} kolekcija Otvorena polica N2212`,
       }),
     ).toBeVisible();
+    await expect(page.getByLabel("Boja proizvoda")).toContainText("Natur");
+    await expect(page.getByLabel("Atributi proizvoda")).toContainText("Hrast");
+    await expect(page.getByLabel("Atributi proizvoda")).toContainText("Metal");
+    await page.locator("button").filter({ hasText: "Opis proizvoda" }).first().click();
+    const pdpInfoDialog = page.getByRole("dialog");
+    await expect(pdpInfoDialog).toBeVisible();
+    await expect(
+      pdpInfoDialog.getByRole("heading", { name: "Naslov", level: 2 }),
+    ).toBeVisible();
+    await expect(pdpInfoDialog.locator("strong").filter({ hasText: "opis" })).toBeVisible();
+    await expect(pdpInfoDialog.locator("ul li").filter({ hasText: "Stavka" })).toBeVisible();
 
     await page.goto(`/admin/erp/artikli/${productId}`, { waitUntil: "load" });
     await expect(page.getByLabel("Web check")).toBeChecked();
@@ -840,7 +872,8 @@ test.describe("article master acceptance", () => {
       articleStatus: "SP",
       supplierId,
       collection: { name: `${tag} kolekcija` },
-      description: "<h2>Naslov</h2><p>Bezbedan <strong>opis</strong></p>",
+      description:
+        "<h2>Naslov</h2><p>Bezbedan <strong>opis</strong></p><ul><li>Stavka</li></ul>",
       materialText: "Hrast + čelik",
       attribute1: "Hrast",
       colorPrimary: "Natur",

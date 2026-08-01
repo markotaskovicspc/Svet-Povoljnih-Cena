@@ -23,3 +23,10 @@ export function productAttachmentSectionLabel(
       ?.label ?? section
   );
 }
+
+export function productAttachmentAdminLabel(
+  sku: string,
+  section: ProductAttachmentSectionValue,
+) {
+  return `${sku.trim()} ${productAttachmentSectionLabel(section).toLocaleLowerCase("sr-Latn")}`;
+}

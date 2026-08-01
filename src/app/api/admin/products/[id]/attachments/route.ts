@@ -6,15 +6,19 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getProductMediaBucket } from "@/lib/supabase/storage";
+import {
+  getManagedProductMediaStorageKey,
+  getProductMediaBucket,
+  resolveSupabaseStorageUrl,
+} from "@/lib/supabase/storage";
 import { validateProductDocument } from "@/lib/product-documents.server";
+import { productAttachmentAdminLabel } from "@/lib/product-documents";
 
 const uploadSchema = z.object({
   section: z.nativeEnum(ProductAttachmentSection).refine(
     (section) => section !== ProductAttachmentSection.GENERAL,
     "Izaberite PDP info sekciju.",
   ),
-  label: z.string().trim().min(1).max(160),
 });
 
 function refreshProduct(productId: string, slug: string) {
@@ -30,12 +34,10 @@ export async function POST(
   const admin = await requireAdminAction(["CONTENT", "OPS"]);
   const { id: productId } = await context.params;
   let storageKey: string | null = null;
-  let createdAttachmentId: string | null = null;
   try {
     const formData = await request.formData();
     const parsed = uploadSchema.safeParse({
       section: formData.get("section"),
-      label: formData.get("label"),
     });
     if (!parsed.success) {
       return NextResponse.json(
@@ -50,7 +52,7 @@ export async function POST(
     const [product, validated] = await Promise.all([
       db.product.findUnique({
         where: { id: productId },
-        select: { id: true, slug: true },
+        select: { id: true, sku: true, slug: true },
       }),
       validateProductDocument(file),
     ]);
@@ -69,61 +71,109 @@ export async function POST(
     );
     if (uploadError) throw new Error(`Upload nije uspeo: ${uploadError.message}`);
 
-    const maxOrder = await db.productAttachment.aggregate({
-      where: {
-        productId,
-        section: parsed.data.section,
-        kind: "DOCUMENT",
-      },
-      _max: { order: true },
+    const label = productAttachmentAdminLabel(product.sku, parsed.data.section);
+    const saved = await db.$transaction(async (tx) => {
+      const existing = await tx.productAttachment.findMany({
+        where: {
+          productId,
+          section: parsed.data.section,
+          kind: "DOCUMENT",
+          origin: "ADMIN_UPLOAD",
+        },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      });
+      const current = existing[0];
+      if (existing.length > 1) {
+        await tx.productAttachment.deleteMany({
+          where: { id: { in: existing.slice(1).map(({ id }) => id) } },
+        });
+      }
+      if (current) {
+        const attachment = await tx.productAttachment.update({
+          where: { id: current.id },
+          data: {
+            label,
+            url: storageKey!,
+            mimeType: validated.mimeType,
+            sizeBytes: validated.sizeBytes,
+            syncStatus: "READY",
+          },
+        });
+        return { attachment, replaced: existing };
+      }
+      const maxOrder = await tx.productAttachment.aggregate({
+        where: {
+          productId,
+          section: parsed.data.section,
+          kind: "DOCUMENT",
+        },
+        _max: { order: true },
+      });
+      const attachment = await tx.productAttachment.create({
+        data: {
+          productId,
+          section: parsed.data.section,
+          kind: "DOCUMENT",
+          origin: "ADMIN_UPLOAD",
+          label,
+          url: storageKey!,
+          mimeType: validated.mimeType,
+          sizeBytes: validated.sizeBytes,
+          order: (maxOrder._max.order ?? -1) + 1,
+        },
+      });
+      return { attachment, replaced: [] };
     });
-    const attachment = await db.productAttachment.create({
-      data: {
-        productId,
-        section: parsed.data.section,
-        kind: "DOCUMENT",
-        origin: "ADMIN_UPLOAD",
-        label: parsed.data.label,
-        url: storageKey,
-        mimeType: validated.mimeType,
-        sizeBytes: validated.sizeBytes,
-        order: (maxOrder._max.order ?? -1) + 1,
-      },
-      select: { id: true, label: true, section: true, order: true },
-    });
-    createdAttachmentId = attachment.id;
+    const replacedStorageKeys = saved.replaced
+      .map((attachment) => getManagedProductMediaStorageKey(attachment.url))
+      .filter(
+        (key): key is string =>
+          Boolean(key?.startsWith(`products/${productId}/documents/`)) &&
+          key !== storageKey,
+      );
+    let cleanupError: string | null = null;
+    if (replacedStorageKeys.length) {
+      const { error } = await storage.remove(replacedStorageKeys);
+      cleanupError = error?.message ?? null;
+    }
     await logAudit({
       actorId: admin.id,
-      action: "product.attachment.create",
+      action: saved.replaced.length
+        ? "product.attachment.replace"
+        : "product.attachment.create",
       entity: "ProductAttachment",
-      entityId: attachment.id,
+      entityId: saved.attachment.id,
       diff: {
         productId,
-        section: attachment.section,
-        label: attachment.label,
+        section: saved.attachment.section,
+        label: saved.attachment.label,
         mimeType: validated.mimeType,
         sizeBytes: validated.sizeBytes,
         storageKey,
+        replacedAttachmentIds: saved.replaced.map(({ id }) => id),
+        cleanupError,
       },
     });
     refreshProduct(productId, product.slug);
-    return NextResponse.json({ attachment });
+    return NextResponse.json({
+      attachment: {
+        id: saved.attachment.id,
+        section: saved.attachment.section,
+        label: saved.attachment.label,
+        url: resolveSupabaseStorageUrl(saved.attachment.url),
+        order: saved.attachment.order,
+        origin: saved.attachment.origin,
+        mimeType: saved.attachment.mimeType,
+        sizeBytes: saved.attachment.sizeBytes,
+      },
+    });
   } catch (error) {
     if (storageKey) {
-      let canRemoveStorage = !createdAttachmentId;
-      if (createdAttachmentId) {
-        canRemoveStorage = await db.productAttachment
-          .deleteMany({
-            where: {
-              id: createdAttachmentId,
-              productId,
-              origin: "ADMIN_UPLOAD",
-            },
-          })
-          .then(() => true)
-          .catch(() => false);
-      }
-      if (canRemoveStorage) {
+      const savedAttachment = await db.productAttachment.findFirst({
+        where: { productId, url: storageKey },
+        select: { id: true },
+      }).catch(() => null);
+      if (!savedAttachment) {
         await createAdminClient()
           .storage
           .from(getProductMediaBucket())

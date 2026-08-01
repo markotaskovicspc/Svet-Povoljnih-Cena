@@ -16,6 +16,7 @@ import {
   convertDocxDescription,
   validateProductDocument,
 } from "@/lib/product-documents.server";
+import { productAttachmentAdminLabel } from "@/lib/product-documents";
 
 describe("unos artikala", () => {
   it("trimuje ručni SKU i odbija praznine i kontrolne znakove", () => {
@@ -140,7 +141,9 @@ describe("PDP dokumenti", () => {
     const converted = await convertDocxDescription(buffer);
     expect(converted.html).toContain("<h2>Naslov</h2>");
     expect(converted.html).toContain("<strong>Važno</strong>");
+    expect(converted.html).toContain("<strong>Prilagođen stil</strong>");
     expect(converted.html).not.toMatch(/script|onclick|style=/i);
+    expect(converted.warnings).toEqual([]);
 
     const fakeZip = new File(
       [Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00])],
@@ -150,6 +153,15 @@ describe("PDP dokumenti", () => {
       },
     );
     await expect(validateProductDocument(fakeZip)).rejects.toThrow(/DOCX paket/i);
+  });
+
+  it("formira naziv admin dokumenta iz šifre i PDP sekcije", () => {
+    expect(productAttachmentAdminLabel(" 110187 ", "DECLARATION")).toBe(
+      "110187 deklaracija",
+    );
+    expect(
+      productAttachmentAdminLabel("110187", "ASSEMBLY_INSTRUCTIONS"),
+    ).toBe("110187 uputstvo za sastavljanje");
   });
 });
 
@@ -177,6 +189,8 @@ function minimalDocx() {
     `<?xml version="1.0" encoding="UTF-8"?>
       <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
         <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/></w:style>
+        <w:style w:type="paragraph" w:styleId="p1"><w:name w:val="p1"/></w:style>
+        <w:style w:type="character" w:styleId="s1"><w:name w:val="s1"/></w:style>
       </w:styles>`,
   );
   zip.folder("word")?.file(
@@ -186,6 +200,7 @@ function minimalDocx() {
         <w:body>
           <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Naslov</w:t></w:r></w:p>
           <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Važno</w:t></w:r></w:p>
+          <w:p><w:pPr><w:pStyle w:val="p1"/></w:pPr><w:r><w:rPr><w:rStyle w:val="s1"/><w:b/></w:rPr><w:t>Prilagođen stil</w:t></w:r></w:p>
           <w:sectPr/>
         </w:body>
       </w:document>`,

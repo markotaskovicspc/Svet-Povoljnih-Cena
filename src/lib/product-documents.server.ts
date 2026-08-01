@@ -134,6 +134,9 @@ export async function convertDocxDescription(buffer: Buffer) {
           .filter((message) => message.type === "warning")
           .map((message) => message.message),
       ]),
+    ).filter(
+      (warning) =>
+        !/^Unrecognised (?:paragraph|run) style:/i.test(warning.trim()),
     ),
   };
 }

@@ -170,10 +170,28 @@ export default async function ProductPage({ params }: RouteProps) {
             ) : null}
             <ProductColorOptions
               product={product}
-              selectable
               className="mt-1.5 md:mt-2.5"
-              label="Dostupne boje"
+              label="Boja proizvoda"
+              showLabels
             />
+            {product.attributes?.length ? (
+              <div
+                className="mt-1.5 flex flex-wrap items-center gap-1.5"
+                aria-label="Atributi proizvoda"
+              >
+                <span className="mr-0.5 text-xs font-medium text-ink-500">
+                  Atributi:
+                </span>
+                {product.attributes.map((attribute) => (
+                  <span
+                    key={attribute}
+                    className="rounded-full bg-muted-bg px-2 py-1 text-xs font-semibold text-ink-800"
+                  >
+                    {attribute}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </header>
 
           {/* Price block — only the effective price is emphasised. */}

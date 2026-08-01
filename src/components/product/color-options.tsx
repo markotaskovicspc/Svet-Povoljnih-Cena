@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -54,54 +53,53 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
 export function ProductColorOptions({
   product,
   className,
-  selectable = false,
   label = "Opcije boja",
   max = 4,
+  showLabels = false,
 }: {
   product: Product;
   className?: string;
-  selectable?: boolean;
   label?: string;
   max?: number;
+  showLabels?: boolean;
 }) {
-  const colors = useMemo(() => getProductColorOptions(product), [product]);
-  const [selected, setSelected] = useState(colors[0]?.label ?? "");
+  const colors = getProductColorOptions(product);
 
   if (!colors.length) {
     return <div className={cn("h-5", className)} aria-hidden />;
   }
 
   return (
-    <div className={cn("flex items-center gap-1", className)} aria-label={label}>
-      {colors.slice(0, max).map((color) => {
-        const active = selectable && selected === color.label;
-        return (
-          <button
-            key={color.label}
-            type="button"
-            title={color.label}
-            aria-label={color.label}
-            aria-pressed={selectable ? active : undefined}
-            onClick={selectable ? () => setSelected(color.label) : undefined}
-            disabled={!selectable}
+    <div
+      className={cn("flex flex-wrap items-center gap-1.5", className)}
+      aria-label={label}
+    >
+      {showLabels ? (
+        <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
+      ) : null}
+      {colors.slice(0, max).map((color) => (
+        <span
+          key={color.label}
+          title={color.label}
+          className={cn(
+            "inline-flex shrink-0 items-center rounded-full",
+            showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
+          )}
+        >
+          <span
             className={cn(
-              "ring-border inline-flex shrink-0 rounded-full ring-1 transition",
-              selectable
-                ? "size-7 items-center justify-center bg-white hover:ring-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
-                : "size-3.5",
-              active && "ring-walnut ring-2",
+              "shrink-0 rounded-full ring-1 ring-black/10",
+              showLabels ? "size-3.5" : "size-full",
             )}
-          >
-            <span
-              className={cn(
-                "rounded-full ring-1 ring-black/10",
-                selectable ? "size-[18px]" : "size-full",
-              )}
-              style={{ backgroundColor: color.hex }}
-            />
-          </button>
-        );
-      })}
+            style={{ backgroundColor: color.hex }}
+          />
+          {showLabels ? (
+            <span className="text-xs font-semibold text-ink-800">
+              {color.label}
+            </span>
+          ) : null}
+        </span>
+      ))}
     </div>
   );
 }

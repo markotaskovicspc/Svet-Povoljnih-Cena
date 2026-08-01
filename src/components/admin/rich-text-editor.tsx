@@ -73,9 +73,10 @@ export function RichTextEditor({
       syncValue();
       setImportMessage({
         ok: true,
-        text: payload.warnings?.length
-          ? `Opis je učitan. ${payload.warnings.join(" ")}`
-          : "Opis je učitan u editor. Pregledajte ga i sačuvajte artikal.",
+        text: [
+          "Opis je učitan u editor. Pregledajte ga i sačuvajte artikal.",
+          ...(payload.warnings ?? []),
+        ].join(" "),
       });
     } catch (error) {
       setImportMessage({

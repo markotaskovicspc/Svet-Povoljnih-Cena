@@ -170,7 +170,7 @@ function RichText({ content }: { content: string }) {
   if (hasMarkup) {
     return (
       <div
-        className="text-justify text-sm leading-relaxed text-ink-700 [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5"
+        className="text-justify text-sm leading-relaxed text-ink-700 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-walnut/35 [&_blockquote]:pl-4 [&_blockquote]:italic [&_em]:italic [&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-left [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink-900 [&_h2:first-child]:mt-0 [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:text-left [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-ink-900 [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_strong]:font-bold [&_u]:underline [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
         dangerouslySetInnerHTML={{ __html: sanitizeRichText(content) }}
       />
     );

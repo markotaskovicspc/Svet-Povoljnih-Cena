@@ -45,6 +45,7 @@ import {
   type DeliveryWindows,
 } from "@/lib/delivery-windows";
 import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import { productAttachmentAdminLabel } from "@/lib/product-documents";
 import {
   productNewUntilFloor,
   productNewUntilIsActive,
@@ -227,6 +228,9 @@ function mapProduct(
     packageDimensionsCm: packageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
+    attributes: [p.attribute1, p.attribute2, p.attribute3, p.attribute4].filter(
+      (attribute): attribute is string => Boolean(attribute?.trim()),
+    ),
     materials: p.materials.map((m) => ({
       id: m.material.id,
       label: m.material.label,
@@ -294,7 +298,13 @@ function mapProduct(
         | "declaration"
         | "assembly_instructions"
         | "maintenance",
-      label: attachment.label,
+      label:
+        attachment.origin === "ADMIN_UPLOAD" && attachment.section !== "GENERAL"
+          ? productAttachmentAdminLabel(
+              p.sku,
+              attachment.section,
+            )
+          : attachment.label,
       url: resolveSupabaseStorageMedia({ url: attachment.url }).url,
       mimeType: attachment.mimeType ?? undefined,
       sizeBytes: attachment.sizeBytes ?? undefined,
@@ -364,6 +374,10 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     dimensionsCm: { w: 0, d: 0, h: 0 },
     colorPrimary: sourceValue(product, "Boja 1") || undefined,
     colorSecondary: sourceValue(product, "Boja 2") || undefined,
+    attributes: [
+      sourceValue(product, "Atribut 1"),
+      sourceValue(product, "Atribut 2"),
+    ].filter((attribute): attribute is string => Boolean(attribute?.trim())),
     materials: [],
     pictograms: [],
     stock: 0,
