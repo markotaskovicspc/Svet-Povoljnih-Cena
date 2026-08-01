@@ -47,6 +47,7 @@ import {
   activeRetailPriceEntryWhere,
   upsertActiveRetailPrice,
 } from "@/lib/pricing/retail-price-write.server";
+import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
@@ -656,9 +657,12 @@ async function upsertCatalogItem(
         isRiskyPriceChange(Number(existing.fullPrice), item.fullPrice),
     );
     if (existing) {
-      const updateData = applyRabaluxOverrides(
-        data as unknown as Record<string, unknown>,
-        overrideFields,
+      const updateData = preserveExistingProductDescriptions(
+        applyRabaluxOverrides(
+          data as unknown as Record<string, unknown>,
+          overrideFields,
+        ),
+        existing,
       ) as Prisma.ProductUncheckedUpdateInput;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;

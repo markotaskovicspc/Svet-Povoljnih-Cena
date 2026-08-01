@@ -40,6 +40,10 @@ import { optionalDateInput, dateInputValue } from "@/lib/article-master";
 import { normalizeArticleSku } from "@/lib/article-sku";
 import { sanitizeRichText } from "@/lib/rich-text";
 import {
+  normalizeFullProductDescription,
+  normalizeShortProductDescription,
+} from "@/lib/product-descriptions";
+import {
   PRODUCT_ATTACHMENT_SECTION_OPTIONS,
   productAttachmentAdminLabel,
 } from "@/lib/product-documents";
@@ -357,8 +361,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           attribute2: d.attribute2?.trim() || null,
           attribute3: d.attribute3?.trim() || null,
           attribute4: d.attribute4?.trim() || null,
-          shortDescription: d.shortDescription || null,
-          description: sanitizeRichText(d.description),
+          shortDescription: normalizeShortProductDescription(d.shortDescription),
+          description: normalizeFullProductDescription(d.description),
           articleStatus: d.articleStatus,
           supplierId: d.supplierId?.trim() || null,
           pdpDeliveryTerms: d.pdpDeliveryTerms?.trim() || null,
@@ -1165,6 +1169,7 @@ export default async function ProductDetail({
                 <Textarea
                   name="shortDescription"
                   rows={2}
+                  maxLength={500}
                   defaultValue={product.shortDescription ?? ""}
                 />
                 <p className="mt-1 text-xs text-ink-500">

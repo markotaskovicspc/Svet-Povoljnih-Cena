@@ -30,6 +30,24 @@ export function RichTextEditor({
     initializedRef.current = true;
   }, [defaultValue]);
 
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    const form = editor?.closest("form");
+    if (!editor || !form) return;
+    const syncBeforeSubmit = () => {
+      if (hiddenRef.current) hiddenRef.current.value = editor.innerHTML;
+    };
+    const syncFormData = (event: FormDataEvent) => {
+      event.formData.set(name, editor.innerHTML);
+    };
+    form.addEventListener("submit", syncBeforeSubmit);
+    form.addEventListener("formdata", syncFormData);
+    return () => {
+      form.removeEventListener("submit", syncBeforeSubmit);
+      form.removeEventListener("formdata", syncFormData);
+    };
+  }, [name]);
+
   const syncValue = () => {
     if (hiddenRef.current) {
       hiddenRef.current.value = editorRef.current?.innerHTML ?? "";
@@ -150,10 +168,12 @@ export function RichTextEditor({
         contentEditable
         suppressContentEditableWarning
         onInput={syncValue}
+        onBlur={syncValue}
         className="prose prose-sm min-h-40 max-w-none px-3 py-2 text-sm text-ink-800 outline-none"
         role="textbox"
         aria-label="Formatirani opis za sajt"
         aria-multiline="true"
+        aria-required={required}
       />
       <input
         ref={hiddenRef}

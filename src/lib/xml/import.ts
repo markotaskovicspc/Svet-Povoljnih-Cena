@@ -7,6 +7,7 @@ import { connectorFor } from "./connector";
 import { productNewUntilIsActive } from "@/lib/product-newness";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
+import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
 import type {
   FeedItem,
   ImportSummary,
@@ -308,7 +309,13 @@ async function upsertFeedItem(
           { supplierId, supplierExternalId: item.externalId },
         ],
       },
-      select: { id: true, actionId: true, syncOverrides: true },
+      select: {
+        id: true,
+        actionId: true,
+        description: true,
+        shortDescription: true,
+        syncOverrides: true,
+      },
     });
 
     const slug = item.slug ?? item.sku.toLowerCase();
@@ -348,7 +355,12 @@ async function upsertFeedItem(
     let productId: string;
     let kind: "created" | "updated";
     const overrides = existing ? parseSyncOverrideFields(existing.syncOverrides) : new Set<string>();
-    const productData = existing ? applyProductOverrides(data, overrides) : data;
+    const productData = existing
+      ? preserveExistingProductDescriptions(
+          applyProductOverrides(data, overrides) as Record<string, unknown>,
+          existing,
+        ) as Prisma.ProductUncheckedUpdateInput
+      : data;
     const pricingLocked = overrides.has("pricing") || overrides.has("price");
 
     if (existing) {

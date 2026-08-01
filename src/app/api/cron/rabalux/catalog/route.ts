@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import {
   isRabaluxEnabled,
   RabaluxSyncBusyError,
@@ -19,7 +20,9 @@ async function run(request: Request) {
     return NextResponse.json({ ok: true, skipped: "integration_disabled" });
   }
   try {
-    return NextResponse.json({ ok: true, summary: await syncRabaluxCatalog() });
+    const summary = await syncRabaluxCatalog();
+    revalidateTag("catalog-products", "max");
+    return NextResponse.json({ ok: true, summary });
   } catch (error) {
     if (error instanceof RabaluxSyncBusyError) {
       return NextResponse.json(

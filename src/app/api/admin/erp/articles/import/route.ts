@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { ArticleStatus, Prisma } from "@prisma/client";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import {
@@ -13,10 +14,15 @@ import {
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
 import { articleSlug, optionalDateInput } from "@/lib/article-master";
-import { sanitizeRichText } from "@/lib/rich-text";
+import {
+  hasMeaningfulProductDescription,
+  resolveImportedFullDescription,
+  resolveImportedShortDescription,
+} from "@/lib/product-descriptions";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
 import { productNewUntilIsActive } from "@/lib/product-newness";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
+import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -607,9 +613,11 @@ export async function POST(request: Request) {
         const status = hasColumn("status")
           ? row.status ?? "UZ"
           : existing?.articleStatus ?? "UZ";
-        const shortDescription = hasColumn("shortDescription")
-          ? row.shortDescription
-          : existing?.shortDescription ?? null;
+        const shortDescription = resolveImportedShortDescription({
+          columnPresent: hasColumn("shortDescription"),
+          incoming: row.shortDescription,
+          current: existing?.shortDescription,
+        });
         const newUntil = hasColumn("newUntil")
           ? row.newUntil
           : existing?.newUntil ?? null;
@@ -622,9 +630,11 @@ export async function POST(request: Request) {
           }),
           shortName: row.shortName,
           shortDescription,
-          description: hasColumn("description")
-            ? sanitizeRichText(row.description ?? "")
-            : existing?.description ?? "",
+          description: resolveImportedFullDescription({
+            columnPresent: hasColumn("description"),
+            incoming: row.description,
+            current: existing?.description,
+          }),
           articleStatus: status,
           supplierId,
           groupId: group?.id ?? null,
@@ -723,6 +733,14 @@ export async function POST(request: Request) {
                 slug: `${articleSlug(`${row.shortName}-${sku}`)}-${randomBytes(3).toString("hex")}`,
               },
             });
+        if (
+          (hasColumn("description") &&
+            hasMeaningfulProductDescription(row.description)) ||
+          (hasColumn("shortDescription") &&
+            hasMeaningfulProductDescription(row.shortDescription))
+        ) {
+          await lockSupplierOwnedFields(tx, product.id, admin.id, ["description"]);
+        }
         if (shouldReplaceCategory) {
           await tx.productCategory.deleteMany({ where: { productId: product.id } });
           if (category) {
@@ -824,5 +842,7 @@ export async function POST(request: Request) {
     entity: "Product",
     diff: { filename: file.name, rows: rows.length },
   });
+  revalidateTag("catalog-products", "max");
+  revalidatePath("/admin/erp/artikli");
   return NextResponse.json({ ok: true, imported: rows.length });
 }

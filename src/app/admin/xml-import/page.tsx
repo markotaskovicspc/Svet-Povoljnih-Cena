@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -230,6 +230,7 @@ async function executeRabalux(
                 reason,
               });
       revalidatePath("/admin/xml-import");
+      updateTag("catalog-products");
       return {
         ok: true as const,
         entityId: "supplier-rabalux",
@@ -375,6 +376,7 @@ async function triggerImport(formData: FormData) {
         const dryRun = formData.get("dryRun") === "on" || formData.get("dryRun") === "true";
         const summary = await importSupplier(id, { dryRun });
         revalidatePath("/admin/xml-import");
+        if (!dryRun) updateTag("catalog-products");
         return {
           ok: true as const,
           entityId: id,
