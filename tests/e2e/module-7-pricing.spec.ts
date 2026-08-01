@@ -497,8 +497,13 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       await expect(actionRow(page, fixture.highAction)).toBeVisible();
     });
 
-    await test.step("dupli klik, nepostojeći SKU i automatska polja sa MP cenom na datum", async () => {
-      await actionRow(page, fixture.lowAction).dblclick();
+    await test.step("dugme Otvori, nepostojeći SKU i automatska polja sa MP cenom na datum", async () => {
+      await page
+        .getByRole("button", {
+          name: `Otvori artikle akcije ${fixture.lowAction}`,
+          exact: true,
+        })
+        .click();
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText(`Artikli na akciji: ${fixture.lowAction}`);

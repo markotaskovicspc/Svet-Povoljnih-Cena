@@ -7,7 +7,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Pencil, Plus, Tag, Users } from "lucide-react";
+import { FolderOpen, Plus, Tag, Users } from "lucide-react";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -209,7 +209,7 @@ export function ActionsAdmin({
                 Lista akcija
               </p>
               <p className="text-xs text-ink-500">
-                Klik bira akciju; dupli klik otvara njene artikle.
+                Klik bira akciju; dugme Otvori prikazuje njene artikle.
               </p>
             </div>
             <Button
@@ -234,6 +234,7 @@ export function ActionsAdmin({
                   <th className="px-4 py-2.5">Period</th>
                   <th className="px-4 py-2.5 text-right">Prioritet</th>
                   <th className="px-4 py-2.5 text-right">Proizvoda</th>
+                  <th className="px-4 py-2.5 text-right">Radnje</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -277,11 +278,27 @@ export function ActionsAdmin({
                     <td className="px-4 py-3 text-right tabular-nums">
                       {action.products.length}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        aria-label={`Otvori artikle akcije ${action.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          chooseAction(action.id);
+                          setItemsOpen(true);
+                        }}
+                      >
+                        <FolderOpen className="size-4" />
+                        Otvori
+                      </Button>
+                    </td>
                   </tr>
                 ))}
                 {!actions.length ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-ink-500">
+                    <td colSpan={6} className="px-4 py-12 text-center text-ink-500">
                       Nema akcija. Kreirajte prvu akciju.
                     </td>
                   </tr>
@@ -454,8 +471,8 @@ function ActionEditor({
             </SubmitButton>
             {action ? (
               <Button type="button" variant="outline" onClick={onOpenItems}>
-                <Pencil className="size-4" />
-                Artikli ({action.products.length})
+                <FolderOpen className="size-4" />
+                Otvori artikle ({action.products.length})
               </Button>
             ) : null}
           </div>
