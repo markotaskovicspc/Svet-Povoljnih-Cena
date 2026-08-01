@@ -5,14 +5,17 @@ import { unstable_cache } from "next/cache";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import type { Product } from "@/types";
 import { compareActionPriceCandidates } from "./engine";
-import {
-  selectApplicableLoyaltyRule,
-  type ScopedLoyaltyRule,
-} from "./loyalty-scope";
+
+type ActiveLoyaltyRule = {
+  id: string;
+  discountPct: number;
+  priority: number;
+  updatedAt: string;
+};
 
 export type ActivePricingRules = {
   evaluatedAt: string;
-  loyaltyRules: ScopedLoyaltyRule[];
+  loyaltyRules: ActiveLoyaltyRule[];
   linearPromotions: Array<{
     id: string;
     name: string;
@@ -52,8 +55,6 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
         discountPct: true,
         priority: true,
         updatedAt: true,
-        scope: true,
-        products: { select: { productId: true } },
       },
     }),
     db.linearPromotion.findMany({
@@ -82,8 +83,6 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
       discountPct: Number(rule.discountPct),
       priority: rule.priority,
       updatedAt: rule.updatedAt.toISOString(),
-      scope: rule.scope,
-      productIds: rule.products.map((item) => item.productId),
     })),
     linearPromotions: linearPromotions.map((promotion) => ({
       id: promotion.id,
@@ -101,7 +100,7 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
 
 const getActivePricingRulesAcrossRequests = unstable_cache(
   loadActivePricingRules,
-  ["active-pricing-rules-v3"],
+  ["active-pricing-rules-v4"],
   { revalidate: 30, tags: ["catalog-pricing"] },
 );
 
@@ -118,10 +117,9 @@ export function pricingRuleInputsForProduct(
 ) {
   const categoryIds = new Set(product.categoryIds ?? []);
   const categoryPaths = product.categoryPaths ?? [];
-  const loyalty = selectApplicableLoyaltyRule(
-    product.id,
-    rules.loyaltyRules ?? [],
-  );
+  // Rules are already ordered by priority and latest update. Loyalty is a
+  // catalog-wide benefit; product targeting is intentionally ignored.
+  const loyalty = rules.loyaltyRules[0] ?? null;
   return {
     loyaltyDiscountPct: loyalty?.discountPct ?? null,
     linearPromotions: rules.linearPromotions

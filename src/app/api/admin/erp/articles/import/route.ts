@@ -52,6 +52,9 @@ type ArticleImportRow = {
   depthCm: number | null;
   heightCm: number | null;
   grossWeightKg: number | null;
+  unitPackWidthCm: number | null;
+  unitPackDepthCm: number | null;
+  unitPackHeightCm: number | null;
   packQty: number | null;
   packWidthCm: number | null;
   packDepthCm: number | null;
@@ -148,6 +151,18 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   brutotezinakg: "grossWeightKg",
   brutotezina: "grossWeightKg",
   brutotezinaartikla: "grossWeightKg",
+  unitpackwidthcm: "unitPackWidthCm",
+  sirinapakovanjajednogartikla: "unitPackWidthCm",
+  sirinapakovanjapojedinacnogartikla: "unitPackWidthCm",
+  sirinapojedinacnogpakovanja: "unitPackWidthCm",
+  unitpackdepthcm: "unitPackDepthCm",
+  dubinapakovanjajednogartikla: "unitPackDepthCm",
+  dubinapakovanjapojedinacnogartikla: "unitPackDepthCm",
+  dubinapojedinacnogpakovanja: "unitPackDepthCm",
+  unitpackheightcm: "unitPackHeightCm",
+  visinapakovanjajednogartikla: "unitPackHeightCm",
+  visinapakovanjapojedinacnogartikla: "unitPackHeightCm",
+  visinapojedinacnogpakovanja: "unitPackHeightCm",
   packqty: "packQty",
   kompak: "packQty",
   brojartikalaupakovanju: "packQty",
@@ -426,6 +441,9 @@ export async function POST(request: Request) {
       depthCm: numberCell(row, headers.get("depthCm"), "depthCm", errors, { min: 0 }),
       heightCm: numberCell(row, headers.get("heightCm"), "heightCm", errors, { min: 0 }),
       grossWeightKg: numberCell(row, headers.get("grossWeightKg"), "grossWeightKg", errors, { min: 0 }),
+      unitPackWidthCm: numberCell(row, headers.get("unitPackWidthCm"), "unitPackWidthCm", errors, { min: 0 }),
+      unitPackDepthCm: numberCell(row, headers.get("unitPackDepthCm"), "unitPackDepthCm", errors, { min: 0 }),
+      unitPackHeightCm: numberCell(row, headers.get("unitPackHeightCm"), "unitPackHeightCm", errors, { min: 0 }),
       packQty: numberCell(row, headers.get("packQty"), "packQty", errors, { integer: true, min: 0 }),
       packWidthCm: numberCell(row, headers.get("packWidthCm"), "packWidthCm", errors, { min: 0 }),
       packDepthCm: numberCell(row, headers.get("packDepthCm"), "packDepthCm", errors, { min: 0 }),
@@ -665,6 +683,15 @@ export async function POST(request: Request) {
           grossWeightKg: hasColumn("grossWeightKg")
             ? row.grossWeightKg
             : existing?.grossWeightKg ?? null,
+          unitPackWidthCm: hasColumn("unitPackWidthCm")
+            ? row.unitPackWidthCm
+            : existing?.unitPackWidthCm ?? null,
+          unitPackDepthCm: hasColumn("unitPackDepthCm")
+            ? row.unitPackDepthCm
+            : existing?.unitPackDepthCm ?? null,
+          unitPackHeightCm: hasColumn("unitPackHeightCm")
+            ? row.unitPackHeightCm
+            : existing?.unitPackHeightCm ?? null,
           packQty: hasColumn("packQty") ? row.packQty : existing?.packQty ?? null,
           packWidthCm: hasColumn("packWidthCm")
             ? row.packWidthCm

@@ -354,12 +354,19 @@ model Product {
   collectionId String?
   collection   Collection? @relation(fields: [collectionId], references: [id])
 
-  // Dimensions ŠxDxV (cm)
+  // Assembled article dimensions ŠxDxV (cm)
   widthCm             Decimal?  @db.Decimal(8, 2)
   depthCm             Decimal?  @db.Decimal(8, 2)
   heightCm            Decimal?  @db.Decimal(8, 2)
   weightKg            Decimal?  @db.Decimal(10, 3)
   grossWeightKg       Decimal?  @db.Decimal(10, 3)
+
+  // Individual article package dimensions ŠxDxV (cm)
+  unitPackWidthCm  Decimal? @db.Decimal(8, 2)
+  unitPackDepthCm  Decimal? @db.Decimal(8, 2)
+  unitPackHeightCm Decimal? @db.Decimal(8, 2)
+
+  // Transport package dimensions ŠxDxV (cm)
   packQty             Int?
   packWidthCm         Decimal?  @db.Decimal(8, 2)
   packDepthCm         Decimal?  @db.Decimal(8, 2)
@@ -2419,7 +2426,7 @@ model LoyaltyRule {
   id          String    @id @default(cuid())
   name        String
   discountPct Decimal   @db.Decimal(8, 2)
-  scope       LoyaltyScope @default(SELECTED_PRODUCTS)
+  scope       LoyaltyScope @default(ALL_PRODUCTS)
   priority    Int       @default(0)
   startsAt    DateTime?
   endsAt      DateTime?

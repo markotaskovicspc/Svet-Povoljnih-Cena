@@ -298,6 +298,9 @@ test.describe("article master acceptance", () => {
     await page.getByLabel("Sertifikati (odvojeni zarezom)").fill("FSC");
     await page.locator('textarea[name="materialText"]').fill("Hrast + čelik");
     await page.locator('input[name="stock"]').fill("25");
+    await productForm.locator('input[name="unitPackWidthCm"]').fill("31.5");
+    await productForm.locator('input[name="unitPackDepthCm"]').fill("22.25");
+    await productForm.locator('input[name="unitPackHeightCm"]').fill("11");
     await page
       .locator('input[name="stockAdjustmentReason"]')
       .fill("QA usklađivanje fizičkog stanja");
@@ -342,6 +345,9 @@ test.describe("article master acceptance", () => {
             articleStatus: true,
             isNew: true,
             materialText: true,
+            unitPackWidthCm: true,
+            unitPackDepthCm: true,
+            unitPackHeightCm: true,
             availableWebAuto: true,
             availableWholesaleAuto: true,
             availableExportAuto: true,
@@ -373,6 +379,11 @@ test.describe("article master acceptance", () => {
           status: product.articleStatus,
           isNew: product.isNew,
           material: product.materialText,
+          unitPackage: [
+            Number(product.unitPackWidthCm),
+            Number(product.unitPackDepthCm),
+            Number(product.unitPackHeightCm),
+          ],
           channels: [
             product.availableWebAuto,
             product.availableWholesaleAuto,
@@ -406,12 +417,14 @@ test.describe("article master acceptance", () => {
         status: "SP",
         isNew: true,
         material: "Hrast + čelik",
+        unitPackage: [31.5, 22.25, 11],
         channels: [true, true, true],
         parity: "DAP",
         deliveryDays: 14,
         collection: `${tag} kolekcija`,
         overrides: expect.arrayContaining([
           "description",
+          "dimensions",
           "flags",
           "grouping",
           "identity",
@@ -743,6 +756,9 @@ test.describe("article master acceptance", () => {
       "T&C od",
       "T&C do",
       "MPC",
+      "Širina pakovanja pojedinačnog artikla",
+      "Dubina pakovanja pojedinačnog artikla",
+      "Visina pakovanja pojedinačnog artikla",
     ]);
     sheet.addRow([
       `${tag} XLSX`,
@@ -766,6 +782,9 @@ test.describe("article master acceptance", () => {
       new Date("2026-08-01T00:00:00Z"),
       new Date("2026-12-31T00:00:00Z"),
       4999,
+      41.5,
+      32.25,
+      21,
     ]);
     const xlsx = Buffer.from(await importWorkbook.xlsx.writeBuffer());
     await page.goto("/admin/erp/artikli/import", {
@@ -828,6 +847,9 @@ test.describe("article master acceptance", () => {
         availableWholesaleAuto: true,
         availableExportAuto: true,
         isNew: true,
+        unitPackWidthCm: true,
+        unitPackDepthCm: true,
+        unitPackHeightCm: true,
         tncFrom: true,
         tncUntil: true,
         media: {
@@ -849,6 +871,11 @@ test.describe("article master acceptance", () => {
       tncFrom: null,
       tncUntil: null,
     });
+    expect([
+      Number(imported.unitPackWidthCm),
+      Number(imported.unitPackDepthCm),
+      Number(imported.unitPackHeightCm),
+    ]).toEqual([41.5, 32.25, 21]);
     expect(imported.sku).toMatch(/^\d+$/);
     expect(Number(imported.sku)).toBeGreaterThan(100_000);
     expect(imported.categories[0]?.category.name).toBe(`${tag} podgrupa`);

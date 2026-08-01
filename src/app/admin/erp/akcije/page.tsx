@@ -45,14 +45,6 @@ export default async function ActionsPage({
       }),
       db.loyaltyRule.findMany({
         orderBy: [{ startsAt: "desc" }, { priority: "desc" }],
-        include: {
-          products: {
-            orderBy: { product: { sku: "asc" } },
-            include: {
-              product: { select: { id: true, sku: true, name: true } },
-            },
-          },
-        },
       }),
       db.linearPromotion.findMany({
         orderBy: [{ startsAt: "desc" }, { priority: "desc" }],
@@ -192,12 +184,10 @@ export default async function ActionsPage({
           id: rule.id,
           name: rule.name,
           discountPct: Number(rule.discountPct),
-          scope: rule.scope,
           priority: rule.priority,
           startsAt: formatBelgradePricingDateTime(rule.startsAt),
           endsAt: formatBelgradePricingDateTime(rule.endsAt),
           active: rule.active,
-          products: rule.products.map((item) => item.product),
         }))}
         linearPromotions={linearPromotions.map((promotion) => ({
           id: promotion.id,

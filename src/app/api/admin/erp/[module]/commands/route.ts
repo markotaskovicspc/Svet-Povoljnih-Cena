@@ -420,6 +420,7 @@ async function createLoyaltyRule(): Promise<CommandResult> {
     data: {
       name: `Novo loyalty pravilo ${count + 1}`,
       discountPct: 5,
+      scope: "ALL_PRODUCTS",
       startsAt,
       endsAt,
       active: false,

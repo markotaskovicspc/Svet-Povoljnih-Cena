@@ -114,6 +114,9 @@ const overrideSchema = z.object({
   heightCm: z.coerce.number().positive().max(10000),
   weightKg: optionalNonnegativeNumber(),
   grossWeightKg: optionalNonnegativeNumber(),
+  unitPackWidthCm: optionalNonnegativeNumber(),
+  unitPackDepthCm: optionalNonnegativeNumber(),
+  unitPackHeightCm: optionalNonnegativeNumber(),
   packQty: optionalNonnegativeInteger(),
   packWidthCm: optionalNonnegativeNumber(),
   packDepthCm: optionalNonnegativeNumber(),
@@ -293,7 +296,17 @@ function changedManualGroups(
     ["description", ["description", "shortDescription"]],
     ["grouping", ["groupId", "collectionId"]],
     ["specifications", ["colorPrimary", "colorSecondary"]],
-    ["dimensions", ["widthCm", "depthCm", "heightCm"]],
+    [
+      "dimensions",
+      [
+        "widthCm",
+        "depthCm",
+        "heightCm",
+        "unitPackWidthCm",
+        "unitPackDepthCm",
+        "unitPackHeightCm",
+      ],
+    ],
     ["delivery", ["allowsAssembly"]],
     ["flags", ["articleStatus", "isActive", "isNew", "isDtz"]],
   ];
@@ -365,6 +378,9 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           heightCm: d.heightCm,
           weightKg: d.weightKg ?? null,
           grossWeightKg: d.grossWeightKg ?? null,
+          unitPackWidthCm: d.unitPackWidthCm ?? null,
+          unitPackDepthCm: d.unitPackDepthCm ?? null,
+          unitPackHeightCm: d.unitPackHeightCm ?? null,
           packQty: d.packQty ?? null,
           packWidthCm: d.packWidthCm ?? null,
           packDepthCm: d.packDepthCm ?? null,
@@ -405,6 +421,9 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               widthCm: true,
               depthCm: true,
               heightCm: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
               allowsAssembly: true,
               isActive: true,
               isNew: true,
@@ -1017,10 +1036,6 @@ export default async function ProductDetail({
       db.loyaltyRule.findFirst({
         where: {
           active: true,
-          OR: [
-            { scope: "ALL_PRODUCTS" },
-            { scope: "SELECTED_PRODUCTS", products: { some: { productId: id } } },
-          ],
           AND: [
             { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
             { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
@@ -1056,7 +1071,10 @@ export default async function ProductDetail({
       (entry.action.isPermanent || entry.action.startsAt <= now) &&
       (entry.action.isPermanent || entry.action.endsAt >= now),
   );
-  const loyaltyDiscountPct = loyaltyRule ? Number(loyaltyRule.discountPct) : null;
+  const hasActionPrice = Boolean(activeAction || product.salePrice);
+  const loyaltyDiscountPct = loyaltyRule && !hasActionPrice
+    ? Number(loyaltyRule.discountPct)
+    : null;
   const loyaltyPrice = loyaltyDiscountPct === null
     ? null
     : Math.max(0, retailPrice.price * (1 - loyaltyDiscountPct / 100));
@@ -1447,7 +1465,13 @@ export default async function ProductDetail({
                 />
                 <SourceSummary
                   label="Loyalty cena"
-                  value={loyaltyPrice === null ? "Nema aktivnog pravila" : formatRsd(loyaltyPrice)}
+                  value={
+                    hasActionPrice
+                      ? "Ne primenjuje se zbog akcijske cene"
+                      : loyaltyPrice === null
+                        ? "Nema aktivnog pravila"
+                        : formatRsd(loyaltyPrice)
+                  }
                   source={loyaltyRule?.name ?? "Loyalty pravila"}
                   href="/admin/erp/loyalty"
                 />
@@ -1487,7 +1511,23 @@ export default async function ProductDetail({
             </div>
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
-                Pakovanje
+                Pakovanje pojedinačnog artikla
+              </legend>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <Field label="Širina (cm)">
+                  <Input name="unitPackWidthCm" type="number" min={0} step="0.01" defaultValue={product.unitPackWidthCm ? num(product.unitPackWidthCm) : ""} />
+                </Field>
+                <Field label="Dubina (cm)">
+                  <Input name="unitPackDepthCm" type="number" min={0} step="0.01" defaultValue={product.unitPackDepthCm ? num(product.unitPackDepthCm) : ""} />
+                </Field>
+                <Field label="Visina (cm)">
+                  <Input name="unitPackHeightCm" type="number" min={0} step="0.01" defaultValue={product.unitPackHeightCm ? num(product.unitPackHeightCm) : ""} />
+                </Field>
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
+              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
+                Transportno pakovanje
               </legend>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                 <Field label="Kom/pak">

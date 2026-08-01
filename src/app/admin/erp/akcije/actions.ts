@@ -49,8 +49,6 @@ const loyaltySchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(1).max(120),
   discountPct: z.coerce.number().gt(0).lte(100),
-  scope: z.enum(["SELECTED_PRODUCTS", "ALL_PRODUCTS"]),
-  productIds: z.array(z.string().min(1)).max(500).default([]),
   startsAt: z.string().min(1),
   endsAt: z.string().min(1),
   priority: z.coerce.number().int().min(0).default(0),
@@ -490,7 +488,6 @@ export async function upsertLoyaltyRule(
       const parsed = loyaltySchema.safeParse({
         ...Object.fromEntries(formData),
         active: formData.get("active") === "on",
-        productIds: formData.getAll("productIds").map(String),
       });
       if (!parsed.success) {
         return {
@@ -503,24 +500,11 @@ export async function upsertLoyaltyRule(
         parsed.data.startsAt,
         parsed.data.endsAt,
       );
-      const { id, productIds: submittedProductIds, ...values } = parsed.data;
-      const productIds = Array.from(new Set(submittedProductIds));
-      const existingProducts = productIds.length
-        ? await db.product.findMany({
-            where: { id: { in: productIds }, deletedAt: null },
-            select: { id: true },
-          })
-        : [];
-      if (existingProducts.length !== productIds.length) {
-        return {
-          ok: false as const,
-          error: "Jedan ili više izabranih artikala više ne postoje.",
-        };
-      }
+      const { id, ...values } = parsed.data;
       const data = {
         name: values.name,
         discountPct: values.discountPct,
-        scope: values.scope,
+        scope: "ALL_PRODUCTS" as const,
         priority: values.priority,
         startsAt: start,
         endsAt: end,
@@ -530,12 +514,7 @@ export async function upsertLoyaltyRule(
       let message = "Loyalty pravilo je dodato u istoriju.";
       if (!id) {
         saved = await db.loyaltyRule.create({
-          data: {
-            ...data,
-            products: {
-              create: productIds.map((productId) => ({ productId })),
-            },
-          },
+          data,
         });
       } else {
         const current = await db.loyaltyRule.findUnique({ where: { id } });
@@ -552,32 +531,13 @@ export async function upsertLoyaltyRule(
               data: { active: false },
             });
             return tx.loyaltyRule.create({
-              data: {
-                ...data,
-                products: {
-                  create: productIds.map((productId) => ({ productId })),
-                },
-              },
+              data,
             });
           });
           message =
             "Novi procenat je dodat kao novi zapis; prethodni je sačuvan u istoriji i deaktiviran.";
         } else {
-          saved = await db.$transaction(async (tx) => {
-            const updated = await tx.loyaltyRule.update({ where: { id }, data });
-            await tx.loyaltyRuleProduct.deleteMany({
-              where: { loyaltyRuleId: id },
-            });
-            if (productIds.length) {
-              await tx.loyaltyRuleProduct.createMany({
-                data: productIds.map((productId) => ({
-                  loyaltyRuleId: id,
-                  productId,
-                })),
-              });
-            }
-            return updated;
-          });
+          saved = await db.loyaltyRule.update({ where: { id }, data });
           message = "Loyalty pravilo je izmenjeno.";
         }
       }
@@ -585,7 +545,7 @@ export async function upsertLoyaltyRule(
       return {
         ok: true as const,
         entityId: saved.id,
-        diff: { previousId: id ?? null, ...values, productIds },
+        diff: { previousId: id ?? null, ...values, scope: "ALL_PRODUCTS" },
         message,
         result: {
           entityId: saved.id,
@@ -594,26 +554,6 @@ export async function upsertLoyaltyRule(
       };
     },
   )(formData);
-}
-
-export async function searchLoyaltyProducts(rawQuery: string) {
-  await requireAdminAction(["CONTENT"]);
-  const query = rawQuery.trim();
-  if (query.length < 2) return [];
-  return db.product.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        { sku: { contains: query, mode: "insensitive" } },
-        { name: { contains: query, mode: "insensitive" } },
-        { barcode: { contains: query, mode: "insensitive" } },
-        { supplierExternalId: { contains: query, mode: "insensitive" } },
-      ],
-    },
-    orderBy: [{ name: "asc" }, { sku: "asc" }],
-    take: 20,
-    select: { id: true, sku: true, name: true },
-  });
 }
 
 export async function deleteLoyaltyRule(

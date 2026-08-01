@@ -323,6 +323,24 @@ async function persistProductCell(
     case "grossWeightKg":
       data.grossWeightKg = nullableDecimal(value, "Bruto težina mora biti broj.");
       break;
+    case "unitPackWidthCm":
+      data.unitPackWidthCm = nullableDecimal(
+        value,
+        "Širina pakovanja pojedinačnog artikla mora biti broj.",
+      );
+      break;
+    case "unitPackDepthCm":
+      data.unitPackDepthCm = nullableDecimal(
+        value,
+        "Dubina pakovanja pojedinačnog artikla mora biti broj.",
+      );
+      break;
+    case "unitPackHeightCm":
+      data.unitPackHeightCm = nullableDecimal(
+        value,
+        "Visina pakovanja pojedinačnog artikla mora biti broj.",
+      );
+      break;
     case "packQty":
       data.packQty = nullableInt(value, "Broj komada u pakovanju mora biti ceo broj.");
       break;
@@ -703,13 +721,38 @@ async function persistActionPriceCell(rowId: string, columnKey: string, value: C
 }
 
 async function persistLoyaltyCell(rowId: string, columnKey: string, value: CellValue) {
+  if (columnKey === "discountPct") {
+    const discountPct = decimalValue(value, "Popust mora biti broj.");
+    const numericDiscount = Number(discountPct);
+    if (numericDiscount <= 0 || numericDiscount > 100) {
+      throw new Error("Popust mora biti veći od 0 i najviše 100%.");
+    }
+    await db.$transaction(async (tx) => {
+      const current = await tx.loyaltyRule.findUnique({ where: { id: rowId } });
+      if (!current) throw new Error("Loyalty pravilo nije pronađeno.");
+      if (Number(current.discountPct) === numericDiscount) return;
+      await tx.loyaltyRule.update({
+        where: { id: rowId },
+        data: { active: false },
+      });
+      await tx.loyaltyRule.create({
+        data: {
+          name: current.name,
+          discountPct,
+          scope: "ALL_PRODUCTS",
+          priority: current.priority,
+          startsAt: current.startsAt,
+          endsAt: current.endsAt,
+          active: current.active,
+        },
+      });
+    });
+    return { value, refreshRow: true };
+  }
   const data: Prisma.LoyaltyRuleUncheckedUpdateInput = {};
   switch (columnKey) {
     case "name":
       data.name = requiredString(value, "Naziv pravila je obavezan.");
-      break;
-    case "discountPct":
-      data.discountPct = decimalValue(value, "Popust mora biti broj.");
       break;
     case "priority":
       data.priority = intValue(value, "Prioritet mora biti ceo broj.");

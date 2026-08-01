@@ -675,7 +675,6 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         priority: 2_000_000_000,
         active: true,
       });
-      await addLoyaltyProduct(loyaltyForm(page), fixture.loyaltySku);
       await loyaltyForm(page)
         .getByRole("button", { name: "Dodaj u istoriju" })
         .click();
@@ -711,7 +710,6 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         priority: 1_999_999_700,
         active: false,
       });
-      await addLoyaltyProduct(loyaltyForm(page), fixture.loyaltySku);
       await loyaltyForm(page)
         .getByRole("button", { name: "Dodaj u istoriju" })
         .click();
@@ -739,6 +737,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
             select: {
               discountPct: true,
               active: true,
+              scope: true,
               _count: { select: { products: true } },
             },
             orderBy: { discountPct: "asc" },
@@ -746,12 +745,23 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           return rows.map((row) => ({
             discountPct: Number(row.discountPct),
             active: row.active,
+            scope: row.scope,
             products: row._count.products,
           }));
         })
         .toEqual([
-          { discountPct: 3, active: false, products: 1 },
-          { discountPct: 7, active: true, products: 1 },
+          {
+            discountPct: 3,
+            active: false,
+            scope: "ALL_PRODUCTS",
+            products: 0,
+          },
+          {
+            discountPct: 7,
+            active: true,
+            scope: "ALL_PRODUCTS",
+            products: 0,
+          },
         ]);
 
       editForm = page
@@ -975,11 +985,12 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           }),
         });
         await expect(guestPage.getByText("Akcijska cena", { exact: true })).toBeVisible();
-        await expect(guestPage.getByText("Loyalty cena", { exact: true })).toBeVisible();
-        // The selected action is already deeper than the 30% combined cap.
-        // It remains authoritative (the cap must never raise it), while the
-        // additional linear discount is verified on the loyalty fixture below.
-        await expect(actionPdp).toContainText(/800(?:[.,]00)?\s*RSD/);
+        await expect(
+          guestPage.getByText("Loyalty cena", { exact: true }),
+        ).toHaveCount(0);
+        // The product action replaces loyalty. The selected 10% category
+        // promotion is then added to the 800 RSD action price.
+        await expect(actionPdp).toContainText(/720(?:[.,]00)?\s*RSD/);
 
         await guestPage.goto(`/p/${fixture.loyaltySlug}`, {
           waitUntil: "domcontentloaded",
@@ -1241,15 +1252,6 @@ async function fillLoyaltyForm(
   await form.locator('input[name="priority"]').fill(String(values.priority));
   const active = form.getByLabel("Aktivno");
   if ((await active.isChecked()) !== values.active) await active.click();
-}
-
-async function addLoyaltyProduct(form: Locator, sku: string) {
-  const search = form.getByPlaceholder("Naziv, SKU, bar-kod ili šifra dobavljača");
-  await search.fill(sku);
-  await form.getByRole("button", { name: "Pretraži" }).click();
-  const result = form.locator("button").filter({ hasText: sku });
-  await expect(result).toHaveCount(1);
-  await result.click();
 }
 
 async function createLinearPromotion(

@@ -256,7 +256,11 @@ export function resolveProductPriceQuote(
     actionExpired,
     actionName: canonicalAction?.actionName ?? product.action?.name,
   });
-  const loyaltyBase = resolveLoyaltyPrice(product, full);
+  // Client rule: a product-level action replaces loyalty pricing. Linear
+  // promotions are different: they are applied on top of whichever base is
+  // active (action, loyalty, or the full price).
+  const loyaltyBase =
+    actionBase == null ? resolveLoyaltyPrice(product, full) : null;
   const loyaltyOffer = loyaltyBase
     ? pricedOffer({
         full,
@@ -268,10 +272,7 @@ export function resolveProductPriceQuote(
       })
     : null;
   const eligible = options.loggedIn ?? product.loyaltyEligible ?? false;
-  const payable =
-    eligible && loyaltyOffer && loyaltyOffer.effective < publicPrice.effective
-      ? loyaltyOffer
-      : publicPrice;
+  const payable = eligible && loyaltyOffer ? loyaltyOffer : publicPrice;
   return {
     full,
     actionOffer: publicPrice.effective < full ? publicPrice : null,

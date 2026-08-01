@@ -23,7 +23,7 @@ export function PdpPrice({ product }: { product: Product }) {
   return (
     <>
       <p className="mb-0.5 text-xs font-semibold text-ink-500 md:mb-1">
-        {actionOffer || loyaltyOffer ? "Dostupne cene" : "Cena"}
+        Cena
       </p>
       <div className="space-y-1.5">
         {!actionOffer && !loyaltyOffer ? (
@@ -61,7 +61,9 @@ export function PdpPrice({ product }: { product: Product }) {
           </Link>
         </p>
       ) : payable.kind === "loyalty" ? (
-        <p className="mt-1 text-xs text-ink-500">Primenićemo nižu cenu u korpi.</p>
+        <p className="mt-1 text-xs text-ink-500">
+          Loyalty cena je primenjena na prijavljeni nalog.
+        </p>
       ) : payable.kind === "sale" && product.action?.isPermanent ? (
         <p className="mt-1 text-xs text-ink-500">
           Trajno niska cena od 01.05.2026.
