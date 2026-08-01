@@ -12,6 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
+import {
+  categoryDescendantPathUpdates,
+  collectCategoryDescendantIds,
+  flattenCategoryTree,
+} from "@/lib/admin/category-tree";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -53,9 +58,30 @@ async function upsert(_state: AdminActionState, formData: FormData) {
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         const data = parsed.data;
         const slug = data.slug?.trim() || slugify(data.name);
-        const parent = data.parentId
-          ? await db.category.findUnique({ where: { id: data.parentId } })
+        const categories = await db.category.findMany();
+        const current = data.id
+          ? categories.find((category) => category.id === data.id)
           : null;
+        if (data.id && !current) {
+          return { ok: false as const, error: "Kategorija više ne postoji." };
+        }
+
+        const descendants = current
+          ? collectCategoryDescendantIds(categories, current.id)
+          : new Set<string>();
+        if (data.parentId && descendants.has(data.parentId)) {
+          return {
+            ok: false as const,
+            error: "Kategorija ne može biti premeštena unutar sopstvenog podstabla.",
+          };
+        }
+
+        const parent = data.parentId
+          ? categories.find((category) => category.id === data.parentId) ?? null
+          : null;
+        if (data.parentId && !parent) {
+          return { ok: false as const, error: "Izabrani roditelj više ne postoji." };
+        }
         const level = parent ? parent.level + 1 : 0;
         const path = parent ? `${parent.path}/${slug}` : `/${slug}`;
 
@@ -84,6 +110,18 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           const category = data.id
             ? await tx.category.update({ where: { id: data.id }, data: payload })
             : await tx.category.create({ data: payload });
+
+          const updatedTree = await tx.category.findMany();
+          const descendantUpdates = categoryDescendantPathUpdates(
+            updatedTree,
+            category.id,
+          );
+          for (const update of descendantUpdates) {
+            await tx.category.update({
+              where: { id: update.id },
+              data: { path: update.path, level: update.level },
+            });
+          }
           await ensureCategoryGroup(tx, category);
           return category;
         });
@@ -135,16 +173,18 @@ export default async function CategoriesPage({
 }) {
   await requireAdminAction(["CONTENT"]);
   const params = await searchParams;
-  const cats = await db.category.findMany({
-    orderBy: [{ path: "asc" }],
-  });
+  const cats = await db.category.findMany();
+  const flat = flattenCategoryTree(cats);
   const selected = params.new === "1"
     ? undefined
-    : cats.find((category) => category.id === params.edit) ?? cats[0];
-  const flat = cats.map((c) => ({
-    ...c,
-    indent: c.level,
-  }));
+    : flat.find((category) => category.id === params.edit) ?? flat[0];
+  const selectedDescendants = selected
+    ? collectCategoryDescendantIds(cats, selected.id)
+    : new Set<string>();
+  const allowedParents = flat.filter(
+    (category) =>
+      category.id !== selected?.id && !selectedDescendants.has(category.id),
+  );
 
   return (
     <>
@@ -178,7 +218,7 @@ export default async function CategoriesPage({
                     {c.name}{" "}
                     <span className="ml-1 font-mono text-[11px] text-ink-300">{c.path}</span>
                   </a>
-                  <AdminActionForm action={remove}>
+                  <AdminActionForm action={remove} refreshOnSuccess>
                     <input type="hidden" name="id" value={c.id} />
                     <SubmitButton variant="destructive" size="xs" pendingLabel="…">
                       ×
@@ -191,7 +231,12 @@ export default async function CategoriesPage({
         </Card>
         <Card className="xl:sticky xl:top-6">
           <CardTitle>{selected ? `Izmena: ${selected.name}` : "Nova kategorija"}</CardTitle>
-          <CategoryForm key={selected?.id ?? "new"} action={upsert} parents={cats} values={selected} />
+          <CategoryForm
+            key={selected?.id ?? "new"}
+            action={upsert}
+            parents={allowedParents}
+            values={selected}
+          />
         </Card>
       </div>
     </>
@@ -219,7 +264,7 @@ function CategoryForm({
   };
 }) {
   return (
-    <AdminActionForm action={action} className="space-y-3">
+    <AdminActionForm action={action} className="space-y-3" refreshOnSuccess>
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <Field label="Naziv">
         <Input name="name" required defaultValue={values?.name ?? ""} />
