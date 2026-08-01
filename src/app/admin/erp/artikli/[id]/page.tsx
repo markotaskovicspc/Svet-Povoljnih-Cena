@@ -3,6 +3,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import { randomBytes } from "node:crypto";
+import { Fragment } from "react";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -24,7 +25,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
-import { ProductCommercialTerms } from "@/components/admin/product-commercial-terms";
 import { ProductCategorySelector } from "@/components/admin/product-category-selector";
 import {
   ProductAttachmentsEditor,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/admin/article-master.server";
 import { optionalDateInput, dateInputValue } from "@/lib/article-master";
 import { normalizeArticleSku } from "@/lib/article-sku";
+import { ARTICLE_STATUS_OPTIONS } from "@/lib/article-status";
 import { sanitizeRichText } from "@/lib/rich-text";
 import {
   normalizeFullProductDescription,
@@ -127,8 +128,6 @@ const overrideSchema = z.object({
   ananasStoragePct: optionalNonnegativeNumber(),
   ananasDeliveryPct: optionalNonnegativeNumber(),
   newUntil: z.string().max(10).optional().nullable(),
-  tncFrom: z.string().max(10).optional().nullable(),
-  tncUntil: z.string().max(10).optional().nullable(),
   allowsAssembly: z.coerce.boolean().default(false),
   availableWebManual: z.coerce.boolean().default(false),
   availableWholesaleManual: z.coerce.boolean().default(false),
@@ -334,14 +333,6 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
         const d = parsed.data;
         const sku = normalizeArticleSku(d.sku);
         const newUntil = optionalDateInput(d.newUntil);
-        const tncFrom = d.articleStatus === "DTZ" ? optionalDateInput(d.tncFrom) : null;
-        const tncUntil = d.articleStatus === "DTZ" ? optionalDateInput(d.tncUntil) : null;
-        if (tncFrom && tncUntil && tncFrom > tncUntil) {
-          return {
-            ok: false as const,
-            error: "T&C datum od ne može biti posle datuma do.",
-          };
-        }
         const statusFlags =
           d.articleStatus === "DTZ"
             ? { isActive: true, isDtz: true, isLimited: false }
@@ -388,8 +379,6 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           ananasStoragePct: d.ananasStoragePct ?? null,
           ananasDeliveryPct: d.ananasDeliveryPct ?? null,
           newUntil,
-          tncFrom,
-          tncUntil,
           allowsAssembly: d.allowsAssembly,
           ...statusFlags,
           isNew: productNewUntilIsActive(newUntil),
@@ -1028,6 +1017,10 @@ export default async function ProductDetail({
       db.loyaltyRule.findFirst({
         where: {
           active: true,
+          OR: [
+            { scope: "ALL_PRODUCTS" },
+            { scope: "SELECTED_PRODUCTS", products: { some: { productId: id } } },
+          ],
           AND: [
             { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
             { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
@@ -1138,11 +1131,11 @@ export default async function ProductDetail({
             Osnovni podaci
           </CardTitle>
           <AdminActionForm
-            key={product.updatedAt.toISOString()}
             action={updateProduct}
             className="space-y-4 pb-24"
             refreshOnSuccess
           >
+            <Fragment key={product.updatedAt.toISOString()}>
             <input type="hidden" name="id" value={product.id} />
             <input
               type="hidden"
@@ -1153,7 +1146,7 @@ export default async function ProductDetail({
               Puni naziv se automatski formira kao: kolekcija + kratki opis + kratki naziv.
               Trenutno: <strong>{product.name}</strong>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[140px_minmax(200px,1.4fr)_minmax(180px,1fr)_100px_minmax(170px,1fr)]">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[140px_minmax(200px,1.4fr)_minmax(180px,1fr)_minmax(210px,0.9fr)_minmax(170px,1fr)]">
               <Field label="Šifra artikla">
                 <Input
                   name="sku"
@@ -1183,12 +1176,16 @@ export default async function ProductDetail({
                 <select
                   name="articleStatus"
                   defaultValue={product.articleStatus}
+                  aria-describedby="article-status-hint"
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
                 >
-                  {["SP", "IT", "DTZ", "DOB", "ARH", "UZ"].map((status) => (
-                    <option key={status} value={status}>{status}</option>
+                  {ARTICLE_STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
                   ))}
                 </select>
+                <p id="article-status-hint" className="mt-1 text-xs text-ink-500">
+                  DTZ nema datum isteka. UZ je neobjavljen artikal u pripremi, a ARH je arhiviran.
+                </p>
               </Field>
               <Field label="Dobavljač">
                 <select
@@ -1564,14 +1561,9 @@ export default async function ProductDetail({
                 <Field label="Novo do">
                   <Input name="newUntil" type="date" defaultValue={dateInputValue(product.newUntil)} />
                 </Field>
-                <ProductCommercialTerms
-                  initialStatus={product.articleStatus}
-                  tncFrom={dateInputValue(product.tncFrom)}
-                  tncUntil={dateInputValue(product.tncUntil)}
-                />
               </div>
               <p className="text-xs text-ink-500">
-                T&C datumi se prikazuju i čuvaju samo kada je status artikla DTZ. „Novo“ se automatski izvodi isključivo iz datuma „Novo do“.
+                „Novo“ se automatski izvodi isključivo iz datuma „Novo do“.
               </p>
               <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
                 <Toggle name="availableWebManual" defaultChecked={product.availableWebManual} label="Web check" />
@@ -1594,6 +1586,7 @@ export default async function ProductDetail({
                 Sačuvaj izmene
               </SubmitButton>
             </div>
+            </Fragment>
           </AdminActionForm>
           </Card>
         </div>

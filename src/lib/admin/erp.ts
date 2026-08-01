@@ -14,6 +14,7 @@ import {
 } from "@/lib/admin/purchase-price";
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 import { articleSearchWhere } from "@/lib/admin/article-search";
+import { ARTICLE_STATUS_LABELS } from "@/lib/article-status";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -22,6 +23,8 @@ export type ErpColumn = {
   label: string;
   type?: "text" | "number" | "money" | "date" | "status" | "boolean";
   options?: string[];
+  /** Human-readable labels for compact stored option values. */
+  optionLabels?: Record<string, string>;
   defaultVisible?: boolean;
   align?: "left" | "right" | "center";
 };
@@ -81,6 +84,8 @@ export type ErpRow = {
 
 export type ErpCommand = {
   label: string;
+  /** Explicit progress copy shown while the command is running. */
+  pendingLabel?: string;
   /** Short, command-specific guidance shown in the input dialog. */
   description?: string;
   tone?: "primary" | "danger" | "neutral";
@@ -181,7 +186,14 @@ function cogsStatusLabel(status: string) {
 
 const articleColumns: ErpColumn[] = [
   { key: "photo", label: "Foto", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", options: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"], defaultVisible: true },
+  {
+    key: "status",
+    label: "Status",
+    type: "status",
+    options: ["SP", "IT", "DTZ", "DOB", "ARH", "UZ"],
+    optionLabels: ARTICLE_STATUS_LABELS,
+    defaultVisible: true,
+  },
   { key: "sku", label: "Šifra", defaultVisible: true },
   { key: "shortDescription", label: "Kratki opis", defaultVisible: true },
   { key: "shortName", label: "Kratki naziv", defaultVisible: true },
@@ -241,8 +253,6 @@ const articleColumns: ErpColumn[] = [
   { key: "deliveryDays", label: "Rok isporuke", type: "number", align: "right" },
   { key: "moq", label: "MOQ", type: "number", align: "right" },
   { key: "newUntil", label: "Novo do", type: "date" },
-  { key: "tncFrom", label: "T&C od", type: "date" },
-  { key: "tncUntil", label: "T&C do", type: "date" },
 ];
 
 const emptyRows: ErpRow[] = [];
@@ -387,6 +397,7 @@ const coreErpModules: ErpModule[] = [
     commands: [
       {
         label: "Unos novog",
+        pendingLabel: "Kreiranje artikla…",
         description: "Sistem automatski dodeljuje sledeću internu šifru artikla.",
         tone: "primary",
         action: "article.create",
@@ -1069,8 +1080,6 @@ async function getArticleRows(
       hsCode: true,
       moq: true,
       newUntil: true,
-      tncFrom: true,
-      tncUntil: true,
       ananasBrokeragePct: true,
       ananasStoragePct: true,
       ananasDeliveryPct: true,
@@ -1281,8 +1290,6 @@ async function getArticleRows(
         parity: product.supplier?.parity ?? null,
         deliveryDays: product.supplier?.deliveryDays ?? null,
         newUntil: dateOnly(product.newUntil),
-        tncFrom: dateOnly(product.tncFrom),
-        tncUntil: dateOnly(product.tncUntil),
         calcRetailPrice: asNumber(product.fullPrice),
       },
     };

@@ -104,6 +104,14 @@ export async function PATCH(
       revalidatePath(`/admin/erp/artikli/${rowId}`);
       revalidateTag("catalog-products", { expire: 0 });
     }
+    if (
+      module === "loyalty" ||
+      module === "linearne-promocije" ||
+      module === "akcijske-cene"
+    ) {
+      revalidateTag("catalog-pricing", { expire: 0 });
+      revalidateTag("catalog-products", { expire: 0 });
+    }
 
     return NextResponse.json({
       ok: true,

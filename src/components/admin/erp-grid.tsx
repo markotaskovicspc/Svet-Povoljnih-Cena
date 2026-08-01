@@ -1127,7 +1127,7 @@ export function ErpGrid({
                           <option value="">Sve</option>
                           {column.options.map((option) => (
                             <option key={option} value={option}>
-                              {option}
+                              {column.optionLabels?.[option] ?? option}
                             </option>
                           ))}
                         </select>
@@ -1192,7 +1192,7 @@ export function ErpGrid({
                   title={command.disabledReason}
                 >
                   {runningCommand === command.label
-                    ? "…"
+                    ? (command.pendingLabel ?? "Izvršavanje…")
                     : isEditCommand && isEditMode
                       ? "Završi uređivanje"
                       : command.label}
@@ -1606,7 +1606,7 @@ export function ErpGrid({
                               <option value="">—</option>
                               {selectOptions.map((option) => (
                                 <option key={option} value={option}>
-                                  {option}
+                                  {column.optionLabels?.[option] ?? option}
                                 </option>
                               ))}
                             </select>
@@ -1663,8 +1663,9 @@ export function ErpGrid({
                               )}
                               title={
                                 isCellEditable
-                                  ? `Klik za izmenu. Original: ${formatValue(originalValue, column)}`
-                                  : "Polje je samo za čitanje"
+                                  ? `${column.optionLabels?.[textValue(value)] ?? formatValue(value, column)}. Klik za izmenu. Original: ${formatValue(originalValue, column)}`
+                                  : (column.optionLabels?.[textValue(value)] ??
+                                    "Polje je samo za čitanje")
                               }
                             >
                               {formatValue(value, column)}

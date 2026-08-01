@@ -533,6 +533,7 @@ export async function createOrder(
     const p = bySku.get(line.sku)!;
     const ruleInputs = pricingRuleInputsForProduct(
       {
+        id: p.id,
         categoryIds: p.categories.map((item) => item.categoryId),
         categoryPaths: p.categories.map((item) => item.category.path),
         groupId: p.groupId,
@@ -546,9 +547,8 @@ export async function createOrder(
         fullPrice: num(p.fullPrice),
         salePrice: p.salePrice ? num(p.salePrice) : null,
         discountPct: p.discountPct,
-        loyaltyPrice: p.loyaltyPrice ? num(p.loyaltyPrice) : null,
-        loyaltyDiscountPct:
-          ruleInputs.loyaltyDiscountPct ?? p.loyaltyDiscountPct,
+        loyaltyPrice: null,
+        loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
         loyaltyEligible: Boolean(userId),
         action: p.action ?? null,
         actionPrices: p.actionPrices.map((entry) => ({

@@ -11,6 +11,7 @@ export function ArticleImportForm() {
     ok: boolean;
     message: string;
     errors?: RowError[];
+    warnings?: string[];
   } | null>(null);
 
   async function submit(formData: FormData) {
@@ -22,19 +23,27 @@ export function ArticleImportForm() {
         body: formData,
       });
       const payload = (await response.json().catch(() => null)) as
-        | { ok?: boolean; imported?: number; error?: string; errors?: RowError[] }
+        | {
+            ok?: boolean;
+            imported?: number;
+            error?: string;
+            errors?: RowError[];
+            warnings?: string[];
+          }
         | null;
       if (!response.ok || !payload?.ok) {
         setResult({
           ok: false,
           message: payload?.error ?? "Uvoz nije uspeo.",
           errors: payload?.errors,
+          warnings: payload?.warnings,
         });
         return;
       }
       setResult({
         ok: true,
         message: `Uvezeno artikala: ${payload.imported ?? 0}.`,
+        warnings: payload.warnings,
       });
     } finally {
       setRunning(false);
@@ -62,7 +71,15 @@ export function ArticleImportForm() {
           kategoriju/podgrupu, grupu,
           kolekciju, atribute, boje, benefite, formatirani opis, zalihe, COGS,
           dimenzije i pakovanje, materijal, sertifikate, kanale prodaje, MOQ,
-          Novo i T&amp;C datume.
+          kao i datum „Novo do“.
+        </p>
+        <p className="mt-2 rounded-lg border border-brand-blue/20 bg-brand-blue-50/50 px-3 py-2 text-sm text-ink-700">
+          Za artikal „Dok traju zalihe“ unesite <strong>DTZ</strong> u kolonu
+          <strong> Status</strong>. DTZ nema datum isteka.
+        </p>
+        <p className="mt-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning">
+          Stare kolone „T&amp;C od“ i „T&amp;C do“ više se ne koriste. Ako postoje
+          u datoteci, biće ignorisane, a uvoz će prikazati upozorenje.
         </p>
         <p className="mt-1 text-sm text-ink-500">
           Kod izmene postojećeg SKU-a menjaju se samo kolone koje postoje u
@@ -87,6 +104,13 @@ export function ArticleImportForm() {
           }
         >
           <p>{result.message}</p>
+          {result.warnings?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-warning">
+              {result.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
           {result.errors?.length ? (
             <div className="mt-3 max-h-96 overflow-auto rounded-lg bg-surface">
               <table className="w-full text-left text-xs text-ink-700">

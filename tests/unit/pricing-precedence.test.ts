@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePromotionPrice } from "@/lib/pricing";
+import { resolveProductPriceQuote, resolvePromotionPrice } from "@/lib/pricing";
 
 const now = new Date("2026-07-18T12:00:00.000Z");
 
@@ -72,5 +72,96 @@ describe("ERP pricing precedence", () => {
       { now, loggedIn: false },
     );
     expect(price.effective).toBe(10_000);
+  });
+
+  it("shows loyalty publicly but only charges it to an authenticated customer", () => {
+    const guest = resolveProductPriceQuote(
+      { fullPrice: 10_000, loyaltyPrice: 8_000 },
+      { now, loggedIn: false },
+    );
+    expect(guest.loyaltyOffer?.effective).toBe(8_000);
+    expect(guest.payable.effective).toBe(10_000);
+
+    const customer = resolveProductPriceQuote(
+      { fullPrice: 10_000, loyaltyPrice: 8_000 },
+      { now, loggedIn: true },
+    );
+    expect(customer.payable.kind).toBe("loyalty");
+    expect(customer.payable.effective).toBe(8_000);
+  });
+
+  it("shows action and loyalty independently and charges the lower offer", () => {
+    const quote = resolveProductPriceQuote(
+      {
+        fullPrice: 10_000,
+        loyaltyPrice: 7_500,
+        actionPrices: [
+          {
+            price: 8_000,
+            priority: 10,
+            startsAt: "2026-07-01",
+            endsAt: "2026-07-31",
+          },
+        ],
+      },
+      { now, loggedIn: true },
+    );
+    expect(quote.actionOffer?.effective).toBe(8_000);
+    expect(quote.loyaltyOffer?.effective).toBe(7_500);
+    expect(quote.payable.effective).toBe(7_500);
+    expect(quote.payable.kind).toBe("loyalty");
+  });
+
+  it("breaks equal action priorities by newer start and then lower price", () => {
+    const newer = resolvePromotionPrice(
+      {
+        fullPrice: 10_000,
+        actionPrices: [
+          {
+            price: 7_000,
+            priority: 5,
+            startsAt: "2026-07-01",
+            endsAt: "2026-07-31",
+            actionId: "older",
+            actionName: "Starija akcija",
+          },
+          {
+            price: 8_000,
+            priority: 5,
+            startsAt: "2026-07-10",
+            endsAt: "2026-07-31",
+            actionId: "newer",
+            actionName: "Novija akcija",
+          },
+        ],
+      },
+      { now },
+    );
+    expect(newer.effective).toBe(8_000);
+    expect(newer.actionName).toBe("Novija akcija");
+
+    const lower = resolvePromotionPrice(
+      {
+        fullPrice: 10_000,
+        actionPrices: [
+          {
+            price: 8_000,
+            priority: 5,
+            startsAt: "2026-07-10",
+            endsAt: "2026-07-31",
+            actionId: "higher-price",
+          },
+          {
+            price: 7_500,
+            priority: 5,
+            startsAt: "2026-07-10",
+            endsAt: "2026-07-31",
+            actionId: "lower-price",
+          },
+        ],
+      },
+      { now },
+    );
+    expect(lower.effective).toBe(7_500);
   });
 });

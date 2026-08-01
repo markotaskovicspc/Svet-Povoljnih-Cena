@@ -51,11 +51,13 @@ export interface PricingProduct {
     startsAt: string | Date;
     endsAt: string | Date;
   }>;
-  /** Loyalty must be supplied from authenticated customer context. */
+  /** Controls whether the publicly exposed loyalty offer is payable. */
   loyaltyEligible?: boolean;
   /** Admin setting; launch default is 30%. */
   maxCombinedDiscountPct?: number;
 }
+
+type PricingActionCandidate = NonNullable<PricingProduct["actionPrices"]>[number];
 
 export interface EffectivePrice {
   /** Unit price the customer actually pays. */
@@ -74,6 +76,13 @@ export interface EffectivePrice {
   linearDiscountPct: number;
   /** Name of the selected product action, when present. */
   actionName?: string;
+}
+
+export interface ProductPriceQuote {
+  full: number;
+  actionOffer: EffectivePrice | null;
+  loyaltyOffer: EffectivePrice | null;
+  payable: EffectivePrice;
 }
 
 function toDate(d: string | Date): Date {
@@ -119,19 +128,90 @@ function isWindowLive(
 }
 
 /**
- * Canonical catalog precedence:
- * 1. highest-priority live product action, otherwise authenticated loyalty;
- * 2. highest-priority eligible linear promotion stacked on that base price;
- * 3. cap the combined reduction without ever making the selected base price
- *    more expensive (an explicit action price always remains authoritative).
+ * Deterministic action tie-breaker: priority, newer start, lower customer
+ * price, then stable action identity. This keeps PDP, listings and checkout in
+ * agreement even when administrators reuse a priority.
  */
-export function resolvePromotionPrice(
+export function compareActionPriceCandidates(
+  left: PricingActionCandidate,
+  right: PricingActionCandidate,
+) {
+  const priority = right.priority - left.priority;
+  if (priority) return priority;
+
+  const leftStart = toDate(left.startsAt).getTime();
+  const rightStart = toDate(right.startsAt).getTime();
+  if (Number.isFinite(leftStart) && Number.isFinite(rightStart)) {
+    const startsAt = rightStart - leftStart;
+    if (startsAt) return startsAt;
+  }
+
+  const price = left.price - right.price;
+  if (price) return price;
+
+  const actionId = (left.actionId ?? "").localeCompare(right.actionId ?? "");
+  if (actionId) return actionId;
+  return (left.actionName ?? "").localeCompare(right.actionName ?? "");
+}
+
+function pricedOffer({
+  full,
+  base,
+  kind,
+  linearDiscountPct,
+  cap,
+  actionExpired,
+  actionName,
+}: {
+  full: number;
+  base: number;
+  kind: EffectivePrice["kind"];
+  linearDiscountPct: number;
+  cap: number;
+  actionExpired: boolean;
+  actionName?: string;
+}): EffectivePrice {
+  const basePct = ((full - base) / full) * 100;
+  const requested = base * (1 - linearDiscountPct / 100);
+  const requestedPct = ((full - requested) / full) * 100;
+  const appliedPct = Math.max(
+    0,
+    Math.min(requestedPct, Math.max(cap, basePct)),
+  );
+  const effective = Math.round(full * (1 - appliedPct / 100));
+  const resolvedKind = kind === "full" && effective < full ? "linear" : kind;
+  return {
+    effective,
+    full,
+    onSale: resolvedKind === "sale" || resolvedKind === "linear",
+    kind: resolvedKind,
+    discountPct: Math.round(appliedPct),
+    actionExpired,
+    linearDiscountPct,
+    actionName,
+  };
+}
+
+export function resolveProductPriceQuote(
   product: PricingProduct,
   options: { now?: Date; loggedIn?: boolean; maxDiscountPct?: number } = {},
-): EffectivePrice {
+): ProductPriceQuote {
   const now = options.now ?? new Date();
   const full = product.fullPrice;
-  const actionPrice = [...(product.actionPrices ?? [])]
+  if (!Number.isFinite(full) || full <= 0) {
+    const safeFull = Math.max(0, Number.isFinite(full) ? full : 0);
+    const payable: EffectivePrice = {
+      effective: safeFull,
+      full: safeFull,
+      onSale: false,
+      kind: "full",
+      discountPct: 0,
+      actionExpired: false,
+      linearDiscountPct: 0,
+    };
+    return { full: safeFull, actionOffer: null, loyaltyOffer: null, payable };
+  }
+  const canonicalAction = [...(product.actionPrices ?? [])]
     .filter(
       (candidate) =>
         candidate.price > 0 &&
@@ -143,19 +223,20 @@ export function resolvePromotionPrice(
           Boolean(candidate.isPermanent),
         ),
     )
-    .sort((left, right) => right.priority - left.priority)[0];
-  const loyalty =
-    !actionPrice && (options.loggedIn || product.loyaltyEligible)
-      ? resolveLoyaltyPrice(product, full)
+    .sort(compareActionPriceCandidates)[0];
+  const legacySale =
+    !product.actionPrices?.length &&
+    product.salePrice != null &&
+    product.salePrice > 0 &&
+    product.salePrice < full &&
+    isActionLive(product.action, now)
+      ? product.salePrice
       : null;
-  const baseKind: EffectivePrice["kind"] = actionPrice
-    ? "sale"
-    : loyalty
-      ? "loyalty"
-      : "full";
-  let effective = actionPrice?.price ?? loyalty?.effective ?? full;
-  const basePct = ((full - effective) / full) * 100;
-  let requestedPct = basePct;
+  const actionBase = canonicalAction?.price ?? legacySale;
+  const actionExpired = Boolean(
+    (product.actionPrices?.length && !canonicalAction) ||
+      (product.salePrice != null && product.salePrice < full && !legacySale),
+  );
   const linear = [...(product.linearPromotions ?? [])]
     .filter(
       (candidate) =>
@@ -163,24 +244,47 @@ export function resolvePromotionPrice(
         isWindowLive(candidate.startsAt, candidate.endsAt, now),
     )
     .sort((left, right) => right.priority - left.priority)[0];
-  if (linear) {
-    effective = effective * (1 - linear.discountPct / 100);
-    requestedPct = ((full - effective) / full) * 100;
-  }
   const cap =
     options.maxDiscountPct ?? product.maxCombinedDiscountPct ?? MAX_STACK_PCT;
-  const appliedPct = Math.max(0, Math.min(requestedPct, Math.max(cap, basePct)));
-  effective = Math.round(full * (1 - appliedPct / 100));
-  return {
-    effective,
+  const linearPct = linear?.discountPct ?? 0;
+  const publicPrice = pricedOffer({
     full,
-    onSale: Boolean(actionPrice || linear),
-    kind: baseKind === "full" && linear ? "linear" : baseKind,
-    discountPct: Math.round(appliedPct),
-    actionExpired: Boolean(product.actionPrices?.length && !actionPrice),
-    linearDiscountPct: linear?.discountPct ?? 0,
-    actionName: actionPrice?.actionName,
+    base: actionBase ?? full,
+    kind: actionBase == null ? "full" : "sale",
+    linearDiscountPct: linearPct,
+    cap,
+    actionExpired,
+    actionName: canonicalAction?.actionName ?? product.action?.name,
+  });
+  const loyaltyBase = resolveLoyaltyPrice(product, full);
+  const loyaltyOffer = loyaltyBase
+    ? pricedOffer({
+        full,
+        base: loyaltyBase.effective,
+        kind: "loyalty",
+        linearDiscountPct: linearPct,
+        cap,
+        actionExpired,
+      })
+    : null;
+  const eligible = options.loggedIn ?? product.loyaltyEligible ?? false;
+  const payable =
+    eligible && loyaltyOffer && loyaltyOffer.effective < publicPrice.effective
+      ? loyaltyOffer
+      : publicPrice;
+  return {
+    full,
+    actionOffer: publicPrice.effective < full ? publicPrice : null,
+    loyaltyOffer,
+    payable,
   };
+}
+
+export function resolvePromotionPrice(
+  product: PricingProduct,
+  options: { now?: Date; loggedIn?: boolean; maxDiscountPct?: number } = {},
+): EffectivePrice {
+  return resolveProductPriceQuote(product, options).payable;
 }
 
 /**
@@ -192,73 +296,11 @@ export function effectiveUnitPrice(
   product: PricingProduct,
   now: Date = new Date(),
 ): EffectivePrice {
-  if (product.actionPrices?.length || product.linearPromotions?.length) {
-    return resolvePromotionPrice(product, {
-      now,
-      loggedIn: product.loyaltyEligible,
-      maxDiscountPct: product.maxCombinedDiscountPct,
-    });
-  }
-  const full = product.fullPrice;
-  const sale = product.salePrice ?? null;
-  const loyalty = product.loyaltyEligible
-    ? resolveLoyaltyPrice(product, full)
-    : null;
-  if (sale == null || sale >= full) {
-    if (loyalty) {
-      return {
-        effective: loyalty.effective,
-        full,
-        onSale: false,
-        kind: "loyalty",
-      discountPct: loyalty.discountPct,
-      actionExpired: false,
-      linearDiscountPct: 0,
-      };
-    }
-    return {
-      effective: full,
-      full,
-      onSale: false,
-      kind: "full",
-      discountPct: 0,
-      actionExpired: false,
-      linearDiscountPct: 0,
-    };
-  }
-  const live = isActionLive(product.action, now);
-  if (!live) {
-    if (loyalty) {
-      return {
-        effective: loyalty.effective,
-        full,
-        onSale: false,
-        kind: "loyalty",
-      discountPct: loyalty.discountPct,
-      actionExpired: true,
-      linearDiscountPct: 0,
-      };
-    }
-    return {
-      effective: full,
-      full,
-      onSale: false,
-      kind: "full",
-      discountPct: 0,
-      actionExpired: true,
-      linearDiscountPct: 0,
-    };
-  }
-  const pct = product.discountPct ?? Math.round(((full - sale) / full) * 100);
-  return {
-    effective: sale,
-    full,
-    onSale: true,
-    kind: "sale",
-    discountPct: pct,
-    actionExpired: false,
-    linearDiscountPct: 0,
-  };
+  return resolveProductPriceQuote(product, {
+    now,
+    loggedIn: product.loyaltyEligible,
+    maxDiscountPct: product.maxCombinedDiscountPct,
+  }).payable;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

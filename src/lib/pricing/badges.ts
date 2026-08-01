@@ -7,7 +7,11 @@
  * the rest into a "+N" overflow chip.
  */
 
-import { effectiveUnitPrice, type PricingProduct } from "./engine";
+import {
+  effectiveUnitPrice,
+  resolveProductPriceQuote,
+  type PricingProduct,
+} from "./engine";
 import { productNewUntilIsActive } from "@/lib/product-newness";
 
 export type BadgeKey =
@@ -59,7 +63,10 @@ function isNewActive(p: BadgeProduct, now: Date): boolean {
  */
 export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
   const out: Badge[] = [];
-  const price = effectiveUnitPrice(p, now);
+  const quote = resolveProductPriceQuote(p, { now, loggedIn: p.loyaltyEligible });
+  const price = [quote.actionOffer, quote.loyaltyOffer]
+    .filter((offer) => offer !== null)
+    .sort((left, right) => left.effective - right.effective)[0] ?? quote.payable;
 
   if (p.action?.isPermanent) {
     out.push({
@@ -79,7 +86,7 @@ export function deriveBadges(p: BadgeProduct, now: Date = new Date()): Badge[] {
   ) {
     out.push({ key: "discount", label: `-${price.discountPct}%`, tone: "action" });
   }
-  if (price.onSale && p.action?.name) {
+  if (quote.actionOffer && p.action?.name) {
     out.push({
       key: "action",
       label: p.action.isPermanent ? "Trajno niska cena" : p.action.name,

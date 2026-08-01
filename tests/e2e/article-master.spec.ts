@@ -259,6 +259,14 @@ test.describe("article master acceptance", () => {
     await expect(productForm.locator('input[name="sku"]')).toBeEditable();
     const saveButton = productForm.getByRole("button", { name: "Sačuvaj izmene" });
     await expect(saveButton).toBeInViewport();
+    await expect(
+      page.locator('select[name="articleStatus"] option[value="DTZ"]'),
+    ).toHaveText("DTZ — Dok traju zalihe");
+    await expect(
+      page.getByText(
+        "DTZ nema datum isteka. UZ je neobjavljen artikal u pripremi, a ARH je arhiviran.",
+      ),
+    ).toBeVisible();
     expect(
       await productForm
         .locator('[name="sku"], [name="shortDescription"], [name="name"]')
@@ -316,9 +324,10 @@ test.describe("article master acceptance", () => {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect(saveButton).toBeInViewport();
     await page.getByRole("button", { name: "Sačuvaj izmene" }).click();
-    await expect(
-      productForm.getByRole("button", { name: "Čuvanje…" }),
-    ).toBeVisible();
+    await expect(productForm.getByRole("status")).toContainText(
+      "Proizvod je sačuvan.",
+      { timeout: 120_000 },
+    );
     await expect
       .poll(async () => {
         const product = await db.product.findUniqueOrThrow({
@@ -762,6 +771,12 @@ test.describe("article master acceptance", () => {
     await page.goto("/admin/erp/artikli/import", {
       waitUntil: "domcontentloaded",
     });
+    await expect(
+      page.getByText(/Za artikal „Dok traju zalihe“ unesite DTZ/),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Stare kolone „T&C od“ i „T&C do“ više se ne koriste/),
+    ).toBeVisible();
     await page.getByLabel("XLSX datoteka").setInputFiles({
       name: `article-master-qa-${runId}.xlsx`,
       mimeType:
@@ -780,6 +795,9 @@ test.describe("article master acceptance", () => {
     await expect(page.getByRole("status")).toContainText("Uvezeno artikala: 1", {
       timeout: 120_000,
     });
+    await expect(page.getByRole("status")).toContainText(
+      "Kolone T&C od/do su ignorisane",
+    );
     await expect
       .poll(
         () =>
@@ -828,6 +846,8 @@ test.describe("article master acceptance", () => {
       availableWholesaleAuto: true,
       availableExportAuto: true,
       isNew: true,
+      tncFrom: null,
+      tncUntil: null,
     });
     expect(imported.sku).toMatch(/^\d+$/);
     expect(Number(imported.sku)).toBeGreaterThan(100_000);
@@ -835,9 +855,6 @@ test.describe("article master acceptance", () => {
     expect(imported.media[0]?.url).toBe(
       "https://placehold.co/48x48.png",
     );
-    expect(imported.tncFrom?.toISOString().slice(0, 10)).toBe("2026-08-01");
-    expect(imported.tncUntil?.toISOString().slice(0, 10)).toBe("2026-12-31");
-
     const invalidHierarchyWorkbook = new ExcelJS.Workbook();
     const invalidHierarchySheet = invalidHierarchyWorkbook.addWorksheet("Artikli");
     invalidHierarchySheet.addRow(["Kratki naziv", "Grupa"]);
@@ -959,16 +976,12 @@ test.describe("article master acceptance", () => {
       "Kratki naziv",
       "Status",
       "Dobavljač",
-      "T&C od",
-      "T&C do",
     ]);
-    rejectedSheet.addRow([`${tag} ne sme biti upisan`, "SP", "", "", ""]);
+    rejectedSheet.addRow([`${tag} ne sme biti upisan`, "SP", ""]);
     rejectedSheet.addRow([
       `${tag} neispravan`,
       "POGREŠAN",
       "Dobavljač koji ne postoji",
-      "2027-12-31",
-      "2027-01-01",
     ]);
     await page.getByLabel("XLSX datoteka").setInputFiles({
       name: "article-master-rejected.xlsx",
@@ -983,9 +996,6 @@ test.describe("article master acceptance", () => {
     await expect(importAlert).toBeVisible();
     await expect(importAlert).toContainText(
       "Status mora biti SP, IT, DTZ, DOB, ARH ili UZ",
-    );
-    await expect(importAlert).toContainText(
-      "T&C datum od ne može biti posle datuma do",
     );
     expect(
       await db.product.count({
@@ -1520,11 +1530,21 @@ async function clickConfirmation(
 }
 
 function createDatabaseClient() {
-  const raw = process.env.DATABASE_URL;
-  if (!raw) throw new Error("DATABASE_URL is required for article acceptance.");
+  const raw = [
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.POSTGRES_URL,
+  ].find((value) => value?.trim());
+  if (!raw) throw new Error("Database URL is required for article acceptance.");
+  const url = new URL(raw);
+  if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+    url.searchParams.set("sslmode", "no-verify");
+    url.searchParams.delete("uselibpqcompat");
+  }
   return new PrismaClient({
     adapter: new PrismaPg({
-      connectionString: raw,
+      connectionString: url.toString(),
       max: 1,
       connectionTimeoutMillis: 60_000,
     }),

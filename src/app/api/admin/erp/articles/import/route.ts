@@ -71,8 +71,6 @@ type ArticleImportRow = {
   exportCheck: boolean | null;
   moq: number | null;
   newUntil: Date | null;
-  tncFrom: Date | null;
-  tncUntil: Date | null;
 };
 
 const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
@@ -196,15 +194,18 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   moq: "moq",
   newuntil: "newUntil",
   novodo: "newUntil",
-  tncfrom: "tncFrom",
-  tncod: "tncFrom",
-  tcfrom: "tncFrom",
-  tcod: "tncFrom",
-  tncuntil: "tncUntil",
-  tncdo: "tncUntil",
-  tcuntil: "tncUntil",
-  tcdo: "tncUntil",
 };
+
+const LEGACY_TNC_HEADERS = new Set([
+  "tncfrom",
+  "tncod",
+  "tcfrom",
+  "tcod",
+  "tncuntil",
+  "tncdo",
+  "tcuntil",
+  "tcdo",
+]);
 
 function normalizeHeader(value: string) {
   return value
@@ -342,10 +343,18 @@ export async function POST(request: Request) {
   }
 
   const headers = new Map<keyof ArticleImportRow, number>();
+  let hasLegacyTncColumns = false;
   worksheet.getRow(1).eachCell((cell, column) => {
-    const field = HEADER_ALIASES[normalizeHeader(cellText(cell))];
+    const normalizedHeader = normalizeHeader(cellText(cell));
+    if (LEGACY_TNC_HEADERS.has(normalizedHeader)) hasLegacyTncColumns = true;
+    const field = HEADER_ALIASES[normalizedHeader];
     if (field) headers.set(field, column);
   });
+  const warnings = hasLegacyTncColumns
+    ? [
+        "Kolone T&C od/do su ignorisane. Za ponudu bez vremenskog ograničenja koristite DTZ u koloni Status.",
+      ]
+    : [];
   const errors: ImportError[] = [];
   if (!headers.has("shortName")) {
     errors.push({ row: 1, field: "shortName", message: "Nedostaje kolona Kratki naziv." });
@@ -436,20 +445,7 @@ export async function POST(request: Request) {
       exportCheck: booleanCell(row, headers.get("exportCheck"), "exportCheck", errors),
       moq: numberCell(row, headers.get("moq"), "moq", errors, { integer: true, min: 0 }),
       newUntil: dateCell(row, headers.get("newUntil"), "newUntil", errors),
-      tncFrom: dateCell(row, headers.get("tncFrom"), "tncFrom", errors),
-      tncUntil: dateCell(row, headers.get("tncUntil"), "tncUntil", errors),
     };
-    if (
-      parsedRow.tncFrom &&
-      parsedRow.tncUntil &&
-      parsedRow.tncFrom > parsedRow.tncUntil
-    ) {
-      errors.push({
-        row: rowNumber,
-        field: "tncFrom",
-        message: "T&C datum od ne može biti posle datuma do.",
-      });
-    }
     rows.push(parsedRow);
   });
   if (!rows.length) errors.push({ row: 2, field: "file", message: "Datoteka nema artikle." });
@@ -500,6 +496,7 @@ export async function POST(request: Request) {
         ok: false,
         error: "Cela datoteka je odbijena. Ispravite navedene redove i pokušajte ponovo.",
         errors,
+        warnings,
       },
       { status: 422 },
     );
@@ -707,18 +704,6 @@ export async function POST(request: Request) {
           moq: hasColumn("moq") ? row.moq : existing?.moq ?? null,
           newUntil,
           isNew: productNewUntilIsActive(newUntil),
-          tncFrom:
-            status === "DTZ"
-              ? hasColumn("tncFrom")
-                ? row.tncFrom
-                : existing?.tncFrom ?? null
-              : null,
-          tncUntil:
-            status === "DTZ"
-              ? hasColumn("tncUntil")
-                ? row.tncUntil
-                : existing?.tncUntil ?? null
-              : null,
           fullPrice: existing?.fullPrice ?? 0,
           ...statusFlags(status),
           deletedAt:
@@ -844,5 +829,5 @@ export async function POST(request: Request) {
   });
   revalidateTag("catalog-products", "max");
   revalidatePath("/admin/erp/artikli");
-  return NextResponse.json({ ok: true, imported: rows.length });
+  return NextResponse.json({ ok: true, imported: rows.length, warnings });
 }

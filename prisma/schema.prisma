@@ -486,6 +486,7 @@ model Product {
   lookupAssignments        ProductLookupAssignment[]
   priceListEntries         PriceListEntry[]
   actionPrices             ActionProduct[]
+  loyaltyRules            LoyaltyRuleProduct[]
   loyaltyPriceHistory      LoyaltyPriceHistory[]
   dispatchNoteItems        DispatchNoteItem[]
   partnerReservations      PartnerReservation[]
@@ -2418,6 +2419,7 @@ model LoyaltyRule {
   id          String    @id @default(cuid())
   name        String
   discountPct Decimal   @db.Decimal(8, 2)
+  scope       LoyaltyScope @default(SELECTED_PRODUCTS)
   priority    Int       @default(0)
   startsAt    DateTime?
   endsAt      DateTime?
@@ -2425,7 +2427,26 @@ model LoyaltyRule {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  products LoyaltyRuleProduct[]
+
   @@index([active, priority, startsAt, endsAt])
+}
+
+enum LoyaltyScope {
+  SELECTED_PRODUCTS
+  ALL_PRODUCTS
+}
+
+model LoyaltyRuleProduct {
+  loyaltyRuleId String
+  productId     String
+  createdAt     DateTime @default(now())
+
+  loyaltyRule LoyaltyRule @relation(fields: [loyaltyRuleId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([loyaltyRuleId, productId])
+  @@index([productId])
 }
 
 model LoyaltyPriceHistory {

@@ -9,6 +9,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
+import {
+  formatBelgradePricingDateTime,
+  parseBelgradePricingDateTime,
+} from "@/lib/admin/pricing-date-time";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -34,6 +38,8 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
     category: `${tag} kategorija`,
     subcategory: `${tag} podgrupa`,
     actionSku: `M7-A-${runId}`.slice(0, 80),
+    actionExternalSku: `EXT-${runId}`.slice(0, 80),
+    actionBarcode: `860${String(Date.now()).slice(-10)}`,
     loyaltySku: `M7-L-${runId}`.slice(0, 80),
     actionSlug: `${slugBase}-akcijski-artikal`,
     loyaltySlug: `${slugBase}-loyalty-artikal`,
@@ -70,9 +76,9 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
   const now = new Date();
   const startsAt = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
   const endsAt = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
-  const startsLocal = dateTimeLocal(startsAt);
-  const endsLocal = dateTimeLocal(endsAt);
-  const invalidEndsLocal = dateTimeLocal(
+  const startsLocal = formatBelgradePricingDateTime(startsAt);
+  const endsLocal = formatBelgradePricingDateTime(endsAt);
+  const invalidEndsLocal = formatBelgradePricingDateTime(
     new Date(startsAt.getTime() - 24 * 60 * 60 * 1000),
   );
 
@@ -175,6 +181,8 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
     const actionProduct = await db.product.create({
       data: {
         sku: fixture.actionSku,
+        supplierExternalId: fixture.actionExternalSku,
+        barcode: fixture.actionBarcode,
         slug: fixture.actionSlug,
         name: `${tag} Kratki naziv akcijskog artikla`,
         description: "Privremeni Modul 7 acceptance artikal.",
@@ -431,6 +439,16 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           priority: 2_000_000_000,
           sortOrder: 17,
         });
+      const storedWindow = await db.action.findUniqueOrThrow({
+        where: { slug: `${slugBase}-heroji` },
+        select: { startsAt: true, endsAt: true },
+      });
+      expect(storedWindow.startsAt).toEqual(
+        parseBelgradePricingDateTime(startsLocal),
+      );
+      expect(storedWindow.endsAt).toEqual(
+        parseBelgradePricingDateTime(endsLocal),
+      );
     });
 
     await test.step("hero meseca prikazuje grešku i osvežava listu bez reload-a", async () => {
@@ -494,8 +512,9 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       await dialog.getByRole("button", { name: "Popuni podatke" }).click();
       await expect(dialog).toContainText("nije pronađen");
 
-      await skuInput.fill(fixture.actionSku);
+      await skuInput.fill(fixture.actionExternalSku);
       await skuInput.press("Enter");
+      await expect(skuInput).toHaveValue(fixture.actionSku);
       for (const value of [
         fixture.supplier,
         fixture.category,
@@ -515,9 +534,27 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       }
       await expect(dialog).toContainText(/1[.\s]000(?:,00)?\s*RSD/);
 
-      await dialog
-        .locator('input[name="salePrice"][form="add-action-product"]')
-        .fill("900");
+      const newSalePrice = dialog.locator(
+        'input[name="salePrice"][form="add-action-product"]',
+      );
+      await newSalePrice.evaluate((input) => input.removeAttribute("max"));
+      await newSalePrice.fill("1000");
+      await dialog.getByRole("button", { name: "Dodaj", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        "mora biti manja od važeće MP cene",
+      );
+      await expect
+        .poll(() =>
+          db.actionProduct.count({
+            where: {
+              action: { slug: `${slugBase}-nizi` },
+              productId: created.actionProductId,
+            },
+          }),
+        )
+        .toBe(0);
+
+      await newSalePrice.fill("900");
       await dialog.getByRole("button", { name: "Dodaj", exact: true }).click();
       await expect
         .poll(async () => {
@@ -638,6 +675,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         priority: 2_000_000_000,
         active: true,
       });
+      await addLoyaltyProduct(loyaltyForm(page), fixture.loyaltySku);
       await loyaltyForm(page)
         .getByRole("button", { name: "Dodaj u istoriju" })
         .click();
@@ -673,6 +711,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         priority: 1_999_999_700,
         active: false,
       });
+      await addLoyaltyProduct(loyaltyForm(page), fixture.loyaltySku);
       await loyaltyForm(page)
         .getByRole("button", { name: "Dodaj u istoriju" })
         .click();
@@ -697,17 +736,22 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         .poll(async () => {
           const rows = await db.loyaltyRule.findMany({
             where: { name: fixture.loyaltyEditable },
-            select: { discountPct: true, active: true },
+            select: {
+              discountPct: true,
+              active: true,
+              _count: { select: { products: true } },
+            },
             orderBy: { discountPct: "asc" },
           });
           return rows.map((row) => ({
             discountPct: Number(row.discountPct),
             active: row.active,
+            products: row._count.products,
           }));
         })
         .toEqual([
-          { discountPct: 3, active: false },
-          { discountPct: 7, active: true },
+          { discountPct: 3, active: false, products: 1 },
+          { discountPct: 7, active: true, products: 1 },
         ]);
 
       editForm = page
@@ -931,6 +975,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           }),
         });
         await expect(guestPage.getByText("Akcijska cena", { exact: true })).toBeVisible();
+        await expect(guestPage.getByText("Loyalty cena", { exact: true })).toBeVisible();
         // The selected action is already deeper than the 30% combined cap.
         // It remains authoritative (the cap must never raise it), while the
         // additional linear discount is verified on the loyalty fixture below.
@@ -1198,6 +1243,15 @@ async function fillLoyaltyForm(
   if ((await active.isChecked()) !== values.active) await active.click();
 }
 
+async function addLoyaltyProduct(form: Locator, sku: string) {
+  const search = form.getByPlaceholder("Naziv, SKU, bar-kod ili šifra dobavljača");
+  await search.fill(sku);
+  await form.getByRole("button", { name: "Pretraži" }).click();
+  const result = form.locator("button").filter({ hasText: sku });
+  await expect(result).toHaveCount(1);
+  await result.click();
+}
+
 async function createLinearPromotion(
   page: Page,
   values: {
@@ -1242,11 +1296,6 @@ async function clickConfirmation(
   if (accept) await dialog.accept();
   else await dialog.dismiss();
   await clickPromise;
-}
-
-function dateTimeLocal(value: Date) {
-  const offset = value.getTimezoneOffset() * 60_000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function escapeRegex(value: string) {

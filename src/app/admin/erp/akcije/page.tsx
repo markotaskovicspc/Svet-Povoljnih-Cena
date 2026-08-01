@@ -4,17 +4,13 @@ import { PageHeader } from "@/components/admin/page-header";
 import { ActionsAdmin } from "./actions-admin";
 import { getErpModule } from "@/lib/admin/erp";
 import { ErpGrid } from "@/components/admin/erp-grid";
+import { formatBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Akcije",
   robots: { index: false, follow: false },
 };
-
-function dateTimeLocal(date: Date) {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
 
 export default async function ActionsPage({
   searchParams,
@@ -49,6 +45,14 @@ export default async function ActionsPage({
       }),
       db.loyaltyRule.findMany({
         orderBy: [{ startsAt: "desc" }, { priority: "desc" }],
+        include: {
+          products: {
+            orderBy: { product: { sku: "asc" } },
+            include: {
+              product: { select: { id: true, sku: true, name: true } },
+            },
+          },
+        },
       }),
       db.linearPromotion.findMany({
         orderBy: [{ startsAt: "desc" }, { priority: "desc" }],
@@ -123,8 +127,8 @@ export default async function ActionsPage({
     name: action.name,
     slug: action.slug,
     kind: action.kind,
-    startsAt: dateTimeLocal(action.startsAt),
-    endsAt: dateTimeLocal(action.endsAt),
+    startsAt: formatBelgradePricingDateTime(action.startsAt),
+    endsAt: formatBelgradePricingDateTime(action.endsAt),
     isHero: action.isHero,
     isPermanent: action.isPermanent,
     sortOrder: action.sortOrder,
@@ -188,18 +192,20 @@ export default async function ActionsPage({
           id: rule.id,
           name: rule.name,
           discountPct: Number(rule.discountPct),
+          scope: rule.scope,
           priority: rule.priority,
-          startsAt: rule.startsAt ? dateTimeLocal(rule.startsAt) : null,
-          endsAt: rule.endsAt ? dateTimeLocal(rule.endsAt) : null,
+          startsAt: formatBelgradePricingDateTime(rule.startsAt),
+          endsAt: formatBelgradePricingDateTime(rule.endsAt),
           active: rule.active,
+          products: rule.products.map((item) => item.product),
         }))}
         linearPromotions={linearPromotions.map((promotion) => ({
           id: promotion.id,
           name: promotion.name,
           discountPct: Number(promotion.discountPct),
           priority: promotion.priority,
-          startsAt: dateTimeLocal(promotion.startsAt),
-          endsAt: dateTimeLocal(promotion.endsAt),
+          startsAt: formatBelgradePricingDateTime(promotion.startsAt),
+          endsAt: formatBelgradePricingDateTime(promotion.endsAt),
           active: promotion.active,
           categoryIds: promotion.categories.map((item) => item.category.id),
           groupIds: promotion.groups.map((item) => item.group.id),

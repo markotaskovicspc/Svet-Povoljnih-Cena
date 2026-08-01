@@ -10,6 +10,7 @@ import { CrossSellModal } from "@/components/cart/cross-sell-modal";
 import { WishlistDrawer } from "@/components/cart/wishlist-drawer";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { PricingEligibilityProvider } from "@/components/pricing/pricing-eligibility";
+import { CartPricingSync } from "@/components/cart/cart-pricing-sync";
 
 export function Providers({
   children,
@@ -22,6 +23,7 @@ export function Providers({
     <SessionProvider refetchOnWindowFocus={false}>
       <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
         <MotionConfig reducedMotion="user">
+          <CartPricingSync />
           <TooltipProvider delay={150}>
             {children}
             <CartDrawer />

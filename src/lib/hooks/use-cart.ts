@@ -16,6 +16,11 @@ export interface CartLine {
   assemblyPrice?: number;
 }
 
+export type CartPriceUpdate = Pick<
+  CartLine,
+  "sku" | "name" | "slug" | "unitPriceFull" | "unitPriceSale" | "thumbnailUrl"
+>;
+
 interface CartState {
   hydrated: boolean;
   lines: CartLine[];
@@ -23,6 +28,7 @@ interface CartState {
   remove: (sku: SKU) => void;
   setQty: (sku: SKU, qty: number) => void;
   toggleAssembly: (sku: SKU) => void;
+  reprice: (updates: CartPriceUpdate[]) => void;
   clear: () => void;
   /** Derived helpers */
   count: () => number;
@@ -80,6 +86,27 @@ export function normalizeCartLines(lines: unknown): CartLine[] {
   return Array.from(bySku.values());
 }
 
+export function repriceCartLines(
+  lines: CartLine[],
+  updates: CartPriceUpdate[],
+): CartLine[] {
+  const bySku = new Map(updates.map((item) => [item.sku, item]));
+  return normalizeCartLines(lines).map((line) => {
+    const update = bySku.get(line.sku);
+    if (!update) return line;
+    if (
+      line.name === update.name &&
+      line.slug === update.slug &&
+      line.unitPriceFull === update.unitPriceFull &&
+      line.unitPriceSale === update.unitPriceSale &&
+      line.thumbnailUrl === update.thumbnailUrl
+    ) {
+      return line;
+    }
+    return { ...line, ...update };
+  });
+}
+
 export const useCart = create<CartState>()(
   persist(
     (set, get) => ({
@@ -124,6 +151,13 @@ export const useCart = create<CartState>()(
             l.sku === sku ? { ...l, withAssembly: !l.withAssembly } : l,
           ),
         })),
+      reprice: (updates) =>
+        set((state) => {
+          const current = normalizeCartLines(state.lines);
+          const lines = repriceCartLines(current, updates);
+          const changed = lines.some((line, index) => line !== current[index]);
+          return changed ? { lines } : state;
+        }),
       clear: () => set({ lines: [] }),
       count: () => normalizeCartLines(get().lines).reduce((n, l) => n + l.qty, 0),
       subtotal: () =>

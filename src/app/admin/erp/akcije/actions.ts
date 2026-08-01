@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
@@ -8,6 +9,8 @@ import {
   withAdminState,
   type AdminActionState,
 } from "@/lib/admin";
+import { parseBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
+import { actionSalePriceError } from "@/lib/pricing/action-price";
 
 export type PricingMutationResult = {
   entityId: string;
@@ -46,6 +49,8 @@ const loyaltySchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(1).max(120),
   discountPct: z.coerce.number().gt(0).lte(100),
+  scope: z.enum(["SELECTED_PRODUCTS", "ALL_PRODUCTS"]),
+  productIds: z.array(z.string().min(1)).max(500).default([]),
   startsAt: z.string().min(1),
   endsAt: z.string().min(1),
   priority: z.coerce.number().int().min(0).default(0),
@@ -73,9 +78,27 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const actionProductDetailsInclude = {
+  supplier: { select: { name: true } },
+  group: { select: { name: true } },
+  collection: { select: { name: true } },
+  categories: {
+    include: { category: { select: { name: true, level: true } } },
+  },
+} satisfies Prisma.ProductInclude;
+
+type ActionProductDetails = Prisma.ProductGetPayload<{
+  include: typeof actionProductDetailsInclude;
+}>;
+
+type ActionProductResolution =
+  | { kind: "found"; product: ActionProductDetails }
+  | { kind: "missing" }
+  | { kind: "ambiguous"; skus: string[] };
+
 function dateRange(startsAt: string, endsAt: string) {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
+  const start = parseBelgradePricingDateTime(startsAt);
+  const end = parseBelgradePricingDateTime(endsAt);
   if (
     Number.isNaN(start.getTime()) ||
     Number.isNaN(end.getTime()) ||
@@ -84,6 +107,44 @@ function dateRange(startsAt: string, endsAt: string) {
     throw new Error("Datum završetka mora biti posle datuma početka.");
   }
   return { start, end };
+}
+
+async function resolveActionProduct(
+  rawIdentifier: string,
+): Promise<ActionProductResolution> {
+  const identifier = rawIdentifier.trim();
+  const exactSku = await db.product.findFirst({
+    where: {
+      deletedAt: null,
+      sku: { equals: identifier, mode: "insensitive" },
+    },
+    include: actionProductDetailsInclude,
+  });
+  if (exactSku) return { kind: "found", product: exactSku };
+
+  const alternatives = await db.product.findMany({
+    where: {
+      deletedAt: null,
+      OR: [
+        { barcode: { equals: identifier, mode: "insensitive" } },
+        {
+          supplierExternalId: { equals: identifier, mode: "insensitive" },
+        },
+        { sku: { endsWith: `-${identifier}`, mode: "insensitive" } },
+      ],
+    },
+    orderBy: { sku: "asc" },
+    take: 6,
+    include: actionProductDetailsInclude,
+  });
+  if (!alternatives.length) return { kind: "missing" };
+  if (alternatives.length > 1) {
+    return {
+      kind: "ambiguous",
+      skus: alternatives.map((product) => product.sku),
+    };
+  }
+  return { kind: "found", product: alternatives[0] };
 }
 
 function refreshPricing() {
@@ -246,33 +307,32 @@ function mapProductDetails(
 
 export async function lookupActionProduct(actionId: string, rawSku: string) {
   await requireAdminAction(["CONTENT"]);
-  const sku = rawSku.trim();
-  if (!sku) return { ok: false as const, message: "Unesite šifru artikla." };
+  const identifier = rawSku.trim();
+  if (!identifier) {
+    return { ok: false as const, message: "Unesite šifru artikla." };
+  }
 
-  const [action, product] = await Promise.all([
+  const [action, resolution] = await Promise.all([
     db.action.findUnique({
       where: { id: actionId },
       select: { startsAt: true },
     }),
-    db.product.findFirst({
-      where: { sku, deletedAt: null },
-      include: {
-        supplier: { select: { name: true } },
-        group: { select: { name: true } },
-        collection: { select: { name: true } },
-        categories: {
-          include: { category: { select: { name: true, level: true } } },
-        },
-      },
-    }),
+    resolveActionProduct(identifier),
   ]);
   if (!action) return { ok: false as const, message: "Akcija nije pronađena." };
-  if (!product) {
+  if (resolution.kind === "missing") {
     return {
       ok: false as const,
-      message: `Artikal sa šifrom „${sku}“ nije pronađen.`,
+      message: `Artikal sa šifrom „${identifier}“ nije pronađen.`,
     };
   }
+  if (resolution.kind === "ambiguous") {
+    return {
+      ok: false as const,
+      message: `Unos „${identifier}“ odgovara više artikala (${resolution.skus.join(", ")}). Unesite punu internu SKU šifru.`,
+    };
+  }
+  const product = resolution.product;
 
   const retailPrice =
     (await retailPriceAt(product.id, action.startsAt)) ??
@@ -304,14 +364,41 @@ export async function saveActionProduct(
           fieldErrors: zodFieldErrors(parsed.error),
         };
       }
-      const product = await db.product.findFirst({
-        where: { sku: parsed.data.sku, deletedAt: null },
-        select: { id: true, sku: true },
-      });
-      if (!product) {
+      const [action, resolution] = await Promise.all([
+        db.action.findUnique({
+          where: { id: parsed.data.actionId },
+          select: { startsAt: true },
+        }),
+        resolveActionProduct(parsed.data.sku),
+      ]);
+      if (!action) {
+        return { ok: false as const, error: "Akcija nije pronađena." };
+      }
+      if (resolution.kind === "missing") {
         return {
           ok: false as const,
           error: `Artikal sa šifrom „${parsed.data.sku}“ nije pronađen.`,
+        };
+      }
+      if (resolution.kind === "ambiguous") {
+        return {
+          ok: false as const,
+          error: `Unos „${parsed.data.sku}“ odgovara više artikala (${resolution.skus.join(", ")}). Unesite punu internu SKU šifru.`,
+        };
+      }
+      const product = resolution.product;
+      const regularPrice =
+        (await retailPriceAt(product.id, action.startsAt)) ??
+        Number(product.fullPrice);
+      const priceError = actionSalePriceError(
+        parsed.data.salePrice,
+        regularPrice,
+      );
+      if (priceError) {
+        return {
+          ok: false as const,
+          error: priceError,
+          fieldErrors: { salePrice: [priceError] },
         };
       }
 
@@ -339,7 +426,11 @@ export async function saveActionProduct(
       return {
         ok: true as const,
         entityId: `${parsed.data.actionId}:${product.id}`,
-        diff: { sku: product.sku, salePrice: parsed.data.salePrice },
+        diff: {
+          sku: product.sku,
+          salePrice: parsed.data.salePrice,
+          regularPrice,
+        },
         message: "Akcijska cena je sačuvana.",
         result: {
           entityId: `${parsed.data.actionId}:${product.id}`,
@@ -399,6 +490,7 @@ export async function upsertLoyaltyRule(
       const parsed = loyaltySchema.safeParse({
         ...Object.fromEntries(formData),
         active: formData.get("active") === "on",
+        productIds: formData.getAll("productIds").map(String),
       });
       if (!parsed.success) {
         return {
@@ -411,10 +503,24 @@ export async function upsertLoyaltyRule(
         parsed.data.startsAt,
         parsed.data.endsAt,
       );
-      const { id, ...values } = parsed.data;
+      const { id, productIds: submittedProductIds, ...values } = parsed.data;
+      const productIds = Array.from(new Set(submittedProductIds));
+      const existingProducts = productIds.length
+        ? await db.product.findMany({
+            where: { id: { in: productIds }, deletedAt: null },
+            select: { id: true },
+          })
+        : [];
+      if (existingProducts.length !== productIds.length) {
+        return {
+          ok: false as const,
+          error: "Jedan ili više izabranih artikala više ne postoje.",
+        };
+      }
       const data = {
         name: values.name,
         discountPct: values.discountPct,
+        scope: values.scope,
         priority: values.priority,
         startsAt: start,
         endsAt: end,
@@ -423,7 +529,14 @@ export async function upsertLoyaltyRule(
       let saved;
       let message = "Loyalty pravilo je dodato u istoriju.";
       if (!id) {
-        saved = await db.loyaltyRule.create({ data });
+        saved = await db.loyaltyRule.create({
+          data: {
+            ...data,
+            products: {
+              create: productIds.map((productId) => ({ productId })),
+            },
+          },
+        });
       } else {
         const current = await db.loyaltyRule.findUnique({ where: { id } });
         if (!current) {
@@ -438,12 +551,33 @@ export async function upsertLoyaltyRule(
               where: { id },
               data: { active: false },
             });
-            return tx.loyaltyRule.create({ data });
+            return tx.loyaltyRule.create({
+              data: {
+                ...data,
+                products: {
+                  create: productIds.map((productId) => ({ productId })),
+                },
+              },
+            });
           });
           message =
             "Novi procenat je dodat kao novi zapis; prethodni je sačuvan u istoriji i deaktiviran.";
         } else {
-          saved = await db.loyaltyRule.update({ where: { id }, data });
+          saved = await db.$transaction(async (tx) => {
+            const updated = await tx.loyaltyRule.update({ where: { id }, data });
+            await tx.loyaltyRuleProduct.deleteMany({
+              where: { loyaltyRuleId: id },
+            });
+            if (productIds.length) {
+              await tx.loyaltyRuleProduct.createMany({
+                data: productIds.map((productId) => ({
+                  loyaltyRuleId: id,
+                  productId,
+                })),
+              });
+            }
+            return updated;
+          });
           message = "Loyalty pravilo je izmenjeno.";
         }
       }
@@ -451,7 +585,7 @@ export async function upsertLoyaltyRule(
       return {
         ok: true as const,
         entityId: saved.id,
-        diff: { previousId: id ?? null, ...values },
+        diff: { previousId: id ?? null, ...values, productIds },
         message,
         result: {
           entityId: saved.id,
@@ -460,6 +594,26 @@ export async function upsertLoyaltyRule(
       };
     },
   )(formData);
+}
+
+export async function searchLoyaltyProducts(rawQuery: string) {
+  await requireAdminAction(["CONTENT"]);
+  const query = rawQuery.trim();
+  if (query.length < 2) return [];
+  return db.product.findMany({
+    where: {
+      deletedAt: null,
+      OR: [
+        { sku: { contains: query, mode: "insensitive" } },
+        { name: { contains: query, mode: "insensitive" } },
+        { barcode: { contains: query, mode: "insensitive" } },
+        { supplierExternalId: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    orderBy: [{ name: "asc" }, { sku: "asc" }],
+    take: 20,
+    select: { id: true, sku: true, name: true },
+  });
 }
 
 export async function deleteLoyaltyRule(

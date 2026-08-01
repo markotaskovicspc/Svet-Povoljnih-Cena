@@ -7,7 +7,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Pencil, Plus, Tag, Users } from "lucide-react";
+import { Pencil, Plus, Search, Tag, Trash2, Users } from "lucide-react";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -28,6 +28,7 @@ import {
   deleteLinearPromotion,
   deleteLoyaltyRule,
   lookupActionProduct,
+  searchLoyaltyProducts,
   saveActionProduct,
   upsertAction,
   upsertLinearPromotion,
@@ -73,11 +74,15 @@ type LoyaltyRuleRow = {
   id: string;
   name: string;
   discountPct: number;
+  scope: "SELECTED_PRODUCTS" | "ALL_PRODUCTS";
   priority: number;
   startsAt: string | null;
   endsAt: string | null;
   active: boolean;
+  products: LoyaltyProductRow[];
 };
+
+type LoyaltyProductRow = { id: string; sku: string; name: string };
 
 type LinearPromotionRow = {
   id: string;
@@ -120,7 +125,13 @@ const date = new Intl.DateTimeFormat("sr-Latn-RS", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
+  timeZone: "Europe/Belgrade",
 });
+
+function maximumSalePrice(regularPrice: number) {
+  const maximum = (Math.round(regularPrice * 100) - 1) / 100;
+  return maximum > 0 ? maximum.toFixed(2) : undefined;
+}
 
 const productColumns: Array<{
   key: keyof LookupRow;
@@ -403,7 +414,7 @@ function ActionEditor({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field
             label="Prioritet"
-            hint="Ako je artikal u više akcija, pobeđuje veći broj."
+            hint="Pobeđuje veći broj; kod istog prioriteta noviji početak, pa niža cena."
           >
             <Input
               name="priority"
@@ -512,6 +523,7 @@ function ActionProductsDialog({
         return;
       }
       setPreview(result.product);
+      setSku(result.product.sku);
       setLookupMessage("");
       setProductNotice(null);
     });
@@ -523,8 +535,9 @@ function ActionProductsDialog({
         <DialogHeader className="border-b border-border px-5 py-4 pr-14">
           <DialogTitle>Artikli na akciji: {action.name}</DialogTitle>
           <DialogDescription>
-            Šifru i akcijsku MP cenu unosi korisnik. Ostala polja se popunjavaju
-            automatski. Važeća MP cena se čita na datum početka akcije.
+            Pronađite artikal po internoj SKU šifri, dobavljačkoj šifri ili
+            bar-kodu, pa unesite akcijsku MP cenu. Važeća MP cena se čita na
+            datum početka akcije.
           </DialogDescription>
           <MutationMessage
             state={productNotice ?? (addState.message ? addState : null)}
@@ -567,7 +580,7 @@ function ActionProductsDialog({
                     value={sku}
                     name="sku"
                     form="add-action-product"
-                    placeholder="Unesite šifru"
+                    placeholder="SKU, dobavljačka šifra ili bar-kod"
                     autoComplete="off"
                     onChange={(event) => {
                       setSku(event.target.value);
@@ -614,6 +627,11 @@ function ActionProductsDialog({
                     name="salePrice"
                     type="number"
                     min="0.01"
+                    max={
+                      preview
+                        ? maximumSalePrice(preview.validMpPrice)
+                        : undefined
+                    }
                     step="0.01"
                     required
                     disabled={!preview}
@@ -654,6 +672,7 @@ function ActionProductsDialog({
                         name="salePrice"
                         type="number"
                         min="0.01"
+                        max={maximumSalePrice(product.validMpPrice)}
                         step="0.01"
                         required
                         defaultValue={product.salePrice}
@@ -802,6 +821,8 @@ function LoyaltyCard({ rules }: { rules: LoyaltyRuleRow[] }) {
             <tr>
               <th className="px-3 py-2">Naziv</th>
               <th className="px-3 py-2 text-right">Popust</th>
+              <th className="px-3 py-2">Obuhvat</th>
+              <th className="px-3 py-2 text-right">Artikli</th>
               <th className="px-3 py-2">Period</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Radnje</th>
@@ -818,6 +839,12 @@ function LoyaltyCard({ rules }: { rules: LoyaltyRuleRow[] }) {
                 <td className="px-3 py-2">{rule.name}</td>
                 <td className="px-3 py-2 text-right font-medium tabular-nums">
                   {rule.discountPct}%
+                </td>
+                <td className="px-3 py-2 text-ink-500">
+                  {rule.scope === "ALL_PRODUCTS" ? "Svi proizvodi" : "Izabrani"}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {rule.scope === "ALL_PRODUCTS" ? "Svi" : rule.products.length}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-500">
                   {rule.startsAt ? date.format(new Date(rule.startsAt)) : "—"} →{" "}
@@ -843,7 +870,7 @@ function LoyaltyCard({ rules }: { rules: LoyaltyRuleRow[] }) {
             ))}
             {!rules.length ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-ink-500">
+                <td colSpan={7} className="px-3 py-8 text-center text-ink-500">
                   Nema loyalty istorije.
                 </td>
               </tr>
@@ -872,6 +899,22 @@ function LoyaltyEditor({
     deleteLoyaltyRule,
     emptyMutationState(),
   );
+  const [scope, setScope] = useState<"SELECTED_PRODUCTS" | "ALL_PRODUCTS">(
+    rule?.scope ?? "SELECTED_PRODUCTS",
+  );
+  const [products, setProducts] = useState<LoyaltyProductRow[]>(
+    rule?.products ?? [],
+  );
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<LoyaltyProductRow[]>([]);
+  const [isSearching, startSearch] = useTransition();
+
+  const runProductSearch = () => {
+    if (query.trim().length < 2) return;
+    startSearch(async () => {
+      setResults(await searchLoyaltyProducts(query));
+    });
+  };
 
   useEffect(() => {
     if (saveState.ok && saveState.result) onSaved(saveState);
@@ -933,6 +976,22 @@ function LoyaltyEditor({
               defaultValue={rule?.priority ?? 0}
             />
           </Field>
+          <Field
+            label="Obuhvat"
+            hint="Prazan izbor proizvoda ne znači ceo asortiman."
+          >
+            <select
+              name="scope"
+              value={scope}
+              onChange={(event) =>
+                setScope(event.target.value as typeof scope)
+              }
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+            >
+              <option value="SELECTED_PRODUCTS">Izabrani proizvodi</option>
+              <option value="ALL_PRODUCTS">Svi proizvodi</option>
+            </select>
+          </Field>
           <label className="flex items-end gap-2 pb-2 text-sm">
             <input
               type="checkbox"
@@ -942,6 +1001,105 @@ function LoyaltyEditor({
             />
             Aktivno
           </label>
+        </div>
+        {products.map((product) => (
+          <input
+            key={product.id}
+            type="hidden"
+            name="productIds"
+            value={product.id}
+          />
+        ))}
+        <div className="rounded-lg border border-border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-ink-900">
+                Artikli ({products.length})
+              </p>
+              <p className="text-xs text-ink-500">
+                {scope === "ALL_PRODUCTS"
+                  ? "Lista se čuva, ali se ignoriše dok važi režim svih proizvoda."
+                  : "Loyalty važi isključivo za artikle sa ove liste."}
+              </p>
+            </div>
+          </div>
+          {scope === "SELECTED_PRODUCTS" ? (
+            <div className="mt-3 flex gap-2">
+              <Input
+                value={query}
+                placeholder="Naziv, SKU, bar-kod ili šifra dobavljača"
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    runProductSearch();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSearching || query.trim().length < 2}
+                onClick={runProductSearch}
+              >
+                <Search className="size-4" />
+                {isSearching ? "Tražim…" : "Pretraži"}
+              </Button>
+            </div>
+          ) : null}
+          {scope === "SELECTED_PRODUCTS" && results.length ? (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {results.map((product) => {
+                const selected = products.some((item) => item.id === product.id);
+                return (
+                  <button
+                    type="button"
+                    key={product.id}
+                    disabled={selected}
+                    onClick={() => setProducts((current) => [...current, product])}
+                    className="rounded-lg border border-border px-3 py-2 text-left text-xs hover:bg-muted-bg disabled:opacity-50"
+                  >
+                    <span className="block font-medium text-ink-900">
+                      {product.name}
+                    </span>
+                    <span className="font-mono text-ink-500">{product.sku}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className="mt-3 space-y-2">
+            {products.map((product) => (
+              <div
+                key={product.id}
+                className="flex items-center gap-3 rounded-lg bg-muted-bg px-3 py-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {product.name}{" "}
+                  <span className="font-mono text-xs text-ink-500">
+                    {product.sku}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Ukloni ${product.sku}`}
+                  onClick={() =>
+                    setProducts((current) =>
+                      current.filter((item) => item.id !== product.id),
+                    )
+                  }
+                  className="text-ink-500 hover:text-action"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+            {!products.length ? (
+              <p className="text-xs text-warning">
+                Nema izabranih artikala — pravilo trenutno ne važi ni za jedan proizvod.
+              </p>
+            ) : null}
+          </div>
         </div>
         <SubmitButton pendingLabel="Čuvanje…">
           {rule ? "Sačuvaj pravilo" : "Dodaj u istoriju"}

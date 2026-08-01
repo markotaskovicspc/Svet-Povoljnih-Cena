@@ -22,7 +22,7 @@ import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { ProductColorOptions } from "@/components/product/color-options";
 import {
   deriveImageBadges,
-  effectiveUnitPrice,
+  resolveProductPriceQuote,
   type Badge,
   type BadgeTone,
 } from "@/lib/pricing";
@@ -100,8 +100,9 @@ export function ProductCard({
   const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
-  const price = effectiveUnitPrice(pricingProduct);
-  const hasReducedPrice = price.effective < price.full;
+  const quote = resolveProductPriceQuote(pricingProduct);
+  const price = quote.payable;
+  const hasReducedPrice = Boolean(quote.actionOffer || quote.loyaltyOffer);
   const shortDescription =
     product.shortDescription?.trim() ||
     product.categoryPath.at(-1) ||
@@ -112,7 +113,11 @@ export function ProductCard({
       ? `Akcija do ${formatDate(product.action.endsAt)}`
       : price.kind === "linear"
         ? "Dodatni akcijski popust"
-      : "";
+        : quote.loyaltyOffer
+          ? loyaltyEligible
+            ? "Loyalty cena je aktivna"
+            : "Loyalty cena uz prijavljen nalog"
+          : "";
   const availability = getProductAvailability(product);
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
@@ -343,13 +348,24 @@ export function ProductCard({
               className="min-w-0 rounded-sm transition focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
             >
               {hasReducedPrice ? (
-                <div className="flex min-w-0 items-end justify-between gap-1.5">
-                  <span className="min-w-0 truncate text-[10px] text-ink-500 line-through md:text-[11px]">
-                    {formatRsd(price.full)}
+                <div className="space-y-0.5">
+                  <span className="block truncate text-[10px] text-ink-500 line-through md:text-[11px]">
+                    {formatRsd(quote.full)}
                   </span>
-                  <span className="text-action shrink-0 text-sm leading-none font-bold md:text-[15px]">
-                    {formatRsd(price.effective)}
-                  </span>
+                  {quote.actionOffer ? (
+                    <CompactPriceOffer
+                      label="Akcija"
+                      value={quote.actionOffer.effective}
+                      selected={price.kind !== "loyalty"}
+                    />
+                  ) : null}
+                  {quote.loyaltyOffer ? (
+                    <CompactPriceOffer
+                      label="Loyalty"
+                      value={quote.loyaltyOffer.effective}
+                      selected={price.kind === "loyalty"}
+                    />
+                  ) : null}
                 </div>
               ) : (
                 <span className="block truncate text-sm leading-none font-bold text-ink-900 md:text-[15px]">
@@ -388,6 +404,32 @@ export function ProductCard({
       </div>
 
     </motion.article>
+  );
+}
+
+function CompactPriceOffer({
+  label,
+  value,
+  selected,
+}: {
+  label: string;
+  value: number;
+  selected: boolean;
+}) {
+  return (
+    <span className="flex items-baseline justify-between gap-2">
+      <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">
+        {label}
+      </span>
+      <span
+        className={cn(
+          "shrink-0 text-sm leading-none font-bold md:text-[15px]",
+          selected ? "text-action" : "text-ink-900",
+        )}
+      >
+        {formatRsd(value)}
+      </span>
+    </span>
   );
 }
 

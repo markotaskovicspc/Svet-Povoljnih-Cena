@@ -4,10 +4,15 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import type { Product } from "@/types";
+import { compareActionPriceCandidates } from "./engine";
+import {
+  selectApplicableLoyaltyRule,
+  type ScopedLoyaltyRule,
+} from "./loyalty-scope";
 
 export type ActivePricingRules = {
   evaluatedAt: string;
-  loyaltyDiscountPct: number | null;
+  loyaltyRules: ScopedLoyaltyRule[];
   linearPromotions: Array<{
     id: string;
     name: string;
@@ -23,7 +28,7 @@ export type ActivePricingRules = {
 
 const emptyRules = (): ActivePricingRules => ({
   evaluatedAt: new Date().toISOString(),
-  loyaltyDiscountPct: null,
+  loyaltyRules: [],
   linearPromotions: [],
 });
 
@@ -38,11 +43,18 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
     ],
   };
 
-  const [loyalty, linearPromotions] = await Promise.all([
-    db.loyaltyRule.findFirst({
+  const [loyaltyRules, linearPromotions] = await Promise.all([
+    db.loyaltyRule.findMany({
       where: { active: true, ...liveWindow },
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
-      select: { discountPct: true },
+      select: {
+        id: true,
+        discountPct: true,
+        priority: true,
+        updatedAt: true,
+        scope: true,
+        products: { select: { productId: true } },
+      },
     }),
     db.linearPromotion.findMany({
       where: {
@@ -65,7 +77,14 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
 
   return {
     evaluatedAt: now.toISOString(),
-    loyaltyDiscountPct: loyalty ? Number(loyalty.discountPct) : null,
+    loyaltyRules: loyaltyRules.map((rule) => ({
+      id: rule.id,
+      discountPct: Number(rule.discountPct),
+      priority: rule.priority,
+      updatedAt: rule.updatedAt.toISOString(),
+      scope: rule.scope,
+      productIds: rule.products.map((item) => item.productId),
+    })),
     linearPromotions: linearPromotions.map((promotion) => ({
       id: promotion.id,
       name: promotion.name,
@@ -82,7 +101,7 @@ async function loadActivePricingRules(): Promise<ActivePricingRules> {
 
 const getActivePricingRulesAcrossRequests = unstable_cache(
   loadActivePricingRules,
-  ["active-pricing-rules-v2"],
+  ["active-pricing-rules-v3"],
   { revalidate: 30, tags: ["catalog-pricing"] },
 );
 
@@ -90,6 +109,7 @@ export const getActivePricingRules = cache(getActivePricingRulesAcrossRequests);
 
 export function pricingRuleInputsForProduct(
   product: {
+    id?: string;
     categoryIds?: string[];
     categoryPaths?: string[];
     groupId?: string | null;
@@ -98,8 +118,12 @@ export function pricingRuleInputsForProduct(
 ) {
   const categoryIds = new Set(product.categoryIds ?? []);
   const categoryPaths = product.categoryPaths ?? [];
+  const loyalty = selectApplicableLoyaltyRule(
+    product.id,
+    rules.loyaltyRules ?? [],
+  );
   return {
-    loyaltyDiscountPct: rules.loyaltyDiscountPct,
+    loyaltyDiscountPct: loyalty?.discountPct ?? null,
     linearPromotions: rules.linearPromotions
       .filter((promotion) => {
         const hasScope =
@@ -150,6 +174,7 @@ export function applyActivePricingRules(
 ): Product {
   const ruleInputs = pricingRuleInputsForProduct(
     {
+      id: product.id,
       categoryIds: product.categoryIds,
       categoryPaths: product.pricingCategoryPaths,
       groupId: product.groupId,
@@ -167,14 +192,12 @@ export function applyActivePricingRules(
         Boolean(candidate.isPermanent),
       ),
     )
-    .sort((left, right) => right.priority - left.priority)[0];
+    .sort(compareActionPriceCandidates)[0];
 
   return {
     ...product,
-    loyaltyPrice:
-      rules.loyaltyDiscountPct === null ? product.loyaltyPrice : undefined,
-    loyaltyDiscountPct:
-      rules.loyaltyDiscountPct ?? product.loyaltyDiscountPct,
+    loyaltyPrice: undefined,
+    loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct ?? undefined,
     linearPromotions: ruleInputs.linearPromotions,
     action: canonicalAction?.actionId
       ? {
