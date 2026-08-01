@@ -94,10 +94,9 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
       heightCm: true,
       weightKg: true,
       grossWeightKg: true,
-      packWidthCm: true,
-      packDepthCm: true,
-      packHeightCm: true,
-      packGrossWeightKg: true,
+      unitPackWidthCm: true,
+      unitPackDepthCm: true,
+      unitPackHeightCm: true,
       fullPrice: true,
       salePrice: true,
       discountPct: true,
@@ -528,10 +527,9 @@ function catalogItemSnapshot(item: RabaluxCatalogItem, categoryId?: string) {
     heightCm: item.heightCm,
     weightKg: item.weightKg,
     grossWeightKg: item.grossWeightKg,
-    packWidthCm: item.packWidthCm,
-    packDepthCm: item.packDepthCm,
-    packHeightCm: item.packHeightCm,
-    packGrossWeightKg: item.packGrossWeightKg,
+    unitPackWidthCm: item.unitPackWidthCm,
+    unitPackDepthCm: item.unitPackDepthCm,
+    unitPackHeightCm: item.unitPackHeightCm,
     fullPrice: item.fullPrice,
     salePrice: item.salePrice,
     discountPct: item.discountPct,
@@ -568,10 +566,9 @@ function catalogProductShape(product: {
   heightCm: Prisma.Decimal | null;
   weightKg: Prisma.Decimal | null;
   grossWeightKg: Prisma.Decimal | null;
-  packWidthCm: Prisma.Decimal | null;
-  packDepthCm: Prisma.Decimal | null;
-  packHeightCm: Prisma.Decimal | null;
-  packGrossWeightKg: Prisma.Decimal | null;
+  unitPackWidthCm: Prisma.Decimal | null;
+  unitPackDepthCm: Prisma.Decimal | null;
+  unitPackHeightCm: Prisma.Decimal | null;
   fullPrice: Prisma.Decimal;
   salePrice: Prisma.Decimal | null;
   discountPct: number | null;
@@ -598,10 +595,9 @@ function catalogProductShape(product: {
     heightCm: decimalNumber(product.heightCm),
     weightKg: decimalNumber(product.weightKg),
     grossWeightKg: decimalNumber(product.grossWeightKg),
-    packWidthCm: decimalNumber(product.packWidthCm),
-    packDepthCm: decimalNumber(product.packDepthCm),
-    packHeightCm: decimalNumber(product.packHeightCm),
-    packGrossWeightKg: decimalNumber(product.packGrossWeightKg),
+    unitPackWidthCm: decimalNumber(product.unitPackWidthCm),
+    unitPackDepthCm: decimalNumber(product.unitPackDepthCm),
+    unitPackHeightCm: decimalNumber(product.unitPackHeightCm),
     fullPrice: Number(product.fullPrice),
     salePrice: decimalNumber(product.salePrice),
     discountPct: product.discountPct,

@@ -34,6 +34,11 @@ describe("Rabalux catalog mapping", () => {
     expect(item.widthCm).toBe(12);
     expect(item.depthCm).toBe(7.2);
     expect(item.heightCm).toBe(22);
+    expect([
+      item.unitPackWidthCm,
+      item.unitPackDepthCm,
+      item.unitPackHeightCm,
+    ]).toEqual([13.5, 7.5, 23.5]);
     expect(item.warrantyYears).toBe(5);
     expect(item.materials).toEqual(["metal", "plastika"]);
     expect(item.media.filter((asset) => asset.kind === "IMAGE")).toHaveLength(1);

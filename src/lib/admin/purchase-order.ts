@@ -58,6 +58,9 @@ export function calculateUnitLogistics(input: {
   heightCm?: number | null;
   grossWeightKg?: number | null;
   weightKg?: number | null;
+  unitPackWidthCm?: number | null;
+  unitPackDepthCm?: number | null;
+  unitPackHeightCm?: number | null;
   packWidthCm?: number | null;
   packDepthCm?: number | null;
   packHeightCm?: number | null;
@@ -68,13 +71,19 @@ export function calculateUnitLogistics(input: {
     (input.packWidthCm ?? 0) *
     (input.packDepthCm ?? 0) *
     (input.packHeightCm ?? 0);
+  const unitPackVolume =
+    (input.unitPackWidthCm ?? 0) *
+    (input.unitPackDepthCm ?? 0) *
+    (input.unitPackHeightCm ?? 0);
   const itemVolume =
     (input.widthCm ?? 0) * (input.depthCm ?? 0) * (input.heightCm ?? 0);
   const volumeM3 =
     packVolume > 0
       ? packVolume / 1_000_000 / packQty
-      : itemVolume > 0
-        ? itemVolume / 1_000_000
+      : unitPackVolume > 0
+        ? unitPackVolume / 1_000_000
+        : itemVolume > 0
+          ? itemVolume / 1_000_000
         : 0;
   const weightKg =
     input.packGrossWeightKg != null && input.packGrossWeightKg > 0

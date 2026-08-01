@@ -138,6 +138,9 @@ const productListSelect = {
   packWidthCm: true,
   packDepthCm: true,
   packHeightCm: true,
+  unitPackWidthCm: true,
+  unitPackDepthCm: true,
+  unitPackHeightCm: true,
   warrantyYears: true,
   supplier: { select: { integrationKey: true, enabled: true } },
   isHero: true,
@@ -557,11 +560,17 @@ function packageDimensions(p: {
   packWidthCm: Prisma.Decimal | null;
   packDepthCm: Prisma.Decimal | null;
   packHeightCm: Prisma.Decimal | null;
+  unitPackWidthCm: Prisma.Decimal | null;
+  unitPackDepthCm: Prisma.Decimal | null;
+  unitPackHeightCm: Prisma.Decimal | null;
+  widthCm: Prisma.Decimal | null;
+  depthCm: Prisma.Decimal | null;
+  heightCm: Prisma.Decimal | null;
 }) {
   const dimensions = {
-    w: num(p.packWidthCm) || 0,
-    d: num(p.packDepthCm) || 0,
-    h: num(p.packHeightCm) || 0,
+    w: num(p.packWidthCm ?? p.unitPackWidthCm ?? p.widthCm) || 0,
+    d: num(p.packDepthCm ?? p.unitPackDepthCm ?? p.depthCm) || 0,
+    h: num(p.packHeightCm ?? p.unitPackHeightCm ?? p.heightCm) || 0,
   };
   return Object.values(dimensions).some((value) => value > 0)
     ? dimensions

@@ -33,6 +33,9 @@ export type PackageSourceItem = {
     packDepthCm?: unknown;
     packHeightCm?: unknown;
     packGrossWeightKg?: unknown;
+    unitPackWidthCm?: unknown;
+    unitPackDepthCm?: unknown;
+    unitPackHeightCm?: unknown;
     widthCm?: unknown;
     depthCm?: unknown;
     heightCm?: unknown;
@@ -66,12 +69,15 @@ export function derivePhysicalPackages(
           positiveNumber(item.product?.weightKg),
         widthCm:
           positiveNumber(item.product?.packWidthCm) ??
+          positiveNumber(item.product?.unitPackWidthCm) ??
           positiveNumber(item.product?.widthCm),
         depthCm:
           positiveNumber(item.product?.packDepthCm) ??
+          positiveNumber(item.product?.unitPackDepthCm) ??
           positiveNumber(item.product?.depthCm),
         heightCm:
           positiveNumber(item.product?.packHeightCm) ??
+          positiveNumber(item.product?.unitPackHeightCm) ??
           positiveNumber(item.product?.heightCm),
       });
     }

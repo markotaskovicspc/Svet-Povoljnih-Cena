@@ -228,6 +228,7 @@ const articleColumns: ErpColumn[] = [
   { key: "unitPackWidthCm", label: "Poj. pak. širina", type: "number", align: "right" },
   { key: "unitPackDepthCm", label: "Poj. pak. dubina", type: "number", align: "right" },
   { key: "unitPackHeightCm", label: "Poj. pak. visina", type: "number", align: "right" },
+  { key: "unitPackVolumeM3", label: "Poj. pak. m3", type: "number", align: "right" },
   { key: "packQty", label: "Kom/pak", type: "number", align: "right" },
   { key: "packWidthCm", label: "Transport. širina", type: "number", align: "right" },
   { key: "packDepthCm", label: "Transport. dubina", type: "number", align: "right" },
@@ -1181,6 +1182,9 @@ async function getArticleRows(
     const packWidth = asNumber(product.packWidthCm);
     const packDepth = asNumber(product.packDepthCm);
     const packHeight = asNumber(product.packHeightCm);
+    const unitPackWidth = asNumber(product.unitPackWidthCm);
+    const unitPackDepth = asNumber(product.unitPackDepthCm);
+    const unitPackHeight = asNumber(product.unitPackHeightCm);
     const volume =
       width !== null && depth !== null && height !== null
         ? Number(((width * depth * height) / 1_000_000).toFixed(3))
@@ -1192,6 +1196,12 @@ async function getArticleRows(
     const packVolume =
       packWidth !== null && packDepth !== null && packHeight !== null
         ? Number(((packWidth * packDepth * packHeight) / 1_000_000).toFixed(3))
+        : null;
+    const unitPackVolume =
+      unitPackWidth !== null && unitPackDepth !== null && unitPackHeight !== null
+        ? Number(
+            ((unitPackWidth * unitPackDepth * unitPackHeight) / 1_000_000).toFixed(3),
+          )
         : null;
     const lastPurchase = product.purchasePrices[0] ?? null;
     const stockRows = new Map(
@@ -1270,9 +1280,10 @@ async function getArticleRows(
         volumeM3: volume,
         weightKg: asNumber(product.weightKg),
         grossWeightKg: asNumber(product.grossWeightKg),
-        unitPackWidthCm: asNumber(product.unitPackWidthCm),
-        unitPackDepthCm: asNumber(product.unitPackDepthCm),
-        unitPackHeightCm: asNumber(product.unitPackHeightCm),
+        unitPackWidthCm: unitPackWidth,
+        unitPackDepthCm: unitPackDepth,
+        unitPackHeightCm: unitPackHeight,
+        unitPackVolumeM3: unitPackVolume,
         packQty: product.packQty,
         packWidthCm: packWidth,
         packDepthCm: packDepth,

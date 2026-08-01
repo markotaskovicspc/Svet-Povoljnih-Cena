@@ -116,6 +116,9 @@ export async function createShipmentForOrder(
               packDepthCm: true,
               packHeightCm: true,
               packGrossWeightKg: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
               widthCm: true,
               depthCm: true,
               heightCm: true,
@@ -165,9 +168,24 @@ export async function createShipmentForOrder(
       withAssembly: item.withAssembly,
       qty: item.qty,
       packQty: item.product?.packQty,
-      packWidthCm: Number(item.product?.packWidthCm ?? 0),
-      packDepthCm: Number(item.product?.packDepthCm ?? 0),
-      packHeightCm: Number(item.product?.packHeightCm ?? 0),
+      packWidthCm: Number(
+        item.product?.packWidthCm ??
+          item.product?.unitPackWidthCm ??
+          item.product?.widthCm ??
+          0,
+      ),
+      packDepthCm: Number(
+        item.product?.packDepthCm ??
+          item.product?.unitPackDepthCm ??
+          item.product?.depthCm ??
+          0,
+      ),
+      packHeightCm: Number(
+        item.product?.packHeightCm ??
+          item.product?.unitPackHeightCm ??
+          item.product?.heightCm ??
+          0,
+      ),
       packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
     })),
   });

@@ -32,7 +32,7 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toBe("2026-07-22T00:00:00.000Z");
   });
 
-  it("uses package dimensions per item and falls back to article dimensions", () => {
+  it("uses transport dimensions per item, then unit packaging, then article dimensions", () => {
     expect(
       calculateUnitLogistics({
         packQty: 2,
@@ -42,6 +42,17 @@ describe("ERP module 4 purchase-order rules", () => {
         packGrossWeightKg: 20,
       }),
     ).toEqual({ volumeM3: 0.1, weightKg: 10 });
+    expect(
+      calculateUnitLogistics({
+        unitPackWidthCm: 80,
+        unitPackDepthCm: 40,
+        unitPackHeightCm: 25,
+        widthCm: 100,
+        depthCm: 50,
+        heightCm: 40,
+        grossWeightKg: 18,
+      }),
+    ).toEqual({ volumeM3: 0.08, weightKg: 18 });
     expect(
       calculateUnitLogistics({
         widthCm: 100,

@@ -37,10 +37,9 @@ export type RabaluxCatalogItem = {
   heightCm: number | null;
   weightKg: number | null;
   grossWeightKg: number | null;
-  packWidthCm: number | null;
-  packDepthCm: number | null;
-  packHeightCm: number | null;
-  packGrossWeightKg: number | null;
+  unitPackWidthCm: number | null;
+  unitPackDepthCm: number | null;
+  unitPackHeightCm: number | null;
   warrantyYears: number;
   countryOfOrigin: string | null;
   hsCode: string | null;

@@ -40,6 +40,31 @@ describe("physical courier packages", () => {
     });
   });
 
+  it("falls back from transport packaging to individual article packaging", () => {
+    const [pkg] = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Lampa",
+        qty: 1,
+        product: {
+          grossWeightKg: 2,
+          unitPackWidthCm: 25,
+          unitPackDepthCm: 15,
+          unitPackHeightCm: 40,
+          widthCm: 20,
+          depthCm: 10,
+          heightCm: 35,
+        },
+      },
+    ]);
+    expect(pkg).toMatchObject({
+      weightKg: 2,
+      widthCm: 25,
+      depthCm: 15,
+      heightCm: 40,
+    });
+  });
+
   it("enforces GLS weight, side and girth limits", () => {
     const base = {
       packageNo: 1,
