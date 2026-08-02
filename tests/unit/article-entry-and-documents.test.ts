@@ -17,6 +17,7 @@ import {
   validateProductDocument,
 } from "@/lib/product-documents.server";
 import { productAttachmentAdminLabel } from "@/lib/product-documents";
+import { buildProductDeclaration } from "@/lib/product-declaration";
 
 describe("unos artikala", () => {
   it("trimuje ručni SKU i odbija praznine i kontrolne znakove", () => {
@@ -106,6 +107,43 @@ describe("unos artikala", () => {
 });
 
 describe("PDP dokumenti", () => {
+  it("gradi deklaraciju iz matičnih podataka artikla", () => {
+    expect(
+      buildProductDeclaration({
+        name: "Baštenska stolica RELAX",
+        shortName: "RELAX",
+        shortDescription: "Baštenska stolica",
+        materialText: "Čelik i tekstilen",
+        countryOfOrigin: "Kina",
+      }),
+    ).toBe(
+      [
+        "Vrsta robe: Baštenska stolica",
+        "Naziv: Baštenska stolica RELAX",
+        "Jedinica mere: komad",
+        "Uvoznik: Svet povoljnih cena doo",
+        "Materijal: Čelik i tekstilen",
+        "Zemlja porekla: Kina",
+      ].join("\n"),
+    );
+  });
+
+  it("osvežava standardna polja i čuva samo dodatnu ručnu napomenu", () => {
+    const declaration = buildProductDeclaration({
+      name: "Nova stolica",
+      shortName: "NOVA",
+      shortDescription: "Trpezarijska stolica",
+      countryOfOrigin: "Srbija",
+      manualDeclaration:
+        "Vrsta robe: Stara vrednost\nZemlja porekla: Kina\nDržati dalje od vatre.",
+    });
+
+    expect(declaration).toContain("Vrsta robe: Trpezarijska stolica");
+    expect(declaration).toContain("Zemlja porekla: Srbija");
+    expect(declaration).toContain("Držati dalje od vatre.");
+    expect(declaration).not.toContain("Stara vrednost");
+  });
+
   it("prihvata PDF samo kada ekstenzija, MIME i potpis odgovaraju", async () => {
     const pdf = new File([Buffer.from("%PDF-1.7\n")], "deklaracija.pdf", {
       type: "application/pdf",

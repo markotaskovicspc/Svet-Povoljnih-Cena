@@ -402,9 +402,17 @@ const coreErpModules: ErpModule[] = [
       {
         label: "Unos novog",
         pendingLabel: "Kreiranje artikla…",
-        description: "Sistem automatski dodeljuje sledeću internu šifru artikla.",
+        description:
+          "Unesite šifru sličnog artikla ako želite da prekopirate njegove matične podatke. Novoformirana šifra, slike, dokumenti, zalihe i transakcioni podaci se ne kopiraju. Ostavite prazno za potpuno nov artikal.",
         tone: "primary",
         action: "article.create",
+        fields: [
+          {
+            key: "sourceSku",
+            label: "Kopiraj podatke iz artikla (šifra)",
+            type: "text",
+          },
+        ],
       },
       { label: "Excel unos", tone: "neutral", href: "/admin/erp/artikli/import" },
       {

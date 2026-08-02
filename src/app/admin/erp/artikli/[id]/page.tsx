@@ -125,6 +125,7 @@ const overrideSchema = z.object({
   customsRate: optionalNonnegativeNumber(),
   supplierProductName: z.string().max(500).optional().nullable(),
   materialText: z.string().max(5000).optional().nullable(),
+  countryOfOrigin: z.string().max(120).optional().nullable(),
   hsCode: z.string().max(80).optional().nullable(),
   moq: optionalNonnegativeInteger(),
   ananasBrokeragePct: optionalNonnegativeNumber(),
@@ -295,7 +296,7 @@ function changedManualGroups(
     ["identity", ["sku", "barcode"]],
     ["description", ["description", "shortDescription"]],
     ["grouping", ["groupId", "collectionId"]],
-    ["specifications", ["colorPrimary", "colorSecondary"]],
+    ["specifications", ["colorPrimary", "colorSecondary", "countryOfOrigin"]],
     [
       "dimensions",
       [
@@ -389,6 +390,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           customsRate: d.customsRate ?? null,
           supplierProductName: d.supplierProductName?.trim() || null,
           materialText: d.materialText?.trim() || null,
+          countryOfOrigin: d.countryOfOrigin?.trim() || null,
           hsCode: d.hsCode?.trim() || null,
           moq: d.moq ?? null,
           ananasBrokeragePct: d.ananasBrokeragePct ?? null,
@@ -418,6 +420,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               shortDescription: true,
               colorPrimary: true,
               colorSecondary: true,
+              countryOfOrigin: true,
               widthCm: true,
               depthCm: true,
               heightCm: true,
@@ -1568,9 +1571,15 @@ export default async function ProductDetail({
                   <Input name="customsRate" type="number" min={0} step="0.01" defaultValue={product.customsRate ? num(product.customsRate) : ""} />
                 </Field>
               </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <Field label="Materijal">
                   <Textarea name="materialText" rows={2} defaultValue={product.materialText ?? ""} />
+                </Field>
+                <Field label="Zemlja porekla">
+                  <Input name="countryOfOrigin" defaultValue={product.countryOfOrigin ?? ""} />
+                  <p className="mt-1 text-xs text-ink-500">
+                    Ova vrednost se automatski prikazuje u deklaraciji proizvoda.
+                  </p>
                 </Field>
                 <Field label="MOQ">
                   <Input name="moq" type="number" min={0} defaultValue={product.moq ?? ""} />

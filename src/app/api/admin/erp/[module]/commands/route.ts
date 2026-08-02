@@ -18,6 +18,12 @@ import {
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { articleSlug } from "@/lib/article-master";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
+import { normalizeArticleSku } from "@/lib/article-sku";
+import {
+  articleCopySelect,
+  buildCopiedArticleData,
+  copyArticleRelations,
+} from "@/lib/admin/article-copy.server";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 import {
   createPurchasePrice,
@@ -107,7 +113,7 @@ async function runCommand(
     case "row.delete":
       return deleteRows(module, ids);
     case "article.create":
-      return createArticle();
+      return createArticle(input);
     case "lookup.create":
       return createLookupValue();
     case "supplier.create":
@@ -321,24 +327,52 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
   return { message: `Obrisano: ${count}.` };
 }
 
-async function createArticle(): Promise<CommandResult> {
+async function createArticle(input: PurchasePriceCommandInput): Promise<CommandResult> {
+  const requestedSourceSku =
+    typeof input.sourceSku === "string" && input.sourceSku.trim()
+      ? normalizeArticleSku(input.sourceSku)
+      : null;
   const product = await db.$transaction(async (tx) => {
     const sku = await nextArticleSku(tx);
-    return tx.product.create({
-      data: {
-        sku,
-        slug: `${articleSlug(sku)}-${randomBytes(3).toString("hex")}`,
-        name: "Novi artikal",
-        shortName: "Novi artikal",
-        description: "Dopuniti opis za sajt.",
-        fullPrice: 0,
-        articleStatus: "UZ",
-        isActive: false,
+    const slug = `${articleSlug(sku)}-${randomBytes(3).toString("hex")}`;
+    if (!requestedSourceSku) {
+      return tx.product.create({
+        data: {
+          sku,
+          slug,
+          name: "Novi artikal",
+          shortName: "Novi artikal",
+          description: "Dopuniti opis za sajt.",
+          fullPrice: 0,
+          articleStatus: "UZ",
+          isActive: false,
+        },
+      });
+    }
+
+    const source = await tx.product.findFirst({
+      where: {
+        sku: { equals: requestedSourceSku, mode: "insensitive" },
+        deletedAt: null,
       },
+      select: articleCopySelect,
     });
+    if (!source) {
+      throw new Error(
+        `Artikal sa šifrom ${requestedSourceSku} ne postoji u bazi artikala.`,
+      );
+    }
+
+    const copied = await tx.product.create({
+      data: buildCopiedArticleData(source, { sku, slug }),
+    });
+    await copyArticleRelations(tx, copied.id, source);
+    return copied;
   });
   return {
-    message: `Artikal ${product.sku} je kreiran neobjavljen. Dopunite obavezna polja.`,
+    message: requestedSourceSku
+      ? `Artikal ${product.sku} je kreiran kao neobjavljena kopija artikla ${requestedSourceSku}, sa novom šifrom i bez slika i operativnih podataka izvornog artikla.`
+      : `Artikal ${product.sku} je kreiran neobjavljen. Dopunite obavezna polja.`,
     createdId: product.id,
     redirect: `/admin/erp/artikli/${product.id}`,
   };

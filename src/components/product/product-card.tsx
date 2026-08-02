@@ -32,6 +32,7 @@ import {
   type CampaignStickerKey,
 } from "@/data/campaign-icons";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import { formatProductCardDimensions } from "@/lib/product-dimensions";
 
 interface ProductCardProps {
   product: Product;
@@ -103,10 +104,7 @@ export function ProductCard({
   const quote = resolveProductPriceQuote(pricingProduct);
   const price = quote.payable;
   const hasReducedPrice = Boolean(quote.actionOffer || quote.loyaltyOffer);
-  const shortDescription =
-    product.shortDescription?.trim() ||
-    product.categoryPath.at(-1) ||
-    product.group;
+  const dimensions = formatProductCardDimensions(product.dimensionsCm);
   const promoLine = product.action?.isPermanent
     ? "Trajno niska cena"
     : price.kind === "sale" && product.action?.endsAt
@@ -336,7 +334,7 @@ export function ProductCard({
           href={`/p/${product.slug}`}
           className="truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]"
         >
-          {shortDescription}
+          {dimensions}
         </Link>
         <ProductColorOptions product={product} className="h-4 pt-0" />
 
@@ -349,7 +347,7 @@ export function ProductCard({
             >
               {hasReducedPrice ? (
                 <div className="space-y-0.5">
-                  <span className="block truncate text-[10px] text-ink-500 line-through md:text-[11px]">
+                  <span className="block truncate text-[10px] text-ink-500 md:text-[11px]">
                     {formatRsd(quote.full)}
                   </span>
                   {quote.actionOffer ? (
@@ -424,7 +422,7 @@ function CompactPriceOffer({
       <span
         className={cn(
           "shrink-0 text-sm leading-none font-bold md:text-[15px]",
-          selected ? "text-action" : "text-ink-900",
+          selected || label === "Loyalty" ? "text-action" : "text-ink-900",
         )}
       >
         {formatRsd(value)}

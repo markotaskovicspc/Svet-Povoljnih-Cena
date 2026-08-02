@@ -56,6 +56,7 @@ import {
   permanentPriceProductsWhere,
   storefrontMonth,
 } from "@/lib/storefront/promotion-filters";
+import { buildProductDeclaration } from "@/lib/product-declaration";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -282,7 +283,15 @@ function mapProduct(
     })),
     pdpInfo: {
       deliveryTerms: p.pdpDeliveryTerms ?? undefined,
-      declaration: p.declaration ?? undefined,
+      declaration: buildProductDeclaration({
+        name: p.name,
+        shortName: p.shortName,
+        shortDescription: p.shortDescription,
+        materialText: p.materialText,
+        materialLabels: p.materials.map((item) => item.material.label),
+        countryOfOrigin: p.countryOfOrigin,
+        manualDeclaration: p.declaration,
+      }),
       assemblyInstructions: p.assemblyInstructions ?? undefined,
       maintenance: p.maintenance ?? undefined,
     },

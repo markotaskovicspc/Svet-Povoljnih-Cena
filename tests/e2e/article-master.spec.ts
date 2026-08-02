@@ -32,6 +32,7 @@ test.describe("article master acceptance", () => {
   let rootCategoryId = "";
   let groupCategoryId = "";
   let generatedProductId = "";
+  let copiedProductId = "";
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -1054,6 +1055,13 @@ test.describe("article master acceptance", () => {
     await page.goto("/admin/erp/artikli", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(10_000);
     await page.getByRole("button", { name: "Unos novog", exact: true }).click();
+    const createDialog = page.getByRole("dialog");
+    await expect(
+      createDialog.getByLabel("Kopiraj podatke iz artikla (šifra)"),
+    ).toBeVisible();
+    await createDialog
+      .getByRole("button", { name: "Unos novog", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/admin\/erp\/artikli\/[^/]+$/, {
       timeout: 180_000,
     });
@@ -1119,6 +1127,43 @@ test.describe("article master acceptance", () => {
       )
       .toEqual({ sku: qaSku });
     await expect(form.locator('input[name="sku"]')).toHaveValue(qaSku);
+
+    const source = await db.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: { sku: true, name: true, widthCm: true, media: { select: { id: true } } },
+    });
+    await page.goto("/admin/erp/artikli", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Unos novog", exact: true }).click();
+    const copyDialog = page.getByRole("dialog");
+    await copyDialog
+      .getByLabel("Kopiraj podatke iz artikla (šifra)")
+      .fill(source.sku);
+    await copyDialog
+      .getByRole("button", { name: "Unos novog", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/erp\/artikli\/[^/]+$/, {
+      timeout: 180_000,
+    });
+    copiedProductId = new URL(page.url()).pathname.split("/").pop() ?? "";
+    const copied = await db.product.findUniqueOrThrow({
+      where: { id: copiedProductId },
+      select: {
+        sku: true,
+        name: true,
+        widthCm: true,
+        articleStatus: true,
+        stock: true,
+        media: { select: { id: true } },
+      },
+    });
+    expect(copied).toMatchObject({
+      name: source.name,
+      articleStatus: "UZ",
+      stock: 0,
+      media: [],
+    });
+    expect(Number(copied.widthCm)).toBe(Number(source.widthCm));
+    expect(copied.sku).not.toBe(source.sku);
   });
 
   test("filters, edits, saves a view and archives through the canonical grid", async ({
@@ -1495,6 +1540,7 @@ test.describe("article master acceptance", () => {
         OR: [
           { id: productId || "__missing__" },
           { id: generatedProductId || "__missing__" },
+          { id: copiedProductId || "__missing__" },
           { sku: { contains: runId } },
           { name: { startsWith: tag } },
         ],

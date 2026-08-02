@@ -39,6 +39,39 @@ const readyProduct: Product = {
 };
 
 describe("ProductCard image regression", () => {
+  it("prikazuje dimenzije umesto kratkog opisa", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          shortDescription: "Ovaj tekst ne pripada kartici",
+          dimensionsCm: { w: 54.5, d: 61, h: 88 },
+        },
+      }),
+    );
+
+    expect(html).toContain("Dimenzije: 54,5 × 61 × 88 cm");
+    expect(html).not.toContain("Ovaj tekst ne pripada kartici");
+  });
+
+  it("ne precrtava redovnu cenu i prikazuje loyalty cenu crveno", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          fullPrice: 2_427,
+          loyaltyPrice: 1_699,
+          loyaltyDiscountPct: 30,
+        },
+      }),
+    );
+
+    expect(html).toContain("2.427 RSD");
+    expect(html).toContain("1.699 RSD");
+    expect(html).not.toContain("line-through");
+    expect(html).toMatch(/text-action[^>]*>1\.699 RSD/);
+  });
+
   it("renders the ordered first card image in the initial HTML", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, { product: readyProduct }),
