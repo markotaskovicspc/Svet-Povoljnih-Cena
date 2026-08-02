@@ -844,6 +844,7 @@ export async function getErpModule(
   slug: string,
   options: {
     take?: number;
+    skip?: number;
     warehouseId?: string | null;
     includeLookupOptions?: boolean;
     query?: string;
@@ -865,6 +866,7 @@ export async function getErpModule(
       }
     : definition;
   const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
+  const skip = Math.max(0, options.skip ?? 0);
   const includeLookupOptions = options.includeLookupOptions !== false;
   const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
     getPersistedErpRows(
@@ -874,6 +876,7 @@ export async function getErpModule(
       options.query,
       options.searchColumn,
       options.salesOrderFilters,
+      skip,
     ),
     includeLookupOptions && slug === "artikli"
       ? getArticleModuleContext()
@@ -960,10 +963,11 @@ async function getPersistedErpRows(
   query?: string,
   searchColumn?: string,
   salesOrderFilters?: SalesOrderExportFilters,
+  skip = 0,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows(take, warehouseId, query, searchColumn);
+      return getArticleRows(take, warehouseId, query, searchColumn, skip);
     case "dobavljaci":
       return getSupplierRows(take);
     case "nabavne-cene":
@@ -1046,12 +1050,14 @@ async function getArticleRows(
   selectedWarehouseId?: string | null,
   query?: string,
   searchColumn?: string,
+  skip = 0,
 ): Promise<ErpRow[]> {
   const where = articleSearchWhere(query, searchColumn);
   const [products, activeWarehouses] = await Promise.all([db.product.findMany({
     where,
     orderBy: { updatedAt: "desc" },
     take,
+    skip,
     select: {
       id: true,
       sku: true,
@@ -1324,6 +1330,12 @@ async function getArticleRows(
         calcRetailPrice: asNumber(product.fullPrice),
       },
     };
+  });
+}
+
+export function countArticleRows(query?: string, searchColumn?: string) {
+  return db.product.count({
+    where: articleSearchWhere(query, searchColumn),
   });
 }
 

@@ -1,4 +1,31 @@
 import type { Prisma } from "@prisma/client";
+import { numericArticleSku } from "@/lib/article-sku";
+
+function groupedNumericSku(value: number) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function exactNumericIdentifierWhere(
+  search: string,
+  searchColumn?: string,
+): Prisma.ProductWhereInput | null {
+  const numericSku = numericArticleSku(search);
+  if (numericSku === null || numericSku < 10_000) return null;
+
+  const skuVariants = Array.from(
+    new Set([search, String(numericSku), groupedNumericSku(numericSku)]),
+  );
+  if (searchColumn === "sku") return { sku: { in: skuVariants } };
+  if (searchColumn === "barcode") return { barcode: search };
+  if (searchColumn) return null;
+
+  // Numeric quick-search values are overwhelmingly article identifiers. Use
+  // the existing SKU/barcode indexes rather than scanning every description,
+  // relation and stock column with case-insensitive contains predicates.
+  return {
+    OR: [{ sku: { in: skuVariants } }, { barcode: search }],
+  };
+}
 
 export function articleSearchWhere(
   query?: string,
@@ -6,6 +33,8 @@ export function articleSearchWhere(
 ): Prisma.ProductWhereInput | undefined {
   const search = query?.trim();
   if (!search) return undefined;
+  const exactIdentifier = exactNumericIdentifierWhere(search, searchColumn);
+  if (exactIdentifier) return exactIdentifier;
   if (searchColumn === "sku") {
     return { sku: { contains: search, mode: "insensitive" } };
   }

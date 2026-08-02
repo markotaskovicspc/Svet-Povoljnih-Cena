@@ -1,21 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import {
-  Award,
-  Box,
-  Check,
-  Hammer,
-  Leaf,
-  Ruler,
-  ShieldCheck,
-  Sparkles,
-  Truck,
-} from "lucide-react";
+import { Leaf } from "lucide-react";
 import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
+import { PdpBenefits } from "@/components/product/pdp-benefits";
 import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { ProductColorOptions } from "@/components/product/color-options";
@@ -111,15 +102,6 @@ export default async function ProductPage({ params }: RouteProps) {
   const overlayBadges = deriveImageBadges(product);
   const cleanDescription = stripHtml(product.description);
 
-  // Pictograms — fall back to synthesized set if XML hasn't supplied any yet
-  const pictograms: DisplayPictogram[] = product.pictograms.length
-    ? product.pictograms
-        .map((p) => ({ label: p.label, code: p.code, iconUrl: p.iconUrl }))
-        .filter((p) => !["assembly", "montaza", "montaža"].includes(p.code.toLowerCase()))
-    : synthesizedPictograms(product);
-  const benefitChips: DisplayPictogram[] = product.isLimited || product.isDtz
-    ? [...pictograms, { code: "limited", label: "Dok traju zalihe" }]
-    : pictograms;
   const materials = product.materials;
   const dimensionsLabel = formatDimensions(product.dimensionsCm);
 
@@ -202,27 +184,7 @@ export default async function ProductPage({ params }: RouteProps) {
             <PdpAddToCart product={product} variant="desktop" />
           </div>
 
-          <ul className="border-border/60 grid grid-cols-2 gap-1 border-t pt-2 text-xs text-ink-700 md:grid-cols-3 md:pt-1.5">
-            {benefitChips.slice(0, 6).map((benefit) => (
-              <FeatureChip
-                key={`${benefit.code}-${benefit.label}`}
-                icon={
-                  benefit.iconUrl ? (
-                    <Image
-                      src={benefit.iconUrl}
-                      alt=""
-                      width={16}
-                      height={16}
-                      className="size-4 object-contain"
-                    />
-                  ) : (
-                    <PictogramIcon code={benefit.code} className="size-3 text-walnut" />
-                  )
-                }
-                label={benefit.label}
-              />
-            ))}
-          </ul>
+          <PdpBenefits deliveryDays={product.deliveryDays} />
 
           <div className="border-border/60 border-t pt-2 md:pt-2.5">
             <div>
@@ -461,69 +423,4 @@ function PdpStickerBadge({
 
 function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function FeatureChip({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <li className="bg-surface ring-border/60 flex min-h-9 items-center justify-center gap-1 rounded-md p-1 text-center leading-tight ring-1 shadow-soft-1 md:h-8 md:min-h-0 md:flex-col md:gap-0 md:p-0.5">
-      {icon}
-      <span className="line-clamp-2 text-xs font-bold md:text-[10px]">{label}</span>
-    </li>
-  );
-}
-
-interface DisplayPictogram {
-  code: string;
-  label: string;
-  iconUrl?: string;
-}
-
-function synthesizedPictograms(p: Product): DisplayPictogram[] {
-  const out: DisplayPictogram[] = [
-    { code: "delivery", label: `Isporuka ${p.deliveryDays.min}–${p.deliveryDays.max} dana` },
-    {
-      code: "warranty",
-      label: `Garancija ${p.warrantyYears ?? 2} godine`,
-    },
-    { code: "quality", label: "Kontrola kvaliteta" },
-    { code: "ruler", label: "Precizne dimenzije" },
-  ];
-  if (p.isHero) {
-    out.push({ code: "hero", label: "Heroj meseca" });
-  }
-  return out;
-}
-
-function PictogramIcon({
-  code,
-  className = "size-7 text-walnut",
-}: {
-  code: string;
-  className?: string;
-}) {
-  const cls = className;
-  switch (code) {
-    case "delivery":
-      return <Truck className={cls} aria-hidden />;
-    case "warranty":
-      return <ShieldCheck className={cls} aria-hidden />;
-    case "assembly":
-      return <Hammer className={cls} aria-hidden />;
-    case "ruler":
-      return <Ruler className={cls} aria-hidden />;
-    case "hero":
-      return <Award className={cls} aria-hidden />;
-    case "quality":
-      return <Check className={cls} aria-hidden />;
-    case "limited":
-      return <Sparkles className={cls} aria-hidden />;
-    default:
-      return <Box className={cls} aria-hidden />;
-  }
 }

@@ -30,6 +30,7 @@ function AdminNavContent({
     <nav className="flex flex-col gap-6 px-4 py-6 text-sm">
       <Link
         href="/admin"
+        prefetch={false}
         onClick={onNavigate}
         className="font-display text-lg tracking-tight text-ink-900 hover:text-walnut"
       >
@@ -46,6 +47,7 @@ function AdminNavContent({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={onNavigate}
                 className={cn(
                   "rounded-lg px-2 py-1.5 transition-colors",

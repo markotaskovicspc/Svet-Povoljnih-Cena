@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import {
+  countArticleRows,
   getErpModule,
+  getErpModuleDefinition,
   type AdminGridFilter,
   type AdminGridSort,
 } from "@/lib/admin/erp";
@@ -23,24 +25,19 @@ export async function GET(
     1,
     Math.min(100, Number.parseInt(search.get("pageSize") ?? "100", 10) || 100),
   );
+  const start = (page - 1) * pageSize;
   const requestedSearchColumn = search.get("searchColumn") ?? "";
-  const erpModule = await getErpModule(slug, {
-    take: 10_000,
-    warehouseId: search.get("warehouseId"),
-    includeLookupOptions: false,
-    query: search.get("q") ?? undefined,
-    searchColumn: requestedSearchColumn || undefined,
-  });
-  if (!erpModule) {
+  const definition = getErpModuleDefinition(slug);
+  if (!definition) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
   }
-  const knownColumns = new Set(erpModule.columns.map((column) => column.key));
+  const knownColumns = new Set(definition.columns.map((column) => column.key));
   const requestedColumns = parseGridArray<string>(search.get("columns")).filter((key) =>
     knownColumns.has(key),
   );
   const columns = requestedColumns.length
     ? requestedColumns
-    : erpModule.columns
+    : definition.columns
         .filter((column) => column.defaultVisible)
         .map((column) => column.key);
   const searchColumns = knownColumns.has(requestedSearchColumn)
@@ -58,14 +55,42 @@ export async function GET(
       knownColumns.has(sort.columnKey) &&
       (sort.direction === "asc" || sort.direction === "desc"),
   );
+  const query = search.get("q") ?? "";
+  const useDatabasePagination =
+    slug === "artikli" &&
+    !query.trim() &&
+    filters.length === 0 &&
+    sorting.length === 0;
+  const [erpModule, databaseTotal] = await Promise.all([
+    getErpModule(slug, {
+      take: useDatabasePagination ? pageSize : 10_000,
+      skip: useDatabasePagination ? start : 0,
+      warehouseId: search.get("warehouseId"),
+      includeLookupOptions: false,
+      query: query || undefined,
+      searchColumn: requestedSearchColumn || undefined,
+    }),
+    useDatabasePagination ? countArticleRows() : Promise.resolve(null),
+  ]);
+  if (!erpModule) {
+    return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
+  }
+  if (databaseTotal !== null) {
+    return NextResponse.json({
+      rows: erpModule.rows,
+      page,
+      pageSize,
+      total: databaseTotal,
+      pageCount: Math.max(1, Math.ceil(databaseTotal / pageSize)),
+    });
+  }
   const result = filterAndSortGridRows(
     erpModule.rows,
     searchColumns,
-    search.get("q") ?? "",
+    query,
     filters,
     sorting,
   );
-  const start = (page - 1) * pageSize;
   return NextResponse.json({
     rows: result.slice(start, start + pageSize),
     page,

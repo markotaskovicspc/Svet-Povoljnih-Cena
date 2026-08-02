@@ -1523,6 +1523,7 @@ export function ErpGrid({
                       <td className="px-3 py-2">
                         <Link
                           href={`${module.detailHrefBase}/${row.detailId ?? row.id}`}
+                          prefetch={false}
                           onClick={
                             module.slug === "prodajni-nalozi"
                               ? (event) => {
@@ -1676,6 +1677,7 @@ export function ErpGrid({
                                 row.cellHrefs?.photo ??
                                 `/admin/erp/artikli/${row.id}#mediji`
                               }
+                              prefetch={false}
                               className="inline-flex size-12 items-center justify-center overflow-hidden rounded-md bg-muted-bg text-[10px] text-ink-500 ring-1 ring-border/60 transition hover:ring-walnut/40"
                               title={value ? "Otvori fotografije artikla" : "Dodaj fotografiju"}
                             >
@@ -1705,6 +1707,7 @@ export function ErpGrid({
                                   ? `?warehouseId=${encodeURIComponent(context.warehouseId)}`
                                   : ""
                               }`}
+                              prefetch={false}
                               className="inline-flex min-h-8 items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                               title="Otvori stanje i kretanje zaliha"
                             >
@@ -1713,6 +1716,7 @@ export function ErpGrid({
                           ) : row.cellHrefs?.[column.key] ? (
                             <Link
                               href={row.cellHrefs[column.key]}
+                              prefetch={false}
                               onClick={
                                 module.slug === "prodajni-nalozi"
                                   ? (event) => {
@@ -1732,6 +1736,7 @@ export function ErpGrid({
                           ) : column.key === "siteDescription" ? (
                             <Link
                               href={`/admin/erp/artikli/${row.id}#opis-za-sajt`}
+                              prefetch={false}
                               className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                               title="Otvori formatirani opis artikla"
                             >
@@ -1740,6 +1745,7 @@ export function ErpGrid({
                           ) : column.key === "benefits" || column.key === "certificates" ? (
                             <Link
                               href={`/admin/erp/artikli/${row.id}#sifarnici`}
+                              prefetch={false}
                               className="inline-flex min-h-8 max-w-[360px] items-center rounded-md px-1.5 py-1 text-walnut underline-offset-2 hover:underline"
                             >
                               <span className="truncate">{formatValue(value, column)}</span>
@@ -1747,6 +1753,7 @@ export function ErpGrid({
                           ) : column.key === "siteLink" && typeof value === "string" ? (
                             <Link
                               href={value}
+                              prefetch={false}
                               className="text-walnut underline-offset-2 hover:underline"
                             >
                               {value}

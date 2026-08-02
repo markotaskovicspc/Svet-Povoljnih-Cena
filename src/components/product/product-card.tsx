@@ -205,6 +205,7 @@ export function ProductCard({
       <div className="relative aspect-square overflow-hidden bg-white">
         <Link
           href={`/p/${product.slug}`}
+          prefetch={false}
           aria-label={`${product.name} — pregled proizvoda`}
           onClick={(event) => {
             if (imageDragRef.current.didDrag) event.preventDefault();
@@ -325,6 +326,7 @@ export function ProductCard({
         <h3 className="truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]">
           <Link
             href={`/p/${product.slug}`}
+            prefetch={false}
             className="hover:text-walnut transition focus-visible:underline focus-visible:outline-none"
           >
             {product.name}
@@ -332,6 +334,7 @@ export function ProductCard({
         </h3>
         <Link
           href={`/p/${product.slug}`}
+          prefetch={false}
           className="truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]"
         >
           {dimensions}
@@ -342,6 +345,7 @@ export function ProductCard({
           <div className="flex flex-col items-stretch gap-1.5">
             <Link
               href={`/p/${product.slug}`}
+              prefetch={false}
               aria-label={`${product.name} — cena i detalji`}
               className="min-w-0 rounded-sm transition focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
             >

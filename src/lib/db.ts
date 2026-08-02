@@ -57,9 +57,18 @@ function usesLibpqCompatibleSsl(sslMode: string) {
   return ["prefer", "require", "verify-ca"].includes(sslMode.toLowerCase());
 }
 
-function databasePoolMax() {
+export function getDatabasePoolMax() {
   const configured = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10);
-  return Number.isFinite(configured) ? Math.max(1, Math.min(configured, 10)) : 1;
+  if (Number.isFinite(configured)) {
+    return Math.max(1, Math.min(configured, 10));
+  }
+
+  // A long-running local/self-hosted Next.js server shares one process-wide
+  // pool across concurrent RSC and API requests. A single connection makes
+  // ordinary navigation prefetches queue until `connectionTimeoutMillis`.
+  // Vercel may multiply this pool across instances, so keep its implicit
+  // default conservative unless the deployment sets DATABASE_POOL_MAX.
+  return process.env.VERCEL ? 1 : 5;
 }
 
 function databaseConnectionTimeoutMillis() {
@@ -96,9 +105,12 @@ function databaseTransactionTimeoutMillis() {
 export function getDatabaseConnectionString() {
   return [
     process.env.DATABASE_URL,
+    // This project intentionally uses Supabase's session-mode 5432 endpoint.
+    // Prefer it over the transaction pooler when DATABASE_URL is absent so a
+    // partial local/worktree env cannot silently select the hanging 6543 URL.
+    process.env.POSTGRES_URL_NON_POOLING,
     process.env.POSTGRES_PRISMA_URL,
     process.env.POSTGRES_URL,
-    process.env.POSTGRES_URL_NON_POOLING,
   ].find((value) => value?.trim());
 }
 
@@ -135,7 +147,7 @@ function createClient(): PrismaClient {
       // Next.js build workers and serverless instances each create a process-local
       // pool. Keep the default at one so Supabase's session-mode limit is not
       // multiplied by the worker count; deployments may raise it explicitly.
-      max: databasePoolMax(),
+      max: getDatabasePoolMax(),
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
     },

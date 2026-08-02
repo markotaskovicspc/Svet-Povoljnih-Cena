@@ -28,6 +28,20 @@ interface PdpAddToCartProps {
   variant: "desktop" | "mobile";
 }
 
+export function getPdpAvailabilityMessage(
+  product: Pick<Product, "deliveryDays">,
+  availability: ProductAvailability,
+) {
+  if (availability.isSupplierSourced) return availability.message;
+  if (availability.canAddToCart) {
+    return `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`;
+  }
+  return availability.message ===
+    "Trenutno nije dostupno za online kupovinu"
+    ? null
+    : availability.message;
+}
+
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   const loyaltyEligible = useLoyaltyEligibility();
   const [isActiveVariant, setIsActiveVariant] = useState(false);
@@ -43,6 +57,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
   const availability = liveAvailability ?? getProductAvailability(product);
+  const availabilityMessage = getPdpAvailabilityMessage(product, availability);
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
@@ -133,13 +148,11 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
     return (
       <div className="hidden flex-col gap-2 md:flex">
         {ctas}
-        <p className="text-xs text-ink-500" aria-live="polite">
-          {availability.isSupplierSourced
-            ? availability.message
-            : availability.canAddToCart
-            ? `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
-            : availability.message}
-        </p>
+        {availabilityMessage ? (
+          <p className="text-xs text-ink-500" aria-live="polite">
+            {availabilityMessage}
+          </p>
+        ) : null}
       </div>
     );
   }

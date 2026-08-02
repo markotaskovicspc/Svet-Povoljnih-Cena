@@ -37,9 +37,11 @@ function usesLibpqCompatibleSsl(sslMode: string) {
 
 const databaseUrl = [
   process.env.DATABASE_URL,
+  // Migrations in this project require Supabase's session-mode 5432 endpoint.
+  // Keep the non-pooling fallback ahead of the 6543 transaction pooler URLs.
+  process.env.POSTGRES_URL_NON_POOLING,
   process.env.POSTGRES_PRISMA_URL,
   process.env.POSTGRES_URL,
-  process.env.POSTGRES_URL_NON_POOLING,
 ].find((value) => value?.trim());
 
 export default defineConfig({

@@ -103,6 +103,7 @@ export function PromoBar({ bar }: PromoBarProps) {
             {bar.href ? (
               <Link
                 href={bar.href}
+                prefetch={false}
                 className="underline-offset-4 hover:underline focus-visible:underline"
               >
                 {Inner}

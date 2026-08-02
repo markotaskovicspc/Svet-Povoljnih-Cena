@@ -3,7 +3,10 @@
 import Link from "next/link";
 import type { Product } from "@/types";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
-import { resolveProductPriceQuote } from "@/lib/pricing";
+import {
+  resolveProductPriceQuote,
+  type ProductPriceQuote,
+} from "@/lib/pricing";
 import { formatDate, formatRsd } from "@/lib/format";
 
 /**
@@ -18,6 +21,25 @@ export function PdpPrice({ product }: { product: Product }) {
       ? product
       : { ...product, loyaltyEligible };
   const quote = resolveProductPriceQuote(pricingProduct);
+
+  return (
+    <PdpPriceContent
+      product={product}
+      quote={quote}
+      loyaltyEligible={loyaltyEligible}
+    />
+  );
+}
+
+export function PdpPriceContent({
+  product,
+  quote,
+  loyaltyEligible,
+}: {
+  product: Product;
+  quote: ProductPriceQuote;
+  loyaltyEligible: boolean;
+}) {
   const { actionOffer, loyaltyOffer, payable } = quote;
 
   return (
@@ -32,7 +54,10 @@ export function PdpPrice({ product }: { product: Product }) {
           </span>
         ) : (
           <p className="text-sm text-ink-500">
-            Redovna cena: <span className="line-through">{formatRsd(quote.full)}</span>
+            Redovna cena:{" "}
+            <span className={actionOffer ? "line-through" : undefined}>
+              {formatRsd(quote.full)}
+            </span>
           </p>
         )}
         {actionOffer ? (
@@ -47,12 +72,13 @@ export function PdpPrice({ product }: { product: Product }) {
             label="Loyalty cena"
             value={loyaltyOffer.effective}
             selected={payable.kind === "loyalty"}
+            accent
           />
         ) : null}
       </div>
       {loyaltyOffer && !loyaltyEligible ? (
         <p className="mt-1 text-xs text-ink-500">
-          Loyalty cena važi uz prijavljen nalog. {" "}
+          Loyalty cena važi uz prijavljen nalog.{" "}
           <Link
             href={`/nalog/prijava?callbackUrl=${encodeURIComponent(`/p/${product.slug}`)}`}
             className="font-semibold text-walnut hover:underline"
@@ -68,7 +94,9 @@ export function PdpPrice({ product }: { product: Product }) {
         <p className="mt-1 text-xs text-ink-500">
           Trajno niska cena od 01.05.2026.
         </p>
-      ) : payable.kind === "sale" && product.action?.startsAt && product.action.endsAt ? (
+      ) : payable.kind === "sale" &&
+        product.action?.startsAt &&
+        product.action.endsAt ? (
         <p className="mt-1 text-xs text-ink-500">
           Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
           {formatDate(product.action.endsAt)}
@@ -86,20 +114,22 @@ function PriceOfferRow({
   label,
   value,
   selected,
+  accent = false,
 }: {
   label: string;
   value: number;
   selected: boolean;
+  accent?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3">
       <span className="min-w-24 text-xs font-semibold text-ink-600">{label}</span>
       <span
-        className={
+        className={`${
           selected
-            ? "text-action text-[30px] leading-none font-black md:text-[34px]"
-            : "text-xl leading-none font-bold text-ink-900"
-        }
+            ? "text-[30px] leading-none font-black md:text-[34px]"
+            : "text-xl leading-none font-bold"
+        } ${selected || accent ? "text-action" : "text-ink-900"}`}
       >
         {formatRsd(value)}
       </span>

@@ -54,6 +54,21 @@ describe("unos artikala", () => {
     expect(articleSearchWhere("abc")).toHaveProperty("OR");
   });
 
+  it("koristi indeksni exact lookup za brojčanu šifru i bar-kod", () => {
+    expect(articleSearchWhere("110083")).toEqual({
+      OR: [
+        { sku: { in: ["110083", "110.083"] } },
+        { barcode: "110083" },
+      ],
+    });
+    expect(articleSearchWhere("110.083", "sku")).toEqual({
+      sku: { in: ["110.083", "110083"] },
+    });
+    expect(articleSearchWhere("8601234567890", "barcode")).toEqual({
+      barcode: "8601234567890",
+    });
+  });
+
   it("uzima važeću RETAIL stavku pre legacy Product.fullPrice", () => {
     const now = new Date("2026-07-28T12:00:00.000Z");
     const resolved = resolveRetailPrice(

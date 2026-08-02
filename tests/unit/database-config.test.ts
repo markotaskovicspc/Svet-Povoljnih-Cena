@@ -1,0 +1,51 @@
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  getDatabaseConnectionString,
+  getDatabasePoolMax,
+} from "@/lib/db";
+
+const ENV_KEYS = [
+  "DATABASE_URL",
+  "POSTGRES_PRISMA_URL",
+  "POSTGRES_URL",
+  "POSTGRES_URL_NON_POOLING",
+  "DATABASE_POOL_MAX",
+  "VERCEL",
+] as const;
+const originalEnv = Object.fromEntries(
+  ENV_KEYS.map((key) => [key, process.env[key]]),
+);
+
+afterEach(() => {
+  for (const key of ENV_KEYS) {
+    const original = originalEnv[key];
+    if (original === undefined) delete process.env[key];
+    else process.env[key] = original;
+  }
+});
+
+describe("database runtime configuration", () => {
+  it("prefers the 5432 non-pooling fallback when DATABASE_URL is absent", () => {
+    delete process.env.DATABASE_URL;
+    process.env.POSTGRES_PRISMA_URL = "postgresql://db.example:6543/postgres";
+    process.env.POSTGRES_URL = "postgresql://db.example:6543/postgres";
+    process.env.POSTGRES_URL_NON_POOLING =
+      "postgresql://db.example:5432/postgres";
+
+    expect(getDatabaseConnectionString()).toBe(
+      "postgresql://db.example:5432/postgres",
+    );
+  });
+
+  it("uses a wider local pool while keeping Vercel conservative", () => {
+    delete process.env.DATABASE_POOL_MAX;
+    delete process.env.VERCEL;
+    expect(getDatabasePoolMax()).toBe(5);
+
+    process.env.VERCEL = "1";
+    expect(getDatabasePoolMax()).toBe(1);
+
+    process.env.DATABASE_POOL_MAX = "4";
+    expect(getDatabasePoolMax()).toBe(4);
+  });
+});
