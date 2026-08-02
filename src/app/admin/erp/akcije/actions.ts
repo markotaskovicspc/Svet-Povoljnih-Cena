@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin";
 import { parseBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
 import { actionSalePriceError } from "@/lib/pricing/action-price";
+import { storefrontMonth } from "@/lib/storefront/promotion-filters";
 
 export type PricingMutationResult = {
   entityId: string;
@@ -42,7 +43,8 @@ const actionSchema = z.object({
 const actionProductSchema = z.object({
   actionId: z.string().min(1),
   sku: z.string().trim().min(1).max(100),
-  salePrice: z.coerce.number().positive(),
+  salePrice: z.coerce.number().positive().optional(),
+  isHero: z.boolean().optional(),
 });
 
 const loyaltySchema = z.object({
@@ -148,8 +150,11 @@ async function resolveActionProduct(
 function refreshPricing() {
   updateTag("catalog-pricing");
   updateTag("catalog-products");
+  updateTag("storefront-home");
   revalidatePath("/admin/erp/akcije");
+  revalidatePath("/admin/erp/heroji-meseca");
   revalidatePath("/akcija");
+  revalidatePath("/heroji-meseca");
   revalidatePath("/nedeljna-akcija");
   revalidatePath("/", "layout");
 }
@@ -214,7 +219,10 @@ export async function deleteAction(
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID akcije." };
-      await db.action.delete({ where: { id } });
+      await db.$transaction(async (tx) => {
+        await tx.heroOfMonth.deleteMany({ where: { actionId: id } });
+        await tx.action.delete({ where: { id } });
+      });
       refreshPricing();
       return {
         ok: true as const,
@@ -267,6 +275,7 @@ function mapProductDetails(
     attribute4: string | null;
     colorPrimary: string | null;
     colorSecondary: string | null;
+    isHero: boolean;
     fullPrice: { toString(): string };
     supplier: { name: string } | null;
     group: { name: string } | null;
@@ -276,6 +285,7 @@ function mapProductDetails(
     }>;
   },
   validMpPrice: number,
+  isHero: boolean,
 ) {
   const categories = [...product.categories].sort(
     (left, right) => left.category.level - right.category.level,
@@ -299,6 +309,7 @@ function mapProductDetails(
     attribute4: product.attribute4 ?? "—",
     color1: product.colorPrimary ?? "—",
     color2: product.colorSecondary ?? "—",
+    isHero,
     validMpPrice,
   };
 }
@@ -331,13 +342,22 @@ export async function lookupActionProduct(actionId: string, rawSku: string) {
     };
   }
   const product = resolution.product;
-
-  const retailPrice =
-    (await retailPriceAt(product.id, action.startsAt)) ??
-    Number(product.fullPrice);
+  const heroPeriod = storefrontMonth(action.startsAt);
+  const [retailPriceEntry, monthlyHero] = await Promise.all([
+    retailPriceAt(product.id, action.startsAt),
+    db.heroOfMonth.findFirst({
+      where: {
+        actionId,
+        productSku: product.sku,
+        ...heroPeriod,
+      },
+      select: { id: true },
+    }),
+  ]);
+  const retailPrice = retailPriceEntry ?? Number(product.fullPrice);
   return {
     ok: true as const,
-    product: mapProductDetails(product, retailPrice),
+    product: mapProductDetails(product, retailPrice, Boolean(monthlyHero)),
   };
 }
 
@@ -352,7 +372,14 @@ export async function saveActionProduct(
       entity: "ActionProduct",
     },
     async (_actorId, formData: FormData) => {
-      const parsed = actionProductSchema.safeParse(Object.fromEntries(formData));
+      const parsed = actionProductSchema.safeParse({
+        ...Object.fromEntries(formData),
+        salePrice: formData.get("salePrice") || undefined,
+        isHero:
+          formData.get("heroManaged") === "true"
+            ? formData.get("isHero") === "on"
+            : undefined,
+      });
       if (!parsed.success) {
         return {
           ok: false as const,
@@ -365,7 +392,7 @@ export async function saveActionProduct(
       const [action, resolution] = await Promise.all([
         db.action.findUnique({
           where: { id: parsed.data.actionId },
-          select: { startsAt: true },
+          select: { startsAt: true, isPermanent: true },
         }),
         resolveActionProduct(parsed.data.sku),
       ]);
@@ -388,10 +415,19 @@ export async function saveActionProduct(
       const regularPrice =
         (await retailPriceAt(product.id, action.startsAt)) ??
         Number(product.fullPrice);
-      const priceError = actionSalePriceError(
-        parsed.data.salePrice,
-        regularPrice,
-      );
+      const salePrice = action.isPermanent
+        ? regularPrice
+        : parsed.data.salePrice;
+      if (salePrice === undefined) {
+        return {
+          ok: false as const,
+          error: "Unesite akcijsku MP cenu.",
+          fieldErrors: { salePrice: ["Unesite akcijsku MP cenu."] },
+        };
+      }
+      const priceError = action.isPermanent
+        ? null
+        : actionSalePriceError(salePrice, regularPrice);
       if (priceError) {
         return {
           ok: false as const,
@@ -400,8 +436,9 @@ export async function saveActionProduct(
         };
       }
 
-      await db.$transaction([
-        db.actionProduct.upsert({
+      const heroPeriod = storefrontMonth(action.startsAt);
+      await db.$transaction(async (tx) => {
+        await tx.actionProduct.upsert({
           where: {
             actionId_productId: {
               actionId: parsed.data.actionId,
@@ -411,25 +448,62 @@ export async function saveActionProduct(
           create: {
             actionId: parsed.data.actionId,
             productId: product.id,
-            salePrice: parsed.data.salePrice,
+            salePrice,
           },
-          update: { salePrice: parsed.data.salePrice },
-        }),
-        db.action.update({
+          update: { salePrice },
+        });
+        await tx.action.update({
           where: { id: parsed.data.actionId },
           data: { products: { connect: { id: product.id } } },
-        }),
-      ]);
+        });
+        if (parsed.data.isHero !== undefined) {
+          if (parsed.data.isHero) {
+            await tx.heroOfMonth.upsert({
+              where: {
+                productSku_month_year: {
+                  productSku: product.sku,
+                  ...heroPeriod,
+                },
+              },
+              create: {
+                actionId: parsed.data.actionId,
+                productSku: product.sku,
+                ...heroPeriod,
+              },
+              update: { actionId: parsed.data.actionId },
+            });
+          } else {
+            await tx.heroOfMonth.deleteMany({
+              where: {
+                actionId: parsed.data.actionId,
+                productSku: product.sku,
+                ...heroPeriod,
+              },
+            });
+          }
+        }
+      });
       refreshPricing();
       return {
         ok: true as const,
         entityId: `${parsed.data.actionId}:${product.id}`,
         diff: {
           sku: product.sku,
-          salePrice: parsed.data.salePrice,
+          salePrice: action.isPermanent ? null : salePrice,
           regularPrice,
+          ...(parsed.data.isHero === undefined
+            ? {}
+            : {
+                isHero: parsed.data.isHero,
+                heroMonth: heroPeriod.month,
+                heroYear: heroPeriod.year,
+              }),
         },
-        message: "Akcijska cena je sačuvana.",
+        message: action.isPermanent
+          ? "TNC artikal je sačuvan bez akcijskog umanjenja."
+          : parsed.data.isHero === undefined
+            ? "Akcijska cena je sačuvana."
+            : "Akcijska cena i status Heroja meseca su sačuvani.",
         result: {
           entityId: `${parsed.data.actionId}:${product.id}`,
           mode: "update" as const,
@@ -455,15 +529,24 @@ export async function deleteActionProduct(
       if (!actionId || !productId) {
         return { ok: false as const, error: "Nedostaje veza akcije i artikla." };
       }
-      await db.$transaction([
-        db.actionProduct.delete({
+      await db.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({
+          where: { id: productId },
+          select: { sku: true },
+        });
+        await tx.actionProduct.delete({
           where: { actionId_productId: { actionId, productId } },
-        }),
-        db.action.update({
+        });
+        await tx.action.update({
           where: { id: actionId },
           data: { products: { disconnect: { id: productId } } },
-        }),
-      ]);
+        });
+        if (product) {
+          await tx.heroOfMonth.deleteMany({
+            where: { actionId, productSku: product.sku },
+          });
+        }
+      });
       refreshPricing();
       return {
         ok: true as const,

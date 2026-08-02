@@ -120,9 +120,7 @@ function isWindowLive(
   startsAt: string | Date,
   endsAt: string | Date,
   now: Date,
-  permanent = false,
 ) {
-  if (permanent) return true;
   const time = now.getTime();
   return time >= toDate(startsAt).getTime() && time <= toDate(endsAt).getTime();
 }
@@ -211,21 +209,23 @@ export function resolveProductPriceQuote(
     };
     return { full: safeFull, actionOffer: null, loyaltyOffer: null, payable };
   }
-  const canonicalAction = [...(product.actionPrices ?? [])]
+  // TNC is a regular-price label, not a discounted offer. Permanent action
+  // rows remain useful for campaign membership and badges, but never become
+  // an action price or suppress a customer's loyalty price.
+  const discountActionPrices = (product.actionPrices ?? []).filter(
+    (candidate) => !candidate.isPermanent,
+  );
+  const canonicalAction = [...discountActionPrices]
     .filter(
       (candidate) =>
         candidate.price > 0 &&
         candidate.price < full &&
-        isWindowLive(
-          candidate.startsAt,
-          candidate.endsAt,
-          now,
-          Boolean(candidate.isPermanent),
-        ),
+        isWindowLive(candidate.startsAt, candidate.endsAt, now),
     )
     .sort(compareActionPriceCandidates)[0];
   const legacySale =
-    !product.actionPrices?.length &&
+    !product.action?.isPermanent &&
+    !discountActionPrices.length &&
     product.salePrice != null &&
     product.salePrice > 0 &&
     product.salePrice < full &&
@@ -234,8 +234,11 @@ export function resolveProductPriceQuote(
       : null;
   const actionBase = canonicalAction?.price ?? legacySale;
   const actionExpired = Boolean(
-    (product.actionPrices?.length && !canonicalAction) ||
-      (product.salePrice != null && product.salePrice < full && !legacySale),
+    (discountActionPrices.length && !canonicalAction) ||
+      (!product.action?.isPermanent &&
+        product.salePrice != null &&
+        product.salePrice < full &&
+        !legacySale),
   );
   const linear = [...(product.linearPromotions ?? [])]
     .filter(

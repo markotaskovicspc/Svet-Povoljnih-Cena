@@ -133,6 +133,35 @@ describe("ERP pricing precedence", () => {
     expect(quote.payable.kind).toBe("loyalty");
   });
 
+  it("treats TNC membership as a regular price instead of an action price", () => {
+    const quote = resolveProductPriceQuote(
+      {
+        fullPrice: 10_000,
+        loyaltyPrice: 8_500,
+        action: {
+          name: "Trajno niska cena",
+          startsAt: "2026-01-01",
+          endsAt: "2026-12-31",
+          isPermanent: true,
+        },
+        actionPrices: [
+          {
+            price: 7_000,
+            priority: 100,
+            startsAt: "2026-01-01",
+            endsAt: "2026-12-31",
+            isPermanent: true,
+          },
+        ],
+      },
+      { now, loggedIn: true },
+    );
+
+    expect(quote.actionOffer).toBeNull();
+    expect(quote.loyaltyOffer?.effective).toBe(8_500);
+    expect(quote.payable.kind).toBe("loyalty");
+  });
+
   it("breaks equal action priorities by newer start and then lower price", () => {
     const newer = resolvePromotionPrice(
       {

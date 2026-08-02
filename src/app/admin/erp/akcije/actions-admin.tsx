@@ -51,6 +51,7 @@ type ActionProductRow = {
   attribute4: string;
   color1: string;
   color2: string;
+  isHero: boolean;
   validMpPrice: number;
   salePrice: number;
 };
@@ -513,6 +514,7 @@ function ActionProductsDialog({
 }) {
   const [sku, setSku] = useState("");
   const [preview, setPreview] = useState<LookupRow | null>(null);
+  const [addIsHero, setAddIsHero] = useState(false);
   const [lookupMessage, setLookupMessage] = useState("");
   const [productNotice, setProductNotice] = useState<MutationState | null>(null);
   const [isLookingUp, startLookup] = useTransition();
@@ -535,6 +537,7 @@ function ActionProductsDialog({
         return;
       }
       setPreview(result.product);
+      setAddIsHero(result.product.isHero);
       setSku(result.product.sku);
       setLookupMessage("");
       setProductNotice(null);
@@ -547,9 +550,9 @@ function ActionProductsDialog({
         <DialogHeader className="border-b border-border px-5 py-4 pr-14">
           <DialogTitle>Artikli na akciji: {action.name}</DialogTitle>
           <DialogDescription>
-            Pronađite artikal po internoj SKU šifri, dobavljačkoj šifri ili
-            bar-kodu, pa unesite akcijsku MP cenu. Važeća MP cena se čita na
-            datum početka akcije.
+            {action.isPermanent
+              ? "Pronađite artikal po internoj SKU šifri, dobavljačkoj šifri ili bar-kodu. TNC koristi važeću MP cenu bez akcijskog umanjenja."
+              : "Pronađite artikal po internoj SKU šifri, dobavljačkoj šifri ili bar-kodu, pa unesite akcijsku MP cenu i po potrebi označite Heroja meseca. Važeća MP cena se čita na datum početka akcije."}
           </DialogDescription>
           <MutationMessage
             state={productNotice ?? (addState.message ? addState : null)}
@@ -557,7 +560,12 @@ function ActionProductsDialog({
           />
         </DialogHeader>
         <div className="min-h-0 overflow-auto">
-          <table className="min-w-[2550px] border-separate border-spacing-0 text-left text-xs">
+          <table
+            className={cn(
+              "border-separate border-spacing-0 text-left text-xs",
+              action.isPermanent ? "min-w-[2350px]" : "min-w-[2700px]",
+            )}
+          >
             <thead className="sticky top-0 z-20 bg-muted-bg text-[10px] uppercase tracking-[0.1em] text-ink-500">
               <tr>
                 <th className="sticky left-0 z-30 min-w-36 border-b border-r border-border bg-muted-bg px-3 py-2.5">
@@ -574,12 +582,24 @@ function ActionProductsDialog({
                     {column.label}
                   </th>
                 ))}
-                <th className="sticky right-72 z-30 min-w-40 border-b border-l border-border bg-muted-bg px-3 py-2.5 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
+                <th
+                  className={cn(
+                    "sticky z-30 min-w-40 border-b border-l border-border bg-muted-bg px-3 py-2.5 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
+                    action.isPermanent ? "right-28" : "right-[27rem]",
+                  )}
+                >
                   Važeća MP cena
                 </th>
-                <th className="sticky right-28 z-30 min-w-44 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
-                  Akcijska MP cena
-                </th>
+                {!action.isPermanent ? (
+                  <>
+                    <th className="sticky right-64 z-30 min-w-44 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
+                      Akcijska MP cena
+                    </th>
+                    <th className="sticky right-28 z-30 min-w-36 border-b border-border bg-muted-bg px-3 py-2.5 text-center">
+                      Heroj meseca
+                    </th>
+                  </>
+                ) : null}
                 <th className="sticky right-0 z-30 min-w-28 border-b border-border bg-muted-bg px-3 py-2.5">
                   Radnje
                 </th>
@@ -597,6 +617,7 @@ function ActionProductsDialog({
                     onChange={(event) => {
                       setSku(event.target.value);
                       setPreview(null);
+                      setAddIsHero(false);
                       setLookupMessage("");
                       setProductNotice(null);
                     }}
@@ -630,27 +651,54 @@ function ActionProductsDialog({
                     {preview?.[column.key] ?? "—"}
                   </td>
                 ))}
-                <td className="sticky right-72 z-10 border-b border-l border-border bg-brand-blue-50 px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
+                <td
+                  className={cn(
+                    "sticky z-10 border-b border-l border-border bg-brand-blue-50 px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
+                    action.isPermanent ? "right-28" : "right-[27rem]",
+                  )}
+                >
                   {preview ? money.format(preview.validMpPrice) : "—"}
                 </td>
-                <td className="sticky right-28 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
-                  <Input
-                    form="add-action-product"
-                    name="salePrice"
-                    type="number"
-                    min="0.01"
-                    max={
-                      preview
-                        ? maximumSalePrice(preview.validMpPrice)
-                        : undefined
-                    }
-                    step="0.01"
-                    required
-                    disabled={!preview}
-                    className="text-right tabular-nums"
-                    placeholder="0,00"
-                  />
-                </td>
+                {!action.isPermanent ? (
+                  <>
+                    <td className="sticky right-64 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
+                      <Input
+                        form="add-action-product"
+                        name="salePrice"
+                        type="number"
+                        min="0.01"
+                        max={
+                          preview
+                            ? maximumSalePrice(preview.validMpPrice)
+                            : undefined
+                        }
+                        step="0.01"
+                        required
+                        disabled={!preview}
+                        className="text-right tabular-nums"
+                        placeholder="0,00"
+                      />
+                    </td>
+                    <td className="sticky right-28 z-10 border-b border-border bg-brand-blue-50 px-3 py-3 text-center">
+                      <input
+                        form="add-action-product"
+                        type="hidden"
+                        name="heroManaged"
+                        value="true"
+                      />
+                      <input
+                        form="add-action-product"
+                        type="checkbox"
+                        name="isHero"
+                        aria-label="Heroj meseca"
+                        checked={addIsHero}
+                        onChange={(event) => setAddIsHero(event.target.checked)}
+                        disabled={!preview}
+                        className="size-4 accent-walnut"
+                      />
+                    </td>
+                  </>
+                ) : null}
                 <td className="sticky right-0 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
                   <form id="add-action-product" action={addFormAction}>
                     <input type="hidden" name="actionId" value={action.id} />
@@ -675,22 +723,47 @@ function ActionProductsDialog({
                         {product[column.key]}
                       </td>
                     ))}
-                    <td className="sticky right-72 z-10 border-b border-l border-border bg-white px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
+                    <td
+                      className={cn(
+                        "sticky z-10 border-b border-l border-border bg-white px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
+                        action.isPermanent ? "right-28" : "right-[27rem]",
+                      )}
+                    >
                       {money.format(product.validMpPrice)}
                     </td>
-                    <td className="sticky right-28 z-10 border-b border-border bg-white px-3 py-3">
-                      <Input
-                        form={saveFormId}
-                        name="salePrice"
-                        type="number"
-                        min="0.01"
-                        max={maximumSalePrice(product.validMpPrice)}
-                        step="0.01"
-                        required
-                        defaultValue={product.salePrice}
-                        className="text-right tabular-nums"
-                      />
-                    </td>
+                    {!action.isPermanent ? (
+                      <>
+                        <td className="sticky right-64 z-10 border-b border-border bg-white px-3 py-3">
+                          <Input
+                            form={saveFormId}
+                            name="salePrice"
+                            type="number"
+                            min="0.01"
+                            max={maximumSalePrice(product.validMpPrice)}
+                            step="0.01"
+                            required
+                            defaultValue={product.salePrice}
+                            className="text-right tabular-nums"
+                          />
+                        </td>
+                        <td className="sticky right-28 z-10 border-b border-border bg-white px-3 py-3 text-center">
+                          <input
+                            form={saveFormId}
+                            type="hidden"
+                            name="heroManaged"
+                            value="true"
+                          />
+                          <input
+                            form={saveFormId}
+                            type="checkbox"
+                            name="isHero"
+                            aria-label={`Heroj meseca: ${product.sku}`}
+                            defaultChecked={product.isHero}
+                            className="size-4 accent-walnut"
+                          />
+                        </td>
+                      </>
+                    ) : null}
                     <td className="sticky right-0 z-10 border-b border-border bg-white px-3 py-3">
                       <ActionProductControls
                         actionId={action.id}
@@ -705,7 +778,7 @@ function ActionProductsDialog({
               {!action.products.length ? (
                 <tr>
                   <td
-                    colSpan={17}
+                    colSpan={action.isPermanent ? 16 : 18}
                     className="px-4 py-10 text-center text-sm text-ink-500"
                   >
                     Akcija još nema artikle. Unesite prvu šifru u plavom redu.

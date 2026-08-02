@@ -739,16 +739,27 @@ function liveActionWhere(now: Date): Prisma.ActionWhereInput {
   };
 }
 
+function liveDiscountActionWhere(now: Date): Prisma.ActionWhereInput {
+  return {
+    isPermanent: false,
+    startsAt: { lte: now },
+    endsAt: { gte: now },
+  };
+}
+
 function liveSaleWhere(now: Date): Prisma.ProductWhereInput {
   return {
     OR: [
       {
         salePrice: { not: null },
-        OR: [{ actionId: null }, { action: { is: liveActionWhere(now) } }],
+        OR: [
+          { actionId: null },
+          { action: { is: liveDiscountActionWhere(now) } },
+        ],
       },
       {
         actionPrices: {
-          some: { action: { is: liveActionWhere(now) } },
+          some: { action: { is: liveDiscountActionWhere(now) } },
         },
       },
     ],

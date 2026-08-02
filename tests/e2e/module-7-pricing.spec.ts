@@ -13,6 +13,7 @@ import {
   formatBelgradePricingDateTime,
   parseBelgradePricingDateTime,
 } from "@/lib/admin/pricing-date-time";
+import { storefrontMonth } from "@/lib/storefront/promotion-filters";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -45,6 +46,7 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
     loyaltySlug: `${slugBase}-loyalty-artikal`,
     lowAction: `${tag} niži prioritet`,
     highAction: `${tag} Heroji meseca`,
+    tncAction: `${tag} TNC`,
     disposableAction: `${tag} za brisanje`,
     invalidAction: `${tag} neispravan period`,
     loyaltyOld: `${tag} loyalty istorija 4%`,
@@ -406,11 +408,22 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         priority: 2_000_000_000,
         isHero: true,
       });
+      await createAction(page, {
+        name: fixture.tncAction,
+        slug: `${slugBase}-tnc`,
+        kind: "CUSTOM",
+        startsAt: startsLocal,
+        endsAt: endsLocal,
+        priority: 1_999_999_700,
+        isPermanent: true,
+      });
 
       const lowRow = actionRow(page, fixture.lowAction);
       const highRow = actionRow(page, fixture.highAction);
+      const tncRow = actionRow(page, fixture.tncAction);
       await expect(lowRow).toBeVisible();
       await expect(highRow).toBeVisible();
+      await expect(tncRow).toBeVisible();
 
       await lowRow.click();
       await expect(actionForm(page).locator('input[name="name"]')).toHaveValue(
@@ -497,6 +510,29 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       await expect(actionRow(page, fixture.highAction)).toBeVisible();
     });
 
+    await test.step("TNC koristi važeću MP cenu bez akcijske cene", async () => {
+      await actionRow(page, fixture.tncAction).press("Enter");
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(
+        "TNC koristi važeću MP cenu bez akcijskog umanjenja.",
+      );
+      await expect(dialog.locator('input[name="salePrice"]')).toHaveCount(0);
+      await expect(dialog.locator('input[name="isHero"]')).toHaveCount(0);
+
+      const skuInput = dialog.locator(
+        'input[name="sku"][form="add-action-product"]',
+      );
+      await skuInput.fill(fixture.actionSku);
+      await skuInput.press("Enter");
+      await dialog.getByRole("button", { name: "Dodaj", exact: true }).click();
+      await expect
+        .poll(() => actionPrice(`${slugBase}-tnc`))
+        .toBe(1_000);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+    });
+
     await test.step("dugme Otvori, nepostojeći SKU i automatska polja sa MP cenom na datum", async () => {
       await page
         .getByRole("button", {
@@ -539,6 +575,12 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
       }
       await expect(dialog).toContainText(/1[.\s]000(?:,00)?\s*RSD/);
 
+      const newHero = dialog.locator(
+        'input[name="isHero"][form="add-action-product"]',
+      );
+      await expect(newHero).toBeVisible();
+      await newHero.check();
+
       const newSalePrice = dialog.locator(
         'input[name="salePrice"][form="add-action-product"]',
       );
@@ -579,6 +621,35 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
           return row ? Number(row.salePrice) : null;
         })
         .toBe(900);
+      await expect
+        .poll(async () => {
+          const heroPeriod = storefrontMonth(
+            parseBelgradePricingDateTime(startsLocal),
+          );
+          const [monthlyHero, product] = await Promise.all([
+            db.heroOfMonth.findUnique({
+              where: {
+                productSku_month_year: {
+                  productSku: fixture.actionSku,
+                  ...heroPeriod,
+                },
+              },
+              select: { action: { select: { slug: true } } },
+            }),
+            db.product.findUniqueOrThrow({
+              where: { id: created.actionProductId },
+              select: { isHero: true },
+            }),
+          ]);
+          return {
+            actionSlug: monthlyHero?.action?.slug ?? null,
+            globalHero: product.isHero,
+          };
+        })
+        .toEqual({
+          actionSlug: `${slugBase}-nizi`,
+          globalHero: false,
+        });
     });
 
     await test.step("izmena, upsert i potvrđeno uklanjanje artikla", async () => {
@@ -587,11 +658,30 @@ test.describe("Modul 7 — admin pricing acceptance", () => {
         .locator("tbody tr")
         .filter({ hasText: fixture.actionSku });
       await expect(productRow).toBeVisible();
+      const storedHeroCheckbox = productRow.locator('input[name="isHero"]');
+      await expect(storedHeroCheckbox).toBeChecked();
+      await storedHeroCheckbox.uncheck();
       await productRow.locator('input[name="salePrice"]').fill("875");
       await productRow.getByRole("button", { name: "Sačuvaj" }).click();
       await expect
         .poll(() => actionPrice(`${slugBase}-nizi`))
         .toBe(875);
+      await expect
+        .poll(() => {
+          const heroPeriod = storefrontMonth(
+            parseBelgradePricingDateTime(startsLocal),
+          );
+          return db.heroOfMonth.findUnique({
+            where: {
+              productSku_month_year: {
+                productSku: fixture.actionSku,
+                ...heroPeriod,
+              },
+            },
+            select: { id: true },
+          });
+        })
+        .toBeNull();
 
       const skuInput = dialog.locator(
         'input[name="sku"][form="add-action-product"]',
@@ -1214,6 +1304,7 @@ async function fillActionForm(
     endsAt: string;
     priority: number;
     isHero?: boolean;
+    isPermanent?: boolean;
   },
 ) {
   await form.locator('input[name="name"]').fill(values.name);
@@ -1224,6 +1315,10 @@ async function fillActionForm(
   await form.locator('input[name="priority"]').fill(String(values.priority));
   const hero = form.getByLabel("Glavna akcija");
   if ((await hero.isChecked()) !== Boolean(values.isHero)) await hero.click();
+  const permanent = form.getByLabel("Trajno niska cena");
+  if ((await permanent.isChecked()) !== Boolean(values.isPermanent)) {
+    await permanent.click();
+  }
 }
 
 async function createAction(

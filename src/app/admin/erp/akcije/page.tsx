@@ -5,6 +5,7 @@ import { ActionsAdmin } from "./actions-admin";
 import { getErpModule } from "@/lib/admin/erp";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { formatBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
+import { storefrontMonth } from "@/lib/storefront/promotion-filters";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -24,6 +25,9 @@ export default async function ActionsPage({
       db.action.findMany({
         orderBy: [{ priority: "desc" }, { startsAt: "desc" }],
         include: {
+          heroes: {
+            select: { productSku: true, month: true, year: true },
+          },
           actionPrices: {
             orderBy: { product: { sku: "asc" } },
             include: {
@@ -127,6 +131,7 @@ export default async function ActionsPage({
     priority: action.priority,
     products: action.actionPrices.map((entry) => {
       const product = entry.product;
+      const heroPeriod = storefrontMonth(action.startsAt);
       const productCategories = [...product.categories].sort(
         (left, right) =>
           left.category.level - right.category.level,
@@ -151,6 +156,12 @@ export default async function ActionsPage({
         attribute4: product.attribute4 ?? "—",
         color1: product.colorPrimary ?? "—",
         color2: product.colorSecondary ?? "—",
+        isHero: action.heroes.some(
+          (hero) =>
+            hero.productSku === product.sku &&
+            hero.month === heroPeriod.month &&
+            hero.year === heroPeriod.year,
+        ),
         validMpPrice: retailPriceAt(
           product.id,
           action.startsAt,

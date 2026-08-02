@@ -1071,8 +1071,9 @@ export default async function ProductDetail({
   const retailPrice = resolveRetailPrice(product.priceListEntries, product.fullPrice, now);
   const activeAction = product.actionPrices.find(
     (entry) =>
-      (entry.action.isPermanent || entry.action.startsAt <= now) &&
-      (entry.action.isPermanent || entry.action.endsAt >= now),
+      !entry.action.isPermanent &&
+      entry.action.startsAt <= now &&
+      entry.action.endsAt >= now,
   );
   const hasActionPrice = Boolean(activeAction || product.salePrice);
   const loyaltyDiscountPct = loyaltyRule && !hasActionPrice
