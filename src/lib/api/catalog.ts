@@ -287,6 +287,7 @@ function mapProduct(
         name: p.name,
         shortName: p.shortName,
         shortDescription: p.shortDescription,
+        categoryLabels: categoryPathLabels(sortedCats),
         materialText: p.materialText,
         materialLabels: p.materials.map((item) => item.material.label),
         countryOfOrigin: p.countryOfOrigin,

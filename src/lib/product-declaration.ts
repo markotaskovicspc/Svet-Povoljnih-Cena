@@ -14,6 +14,7 @@ type ProductDeclarationInput = {
   name: string;
   shortName?: string | null;
   shortDescription?: string | null;
+  categoryLabels?: string[];
   materialText?: string | null;
   materialLabels?: string[];
   countryOfOrigin?: string | null;
@@ -22,6 +23,29 @@ type ProductDeclarationInput = {
 
 function clean(value: string | null | undefined) {
   return value?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function conciseProductKind(value: string | null | undefined) {
+  const normalized = clean(value);
+  if (!normalized) return "";
+  return normalized.length <= 120 && normalized.split(/\s+/).length <= 12
+    ? normalized
+    : "";
+}
+
+function localizedCountryName(value: string | null | undefined) {
+  const normalized = clean(value);
+  if (!/^[a-z]{2}$/i.test(normalized)) return normalized;
+
+  try {
+    return (
+      new Intl.DisplayNames(["sr-Latn-RS", "sr-Latn"], {
+        type: "region",
+      }).of(normalized.toUpperCase()) ?? normalized
+    );
+  } catch {
+    return normalized;
+  }
 }
 
 function manualDeclarationParts(value: string | null | undefined) {
@@ -51,9 +75,14 @@ function manualDeclarationParts(value: string | null | undefined) {
  */
 export function buildProductDeclaration(input: ProductDeclarationInput) {
   const manual = manualDeclarationParts(input.manualDeclaration);
+  const deepestCategory = [...(input.categoryLabels ?? [])]
+    .reverse()
+    .map(conciseProductKind)
+    .find(Boolean);
   const kind =
-    clean(input.shortDescription) ||
+    conciseProductKind(input.shortDescription) ||
     manual.fields.get("vrsta robe") ||
+    deepestCategory ||
     clean(input.shortName) ||
     clean(input.name);
   const shortName = clean(input.shortName);
@@ -70,9 +99,9 @@ export function buildProductDeclaration(input: ProductDeclarationInput) {
     manual.fields.get("materijal") ||
     "";
   const countryOfOrigin =
-    clean(input.countryOfOrigin) ||
-    manual.fields.get("zemlja porekla") ||
-    "";
+    localizedCountryName(
+      clean(input.countryOfOrigin) || manual.fields.get("zemlja porekla"),
+    );
 
   const lines = [
     `Vrsta robe: ${kind}`,

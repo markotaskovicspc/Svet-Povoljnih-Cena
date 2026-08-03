@@ -89,7 +89,7 @@ function databaseTransactionMaxWaitMillis() {
   );
   return Number.isFinite(configured)
     ? Math.max(2_000, Math.min(configured, 30_000))
-    : 5_000;
+    : 30_000;
 }
 
 function databaseTransactionTimeoutMillis() {

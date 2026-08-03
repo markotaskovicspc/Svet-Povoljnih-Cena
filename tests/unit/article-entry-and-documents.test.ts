@@ -159,6 +159,24 @@ describe("PDP dokumenti", () => {
     expect(declaration).not.toContain("Stara vrednost");
   });
 
+  it("ne koristi dobavljački pasus kao vrstu robe i lokalizuje ISO zemlju", () => {
+    const declaration = buildProductDeclaration({
+      name: "Remiel",
+      shortName: "Remiel",
+      shortDescription:
+        "Sa svojim toplim nijansama, Remiel privezak je posebno dobar izbor u modernim kuhinjama gde nameštaj sadrži druge drvene elemente i pruža efikasnu pomoć tokom pripreme obroka.",
+      categoryLabels: ["Rasveta", "Unutrašnja rasveta", "Visilice"],
+      materialLabels: ["metal", "plastika"],
+      countryOfOrigin: "CN",
+    });
+
+    expect(declaration).toContain("Vrsta robe: Visilice");
+    expect(declaration).toContain("Naziv: Visilice Remiel");
+    expect(declaration).toContain("Materijal: metal, plastika");
+    expect(declaration).toContain("Zemlja porekla: Kina");
+    expect(declaration).not.toContain("toplim nijansama");
+  });
+
   it("prihvata PDF samo kada ekstenzija, MIME i potpis odgovaraju", async () => {
     const pdf = new File([Buffer.from("%PDF-1.7\n")], "deklaracija.pdf", {
       type: "application/pdf",
