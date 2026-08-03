@@ -9,7 +9,7 @@ import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytic
 import { getGa4MeasurementId } from "@/lib/analytics/config";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
-import type { NavNode } from "@/data/site";
+import { primaryNav, type NavNode } from "@/data/site";
 
 const gaId = getGa4MeasurementId();
 
@@ -43,6 +43,9 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
     getActiveTabs(),
     getCategoryTree(),
   ]);
+  const categories = categoryTree.length
+    ? categoryNav(categoryTree)
+    : primaryNav;
 
   return (
     <>
@@ -52,7 +55,7 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
           className="h-[max(env(safe-area-inset-top),1.5rem)] bg-white md:hidden"
         />
         {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
-        <Header tabs={activeTabs} categories={categoryNav(categoryTree)} />
+        <Header tabs={activeTabs} categories={categories} />
       </div>
       <main className="flex-1">{children}</main>
       <FirstPurchaseCta />

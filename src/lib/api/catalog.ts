@@ -630,29 +630,36 @@ export interface CategoryNode extends CategoryDTO {
 
 async function loadCategoryTree(): Promise<CategoryNode[]> {
   if (!hasDatabaseConnection()) return [];
-  const rows = await db.category.findMany({ orderBy: [{ level: "asc" }, { order: "asc" }] });
-  const byId = new Map<string, CategoryNode>();
-  const roots: CategoryNode[] = [];
-  for (const c of rows) {
-    byId.set(c.id, {
-      id: c.id,
-      slug: c.slug,
-      name: c.name,
-      parentId: c.parentId,
-      order: c.order,
-      imageUrl: c.imageUrl ?? undefined,
-      children: [],
+  try {
+    const rows = await db.category.findMany({
+      orderBy: [{ level: "asc" }, { order: "asc" }],
     });
-  }
-  for (const c of rows) {
-    const node = byId.get(c.id)!;
-    if (c.parentId && byId.has(c.parentId)) {
-      byId.get(c.parentId)!.children.push(node);
-    } else {
-      roots.push(node);
+    const byId = new Map<string, CategoryNode>();
+    const roots: CategoryNode[] = [];
+    for (const c of rows) {
+      byId.set(c.id, {
+        id: c.id,
+        slug: c.slug,
+        name: c.name,
+        parentId: c.parentId,
+        order: c.order,
+        imageUrl: c.imageUrl ?? undefined,
+        children: [],
+      });
     }
+    for (const c of rows) {
+      const node = byId.get(c.id)!;
+      if (c.parentId && byId.has(c.parentId)) {
+        byId.get(c.parentId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    return roots;
+  } catch (error) {
+    console.error("[catalog] Failed to load category tree.", error);
+    return [];
   }
-  return roots;
 }
 
 const getCategoryTreeAcrossRequests = unstable_cache(
@@ -775,7 +782,7 @@ function appendAnd(where: Prisma.ProductWhereInput, condition: Prisma.ProductWhe
   ];
 }
 
-export async function listProducts(
+async function loadProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
   if (!hasDatabaseConnection()) {
@@ -971,6 +978,17 @@ export async function listProducts(
     nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
     total,
   };
+}
+
+export async function listProducts(
+  input: ListProductsInput = {},
+): Promise<ListProductsResult> {
+  try {
+    return await loadProducts(input);
+  } catch (error) {
+    console.error("[catalog] Failed to list products.", error);
+    return { items: [], nextCursor: null, total: 0 };
+  }
 }
 
 async function loadProductBySlug(
