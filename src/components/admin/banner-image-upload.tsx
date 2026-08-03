@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ImagePlus, RotateCcw, Upload } from "lucide-react";
 import {
   BANNER_IMAGE_MAX_BYTES,
+  type BannerImageVariant,
   validateBannerImageFile,
 } from "@/lib/banners/image-file";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,8 @@ export function BannerImageUpload({
   removeName,
   aspect = "wide",
   hint,
+  placement,
+  variant,
 }: {
   name: string;
   label: string;
@@ -27,6 +30,8 @@ export function BannerImageUpload({
   removeName?: string;
   aspect?: "wide" | "mobile";
   hint: string;
+  placement: string;
+  variant: BannerImageVariant;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,7 +40,29 @@ export function BannerImageUpload({
   const [selectedName, setSelectedName] = useState("");
   const [removed, setRemoved] = useState(false);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadedKey, setUploadedKey] = useState("");
   const objectUrlRef = useRef("");
+  const uploadedKeyRef = useRef("");
+  const selectionRef = useRef(0);
+  const uploadKeyName = name.replace(/File$/, "UploadKey");
+
+  function cleanupStagedUpload(key: string) {
+    if (!key) return;
+    void fetch("/api/admin/banner-uploads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, placement, variant }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }
+
+  function clearUploadedKey() {
+    const key = uploadedKeyRef.current;
+    uploadedKeyRef.current = "";
+    setUploadedKey("");
+    cleanupStagedUpload(key);
+  }
 
   function releaseObjectUrl() {
     if (objectUrlRef.current) {
@@ -45,10 +72,17 @@ export function BannerImageUpload({
   }
 
   function resetPreview() {
+    selectionRef.current += 1;
+    clearUploadedKey();
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.setCustomValidity("");
+    }
     releaseObjectUrl();
     setPreviewUrl(currentUrl ?? "");
     setSelectedName("");
     setRemoved(false);
+    setUploading(false);
     setError("");
   }
 
@@ -59,35 +93,104 @@ export function BannerImageUpload({
     form.addEventListener("reset", resetPreview);
     return () => {
       form.removeEventListener("reset", resetPreview);
+      selectionRef.current += 1;
+      cleanupStagedUpload(uploadedKeyRef.current);
+      uploadedKeyRef.current = "";
       releaseObjectUrl();
     };
     // The current URL is fixed for the lifetime of an individual edit form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function stageFile(file: File, selection: number) {
+    let stagedKey = "";
+    try {
+      const presignResponse = await fetch("/api/admin/banner-uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          bytes: file.size,
+          placement,
+          variant,
+        }),
+      });
+      const presign = await presignResponse.json().catch(() => null);
+      if (!presignResponse.ok || !presign?.uploadUrl || !presign?.key) {
+        throw new Error(presign?.error ?? "Priprema slanja slike nije uspela.");
+      }
+      stagedKey = String(presign.key);
+
+      const uploadResponse = await fetch(String(presign.uploadUrl), {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Slanje slike nije uspelo. Pokušajte ponovo.");
+      }
+      if (selectionRef.current !== selection) {
+        cleanupStagedUpload(stagedKey);
+        return;
+      }
+
+      uploadedKeyRef.current = stagedKey;
+      setUploadedKey(stagedKey);
+      setUploading(false);
+      setError("");
+      if (inputRef.current) {
+        // The original bytes have reached Supabase directly. Clearing the file
+        // keeps the subsequent Server Action well below Vercel's 4.5 MB cap.
+        inputRef.current.value = "";
+        inputRef.current.setCustomValidity("");
+      }
+    } catch (caught) {
+      if (stagedKey) cleanupStagedUpload(stagedKey);
+      if (selectionRef.current !== selection) return;
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Slanje slike nije uspelo. Pokušajte ponovo.";
+      setUploading(false);
+      setUploadedKey("");
+      uploadedKeyRef.current = "";
+      setError(message);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+        inputRef.current.setCustomValidity(message);
+      }
+    }
+  }
+
   function applyFile(file: File | undefined) {
     if (!file) return;
     try {
       validateBannerImageFile(file);
     } catch (caught) {
-      if (inputRef.current) inputRef.current.value = "";
+      const message =
+        caught instanceof Error ? caught.message : "Slika nije ispravna.";
+      if (inputRef.current) {
+        inputRef.current.value = "";
+        inputRef.current.setCustomValidity(message);
+      }
+      selectionRef.current += 1;
+      clearUploadedKey();
       releaseObjectUrl();
       setPreviewUrl(currentUrl ?? "");
       setSelectedName("");
       setRemoved(false);
-      setError(
-        caught instanceof Error ? caught.message : "Slika nije ispravna.",
-      );
+      setUploading(false);
+      setError(message);
       return;
     }
 
     const input = inputRef.current;
     if (!input) return;
-    if (input.files?.[0] !== file) {
-      const transfer = new DataTransfer();
-      transfer.items.add(file);
-      input.files = transfer.files;
-    }
+    selectionRef.current += 1;
+    const selection = selectionRef.current;
+    clearUploadedKey();
+    input.setCustomValidity("Sačekajte da se slika otpremi.");
 
     releaseObjectUrl();
     const nextPreview = URL.createObjectURL(file);
@@ -95,15 +198,23 @@ export function BannerImageUpload({
     setPreviewUrl(nextPreview);
     setSelectedName(file.name);
     setRemoved(false);
+    setUploading(true);
     setError("");
+    void stageFile(file, selection);
   }
 
   function removeCurrentSelection() {
-    if (inputRef.current) inputRef.current.value = "";
+    selectionRef.current += 1;
+    clearUploadedKey();
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.setCustomValidity("");
+    }
     releaseObjectUrl();
     setPreviewUrl("");
     setSelectedName("");
     setRemoved(true);
+    setUploading(false);
     setError("");
   }
 
@@ -130,12 +241,16 @@ export function BannerImageUpload({
         aria-describedby={`${inputId}-hint${error ? ` ${inputId}-error` : ""}`}
         onChange={(event) => applyFile(event.currentTarget.files?.[0])}
       />
+      {uploadedKey ? (
+        <input type="hidden" name={uploadKeyName} value={uploadedKey} />
+      ) : null}
       {removeName && removed ? (
         <input type="hidden" name={removeName} value="true" />
       ) : null}
 
       <label
         htmlFor={inputId}
+        aria-busy={uploading}
         className={cn(
           "group relative flex cursor-pointer overflow-hidden rounded-xl border-2 border-dashed bg-muted-bg/35 transition",
           "focus-within:border-walnut focus-within:ring-3 focus-within:ring-walnut/15",
@@ -154,7 +269,9 @@ export function BannerImageUpload({
           setDragging(true);
         }}
         onDragLeave={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          if (
+            !event.currentTarget.contains(event.relatedTarget as Node | null)
+          ) {
             setDragging(false);
           }
         }}
@@ -182,7 +299,11 @@ export function BannerImageUpload({
                   {selectedName || "Trenutna slika"}
                 </span>
                 <span className="block text-xs text-white/80">
-                  Prevucite novu sliku ili kliknite za zamenu
+                  {uploading
+                    ? "Otpremanje slike…"
+                    : uploadedKey
+                      ? "Slika je spremna za čuvanje"
+                      : "Prevucite novu sliku ili kliknite za zamenu"}
                 </span>
               </span>
               <RotateCcw className="size-5 shrink-0" aria-hidden="true" />
@@ -222,8 +343,21 @@ export function BannerImageUpload({
           </button>
         ) : null}
       </div>
+      {uploading ? (
+        <p role="status" className="text-xs text-ink-500">
+          Otpremanje slike je u toku. Sačekajte pre čuvanja forme.
+        </p>
+      ) : uploadedKey ? (
+        <p role="status" className="text-xs text-success">
+          Slika je otpremljena i spremna za čuvanje.
+        </p>
+      ) : null}
       {error ? (
-        <p id={`${inputId}-error`} role="alert" className="text-xs text-destructive">
+        <p
+          id={`${inputId}-error`}
+          role="alert"
+          className="text-xs text-destructive"
+        >
           {error}
         </p>
       ) : null}

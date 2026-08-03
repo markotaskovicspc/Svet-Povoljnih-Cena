@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BANNER_IMAGE_MAX_BYTES,
+  getBannerStagingImageKey,
   getManagedBannerImageKey,
   toBannerImageUploadBody,
   validateBannerImageFile,
@@ -56,23 +57,58 @@ describe("banner image files", () => {
   });
 
   it("only treats the dedicated banner prefix as managed banner storage", () => {
-    expect(
-      getManagedBannerImageKey("content/banners/hero/banner.webp"),
-    ).toBe("content/banners/hero/banner.webp");
+    expect(getManagedBannerImageKey("content/banners/hero/banner.webp")).toBe(
+      "content/banners/hero/banner.webp",
+    );
     expect(getManagedBannerImageKey("products/product/photo.webp")).toBeNull();
-    expect(getManagedBannerImageKey("https://images.unsplash.com/a.jpg")).toBeNull();
+    expect(
+      getManagedBannerImageKey("https://images.unsplash.com/a.jpg"),
+    ).toBeNull();
+  });
+
+  it("accepts staging keys only for the expected admin, placement and variant", () => {
+    const key =
+      "content/banners/staging/hero/admin-123/1785782472770-2fb2e83543469098-desktop.jpg";
+
+    expect(
+      getBannerStagingImageKey(key, {
+        actorId: "admin-123",
+        placement: "HERO",
+        variant: "desktop",
+      }),
+    ).toBe(key);
+    expect(
+      getBannerStagingImageKey(key, {
+        actorId: "another-admin",
+        placement: "HERO",
+        variant: "desktop",
+      }),
+    ).toBeNull();
+    expect(
+      getBannerStagingImageKey(key, {
+        actorId: "admin-123",
+        placement: "HERO",
+        variant: "mobile",
+      }),
+    ).toBeNull();
+    expect(
+      getBannerStagingImageKey(
+        "content/banners/staging/hero/admin-123/../x.jpg",
+        {
+          actorId: "admin-123",
+          placement: "HERO",
+          variant: "desktop",
+        },
+      ),
+    ).toBeNull();
   });
 
   it("copies binary upload bytes without UTF-8 conversion or extra buffer data", () => {
     const backing = new Uint8Array([9, 0x52, 0x80, 0xff, 0x00, 0x49, 8]);
     const source = backing.subarray(1, 6);
 
-    expect(Array.from(new Uint8Array(toBannerImageUploadBody(source)))).toEqual([
-      0x52,
-      0x80,
-      0xff,
-      0x00,
-      0x49,
-    ]);
+    expect(Array.from(new Uint8Array(toBannerImageUploadBody(source)))).toEqual(
+      [0x52, 0x80, 0xff, 0x00, 0x49],
+    );
   });
 });

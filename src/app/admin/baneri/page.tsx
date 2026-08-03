@@ -13,6 +13,7 @@ import {
 } from "@/lib/banners/builtins";
 import {
   BANNER_IMAGE_PREFIX,
+  getBannerStagingImageKey,
   getManagedBannerImageKey,
   toBannerImageUploadBody,
   validateBannerImageFile,
@@ -79,7 +80,8 @@ const SECTIONS: SectionDef[] = [
   {
     placement: BannerPlacement.HOME_AFTER_SECOND_ROW,
     title: "2 · Baner posle 2. reda",
-    where: "Između druge i treće promo sekcije na početnoj (sada „Trajno niska cena“).",
+    where:
+      "Između druge i treće promo sekcije na početnoj (sada „Trajno niska cena“).",
     kind: "single",
     desktopSize: "1200 × 400 px",
     hint: "Jedna slika. Ako dodate više, prikazuje se prvi aktivni; ostale označite kao neaktivne ili obrišite.",
@@ -87,7 +89,8 @@ const SECTIONS: SectionDef[] = [
   {
     placement: BannerPlacement.HOME_AFTER_FOURTH_ROW,
     title: "3 · Baner posle 4. reda",
-    where: "Između četvrte i pete promo sekcije na početnoj (sada „Heroji meseca“).",
+    where:
+      "Između četvrte i pete promo sekcije na početnoj (sada „Heroji meseca“).",
     kind: "single",
     desktopSize: "1200 × 400 px",
     hint: "Jedna slika. Ako dodate više, prikazuje se prvi aktivni; ostale označite kao neaktivne ili obrišite.",
@@ -135,13 +138,16 @@ function selectedFile(formData: FormData, name: string) {
   return value instanceof File && value.size > 0 ? value : null;
 }
 
-async function uploadBannerImage(
-  file: File,
+function selectedUploadKey(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function persistBannerImage(
+  input: Buffer,
   placement: BannerPlacement,
   variant: "desktop" | "mobile",
 ) {
-  validateBannerImageFile(file);
-  const input = Buffer.from(await file.arrayBuffer());
   let output: Buffer;
 
   try {
@@ -173,15 +179,11 @@ async function uploadBannerImage(
 
   const key = `${BANNER_IMAGE_PREFIX}${placement.toLowerCase()}/${Date.now()}-${randomBytes(8).toString("hex")}-${variant}.webp`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
-  const { error } = await storage.upload(
-    key,
-    toBannerImageUploadBody(output),
-    {
-      cacheControl: "31536000",
-      contentType: "image/webp",
-      upsert: false,
-    },
-  );
+  const { error } = await storage.upload(key, toBannerImageUploadBody(output), {
+    cacheControl: "31536000",
+    contentType: "image/webp",
+    upsert: false,
+  });
   if (error) throw new Error(`Upload slike nije uspeo: ${error.message}`);
 
   // Do not save a public URL until storage returns the exact bytes we sent.
@@ -210,6 +212,80 @@ async function uploadBannerImage(
   return { key, url: data.publicUrl };
 }
 
+async function uploadBannerImage(
+  file: File,
+  placement: BannerPlacement,
+  variant: "desktop" | "mobile",
+) {
+  validateBannerImageFile(file);
+  return persistBannerImage(
+    Buffer.from(await file.arrayBuffer()),
+    placement,
+    variant,
+  );
+}
+
+async function uploadStagedBannerImage(
+  value: string,
+  actorId: string,
+  placement: BannerPlacement,
+  variant: "desktop" | "mobile",
+) {
+  const key = getBannerStagingImageKey(value, {
+    actorId,
+    placement,
+    variant,
+  });
+  if (!key) throw new Error("Privremeni upload slike nije ispravan.");
+
+  const storage = createAdminClient().storage.from(getProductMediaBucket());
+  try {
+    const { data, error } = await storage.download(key);
+    if (error || !data) {
+      throw new Error(error?.message ?? "Otpremljena slika nije pronađena.");
+    }
+    validateBannerImageFile({ name: key, size: data.size, type: data.type });
+    return await persistBannerImage(
+      Buffer.from(await data.arrayBuffer()),
+      placement,
+      variant,
+    );
+  } finally {
+    const { error } = await storage.remove([key]);
+    if (error) {
+      logOperationalError("banner.staging_cleanup_failed", error, {
+        actorId,
+        key,
+      });
+    }
+  }
+}
+
+async function removeStagedBannerImages(
+  values: Array<{
+    value: string | null;
+    variant: "desktop" | "mobile";
+  }>,
+  actorId: string,
+  placement: string,
+) {
+  const keys = values
+    .map(({ value, variant }) =>
+      getBannerStagingImageKey(value, { actorId, placement, variant }),
+    )
+    .filter((key): key is string => Boolean(key));
+  if (!keys.length) return;
+  const { error } = await createAdminClient()
+    .storage.from(getProductMediaBucket())
+    .remove(keys);
+  if (error) {
+    logOperationalError("banner.staging_cleanup_failed", error, {
+      actorId,
+      keys,
+    });
+  }
+}
+
 async function removeManagedBannerImages(
   values: Array<string | null | undefined>,
   context: Record<string, unknown>,
@@ -224,8 +300,7 @@ async function removeManagedBannerImages(
   if (!keys.length) return;
 
   const { error } = await createAdminClient()
-    .storage
-    .from(getProductMediaBucket())
+    .storage.from(getProductMediaBucket())
     .remove(keys);
   if (error) {
     logOperationalError("banner.image_cleanup_failed", error, {
@@ -239,7 +314,9 @@ async function removeUnreferencedBannerImages(
   values: Array<string | null | undefined>,
   context: Record<string, unknown>,
 ) {
-  const urls = Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+  const urls = Array.from(
+    new Set(values.filter((value): value is string => Boolean(value))),
+  );
   const removable: string[] = [];
   for (const url of urls) {
     if (!getManagedBannerImageKey(url)) continue;
@@ -265,171 +342,221 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
 
   return withAdminState(
     { allowed: ["CONTENT"], action: "banner.upsert", entity: "Banner" },
-    async (_actorId, formData: FormData) => {
-      const raw = Object.fromEntries(formData.entries());
-      const parsed = upsertSchema.safeParse({
-        ...raw,
-        enabled:
-          formData.get("enabled") === "on" ||
-          formData.get("enabled") === "true",
-      });
-      if (!parsed.success) {
-        return {
-          ok: false as const,
-          error: parsed.error.issues[0]?.message ?? "Neispravan unos.",
-        };
-      }
-      const data = parsed.data;
-      const startsAt = data.startsAt ? new Date(data.startsAt) : null;
-      const endsAt = data.endsAt ? new Date(data.endsAt) : null;
-      if (
-        (startsAt && Number.isNaN(startsAt.getTime())) ||
-        (endsAt && Number.isNaN(endsAt.getTime())) ||
-        (startsAt && endsAt && startsAt >= endsAt)
-      ) {
-        return {
-          ok: false as const,
-          error: "Period nije ispravan; kraj mora biti posle početka.",
-        };
-      }
-
-      await materializeBuiltInBanners(data.placement);
-      const existing = data.id
-        ? await db.banner.findUnique({ where: { id: data.id } })
-        : null;
-      if (data.id && !existing) {
-        return {
-          ok: false as const,
-          error: "Baner više ne postoji. Osvežite stranicu i pokušajte ponovo.",
-        };
-      }
-      if (existing && existing.placement !== data.placement) {
-        return { ok: false as const, error: "Pozicija banera nije ispravna." };
-      }
-
-      const desktopFile = selectedFile(formData, "imageDesktopFile");
-      const mobileFile = selectedFile(formData, "imageMobileFile");
-      const removeMobile = formData.get("removeImageMobile") === "true";
-      if (!desktopFile && !existing?.imageDesktop) {
-        return {
-          ok: false as const,
-          error: "Prevucite desktop sliku ili je izaberite sa računara.",
-        };
-      }
-
-      let uploadedDesktop: Awaited<
-        ReturnType<typeof uploadBannerImage>
-      > | null = null;
-      let uploadedMobile: Awaited<
-        ReturnType<typeof uploadBannerImage>
-      > | null = null;
-      try {
-        if (desktopFile) {
-          uploadedDesktop = await uploadBannerImage(
-            desktopFile,
-            data.placement,
-            "desktop",
-          );
-        }
-        if (mobileFile && !removeMobile) {
-          uploadedMobile = await uploadBannerImage(
-            mobileFile,
-            data.placement,
-            "mobile",
-          );
-        }
-      } catch (error) {
-        await removeManagedBannerImages(
-          [uploadedDesktop?.url, uploadedMobile?.url],
-          { placement: data.placement, reason: "upload_failed" },
-        );
-        return {
-          ok: false as const,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Upload slike nije uspeo.",
-        };
-      }
-
-      const imageDesktop = uploadedDesktop?.url ?? existing?.imageDesktop;
-      if (!imageDesktop) {
-        await removeManagedBannerImages(
-          [uploadedDesktop?.url, uploadedMobile?.url],
-          { placement: data.placement, reason: "missing_desktop_after_upload" },
-        );
-        return { ok: false as const, error: "Desktop slika nije sačuvana." };
-      }
-      const payload = {
-        title: data.title,
-        subtitle: data.subtitle || null,
-        ctaLabel: data.ctaLabel || null,
-        ctaHref: data.ctaHref || null,
-        imageDesktop,
-        imageMobile: removeMobile
-          ? null
-          : (uploadedMobile?.url ?? existing?.imageMobile ?? null),
-        startsAt,
-        endsAt,
-        order: data.order,
-        enabled: data.enabled,
-        placement: data.placement,
-      };
-
-      let saved: BannerRecord;
-      try {
-        saved = await db.$transaction(async (tx) => {
-          if (data.enabled && data.placement !== BannerPlacement.HERO) {
-            await tx.banner.updateMany({
-              where: {
-                placement: data.placement,
-                enabled: true,
-                ...(data.id ? { NOT: { id: data.id } } : {}),
-              },
-              data: { enabled: false },
-            });
-          }
-          return data.id
-            ? tx.banner.update({ where: { id: data.id }, data: payload })
-            : tx.banner.create({ data: payload });
-        });
-      } catch (error) {
-        await removeManagedBannerImages(
-          [uploadedDesktop?.url, uploadedMobile?.url],
-          { placement: data.placement, reason: "database_save_failed" },
-        );
-        return {
-          ok: false as const,
-          error:
-            error instanceof Error
-              ? `Baner nije sačuvan: ${error.message}`
-              : "Baner nije sačuvan zbog greške u bazi.",
-        };
-      }
-
-      await removeUnreferencedBannerImages(
-        [
-          uploadedDesktop && existing?.imageDesktop !== uploadedDesktop.url
-            ? existing?.imageDesktop
-            : null,
-          (uploadedMobile || removeMobile) &&
-          existing?.imageMobile !== uploadedMobile?.url
-            ? existing?.imageMobile
-            : null,
-        ],
-        { bannerId: saved.id, reason: "image_replaced" },
+    async (actorId, formData: FormData) => {
+      const rawPlacement = String(formData.get("placement") ?? "");
+      const desktopUploadKey = selectedUploadKey(
+        formData,
+        "imageDesktopUploadKey",
       );
-      revalidateBannerSurfaces();
-      return {
-        ok: true as const,
-        entityId: saved.id,
-        diff: {
-          ...payload,
-          desktopStorageKey: uploadedDesktop?.key,
-          mobileStorageKey: uploadedMobile?.key,
-        },
-        message: data.id ? "Baner je sačuvan." : "Baner je dodat.",
-      };
+      const mobileUploadKey = selectedUploadKey(
+        formData,
+        "imageMobileUploadKey",
+      );
+      try {
+        const raw = Object.fromEntries(formData.entries());
+        const parsed = upsertSchema.safeParse({
+          ...raw,
+          enabled:
+            formData.get("enabled") === "on" ||
+            formData.get("enabled") === "true",
+        });
+        if (!parsed.success) {
+          return {
+            ok: false as const,
+            error: parsed.error.issues[0]?.message ?? "Neispravan unos.",
+          };
+        }
+        const data = parsed.data;
+        const startsAt = data.startsAt ? new Date(data.startsAt) : null;
+        const endsAt = data.endsAt ? new Date(data.endsAt) : null;
+        if (
+          (startsAt && Number.isNaN(startsAt.getTime())) ||
+          (endsAt && Number.isNaN(endsAt.getTime())) ||
+          (startsAt && endsAt && startsAt >= endsAt)
+        ) {
+          return {
+            ok: false as const,
+            error: "Period nije ispravan; kraj mora biti posle početka.",
+          };
+        }
+
+        await materializeBuiltInBanners(data.placement);
+        const existing = data.id
+          ? await db.banner.findUnique({ where: { id: data.id } })
+          : null;
+        if (data.id && !existing) {
+          return {
+            ok: false as const,
+            error:
+              "Baner više ne postoji. Osvežite stranicu i pokušajte ponovo.",
+          };
+        }
+        if (existing && existing.placement !== data.placement) {
+          return {
+            ok: false as const,
+            error: "Pozicija banera nije ispravna.",
+          };
+        }
+
+        const desktopFile = selectedFile(formData, "imageDesktopFile");
+        const mobileFile = selectedFile(formData, "imageMobileFile");
+        const removeMobile = formData.get("removeImageMobile") === "true";
+        if (
+          (desktopFile && desktopUploadKey) ||
+          (mobileFile && mobileUploadKey)
+        ) {
+          return {
+            ok: false as const,
+            error: "Pošaljite samo jednu verziju svake slike.",
+          };
+        }
+        if (!desktopFile && !desktopUploadKey && !existing?.imageDesktop) {
+          return {
+            ok: false as const,
+            error: "Prevucite desktop sliku ili je izaberite sa računara.",
+          };
+        }
+
+        let uploadedDesktop: Awaited<
+          ReturnType<typeof uploadBannerImage>
+        > | null = null;
+        let uploadedMobile: Awaited<
+          ReturnType<typeof uploadBannerImage>
+        > | null = null;
+        try {
+          if (desktopUploadKey) {
+            uploadedDesktop = await uploadStagedBannerImage(
+              desktopUploadKey,
+              actorId,
+              data.placement,
+              "desktop",
+            );
+          } else if (desktopFile) {
+            uploadedDesktop = await uploadBannerImage(
+              desktopFile,
+              data.placement,
+              "desktop",
+            );
+          }
+          if (mobileUploadKey && !removeMobile) {
+            uploadedMobile = await uploadStagedBannerImage(
+              mobileUploadKey,
+              actorId,
+              data.placement,
+              "mobile",
+            );
+          } else if (mobileFile && !removeMobile) {
+            uploadedMobile = await uploadBannerImage(
+              mobileFile,
+              data.placement,
+              "mobile",
+            );
+          }
+        } catch (error) {
+          await removeManagedBannerImages(
+            [uploadedDesktop?.url, uploadedMobile?.url],
+            { placement: data.placement, reason: "upload_failed" },
+          );
+          return {
+            ok: false as const,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Upload slike nije uspeo.",
+          };
+        }
+
+        const imageDesktop = uploadedDesktop?.url ?? existing?.imageDesktop;
+        if (!imageDesktop) {
+          await removeManagedBannerImages(
+            [uploadedDesktop?.url, uploadedMobile?.url],
+            {
+              placement: data.placement,
+              reason: "missing_desktop_after_upload",
+            },
+          );
+          return { ok: false as const, error: "Desktop slika nije sačuvana." };
+        }
+        const payload = {
+          title: data.title,
+          subtitle: data.subtitle || null,
+          ctaLabel: data.ctaLabel || null,
+          ctaHref: data.ctaHref || null,
+          imageDesktop,
+          imageMobile: removeMobile
+            ? null
+            : (uploadedMobile?.url ?? existing?.imageMobile ?? null),
+          startsAt,
+          endsAt,
+          order: data.order,
+          enabled: data.enabled,
+          placement: data.placement,
+        };
+
+        let saved: BannerRecord;
+        try {
+          saved = await db.$transaction(async (tx) => {
+            if (data.enabled && data.placement !== BannerPlacement.HERO) {
+              await tx.banner.updateMany({
+                where: {
+                  placement: data.placement,
+                  enabled: true,
+                  ...(data.id ? { NOT: { id: data.id } } : {}),
+                },
+                data: { enabled: false },
+              });
+            }
+            return data.id
+              ? tx.banner.update({ where: { id: data.id }, data: payload })
+              : tx.banner.create({ data: payload });
+          });
+        } catch (error) {
+          await removeManagedBannerImages(
+            [uploadedDesktop?.url, uploadedMobile?.url],
+            { placement: data.placement, reason: "database_save_failed" },
+          );
+          return {
+            ok: false as const,
+            error:
+              error instanceof Error
+                ? `Baner nije sačuvan: ${error.message}`
+                : "Baner nije sačuvan zbog greške u bazi.",
+          };
+        }
+
+        await removeUnreferencedBannerImages(
+          [
+            uploadedDesktop && existing?.imageDesktop !== uploadedDesktop.url
+              ? existing?.imageDesktop
+              : null,
+            (uploadedMobile || removeMobile) &&
+            existing?.imageMobile !== uploadedMobile?.url
+              ? existing?.imageMobile
+              : null,
+          ],
+          { bannerId: saved.id, reason: "image_replaced" },
+        );
+        revalidateBannerSurfaces();
+        return {
+          ok: true as const,
+          entityId: saved.id,
+          diff: {
+            ...payload,
+            desktopStorageKey: uploadedDesktop?.key,
+            mobileStorageKey: uploadedMobile?.key,
+          },
+          message: data.id ? "Baner je sačuvan." : "Baner je dodat.",
+        };
+      } finally {
+        await removeStagedBannerImages(
+          [
+            { value: desktopUploadKey, variant: "desktop" },
+            { value: mobileUploadKey, variant: "mobile" },
+          ],
+          actorId,
+          rawPlacement,
+        );
+      }
     },
   )(formData);
 }
@@ -442,9 +569,9 @@ async function deleteBanner(formData: FormData) {
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID." };
-      const placement = z.nativeEnum(BannerPlacement).safeParse(
-        formData.get("placement"),
-      );
+      const placement = z
+        .nativeEnum(BannerPlacement)
+        .safeParse(formData.get("placement"));
       if (isBuiltInBannerId(id) && placement.success) {
         await materializeBuiltInBanners(placement.data);
       }
@@ -472,9 +599,9 @@ async function reorderBanner(formData: FormData) {
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const dir = String(formData.get("dir") ?? "");
-      const placement = z.nativeEnum(BannerPlacement).safeParse(
-        formData.get("placement"),
-      );
+      const placement = z
+        .nativeEnum(BannerPlacement)
+        .safeParse(formData.get("placement"));
       if (!id || (dir !== "up" && dir !== "down")) {
         return { ok: false as const, error: "Neispravan zahtev." };
       }
@@ -541,9 +668,7 @@ export default async function BannersPage() {
       .map((banner) => ({ ...banner, source: "database" as const }));
     byPlacement.set(
       section.placement,
-      configured.length
-        ? configured
-        : builtInAdminBanners(section.placement),
+      configured.length ? configured : builtInAdminBanners(section.placement),
     );
   }
 
@@ -556,9 +681,10 @@ export default async function BannersPage() {
       />
       <div className="space-y-6 px-8 py-6">
         <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/5 px-4 py-3 text-sm text-ink-700">
-          Ugrađeni baneri su prikazani zajedno sa sadržajem iz baze. Kada prvi put
-          sačuvate izmenu ili dodate slajd, trenutni sadržaj se automatski prenosi
-          pod upravljanje administracije — bez nestanka ostalih slajdova.
+          Ugrađeni baneri su prikazani zajedno sa sadržajem iz baze. Kada prvi
+          put sačuvate izmenu ili dodate slajd, trenutni sadržaj se automatski
+          prenosi pod upravljanje administracije — bez nestanka ostalih
+          slajdova.
         </div>
         {SECTIONS.map((section) => (
           <BannerSection
@@ -586,16 +712,20 @@ function BannerSection({
     <Card className="p-0">
       <div className="flex flex-col gap-1 border-b border-border/60 px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-ink-900">{section.title}</h2>
+          <h2 className="text-base font-semibold text-ink-900">
+            {section.title}
+          </h2>
           <span className="rounded-full bg-muted-bg px-2.5 py-0.5 text-xs text-ink-600">
-            {banners.length} {isCarousel ? "slajdova" : "banera"} · {activeCount}{" "}
-            aktivnih sada
+            {banners.length} {isCarousel ? "slajdova" : "banera"} ·{" "}
+            {activeCount} aktivnih sada
           </span>
         </div>
         <p className="text-sm text-ink-500">{section.where}</p>
         <p className="text-xs text-ink-500">
           Preporučena dimenzija: <strong>{section.desktopSize}</strong>
-          {section.mobileSize ? ` (desktop), ${section.mobileSize} (mobilna)` : ""}
+          {section.mobileSize
+            ? ` (desktop), ${section.mobileSize} (mobilna)`
+            : ""}
         </p>
         <p className="text-xs text-ink-400">{section.hint}</p>
       </div>
@@ -771,7 +901,9 @@ function BannerSection({
                 : "Nova slika se odmah prikazuje ako je aktivna i u periodu prikaza."
             }
           >
-            {isCarousel ? "Dodaj slajd u carousel" : "Dodaj novi / zameni baner"}
+            {isCarousel
+              ? "Dodaj slajd u carousel"
+              : "Dodaj novi / zameni baner"}
           </CardTitle>
           <BannerForm action={upsertBanner} placement={section.placement} />
         </Card>
@@ -808,7 +940,9 @@ function BannerForm({
 }) {
   // New banners are appended to the end of their placement (renormalized on reorder).
   const orderValue = values?.id ? (values.order ?? 0) : 9999;
-  const section = SECTIONS.find((candidate) => candidate.placement === placement);
+  const section = SECTIONS.find(
+    (candidate) => candidate.placement === placement,
+  );
   return (
     <AdminActionForm action={action} className="space-y-4" refreshOnSuccess>
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
@@ -818,7 +952,11 @@ function BannerForm({
         <Input name="title" required defaultValue={values?.title ?? ""} />
       </Field>
       <Field label="Podnaslov">
-        <Textarea name="subtitle" rows={2} defaultValue={values?.subtitle ?? ""} />
+        <Textarea
+          name="subtitle"
+          rows={2}
+          defaultValue={values?.subtitle ?? ""}
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="CTA labela">
@@ -835,13 +973,17 @@ function BannerForm({
       <BannerImageUpload
         name="imageDesktopFile"
         label="Desktop slika"
+        placement={placement}
+        variant="desktop"
         currentUrl={values?.imageDesktop}
         required={!values?.imageDesktop}
-        hint={`Preporuka: ${section?.desktopSize ?? "široki format"}. Slika se otprema tek kada sačuvate formu.`}
+        hint={`Preporuka: ${section?.desktopSize ?? "široki format"}. Sačekajte potvrdu da je slika spremna pre čuvanja.`}
       />
       <BannerImageUpload
         name="imageMobileFile"
         label="Mobilna slika (opciono)"
+        placement={placement}
+        variant="mobile"
         currentUrl={values?.imageMobile}
         removeName="removeImageMobile"
         aspect="mobile"

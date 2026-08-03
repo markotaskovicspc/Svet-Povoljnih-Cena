@@ -1,7 +1,10 @@
 import { getManagedProductMediaStorageKey } from "@/lib/supabase/storage";
 
 export const BANNER_IMAGE_PREFIX = "content/banners/";
+export const BANNER_IMAGE_STAGING_PREFIX = `${BANNER_IMAGE_PREFIX}staging/`;
 export const BANNER_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+export type BannerImageVariant = "desktop" | "mobile";
 
 const ALLOWED_IMAGE_EXTENSIONS = {
   "image/jpeg": ["jpg", "jpeg"],
@@ -35,11 +38,43 @@ export function validateBannerImageFile(file: BannerImageFileMetadata) {
   return extension;
 }
 
-export function getManagedBannerImageKey(
-  value: string | null | undefined,
-) {
+export function getManagedBannerImageKey(value: string | null | undefined) {
   const key = getManagedProductMediaStorageKey(value);
   return key?.startsWith(BANNER_IMAGE_PREFIX) ? key : null;
+}
+
+/**
+ * Accept only a temporary upload created for this exact admin, placement and
+ * image variant. The Server Action receives this small key instead of the
+ * original image bytes, keeping banner saves below Vercel's request limit.
+ */
+export function getBannerStagingImageKey(
+  value: string | null | undefined,
+  expected: {
+    actorId: string;
+    placement: string;
+    variant: BannerImageVariant;
+  },
+) {
+  const key = value?.trim();
+  if (!key?.startsWith(BANNER_IMAGE_STAGING_PREFIX)) return null;
+
+  const relative = key.slice(BANNER_IMAGE_STAGING_PREFIX.length);
+  const parts = relative.split("/");
+  if (parts.length !== 3) return null;
+
+  const [placement, actorId, filename] = parts;
+  if (
+    placement !== expected.placement.toLowerCase() ||
+    actorId !== expected.actorId
+  ) {
+    return null;
+  }
+
+  const match = filename?.match(
+    /^(\d{10,})-([a-f0-9]{16})-(desktop|mobile)\.(jpg|jpeg|png|webp|avif)$/,
+  );
+  return match?.[3] === expected.variant ? key : null;
 }
 
 /**
