@@ -517,7 +517,7 @@ const coreErpModules: ErpModule[] = [
       "Šifra dobavljača se automatski dodeljuje i nije ručno izmenljiva.",
       "Kontakt mail mora da sadrži @.",
       "Valuta je ograničena na RSD, $ ili €, a paritet se bira iz Incoterms liste.",
-      "Cenovnik i mesta utovara biraju se iz postojećih ponuđenih vrednosti.",
+      "Cenovnik se bira iz postojećih vrednosti, a mesta utovara su slobodan unos.",
     ],
   },
   {
@@ -909,9 +909,7 @@ export async function getErpModule(
       : supplierContext
         ? column.key === "defaultPriceList"
           ? supplierContext.priceLists
-          : /^loading[1-3]$/.test(column.key)
-            ? supplierContext.loadingLocations
-            : column.options
+          : column.options
         : purchasePriceContext && column.key === "sku"
           ? purchasePriceContext.skus
         : column.options,
@@ -1021,22 +1019,14 @@ async function getArticleModuleContext() {
 }
 
 async function getSupplierModuleContext() {
-  const [priceLists, loadingLocations] = await Promise.all([
-    db.priceList.findMany({
-      where: { active: true },
-      orderBy: { code: "asc" },
-      select: { code: true },
-    }),
-    db.supplierLoadingLocation.findMany({
-      orderBy: { name: "asc" },
-      distinct: ["name"],
-      select: { name: true },
-    }),
-  ]);
+  const priceLists = await db.priceList.findMany({
+    where: { active: true },
+    orderBy: { code: "asc" },
+    select: { code: true },
+  });
 
   return {
     priceLists: priceLists.map((priceList) => priceList.code),
-    loadingLocations: loadingLocations.map((location) => location.name),
   };
 }
 

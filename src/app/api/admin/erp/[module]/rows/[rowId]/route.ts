@@ -493,13 +493,6 @@ async function persistSupplierCell(rowId: string, columnKey: string, value: Cell
         where: { supplierId: rowId, position },
       });
     } else {
-      const offeredLocation = await db.supplierLoadingLocation.findFirst({
-        where: { name },
-        select: { id: true },
-      });
-      if (!offeredLocation) {
-        throw new Error("Izaberite mesto utovara iz ponuđenih vrednosti.");
-      }
       await db.supplierLoadingLocation.upsert({
         where: { supplierId_position: { supplierId: rowId, position } },
         create: {

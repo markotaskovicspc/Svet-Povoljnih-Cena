@@ -66,6 +66,11 @@ describe("supplier master data", () => {
       "loading3",
     ]);
     expect(supplierModule?.editableColumns).not.toContain("code");
+    expect(
+      supplierModule?.columns
+        .filter((column) => /^loading[1-3]$/.test(column.key))
+        .every((column) => column.options === undefined),
+    ).toBe(true);
     expect(supplierModule?.columns.map((column) => column.key)).not.toContain(
       "exchangeRate",
     );

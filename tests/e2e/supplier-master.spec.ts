@@ -24,8 +24,6 @@ test.describe("ERP module 2 supplier master acceptance", () => {
     adminEmail: `qa.supplier.${runId}@example.invalid`,
     adminPassword: `QaSupplier!${runId}x`,
     supplierName: `${tag} dobavljač`,
-    seedSupplierName: `${tag} ponuđene lokacije`,
-    seedSupplierCode: `QA-SEED-${runId}`.slice(0, 80),
     priceListCode: `QA-PL-${runId}`.slice(0, 80),
     priceListName: `${tag} cenovnik`,
     loadingLocations: [
@@ -67,20 +65,6 @@ test.describe("ERP module 2 supplier master acceptance", () => {
         currency: "EUR",
         active: true,
         validFrom: new Date(),
-      },
-    });
-    await db.supplier.create({
-      data: {
-        code: fixture.seedSupplierCode,
-        name: fixture.seedSupplierName,
-        loadingLocations: {
-          create: fixture.loadingLocations.map((name, index) => ({
-            name,
-            position: index + 1,
-            city: name.split(" ").at(-1),
-            country: "RS",
-          })),
-        },
       },
     });
   });
@@ -306,7 +290,6 @@ test.describe("ERP module 2 supplier master acceptance", () => {
         ["transitDays", 2.5, "Tranzitno vreme mora biti ceo broj."],
         ["transitDays", -1, "Tranzitno vreme ne može biti negativno."],
         ["defaultPriceList", "NE-POSTOJI", "ne postoji"],
-        ["loading1", "Nepoznata lokacija", "ponuđenih vrednosti"],
       ] as const;
 
       for (const [columnKey, value, message] of invalidCases) {
@@ -362,19 +345,19 @@ test.describe("ERP module 2 supplier master acceptance", () => {
       await setTextCell(page, row, "SWIFT kod", "QABKRSBG");
       await setTextCell(page, row, "IBAN", "RS35105008123123123173");
       await setSelectCell(page, row, "Cenovnik", fixture.priceListCode);
-      await setSelectCell(
+      await setTextCell(
         page,
         row,
         "Mesto utovara 1",
         fixture.loadingLocations[0],
       );
-      await setSelectCell(
+      await setTextCell(
         page,
         row,
         "Mesto utovara 2",
         fixture.loadingLocations[1],
       );
-      await setSelectCell(
+      await setTextCell(
         page,
         row,
         "Mesto utovara 3",
@@ -581,13 +564,7 @@ test.describe("ERP module 2 supplier master acceptance", () => {
       await db.supplier.deleteMany({ where: { id: { in: supplierIds } } });
     }
     await db.supplier.deleteMany({
-      where: {
-        OR: [
-          { name: { startsWith: tag } },
-          { name: fixture.seedSupplierName },
-          { code: fixture.seedSupplierCode },
-        ],
-      },
+      where: { name: { startsWith: tag } },
     });
     await db.priceList.deleteMany({
       where: { code: fixture.priceListCode },
