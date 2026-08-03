@@ -123,8 +123,8 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      // A banner form can carry one 8 MB desktop and one 8 MB mobile image.
-      bodySizeLimit: "20mb",
+      // Admin media forms support one banner pair or up to ten 8 MB product images.
+      bodySizeLimit: "85mb",
     },
     staticGenerationMaxConcurrency: 2,
     staticGenerationMinPagesPerWorker: 50,

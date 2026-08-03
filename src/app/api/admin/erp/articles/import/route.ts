@@ -60,6 +60,8 @@ type ArticleImportRow = {
   packDepthCm: number | null;
   packHeightCm: number | null;
   packGrossWeightKg: number | null;
+  containerQty: number | null;
+  containerGrossWeightKg: number | null;
   supplierProductName: string | null;
   materialText: string | null;
   certificates: string | null;
@@ -181,6 +183,12 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   packgrossweightkg: "packGrossWeightKg",
   pakbrutokg: "packGrossWeightKg",
   brutotezinatransportnogpakovanja: "packGrossWeightKg",
+  containerqty: "containerQty",
+  kolicinazaceokontejner: "containerQty",
+  kolicinapokontejneru: "containerQty",
+  containergrossweightkg: "containerGrossWeightKg",
+  brutokgzaceokontejner: "containerGrossWeightKg",
+  brutotezinakontejnera: "containerGrossWeightKg",
   suppliername: "supplierProductName",
   dobavljacevnaziv: "supplierProductName",
   material: "materialText",
@@ -449,6 +457,8 @@ export async function POST(request: Request) {
       packDepthCm: numberCell(row, headers.get("packDepthCm"), "packDepthCm", errors, { min: 0 }),
       packHeightCm: numberCell(row, headers.get("packHeightCm"), "packHeightCm", errors, { min: 0 }),
       packGrossWeightKg: numberCell(row, headers.get("packGrossWeightKg"), "packGrossWeightKg", errors, { min: 0 }),
+      containerQty: numberCell(row, headers.get("containerQty"), "containerQty", errors, { integer: true, min: 1 }),
+      containerGrossWeightKg: numberCell(row, headers.get("containerGrossWeightKg"), "containerGrossWeightKg", errors, { min: 0.001 }),
       supplierProductName: textAt("supplierProductName") || null,
       materialText: textAt("materialText") || null,
       certificates: textAt("certificates") || null,
@@ -705,6 +715,12 @@ export async function POST(request: Request) {
           packGrossWeightKg: hasColumn("packGrossWeightKg")
             ? row.packGrossWeightKg
             : existing?.packGrossWeightKg ?? null,
+          containerQty: hasColumn("containerQty")
+            ? row.containerQty
+            : existing?.containerQty ?? null,
+          containerGrossWeightKg: hasColumn("containerGrossWeightKg")
+            ? row.containerGrossWeightKg
+            : existing?.containerGrossWeightKg ?? null,
           supplierProductName: hasColumn("supplierProductName")
             ? row.supplierProductName
             : existing?.supplierProductName ?? null,

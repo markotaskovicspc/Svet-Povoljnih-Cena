@@ -27,6 +27,21 @@ export type CityAutocompletePlace = SerbianPlace & {
   displayName?: string | null;
 };
 
+function normalizedPlaceName(value: string) {
+  return value.trim().toLocaleLowerCase("sr-Latn-RS");
+}
+
+export function preferExactCityMatches(
+  items: CityAutocompletePlace[],
+  query: string,
+) {
+  const normalizedQuery = normalizedPlaceName(query);
+  const exact = items.filter(
+    (item) => normalizedPlaceName(item.name) === normalizedQuery,
+  );
+  return exact.length ? exact : items;
+}
+
 interface CityAutocompleteProps {
   /** Currently typed city value (controlled). */
   value: string;
@@ -78,12 +93,14 @@ export function CityAutocomplete({
   const suggestions = useMemo<CityAutocompletePlace[]>(() => {
     const q = value.trim();
     if (q.length < minChars) return [];
-    if (strictRemote) {
-      return remoteSuggestions.query === q ? remoteSuggestions.items : [];
-    }
-    return remoteSuggestions.query === q && remoteSuggestions.items.length
+    const items = strictRemote
+      ? remoteSuggestions.query === q
+        ? remoteSuggestions.items
+        : []
+      : remoteSuggestions.query === q && remoteSuggestions.items.length
       ? remoteSuggestions.items
       : searchSerbianPlaces(value, 8);
+    return preferExactCityMatches(items, q);
   }, [remoteSuggestions, strictRemote, value, minChars]);
 
   useEffect(() => {

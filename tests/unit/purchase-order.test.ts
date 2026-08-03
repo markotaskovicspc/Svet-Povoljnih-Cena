@@ -35,6 +35,17 @@ describe("ERP module 4 purchase-order rules", () => {
   it("uses transport dimensions per item, then unit packaging, then article dimensions", () => {
     expect(
       calculateUnitLogistics({
+        containerQty: 230,
+        containerGrossWeightKg: 11_500,
+        packQty: 2,
+        packWidthCm: 100,
+        packDepthCm: 50,
+        packHeightCm: 40,
+        packGrossWeightKg: 20,
+      }),
+    ).toEqual({ volumeM3: 0.3, weightKg: 50 });
+    expect(
+      calculateUnitLogistics({
         packQty: 2,
         packWidthCm: 100,
         packDepthCm: 50,

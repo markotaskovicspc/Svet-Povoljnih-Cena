@@ -1,7 +1,7 @@
 import { HeroCarousel } from "@/components/home/hero-carousel";
 import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { SectionRail } from "@/components/home/section-rail";
-import { ProtectedPricesBand } from "@/components/home/protected-prices-band";
+import { EditorialBanner } from "@/components/home/editorial-banner";
 import { UspStrip } from "@/components/home/usp-strip";
 import {
   getActiveBanners,
@@ -31,14 +31,14 @@ export default async function Home() {
       <HomeSection section={sections[HomeSectionSlotKey.SECOND]} />
 
       {bannerAfterSecond ? (
-        <ProtectedPricesBand banner={bannerAfterSecond} compact />
+        <EditorialBanner banner={bannerAfterSecond} compact eyebrow="Izdvojena ponuda" />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.THIRD]} />
       <HomeSection section={sections[HomeSectionSlotKey.FOURTH]} />
 
       {bannerAfterFourth ? (
-        <ProtectedPricesBand banner={bannerAfterFourth} compact />
+        <EditorialBanner banner={bannerAfterFourth} compact eyebrow="Izdvojena ponuda" />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.FIFTH]} />

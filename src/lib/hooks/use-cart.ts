@@ -11,6 +11,9 @@ export interface CartLine {
   qty: number;
   unitPriceFull: number;
   unitPriceSale: number;
+  /** Loyalty offer visible to guests; payable only after customer login. */
+  unitPriceLoyalty?: number;
+  loyaltyDiscountPct?: number;
   thumbnailUrl?: string;
   withAssembly?: boolean;
   assemblyPrice?: number;
@@ -18,7 +21,14 @@ export interface CartLine {
 
 export type CartPriceUpdate = Pick<
   CartLine,
-  "sku" | "name" | "slug" | "unitPriceFull" | "unitPriceSale" | "thumbnailUrl"
+  | "sku"
+  | "name"
+  | "slug"
+  | "unitPriceFull"
+  | "unitPriceSale"
+  | "unitPriceLoyalty"
+  | "loyaltyDiscountPct"
+  | "thumbnailUrl"
 >;
 
 interface CartState {
@@ -69,6 +79,14 @@ export function normalizeCartLines(lines: unknown): CartLine[] {
       qty,
       unitPriceFull: normalizeMoney(row.unitPriceFull),
       unitPriceSale: normalizeMoney(row.unitPriceSale),
+      unitPriceLoyalty:
+        row.unitPriceLoyalty == null
+          ? undefined
+          : normalizeMoney(row.unitPriceLoyalty),
+      loyaltyDiscountPct:
+        row.loyaltyDiscountPct == null
+          ? undefined
+          : Math.max(0, Math.min(100, normalizeMoney(row.loyaltyDiscountPct))),
       thumbnailUrl:
         typeof row.thumbnailUrl === "string" ? row.thumbnailUrl : undefined,
       withAssembly: Boolean(row.withAssembly),
@@ -99,6 +117,8 @@ export function repriceCartLines(
       line.slug === update.slug &&
       line.unitPriceFull === update.unitPriceFull &&
       line.unitPriceSale === update.unitPriceSale &&
+      line.unitPriceLoyalty === update.unitPriceLoyalty &&
+      line.loyaltyDiscountPct === update.loyaltyDiscountPct &&
       line.thumbnailUrl === update.thumbnailUrl
     ) {
       return line;

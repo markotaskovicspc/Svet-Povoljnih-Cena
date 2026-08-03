@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
-import { effectiveUnitPrice } from "@/lib/pricing";
+import { resolveProductPriceQuote } from "@/lib/pricing";
 import { getMediaVariantUrl } from "@/lib/media";
 import type { Product } from "@/types";
 import { useCheckout } from "@/lib/checkout/store";
@@ -46,13 +46,17 @@ export function CartPricingSync() {
         const products = payloads.flatMap((payload) => payload.products ?? []);
         reprice(
           products.map((product) => {
-            const price = effectiveUnitPrice(product);
+            const quote = resolveProductPriceQuote(product, {
+              loggedIn: loyaltyEligible,
+            });
             return {
               sku: product.sku,
               name: product.name,
               slug: product.slug,
-              unitPriceFull: price.full,
-              unitPriceSale: price.effective,
+              unitPriceFull: quote.full,
+              unitPriceSale: quote.payable.effective,
+              unitPriceLoyalty: quote.loyaltyOffer?.effective,
+              loyaltyDiscountPct: quote.loyaltyOffer?.discountPct,
               thumbnailUrl:
                 getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
             };

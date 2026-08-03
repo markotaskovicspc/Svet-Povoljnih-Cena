@@ -178,7 +178,7 @@ export default async function ProductPage({ params }: RouteProps) {
 
           {/* Price block — only the effective price is emphasised. */}
           <div className="grid gap-1.5 md:grid-cols-[minmax(0,1fr)_minmax(270px,0.9fr)] md:items-end md:gap-2.5">
-            <div>
+            <div className="hidden md:block">
               <PdpPrice product={product} />
             </div>
             <PdpAddToCart product={product} variant="desktop" />

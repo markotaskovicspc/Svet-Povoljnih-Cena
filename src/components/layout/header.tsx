@@ -58,7 +58,7 @@ export function Header({
               width={1193}
               height={198}
               preload
-              className="h-auto w-[286px] max-w-[24vw] object-contain"
+              className="h-auto w-[386px] max-w-[30vw] object-contain"
             />
           </div>
         </Link>
@@ -128,7 +128,7 @@ export function Header({
               width={1193}
               height={198}
               preload
-              className="mx-auto h-auto w-[min(52vw,228px)] max-w-full object-contain"
+              className="mx-auto h-auto w-[min(60vw,308px)] max-w-full object-contain"
             />
           </div>
         </Link>

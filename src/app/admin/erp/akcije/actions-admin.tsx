@@ -4,6 +4,7 @@ import {
   useActionState,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useTransition,
 } from "react";
@@ -129,6 +130,38 @@ function maximumSalePrice(regularPrice: number) {
   return maximum > 0 ? maximum.toFixed(2) : undefined;
 }
 
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort(
+    (left, right) => left.localeCompare(right, "sr"),
+  );
+}
+
+function ActionFilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-8 rounded-lg border border-input bg-white px-2 text-sm"
+      aria-label={`Filter: ${label}`}
+    >
+      <option value="">{label}: svi</option>
+      {options.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
+  );
+}
+
 const productColumns: Array<{
   key: keyof LookupRow;
   label: string;
@@ -151,6 +184,7 @@ const productColumns: Array<{
 
 export function ActionsAdmin({
   actions,
+  referenceTime,
   initialSelectedId,
   loyaltyRules,
   linearPromotions,
@@ -158,6 +192,7 @@ export function ActionsAdmin({
   groups,
 }: {
   actions: ActionRow[];
+  referenceTime: number;
   initialSelectedId?: string;
   loyaltyRules: LoyaltyRuleRow[];
   linearPromotions: LinearPromotionRow[];
@@ -172,6 +207,28 @@ export function ActionsAdmin({
   const [creating, setCreating] = useState(actions.length === 0);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [actionNotice, setActionNotice] = useState<MutationState | null>(null);
+  const [actionQuery, setActionQuery] = useState("");
+  const [actionKind, setActionKind] = useState("");
+  const [actionStatus, setActionStatus] = useState("");
+  const filteredActions = useMemo(() => {
+    const query = actionQuery.trim().toLocaleLowerCase("sr-Latn-RS");
+    return actions.filter((action) => {
+      if (query && !action.name.toLocaleLowerCase("sr-Latn-RS").includes(query)) return false;
+      if (actionKind && action.kind !== actionKind) return false;
+      if (actionStatus) {
+        const start = new Date(action.startsAt).getTime();
+        const end = new Date(action.endsAt).getTime();
+        const status =
+          start > referenceTime
+            ? "upcoming"
+            : end < referenceTime
+              ? "expired"
+              : "active";
+        if (status !== actionStatus) return false;
+      }
+      return true;
+    });
+  }, [actionKind, actionQuery, actionStatus, actions, referenceTime]);
   const selected =
     actions.find((action) => action.id === selectedId) ?? actions[0];
 
@@ -204,16 +261,17 @@ export function ActionsAdmin({
     <div className="space-y-6 px-4 py-6 sm:px-8">
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(560px,1.1fr)]">
         <Card className="max-h-[calc(100vh-11rem)] overflow-y-auto p-0">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-4 py-3">
-            <div>
+          <div className="sticky top-0 z-10 border-b border-border bg-white px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
               <p className="font-display text-lg font-semibold text-ink-900">
                 Lista akcija
               </p>
               <p className="text-xs text-ink-500">
                 Klik bira akciju; dugme Otvori prikazuje njene artikle.
               </p>
-            </div>
-            <Button
+              </div>
+              <Button
               type="button"
               size="sm"
               onClick={() => {
@@ -224,7 +282,38 @@ export function ActionsAdmin({
             >
               <Plus className="size-4" />
               Nova akcija
-            </Button>
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Input
+                value={actionQuery}
+                onChange={(event) => setActionQuery(event.target.value)}
+                placeholder="Pretraži naziv akcije"
+                aria-label="Pretraži akcije"
+              />
+              <select
+                value={actionKind}
+                onChange={(event) => setActionKind(event.target.value)}
+                className="h-8 rounded-lg border border-input bg-white px-2 text-sm"
+                aria-label="Filter po tipu akcije"
+              >
+                <option value="">Svi tipovi</option>
+                {Object.entries(kindLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <select
+                value={actionStatus}
+                onChange={(event) => setActionStatus(event.target.value)}
+                className="h-8 rounded-lg border border-input bg-white px-2 text-sm"
+                aria-label="Filter po statusu akcije"
+              >
+                <option value="">Svi statusi</option>
+                <option value="active">Aktivne</option>
+                <option value="upcoming">Predstojeće</option>
+                <option value="expired">Završene</option>
+              </select>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -239,7 +328,7 @@ export function ActionsAdmin({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {actions.map((action) => (
+                {filteredActions.map((action) => (
                   <tr
                     key={action.id}
                     tabIndex={0}
@@ -297,10 +386,10 @@ export function ActionsAdmin({
                     </td>
                   </tr>
                 ))}
-                {!actions.length ? (
+                {!filteredActions.length ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-ink-500">
-                      Nema akcija. Kreirajte prvu akciju.
+                      Nema akcija koje odgovaraju izabranim filterima.
                     </td>
                   </tr>
                 ) : null}
@@ -517,11 +606,57 @@ function ActionProductsDialog({
   const [addIsHero, setAddIsHero] = useState(false);
   const [lookupMessage, setLookupMessage] = useState("");
   const [productNotice, setProductNotice] = useState<MutationState | null>(null);
+  const [productQuery, setProductQuery] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [productSort, setProductSort] = useState("sku-asc");
   const [isLookingUp, startLookup] = useTransition();
   const [addState, addFormAction] = useActionState(
     saveActionProduct,
     emptyMutationState(),
   );
+  const productFilterOptions = useMemo(
+    () => ({
+      suppliers: uniqueValues(action.products.map((product) => product.supplier)),
+      categories: uniqueValues(action.products.map((product) => product.category)),
+      groups: uniqueValues(action.products.map((product) => product.group)),
+    }),
+    [action.products],
+  );
+  const filteredProducts = useMemo(() => {
+    const query = productQuery.trim().toLocaleLowerCase("sr-Latn-RS");
+    return action.products
+      .filter((product) => {
+        if (
+          query &&
+          ![product.sku, product.shortName, product.shortDescription]
+            .join(" ")
+            .toLocaleLowerCase("sr-Latn-RS")
+            .includes(query)
+        ) return false;
+        if (supplierFilter && product.supplier !== supplierFilter) return false;
+        if (categoryFilter && product.category !== categoryFilter) return false;
+        if (groupFilter && product.group !== groupFilter) return false;
+        return true;
+      })
+      .sort((left, right) => {
+        switch (productSort) {
+          case "sku-desc":
+            return right.sku.localeCompare(left.sku, "sr", { numeric: true });
+          case "name-asc":
+            return left.shortName.localeCompare(right.shortName, "sr");
+          case "name-desc":
+            return right.shortName.localeCompare(left.shortName, "sr");
+          case "price-asc":
+            return left.validMpPrice - right.validMpPrice;
+          case "price-desc":
+            return right.validMpPrice - left.validMpPrice;
+          default:
+            return left.sku.localeCompare(right.sku, "sr", { numeric: true });
+        }
+      });
+  }, [action.products, categoryFilter, groupFilter, productQuery, productSort, supplierFilter]);
 
   const reportProductMutation = useCallback((state: MutationState) => {
     setProductNotice(state);
@@ -558,6 +693,45 @@ function ActionProductsDialog({
             state={productNotice ?? (addState.message ? addState : null)}
             compact
           />
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <Input
+              value={productQuery}
+              onChange={(event) => setProductQuery(event.target.value)}
+              placeholder="Naziv ili SKU"
+              aria-label="Pretraži artikle akcije"
+            />
+            <ActionFilterSelect
+              label="Dobavljač"
+              value={supplierFilter}
+              onChange={setSupplierFilter}
+              options={productFilterOptions.suppliers}
+            />
+            <ActionFilterSelect
+              label="Kategorija"
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={productFilterOptions.categories}
+            />
+            <ActionFilterSelect
+              label="Grupa"
+              value={groupFilter}
+              onChange={setGroupFilter}
+              options={productFilterOptions.groups}
+            />
+            <select
+              value={productSort}
+              onChange={(event) => setProductSort(event.target.value)}
+              className="h-8 rounded-lg border border-input bg-white px-2 text-sm"
+              aria-label="Sortiranje artikala akcije"
+            >
+              <option value="sku-asc">SKU rastuće</option>
+              <option value="sku-desc">SKU opadajuće</option>
+              <option value="name-asc">Naziv A–Š</option>
+              <option value="name-desc">Naziv Š–A</option>
+              <option value="price-asc">Cena rastuće</option>
+              <option value="price-desc">Cena opadajuće</option>
+            </select>
+          </div>
         </DialogHeader>
         <div className="min-h-0 overflow-auto">
           <table
@@ -708,7 +882,7 @@ function ActionProductsDialog({
                   </form>
                 </td>
               </tr>
-              {action.products.map((product, index) => {
+              {filteredProducts.map((product, index) => {
                 const saveFormId = `save-action-product-${index}`;
                 return (
                   <tr key={product.productId} className="align-top hover:bg-muted-bg/50">
@@ -775,13 +949,15 @@ function ActionProductsDialog({
                   </tr>
                 );
               })}
-              {!action.products.length ? (
+              {!filteredProducts.length ? (
                 <tr>
                   <td
                     colSpan={action.isPermanent ? 16 : 18}
                     className="px-4 py-10 text-center text-sm text-ink-500"
                   >
-                    Akcija još nema artikle. Unesite prvu šifru u plavom redu.
+                    {action.products.length
+                      ? "Nema artikala koji odgovaraju izabranim filterima."
+                      : "Akcija još nema artikle. Unesite prvu šifru u plavom redu."}
                   </td>
                 </tr>
               ) : null}

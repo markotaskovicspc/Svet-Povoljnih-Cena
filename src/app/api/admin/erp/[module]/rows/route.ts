@@ -63,7 +63,7 @@ export async function GET(
     sorting.length === 0;
   const [erpModule, databaseTotal] = await Promise.all([
     getErpModule(slug, {
-      take: useDatabasePagination ? pageSize : 10_000,
+      take: useDatabasePagination ? pageSize : 500_000,
       skip: useDatabasePagination ? start : 0,
       warehouseId: search.get("warehouseId"),
       includeLookupOptions: false,

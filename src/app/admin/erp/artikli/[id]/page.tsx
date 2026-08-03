@@ -122,6 +122,8 @@ const overrideSchema = z.object({
   packDepthCm: optionalNonnegativeNumber(),
   packHeightCm: optionalNonnegativeNumber(),
   packGrossWeightKg: optionalNonnegativeNumber(),
+  containerQty: optionalPositiveInteger(),
+  containerGrossWeightKg: optionalPositiveNumber(),
   customsRate: optionalNonnegativeNumber(),
   supplierProductName: z.string().max(500).optional().nullable(),
   materialText: z.string().max(5000).optional().nullable(),
@@ -150,6 +152,20 @@ function optionalNonnegativeNumber() {
     ])
     .nullable()
     .optional();
+}
+
+function optionalPositiveNumber() {
+  return z.union([
+    z.coerce.number().positive(),
+    z.literal("").transform(() => null),
+  ]).optional().nullable();
+}
+
+function optionalPositiveInteger() {
+  return z.union([
+    z.coerce.number().int().positive(),
+    z.literal("").transform(() => null),
+  ]).optional().nullable();
 }
 
 function optionalNonnegativeInteger() {
@@ -306,6 +322,8 @@ function changedManualGroups(
         "unitPackWidthCm",
         "unitPackDepthCm",
         "unitPackHeightCm",
+        "containerQty",
+        "containerGrossWeightKg",
       ],
     ],
     ["delivery", ["allowsAssembly"]],
@@ -387,6 +405,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           packDepthCm: d.packDepthCm ?? null,
           packHeightCm: d.packHeightCm ?? null,
           packGrossWeightKg: d.packGrossWeightKg ?? null,
+          containerQty: d.containerQty ?? null,
+          containerGrossWeightKg: d.containerGrossWeightKg ?? null,
           customsRate: d.customsRate ?? null,
           supplierProductName: d.supplierProductName?.trim() || null,
           materialText: d.materialText?.trim() || null,
@@ -677,47 +697,71 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
       }
       const { productId, alt, thumbUrl, cardUrl, pdpUrl } = parsed.data;
-      const file = formData.get("file");
-      let url = parsed.data.url?.trim() || "";
-      if (file instanceof File && file.size > 0) {
-        try {
-          url = await uploadProductImage(productId, file);
-        } catch (err) {
-          return {
-            ok: false as const,
-            error: err instanceof Error ? err.message : "Upload fotografije nije uspeo.",
-          };
-        }
+      const files = formData
+        .getAll("files")
+        .filter((value): value is File => value instanceof File && value.size > 0);
+      if (files.length > 10) {
+        return { ok: false as const, error: "Možete dodati najviše 10 fotografija odjednom." };
       }
-      if (!url) {
+      const remoteUrl = parsed.data.url?.trim() || "";
+      if (!files.length && !remoteUrl) {
         return { ok: false as const, error: "Dodajte URL ili upload fotografiju." };
       }
+
+      const uploadedKeys: string[] = [];
+      try {
+        for (const file of files) {
+          uploadedKeys.push(await uploadProductImage(productId, file));
+        }
+      } catch (err) {
+        if (uploadedKeys.length) {
+          await createAdminClient().storage.from(getProductMediaBucket()).remove(uploadedKeys);
+        }
+        return {
+          ok: false as const,
+          error: err instanceof Error ? err.message : "Upload fotografija nije uspeo.",
+        };
+      }
+
+      const mediaRows = uploadedKeys.length
+        ? uploadedKeys.map((url) => ({ url, thumbUrl: null, cardUrl: null, pdpUrl: null }))
+        : [{
+            url: remoteUrl,
+            thumbUrl: thumbUrl?.trim() || null,
+            cardUrl: cardUrl?.trim() || null,
+            pdpUrl: pdpUrl?.trim() || null,
+          }];
       const last = await db.productMedia.aggregate({
         where: { productId },
         _max: { order: true },
       });
-      const media = await db.$transaction(async (tx) => {
-        const created = await tx.productMedia.create({
-          data: {
-            productId,
-            url,
-            thumbUrl: thumbUrl?.trim() || null,
-            cardUrl: cardUrl?.trim() || null,
-            pdpUrl: pdpUrl?.trim() || null,
-            alt: alt?.trim() || null,
-            order: (last._max.order ?? -1) + 1,
-          },
-          select: { id: true },
+      try {
+        await db.$transaction(async (tx) => {
+          await tx.productMedia.createMany({
+            data: mediaRows.map((row, index) => ({
+              productId,
+              ...row,
+              alt: alt?.trim() || null,
+              order: (last._max.order ?? -1) + 1 + index,
+            })),
+          });
+          await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
         });
-        await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
-        return created;
-      });
+      } catch (error) {
+        if (uploadedKeys.length) {
+          await createAdminClient().storage.from(getProductMediaBucket()).remove(uploadedKeys);
+        }
+        throw error;
+      }
       await revalidateProductSurfaces(productId);
       return {
         ok: true as const,
-        entityId: media.id,
-        diff: { productId, url },
-        message: "Fotografija je dodata.",
+        entityId: productId,
+        diff: { productId, urls: mediaRows.map((row) => row.url) },
+        message:
+          mediaRows.length === 1
+            ? "Fotografija je dodata."
+            : `${mediaRows.length} fotografija je dodato.`,
       };
     },
   )(formData);
@@ -1533,7 +1577,7 @@ export default async function ProductDetail({
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Transportno pakovanje
               </legend>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
                 <Field label="Kom/pak">
                   <Input name="packQty" type="number" min={0} defaultValue={product.packQty ?? ""} />
                 </Field>
@@ -1548,6 +1592,12 @@ export default async function ProductDetail({
                 </Field>
                 <Field label="Bruto kg">
                   <Input name="packGrossWeightKg" type="number" min={0} step="0.001" defaultValue={product.packGrossWeightKg ? num(product.packGrossWeightKg) : ""} />
+                </Field>
+                <Field label="Količina za ceo kontejner">
+                  <Input name="containerQty" type="number" min={1} step={1} defaultValue={product.containerQty ?? ""} />
+                </Field>
+                <Field label="Bruto kg za ceo kontejner">
+                  <Input name="containerGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={product.containerGrossWeightKg ? num(product.containerGrossWeightKg) : ""} />
                 </Field>
               </div>
             </fieldset>
@@ -1836,8 +1886,11 @@ export default async function ProductDetail({
               className="mt-4 space-y-3"
             >
               <input type="hidden" name="productId" value={product.id} />
-              <Field label="Upload fotografije">
-                <Input name="file" type="file" accept="image/*" />
+              <Field label="Upload fotografija">
+                <Input name="files" type="file" accept="image/*" multiple />
+                <p className="mt-1 text-xs text-ink-500">
+                  Možete izabrati do 10 fotografija odjednom; redosled izbora postaje redosled galerije.
+                </p>
               </Field>
               <Field label="URL fotografije">
                 <Input name="url" placeholder="https://... ili /putanja/slika.jpg" />

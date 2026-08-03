@@ -79,7 +79,7 @@ export function DesktopMenu({
         <SheetHeader className="shrink-0 border-b border-border bg-white px-5 py-4 sm:px-6">
           <div className="flex min-h-10 items-center pr-12">
             <Link href="/" aria-label={`${BRAND.name} - početna`} onClick={close}>
-              <BrandLogo className="w-[156px]" />
+              <BrandLogo className="w-[211px]" />
             </Link>
             <SheetTitle className="sr-only">Meni</SheetTitle>
           </div>

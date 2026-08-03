@@ -303,6 +303,11 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               ))}
             </div>
           ) : null}
+          {slides.length > 1 ? (
+            <span className="absolute right-3 bottom-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+              {activeIndex + 1}/{slides.length}
+            </span>
+          ) : null}
         </div>
         <div className="relative hidden md:block">
           <div
@@ -421,6 +426,9 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   />
                 ))}
               </div>
+              <span className="absolute right-4 bottom-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+                {activeIndex + 1}/{slides.length}
+              </span>
             </>
           ) : null}
         </div>
@@ -441,7 +449,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
         <ul
           ref={thumbTrackRef}
           onScroll={updateThumbOverflow}
-          className="flex max-h-[432px] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex max-h-[448px] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
           aria-label="Galerija proizvoda"
         >
@@ -464,7 +472,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   onFocus={() => goTo(i)}
                   onClick={() => goTo(i)}
                   className={cn(
-                    "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-16 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:size-20",
+                    "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-14 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none",
                     isActive && "ring-walnut ring-2",
                   )}
                 >
@@ -473,7 +481,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                       src={getMediaVariantUrl(s.asset, "thumb")}
                       alt=""
                       fill
-                      sizes="80px"
+                      sizes="56px"
                       onError={() => markImageFailed(s.asset.url)}
                       className="object-contain p-1"
                     />

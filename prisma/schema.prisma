@@ -372,6 +372,10 @@ model Product {
   packDepthCm         Decimal?  @db.Decimal(8, 2)
   packHeightCm        Decimal?  @db.Decimal(8, 2)
   packGrossWeightKg   Decimal?  @db.Decimal(10, 3)
+  /// Quantity of sellable units that fills one standard 69 m³ container.
+  containerQty           Int?
+  /// Gross weight of one full container, used for proportional PO logistics.
+  containerGrossWeightKg Decimal? @db.Decimal(12, 3)
   supplierProductName String?
   materialText        String?   @db.Text
   hsCode              String?

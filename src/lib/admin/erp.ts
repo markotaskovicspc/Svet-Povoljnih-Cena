@@ -235,6 +235,8 @@ const articleColumns: ErpColumn[] = [
   { key: "packHeightCm", label: "Transport. visina", type: "number", align: "right" },
   { key: "packVolumeM3", label: "Transport. m3", type: "number", align: "right" },
   { key: "packGrossWeightKg", label: "Transport. bruto kg", type: "number", align: "right" },
+  { key: "containerQty", label: "Količina / kontejner", type: "number", align: "right" },
+  { key: "containerGrossWeightKg", label: "Kontejner bruto kg", type: "number", align: "right" },
   { key: "lastPurchasePrice", label: "Posl. nabavna", type: "money", align: "right" },
   { key: "lastPurchaseCurrency", label: "Valuta nabavne" },
   { key: "supplierName", label: "Dobavljačev naziv" },
@@ -450,6 +452,8 @@ const coreErpModules: ErpModule[] = [
       "packDepthCm",
       "packHeightCm",
       "packGrossWeightKg",
+      "containerQty",
+      "containerGrossWeightKg",
       "supplierName",
       "barcode",
       "hsCode",
@@ -865,7 +869,7 @@ export async function getErpModule(
         blockedReason: pickupAvailability.reason ?? undefined,
       }
     : definition;
-  const take = Math.max(1, Math.min(options.take ?? 100, 10_000));
+  const take = Math.max(1, Math.min(options.take ?? 100, 500_000));
   const skip = Math.max(0, options.skip ?? 0);
   const includeLookupOptions = options.includeLookupOptions !== false;
   const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
@@ -1099,6 +1103,8 @@ async function getArticleRows(
       packDepthCm: true,
       packHeightCm: true,
       packGrossWeightKg: true,
+      containerQty: true,
+      containerGrossWeightKg: true,
       supplierProductName: true,
       materialText: true,
       hsCode: true,
@@ -1304,6 +1310,8 @@ async function getArticleRows(
         packHeightCm: packHeight,
         packVolumeM3: packVolume,
         packGrossWeightKg: asNumber(product.packGrossWeightKg),
+        containerQty: product.containerQty,
+        containerGrossWeightKg: asNumber(product.containerGrossWeightKg),
         lastPurchasePrice: lastPurchase ? asNumber(lastPurchase.price) : null,
         lastPurchaseCurrency: lastPurchase?.currency ?? null,
         supplierName: product.supplierProductName ?? product.supplier?.name ?? null,

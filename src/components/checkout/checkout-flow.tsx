@@ -37,7 +37,7 @@ import type {
 import { CheckoutStepper } from "./checkout-stepper";
 import { IdentityStep } from "./identity-step";
 import { ShippingForm } from "./shipping-form";
-import { ShippingMethodStep } from "./shipping-method";
+import { AutomaticDeliverySection } from "./shipping-method";
 import { VoucherSection } from "./voucher-section";
 import { PaymentMethodStep } from "./payment-method";
 import { NotesConsent } from "./notes-consent";
@@ -103,14 +103,6 @@ type CreateOrderApiResponse =
       };
     }
   | { ok: false; error?: { code?: string; reason?: string; sku?: string } };
-
-const STEP_ORDER: CheckoutStep[] = [
-  "identity",
-  "shipping",
-  "method",
-  "payment",
-  "review",
-];
 
 const STEP_TITLES: Record<CheckoutStep, string> = {
   identity: "Kako želite da nastavite?",
@@ -206,6 +198,13 @@ export function CheckoutFlow({
     name: "perItemAssembly",
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
+  const stepOrder = useMemo<CheckoutStep[]>(
+    () =>
+      isAuthenticatedCustomer
+        ? ["shipping", "payment", "review"]
+        : ["identity", "shipping", "payment", "review"],
+    [isAuthenticatedCustomer],
+  );
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -318,7 +317,12 @@ export function CheckoutFlow({
     if (!isAuthenticatedCustomer) return;
     setIdentity("login");
     methods.setValue("identity", "login", { shouldDirty: false });
-  }, [isAuthenticatedCustomer, methods, setIdentity]);
+    if (step === "identity") setStep("shipping");
+  }, [isAuthenticatedCustomer, methods, setIdentity, setStep, step]);
+
+  useEffect(() => {
+    if (step === "method") setStep("payment");
+  }, [setStep, step]);
 
   useEffect(() => {
     const remembered = readRememberedCheckout();
@@ -350,7 +354,7 @@ export function CheckoutFlow({
     );
   }, [formState.dirtyFields.shipping, getValues, initialCustomer, setValue]);
 
-  const stepIndex = STEP_ORDER.indexOf(step);
+  const stepIndex = stepOrder.indexOf(step);
   const isCompactDesktopStep = step === "shipping" || step === "payment";
   const lastHistoryStep = useRef<CheckoutStep>(step);
 
@@ -365,16 +369,16 @@ export function CheckoutFlow({
     if (typeof window === "undefined") return;
     const onPopState = () => {
       const current = useCheckout.getState().step;
-      const currentIndex = STEP_ORDER.indexOf(current);
+      const currentIndex = stepOrder.indexOf(current);
       if (currentIndex > 0) {
-        const previous = STEP_ORDER[currentIndex - 1]!;
+        const previous = stepOrder[currentIndex - 1]!;
         lastHistoryStep.current = previous;
         setStep(previous);
       }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [setStep]);
+  }, [setStep, stepOrder]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -399,15 +403,15 @@ export function CheckoutFlow({
         return;
       }
       if (step === "shipping") rememberCheckoutFields(getValues());
-      const i = STEP_ORDER.indexOf(step);
-      if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1]!);
+      const i = stepOrder.indexOf(step);
+      if (i < stepOrder.length - 1) setStep(stepOrder[i + 1]!);
     } finally {
       setIsAdvancing(false);
     }
   };
   const prev = () => {
-    const i = STEP_ORDER.indexOf(step);
-    if (i > 0) setStep(STEP_ORDER[i - 1]!);
+    const i = stepOrder.indexOf(step);
+    if (i > 0) setStep(stepOrder[i - 1]!);
   };
 
   const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
@@ -444,7 +448,7 @@ export function CheckoutFlow({
     setLastOrder(order);
     clearCart();
     clearCheckoutSessionId();
-    setStep("identity"); // ready for next purchase
+    setStep(isAuthenticatedCustomer ? "shipping" : "identity");
     const accessQuery = `?token=${encodeURIComponent(result.data.accessToken)}`;
     if (data.paymentMethod === "ips") {
       router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}${accessQuery}`);
@@ -498,7 +502,7 @@ export function CheckoutFlow({
             step === "review" && "lg:p-5",
           )}
         >
-          <CheckoutStepper activeStep={step} />
+          <CheckoutStepper activeStep={step} steps={stepOrder} />
 
           <div
             className={cn(
@@ -546,19 +550,19 @@ export function CheckoutFlow({
                     />
                   ) : null}
                   {step === "shipping" ? (
-                    <ShippingForm xExpressAddressEnabled={xExpressAddressEnabled} />
-                  ) : null}
-                  {step === "method" ? (
                     <div className="flex flex-col gap-5">
-                      <ShippingMethodStep
+                      <ShippingForm xExpressAddressEnabled={xExpressAddressEnabled} />
+                      <AutomaticDeliverySection
                         deliveryQuote={deliveryQuote}
                         glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
                       />
-                      <VoucherSection />
                     </div>
                   ) : null}
                   {step === "payment" ? (
-                    <PaymentMethodStep methods={checkoutConfig.paymentMethods} />
+                    <div className="flex flex-col gap-5">
+                      <PaymentMethodStep methods={checkoutConfig.paymentMethods} />
+                      <VoucherSection />
+                    </div>
                   ) : null}
                   {step === "review" ? (
                     <ReviewStep

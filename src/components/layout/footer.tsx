@@ -25,6 +25,13 @@ const LOCKED_LINK_ORDER: Record<string, number> = {
   "/brisanje-podataka": 50,
 };
 
+const REQUIRED_SERVICE_LINKS = new Set([
+  "/kontakt",
+  "/pomoc",
+  "/servis",
+  "/komentari",
+]);
+
 export async function Footer() {
   const cmsFooter = await getCmsFooterState();
   const resolvedFooterColumns = cmsFooter
@@ -39,7 +46,9 @@ export async function Footer() {
 
         const lockedLinks = column.links
           .filter(
-            (link) => !cmsFooter.managedSlugs.has(link.href.replace(/^\//, "")),
+            (link) =>
+              REQUIRED_SERVICE_LINKS.has(link.href) ||
+              !cmsFooter.managedSlugs.has(link.href.replace(/^\//, "")),
           )
           .map((link) => ({
             ...link,
@@ -55,7 +64,11 @@ export async function Footer() {
 
         return {
           ...column,
-          links: [...lockedLinks, ...cmsLinks]
+          links: Array.from(
+            new Map(
+              [...lockedLinks, ...cmsLinks].map((link) => [link.href, link]),
+            ).values(),
+          )
             .sort(
               (left, right) =>
                 left.order - right.order || left.label.localeCompare(right.label, "sr"),

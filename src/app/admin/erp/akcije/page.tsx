@@ -20,7 +20,15 @@ export default async function ActionsPage({
 }) {
   await requireAdminAction(["CONTENT"]);
   const params = await searchParams;
-  const [actions, loyaltyRules, linearPromotions, categories, groups, erpModule] =
+  const [
+    actions,
+    loyaltyRules,
+    linearPromotions,
+    categories,
+    groups,
+    erpModule,
+    databaseClock,
+  ] =
     await Promise.all([
       db.action.findMany({
         orderBy: [{ priority: "desc" }, { startsAt: "desc" }],
@@ -70,6 +78,7 @@ export default async function ActionsPage({
         select: { id: true, name: true },
       }),
       getErpModule("akcije", { take: 10_000 }),
+      db.$queryRaw<Array<{ now: Date }>>`SELECT NOW() AS "now"`,
     ]);
 
   const productIds = Array.from(
@@ -190,6 +199,7 @@ export default async function ActionsPage({
       ) : null}
       <ActionsAdmin
         actions={actionRows}
+        referenceTime={databaseClock[0]!.now.getTime()}
         initialSelectedId={params.edit}
         loyaltyRules={loyaltyRules.map((rule) => ({
           id: rule.id,

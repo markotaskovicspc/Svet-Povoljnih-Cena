@@ -21,6 +21,8 @@ import {
 import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import { resolveProductPriceQuote } from "@/lib/pricing";
+import { formatRsd } from "@/lib/format";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -58,6 +60,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
   );
   const availability = liveAvailability ?? getProductAvailability(product);
   const availabilityMessage = getPdpAvailabilityMessage(product, availability);
+  const priceQuote = resolveProductPriceQuote(pricingProduct);
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
@@ -177,6 +180,18 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
             aria-hidden
           />
         </button>
+        <div className="min-w-[88px] shrink-0">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
+            {priceQuote.payable.kind === "loyalty"
+              ? "Loyalty cena"
+              : priceQuote.actionOffer
+                ? "Akcijska cena"
+                : "Cena"}
+          </p>
+          <p className="text-base leading-tight font-black whitespace-nowrap text-ink-900">
+            {formatRsd(priceQuote.payable.effective)}
+          </p>
+        </div>
         {ctas}
       </div>
     </div>

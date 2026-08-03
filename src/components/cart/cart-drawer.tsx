@@ -106,11 +106,7 @@ export function CartDrawer() {
               </Link>
               <Link
                 href="/checkout"
-                onClick={(e) => {
-                  e.preventDefault();
-                  close();
-                  openSuggestion("/checkout");
-                }}
+                onClick={close}
                 className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
               >
                 Plati

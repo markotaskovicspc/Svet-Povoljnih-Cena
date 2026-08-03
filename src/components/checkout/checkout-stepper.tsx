@@ -5,19 +5,22 @@ import { useCheckout, type CheckoutStep } from "@/lib/checkout/store";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 
-const STEPS: { id: CheckoutStep; label: string; index: number }[] = [
-  { id: "identity", label: "Identifikacija", index: 1 },
-  { id: "shipping", label: "Podaci za isporuku", index: 2 },
-  { id: "method", label: "Način isporuke", index: 3 },
-  { id: "payment", label: "Plaćanje", index: 4 },
-  { id: "review", label: "Potvrda", index: 5 },
-];
+const STEP_LABELS: Partial<Record<CheckoutStep, string>> = {
+  identity: "Identifikacija",
+  shipping: "Podaci za isporuku",
+  payment: "Plaćanje",
+  review: "Potvrda",
+};
 
-const ORDER: CheckoutStep[] = STEPS.map((s) => s.id);
-
-export function CheckoutStepper({ activeStep }: { activeStep: CheckoutStep }) {
+export function CheckoutStepper({
+  activeStep,
+  steps,
+}: {
+  activeStep: CheckoutStep;
+  steps: CheckoutStep[];
+}) {
   const setStep = useCheckout((s) => s.setStep);
-  const activeIndex = ORDER.indexOf(activeStep);
+  const activeIndex = steps.indexOf(activeStep);
 
   // Keep store in sync if parent forces a step.
   useEffect(() => {
@@ -27,12 +30,12 @@ export function CheckoutStepper({ activeStep }: { activeStep: CheckoutStep }) {
   return (
     <nav aria-label="Koraci naplate" className="w-full">
       <ol className="flex items-center justify-between gap-2 overflow-x-auto sm:gap-4">
-        {STEPS.map((s, i) => {
+        {steps.map((stepId, i) => {
           const completed = i < activeIndex;
           const current = i === activeIndex;
           return (
             <li
-              key={s.id}
+              key={stepId}
               className="flex min-w-0 flex-1 items-center gap-2"
               aria-current={current ? "step" : undefined}
             >
@@ -47,7 +50,7 @@ export function CheckoutStepper({ activeStep }: { activeStep: CheckoutStep }) {
                 )}
                 aria-hidden
               >
-                {completed ? <Check className="size-3.5" /> : s.index}
+                {completed ? <Check className="size-3.5" /> : i + 1}
               </span>
               <span
                 className={cn(
@@ -59,9 +62,9 @@ export function CheckoutStepper({ activeStep }: { activeStep: CheckoutStep }) {
                       : "text-ink-500",
                 )}
               >
-                {s.label}
+                {STEP_LABELS[stepId]}
               </span>
-              {i < STEPS.length - 1 ? (
+              {i < steps.length - 1 ? (
                 <span
                   aria-hidden
                   className={cn(

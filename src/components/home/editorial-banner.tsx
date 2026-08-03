@@ -6,14 +6,26 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import type { Banner } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface EditorialBannerProps {
   banner: Banner;
+  compact?: boolean;
+  eyebrow?: string;
 }
 
-export function EditorialBanner({ banner }: EditorialBannerProps) {
+export function EditorialBanner({
+  banner,
+  compact = false,
+  eyebrow = "Kolekcija meseca",
+}: EditorialBannerProps) {
   return (
-    <section className="mx-auto w-full max-w-[var(--container-page)] px-2 py-12 sm:px-3 md:px-4 md:py-20">
+    <section
+      className={cn(
+        "mx-auto w-full max-w-[var(--container-page)] px-2 sm:px-3 md:px-4",
+        compact ? "py-4 md:py-5" : "py-12 md:py-20",
+      )}
+    >
       <motion.article
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -23,11 +35,18 @@ export function EditorialBanner({ banner }: EditorialBannerProps) {
       >
         <div className="relative aspect-[16/7] min-h-[160px] w-full md:aspect-[24/7] md:min-h-0">
           <Image
+            src={(banner.imageMobile ?? banner.imageDesktop).url}
+            alt={(banner.imageMobile ?? banner.imageDesktop).alt ?? banner.title}
+            fill
+            sizes="calc(100vw - 16px)"
+            className="object-cover opacity-80 md:hidden"
+          />
+          <Image
             src={banner.imageDesktop.url}
             alt={banner.imageDesktop.alt ?? banner.title}
             fill
             sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
-            className="object-cover opacity-80"
+            className="hidden object-cover opacity-80 md:block"
           />
           <div
             aria-hidden
@@ -37,7 +56,7 @@ export function EditorialBanner({ banner }: EditorialBannerProps) {
         <div className="relative flex items-start bg-ink-900 px-5 py-6 md:absolute md:inset-0 md:items-center md:bg-transparent md:px-0 md:py-0">
           <div className="max-w-xl md:px-12">
             <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
-              Kolekcija meseca
+              {eyebrow}
             </p>
             <h2 className="font-display mt-2 text-2xl leading-tight md:mt-3 md:text-5xl md:leading-[1.1]">
               {banner.title}

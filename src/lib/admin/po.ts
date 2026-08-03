@@ -119,6 +119,8 @@ export async function addPurchaseOrderItem(input: {
       packDepthCm: true,
       packHeightCm: true,
       packGrossWeightKg: true,
+      containerQty: true,
+      containerGrossWeightKg: true,
       fullPrice: true,
       customsRate: true,
       moq: true,
@@ -182,6 +184,8 @@ export async function addPurchaseOrderItem(input: {
   }
 
   const logistics = calculateUnitLogistics({
+    containerQty: product.containerQty,
+    containerGrossWeightKg: Number(product.containerGrossWeightKg ?? 0),
     packQty: product.packQty,
     widthCm: Number(product.widthCm ?? 0),
     depthCm: Number(product.depthCm ?? 0),
@@ -310,6 +314,8 @@ export async function updatePurchaseOrderItem(input: {
           packDepthCm: true,
           packHeightCm: true,
           packGrossWeightKg: true,
+          containerQty: true,
+          containerGrossWeightKg: true,
         },
       },
     },
@@ -319,6 +325,8 @@ export async function updatePurchaseOrderItem(input: {
     throw new Error("Stavke proknjižene porudžbenice se ne mogu menjati.");
   }
   const logistics = calculateUnitLogistics({
+    containerQty: item.product?.containerQty,
+    containerGrossWeightKg: Number(item.product?.containerGrossWeightKg ?? 0),
     packQty: item.product?.packQty,
     widthCm: Number(item.product?.widthCm ?? 0),
     depthCm: Number(item.product?.depthCm ?? 0),

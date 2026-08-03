@@ -251,34 +251,6 @@ function operatorsFor(column: ErpColumn): AdminGridFilter["operator"][] {
   return ["contains", "equals", "not_equals"];
 }
 
-function matchesFilter(value: ErpValue, filter: AdminGridFilter) {
-  const actualText = textValue(value).trim().toLowerCase();
-  const expectedText = filter.value.trim().toLowerCase();
-  if (!expectedText) return true;
-  const actualNumber = Number(actualText.replace(",", "."));
-  const expectedNumber = Number(expectedText.replace(",", "."));
-  switch (filter.operator) {
-    case "contains":
-      return actualText.includes(expectedText);
-    case "equals":
-      return actualText === expectedText;
-    case "not_equals":
-      return actualText !== expectedText;
-    case "gt":
-      return actualNumber > expectedNumber;
-    case "gte":
-      return actualNumber >= expectedNumber;
-    case "lt":
-      return actualNumber < expectedNumber;
-    case "lte":
-      return actualNumber <= expectedNumber;
-    case "before":
-      return new Date(actualText).getTime() < new Date(expectedText).getTime();
-    case "after":
-      return new Date(actualText).getTime() > new Date(expectedText).getTime();
-  }
-}
-
 const EMPTY_FIXED_FILTERS: AdminGridFilter[] = [];
 
 export function ErpGrid({
@@ -506,39 +478,9 @@ export function ErpGrid({
     return configuredOptions;
   };
 
-  const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = rows.filter((row) => {
-      if (q) {
-        const searchColumns = searchColumn
-          ? module.columns.filter((column) => column.key === searchColumn)
-          : visible;
-        const hay = searchColumns
-          .map((c) => textValue(row.values[c.key]))
-          .join(" ")
-          .toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return [...fixedFilters, ...filters].every((filter) => {
-        return matchesFilter(row.values[filter.columnKey], filter);
-      });
-    });
-    if (!sorting.length) return filtered;
-    return [...filtered].sort((a, b) => {
-      for (const sort of sorting) {
-        const left = a.values[sort.columnKey];
-        const right = b.values[sort.columnKey];
-        const leftNumber = typeof left === "number" ? left : Number.NaN;
-        const rightNumber = typeof right === "number" ? right : Number.NaN;
-        const comparison =
-          Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
-            ? leftNumber - rightNumber
-            : textValue(left).localeCompare(textValue(right), "sr-Latn");
-        if (comparison !== 0) return sort.direction === "asc" ? comparison : -comparison;
-      }
-      return 0;
-    });
-  }, [filters, fixedFilters, module.columns, query, rows, searchColumn, sorting, visible]);
+  // The API filters and sorts the complete matching data set before slicing a
+  // page. Reapplying those operations here would only reorder the loaded page.
+  const filteredRows = rows;
 
   const allVisibleSelected =
     filteredRows.length > 0 && filteredRows.every((row) => selectedIds.has(row.id));

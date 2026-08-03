@@ -17,6 +17,8 @@ export type PurchaseOrderLineCalculation = {
   bmPct: number | null;
 };
 
+export const STANDARD_CONTAINER_VOLUME_M3 = 69;
+
 function finiteNonNegative(value: number, label: string) {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${label} mora biti nenegativan broj.`);
@@ -52,6 +54,8 @@ export function calculateDeliveryDate(input: {
 }
 
 export function calculateUnitLogistics(input: {
+  containerQty?: number | null;
+  containerGrossWeightKg?: number | null;
   packQty?: number | null;
   widthCm?: number | null;
   depthCm?: number | null;
@@ -66,6 +70,8 @@ export function calculateUnitLogistics(input: {
   packHeightCm?: number | null;
   packGrossWeightKg?: number | null;
 }) {
+  const containerQty =
+    input.containerQty && input.containerQty > 0 ? input.containerQty : null;
   const packQty = input.packQty && input.packQty > 0 ? input.packQty : 1;
   const packVolume =
     (input.packWidthCm ?? 0) *
@@ -78,7 +84,9 @@ export function calculateUnitLogistics(input: {
   const itemVolume =
     (input.widthCm ?? 0) * (input.depthCm ?? 0) * (input.heightCm ?? 0);
   const volumeM3 =
-    packVolume > 0
+    containerQty
+      ? STANDARD_CONTAINER_VOLUME_M3 / containerQty
+      : packVolume > 0
       ? packVolume / 1_000_000 / packQty
       : unitPackVolume > 0
         ? unitPackVolume / 1_000_000
@@ -86,7 +94,11 @@ export function calculateUnitLogistics(input: {
           ? itemVolume / 1_000_000
         : 0;
   const weightKg =
-    input.packGrossWeightKg != null && input.packGrossWeightKg > 0
+    containerQty &&
+    input.containerGrossWeightKg != null &&
+    input.containerGrossWeightKg > 0
+      ? input.containerGrossWeightKg / containerQty
+      : input.packGrossWeightKg != null && input.packGrossWeightKg > 0
       ? input.packGrossWeightKg / packQty
       : Math.max(input.grossWeightKg ?? input.weightKg ?? 0, 0);
   return {

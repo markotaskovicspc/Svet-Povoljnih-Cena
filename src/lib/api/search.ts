@@ -4,7 +4,13 @@ import { db, hasDatabaseConnection } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
-import type { SearchHit } from "@/types/search";
+import { getProductCardsBySlugs } from "@/lib/api/catalog";
+import { resolveProductPriceQuote } from "@/lib/pricing";
+import type {
+  SearchHit,
+  SearchNavigationHit,
+  SearchSuggestion,
+} from "@/types/search";
 
 /**
  * Search layer (Phase 3C — item 8).
@@ -40,19 +46,22 @@ export class SearchUnavailableError extends Error {
   }
 }
 
-export async function suggest(query: string, limit = 8, offset = 0): Promise<SearchHit[]> {
+async function searchProductHits(
+  query: string,
+  limit = 8,
+  offset = 0,
+): Promise<SearchHit[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 96);
   const safeOffset = Math.max(0, Math.round(offset));
+  const codeLike = /^[A-Z0-9_-]{2,8}$/.test(q) && !q.includes(" ");
   if (!hasDatabaseConnection()) {
     throw new SearchUnavailableError("Database connection string is not configured.");
   }
 
   let rows: SuggestRow[] = [];
   try {
-    // pg_trgm-based fuzzy match on name + sku, with category/group matching
-    // so "peg" and "pegle" find products filed under the Pegle category.
     rows = await db.$queryRaw<SuggestRow[]>`
       SELECT p.sku,
              p.slug,
@@ -76,32 +85,50 @@ export async function suggest(query: string, limit = 8, offset = 0): Promise<Sea
                WHERE pc."productId" = p.id) AS breadcrumb
         FROM "Product" p
        WHERE p."isActive" = true
-         AND (p.name ILIKE ${'%' + q + '%'} OR p.sku ILIKE ${'%' + q + '%'}
-              OR p.barcode ILIKE ${'%' + q + '%'}
-              OR similarity(p.name, ${q}) > 0.2
-              OR EXISTS (
-                SELECT 1
-                  FROM "ProductCategory" pc2
-                  JOIN "Category" c2 ON c2.id = pc2."categoryId"
-                 WHERE pc2."productId" = p.id
-                   AND c2.name ILIKE ${'%' + q + '%'}
-              )
-              OR EXISTS (
-                SELECT 1
-                  FROM "Group" g
-                 WHERE g.id = p."groupId"
-                   AND g.name ILIKE ${'%' + q + '%'}
-              ))
+         AND (
+           (${codeLike} AND (
+             lower(${q}) = ANY (
+               regexp_split_to_array(lower(p.name), '[^[:alnum:]_-]+')
+             )
+             OR p.sku ILIKE ${'%' + q + '%'}
+             OR p.barcode ILIKE ${'%' + q + '%'}
+           ))
+           OR (${!codeLike} AND (
+             p.name ILIKE ${'%' + q + '%'}
+             OR p.sku ILIKE ${'%' + q + '%'}
+             OR p.barcode ILIKE ${'%' + q + '%'}
+             OR EXISTS (
+               SELECT 1
+                 FROM "ProductCategory" pc2
+                 JOIN "Category" c2 ON c2.id = pc2."categoryId"
+                WHERE pc2."productId" = p.id
+                  AND c2.name ILIKE ${'%' + q + '%'}
+             )
+             OR EXISTS (
+               SELECT 1
+                 FROM "Group" g
+                WHERE g.id = p."groupId"
+                  AND g.name ILIKE ${'%' + q + '%'}
+             )
+           ))
+         )
        ORDER BY CASE
-                  WHEN p.name ILIKE ${q + '%'} THEN 0
+                  WHEN lower(p.name) = lower(${q}) THEN 0
+                  WHEN lower(p.sku) = lower(${q}) OR lower(COALESCE(p.barcode, '')) = lower(${q}) THEN 1
+                  WHEN ${codeLike} AND lower(${q}) = ANY (
+                    regexp_split_to_array(lower(p.name), '[^[:alnum:]_-]+')
+                  ) THEN 2
+                  WHEN p.name ILIKE ${q + '%'} THEN 2
+                  WHEN p.name ILIKE ${'%' + q + '%'} THEN 3
+                  WHEN p.sku ILIKE ${'%' + q + '%'} OR p.barcode ILIKE ${'%' + q + '%'} THEN 4
                   WHEN EXISTS (
                     SELECT 1
                       FROM "ProductCategory" pc3
                       JOIN "Category" c3 ON c3.id = pc3."categoryId"
                      WHERE pc3."productId" = p.id
                        AND c3.name ILIKE ${'%' + q + '%'}
-                  ) THEN 1
-                  ELSE 2
+                  ) THEN 5
+                  ELSE 6
                 END ASC,
                 p."isHero" DESC,
                 COALESCE(p."discountPct", 0) DESC,
@@ -113,26 +140,111 @@ export async function suggest(query: string, limit = 8, offset = 0): Promise<Sea
     throw new SearchUnavailableError("Real catalog search is unavailable.", err);
   }
 
-  return rows.map((r) => ({
-    sku: r.sku,
-    slug: r.slug,
-    name: r.name,
-    breadcrumb: r.breadcrumb ?? "",
-    thumbnailUrl: resolveSupabaseStorageUrl(
-      getMediaVariantUrl(
-        {
-          url: r.thumbnail,
-          thumbUrl: r.thumbnail_thumb,
-          cardUrl: r.thumbnail_card,
-        },
-        "thumb",
+  const normalizedQuery = q.toLocaleLowerCase("sr-Latn-RS");
+  const exactNameRows = rows.filter(
+    (row) => row.name.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery,
+  );
+  if (exactNameRows.length) rows = exactNameRows;
+
+  const products = await getProductCardsBySlugs(rows.map((row) => row.slug));
+  const productsBySlug = new Map(products.map((product) => [product.slug, product]));
+
+  return rows.map((r) => {
+    const product = productsBySlug.get(r.slug);
+    const fullPrice = product?.fullPrice ?? num(r.full_price);
+    const quote = resolveProductPriceQuote(
+      product ?? {
+        fullPrice,
+        salePrice: r.sale_price ? num(r.sale_price) : null,
+        discountPct: r.discount_pct,
+      },
+      { loggedIn: false },
+    );
+    return {
+      type: "product" as const,
+      href: `/p/${r.slug}`,
+      sku: r.sku,
+      slug: r.slug,
+      name: r.name,
+      breadcrumb: r.breadcrumb ?? "",
+      thumbnailUrl: resolveSupabaseStorageUrl(
+        getMediaVariantUrl(
+          {
+            url: r.thumbnail,
+            thumbUrl: r.thumbnail_thumb,
+            cardUrl: r.thumbnail_card,
+          },
+          "thumb",
+        ),
       ),
-    ),
-    fullPrice: num(r.full_price),
-    salePrice: r.sale_price ? num(r.sale_price) : num(r.full_price),
-    discountPct: r.discount_pct ?? 0,
-    isHero: r.is_hero,
-  }));
+      fullPrice: quote.full,
+      actionPrice: quote.actionOffer?.effective,
+      loyaltyPrice: quote.loyaltyOffer?.effective,
+      salePrice: quote.actionOffer?.effective ?? quote.full,
+      discountPct: quote.actionOffer?.discountPct ?? 0,
+      isHero: r.is_hero,
+    };
+  });
+}
+
+function navigationRank(name: string, query: string) {
+  const normalizedName = name.trim().toLocaleLowerCase("sr-Latn-RS");
+  const normalizedQuery = query.trim().toLocaleLowerCase("sr-Latn-RS");
+  if (normalizedName === normalizedQuery) return 0;
+  if (normalizedName.startsWith(normalizedQuery)) return 1;
+  return 2;
+}
+
+async function searchNavigationHits(query: string): Promise<SearchNavigationHit[]> {
+  const [categories, groups] = await Promise.all([
+    db.category.findMany({
+      where: { name: { contains: query, mode: "insensitive" } },
+      select: { id: true, name: true, path: true, level: true },
+      take: 12,
+    }),
+    db.group.findMany({
+      where: { name: { contains: query, mode: "insensitive" } },
+      select: { id: true, name: true, slug: true },
+      take: 12,
+    }),
+  ]);
+
+  return [
+    ...categories.map((category) => ({
+      type: "category" as const,
+      id: category.id,
+      name: category.name,
+      href: `/k${category.path.startsWith("/") ? category.path : `/${category.path}`}`,
+      breadcrumb: category.level > 0 ? "Kategorija" : "Glavna kategorija",
+    })),
+    ...groups.map((group) => ({
+      type: "group" as const,
+      id: group.id,
+      name: group.name,
+      href: `/pretraga?q=${encodeURIComponent(group.name)}`,
+      breadcrumb: "Grupa proizvoda",
+    })),
+  ]
+    .sort(
+      (left, right) =>
+        navigationRank(left.name, query) - navigationRank(right.name, query) ||
+        (left.type === right.type ? 0 : left.type === "category" ? -1 : 1) ||
+        left.name.localeCompare(right.name, "sr"),
+    )
+    .slice(0, 6);
+}
+
+export async function suggest(query: string, limit = 8): Promise<SearchSuggestion[]> {
+  const q = query.trim();
+  if (q.length < MIN_QUERY_LEN) return [];
+  if (!hasDatabaseConnection()) {
+    throw new SearchUnavailableError("Database connection string is not configured.");
+  }
+  const [navigation, products] = await Promise.all([
+    searchNavigationHits(q),
+    searchProductHits(q, limit),
+  ]);
+  return [...navigation, ...products];
 }
 
 export async function searchProducts(
@@ -140,5 +252,5 @@ export async function searchProducts(
   limit = 48,
   offset = 0,
 ): Promise<SearchHit[]> {
-  return suggest(query, Math.min(Math.max(limit, 1), 120), offset);
+  return searchProductHits(query, Math.min(Math.max(limit, 1), 120), offset);
 }

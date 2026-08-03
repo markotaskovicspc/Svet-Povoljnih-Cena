@@ -10,12 +10,26 @@ export async function GET(req: Request) {
   if (q.length < 2) return NextResponse.json({ items: [] });
 
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8) || 8, 1), 20);
+  const exactItems = await db.xExpressTown.findMany({
+    where: {
+      active: true,
+      name: { equals: q, mode: "insensitive" },
+    },
+    orderBy: [{ priority: "asc" }, { name: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      name: true,
+      displayName: true,
+      postalCode: true,
+      municipalityId: true,
+    },
+  });
   const items = await db.xExpressTown.findMany({
     where: {
       active: true,
       OR: [
         { name: { contains: q, mode: "insensitive" } },
-        { displayName: { contains: q, mode: "insensitive" } },
         { postalCode: { startsWith: q } },
       ],
     },
@@ -31,7 +45,7 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({
-    items: items.map((item) => ({
+    items: (exactItems.length ? exactItems : items).map((item) => ({
       code: String(item.id),
       townId: item.id,
       municipalityId: item.municipalityId,

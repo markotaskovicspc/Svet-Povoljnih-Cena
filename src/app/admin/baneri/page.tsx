@@ -270,7 +270,7 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
         };
       }
 
-      const materialized = await materializeBuiltInBanners(data.placement);
+      await materializeBuiltInBanners(data.placement);
       const existing = data.id
         ? await db.banner.findUnique({ where: { id: data.id } })
         : null;
@@ -282,46 +282,6 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
       }
       if (existing && existing.placement !== data.placement) {
         return { ok: false as const, error: "Pozicija banera nije ispravna." };
-      }
-
-      const ignoredOverlapIds = data.id
-        ? [data.id]
-        : materialized
-          ? getBuiltInBannerSeeds(data.placement).map((banner) =>
-              String(banner.id),
-            )
-          : [];
-      if (data.enabled && data.placement !== BannerPlacement.HERO) {
-        const overlap = await db.banner.findFirst({
-          where: {
-            placement: data.placement,
-            enabled: true,
-            NOT: ignoredOverlapIds.length
-              ? { id: { in: ignoredOverlapIds } }
-              : undefined,
-            AND: [
-              {
-                OR: [
-                  { startsAt: null },
-                  { startsAt: { lte: endsAt ?? new Date("9999-12-31") } },
-                ],
-              },
-              {
-                OR: [
-                  { endsAt: null },
-                  { endsAt: { gte: startsAt ?? new Date("1900-01-01") } },
-                ],
-              },
-            ],
-          },
-          select: { title: true },
-        });
-        if (overlap) {
-          return {
-            ok: false as const,
-            error: `Period se preklapa sa aktivnim banerom „${overlap.title}“.`,
-          };
-        }
       }
 
       const desktopFile = selectedFile(formData, "imageDesktopFile");
@@ -369,12 +329,20 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
         };
       }
 
+      const imageDesktop = uploadedDesktop?.url ?? existing?.imageDesktop;
+      if (!imageDesktop) {
+        await removeManagedBannerImages(
+          [uploadedDesktop?.url, uploadedMobile?.url],
+          { placement: data.placement, reason: "missing_desktop_after_upload" },
+        );
+        return { ok: false as const, error: "Desktop slika nije sačuvana." };
+      }
       const payload = {
         title: data.title,
         subtitle: data.subtitle || null,
         ctaLabel: data.ctaLabel || null,
         ctaHref: data.ctaHref || null,
-        imageDesktop: uploadedDesktop?.url ?? existing!.imageDesktop,
+        imageDesktop,
         imageMobile: removeMobile
           ? null
           : (uploadedMobile?.url ?? existing?.imageMobile ?? null),
@@ -388,19 +356,12 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
       let saved: BannerRecord;
       try {
         saved = await db.$transaction(async (tx) => {
-          if (
-            !data.id &&
-            materialized &&
-            data.enabled &&
-            data.placement !== BannerPlacement.HERO
-          ) {
+          if (data.enabled && data.placement !== BannerPlacement.HERO) {
             await tx.banner.updateMany({
               where: {
-                id: {
-                  in: getBuiltInBannerSeeds(data.placement).map((banner) =>
-                    String(banner.id),
-                  ),
-                },
+                placement: data.placement,
+                enabled: true,
+                ...(data.id ? { NOT: { id: data.id } } : {}),
               },
               data: { enabled: false },
             });
@@ -414,7 +375,13 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
           [uploadedDesktop?.url, uploadedMobile?.url],
           { placement: data.placement, reason: "database_save_failed" },
         );
-        throw error;
+        return {
+          ok: false as const,
+          error:
+            error instanceof Error
+              ? `Baner nije sačuvan: ${error.message}`
+              : "Baner nije sačuvan zbog greške u bazi.",
+        };
       }
 
       await removeUnreferencedBannerImages(
@@ -820,7 +787,7 @@ function BannerForm({
   const orderValue = values?.id ? (values.order ?? 0) : 9999;
   const section = SECTIONS.find((candidate) => candidate.placement === placement);
   return (
-    <AdminActionForm action={action} className="space-y-4">
+    <AdminActionForm action={action} className="space-y-4" refreshOnSuccess>
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <input type="hidden" name="placement" value={placement} />
       <input type="hidden" name="order" value={orderValue} />

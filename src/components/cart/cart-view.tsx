@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
+import { ArrowRight, Loader2, LogIn, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
-import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { useCheckout } from "@/lib/checkout/store";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -50,9 +50,8 @@ export function CartView() {
         aria-label="Stavke u korpi"
         className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
       >
-        {lines.map((l) => (
-          <CartLineRow key={l.sku} line={l} variant="page" />
-        ))}
+        <CartLoginOffer />
+        {lines.map((l) => <CartLineRow key={l.sku} line={l} variant="page" />)}
       </section>
 
       <CartSummary
@@ -101,7 +100,6 @@ function CartSummary({
   savings: number;
   fullTotal: number;
 }) {
-  const openSuggestion = useCartUi((s) => s.openSuggestion);
   const voucher = useCheckout((s) => s.voucher);
   const applyVoucher = useCheckout((s) => s.applyVoucher);
   const [code, setCode] = useState("");
@@ -235,10 +233,6 @@ function CartSummary({
 
         <Link
           href="/checkout"
-          onClick={(e) => {
-            e.preventDefault();
-            openSuggestion("/checkout");
-          }}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-20 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas shadow-soft-2 transition focus-visible:ring-2 focus-visible:outline-none md:static md:shadow-none"
         >
           Nastavi ka podacima za isporuku
@@ -246,5 +240,50 @@ function CartSummary({
         </Link>
       </div>
     </aside>
+  );
+}
+
+function CartLoginOffer() {
+  const loggedIn = useLoyaltyEligibility();
+  const lines = useCart((state) => state.lines);
+  if (loggedIn) return null;
+
+  const eligible = lines.filter(
+    (line) =>
+      line.unitPriceLoyalty != null &&
+      line.unitPriceLoyalty > 0 &&
+      line.unitPriceLoyalty < line.unitPriceSale,
+  );
+  if (!eligible.length) return null;
+
+  const pct = Math.max(...eligible.map((line) => line.loyaltyDiscountPct ?? 0));
+  const potentialSavings = eligible.reduce(
+    (total, line) =>
+      total + (line.unitPriceSale - (line.unitPriceLoyalty ?? line.unitPriceSale)) * line.qty,
+    0,
+  );
+
+  return (
+    <div className="border-walnut/25 bg-walnut/5 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex items-start gap-3">
+        <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-full">
+          <LogIn className="size-4" aria-hidden />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-ink-900">
+            Prijavite se i ostvarite {pct || 30}% loyalty popusta
+          </p>
+          <p className="mt-0.5 text-xs text-ink-600">
+            Važi za artikle koji nisu na akciji. Moguća dodatna ušteda u ovoj korpi: {formatRsd(potentialSavings)}.
+          </p>
+        </div>
+      </div>
+      <Link
+        href={`/nalog/prijava?callbackUrl=${encodeURIComponent("/korpa")}`}
+        className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
+      >
+        Prijavite se
+      </Link>
+    </div>
   );
 }

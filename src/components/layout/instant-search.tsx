@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Search, ArrowRight, Loader2 } from "lucide-react";
-import type { SearchHit } from "@/types/search";
+import { Search, ArrowRight, FolderTree, Layers3, Loader2 } from "lucide-react";
+import type { SearchHit, SearchSuggestion } from "@/types/search";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ interface InstantSearchProps {
 }
 
 interface SuggestResponse {
-  hits?: SearchHit[];
+  hits?: SearchSuggestion[];
 }
 
 export function InstantSearch({
@@ -27,7 +27,7 @@ export function InstantSearch({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [results, setResults] = useState<SearchHit[]>([]);
+  const [results, setResults] = useState<SearchSuggestion[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,9 +115,9 @@ export function InstantSearch({
   }, [onNavigate, queryTrimmed, router]);
 
   const goHit = useCallback(
-    (hit: SearchHit) => {
+    (hit: SearchSuggestion) => {
       setOpen(false);
-      router.push(`/p/${hit.slug}`);
+      router.push(hit.href);
       onNavigate?.();
     },
     [onNavigate, router],
@@ -183,7 +183,7 @@ export function InstantSearch({
             )}
           >
             {results.map((hit, i) => (
-              <li key={hit.sku}>
+              <li key={hit.type === "product" ? hit.sku : `${hit.type}-${hit.id}`}>
                 <button
                   type="button"
                   onMouseEnter={() => setActiveIndex(i)}
@@ -195,8 +195,8 @@ export function InstantSearch({
                     activeIndex === i ? "bg-muted-bg" : "hover:bg-muted-bg/60",
                   )}
                 >
-                  <div className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-white ring-1 ring-border/60">
-                    {hit.thumbnailUrl ? (
+                  <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-white text-walnut ring-1 ring-border/60">
+                    {hit.type === "product" && hit.thumbnailUrl ? (
                       <Image
                         src={hit.thumbnailUrl}
                         alt=""
@@ -204,6 +204,10 @@ export function InstantSearch({
                         sizes="48px"
                         className="object-contain p-1"
                       />
+                    ) : hit.type === "category" ? (
+                      <FolderTree className="size-5" aria-hidden />
+                    ) : hit.type === "group" ? (
+                      <Layers3 className="size-5" aria-hidden />
                     ) : null}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -212,11 +216,7 @@ export function InstantSearch({
                       {hit.breadcrumb}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-action">
-                      {formatRsd(hit.salePrice)}
-                    </div>
-                  </div>
+                  {hit.type === "product" ? <SearchHitPrices hit={hit} /> : null}
                 </button>
               </li>
             ))}
@@ -277,6 +277,31 @@ export function InstantSearch({
       </div>
 
       {panel}
+    </div>
+  );
+}
+
+function SearchHitPrices({ hit }: { hit: SearchHit }) {
+  const hasReducedPrice = Boolean(hit.actionPrice || hit.loyaltyPrice);
+  return (
+    <div className="shrink-0 text-right text-[11px] leading-tight">
+      {hasReducedPrice ? (
+        <div className="text-ink-400 line-through">{formatRsd(hit.fullPrice)}</div>
+      ) : (
+        <div className="text-sm font-semibold text-ink-900">
+          {formatRsd(hit.fullPrice)}
+        </div>
+      )}
+      {hit.actionPrice ? (
+        <div className="font-semibold text-action">
+          Akcija {formatRsd(hit.actionPrice)}
+        </div>
+      ) : null}
+      {hit.loyaltyPrice ? (
+        <div className="font-semibold text-walnut">
+          Loyalty {formatRsd(hit.loyaltyPrice)}
+        </div>
+      ) : null}
     </div>
   );
 }

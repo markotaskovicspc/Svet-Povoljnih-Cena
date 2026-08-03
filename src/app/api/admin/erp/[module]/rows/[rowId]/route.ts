@@ -356,6 +356,18 @@ async function persistProductCell(
     case "packGrossWeightKg":
       data.packGrossWeightKg = nullableDecimal(value, "Bruto težina pakovanja mora biti broj.");
       break;
+    case "containerQty":
+      data.containerQty = nullablePositiveInt(
+        value,
+        "Količina za ceo kontejner mora biti ceo broj veći od nule.",
+      );
+      break;
+    case "containerGrossWeightKg":
+      data.containerGrossWeightKg = nullablePositiveDecimal(
+        value,
+        "Bruto težina kontejnera mora biti broj veći od nule.",
+      );
+      break;
     case "supplierName":
       data.supplierProductName = optionalString(value);
       break;
@@ -1225,6 +1237,18 @@ function decimalValue(value: CellValue, message: string) {
 
 function nullableDecimal(value: CellValue, message: string) {
   return value === null ? null : decimalValue(value, message);
+}
+
+function nullablePositiveInt(value: CellValue, message: string) {
+  const parsed = nullableInt(value, message);
+  if (parsed != null && parsed <= 0) throw new Error(message);
+  return parsed;
+}
+
+function nullablePositiveDecimal(value: CellValue, message: string) {
+  const parsed = nullableDecimal(value, message);
+  if (parsed != null && parsed <= 0) throw new Error(message);
+  return parsed;
 }
 
 function dateValue(value: CellValue, message: string) {
