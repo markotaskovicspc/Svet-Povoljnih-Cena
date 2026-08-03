@@ -21,7 +21,10 @@ import {
 import { useCart } from "@/lib/hooks/use-cart";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
-import { resolveProductPriceQuote } from "@/lib/pricing";
+import {
+  resolveProductPriceQuote,
+  type ProductPriceQuote,
+} from "@/lib/pricing";
 import { formatRsd } from "@/lib/format";
 
 interface PdpAddToCartProps {
@@ -42,6 +45,46 @@ export function getPdpAvailabilityMessage(
     "Trenutno nije dostupno za online kupovinu"
     ? null
     : availability.message;
+}
+
+export function PdpMobilePriceContent({
+  quote,
+}: {
+  quote: ProductPriceQuote;
+}) {
+  const reducedOffer = quote.actionOffer ?? quote.loyaltyOffer;
+
+  if (!reducedOffer) {
+    return (
+      <div className="min-w-[88px] shrink-0">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
+          Cena
+        </p>
+        <p className="text-base leading-tight font-black whitespace-nowrap text-ink-900">
+          {formatRsd(quote.full)}
+        </p>
+      </div>
+    );
+  }
+
+  const isLoyalty = !quote.actionOffer && Boolean(quote.loyaltyOffer);
+
+  return (
+    <div className="min-w-[94px] shrink-0">
+      <p className="whitespace-nowrap text-[9px] leading-tight font-medium text-ink-500">
+        Redovna:{" "}
+        <span className={cn(!isLoyalty && "line-through")}>
+          {formatRsd(quote.full)}
+        </span>
+      </p>
+      <p className="mt-0.5 text-[9px] leading-tight font-semibold uppercase tracking-wide text-action">
+        {isLoyalty ? "Loyalty cena" : "Akcijska cena"}
+      </p>
+      <p className="text-[19px] leading-none font-black whitespace-nowrap text-action">
+        {formatRsd(reducedOffer.effective)}
+      </p>
+    </div>
+  );
 }
 
 export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
@@ -180,18 +223,7 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
             aria-hidden
           />
         </button>
-        <div className="min-w-[88px] shrink-0">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-            {priceQuote.payable.kind === "loyalty"
-              ? "Loyalty cena"
-              : priceQuote.actionOffer
-                ? "Akcijska cena"
-                : "Cena"}
-          </p>
-          <p className="text-base leading-tight font-black whitespace-nowrap text-ink-900">
-            {formatRsd(priceQuote.payable.effective)}
-          </p>
-        </div>
+        <PdpMobilePriceContent quote={priceQuote} />
         {ctas}
       </div>
     </div>

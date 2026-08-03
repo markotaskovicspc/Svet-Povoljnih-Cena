@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { getPdpAvailabilityMessage } from "@/components/product/pdp-add-to-cart";
+import {
+  getPdpAvailabilityMessage,
+  PdpMobilePriceContent,
+} from "@/components/product/pdp-add-to-cart";
 import { PdpBenefits } from "@/components/product/pdp-benefits";
 import { PdpPriceContent } from "@/components/product/pdp-price";
 import { getProductAvailability } from "@/lib/product-availability";
@@ -75,6 +78,42 @@ describe("PDP price and benefit display", () => {
 
     expect(markup).toContain("Akcijska cena");
     expect(markup).toContain("line-through");
+  });
+
+  it("shows the regular and highlighted action prices in the mobile bar", () => {
+    const actionOffer = price({
+      effective: 6_999,
+      kind: "sale",
+      onSale: true,
+    });
+    const markup = renderToStaticMarkup(
+      <PdpMobilePriceContent
+        quote={quote({ actionOffer, payable: actionOffer })}
+      />,
+    );
+
+    expect(markup).toContain("Redovna:");
+    expect(markup).toContain("Akcijska cena");
+    expect(markup).toContain("line-through");
+    expect(markup).toContain("text-action");
+    expect(markup).toContain("8.999 RSD");
+    expect(markup).toContain("6.999 RSD");
+  });
+
+  it("shows the regular and highlighted loyalty prices in the mobile bar", () => {
+    const loyaltyOffer = price({ effective: 6_999, kind: "loyalty" });
+    const regularPrice = price({});
+    const markup = renderToStaticMarkup(
+      <PdpMobilePriceContent
+        quote={quote({ loyaltyOffer, payable: regularPrice })}
+      />,
+    );
+
+    expect(markup).toContain("Redovna:");
+    expect(markup).toContain("Loyalty cena");
+    expect(markup).not.toContain("line-through");
+    expect(markup).toContain("text-[19px]");
+    expect(markup).toContain("text-action");
   });
 
   it("renders exactly the three requested benefit boxes", () => {
