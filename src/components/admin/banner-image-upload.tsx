@@ -83,9 +83,11 @@ export function BannerImageUpload({
 
     const input = inputRef.current;
     if (!input) return;
-    const transfer = new DataTransfer();
-    transfer.items.add(file);
-    input.files = transfer.files;
+    if (input.files?.[0] !== file) {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+    }
 
     releaseObjectUrl();
     const nextPreview = URL.createObjectURL(file);

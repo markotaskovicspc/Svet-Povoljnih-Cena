@@ -14,6 +14,7 @@ import {
 import {
   BANNER_IMAGE_PREFIX,
   getManagedBannerImageKey,
+  toBannerImageUploadBody,
   validateBannerImageFile,
 } from "@/lib/banners/image-file";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -172,12 +173,34 @@ async function uploadBannerImage(
 
   const key = `${BANNER_IMAGE_PREFIX}${placement.toLowerCase()}/${Date.now()}-${randomBytes(8).toString("hex")}-${variant}.webp`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
-  const { error } = await storage.upload(key, output, {
-    cacheControl: "31536000",
-    contentType: "image/webp",
-    upsert: false,
-  });
+  const { error } = await storage.upload(
+    key,
+    toBannerImageUploadBody(output),
+    {
+      cacheControl: "31536000",
+      contentType: "image/webp",
+      upsert: false,
+    },
+  );
   if (error) throw new Error(`Upload slike nije uspeo: ${error.message}`);
+
+  // Do not save a public URL until storage returns the exact bytes we sent.
+  // This catches successful-looking uploads whose binary body was corrupted in
+  // transit, which otherwise surface only as broken images on the storefront.
+  const { data: storedObject, error: verificationError } =
+    await storage.download(key);
+  const storedBytes = storedObject
+    ? Buffer.from(await storedObject.arrayBuffer())
+    : null;
+  if (
+    verificationError ||
+    !storedBytes ||
+    storedBytes.length !== output.length ||
+    !storedBytes.equals(output)
+  ) {
+    await storage.remove([key]);
+    throw new Error("Upload slike nije moguće potvrditi. Pokušajte ponovo.");
+  }
 
   const { data } = storage.getPublicUrl(key);
   if (!data.publicUrl) {
