@@ -31,69 +31,68 @@ if (missingStorageSchemaRequested && !missingStorageSchemaAllowed) {
 }
 
 try {
-  const [
-    products,
-    payments,
-    warehouses,
-    emailStatuses,
-    shipmentStatuses,
-    fiscalStatuses,
-    backgroundStatuses,
-    migrationRows,
-    rlsViolations,
-    apiGrants,
-  ] = await Promise.all([
-    prisma.product.findMany({
-      where: { isActive: true, deletedAt: null },
-      select: {
-        sku: true,
-        stock: true,
-        fullPrice: true,
-        salePrice: true,
-        widthCm: true,
-        depthCm: true,
-        heightCm: true,
-        deliveryDaysMin: true,
-        deliveryDaysMax: true,
-        media: { select: { id: true }, take: 1 },
-        warehouseStocks: { select: { qty: true } },
-      },
-    }),
-    prisma.paymentMethodConfig.findMany({
-      where: { enabled: true },
-      select: { method: true },
-    }),
-    prisma.warehouse.findMany({
-      where: { active: true },
-      select: { code: true, isDefault: true },
-    }),
-    prisma.emailMessage.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.shipment.groupBy({
-      by: ["provider", "status"],
-      _count: { _all: true },
-    }),
-    prisma.fiscalDocument.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.backgroundJob.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.$queryRawUnsafe(
-      `SELECT "migration_name", "finished_at", "rolled_back_at" FROM "_prisma_migrations"`,
-    ),
-    prisma.$queryRawUnsafe(`
-      SELECT c.relname AS table_name
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public'
-         AND c.relkind IN ('r', 'p')
-         AND NOT c.relrowsecurity
-       ORDER BY c.relname
-    `),
-    prisma.$queryRawUnsafe(`
-      SELECT grantee, table_name, privilege_type
-        FROM information_schema.role_table_grants
-       WHERE table_schema = 'public'
-         AND grantee IN ('anon', 'authenticated')
-       ORDER BY grantee, table_name, privilege_type
-    `),
-  ]);
+  // This check deliberately uses a one-connection pool. Run its queries in
+  // sequence so queued requests do not exhaust their connection-acquisition
+  // timeout while a preceding production query is still using that connection.
+  const products = await prisma.product.findMany({
+    where: { isActive: true, deletedAt: null },
+    select: {
+      sku: true,
+      stock: true,
+      fullPrice: true,
+      salePrice: true,
+      widthCm: true,
+      depthCm: true,
+      heightCm: true,
+      deliveryDaysMin: true,
+      deliveryDaysMax: true,
+      media: { select: { id: true }, take: 1 },
+      warehouseStocks: { select: { qty: true } },
+    },
+  });
+  const payments = await prisma.paymentMethodConfig.findMany({
+    where: { enabled: true },
+    select: { method: true },
+  });
+  const warehouses = await prisma.warehouse.findMany({
+    where: { active: true },
+    select: { code: true, isDefault: true },
+  });
+  const emailStatuses = await prisma.emailMessage.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const shipmentStatuses = await prisma.shipment.groupBy({
+    by: ["provider", "status"],
+    _count: { _all: true },
+  });
+  const fiscalStatuses = await prisma.fiscalDocument.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const backgroundStatuses = await prisma.backgroundJob.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const migrationRows = await prisma.$queryRawUnsafe(
+    `SELECT "migration_name", "finished_at", "rolled_back_at" FROM "_prisma_migrations"`,
+  );
+  const rlsViolations = await prisma.$queryRawUnsafe(`
+    SELECT c.relname AS table_name
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relkind IN ('r', 'p')
+       AND NOT c.relrowsecurity
+     ORDER BY c.relname
+  `);
+  const apiGrants = await prisma.$queryRawUnsafe(`
+    SELECT grantee, table_name, privilege_type
+      FROM information_schema.role_table_grants
+     WHERE table_schema = 'public'
+       AND grantee IN ('anon', 'authenticated')
+     ORDER BY grantee, table_name, privilege_type
+  `);
 
   let storageSchemaAvailable = true;
   let storageBuckets = [];

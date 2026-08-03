@@ -44,6 +44,7 @@ interface CheckoutState {
   setIdentity: (i: IdentityChoice) => void;
   applyVoucher: (v: AppliedVoucher | null) => void;
   setLastOrder: (o: Order | null) => void;
+  resetProgress: () => void;
   reset: () => void;
 }
 
@@ -56,6 +57,12 @@ export const useCheckout = create<CheckoutState>()((set) => ({
   setIdentity: (identity) => set({ identity }),
   applyVoucher: (voucher) => set({ voucher }),
   setLastOrder: (lastOrder) => set({ lastOrder }),
+  resetProgress: () =>
+    set({
+      step: "identity",
+      identity: "guest",
+      voucher: null,
+    }),
   reset: () =>
     set({
       step: "identity",

@@ -448,7 +448,6 @@ export function CheckoutFlow({
     setLastOrder(order);
     clearCart();
     clearCheckoutSessionId();
-    setStep(isAuthenticatedCustomer ? "shipping" : "identity");
     const accessQuery = `?token=${encodeURIComponent(result.data.accessToken)}`;
     if (data.paymentMethod === "ips") {
       router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}${accessQuery}`);

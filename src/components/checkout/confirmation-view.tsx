@@ -39,11 +39,19 @@ export function ConfirmationView({
 }) {
   const router = useRouter();
   const storedOrder = useCheckout((s) => s.lastOrder);
+  const resetProgress = useCheckout((s) => s.resetProgress);
   const order = storedOrder ?? initialOrder ?? null;
 
   useEffect(() => {
-    if (!order) router.replace("/korpa");
-  }, [order, router]);
+    if (!order) {
+      router.replace("/korpa");
+      return;
+    }
+    // Reset the next checkout only after this route is mounted. Resetting the
+    // step before navigation lets the previous route's history effect restore
+    // /checkout/podaci over the confirmation URL.
+    resetProgress();
+  }, [order, resetProgress, router]);
 
   if (!order) return null;
 

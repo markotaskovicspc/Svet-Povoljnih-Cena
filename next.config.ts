@@ -122,6 +122,10 @@ const nextConfig: NextConfig = {
     root: turbopackRoot,
   },
   experimental: {
+    // Production builds query the session-mode Supabase database while
+    // prerendering. Keep one worker so the 15-client session pool cannot be
+    // exhausted by multiple worker-local Prisma pools.
+    cpus: 1,
     serverActions: {
       // Admin media forms support one banner pair or up to ten 8 MB product images.
       bodySizeLimit: "85mb",
