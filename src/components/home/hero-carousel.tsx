@@ -3,9 +3,16 @@
 /**
  * Home hero banner carousel — Phase 1B.
  * Full-width, autoplay 6s (paused on hover/focus + reduced-motion), arrows + dots,
- * touch swipe, infinite loop, Ken-Burns zoom on active slide, crossfade between slides.
+ * touch swipe, infinite loop, and crossfade between slides.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type SyntheticEvent,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -31,6 +38,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [paused, setPaused] = useState(false);
+  const [imageAspects, setImageAspects] = useState<Record<string, number>>({});
   const timer = useRef<number | null>(null);
   const count = banners.length;
 
@@ -61,6 +69,33 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
 
   if (!count) return null;
   const slide = banners[index];
+  const mobileImage = slide.imageMobile ?? slide.imageDesktop;
+  const mobileAspect =
+    imageAspects[mobileImage.url] ??
+    (mobileImage.width && mobileImage.height
+      ? mobileImage.width / mobileImage.height
+      : 4 / 5);
+  const desktopAspect =
+    imageAspects[slide.imageDesktop.url] ??
+    (slide.imageDesktop.width && slide.imageDesktop.height
+      ? slide.imageDesktop.width / slide.imageDesktop.height
+      : 24 / 10);
+  const bannerStyle = {
+    "--hero-mobile-aspect": mobileAspect,
+    "--hero-desktop-aspect": desktopAspect,
+  } as CSSProperties;
+
+  const rememberAspect = (
+    url: string,
+    event: SyntheticEvent<HTMLImageElement>,
+  ) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+    const aspect = naturalWidth / naturalHeight;
+    setImageAspects((current) =>
+      current[url] === aspect ? current : { ...current, [url]: aspect },
+    );
+  };
 
   return (
     <section
@@ -72,7 +107,10 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onBlur={() => setPaused(false)}
       className="relative isolate bg-canvas px-2 pt-2 sm:px-3 md:px-4 md:pt-3"
     >
-      <div className="relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:h-auto md:aspect-[24/10] md:min-h-0 lg:rounded-xl">
+      <div
+        style={bannerStyle}
+        className="relative mx-auto aspect-[var(--hero-mobile-aspect)] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-canvas md:aspect-[var(--hero-desktop-aspect)] lg:rounded-xl"
+      >
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
@@ -89,13 +127,14 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
             onDragEnd={onDragEnd}
           >
             <Image
-              src={(slide.imageMobile ?? slide.imageDesktop).url}
-              alt={(slide.imageMobile ?? slide.imageDesktop).alt ?? slide.title}
+              src={mobileImage.url}
+              alt={mobileImage.alt ?? slide.title}
               fill
               sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
               preload
+              onLoad={(event) => rememberAspect(mobileImage.url, event)}
               className={cn(
-                "object-cover md:hidden",
+                "object-contain md:hidden",
                 !reduce && "will-change-transform",
               )}
             />
@@ -105,53 +144,29 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               fill
               sizes="(max-width: 1440px) calc(100vw - 32px), 1440px"
               preload
+              onLoad={(event) => rememberAspect(slide.imageDesktop.url, event)}
               className={cn(
-                "hidden object-cover md:block",
+                "hidden object-contain md:block",
                 !reduce && "will-change-transform",
               )}
-            />
-            {/* Ken-Burns zoom layer */}
-            {!reduce ? (
-              <motion.div
-                aria-hidden
-                className="absolute inset-0"
-                initial={{ scale: 1 }}
-                animate={{ scale: 1.08 }}
-                transition={{ duration: 7, ease: "linear" }}
-              />
-            ) : null}
-            <div
-              aria-hidden
-              className="from-ink-900/85 via-ink-900/20 absolute inset-0 bg-gradient-to-r to-transparent"
             />
           </motion.div>
         </AnimatePresence>
 
-        {/* Caption */}
-        <div className="pointer-events-none absolute inset-0 flex items-end md:items-center">
-          <div className="w-full px-6 pb-6 md:px-16 md:pb-0 lg:px-24 xl:px-32">
+        {/* CTA label */}
+        <div className="pointer-events-none absolute inset-0 flex items-end">
+          <div className="w-full px-6 pb-6 md:px-16 md:pb-8 lg:px-24 lg:pb-10 xl:px-32">
             <motion.div
               key={slide.id + "-copy"}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease, delay: 0.1 }}
-              className="pointer-events-none max-w-xl text-canvas"
+              className="pointer-events-none"
             >
-              <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
-                {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
-              </p>
-              <h2 className="font-display mt-2 max-w-[13ch] text-2xl leading-[1.1] md:mt-3 md:max-w-none md:text-6xl">
-                {slide.title}
-              </h2>
-              {slide.subtitle ? (
-                <p className="mt-2 hidden max-w-md text-base text-canvas/80 md:block md:text-lg">
-                  {slide.subtitle}
-                </p>
-              ) : null}
               {slide.ctaHref && slide.ctaLabel ? (
                 <Link
                   href={slide.ctaHref}
-                  className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto mt-3 inline-flex items-center rounded-full px-5 py-2 text-xs shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:mt-6 md:px-6 md:py-3 md:text-sm"
+                  className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto inline-flex items-center rounded-full px-5 py-2 text-xs transition focus-visible:ring-2 focus-visible:outline-none md:px-6 md:py-3 md:text-sm"
                 >
                   {slide.ctaLabel}
                 </Link>
@@ -194,7 +209,9 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
                 aria-current={i === index ? "true" : undefined}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
-                  i === index ? "w-8 bg-canvas" : "w-3 bg-canvas/50 hover:bg-canvas/80",
+                  i === index
+                    ? "w-8 bg-canvas"
+                    : "w-3 bg-canvas/50 hover:bg-canvas/80",
                 )}
               />
             ))}
