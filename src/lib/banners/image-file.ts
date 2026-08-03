@@ -41,3 +41,14 @@ export function getManagedBannerImageKey(
   const key = getManagedProductMediaStorageKey(value);
   return key?.startsWith(BANNER_IMAGE_PREFIX) ? key : null;
 }
+
+/**
+ * Copy image bytes into a standalone ArrayBuffer before handing them to fetch.
+ * Node Buffers are Uint8Array subclasses, but treating them as a string at any
+ * transport boundary replaces non-UTF-8 bytes and silently corrupts images.
+ */
+export function toBannerImageUploadBody(bytes: Uint8Array): ArrayBuffer {
+  const body = new Uint8Array(bytes.byteLength);
+  body.set(bytes);
+  return body.buffer;
+}

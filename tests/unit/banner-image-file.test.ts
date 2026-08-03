@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BANNER_IMAGE_MAX_BYTES,
   getManagedBannerImageKey,
+  toBannerImageUploadBody,
   validateBannerImageFile,
 } from "../../src/lib/banners/image-file";
 
@@ -60,5 +61,18 @@ describe("banner image files", () => {
     ).toBe("content/banners/hero/banner.webp");
     expect(getManagedBannerImageKey("products/product/photo.webp")).toBeNull();
     expect(getManagedBannerImageKey("https://images.unsplash.com/a.jpg")).toBeNull();
+  });
+
+  it("copies binary upload bytes without UTF-8 conversion or extra buffer data", () => {
+    const backing = new Uint8Array([9, 0x52, 0x80, 0xff, 0x00, 0x49, 8]);
+    const source = backing.subarray(1, 6);
+
+    expect(Array.from(new Uint8Array(toBannerImageUploadBody(source)))).toEqual([
+      0x52,
+      0x80,
+      0xff,
+      0x00,
+      0x49,
+    ]);
   });
 });
