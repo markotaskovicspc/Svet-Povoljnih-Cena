@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
-import { useState, type SyntheticEvent } from "react";
 import type { Banner } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -21,24 +20,6 @@ export function EditorialBanner({
   eyebrow = "Kolekcija meseca",
 }: EditorialBannerProps) {
   const mobileImage = banner.imageMobile ?? banner.imageDesktop;
-  const [mobileAspect, setMobileAspect] = useState(
-    mobileImage.width && mobileImage.height
-      ? mobileImage.width / mobileImage.height
-      : 16 / 7,
-  );
-  const [desktopAspect, setDesktopAspect] = useState(
-    banner.imageDesktop.width && banner.imageDesktop.height
-      ? banner.imageDesktop.width / banner.imageDesktop.height
-      : 24 / 7,
-  );
-
-  const updateAspect = (
-    event: SyntheticEvent<HTMLImageElement>,
-    setter: (aspect: number) => void,
-  ) => {
-    const { naturalWidth, naturalHeight } = event.currentTarget;
-    if (naturalWidth && naturalHeight) setter(naturalWidth / naturalHeight);
-  };
 
   return (
     <section
@@ -54,29 +35,21 @@ export function EditorialBanner({
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative isolate overflow-hidden rounded-lg bg-canvas text-canvas lg:rounded-xl"
       >
-        <div
-          className="relative w-full md:hidden"
-          style={{ aspectRatio: mobileAspect }}
-        >
+        <div className="relative aspect-[4/5] w-full md:hidden">
           <Image
             src={mobileImage.url}
             alt={mobileImage.alt ?? banner.title}
             fill
             sizes="calc(100vw - 16px)"
-            onLoad={(event) => updateAspect(event, setMobileAspect)}
             className="object-contain"
           />
         </div>
-        <div
-          className="relative hidden w-full md:block"
-          style={{ aspectRatio: desktopAspect }}
-        >
+        <div className="relative hidden aspect-[24/10] w-full md:block">
           <Image
             src={banner.imageDesktop.url}
             alt={banner.imageDesktop.alt ?? banner.title}
             fill
             sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
-            onLoad={(event) => updateAspect(event, setDesktopAspect)}
             className="object-contain"
           />
         </div>

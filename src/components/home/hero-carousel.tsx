@@ -5,14 +5,7 @@
  * Full-width, autoplay 6s (paused on hover/focus + reduced-motion), arrows + dots,
  * touch swipe, infinite loop, and crossfade between slides.
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type SyntheticEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -38,7 +31,6 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [paused, setPaused] = useState(false);
-  const [imageAspects, setImageAspects] = useState<Record<string, number>>({});
   const timer = useRef<number | null>(null);
   const count = banners.length;
 
@@ -70,32 +62,6 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
   if (!count) return null;
   const slide = banners[index];
   const mobileImage = slide.imageMobile ?? slide.imageDesktop;
-  const mobileAspect =
-    imageAspects[mobileImage.url] ??
-    (mobileImage.width && mobileImage.height
-      ? mobileImage.width / mobileImage.height
-      : 4 / 5);
-  const desktopAspect =
-    imageAspects[slide.imageDesktop.url] ??
-    (slide.imageDesktop.width && slide.imageDesktop.height
-      ? slide.imageDesktop.width / slide.imageDesktop.height
-      : 24 / 10);
-  const bannerStyle = {
-    "--hero-mobile-aspect": mobileAspect,
-    "--hero-desktop-aspect": desktopAspect,
-  } as CSSProperties;
-
-  const rememberAspect = (
-    url: string,
-    event: SyntheticEvent<HTMLImageElement>,
-  ) => {
-    const { naturalWidth, naturalHeight } = event.currentTarget;
-    if (!naturalWidth || !naturalHeight) return;
-    const aspect = naturalWidth / naturalHeight;
-    setImageAspects((current) =>
-      current[url] === aspect ? current : { ...current, [url]: aspect },
-    );
-  };
 
   return (
     <section
@@ -107,10 +73,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onBlur={() => setPaused(false)}
       className="relative isolate bg-canvas px-2 pt-2 sm:px-3 md:px-4 md:pt-3"
     >
-      <div
-        style={bannerStyle}
-        className="relative mx-auto aspect-[var(--hero-mobile-aspect)] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-canvas md:aspect-[var(--hero-desktop-aspect)] lg:rounded-xl"
-      >
+      <div className="relative mx-auto aspect-[4/5] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-canvas md:aspect-[24/10] lg:rounded-xl">
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
@@ -132,7 +95,6 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               fill
               sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
               preload
-              onLoad={(event) => rememberAspect(mobileImage.url, event)}
               className={cn(
                 "object-contain md:hidden",
                 !reduce && "will-change-transform",
@@ -144,7 +106,6 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               fill
               sizes="(max-width: 1440px) calc(100vw - 32px), 1440px"
               preload
-              onLoad={(event) => rememberAspect(slide.imageDesktop.url, event)}
               className={cn(
                 "hidden object-contain md:block",
                 !reduce && "will-change-transform",
