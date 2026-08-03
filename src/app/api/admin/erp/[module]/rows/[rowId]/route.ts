@@ -601,7 +601,10 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
       data.number = requiredString(value, "Broj fakture je obavezan.");
       break;
     case "type":
-      data.type = enumFromMap(InboundInvoiceType, value, "Nepoznat tip fakture.");
+      if (value !== InboundInvoiceType.COGS) {
+        throw new Error("Tip ulazne fakture je uvek COGS.");
+      }
+      data.type = InboundInvoiceType.COGS;
       break;
     case "status":
       throw new Error(
@@ -611,10 +614,16 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
       data.invoiceDate = value === null ? null : dateValue(value, "Datum fakture je neispravan.");
       break;
     case "currency":
-      data.currency = enumFromMap(currencyFromUi, value, "Nepoznata valuta.");
+      if (value !== "RSD") {
+        throw new Error("Valuta ulazne fakture je uvek RSD.");
+      }
+      data.currency = "RSD";
       break;
     case "exchangeRate":
-      data.exchangeRate = decimalValue(value, "Kurs mora biti broj.");
+      if (decimalValue(value, "Kurs mora biti broj.") !== 1) {
+        throw new Error("Kurs ulazne fakture u RSD je uvek 1.");
+      }
+      data.exchangeRate = 1;
       break;
     case "netValue": {
       const amount = decimalValue(value, "Neto vrednost mora biti broj.");

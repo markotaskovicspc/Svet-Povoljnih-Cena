@@ -4,6 +4,15 @@ export type InboundInvoiceTotals = {
   grossValue: number;
 };
 
+export type InboundInvoiceCostBreakdown = {
+  invoiceValueRsd: number;
+  customsValueRsd: number;
+  transportValueRsd: number;
+  otherRelatedCostsRsd: number;
+};
+
+export const INBOUND_INVOICE_VAT_RATE = 0.2;
+
 export type PurchaseOrderCostLine = {
   id: string;
   sku: string;
@@ -27,6 +36,117 @@ function assertNonnegativeMoney(value: number, label: string) {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${label} mora biti nenegativan broj.`);
   }
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function calculateInboundInvoiceAmounts(
+  costs: InboundInvoiceCostBreakdown,
+): InboundInvoiceCostBreakdown & InboundInvoiceTotals {
+  assertNonnegativeMoney(costs.invoiceValueRsd, "Vrednost fakture u RSD");
+  assertNonnegativeMoney(costs.customsValueRsd, "Vrednost carine u RSD");
+  assertNonnegativeMoney(costs.transportValueRsd, "Vrednost transporta u RSD");
+  assertNonnegativeMoney(
+    costs.otherRelatedCostsRsd,
+    "Vrednost ostalih vezanih troškova u RSD",
+  );
+
+  const netValue = roundMoney(
+    costs.invoiceValueRsd +
+      costs.customsValueRsd +
+      costs.transportValueRsd +
+      costs.otherRelatedCostsRsd,
+  );
+  const vatValue = roundMoney(netValue * INBOUND_INVOICE_VAT_RATE);
+  const grossValue = roundMoney(netValue + vatValue);
+
+  return { ...costs, netValue, vatValue, grossValue };
+}
+
+export function calculatePurchaseOrderInvoiceDefaults(input: {
+  exchangeRate: number;
+  freightCost: number;
+  freightExchangeRate: number;
+  lines: Array<{
+    qty: number;
+    purchasePrice: number;
+    customsRatePct?: number | null;
+  }>;
+}): Pick<
+  InboundInvoiceCostBreakdown,
+  "invoiceValueRsd" | "customsValueRsd" | "transportValueRsd"
+> {
+  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
+    throw new Error("Kurs porudžbenice mora biti veći od nule.");
+  }
+  if (
+    !Number.isFinite(input.freightExchangeRate) ||
+    input.freightExchangeRate <= 0
+  ) {
+    throw new Error("Kurs valute transporta mora biti veći od nule.");
+  }
+  assertNonnegativeMoney(input.freightCost, "Vrednost transporta");
+
+  let invoiceValueRsd = 0;
+  let customsValueRsd = 0;
+  for (const line of input.lines) {
+    if (!Number.isInteger(line.qty) || line.qty <= 0) {
+      throw new Error("Količina stavke porudžbenice mora biti ceo broj veći od nule.");
+    }
+    assertNonnegativeMoney(line.purchasePrice, "Nabavna cena");
+    const lineValueRsd = line.purchasePrice * input.exchangeRate * line.qty;
+    invoiceValueRsd += lineValueRsd;
+    customsValueRsd +=
+      lineValueRsd * (Math.max(line.customsRatePct ?? 0, 0) / 100);
+  }
+
+  return {
+    invoiceValueRsd: roundMoney(invoiceValueRsd),
+    customsValueRsd: roundMoney(customsValueRsd),
+    transportValueRsd: roundMoney(
+      input.freightCost * input.freightExchangeRate,
+    ),
+  };
+}
+
+export function calculateLinkedInvoiceAdjustmentRsd(input: {
+  purchaseOrderBaselineRsd: number;
+  invoices: Array<{
+    netValue: number;
+    exchangeRate: number;
+    invoiceValueRsd: number | null;
+  }>;
+}) {
+  assertNonnegativeMoney(
+    input.purchaseOrderBaselineRsd,
+    "Osnovna COGS vrednost porudžbenice",
+  );
+  let legacyAdditionalCostsRsd = 0;
+  let breakdownTotalRsd = 0;
+  let hasBreakdownInvoice = false;
+
+  for (const invoice of input.invoices) {
+    assertNonnegativeMoney(invoice.netValue, "Vrednost vezane fakture");
+    if (!Number.isFinite(invoice.exchangeRate) || invoice.exchangeRate <= 0) {
+      throw new Error("Kurs vezane fakture mora biti veći od nule.");
+    }
+    const netValueRsd = invoice.netValue * invoice.exchangeRate;
+    if (invoice.invoiceValueRsd == null) {
+      legacyAdditionalCostsRsd += netValueRsd;
+    } else {
+      hasBreakdownInvoice = true;
+      breakdownTotalRsd += netValueRsd;
+    }
+  }
+
+  return roundMoney(
+    legacyAdditionalCostsRsd +
+      (hasBreakdownInvoice
+        ? breakdownTotalRsd - input.purchaseOrderBaselineRsd
+        : 0),
+  );
 }
 
 /**
@@ -54,7 +174,9 @@ export function allocateInvoiceCostsByOrderValue(
   totalCostRsd: number,
   lines: PurchaseOrderCostLine[],
 ) {
-  assertNonnegativeMoney(totalCostRsd, "Ukupna vrednost vezanih faktura");
+  if (!Number.isFinite(totalCostRsd)) {
+    throw new Error("Ukupna korekcija vezanih faktura mora biti broj.");
+  }
   if (!lines.length) return new Map<string, number>();
 
   const values = lines.map((line) => {

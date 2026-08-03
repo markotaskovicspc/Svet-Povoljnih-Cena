@@ -1,12 +1,67 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateInvoiceCostsByOrderValue,
+  calculateInboundInvoiceAmounts,
+  calculateLinkedInvoiceAdjustmentRsd,
+  calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
+  it("prefills RSD invoice, customs and transport values from the purchase order", () => {
+    expect(
+      calculatePurchaseOrderInvoiceDefaults({
+        exchangeRate: 120,
+        freightCost: 100,
+        freightExchangeRate: 120,
+        lines: [
+          { qty: 10, purchasePrice: 10, customsRatePct: 10 },
+          { qty: 5, purchasePrice: 20, customsRatePct: 5 },
+        ],
+      }),
+    ).toEqual({
+      invoiceValueRsd: 24_000,
+      customsValueRsd: 1_800,
+      transportValueRsd: 12_000,
+    });
+  });
+
+  it("calculates net, 20% VAT and gross from the editable cost components", () => {
+    expect(
+      calculateInboundInvoiceAmounts({
+        invoiceValueRsd: 24_000,
+        customsValueRsd: 1_800,
+        transportValueRsd: 12_000,
+        otherRelatedCostsRsd: 200,
+      }),
+    ).toEqual({
+      invoiceValueRsd: 24_000,
+      customsValueRsd: 1_800,
+      transportValueRsd: 12_000,
+      otherRelatedCostsRsd: 200,
+      netValue: 38_000,
+      vatValue: 7_600,
+      grossValue: 45_600,
+    });
+  });
+
+  it("turns a complete COGS invoice into only the adjustment over the PO baseline", () => {
+    expect(
+      calculateLinkedInvoiceAdjustmentRsd({
+        purchaseOrderBaselineRsd: 8_500,
+        invoices: [
+          {
+            netValue: 9_000,
+            exchangeRate: 1,
+            invoiceValueRsd: 8_500,
+          },
+        ],
+      }),
+    ).toBe(500);
+  });
+
   it("requires net plus VAT to reconcile with gross", () => {
     expect(
       validateInboundInvoiceTotals({
@@ -38,6 +93,19 @@ describe("ERP module 5 inbound invoices and COGS", () => {
     expect(
       Array.from(allocations.values()).reduce((sum, value) => sum + value, 0),
     ).toBeCloseTo(100.01, 2);
+  });
+
+  it("allocates a negative invoice correction without double-counting PO costs", () => {
+    const allocations = allocateInvoiceCostsByOrderValue(-100, [
+      { id: "a", sku: "A", qty: 1, purchasePrice: 100 },
+      { id: "b", sku: "B", qty: 1, purchasePrice: 100 },
+    ]);
+    expect(allocations).toEqual(
+      new Map([
+        ["a", -50],
+        ["b", -50],
+      ]),
+    );
   });
 
   it("calculates incoming unit COGS by SKU from order and linked costs", () => {

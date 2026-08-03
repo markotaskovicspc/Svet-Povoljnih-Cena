@@ -169,8 +169,13 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         "Broj fakture",
         "Datum prijema",
         "Naziv dobavljača",
-        "Vrednost bez PDV-a",
-        "PDV",
+        "Vrednost fakture u RSD",
+        "Vrednost carine u RSD",
+        "Vrednost transporta u RSD",
+        "Ostali vezani troškovi u RSD",
+        "Ukupno bez PDV-a",
+        "PDV (20%)",
+        "Ukupno sa PDV-om",
         "Veza sa dokumentom",
       ]) {
         await expect(
@@ -213,16 +218,20 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       });
       await form.locator('[name="number"]').fill(fixture.invoiceNumber);
       await form.locator('[name="receiptDate"]').fill("2026-07-24");
-      await form.locator('[name="supplierId"]').selectOption(supplierId);
       await form
         .locator('[name="purchaseOrderId"]')
         .selectOption(purchaseOrderId);
-      await form.locator('[name="type"]').selectOption("COGS");
-      await form.locator('[name="currency"]').selectOption("RSD");
-      await form.locator('[name="exchangeRate"]').fill("1");
-      await form.locator('[name="netValue"]').fill("500");
-      await form.locator('[name="vatValue"]').fill("100");
-      await form.locator('[name="grossValue"]').fill("600");
+      await expect(form.locator('[name="supplierId"]')).toHaveValue(supplierId);
+      await expect(form.locator('[name="type"]')).toHaveValue("COGS");
+      await expect(form.locator('[name="currency"]')).toHaveValue("RSD");
+      await expect(form.locator('[name="exchangeRate"]')).toHaveValue("1");
+      await expect(form.locator('[name="invoiceValueRsd"]')).toHaveValue("8500");
+      await expect(form.locator('[name="customsValueRsd"]')).toHaveValue("0");
+      await expect(form.locator('[name="transportValueRsd"]')).toHaveValue("0");
+      await form.locator('[name="otherRelatedCostsRsd"]').fill("500");
+      await expect(form.locator('[name="netValue"]')).toHaveValue("9000");
+      await expect(form.locator('[name="vatValue"]')).toHaveValue("1800");
+      await expect(form.locator('[name="grossValue"]')).toHaveValue("10800");
       await form.locator('[name="notes"]').fill("QA trošak transporta");
       await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(form.getByRole("status")).toContainText(
@@ -241,15 +250,23 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         net: Number(saved.netValue),
         vat: Number(saved.vatValue),
         gross: Number(saved.grossValue),
+        invoiceValueRsd: Number(saved.invoiceValueRsd),
+        customsValueRsd: Number(saved.customsValueRsd),
+        transportValueRsd: Number(saved.transportValueRsd),
+        otherRelatedCostsRsd: Number(saved.otherRelatedCostsRsd),
       }).toEqual({
         number: fixture.invoiceNumber,
         supplierId,
         purchaseOrderId,
         type: "COGS",
         status: "RECEIVED",
-        net: 500,
-        vat: 100,
-        gross: 600,
+        net: 9_000,
+        vat: 1_800,
+        gross: 10_800,
+        invoiceValueRsd: 8_500,
+        customsValueRsd: 0,
+        transportValueRsd: 0,
+        otherRelatedCostsRsd: 500,
       });
       await expect(
         page.locator("tbody tr").filter({ hasText: fixture.sku }),

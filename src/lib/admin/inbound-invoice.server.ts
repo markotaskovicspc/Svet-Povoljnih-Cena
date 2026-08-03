@@ -11,6 +11,9 @@ import {
 import { db } from "@/lib/db";
 import {
   allocateInvoiceCostsByOrderValue,
+  calculateInboundInvoiceAmounts,
+  calculateLinkedInvoiceAdjustmentRsd,
+  calculatePurchaseOrderInvoiceDefaults,
   validateInboundInvoiceTotals,
 } from "@/lib/admin/inbound-invoice";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
@@ -19,14 +22,11 @@ export type SaveInboundInvoiceInput = {
   id: string;
   number: string;
   receiptDate: Date;
-  supplierId: string;
   purchaseOrderId: string;
-  type: InboundInvoiceType;
-  currency: ErpCurrency;
-  exchangeRate: number;
-  netValue: number;
-  vatValue: number;
-  grossValue: number;
+  invoiceValueRsd: number;
+  customsValueRsd: number;
+  transportValueRsd: number;
+  otherRelatedCostsRsd: number;
   notes: string | null;
 };
 
@@ -56,9 +56,11 @@ export async function createInboundInvoice(now = new Date()) {
       return await db.inboundInvoice.create({
         data: {
           number: `UF-${year}-${String(next).padStart(4, "0")}`,
-          type: InboundInvoiceType.DOM,
+          type: InboundInvoiceType.COGS,
           status: InboundInvoiceStatus.DRAFT,
           invoiceDate: utcDateOnly(now),
+          currency: ErpCurrency.RSD,
+          exchangeRate: 1,
           allocationBasis: "VALUE",
         },
       });
@@ -72,12 +74,14 @@ export async function createInboundInvoice(now = new Date()) {
 export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   const number = input.number.trim();
   if (!number) throw new Error("Broj fakture je obavezan.");
-  if (!input.supplierId) throw new Error("Naziv dobavljača je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
-  validateInboundInvoiceTotals(input);
-  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
-    throw new Error("Kurs mora biti veći od nule.");
-  }
+  const amounts = calculateInboundInvoiceAmounts({
+    invoiceValueRsd: input.invoiceValueRsd,
+    customsValueRsd: input.customsValueRsd,
+    transportValueRsd: input.transportValueRsd,
+    otherRelatedCostsRsd: input.otherRelatedCostsRsd,
+  });
+  validateInboundInvoiceTotals(amounts);
 
   const current = await db.inboundInvoice.findUnique({
     where: { id: input.id },
@@ -86,19 +90,19 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   if (!current) throw new Error("Ulazna faktura ne postoji.");
   if (current.lockedAt) throw new Error("Zaključana faktura se ne može menjati.");
 
-  const [supplier, purchaseOrder] = await Promise.all([
-    db.supplier.findUnique({
-      where: { id: input.supplierId },
-      select: { enabled: true },
-    }),
-    db.purchaseOrder.findUnique({
-      where: { id: input.purchaseOrderId },
-      select: { status: true },
-    }),
-  ]);
-  if (!supplier?.enabled) throw new Error("Izabrani dobavljač nije aktivan.");
+  const purchaseOrder = await db.purchaseOrder.findUnique({
+    where: { id: input.purchaseOrderId },
+    select: {
+      status: true,
+      supplierId: true,
+      supplier: { select: { enabled: true } },
+    },
+  });
   if (!purchaseOrder || purchaseOrder.status === PurchaseOrderStatus.CANCELLED) {
     throw new Error("Izabrana porudžbenica nije dostupna.");
+  }
+  if (!purchaseOrder.supplierId || !purchaseOrder.supplier?.enabled) {
+    throw new Error("Porudžbenica nema aktivnog dobavljača.");
   }
 
   try {
@@ -107,15 +111,19 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       data: {
         number,
         invoiceDate: utcDateOnly(input.receiptDate),
-        supplierId: input.supplierId,
+        supplierId: purchaseOrder.supplierId,
         purchaseOrderId: input.purchaseOrderId,
-        type: input.type,
-        currency: input.currency,
-        exchangeRate: input.currency === ErpCurrency.RSD ? 1 : input.exchangeRate,
-        value: input.netValue,
-        netValue: input.netValue,
-        vatValue: input.vatValue,
-        grossValue: input.grossValue,
+        type: InboundInvoiceType.COGS,
+        currency: ErpCurrency.RSD,
+        exchangeRate: 1,
+        value: amounts.netValue,
+        invoiceValueRsd: amounts.invoiceValueRsd,
+        customsValueRsd: amounts.customsValueRsd,
+        transportValueRsd: amounts.transportValueRsd,
+        otherRelatedCostsRsd: amounts.otherRelatedCostsRsd,
+        netValue: amounts.netValue,
+        vatValue: amounts.vatValue,
+        grossValue: amounts.grossValue,
         allocationBasis: "VALUE",
         status: InboundInvoiceStatus.RECEIVED,
         cogsStatus: CogsStatus.PENDING,
@@ -238,15 +246,37 @@ async function rebuildInboundInvoiceAllocations(
       },
       inboundInvoices: {
         where: { lockedAt: { not: null }, status: InboundInvoiceStatus.POSTED },
-        select: { netValue: true, exchangeRate: true },
+        select: {
+          netValue: true,
+          exchangeRate: true,
+          invoiceValueRsd: true,
+        },
       },
     },
   });
   if (!order) return;
-  const linkedCostRsd = order.inboundInvoices.reduce(
-    (sum, linked) => sum + Number(linked.netValue) * Number(linked.exchangeRate),
-    0,
-  );
+  const defaults = calculatePurchaseOrderInvoiceDefaults({
+    exchangeRate: Number(order.exchangeRate),
+    freightCost: Number(order.freightCost),
+    freightExchangeRate: Number(order.freightExchangeRate),
+    lines: order.items.map((item) => ({
+      qty: item.qty,
+      purchasePrice: Number(item.purchasePrice),
+      customsRatePct: Number(item.customsRate ?? 0),
+    })),
+  });
+  const linkedCostRsd = calculateLinkedInvoiceAdjustmentRsd({
+    purchaseOrderBaselineRsd:
+      defaults.invoiceValueRsd +
+      defaults.customsValueRsd +
+      defaults.transportValueRsd,
+    invoices: order.inboundInvoices.map((linked) => ({
+      netValue: Number(linked.netValue),
+      exchangeRate: Number(linked.exchangeRate),
+      invoiceValueRsd:
+        linked.invoiceValueRsd == null ? null : Number(linked.invoiceValueRsd),
+    })),
+  });
   const allocations = allocateInvoiceCostsByOrderValue(
     linkedCostRsd,
     order.items.map((item) => ({

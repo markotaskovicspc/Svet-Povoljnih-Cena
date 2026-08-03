@@ -2150,7 +2150,7 @@ model PurchaseOrderStatusEvent {
 model InboundInvoice {
   id              String               @id @default(cuid())
   number          String               @unique
-  type            InboundInvoiceType
+  type            InboundInvoiceType   @default(COGS)
   supplierId      String?
   purchaseOrderId String?
   status          InboundInvoiceStatus @default(DRAFT)
@@ -2158,6 +2158,10 @@ model InboundInvoice {
   currency        ErpCurrency          @default(RSD)
   exchangeRate    Decimal              @default(1) @db.Decimal(14, 6)
   value           Decimal              @default(0) @db.Decimal(12, 2)
+  invoiceValueRsd Decimal?              @db.Decimal(12, 2)
+  customsValueRsd Decimal?              @db.Decimal(12, 2)
+  transportValueRsd Decimal?            @db.Decimal(12, 2)
+  otherRelatedCostsRsd Decimal?         @db.Decimal(12, 2)
   netValue        Decimal              @default(0) @db.Decimal(12, 2)
   vatValue        Decimal              @default(0) @db.Decimal(12, 2)
   grossValue      Decimal              @default(0) @db.Decimal(12, 2)
