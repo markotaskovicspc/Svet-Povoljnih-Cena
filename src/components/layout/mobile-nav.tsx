@@ -144,7 +144,7 @@ export function MobileNav({
                   width={1193}
                   height={198}
                   preload
-                  className="h-auto w-[min(122vw,514px)] max-w-none object-contain"
+                  className="h-auto w-[min(61vw,257px)] max-w-full scale-110 object-contain"
                 />
               </Link>
               <div className="flex shrink-0 items-center justify-end gap-1">
