@@ -58,7 +58,7 @@ export function Header({
               width={1193}
               height={198}
               preload
-              className="h-auto w-[772px] max-w-[60vw] object-contain"
+              className="h-auto w-[386px] max-w-[30vw] object-contain"
             />
           </div>
         </Link>
