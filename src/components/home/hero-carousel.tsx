@@ -61,6 +61,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
 
   if (!count) return null;
   const slide = banners[index];
+  const isLeadSlide = index === 0;
 
   return (
     <section
@@ -72,7 +73,12 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onBlur={() => setPaused(false)}
       className="relative isolate bg-canvas px-2 pt-2 sm:px-3 md:px-4 md:pt-3"
     >
-      <div className="relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:h-auto md:max-h-none md:min-h-0 md:aspect-[24/10] lg:rounded-xl">
+      <div
+        className={cn(
+          "relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 md:h-auto md:max-h-none md:min-h-0 md:aspect-[24/10] md:shadow-soft-3 lg:rounded-xl",
+          isLeadSlide && "shadow-soft-3",
+        )}
+      >
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
@@ -122,14 +128,27 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
             ) : null}
             <div
               aria-hidden
-              className="from-ink-900/85 via-ink-900/20 absolute inset-0 bg-gradient-to-r to-transparent"
+              className={cn(
+                "from-ink-900/85 via-ink-900/20 absolute inset-0 bg-gradient-to-r to-transparent",
+                !isLeadSlide && "hidden md:block",
+              )}
             />
           </motion.div>
         </AnimatePresence>
 
         {/* Caption */}
-        <div className="pointer-events-none absolute inset-0 flex items-end md:items-center">
-          <div className="w-full px-6 pb-6 md:px-16 md:pb-0 lg:px-24 xl:px-32">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 flex items-end",
+            isLeadSlide && "md:items-center",
+          )}
+        >
+          <div
+            className={cn(
+              "w-full px-6 pb-6 md:px-16 lg:px-24 xl:px-32",
+              isLeadSlide ? "md:pb-0" : "md:pb-8 lg:pb-10",
+            )}
+          >
             <motion.div
               key={slide.id + "-copy"}
               initial={{ opacity: 0, y: 12 }}
@@ -137,21 +156,28 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               transition={{ duration: 0.6, ease, delay: 0.1 }}
               className="pointer-events-none max-w-xl text-canvas"
             >
-              <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
-                {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
-              </p>
-              <h2 className="font-display mt-2 max-w-[13ch] text-2xl leading-[1.1] md:mt-3 md:max-w-none md:text-6xl">
-                {slide.title}
-              </h2>
-              {slide.subtitle ? (
-                <p className="mt-2 hidden max-w-md text-base text-canvas/80 md:block md:text-lg">
-                  {slide.subtitle}
-                </p>
+              {isLeadSlide ? (
+                <>
+                  <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
+                    {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
+                  </p>
+                  <h2 className="font-display mt-2 max-w-[13ch] text-2xl leading-[1.1] md:mt-3 md:max-w-none md:text-6xl">
+                    {slide.title}
+                  </h2>
+                  {slide.subtitle ? (
+                    <p className="mt-2 hidden max-w-md text-base text-canvas/80 md:block md:text-lg">
+                      {slide.subtitle}
+                    </p>
+                  ) : null}
+                </>
               ) : null}
               {slide.ctaHref && slide.ctaLabel ? (
                 <Link
                   href={slide.ctaHref}
-                  className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto mt-3 inline-flex items-center rounded-full px-5 py-2 text-xs shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:mt-6 md:px-6 md:py-3 md:text-sm"
+                  className={cn(
+                    "bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto inline-flex items-center rounded-full px-5 py-2 text-xs shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:px-6 md:py-3 md:text-sm",
+                    isLeadSlide && "mt-3 md:mt-6",
+                  )}
                 >
                   {slide.ctaLabel}
                 </Link>
