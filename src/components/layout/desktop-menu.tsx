@@ -123,56 +123,102 @@ export function DesktopMenu({
             </Link>
           ) : null}
 
-          <ul className="divide-y divide-border">
-            {current.nodes.map((node) => {
-              const isActive = pathname === node.href;
-              const hasChildren = !!node.children?.length;
-              const categoryImageUrl = getCategoryMenuImage(node);
-              return (
-                <li
-                  key={node.href}
-                  className="flex min-h-18 items-stretch transition hover:bg-muted-bg"
-                >
-                  <Link
-                    href={node.href}
-                    onClick={close}
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center gap-3 px-5 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
-                      isActive && "font-semibold text-brand-blue",
-                    )}
-                  >
-                    <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+          {stack.length === 1 ? (
+            <ul className="grid grid-cols-2 gap-x-3.5 gap-y-6 px-4 pt-4 pb-6 sm:px-5">
+              {current.nodes.map((node) => {
+                const categoryImageUrl = getCategoryMenuImage(node);
+                const tileContent = (
+                  <>
+                    <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
                       <Image
                         src={categoryImageUrl}
                         alt=""
                         fill
-                        sizes="70px"
-                        className="object-cover"
+                        sizes="180px"
+                        className="object-cover transition duration-200 group-hover:scale-105"
                       />
                     </span>
-                    <span className="min-w-0 break-words">{node.label}</span>
-                  </Link>
-                  {hasChildren ? (
-                    <button
-                      type="button"
-                      onClick={() => enter(node)}
-                      aria-label={`Otvori ${node.label}`}
-                      className="flex w-14 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                    >
-                      <ChevronRight className="size-4" aria-hidden />
-                    </button>
-                  ) : (
-                    <span
-                      className="flex w-14 shrink-0 items-center justify-center text-ink-300"
-                      aria-hidden
-                    >
-                      <ChevronRight className="size-4" />
+                    <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-xs leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
+                      {node.label}
                     </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  </>
+                );
+
+                return (
+                  <li key={node.href}>
+                    {node.children?.length ? (
+                      <button
+                        type="button"
+                        onClick={() => enter(node)}
+                        className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                      >
+                        {tileContent}
+                      </button>
+                    ) : (
+                      <Link
+                        href={node.href}
+                        onClick={close}
+                        className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                      >
+                        {tileContent}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <ul className="divide-y divide-border">
+              {current.nodes.map((node) => {
+                const isActive = pathname === node.href;
+                const hasChildren = !!node.children?.length;
+                const categoryImageUrl = getCategoryMenuImage(node);
+                return (
+                  <li
+                    key={node.href}
+                    className="flex min-h-18 items-stretch transition hover:bg-muted-bg"
+                  >
+                    <Link
+                      href={node.href}
+                      onClick={close}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-3 px-5 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
+                        isActive && "font-semibold text-brand-blue",
+                      )}
+                    >
+                      <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                        <Image
+                          src={categoryImageUrl}
+                          alt=""
+                          fill
+                          sizes="70px"
+                          className="object-cover"
+                        />
+                      </span>
+                      <span className="min-w-0 break-words">{node.label}</span>
+                    </Link>
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        onClick={() => enter(node)}
+                        aria-label={`Otvori ${node.label}`}
+                        className="flex w-14 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                      >
+                        <ChevronRight className="size-4" aria-hidden />
+                      </button>
+                    ) : (
+                      <span
+                        className="flex w-14 shrink-0 items-center justify-center text-ink-300"
+                        aria-hidden
+                      >
+                        <ChevronRight className="size-4" />
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           {stack.length === 1 ? (
             <ul className="mt-4 border-t border-border">
