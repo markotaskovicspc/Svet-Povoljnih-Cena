@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { revalidatePath, updateTag } from "next/cache";
+import type { Category } from "@prisma/client";
 import { z } from "zod";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -11,7 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
+import { CategoryImageUpload } from "@/components/admin/category-image-upload";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
+import {
+  removeManagedCategoryImages,
+  removeUnreferencedCategoryImages,
+  uploadStagedCategoryImage,
+} from "@/lib/categories/image-storage.server";
 import {
   categoryDescendantPathUpdates,
   categoryTreeDepth,
@@ -42,22 +49,31 @@ const schema = z.object({
     .optional(),
   parentId: z.string().optional().nullable(),
   order: z.coerce.number().int().min(0).default(0),
-  imageUrl: z
-    .union([z.string().url(), z.literal("").transform(() => null)])
-    .optional()
-    .nullable(),
   description: z.string().max(2000).optional().nullable(),
 });
+
+function selectedUploadKey(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
 async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
     { allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
-    async (_a, formData: FormData) => {
+    async (actorId, formData: FormData) => {
         const parsed = schema.safeParse(Object.fromEntries(formData));
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         const data = parsed.data;
+        const imageUploadKey = selectedUploadKey(formData, "imageUploadKey");
+        const removeImage = formData.get("removeImage") === "true";
+        if (imageUploadKey && removeImage) {
+          return {
+            ok: false as const,
+            error: "Izaberite novu sliku ili uklanjanje postojeće, ne oba.",
+          };
+        }
         const slug = data.slug?.trim() || slugify(data.name);
         const categories = await db.category.findMany();
         const current = data.id
@@ -104,35 +120,78 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           };
         }
 
+        let uploadedImage: Awaited<
+          ReturnType<typeof uploadStagedCategoryImage>
+        > | null = null;
+        if (imageUploadKey) {
+          try {
+            uploadedImage = await uploadStagedCategoryImage(
+              imageUploadKey,
+              actorId,
+            );
+          } catch (error) {
+            return {
+              ok: false as const,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Upload slike nije uspeo.",
+            };
+          }
+        }
+
         const payload = {
           name: data.name,
           slug,
           parentId: parent?.id ?? null,
           order: data.order,
-          imageUrl: data.imageUrl || null,
+          imageUrl: removeImage
+            ? null
+            : (uploadedImage?.url ?? current?.imageUrl ?? null),
           description: data.description || null,
           level,
           path,
         };
-        const saved = await db.$transaction(async (tx) => {
-          const category = data.id
-            ? await tx.category.update({ where: { id: data.id }, data: payload })
-            : await tx.category.create({ data: payload });
+        let saved: Category;
+        try {
+          saved = await db.$transaction(async (tx) => {
+            const category = data.id
+              ? await tx.category.update({ where: { id: data.id }, data: payload })
+              : await tx.category.create({ data: payload });
 
-          const updatedTree = await tx.category.findMany();
-          const descendantUpdates = categoryDescendantPathUpdates(
-            updatedTree,
-            category.id,
-          );
-          for (const update of descendantUpdates) {
-            await tx.category.update({
-              where: { id: update.id },
-              data: { path: update.path, level: update.level },
-            });
-          }
-          await ensureCategoryGroup(tx, category);
-          return category;
-        });
+            const updatedTree = await tx.category.findMany();
+            const descendantUpdates = categoryDescendantPathUpdates(
+              updatedTree,
+              category.id,
+            );
+            for (const update of descendantUpdates) {
+              await tx.category.update({
+                where: { id: update.id },
+                data: { path: update.path, level: update.level },
+              });
+            }
+            await ensureCategoryGroup(tx, category);
+            return category;
+          });
+        } catch (error) {
+          await removeManagedCategoryImages([uploadedImage?.url], {
+            categoryId: current?.id ?? null,
+            reason: "database_save_failed",
+          });
+          return {
+            ok: false as const,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Kategoriju nije moguće sačuvati.",
+          };
+        }
+        if (current?.imageUrl !== payload.imageUrl) {
+          await removeUnreferencedCategoryImages([current?.imageUrl], {
+            categoryId: saved.id,
+            reason: removeImage ? "removed" : "replaced",
+          });
+        }
         revalidatePath("/admin/kategorije");
         revalidatePath("/admin/erp/artikli");
         revalidatePath("/");
@@ -162,7 +221,18 @@ async function remove(_state: AdminActionState, formData: FormData) {
         if (childCount > 0) {
           return { ok: false as const, error: "Premestite ili obrišite podkategorije pre brisanja." };
         }
+        const category = await db.category.findUnique({
+          where: { id },
+          select: { imageUrl: true },
+        });
+        if (!category) {
+          return { ok: false as const, error: "Kategorija više ne postoji." };
+        }
         await db.category.delete({ where: { id } });
+        await removeUnreferencedCategoryImages([category.imageUrl], {
+          categoryId: id,
+          reason: "category_deleted",
+        });
         revalidatePath("/admin/kategorije");
         revalidatePath("/");
         revalidatePath("/k/[...slug]", "page");
@@ -299,14 +369,10 @@ function CategoryForm({
             ))}
         </select>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Redosled">
-          <Input name="order" type="number" min={0} defaultValue={values?.order ?? 0} />
-        </Field>
-        <Field label="Slika (URL)">
-          <Input name="imageUrl" type="url" defaultValue={values?.imageUrl ?? ""} />
-        </Field>
-      </div>
+      <Field label="Redosled">
+        <Input name="order" type="number" min={0} defaultValue={values?.order ?? 0} />
+      </Field>
+      <CategoryImageUpload currentUrl={values?.imageUrl} />
       <Field label="Opis">
         <Textarea name="description" rows={3} defaultValue={values?.description ?? ""} />
       </Field>
