@@ -124,8 +124,8 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
         </AnimatePresence>
 
         {/* Caption */}
-        <div className="pointer-events-none absolute inset-0 flex items-end md:items-center">
-          <div className="w-full px-6 pb-6 md:px-16 md:pb-0 lg:px-24 xl:px-32">
+        <div className="pointer-events-none absolute inset-0 flex items-end">
+          <div className="w-full px-6 pb-6 md:px-16 md:pb-8 lg:px-24 lg:pb-10 xl:px-32">
             <motion.div
               key={slide.id + "-copy"}
               initial={{ opacity: 0, y: 12 }}
