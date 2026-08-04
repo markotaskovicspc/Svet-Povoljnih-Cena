@@ -89,6 +89,27 @@ describe("ProductCard image regression", () => {
     expect(html).toContain('alt="Prva fotografija"');
   });
 
+  it("keeps compact responsive image sizing and the restored white space", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          loyaltyPrice: 700,
+          loyaltyDiscountPct: 30,
+        },
+      }),
+    );
+
+    expect(html).toContain(
+      'sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 25vw, (min-width: 394px) 32vw, 126px"',
+    );
+    expect(html).toMatch(/object-contain p-3 transition/);
+    expect(html).not.toMatch(/object-contain p-2\.5 transition/);
+    expect(html).toContain("gap-1.5 sm:gap-2");
+    expect(html).toContain("min-h-6 break-words");
+    expect(html).not.toContain("min-h-3.5 truncate");
+  });
+
   it("keeps duplicate product cards independent on the same page", () => {
     const html = renderToStaticMarkup(
       createElement(

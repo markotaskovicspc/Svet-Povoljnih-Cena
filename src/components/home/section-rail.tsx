@@ -226,7 +226,7 @@ export function SectionRail({
                     transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
                   },
                 }}
-                className="w-[35vw] min-w-[138px] shrink-0 snap-start sm:w-[28vw] md:w-[calc((100%_-_80px)/5)] md:min-w-[180px] 2xl:w-[calc((100%_-_80px)/6)]"
+                className="w-[32vw] min-w-[126px] shrink-0 snap-start sm:w-[25vw] md:w-[clamp(162px,calc(18%_-_14px),220px)]"
               >
                 <ProductCard
                   product={p}

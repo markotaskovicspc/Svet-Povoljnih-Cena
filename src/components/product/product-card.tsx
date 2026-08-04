@@ -232,13 +232,13 @@ export function ProductCard({
                     src={image.url}
                     alt={image.alt ?? product.name}
                     fill
-                    sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 640px) 33vw, 48vw"
+                    sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 25vw, (min-width: 394px) 32vw, 126px"
                     preload={index === 0 ? preload : undefined}
                     draggable={false}
                     placeholder="blur"
                     blurDataURL={image.blurDataUrl ?? FALLBACK_BLUR}
                     onError={() => markImageFailed(image.url)}
-                    className="object-contain p-2.5 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                    className="object-contain p-3 transition duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
                   />
                 </div>
               ))
@@ -395,7 +395,7 @@ export function ProductCard({
               </button>
             )}
           </div>
-          <p className="mt-1 min-h-3.5 truncate text-[10px] leading-none text-ink-500 md:text-[11px]">
+          <p className="mt-1 min-h-6 break-words text-[9px] leading-tight text-ink-500 sm:text-[10px] md:text-[10px]">
             {availability.isSupplierSourced
               ? availability.message
               : availability.canAddToCart
@@ -419,7 +419,7 @@ function CompactPriceOffer({
   selected: boolean;
 }) {
   return (
-    <span className="flex items-baseline justify-between gap-2">
+    <span className="flex items-baseline justify-between gap-1.5 sm:gap-2">
       <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">
         {label}
       </span>
