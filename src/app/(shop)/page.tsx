@@ -31,14 +31,14 @@ export default async function Home() {
       <HomeSection section={sections[HomeSectionSlotKey.SECOND]} />
 
       {bannerAfterSecond ? (
-        <EditorialBanner banner={bannerAfterSecond} compact eyebrow="Izdvojena ponuda" />
+        <EditorialBanner banner={bannerAfterSecond} compact />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.THIRD]} />
       <HomeSection section={sections[HomeSectionSlotKey.FOURTH]} />
 
       {bannerAfterFourth ? (
-        <EditorialBanner banner={bannerAfterFourth} compact eyebrow="Izdvojena ponuda" />
+        <EditorialBanner banner={bannerAfterFourth} compact />
       ) : null}
 
       <HomeSection section={sections[HomeSectionSlotKey.FIFTH]} />

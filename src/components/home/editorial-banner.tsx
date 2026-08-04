@@ -11,13 +11,11 @@ import { cn } from "@/lib/utils";
 interface EditorialBannerProps {
   banner: Banner;
   compact?: boolean;
-  eyebrow?: string;
 }
 
 export function EditorialBanner({
   banner,
   compact = false,
-  eyebrow = "Kolekcija meseca",
 }: EditorialBannerProps) {
   return (
     <section
@@ -31,7 +29,7 @@ export function EditorialBanner({
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="relative isolate overflow-hidden rounded-lg bg-ink-900 text-canvas shadow-soft-4 lg:rounded-xl"
+        className="relative isolate overflow-hidden rounded-lg bg-canvas lg:rounded-xl"
       >
         <div className="relative aspect-[16/7] min-h-[160px] w-full md:aspect-[24/9] md:min-h-0">
           <Image
@@ -39,43 +37,26 @@ export function EditorialBanner({
             alt={(banner.imageMobile ?? banner.imageDesktop).alt ?? banner.title}
             fill
             sizes="calc(100vw - 16px)"
-            className="object-cover opacity-80 md:hidden"
+            className="object-cover md:hidden"
           />
           <Image
             src={banner.imageDesktop.url}
             alt={banner.imageDesktop.alt ?? banner.title}
             fill
             sizes="(max-width: 767px) calc(100vw - 16px), calc(100vw - 32px)"
-            className="hidden object-cover opacity-80 md:block"
-          />
-          <div
-            aria-hidden
-            className="from-ink-900/85 via-ink-900/40 absolute inset-0 bg-gradient-to-r to-transparent"
+            className="hidden object-cover md:block"
           />
         </div>
-        <div className="relative flex items-start bg-ink-900 px-5 py-6 md:absolute md:inset-0 md:items-center md:bg-transparent md:px-0 md:py-0">
-          <div className="max-w-xl md:px-12">
-            <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
-              {eyebrow}
-            </p>
-            <h2 className="font-display mt-2 text-2xl leading-tight md:mt-3 md:text-5xl md:leading-[1.1]">
-              {banner.title}
-            </h2>
-            {banner.subtitle ? (
-              <p className="mt-3 max-w-md text-sm leading-relaxed text-canvas/82 md:mt-4 md:text-lg">
-                {banner.subtitle}
-              </p>
-            ) : null}
-            {banner.ctaHref && banner.ctaLabel ? (
-              <Link
-                href={banner.ctaHref}
-                className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:mt-6 md:px-6 md:py-3"
-              >
-                {banner.ctaLabel}
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-            ) : null}
-          </div>
+        <div className="pointer-events-none absolute inset-0 flex items-end px-5 pb-4 md:px-12 md:pb-10">
+          {banner.ctaHref && banner.ctaLabel ? (
+            <Link
+              href={banner.ctaHref}
+              className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:px-6 md:py-3"
+            >
+              {banner.ctaLabel}
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          ) : null}
         </div>
       </motion.article>
     </section>
