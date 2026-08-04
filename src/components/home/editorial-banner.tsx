@@ -31,7 +31,12 @@ export function EditorialBanner({
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative isolate overflow-hidden rounded-lg bg-canvas lg:rounded-xl"
       >
-        <div className="relative aspect-square w-full md:aspect-[24/10]">
+        <div
+          className={cn(
+            "relative aspect-square w-full",
+            compact ? "md:aspect-[24/9]" : "md:aspect-[24/10]",
+          )}
+        >
           <Image
             src={(banner.imageMobile ?? banner.imageDesktop).url}
             alt={(banner.imageMobile ?? banner.imageDesktop).alt ?? banner.title}
