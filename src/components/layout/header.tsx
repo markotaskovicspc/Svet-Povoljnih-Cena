@@ -128,7 +128,7 @@ export function Header({
               width={1193}
               height={198}
               preload
-              className="mx-auto h-auto w-[min(60vw,308px)] max-w-full scale-110 object-contain"
+              className="mx-auto h-auto w-[min(60vw,308px)] max-w-full scale-125 object-contain"
             />
           </div>
         </Link>
