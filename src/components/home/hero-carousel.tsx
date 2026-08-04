@@ -120,10 +120,6 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
                 transition={{ duration: 7, ease: "linear" }}
               />
             ) : null}
-            <div
-              aria-hidden
-              className="from-ink-900/85 via-ink-900/20 absolute inset-0 bg-gradient-to-r to-transparent"
-            />
           </motion.div>
         </AnimatePresence>
 
@@ -137,10 +133,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
               transition={{ duration: 0.6, ease, delay: 0.1 }}
               className="pointer-events-none max-w-xl text-canvas"
             >
-              <p className="font-mono text-[10px] tracking-[0.2em] text-sand uppercase md:text-xs">
-                {slide.subtitle ? "Aktuelno" : "Predstavljamo"}
-              </p>
-              <h2 className="font-display mt-2 max-w-[13ch] text-2xl leading-[1.1] md:mt-3 md:max-w-none md:text-6xl">
+              <h2 className="font-display max-w-[13ch] text-2xl leading-[1.1] md:max-w-none md:text-6xl">
                 {slide.title}
               </h2>
               {slide.subtitle ? (
