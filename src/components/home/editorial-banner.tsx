@@ -34,7 +34,7 @@ export function EditorialBanner({
         <div
           className={cn(
             "relative aspect-square w-full",
-            compact ? "md:aspect-[24/9]" : "md:aspect-[24/10]",
+            compact ? "md:aspect-[24/7]" : "md:aspect-[24/10]",
           )}
         >
           <Image
