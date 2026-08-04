@@ -72,7 +72,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
       onBlur={() => setPaused(false)}
       className="relative isolate bg-canvas px-2 pt-2 sm:px-3 md:px-4 md:pt-3"
     >
-      <div className="relative mx-auto aspect-[4/5] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:aspect-[16/9] lg:rounded-xl">
+      <div className="relative mx-auto h-[48dvh] max-h-[420px] min-h-[300px] w-full max-w-[calc(var(--container-page)_-_32px)] overflow-hidden rounded-lg bg-ink-900 shadow-soft-3 md:h-auto md:max-h-none md:min-h-0 md:aspect-[16/9] lg:rounded-xl">
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
           <motion.div
             key={slide.id}
