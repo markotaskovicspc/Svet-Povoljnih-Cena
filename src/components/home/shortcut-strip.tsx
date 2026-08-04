@@ -6,15 +6,16 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
   if (!items.length) return null;
 
   return (
-    <section className="bg-white">
-      <div className="mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-3 px-4 py-4 md:grid-cols-4 md:px-6 md:py-6">
+    <section aria-label="Brze ponude" className="bg-white">
+      <div className="mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-2 px-3 py-3 md:grid-cols-4 md:px-6 md:py-6">
         {items.map((tab) => {
           return (
             <PromoShortcutTile
               key={tab.id}
               tab={tab}
               canonicalize={false}
-              className="h-20 text-brand-blue"
+              variant="homepage"
+              className="text-brand-blue"
             />
           );
         })}

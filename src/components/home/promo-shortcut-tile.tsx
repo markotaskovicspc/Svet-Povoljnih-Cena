@@ -37,6 +37,7 @@ export function PromoShortcutTile({
   tab,
   active,
   compact = false,
+  variant = "default",
   className,
   onClick,
   canonicalize = true,
@@ -44,10 +45,12 @@ export function PromoShortcutTile({
   tab: Tab;
   active?: boolean;
   compact?: boolean;
+  variant?: "default" | "homepage";
   className?: string;
   onClick?: () => void;
   canonicalize?: boolean;
 }) {
+  const homepage = variant === "homepage";
   const promoTab = getPromoTabPresentation(tab);
   const Icon =
     shortcutIconMap[tab.icon as keyof typeof shortcutIconMap] ?? Sparkles;
@@ -71,9 +74,11 @@ export function PromoShortcutTile({
         isExternalMobileShortcutHref(presentation.href) ? "noreferrer" : undefined
       }
       onClick={onClick}
+      data-shortcut-variant={variant}
       className={cn(
         "group flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
         compact && "min-h-10 gap-1.5 px-2 py-1 text-[11px]",
+        homepage && "h-16 min-h-16 gap-2 px-2.5 py-2 text-xs",
         active && "ring-2 ring-white/80",
         className,
       )}
@@ -82,6 +87,7 @@ export function PromoShortcutTile({
         className={cn(
           "flex h-12 w-16 shrink-0 items-center justify-center text-brand-blue",
           compact && "h-7 w-8",
+          homepage && "h-8 w-10",
         )}
       >
         {iconAsset ? (
@@ -95,13 +101,21 @@ export function PromoShortcutTile({
               "h-9 w-9 object-contain",
               iconImageClass,
               compact && "max-h-7 max-w-8",
+              homepage && "h-8 w-10",
             )}
           />
         ) : (
           <Icon className={cn("size-5", compact && "size-4")} aria-hidden />
         )}
       </span>
-      <span className="min-w-0 flex-1 leading-[1.08] break-words">{presentation.label}</span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 leading-[1.08] break-words",
+          homepage && "line-clamp-3",
+        )}
+      >
+        {presentation.label}
+      </span>
     </Link>
   );
 }

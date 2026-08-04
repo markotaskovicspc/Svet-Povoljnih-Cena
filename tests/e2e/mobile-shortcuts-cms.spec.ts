@@ -169,8 +169,28 @@ test.describe("mobile shortcut CMS acceptance", () => {
     const uploadedKey = storageKey(savedRow.icon);
     if (uploadedKey) uploadedKeys.add(uploadedKey);
 
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 360, height: 640 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    const shortcutRegion = page.getByRole("region", { name: "Brze ponude" });
+    const shortcutTiles = shortcutRegion.getByRole("link");
+    await expect(shortcutTiles).toHaveCount(4);
+    const shortcutBoxes = await shortcutTiles.evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          bottom: Math.round(rect.bottom),
+          contentFits:
+            element.scrollWidth <= element.clientWidth &&
+            element.scrollHeight <= element.clientHeight,
+        };
+      }),
+    );
+    expect(new Set(shortcutBoxes.map((box) => box.height))).toEqual(new Set([64]));
+    expect(new Set(shortcutBoxes.map((box) => box.width))).toEqual(new Set([164]));
+    expect(shortcutBoxes.every((box) => box.bottom <= 640)).toBe(true);
+    expect(shortcutBoxes.every((box) => box.contentFits)).toBe(true);
     const mobileTile = page.getByRole("link", { name: new RegExp(fixture.label) });
     await expect(mobileTile).toBeVisible();
     await expect(mobileTile).toHaveAttribute("href", `/ponuda/${fixture.slug}`);
@@ -182,6 +202,12 @@ test.describe("mobile shortcut CMS acceptance", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: new RegExp(fixture.label) })).toBeHidden();
+    const desktopHeroBox = await page
+      .getByRole("region", { name: "Glavni baner" })
+      .locator(":scope > div")
+      .boundingBox();
+    expect(desktopHeroBox).not.toBeNull();
+    expect(desktopHeroBox!.width / desktopHeroBox!.height).toBeCloseTo(2.4, 1);
 
     await page.goto("/admin/erp/mobilni-tabovi", {
       waitUntil: "domcontentloaded",
