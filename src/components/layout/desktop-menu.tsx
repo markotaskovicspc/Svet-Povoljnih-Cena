@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
+import { getCategoryMenuImage } from "./category-menu-image";
 
 interface Crumb {
   label: string;
@@ -45,7 +46,8 @@ export function DesktopMenu({
 
   const current = stack[stack.length - 1];
 
-  const resetStack = () => setStack([{ label: "Sve kategorije", nodes: categories }]);
+  const resetStack = () =>
+    setStack([{ label: "Sve kategorije", nodes: categories }]);
   const close = () => {
     setOpen(false);
     setTimeout(resetStack, 200);
@@ -58,7 +60,10 @@ export function DesktopMenu({
   };
   const enter = (node: NavNode) => {
     if (node.children?.length) {
-      setStack((s) => [...s, { label: node.label, href: node.href, nodes: node.children! }]);
+      setStack((s) => [
+        ...s,
+        { label: node.label, href: node.href, nodes: node.children! },
+      ]);
     }
   };
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
@@ -78,14 +83,21 @@ export function DesktopMenu({
       >
         <SheetHeader className="shrink-0 border-b border-border bg-white px-5 py-4 sm:px-6">
           <div className="flex min-h-10 items-center pr-12">
-            <Link href="/" aria-label={`${BRAND.name} - početna`} onClick={close}>
+            <Link
+              href="/"
+              aria-label={`${BRAND.name} - početna`}
+              onClick={close}
+            >
               <BrandLogo className="w-[211px]" />
             </Link>
             <SheetTitle className="sr-only">Meni</SheetTitle>
           </div>
         </SheetHeader>
 
-        <nav aria-label="Kategorije proizvoda" className="min-h-0 flex-1 overflow-y-auto">
+        <nav
+          aria-label="Kategorije proizvoda"
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
           {stack.length > 1 ? (
             <div className="border-b border-border">
               <button
@@ -94,7 +106,9 @@ export function DesktopMenu({
                 className="flex min-h-13 w-full items-center gap-3 px-5 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6"
               >
                 <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                <span className="min-w-0 break-words">Povratak na glavni meni</span>
+                <span className="min-w-0 break-words">
+                  Povratak na glavni meni
+                </span>
               </button>
             </div>
           ) : null}
@@ -113,20 +127,30 @@ export function DesktopMenu({
             {current.nodes.map((node) => {
               const isActive = pathname === node.href;
               const hasChildren = !!node.children?.length;
+              const categoryImageUrl = getCategoryMenuImage(node);
               return (
                 <li
                   key={node.href}
-                  className="flex min-h-15 items-stretch transition hover:bg-muted-bg"
+                  className="flex min-h-18 items-stretch transition hover:bg-muted-bg"
                 >
                   <Link
                     href={node.href}
                     onClick={close}
                     className={cn(
-                      "flex min-w-0 flex-1 items-center px-5 py-4 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
+                      "flex min-w-0 flex-1 items-center gap-3 px-5 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
                       isActive && "font-semibold text-brand-blue",
                     )}
                   >
-                    {node.label}
+                    <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                      <Image
+                        src={categoryImageUrl}
+                        alt=""
+                        fill
+                        sizes="70px"
+                        className="object-cover"
+                      />
+                    </span>
+                    <span className="min-w-0 break-words">{node.label}</span>
                   </Link>
                   {hasChildren ? (
                     <button
@@ -180,13 +204,21 @@ export function DesktopMenu({
                               width={iconAsset.width ?? 80}
                               height={iconAsset.height ?? 80}
                               unoptimized={iconAsset.url.endsWith(".svg")}
-                              className={cn("h-6 w-6 object-contain", iconImageClass)}
+                              className={cn(
+                                "h-6 w-6 object-contain",
+                                iconImageClass,
+                              )}
                             />
                           </span>
                         ) : null}
-                        <span className="min-w-0 break-words">{promoTab.label}</span>
+                        <span className="min-w-0 break-words">
+                          {promoTab.label}
+                        </span>
                       </span>
-                      <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                      <ChevronRight
+                        className="size-4 shrink-0 text-ink-300"
+                        aria-hidden
+                      />
                     </Link>
                   </li>
                 );

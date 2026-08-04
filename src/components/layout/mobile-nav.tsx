@@ -7,24 +7,10 @@ import { usePathname } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
-  Armchair,
-  Bath,
-  BedDouble,
-  BriefcaseBusiness,
-  DoorOpen,
-  Gamepad2,
-  Hammer,
   Home,
-  Lightbulb,
   Menu,
   Search,
-  Shapes,
-  Sofa,
-  Sparkles,
-  SquareStack,
   User2,
-  Utensils,
-  Waves,
   X,
 } from "lucide-react";
 import {
@@ -46,66 +32,13 @@ import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import { getCategoryMenuImage } from "./category-menu-image";
 
 interface Crumb {
   label: string;
   href?: string;
   nodes: NavNode[];
 }
-
-const categoryTileImages: Record<string, string> = {
-  Nameštaj: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=320&h=210&q=80",
-  "Sve za kuću": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=320&h=210&q=80",
-  "Kućni aparati": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=320&h=210&q=80",
-  "Moda i putovanja": "https://images.unsplash.com/photo-1553531384-411a247ccd73?auto=format&fit=crop&w=320&h=210&q=80",
-  "Baštenski nameštaj": "https://images.unsplash.com/photo-1600210491892-03d54c0aaf87?auto=format&fit=crop&w=320&h=210&q=80",
-  Kancelarija: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=320&h=210&q=80",
-  Trpezarija: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=320&h=210&q=80",
-  "Dnevna soba": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=320&h=210&q=80",
-  Predsoblje: "https://images.unsplash.com/photo-1551298370-9d3d53740c72?auto=format&fit=crop&w=320&h=210&q=80",
-  Gejming: "https://images.unsplash.com/photo-1598550476439-6847785fcea6?auto=format&fit=crop&w=320&h=210&q=80",
-  "Spavaća soba": "https://images.unsplash.com/photo-1505693314120-0d443867891c?auto=format&fit=crop&w=320&h=210&q=80",
-  Bazeni: "https://images.unsplash.com/photo-1572331165267-854da2b10ccc?auto=format&fit=crop&w=320&h=210&q=80",
-  Alat: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=320&h=210&q=80",
-  Rasveta: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=320&h=210&q=80",
-  "Čišćenje i održavanje": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=320&h=210&q=80",
-  Dekoracija: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=320&h=210&q=80",
-  Kupatilo: "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=320&h=210&q=80",
-  Tepisi: "https://images.unsplash.com/photo-1600166898405-da9535204843?auto=format&fit=crop&w=320&h=210&q=80",
-  "Kafe aparati": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=320&h=210&q=80",
-  "Lepota i nega": "https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=320&h=210&q=80",
-  "Hlađenje i grejanje": "https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?auto=format&fit=crop&w=320&h=210&q=80",
-  "Priprema hrane": "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=320&h=210&q=80",
-  "Kuvanje i pečenje": "https://images.unsplash.com/photo-1556911073-38141963c9e0?auto=format&fit=crop&w=320&h=210&q=80",
-  Pegle: "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?auto=format&fit=crop&w=320&h=210&q=80",
-  Usisivači: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=320&h=210&q=80",
-  "Prečišćivači vazduha": "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&w=320&h=210&q=80",
-  "Aparati za vodu": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=320&h=210&q=80",
-  "Ženske torbe": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=320&h=210&q=80",
-  "Ženske čarape": "https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?auto=format&fit=crop&w=320&h=210&q=80",
-  Aksesoari: "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=320&h=210&q=80",
-  Koferi: "https://images.unsplash.com/photo-1553531384-411a247ccd73?auto=format&fit=crop&w=320&h=210&q=80",
-};
-
-const fallbackCategoryImage =
-  "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=320&h=210&q=80";
-
-const navIconMap = {
-  Armchair,
-  Bath,
-  BedDouble,
-  BriefcaseBusiness,
-  DoorOpen,
-  Gamepad2,
-  Hammer,
-  Lightbulb,
-  Shapes,
-  Sofa,
-  Sparkles,
-  SquareStack,
-  Utensils,
-  Waves,
-} as const;
 
 const mobileMenuShortcutTabs = [
   {
@@ -148,7 +81,9 @@ export function MobileNav({
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
   const [open, setOpen] = useState(false);
-  const [stack, setStack] = useState<Crumb[]>([{ label: "Sve kategorije", nodes: categories }]);
+  const [stack, setStack] = useState<Crumb[]>([
+    { label: "Sve kategorije", nodes: categories },
+  ]);
   const [searchOpen, setSearchOpen] = useState(false);
   const shortcutTabs = tabs.length ? tabs : mobileMenuShortcutTabs;
 
@@ -156,7 +91,10 @@ export function MobileNav({
 
   const enter = (node: NavNode) => {
     if (node.children?.length) {
-      setStack((s) => [...s, { label: node.label, href: node.href, nodes: node.children! }]);
+      setStack((s) => [
+        ...s,
+        { label: node.label, href: node.href, nodes: node.children! },
+      ]);
     }
   };
   const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
@@ -164,7 +102,10 @@ export function MobileNav({
   const close = () => {
     setOpen(false);
     setSearchOpen(false);
-    setTimeout(() => setStack([{ label: "Sve kategorije", nodes: categories }]), 250);
+    setTimeout(
+      () => setStack([{ label: "Sve kategorije", nodes: categories }]),
+      250,
+    );
   };
 
   return (
@@ -251,7 +192,9 @@ export function MobileNav({
                   className="flex min-h-13 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 break-words">Povratak na glavni meni</span>
+                  <span className="min-w-0 break-words">
+                    Povratak na glavni meni
+                  </span>
                 </button>
                 <p className="px-4 pb-3 text-xs font-semibold tracking-wide text-ink-500 uppercase">
                   {current.label}
@@ -279,53 +222,50 @@ export function MobileNav({
                         {categories.map((node) => {
                           const tile = {
                             ...node,
-                            imageUrl:
-                              node.imageUrl ??
-                              categoryTileImages[node.label] ??
-                              fallbackCategoryImage,
+                            imageUrl: getCategoryMenuImage(node),
                           };
                           return (
-                          <li key={tile.href}>
-                            {tile.children?.length ? (
-                              <button
-                                type="button"
-                                onClick={() => enter(tile)}
-                                className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                              >
-                              <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
-                                <Image
-                                  src={tile.imageUrl}
-                                  alt=""
-                                  fill
-                                  sizes="(max-width: 768px) 45vw, 320px"
-                                  className="object-cover transition duration-200 group-hover:scale-105"
-                                />
-                              </span>
-                              <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
-                                {tile.label}
-                              </span>
-                              </button>
-                            ) : (
-                              <Link
-                                href={tile.href}
-                                onClick={close}
-                                className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                              >
-                                <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
-                                  <Image
-                                    src={tile.imageUrl}
-                                    alt=""
-                                    fill
-                                    sizes="(max-width: 768px) 45vw, 320px"
-                                    className="object-cover transition duration-200 group-hover:scale-105"
-                                  />
-                                </span>
-                                <span className="mt-1.5 block min-h-[1.35em] px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black text-ink-800 uppercase">
-                                  {tile.label}
-                                </span>
-                              </Link>
-                            )}
-                          </li>
+                            <li key={tile.href}>
+                              {tile.children?.length ? (
+                                <button
+                                  type="button"
+                                  onClick={() => enter(tile)}
+                                  className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                                >
+                                  <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                                    <Image
+                                      src={tile.imageUrl}
+                                      alt=""
+                                      fill
+                                      sizes="(max-width: 768px) 45vw, 320px"
+                                      className="object-cover transition duration-200 group-hover:scale-105"
+                                    />
+                                  </span>
+                                  <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
+                                    {tile.label}
+                                  </span>
+                                </button>
+                              ) : (
+                                <Link
+                                  href={tile.href}
+                                  onClick={close}
+                                  className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                                >
+                                  <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
+                                    <Image
+                                      src={tile.imageUrl}
+                                      alt=""
+                                      fill
+                                      sizes="(max-width: 768px) 45vw, 320px"
+                                      className="object-cover transition duration-200 group-hover:scale-105"
+                                    />
+                                  </span>
+                                  <span className="mt-1.5 block min-h-[1.35em] px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black text-ink-800 uppercase">
+                                    {tile.label}
+                                  </span>
+                                </Link>
+                              )}
+                            </li>
                           );
                         })}
                       </ul>
@@ -358,7 +298,6 @@ export function MobileNav({
                         </li>
                       </ul>
                     </div>
-
                   </>
                 ) : current.href ? (
                   <Link
@@ -375,48 +314,67 @@ export function MobileNav({
                     {current.nodes.map((node) => {
                       const isActive = pathname === node.href;
                       const hasChildren = !!node.children?.length;
-                      const Icon = node.iconName
-                        ? navIconMap[node.iconName as keyof typeof navIconMap]
-                        : null;
+                      const categoryImageUrl = getCategoryMenuImage(node);
                       return (
-                        <li key={node.href} className="min-h-14 transition hover:bg-muted-bg">
+                        <li
+                          key={node.href}
+                          className="min-h-18 transition hover:bg-muted-bg"
+                        >
                           {hasChildren ? (
                             <button
                               type="button"
                               onClick={() => enter(node)}
                               className={cn(
-                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-3">
-                                {Icon ? (
-                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-blue/8 text-brand-blue">
-                                    <Icon className="size-4" aria-hidden />
-                                  </span>
-                                ) : null}
-                                <span className="min-w-0 break-words">{node.label}</span>
+                                <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                                  <Image
+                                    src={categoryImageUrl}
+                                    alt=""
+                                    fill
+                                    sizes="70px"
+                                    className="object-cover"
+                                  />
+                                </span>
+                                <span className="min-w-0 break-words">
+                                  {node.label}
+                                </span>
                               </span>
-                              <ChevronRight className="size-4 shrink-0 text-ink-500" aria-hidden />
+                              <ChevronRight
+                                className="size-4 shrink-0 text-ink-500"
+                                aria-hidden
+                              />
                             </button>
                           ) : (
                             <Link
                               href={node.href}
                               onClick={close}
                               className={cn(
-                                "flex min-h-14 w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-3">
-                                {Icon ? (
-                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-blue/8 text-brand-blue">
-                                    <Icon className="size-4" aria-hidden />
-                                  </span>
-                                ) : null}
-                                <span className="min-w-0 break-words">{node.label}</span>
+                                <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                                  <Image
+                                    src={categoryImageUrl}
+                                    alt=""
+                                    fill
+                                    sizes="70px"
+                                    className="object-cover"
+                                  />
+                                </span>
+                                <span className="min-w-0 break-words">
+                                  {node.label}
+                                </span>
                               </span>
-                              <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                              <ChevronRight
+                                className="size-4 shrink-0 text-ink-300"
+                                aria-hidden
+                              />
                             </Link>
                           )}
                         </li>
@@ -439,8 +397,13 @@ export function MobileNav({
                               isActive && "font-semibold text-brand-blue",
                             )}
                           >
-                            <span className="min-w-0 break-words">{t.label}</span>
-                            <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                            <span className="min-w-0 break-words">
+                              {t.label}
+                            </span>
+                            <ChevronRight
+                              className="size-4 shrink-0 text-ink-300"
+                              aria-hidden
+                            />
                           </Link>
                         </li>
                       );
@@ -460,7 +423,10 @@ export function MobileNav({
                           <User2 className="size-4 shrink-0" aria-hidden />
                           Moj nalog
                         </span>
-                        <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
+                        <ChevronRight
+                          className="size-4 shrink-0 text-ink-300"
+                          aria-hidden
+                        />
                       </Link>
                     </li>
                   </ul>
