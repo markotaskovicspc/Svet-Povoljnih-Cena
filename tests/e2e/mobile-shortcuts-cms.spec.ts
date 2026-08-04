@@ -207,7 +207,7 @@ test.describe("mobile shortcut CMS acceptance", () => {
       .locator(":scope > div")
       .boundingBox();
     expect(desktopHeroBox).not.toBeNull();
-    expect(desktopHeroBox!.width / desktopHeroBox!.height).toBeCloseTo(2.4, 1);
+    expect(desktopHeroBox!.width / desktopHeroBox!.height).toBeCloseTo(24 / 7, 1);
 
     await page.goto("/admin/erp/mobilni-tabovi", {
       waitUntil: "domcontentloaded",

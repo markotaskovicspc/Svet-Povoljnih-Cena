@@ -73,7 +73,7 @@ const SECTIONS: SectionDef[] = [
     title: "1 · Glavni hero baner (carousel)",
     where: "Odmah ispod pretrage, na vrhu početne strane.",
     kind: "carousel",
-    desktopSize: "1440 × 600 px (odnos 24:10)",
+    desktopSize: "1440 × 420 px (odnos 24:7)",
     mobileSize: "768 × 768 px (odnos 1:1)",
     hint: "Ovo je jedini baner koji može da sadrži više slika — svaka dodata slika je jedan slajd carousel-a. Strelicama menjate redosled slajdova.",
   },
@@ -83,7 +83,7 @@ const SECTIONS: SectionDef[] = [
     where:
       "Između druge i treće promo sekcije na početnoj (sada „Trajno niska cena“).",
     kind: "single",
-    desktopSize: "1440 × 600 px (odnos 24:10)",
+    desktopSize: "1440 × 420 px (odnos 24:7)",
     mobileSize: "768 × 768 px (odnos 1:1)",
     hint: "Jedna slika. Ako dodate više, prikazuje se prvi aktivni; ostale označite kao neaktivne ili obrišite.",
   },
@@ -93,7 +93,7 @@ const SECTIONS: SectionDef[] = [
     where:
       "Između četvrte i pete promo sekcije na početnoj (sada „Heroji meseca“).",
     kind: "single",
-    desktopSize: "1440 × 600 px (odnos 24:10)",
+    desktopSize: "1440 × 420 px (odnos 24:7)",
     mobileSize: "768 × 768 px (odnos 1:1)",
     hint: "Jedna slika. Ako dodate više, prikazuje se prvi aktivni; ostale označite kao neaktivne ili obrišite.",
   },
