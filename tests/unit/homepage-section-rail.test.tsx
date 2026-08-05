@@ -71,8 +71,7 @@ describe("homepage section rail", () => {
     expect(html).toContain("w-[32vw]");
     expect(html).toContain("min-w-[126px]");
     expect(html).toContain("sm:w-[25vw]");
-    expect(html).toContain("md:w-[clamp(180px,calc(16.5%_-_14px),200px)]");
-    expect(html).toContain("md:h-20");
+    expect(html).toContain("md:w-[clamp(138px,calc(15.3%_-_12px),187px)]");
     expect(html).toContain("Kompaktna kartica");
     expect(html).toContain("Dimenzije: 10 × 10 × 10 cm");
     expect(html).toContain("1.000 RSD");
@@ -84,6 +83,6 @@ describe("homepage section rail", () => {
     );
 
     expect(html).toContain("md:w-[clamp(162px,calc(18%_-_14px),220px)]");
-    expect(html).not.toContain("md:h-20");
+    expect(html).not.toContain("md:w-[clamp(138px,calc(15.3%_-_12px),187px)]");
   });
 });

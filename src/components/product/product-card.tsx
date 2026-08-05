@@ -205,12 +205,7 @@ export function ProductCard({
         className,
       )}
     >
-      <div
-        className={cn(
-          "relative aspect-square overflow-hidden bg-white",
-          compactOnDesktop && "md:h-20 md:aspect-auto",
-        )}
-      >
+      <div className="relative aspect-square overflow-hidden bg-white">
         <Link
           href={`/p/${product.slug}`}
           prefetch={false}
@@ -321,10 +316,17 @@ export function ProductCard({
         aria-pressed={wished}
         aria-label={wished ? "Ukloni iz liste želja" : "Dodaj u listu želja"}
         onClick={() => toggleWish(pricingProduct)}
-        className="bg-surface/85 ring-border/60 hover:text-action focus-visible:ring-walnut/40 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full text-ink-700 ring-1 backdrop-blur transition focus-visible:ring-2 focus-visible:outline-none"
+        className={cn(
+          "bg-surface/85 ring-border/60 hover:text-action focus-visible:ring-walnut/40 absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-full text-ink-700 ring-1 backdrop-blur transition focus-visible:ring-2 focus-visible:outline-none",
+          compactOnDesktop && "md:top-2.5 md:right-2.5 md:size-[31px]",
+        )}
       >
         <Heart
-          className={cn("size-4 transition", wished && "fill-action text-action")}
+          className={cn(
+            "size-4 transition",
+            compactOnDesktop && "md:size-3.5",
+            wished && "fill-action text-action",
+          )}
           aria-hidden
         />
       </button>
@@ -333,13 +335,13 @@ export function ProductCard({
       <div
         className={cn(
           "flex flex-1 flex-col gap-1.5 px-2.5 pt-2 pb-2 md:px-3 md:pt-2.5 md:pb-3",
-          compactOnDesktop && "md:gap-0.5 md:px-2 md:pt-1.5 md:pb-1.5",
+          compactOnDesktop && "md:gap-[5px] md:px-2.5 md:pt-2 md:pb-2.5",
         )}
       >
         <h3
           className={cn(
             "truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]",
-            compactOnDesktop && "md:text-[11px] md:leading-tight",
+            compactOnDesktop && "md:text-[11px]",
           )}
         >
           <Link
@@ -355,7 +357,7 @@ export function ProductCard({
           prefetch={false}
           className={cn(
             "truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]",
-            compactOnDesktop && "md:text-[9px] md:leading-none",
+            compactOnDesktop && "md:text-[9px]",
           )}
         >
           {dimensions}
@@ -364,18 +366,12 @@ export function ProductCard({
           product={product}
           className={cn(
             "h-4 pt-0",
-            compactOnDesktop && "md:h-3 md:gap-1 md:[&>span]:size-2.5",
+            compactOnDesktop && "md:h-3.5 md:gap-1 md:[&>span]:size-3",
           )}
         />
 
         <div className="mt-auto pt-0">
-          <div
-            className={cn(
-              "flex flex-col items-stretch gap-1.5",
-              compactOnDesktop &&
-                "md:grid md:grid-cols-[minmax(0,1fr)_88px] md:items-end md:gap-1",
-            )}
-          >
+          <div className="flex flex-col items-stretch gap-1.5">
             <Link
               href={`/p/${product.slug}`}
               prefetch={false}
@@ -387,7 +383,7 @@ export function ProductCard({
                   <span
                     className={cn(
                       "block truncate text-[10px] text-ink-500 md:text-[11px]",
-                      compactOnDesktop && "md:text-[8px] md:leading-none",
+                      compactOnDesktop && "md:text-[9px]",
                     )}
                   >
                     {formatRsd(quote.full)}
@@ -413,7 +409,7 @@ export function ProductCard({
                 <span
                   className={cn(
                     "block truncate text-sm leading-none font-bold text-ink-900 md:text-[15px]",
-                    compactOnDesktop && "md:text-xs",
+                    compactOnDesktop && "md:text-[13px]",
                   )}
                 >
                   {formatRsd(price.full)}
@@ -430,7 +426,7 @@ export function ProductCard({
                 fullWidth
                 className={cn(
                   "w-full",
-                  compactOnDesktop && "md:h-7 md:gap-1 md:px-1.5 md:text-[9px]",
+                  compactOnDesktop && "md:h-[31px] md:px-2.5 md:text-[10px]",
                 )}
               />
             ) : (
@@ -439,7 +435,7 @@ export function ProductCard({
                 disabled
                 className={cn(
                   "inline-flex h-9 w-full cursor-not-allowed items-center justify-center rounded-full bg-muted-bg px-3 text-xs font-medium text-ink-500 ring-1 ring-border/60",
-                  compactOnDesktop && "md:h-7 md:px-1.5 md:text-[9px]",
+                  compactOnDesktop && "md:h-[31px] md:px-2.5 md:text-[10px]",
                 )}
               >
                 {availability.addLabel}
@@ -450,7 +446,7 @@ export function ProductCard({
             className={cn(
               "mt-1 min-h-6 break-words text-[9px] leading-tight text-ink-500 sm:text-[10px] md:text-[10px]",
               compactOnDesktop &&
-                "md:mt-0.5 md:min-h-3 md:truncate md:text-[8px] md:leading-none",
+                "md:mt-1 md:min-h-5 md:text-[9px] md:leading-tight",
             )}
           >
             {availability.isSupplierSourced
@@ -481,13 +477,13 @@ function CompactPriceOffer({
     <span
       className={cn(
         "flex items-baseline justify-between gap-1.5 sm:gap-2",
-        compactOnDesktop && "md:gap-1",
+        compactOnDesktop && "md:gap-1.5",
       )}
     >
       <span
         className={cn(
           "text-[9px] font-semibold uppercase tracking-wide text-ink-500",
-          compactOnDesktop && "md:text-[7px] md:tracking-normal",
+          compactOnDesktop && "md:text-[8px]",
         )}
       >
         {label}
@@ -495,7 +491,7 @@ function CompactPriceOffer({
       <span
         className={cn(
           "shrink-0 text-sm leading-none font-bold md:text-[15px]",
-          compactOnDesktop && "md:text-[11px]",
+          compactOnDesktop && "md:text-[13px]",
           selected || label === "Loyalty" ? "text-action" : "text-ink-900",
         )}
       >
