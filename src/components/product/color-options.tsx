@@ -37,7 +37,7 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
   const seen = new Set<string>();
   return [product.colorPrimary, product.colorSecondary]
     .filter((color): color is string => Boolean(color?.trim()))
-    .map((label) => label.trim())
+    .map((label) => label.trim().toLocaleUpperCase("sr-Latn-RS"))
     .filter((label) => {
       const key = label.toLowerCase();
       if (seen.has(key)) return false;

@@ -19,8 +19,8 @@ describe("PDP boje proizvoda", () => {
     expect(markup).not.toContain("Boja:");
     expect(markup).not.toContain("<button");
     expect(getProductColorOptions(product)).toEqual([
-      { label: "Crna", hex: "#181716" },
-      { label: "Natur", hex: "#c7a36f" },
+      { label: "CRNA", hex: "#181716" },
+      { label: "NATUR", hex: "#c7a36f" },
     ]);
   });
 
@@ -33,8 +33,8 @@ describe("PDP boje proizvoda", () => {
       />,
     );
     expect(markup).toContain("Boja:");
-    expect(markup).toContain("Crna");
-    expect(markup).toContain("Natur");
+    expect(markup).toContain("CRNA");
+    expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
   });
 });
