@@ -57,6 +57,7 @@ import {
   storefrontMonth,
 } from "@/lib/storefront/promotion-filters";
 import { buildProductDeclaration } from "@/lib/product-declaration";
+import { formatProductAttributes } from "@/lib/product-attributes";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -233,9 +234,12 @@ function mapProduct(
     packageDimensionsCm: packageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
-    attributes: [p.attribute1, p.attribute2, p.attribute3, p.attribute4].filter(
-      (attribute): attribute is string => Boolean(attribute?.trim()),
-    ),
+    attributes: formatProductAttributes([
+      p.attribute1,
+      p.attribute2,
+      p.attribute3,
+      p.attribute4,
+    ]),
     materials: p.materials.map((m) => ({
       id: m.material.id,
       label: m.material.label,
@@ -388,10 +392,10 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
     dimensionsCm: { w: 0, d: 0, h: 0 },
     colorPrimary: sourceValue(product, "Boja 1") || undefined,
     colorSecondary: sourceValue(product, "Boja 2") || undefined,
-    attributes: [
+    attributes: formatProductAttributes([
       sourceValue(product, "Atribut 1"),
       sourceValue(product, "Atribut 2"),
-    ].filter((attribute): attribute is string => Boolean(attribute?.trim())),
+    ]),
     materials: [],
     pictograms: [],
     stock: 0,
