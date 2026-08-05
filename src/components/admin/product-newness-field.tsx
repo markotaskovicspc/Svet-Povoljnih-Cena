@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 
 type ProductNewnessFieldProps = {
   value: string;
-  automaticValue: string;
+  automaticValue: string | null;
   automatic: boolean;
 };
 
@@ -19,7 +19,9 @@ export function ProductNewnessField({
   const [isAutomatic, setIsAutomatic] = useState(automatic);
 
   const stateLabel = isAutomatic
-    ? `Automatski rok: ${automaticValue}`
+    ? automaticValue
+      ? `Automatski rok: ${automaticValue}`
+      : "Automatski rok počinje pri prvom objavljivanju"
     : date
       ? `Ručni rok: ${date}`
       : "Proizvod se ne prikazuje kao „Novo“";
@@ -53,7 +55,7 @@ export function ProductNewnessField({
             type="button"
             variant="outline"
             onClick={() => {
-              setDate(automaticValue);
+              setDate(automaticValue ?? "");
               setIsAutomatic(true);
             }}
           >

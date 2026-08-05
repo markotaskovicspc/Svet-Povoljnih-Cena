@@ -409,7 +409,9 @@ model Product {
   isHero            Boolean   @default(false)
   isNew             Boolean   @default(false)
   newUntil           DateTime?
-  /// True only while the four-month window is managed from the product creation date.
+  /// First transition into the published/active catalog. Reactivation does not reset it.
+  firstPublishedAt   DateTime?
+  /// True only while the four-month window is managed from first publication.
   /// Manual admin/XLSX changes set this false so supplier syncs cannot renew the window.
   newUntilAutomatic Boolean   @default(true)
   isLimited         Boolean   @default(false)

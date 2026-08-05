@@ -9,7 +9,7 @@ import {
 } from "@/lib/product-newness";
 
 describe("product newness", () => {
-  it("adds four calendar months to the Belgrade creation date", () => {
+  it("adds four calendar months to the Belgrade first-publication date", () => {
     expect(
       productNewnessDateInput(
         defaultProductNewUntil(new Date("2026-08-05T12:00:00.000Z")),
@@ -17,7 +17,7 @@ describe("product newness", () => {
     ).toBe("2026-12-05");
   });
 
-  it("uses the Belgrade date when creation crosses the UTC day boundary", () => {
+  it("uses the Belgrade date when publication crosses the UTC day boundary", () => {
     expect(
       productNewnessDateInput(
         defaultProductNewUntil(new Date("2026-08-05T22:30:00.000Z")),

@@ -467,8 +467,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               isNew: true,
               newUntil: true,
               newUntilAutomatic: true,
+              firstPublishedAt: true,
               isDtz: true,
-              createdAt: true,
               groupId: true,
               collectionId: true,
               group: { select: { id: true, name: true } },
@@ -537,7 +537,9 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
                   name: d.newCollectionName,
                 });
           const effectiveNewUntil = d.newUntilAutomatic
-            ? defaultProductNewUntil(existing.createdAt)
+            ? existing.firstPublishedAt
+              ? defaultProductNewUntil(existing.firstPublishedAt)
+              : null
             : requestedNewUntil;
           const completeData = {
             ...data,
@@ -1686,13 +1688,17 @@ export default async function ProductDetail({
               </legend>
               <ProductNewnessField
                 value={dateInputValue(product.newUntil)}
-                automaticValue={productNewnessDateInput(
-                  defaultProductNewUntil(product.createdAt),
-                )}
+                automaticValue={
+                  product.firstPublishedAt
+                    ? productNewnessDateInput(
+                        defaultProductNewUntil(product.firstPublishedAt),
+                      )
+                    : null
+                }
                 automatic={product.newUntilAutomatic}
               />
               <p className="text-xs text-ink-500">
-                Novi proizvodi dobijaju četiri kalendarska meseca od unosa.
+                Novi proizvodi dobijaju četiri kalendarska meseca od prvog objavljivanja.
                 Ručni datum ili uklanjanje imaju prednost i dobavljački sync ih ne menja.
               </p>
               <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">

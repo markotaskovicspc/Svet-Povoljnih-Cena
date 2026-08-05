@@ -542,7 +542,7 @@ Ako postoji greška, prikazuje tabelu sa brojem reda, poljem i jasnim razlogom. 
 
 Pravilo za kolonu **Novo do**:
 
-- novi red bez te kolone automatski dobija oznaku „Novo“ četiri kalendarska meseca od unosa;
+- novi red bez te kolone automatski dobija oznaku „Novo“ četiri kalendarska meseca od prvog objavljivanja;
 - konkretan datum predstavlja ručno zadat rok;
 - prazno polje u postojećoj koloni isključuje proizvod iz sekcije „Novo“;
 - ponovni uvoz bez kolone **Novo do** ne obnavlja niti briše postojeći rok.
@@ -559,8 +559,8 @@ Oznake:
 
 - **Aktivan** — dozvoljava objavu ako su ispunjeni ostali uslovi.
 - **Hero meseca** — uključuje artikal u hero logiku.
-- **Novo do** — novi proizvod automatski dobija četiri kalendarska meseca od unosa. Datum se može ručno skratiti ili produžiti.
-- **Vrati automatski** — vraća rok računat od prvobitnog datuma kreiranja proizvoda.
+- **Novo do** — novi proizvod automatski dobija četiri kalendarska meseca od prvog objavljivanja. Datum se može ručno skratiti ili produžiti.
+- **Vrati automatski** — vraća rok računat od datuma prvog objavljivanja proizvoda. Ako proizvod još nije objavljen, rok će početi tek pri objavljivanju.
 - **Ukloni iz „Novo“** — prazni rok i uklanja proizvod iz sekcije i sa badge-a posle čuvanja.
 - **Ograničena ponuda** — označava limitiranu ponudu.
 - **Dok traju zalihe** — DTZ ponuda.

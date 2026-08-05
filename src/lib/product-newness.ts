@@ -24,8 +24,8 @@ export function productNewUntilFloor(now = new Date()) {
  * Calendar-month arithmetic is clamped, so 31 October + 4 months becomes the
  * last valid day of February instead of overflowing into March.
  */
-export function defaultProductNewUntil(createdAt: Date) {
-  const { year, month, day } = productNewnessDateParts(createdAt);
+export function defaultProductNewUntil(firstPublishedAt: Date) {
+  const { year, month, day } = productNewnessDateParts(firstPublishedAt);
   const targetMonthIndex = month - 1 + PRODUCT_NEWNESS_MONTHS;
   const targetYear = year + Math.floor(targetMonthIndex / 12);
   const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
