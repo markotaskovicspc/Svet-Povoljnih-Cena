@@ -139,10 +139,10 @@ export function MobileNav({
                 className="min-w-0 justify-self-center"
               >
                 <Image
-                  src="/logo.svg"
+                  src="/logo-mobile.svg"
                   alt={BRAND.name}
-                  width={1193}
-                  height={198}
+                  width={995}
+                  height={124}
                   preload
                   className="h-auto w-[min(61vw,257px)] max-w-full scale-110 object-contain"
                 />

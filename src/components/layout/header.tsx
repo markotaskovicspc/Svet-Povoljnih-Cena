@@ -123,12 +123,12 @@ export function Header({
         >
           <div className="min-w-0 rounded-md px-1.5 py-0.5">
             <Image
-              src="/logo.svg"
+              src="/logo-mobile.svg"
               alt={BRAND.name}
-              width={1193}
-              height={198}
+              width={995}
+              height={124}
               preload
-              className="mx-auto h-auto w-[min(60vw,308px)] max-w-full scale-125 object-contain"
+              className="mx-auto h-auto w-[min(60vw,308px)] max-w-full -translate-x-1.5 scale-[1.15] object-contain"
             />
           </div>
         </Link>
