@@ -11,9 +11,11 @@ import { cn } from "@/lib/utils";
 export function CmsMarkdown({
   markdown,
   template = "STANDARD",
+  variant = "page",
 }: {
   markdown: string;
   template?: "STANDARD" | "FAQ";
+  variant?: "page" | "compact";
 }) {
   return (
     <div
@@ -22,6 +24,8 @@ export function CmsMarkdown({
         "[&_blockquote]:mt-5 [&_blockquote]:border-l-4 [&_blockquote]:border-walnut/40 [&_blockquote]:pl-4 [&_blockquote]:italic",
         "[&_table]:mt-6 [&_table]:w-full [&_table]:border-collapse [&_th]:bg-muted-bg [&_th]:font-semibold",
         "[&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:p-2",
+        variant === "compact" &&
+          "text-justify text-sm leading-relaxed text-ink-700 [&_a]:text-brand-blue [&_a]:underline [&_a]:underline-offset-2 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted-bg [&_pre]:p-3 [&_pre]:text-left [&_pre]:font-mono [&_pre]:text-xs [&_strong]:font-bold [&_strong]:text-ink-900 [&_table]:mt-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5",
         template === "FAQ" &&
           "[&_h3]:mt-0 [&_h3]:border-t [&_h3]:border-border/60 [&_h3]:pt-5 [&_h3+p]:mb-5",
       )}
@@ -34,7 +38,12 @@ export function CmsMarkdown({
           h2: ({ children, node }) => (
             <h2
               id={typeof node?.properties?.id === "string" ? node.properties.id : undefined}
-              className="scroll-mt-28 pt-10 font-display text-2xl font-bold text-brand-blue first:pt-0 md:text-3xl"
+              className={cn(
+                "scroll-mt-28 font-display font-bold text-brand-blue first:pt-0",
+                variant === "compact"
+                  ? "pt-5 text-lg"
+                  : "pt-10 text-2xl md:text-3xl",
+              )}
             >
               {children}
             </h2>
@@ -42,7 +51,12 @@ export function CmsMarkdown({
           h3: ({ children, node }) => (
             <h3
               id={typeof node?.properties?.id === "string" ? node.properties.id : undefined}
-              className="scroll-mt-28 pt-7 font-display text-lg font-semibold text-ink-900 md:text-xl"
+              className={cn(
+                "scroll-mt-28 font-display font-semibold text-ink-900",
+                variant === "compact"
+                  ? "pt-4 text-base"
+                  : "pt-7 text-lg md:text-xl",
+              )}
             >
               {children}
             </h3>

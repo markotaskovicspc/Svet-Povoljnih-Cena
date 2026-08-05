@@ -1400,7 +1400,10 @@ export default async function ProductDetail({
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="space-y-2">
-                  <Field label="Uslovi isporuke">
+                  <Field
+                    label="Posebni uslovi isporuke (opciono)"
+                    hint="Ostavite prazno da bi artikal koristio standardni tekst iz Sadržaj → Uslovi isporuke. Popunite samo kada ovaj artikal ima posebne uslove."
+                  >
                     <Textarea
                       name="pdpDeliveryTerms"
                       rows={3}

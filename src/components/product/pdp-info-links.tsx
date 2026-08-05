@@ -8,6 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { CmsMarkdown } from "@/components/content/cms-markdown";
 import { cn } from "@/lib/utils";
 import { sanitizeRichText } from "@/lib/rich-text";
 import type { ProductAttachment } from "@/types";
@@ -30,16 +31,27 @@ const LABELS: Record<PdpInfoKey, string> = {
 export function PdpInfoLinks({
   sections,
   descriptionPreview,
+  standardDeliveryTermsMarkdown,
   attachments = {},
 }: {
   sections: Partial<Record<PdpInfoKey, string>>;
   descriptionPreview?: string;
+  standardDeliveryTermsMarkdown?: string;
   attachments?: Partial<Record<PdpInfoKey, ProductAttachment[]>>;
 }) {
+  const deliveryTerms = resolveDeliveryTermsContent(
+    sections.deliveryTerms,
+    standardDeliveryTermsMarkdown,
+  );
   const items = (Object.keys(LABELS) as PdpInfoKey[]).map((key) => ({
     key,
     label: LABELS[key],
-    content: sections[key]?.trim() || defaultContent(key),
+    content:
+      key === "deliveryTerms"
+        ? deliveryTerms.content
+        : sections[key]?.trim() || defaultContent(key),
+    format:
+      key === "deliveryTerms" ? deliveryTerms.format : ("richText" as const),
     attachments: attachments[key] ?? [],
   }));
   const [open, setOpen] = useState(false);
@@ -120,7 +132,11 @@ export function PdpInfoLinks({
                   </button>
                   {isExpanded ? (
                     <div className="pb-4">
-                      <RichText content={item.content} />
+                      {item.format === "markdown" ? (
+                        <CmsMarkdown markdown={item.content} variant="compact" />
+                      ) : (
+                        <RichText content={item.content} />
+                      )}
                       {item.attachments.length ? (
                         <ul className="mt-1 space-y-2 border-t border-border/60 pt-3">
                           {item.attachments.map((attachment) => (
@@ -148,6 +164,24 @@ export function PdpInfoLinks({
       </Sheet>
     </>
   );
+}
+
+export function resolveDeliveryTermsContent(
+  override: string | undefined,
+  standardMarkdown: string | undefined,
+) {
+  const overrideContent = override?.trim();
+  if (overrideContent) {
+    return { content: overrideContent, format: "richText" as const };
+  }
+  const standardContent = standardMarkdown?.trim();
+  if (standardContent) {
+    return { content: standardContent, format: "markdown" as const };
+  }
+  return {
+    content: defaultContent("deliveryTerms"),
+    format: "richText" as const,
+  };
 }
 
 function defaultContent(key: PdpInfoKey) {

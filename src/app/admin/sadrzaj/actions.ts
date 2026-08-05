@@ -74,6 +74,9 @@ function refreshContentPaths(slug: string, refreshFooter: boolean) {
   revalidatePath("/admin/sadrzaj");
   revalidatePath(`/${slug}`);
   revalidatePath("/sitemap.xml");
+  if (refreshFooter && slug === "uslovi-isporuke") {
+    revalidatePath("/p/[slug]", "page");
+  }
   if (refreshFooter) revalidatePath("/", "layout");
 }
 

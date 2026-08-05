@@ -36,4 +36,22 @@ describe("CMS Markdown renderer", () => {
     expect(html).not.toContain("javascript:");
     expect(html).toContain("napad");
   });
+
+  it("renders the compact variant for product information panels", () => {
+    const html = renderToStaticMarkup(
+      <CmsMarkdown
+        variant="compact"
+        markdown={`## Rokovi isporuke
+
+Standardni rok je **2–3 dana**.
+
+       0       5       299 rsd`}
+      />,
+    );
+
+    expect(html).toContain("Rokovi isporuke");
+    expect(html).toContain("2–3 dana");
+    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("299 rsd");
+  });
 });

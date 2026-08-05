@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
+import { getPublishedContentPage } from "@/lib/cms/pages";
+import { getSystemContentPage } from "@/lib/cms/system-pages";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -44,6 +46,7 @@ interface RouteProps {
 // Product pages are generated on first visit, then served from the CDN and
 // refreshed in the background. No user/session data may be read in this route.
 export const revalidate = 30;
+const DELIVERY_TERMS_SLUG = "uslovi-isporuke";
 
 export function generateStaticParams() {
   return [];
@@ -62,10 +65,16 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
 
 export default async function ProductPage({ params }: RouteProps) {
   const { slug } = await params;
-  const catalogProduct = await getProductBySlug(slug);
+  const [catalogProduct, publishedDeliveryTerms] = await Promise.all([
+    getProductBySlug(slug),
+    getPublishedContentPage(DELIVERY_TERMS_SLUG),
+  ]);
   if (!catalogProduct) notFound();
   const product: Product = catalogProduct;
   const publicPrice = effectiveUnitPrice(product);
+  const standardDeliveryTermsMarkdown =
+    publishedDeliveryTerms?.bodyMarkdown ??
+    getSystemContentPage(DELIVERY_TERMS_SLUG)?.bodyMarkdown;
 
   // Row I — Breadcrumbs
   const trail: Crumb[] = [
@@ -190,6 +199,7 @@ export default async function ProductPage({ params }: RouteProps) {
             <div>
               <PdpInfoLinks
                 descriptionPreview={cleanDescription}
+                standardDeliveryTermsMarkdown={standardDeliveryTermsMarkdown}
                 sections={{
                   description: product.description,
                   deliveryTerms: product.pdpInfo?.deliveryTerms,

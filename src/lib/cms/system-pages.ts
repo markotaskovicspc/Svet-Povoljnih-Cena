@@ -211,23 +211,33 @@ Za pitanja o ovim uslovima obratite se na [{{merchant.email}}](mailto:{{merchant
       "Šta očekivati posle porudžbine — od potvrde, preko priprema, do dovoza i montaže.",
     bodyMarkdown: `## Rokovi isporuke {#rokovi}
 
-Procenjeni rok zavisi od potvrđene zalihe, vrste robe, adrese i izabrane službe. Rok koji važi za konkretnu porudžbinu prikazuje se pre njene potvrde i ponavlja u potvrdi porudžbine.
+Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupac zatraži odlaganje isporuke, novi termin dostave biće organizovan u skladu sa njegovim zahtevom. Kurirska služba može kontaktirati kupca pre isporuke radi potvrde termina dostave.
 
-Kurirska služba može naknadno najaviti termin kroz kanal koji sama podržava. Takva najava ne menja podatke o adresi bez potvrde kupca.
+## Cena isporuke {#tarifa}
 
-## Cena isporuke i dodatnih usluga {#tarifa}
+**Cena dostave se ne računa za svaki poseban paket, već kao suma svih težina po kategoriji.** Ukupan iznos dostave prikazuje se pre potvrde porudžbine.
 
-Cena se računa za konkretnu korpu i adresu. Dostava, unos i montaža nude se samo kada ih aktivni logistički partner podržava, a svaki iznos je prikazan odvojeno pre slanja porudžbine. Ne postoji opšti prag za besplatnu dostavu dok nije izričito prikazan u checkout-u.
+**I kategorija - paketi koji imaju sve dimenzije manje od 60cm:**
 
-## Kada se zadužuje vaš račun {#naplata}
+Težina od\tTežina do\tCena
 
-- **IPS Skeniraj i platne kartice (kada su dostupni):** račun se zadužuje odmah po uspešnoj autorizaciji plaćanja, pre nego što porudžbina krene u pripremu za isporuku.
-- **Uplata na račun:** sredstva se prenose kada vi izvršite uplatu po dobijenoj uplatnici; porudžbinu puštamo u pripremu tek po evidentiranju uplate na našem računu.
-- **Pouzeće (gotovina ili kartica kod kurira):** iznos se naplaćuje tek pri preuzimanju pošiljke, na adresi isporuke.
+       0       5  \t299 rsd
+       5\t  10\t399 rsd
+      10\t  20\t599 rsd
+      20\t  30\t899 rsd
+      30      50\t999 rsd
 
-## Dostupnost montaže {#gradovi}
+**II kategorija - paketi imaju bar jednu dimenziju veću od od 60cm do volumentrijske dimenzije 300cm:**
 
-Montaža se ne podrazumeva. Ako je dostupna za artikal i adresu, biće ponuđena sa cenom pre potvrde porudžbine. Za proveru posebnih uslova kontaktirajte [podršku](/kontakt).
+Težina od\tTežina do\tCena
+
+       0       5  \t399 rsd
+       5\t  10\t499 rsd
+      10\t  20\t699 rsd
+      20\t  30\t999 rsd
+      30      50\t1099 rsd
+
+Paketi sa volumentrijskom dimenzijom većom od 300 cm naplaćuju se po ceni II kategorije, uz doplatu od 300 rsd. Volumentrijska dimenzija se računa po formuli jedan puta najduža stranica plus dva puta širina i plus dva puta visina.
 
 ## Pri prijemu pošiljke {#prijem}
 
