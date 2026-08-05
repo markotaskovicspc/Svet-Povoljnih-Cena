@@ -31,10 +31,10 @@ export function ShippingMethodStep({
   const showKamion = deliveryQuote.truckAvailable;
 
   useEffect(() => {
-    if (method !== "kurir") {
+    if (!glsDeliveryPointsEnabled || method !== "kurir") {
       setValue("glsDeliveryPoint", null, { shouldDirty: true });
     }
-  }, [method, setValue]);
+  }, [glsDeliveryPointsEnabled, method, setValue]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -162,7 +162,10 @@ export function AutomaticDeliverySection({
   useEffect(() => {
     setValue("shippingMethod", "kurir", { shouldDirty: false });
     setValue("perItemAssembly", {}, { shouldDirty: false });
-  }, [setValue]);
+    if (!glsDeliveryPointsEnabled) {
+      setValue("glsDeliveryPoint", null, { shouldDirty: false });
+    }
+  }, [glsDeliveryPointsEnabled, setValue]);
 
   return (
     <div className="bg-walnut/5 ring-walnut/20 rounded-2xl p-4 ring-1">

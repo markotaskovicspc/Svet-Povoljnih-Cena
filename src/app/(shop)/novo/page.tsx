@@ -6,9 +6,9 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
-  title: "Novo u ponudi — najsvežiji komadi",
+  title: "Novo u ponudi — najnoviji proizvodi",
   description:
-    "Najnovije pristigli komadi nameštaja. Sortirano po preostalom trajanju oznake „Novo“.",
+    "Najnoviji proizvodi u ponudi, sortirani od najnovijih ka starijima.",
 };
 
 /** Sub-tabs sourced from primary nav rooms. */
@@ -33,7 +33,7 @@ export default async function NovoPage() {
       title="Novo u ponudi"
       titleIcon={titleIcon ?? newCampaignSticker}
       campaignSticker="new"
-      subtitle="Pristiglo u poslednjih 30 dana — najsvežiji komadi prvi."
+      subtitle="Najnoviji proizvodi u ponudi — najnoviji prvi."
       trail={[{ label: "Novo" }]}
       source={products}
       subTabs={ROOM_TABS}

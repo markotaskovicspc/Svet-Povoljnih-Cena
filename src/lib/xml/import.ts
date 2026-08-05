@@ -4,7 +4,10 @@ import { envValue } from "@/lib/env";
 import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { connectorFor } from "./connector";
-import { productNewUntilIsActive } from "@/lib/product-newness";
+import {
+  omitSupplierProductNewnessUpdates,
+  productNewUntilIsActive,
+} from "@/lib/product-newness";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
@@ -337,6 +340,7 @@ async function upsertFeedItem(
       isHero: item.isHero ?? false,
       isNew: productNewUntilIsActive(item.newUntil),
       newUntil: item.newUntil ?? null,
+      newUntilAutomatic: item.newUntil == null,
       isLimited: item.isLimited ?? false,
       isDtz: item.isDtz ?? false,
       // Owned warehouse stock is authoritative and is never sourced from a
@@ -355,12 +359,17 @@ async function upsertFeedItem(
     let productId: string;
     let kind: "created" | "updated";
     const overrides = existing ? parseSyncOverrideFields(existing.syncOverrides) : new Set<string>();
-    const productData = existing
+    const mappedProductData = existing
       ? preserveExistingProductDescriptions(
           applyProductOverrides(data, overrides) as Record<string, unknown>,
           existing,
         ) as Prisma.ProductUncheckedUpdateInput
       : data;
+    const productData = existing
+      ? omitSupplierProductNewnessUpdates(
+          mappedProductData as Record<string, unknown>,
+        ) as Prisma.ProductUncheckedUpdateInput
+      : mappedProductData;
     const pricingLocked = overrides.has("pricing") || overrides.has("price");
 
     if (existing) {
@@ -369,6 +378,9 @@ async function upsertFeedItem(
       // assigns them to an ActionProduct; supplier sync must not create new ones.
       delete (productData as Record<string, unknown>).salePrice;
       delete (productData as Record<string, unknown>).discountPct;
+      // "Novo" is assigned once when a product is created. A recurring
+      // supplier sync must never renew the four-month window or undo an admin
+      // override. XLSX/admin edits remain the only update paths for this state.
       await tx.product.update({ where: { id: existing.id }, data: productData });
       productId = existing.id;
       kind = "updated";

@@ -7,7 +7,14 @@ export const RABALUX_OVERRIDE_GROUPS = {
   pricing: ["fullPrice", "salePrice", "discountPct"],
   price: ["fullPrice", "salePrice", "discountPct"],
   stock: ["supplierStock", "supplierNextArrivalAt"],
-  flags: ["articleStatus", "isDtz", "isActive", "isNew"],
+  flags: [
+    "articleStatus",
+    "isDtz",
+    "isActive",
+    "isNew",
+    "newUntil",
+    "newUntilAutomatic",
+  ],
   dimensions: [
     "widthCm",
     "depthCm",

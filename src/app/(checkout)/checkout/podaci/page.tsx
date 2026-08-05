@@ -35,7 +35,9 @@ export default async function CheckoutPodaciPage() {
     .join(" ");
   const accountName = account?.name ?? (accountFullName || null);
   const smallParcelProvider = await getSelectedSmallParcelProvider();
-  const glsDeliveryPointsEnabled = smallParcelProvider === "MYGLS";
+  // Paket Shop/locker delivery is intentionally paused until MyGLS confirms
+  // the account services and delivery-point master-data feed.
+  const glsDeliveryPointsEnabled = false;
   const xExpressAddressEnabled = smallParcelProvider === "X_EXPRESS";
   const checkoutConfig = await getCheckoutConfig();
 

@@ -26,6 +26,7 @@ import {
   isRabaluxFieldLocked,
   parseOverrideFields,
 } from "./ownership";
+import { omitSupplierProductNewnessUpdates } from "@/lib/product-newness";
 import {
   RABALUX_SUPPLIER_SAFETY_STOCK,
   resolveRabaluxAvailability,
@@ -655,12 +656,14 @@ async function upsertCatalogItem(
         isRiskyPriceChange(Number(existing.fullPrice), item.fullPrice),
     );
     if (existing) {
-      const updateData = preserveExistingProductDescriptions(
-        applyRabaluxOverrides(
-          data as unknown as Record<string, unknown>,
-          overrideFields,
+      const updateData = omitSupplierProductNewnessUpdates(
+        preserveExistingProductDescriptions(
+          applyRabaluxOverrides(
+            data as unknown as Record<string, unknown>,
+            overrideFields,
+          ),
+          existing,
         ),
-        existing,
       ) as Prisma.ProductUncheckedUpdateInput;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
@@ -669,7 +672,6 @@ async function upsertCatalogItem(
       // supplier sync may no longer create or overwrite legacy sale fields.
       delete (updateData as Record<string, unknown>).salePrice;
       delete (updateData as Record<string, unknown>).discountPct;
-      delete (updateData as Record<string, unknown>).isNew;
       if (!categoryId) delete (updateData as Record<string, unknown>).groupId;
       if (!item.valid || (riskyPrice && !options.allowRiskyPrices)) {
         delete (updateData as Record<string, unknown>).fullPrice;

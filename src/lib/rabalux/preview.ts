@@ -181,12 +181,12 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
           changeType: "CREATE",
           fields: ["product"],
           before: null,
-          after: catalogItemSnapshot(item, mappingId),
+          after: catalogItemSnapshot(item, mappingId, true),
         }),
       );
     } else {
       const before = existingCatalogSnapshot(existing);
-      const after = catalogItemSnapshot(item, mappingId);
+      const after = catalogItemSnapshot(item, mappingId, existing.isNew);
       const locked = parseOverrideFields(existing.syncOverrides);
       const fields = changedFields(before, after).filter(
         (field) => !fieldIsLocked(field, locked),
@@ -510,7 +510,11 @@ function change(args: {
   };
 }
 
-function catalogItemSnapshot(item: RabaluxCatalogItem, categoryId?: string) {
+function catalogItemSnapshot(
+  item: RabaluxCatalogItem,
+  categoryId: string | undefined,
+  isNew: boolean,
+) {
   return {
     sku: item.sku,
     barcode: item.barcode,
@@ -537,7 +541,8 @@ function catalogItemSnapshot(item: RabaluxCatalogItem, categoryId?: string) {
     warrantyYears: item.warrantyYears,
     countryOfOrigin: item.countryOfOrigin,
     hsCode: item.hsCode,
-    isNew: item.isNew,
+    // Newness is assigned once at product creation and is not supplier-owned.
+    isNew,
     categories: categoryId ? [categoryId] : [],
     media: item.media.map(({ sourceUrl, kind, order }) => ({ sourceUrl, kind, order })),
     attachments: item.attachments.map(({ sourceUrl, kind, order }) => ({

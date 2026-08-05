@@ -33,6 +33,7 @@ test.describe("article master acceptance", () => {
   let groupCategoryId = "";
   let generatedProductId = "";
   let copiedProductId = "";
+  let automaticNewUntil = "";
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -141,6 +142,7 @@ test.describe("article master acceptance", () => {
     productId = product.id;
     productSku = product.sku;
     productSlug = product.slug;
+    automaticNewUntil = product.newUntil?.toISOString().slice(0, 10) ?? "";
     await db.priceList.create({
       data: {
         code: `QA-RETAIL-${runId}`.slice(0, 80),
@@ -260,6 +262,11 @@ test.describe("article master acceptance", () => {
     await expect(productForm.locator('input[name="sku"]')).toBeEditable();
     const saveButton = productForm.getByRole("button", { name: "Sačuvaj izmene" });
     await expect(saveButton).toBeInViewport();
+    await expect(page.getByLabel("Novo do")).toHaveValue(automaticNewUntil);
+    await page.getByRole("button", { name: "Ukloni iz „Novo“" }).click();
+    await expect(page.getByLabel("Novo do")).toHaveValue("");
+    await page.getByRole("button", { name: "Vrati automatski" }).click();
+    await expect(page.getByLabel("Novo do")).toHaveValue(automaticNewUntil);
     await expect(
       page.locator('select[name="articleStatus"] option[value="DTZ"]'),
     ).toHaveText("DTZ — Dok traju zalihe");
@@ -345,6 +352,8 @@ test.describe("article master acceptance", () => {
             stock: true,
             articleStatus: true,
             isNew: true,
+            newUntil: true,
+            newUntilAutomatic: true,
             materialText: true,
             unitPackWidthCm: true,
             unitPackDepthCm: true,
@@ -379,6 +388,8 @@ test.describe("article master acceptance", () => {
           stock: product.stock,
           status: product.articleStatus,
           isNew: product.isNew,
+          newUntil: product.newUntil?.toISOString().slice(0, 10),
+          newUntilAutomatic: product.newUntilAutomatic,
           material: product.materialText,
           unitPackage: [
             Number(product.unitPackWidthCm),
@@ -417,6 +428,8 @@ test.describe("article master acceptance", () => {
         stock: 27,
         status: "SP",
         isNew: true,
+        newUntil: "2027-12-31",
+        newUntilAutomatic: false,
         material: "Hrast + čelik",
         unitPackage: [31.5, 22.25, 11],
         channels: [true, true, true],

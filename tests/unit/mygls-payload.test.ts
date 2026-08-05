@@ -22,11 +22,11 @@ const config: MyGlsConfig = {
   flexDeliveryServiceEnabled: false,
   pickup: {
     name: "Svet povoljnih cena",
-    street: "Vojvođanska",
-    houseNumber: "401",
-    houseNumberInfo: "",
-    city: "Surčin",
-    postalCode: "11271",
+    street: "Evropska",
+    houseNumber: "1",
+    houseNumberInfo: "bb",
+    city: "Stara Pazova",
+    postalCode: "22300",
     country: "RS",
     contactName: "DC magacin",
     contactPhone: "+381641234567",
@@ -93,9 +93,10 @@ describe("MyGLS reclamation payload", () => {
     });
     expect(parcel.DeliveryAddress).toMatchObject({
       Name: "Svet povoljnih cena",
-      Street: "Vojvođanska",
-      HouseNumber: "401",
-      City: "Surčin",
+      Street: "Evropska",
+      HouseNumber: "1",
+      HouseNumberInfo: "bb",
+      City: "Stara Pazova",
     });
   });
 
@@ -109,7 +110,7 @@ describe("MyGLS reclamation payload", () => {
 
     expect(parcel.ClientReference).toBe("SPC-2026-000001-ZAMENA");
     expect(parcel.CODAmount).toBe(0);
-    expect(parcel.PickupAddress.City).toBe("Surčin");
+    expect(parcel.PickupAddress.City).toBe("Stara Pazova");
     expect(parcel.DeliveryAddress.City).toBe("Novi Sad");
   });
 

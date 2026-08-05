@@ -73,6 +73,12 @@ export function ArticleImportForm() {
           dimenzije i pakovanje, materijal, sertifikate, kanale prodaje, MOQ,
           kao i datum „Novo do“.
         </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Novi red bez kolone „Novo do“ automatski ostaje u sekciji „Novo“ četiri
+          kalendarska meseca. Ako kolona postoji, datum je ručni rok, a prazno
+          polje isključuje proizvod iz sekcije. Ponovni uvoz bez te kolone ne
+          produžava postojeći rok.
+        </p>
         <p className="mt-2 rounded-lg border border-brand-blue/20 bg-brand-blue-50/50 px-3 py-2 text-sm text-ink-700">
           Za artikal „Dok traju zalihe“ unesite <strong>DTZ</strong> u kolonu
           <strong> Status</strong>. DTZ nema datum isteka.

@@ -952,6 +952,7 @@ async function loadProducts(
       case "discount-desc":
         return [{ discountPct: "desc" }, { fullPrice: "asc" }];
       default:
+        if (input.newOnly) return [{ newUntil: "desc" }];
         return [{ isHero: "desc" }, { discountPct: "desc" }, { fullPrice: "asc" }];
     }
   })();

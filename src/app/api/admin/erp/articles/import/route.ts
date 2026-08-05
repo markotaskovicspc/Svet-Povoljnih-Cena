@@ -20,7 +20,10 @@ import {
   resolveImportedShortDescription,
 } from "@/lib/product-descriptions";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
-import { productNewUntilIsActive } from "@/lib/product-newness";
+import {
+  productNewUntilIsActive,
+  resolveAdminImportedProductNewness,
+} from "@/lib/product-newness";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
 
@@ -643,9 +646,12 @@ export async function POST(request: Request) {
           incoming: row.shortDescription,
           current: existing?.shortDescription,
         });
-        const newUntil = hasColumn("newUntil")
-          ? row.newUntil
-          : existing?.newUntil ?? null;
+        const { newUntil, newUntilAutomatic } =
+          resolveAdminImportedProductNewness({
+            columnPresent: hasColumn("newUntil"),
+            incomingNewUntil: row.newUntil,
+            existing,
+          });
         const data = {
           barcode: hasColumn("barcode") ? row.barcode : existing?.barcode ?? null,
           name: composedArticleName({
@@ -746,6 +752,7 @@ export async function POST(request: Request) {
           availableExportManual: row.exportCheck ?? existing?.availableExportManual ?? true,
           moq: hasColumn("moq") ? row.moq : existing?.moq ?? null,
           newUntil,
+          newUntilAutomatic,
           isNew: productNewUntilIsActive(newUntil),
           fullPrice: existing?.fullPrice ?? 0,
           ...statusFlags(status),
@@ -768,6 +775,9 @@ export async function POST(request: Request) {
             hasMeaningfulProductDescription(row.shortDescription))
         ) {
           await lockSupplierOwnedFields(tx, product.id, admin.id, ["description"]);
+        }
+        if (hasColumn("newUntil")) {
+          await lockSupplierOwnedFields(tx, product.id, admin.id, ["flags"]);
         }
         if (shouldReplaceCategory) {
           await tx.productCategory.deleteMany({ where: { productId: product.id } });

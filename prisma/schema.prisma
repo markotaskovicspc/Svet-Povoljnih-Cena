@@ -406,10 +406,13 @@ model Product {
   countryOfOrigin      String?
 
   // Flags
-  isHero    Boolean   @default(false)
-  isNew     Boolean   @default(false)
-  newUntil  DateTime?
-  isLimited Boolean   @default(false)
+  isHero            Boolean   @default(false)
+  isNew             Boolean   @default(false)
+  newUntil           DateTime?
+  /// True only while the four-month window is managed from the product creation date.
+  /// Manual admin/XLSX changes set this false so supplier syncs cannot renew the window.
+  newUntilAutomatic Boolean   @default(true)
+  isLimited         Boolean   @default(false)
   /// "Dok traju zalihe"
   isDtz     Boolean   @default(false)
 
@@ -511,6 +514,7 @@ model Product {
   @@index([sku])
   @@index([barcode])
   @@index([isActive, isHero])
+  @@index([newUntil])
   @@index([groupId])
   @@index([collectionId])
   @@index([supplierId])

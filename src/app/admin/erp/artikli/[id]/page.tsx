@@ -26,6 +26,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { ProductCategorySelector } from "@/components/admin/product-category-selector";
+import { ProductNewnessField } from "@/components/admin/product-newness-field";
 import {
   ProductAttachmentsEditor,
   type EditableProductAttachment,
@@ -66,7 +67,11 @@ import {
 } from "@/lib/delivery-windows";
 import { formatRsd } from "@/lib/format";
 import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
-import { productNewUntilIsActive } from "@/lib/product-newness";
+import {
+  defaultProductNewUntil,
+  productNewUntilIsActive,
+  productNewnessDateInput,
+} from "@/lib/product-newness";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import {
   articleCategorySelectionFromLeaf,
@@ -134,6 +139,7 @@ const overrideSchema = z.object({
   ananasStoragePct: optionalNonnegativeNumber(),
   ananasDeliveryPct: optionalNonnegativeNumber(),
   newUntil: z.string().max(10).optional().nullable(),
+  newUntilAutomatic: z.coerce.boolean().default(false),
   allowsAssembly: z.coerce.boolean().default(false),
   availableWebManual: z.coerce.boolean().default(false),
   availableWholesaleManual: z.coerce.boolean().default(false),
@@ -327,7 +333,17 @@ function changedManualGroups(
       ],
     ],
     ["delivery", ["allowsAssembly"]],
-    ["flags", ["articleStatus", "isActive", "isNew", "isDtz"]],
+    [
+      "flags",
+      [
+        "articleStatus",
+        "isActive",
+        "isNew",
+        "newUntil",
+        "newUntilAutomatic",
+        "isDtz",
+      ],
+    ],
   ];
   return groups
     .filter(([, keys]) =>
@@ -358,13 +374,14 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           availableWebManual: bool("availableWebManual"),
           availableWholesaleManual: bool("availableWholesaleManual"),
           availableExportManual: bool("availableExportManual"),
+          newUntilAutomatic: bool("newUntilAutomatic"),
         });
         if (!parsed.success) {
           return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         }
         const d = parsed.data;
         const sku = normalizeArticleSku(d.sku);
-        const newUntil = optionalDateInput(d.newUntil);
+        const requestedNewUntil = optionalDateInput(d.newUntil);
         const statusFlags =
           d.articleStatus === "DTZ"
             ? { isActive: true, isDtz: true, isLimited: false }
@@ -416,10 +433,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           ananasBrokeragePct: d.ananasBrokeragePct ?? null,
           ananasStoragePct: d.ananasStoragePct ?? null,
           ananasDeliveryPct: d.ananasDeliveryPct ?? null,
-          newUntil,
           allowsAssembly: d.allowsAssembly,
           ...statusFlags,
-          isNew: productNewUntilIsActive(newUntil),
           availableWebManual: d.availableWebManual,
           availableWholesaleManual: d.availableWholesaleManual,
           availableExportManual: d.availableExportManual,
@@ -450,7 +465,10 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
               allowsAssembly: true,
               isActive: true,
               isNew: true,
+              newUntil: true,
+              newUntilAutomatic: true,
               isDtz: true,
+              createdAt: true,
               groupId: true,
               collectionId: true,
               group: { select: { id: true, name: true } },
@@ -518,8 +536,14 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
                   id: requestedCollectionId,
                   name: d.newCollectionName,
                 });
+          const effectiveNewUntil = d.newUntilAutomatic
+            ? defaultProductNewUntil(existing.createdAt)
+            : requestedNewUntil;
           const completeData = {
             ...data,
+            newUntil: effectiveNewUntil,
+            newUntilAutomatic: d.newUntilAutomatic,
+            isNew: productNewUntilIsActive(effectiveNewUntil),
             name: composedArticleName({
               collectionName: collection?.name,
               shortDescription: d.shortDescription,
@@ -1657,13 +1681,16 @@ export default async function ProductDetail({
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Komercijalni uslovi i kanali
               </legend>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <Field label="Novo do">
-                  <Input name="newUntil" type="date" defaultValue={dateInputValue(product.newUntil)} />
-                </Field>
-              </div>
+              <ProductNewnessField
+                value={dateInputValue(product.newUntil)}
+                automaticValue={productNewnessDateInput(
+                  defaultProductNewUntil(product.createdAt),
+                )}
+                automatic={product.newUntilAutomatic}
+              />
               <p className="text-xs text-ink-500">
-                „Novo“ se automatski izvodi isključivo iz datuma „Novo do“.
+                Novi proizvodi dobijaju četiri kalendarska meseca od unosa.
+                Ručni datum ili uklanjanje imaju prednost i dobavljački sync ih ne menja.
               </p>
               <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
                 <Toggle name="availableWebManual" defaultChecked={product.availableWebManual} label="Web check" />

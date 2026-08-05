@@ -143,6 +143,7 @@ export function buildCopiedArticleData(
     isHero: false,
     isNew: false,
     newUntil: null,
+    newUntilAutomatic: true,
     isLimited: false,
     isDtz: false,
     stock: 0,

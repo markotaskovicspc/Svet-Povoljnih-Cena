@@ -540,6 +540,13 @@ Dugmad:
 
 Ako postoji greška, prikazuje tabelu sa brojem reda, poljem i jasnim razlogom. Nijedan red se ne upisuje dok se sve greške ne isprave.
 
+Pravilo za kolonu **Novo do**:
+
+- novi red bez te kolone automatski dobija oznaku „Novo“ četiri kalendarska meseca od unosa;
+- konkretan datum predstavlja ručno zadat rok;
+- prazno polje u postojećoj koloni isključuje proizvod iz sekcije „Novo“;
+- ponovni uvoz bez kolone **Novo do** ne obnavlja niti briše postojeći rok.
+
 ## 10. Detalj proizvoda
 
 Ova stranica se otvara nakon **Unos novog**, preko QA pregleda ili direktnog linka.
@@ -552,7 +559,9 @@ Oznake:
 
 - **Aktivan** — dozvoljava objavu ako su ispunjeni ostali uslovi.
 - **Hero meseca** — uključuje artikal u hero logiku.
-- **Novo** — prikazuje ga kao novitet.
+- **Novo do** — novi proizvod automatski dobija četiri kalendarska meseca od unosa. Datum se može ručno skratiti ili produžiti.
+- **Vrati automatski** — vraća rok računat od prvobitnog datuma kreiranja proizvoda.
+- **Ukloni iz „Novo“** — prazni rok i uklanja proizvod iz sekcije i sa badge-a posle čuvanja.
 - **Ograničena ponuda** — označava limitiranu ponudu.
 - **Dok traju zalihe** — DTZ ponuda.
 - **Dozvoljena montaža** — omogućava montažu kao opciju isporuke.
