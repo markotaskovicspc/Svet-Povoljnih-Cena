@@ -40,6 +40,8 @@ interface SectionRailProps {
   products: Product[];
   banner?: Banner | null;
   dense?: boolean;
+  /** Uses the short desktop card treatment reserved for homepage rails. */
+  compactCardsOnDesktop?: boolean;
   /**
    * On mobile we deliberately strip eyebrow + description for some sections
    * (e.g. Heroji meseca) to keep the layout dense and uncluttered. The
@@ -71,6 +73,7 @@ export function SectionRail({
   minimalHeader,
   banner,
   dense,
+  compactCardsOnDesktop,
   mobileMinimal,
   compactMobileHeader,
   emptyMessage,
@@ -226,11 +229,17 @@ export function SectionRail({
                     transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
                   },
                 }}
-                className="w-[32vw] min-w-[126px] shrink-0 snap-start sm:w-[25vw] md:w-[clamp(162px,calc(18%_-_14px),220px)]"
+                className={cn(
+                  "w-[32vw] min-w-[126px] shrink-0 snap-start sm:w-[25vw]",
+                  compactCardsOnDesktop
+                    ? "md:w-[clamp(180px,calc(16.5%_-_14px),200px)]"
+                    : "md:w-[clamp(162px,calc(18%_-_14px),220px)]",
+                )}
               >
                 <ProductCard
                   product={p}
                   campaignSticker={campaignSticker}
+                  compactOnDesktop={compactCardsOnDesktop}
                   className="h-full"
                 />
               </motion.li>

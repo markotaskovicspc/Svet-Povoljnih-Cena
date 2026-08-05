@@ -41,6 +41,8 @@ interface ProductCardProps {
   preload?: boolean;
   /** Contextual promo sticker inherited from the current rail/listing. */
   campaignSticker?: CampaignStickerKey;
+  /** Keeps every card detail while reducing homepage card height on desktop. */
+  compactOnDesktop?: boolean;
 }
 
 /** 8×10 white blur placeholder for product media loading states. */
@@ -61,6 +63,7 @@ export function ProductCard({
   product,
   className,
   preload,
+  compactOnDesktop,
 }: ProductCardProps) {
   const reduced = useReducedMotion();
   const loyaltyEligible = useLoyaltyEligibility();
@@ -202,7 +205,12 @@ export function ProductCard({
         className,
       )}
     >
-      <div className="relative aspect-square overflow-hidden bg-white">
+      <div
+        className={cn(
+          "relative aspect-square overflow-hidden bg-white",
+          compactOnDesktop && "md:h-20 md:aspect-auto",
+        )}
+      >
         <Link
           href={`/p/${product.slug}`}
           prefetch={false}
@@ -322,8 +330,18 @@ export function ProductCard({
       </button>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col gap-1.5 px-2.5 pt-2 pb-2 md:px-3 md:pt-2.5 md:pb-3">
-        <h3 className="truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]">
+      <div
+        className={cn(
+          "flex flex-1 flex-col gap-1.5 px-2.5 pt-2 pb-2 md:px-3 md:pt-2.5 md:pb-3",
+          compactOnDesktop && "md:gap-0.5 md:px-2 md:pt-1.5 md:pb-1.5",
+        )}
+      >
+        <h3
+          className={cn(
+            "truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]",
+            compactOnDesktop && "md:text-[11px] md:leading-tight",
+          )}
+        >
           <Link
             href={`/p/${product.slug}`}
             prefetch={false}
@@ -335,14 +353,29 @@ export function ProductCard({
         <Link
           href={`/p/${product.slug}`}
           prefetch={false}
-          className="truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]"
+          className={cn(
+            "truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]",
+            compactOnDesktop && "md:text-[9px] md:leading-none",
+          )}
         >
           {dimensions}
         </Link>
-        <ProductColorOptions product={product} className="h-4 pt-0" />
+        <ProductColorOptions
+          product={product}
+          className={cn(
+            "h-4 pt-0",
+            compactOnDesktop && "md:h-3 md:gap-1 md:[&>span]:size-2.5",
+          )}
+        />
 
         <div className="mt-auto pt-0">
-          <div className="flex flex-col items-stretch gap-1.5">
+          <div
+            className={cn(
+              "flex flex-col items-stretch gap-1.5",
+              compactOnDesktop &&
+                "md:grid md:grid-cols-[minmax(0,1fr)_88px] md:items-end md:gap-1",
+            )}
+          >
             <Link
               href={`/p/${product.slug}`}
               prefetch={false}
@@ -351,7 +384,12 @@ export function ProductCard({
             >
               {hasReducedPrice ? (
                 <div className="space-y-0.5">
-                  <span className="block truncate text-[10px] text-ink-500 md:text-[11px]">
+                  <span
+                    className={cn(
+                      "block truncate text-[10px] text-ink-500 md:text-[11px]",
+                      compactOnDesktop && "md:text-[8px] md:leading-none",
+                    )}
+                  >
                     {formatRsd(quote.full)}
                   </span>
                   {quote.actionOffer ? (
@@ -359,6 +397,7 @@ export function ProductCard({
                       label="Akcija"
                       value={quote.actionOffer.effective}
                       selected={price.kind !== "loyalty"}
+                      compactOnDesktop={compactOnDesktop}
                     />
                   ) : null}
                   {quote.loyaltyOffer ? (
@@ -366,11 +405,17 @@ export function ProductCard({
                       label="Loyalty"
                       value={quote.loyaltyOffer.effective}
                       selected={price.kind === "loyalty"}
+                      compactOnDesktop={compactOnDesktop}
                     />
                   ) : null}
                 </div>
               ) : (
-                <span className="block truncate text-sm leading-none font-bold text-ink-900 md:text-[15px]">
+                <span
+                  className={cn(
+                    "block truncate text-sm leading-none font-bold text-ink-900 md:text-[15px]",
+                    compactOnDesktop && "md:text-xs",
+                  )}
+                >
                   {formatRsd(price.full)}
                 </span>
               )}
@@ -383,19 +428,31 @@ export function ProductCard({
                 tone="dark"
                 addTone="dark"
                 fullWidth
-                className="w-full"
+                className={cn(
+                  "w-full",
+                  compactOnDesktop && "md:h-7 md:gap-1 md:px-1.5 md:text-[9px]",
+                )}
               />
             ) : (
               <button
                 type="button"
                 disabled
-                className="inline-flex h-9 w-full cursor-not-allowed items-center justify-center rounded-full bg-muted-bg px-3 text-xs font-medium text-ink-500 ring-1 ring-border/60"
+                className={cn(
+                  "inline-flex h-9 w-full cursor-not-allowed items-center justify-center rounded-full bg-muted-bg px-3 text-xs font-medium text-ink-500 ring-1 ring-border/60",
+                  compactOnDesktop && "md:h-7 md:px-1.5 md:text-[9px]",
+                )}
               >
                 {availability.addLabel}
               </button>
             )}
           </div>
-          <p className="mt-1 min-h-6 break-words text-[9px] leading-tight text-ink-500 sm:text-[10px] md:text-[10px]">
+          <p
+            className={cn(
+              "mt-1 min-h-6 break-words text-[9px] leading-tight text-ink-500 sm:text-[10px] md:text-[10px]",
+              compactOnDesktop &&
+                "md:mt-0.5 md:min-h-3 md:truncate md:text-[8px] md:leading-none",
+            )}
+          >
             {availability.isSupplierSourced
               ? availability.message
               : availability.canAddToCart
@@ -413,19 +470,32 @@ function CompactPriceOffer({
   label,
   value,
   selected,
+  compactOnDesktop,
 }: {
   label: string;
   value: number;
   selected: boolean;
+  compactOnDesktop?: boolean;
 }) {
   return (
-    <span className="flex items-baseline justify-between gap-1.5 sm:gap-2">
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">
+    <span
+      className={cn(
+        "flex items-baseline justify-between gap-1.5 sm:gap-2",
+        compactOnDesktop && "md:gap-1",
+      )}
+    >
+      <span
+        className={cn(
+          "text-[9px] font-semibold uppercase tracking-wide text-ink-500",
+          compactOnDesktop && "md:text-[7px] md:tracking-normal",
+        )}
+      >
         {label}
       </span>
       <span
         className={cn(
           "shrink-0 text-sm leading-none font-bold md:text-[15px]",
+          compactOnDesktop && "md:text-[11px]",
           selected || label === "Loyalty" ? "text-action" : "text-ink-900",
         )}
       >

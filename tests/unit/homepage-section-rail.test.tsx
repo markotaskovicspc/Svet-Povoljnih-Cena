@@ -64,17 +64,26 @@ describe("homepage section rail", () => {
         title="Kompaktna ponuda"
         href="/akcija"
         products={[product]}
+        compactCardsOnDesktop
       />,
     );
 
     expect(html).toContain("w-[32vw]");
     expect(html).toContain("min-w-[126px]");
     expect(html).toContain("sm:w-[25vw]");
-    expect(html).toContain(
-      "md:w-[clamp(162px,calc(18%_-_14px),220px)]",
-    );
+    expect(html).toContain("md:w-[clamp(180px,calc(16.5%_-_14px),200px)]");
+    expect(html).toContain("md:h-20");
     expect(html).toContain("Kompaktna kartica");
     expect(html).toContain("Dimenzije: 10 × 10 × 10 cm");
     expect(html).toContain("1.000 RSD");
+  });
+
+  it("keeps the regular card treatment outside opted-in homepage rails", () => {
+    const html = renderToStaticMarkup(
+      <SectionRail title="Povezani proizvodi" href="/akcija" products={[product]} />,
+    );
+
+    expect(html).toContain("md:w-[clamp(162px,calc(18%_-_14px),220px)]");
+    expect(html).not.toContain("md:h-20");
   });
 });

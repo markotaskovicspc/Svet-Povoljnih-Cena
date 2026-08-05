@@ -65,6 +65,7 @@ function HomeSection({
       products={section.products}
       minimalHeader
       dense
+      compactCardsOnDesktop
       emptyMessage="Trenutno nema dostupnih proizvoda u ovoj sekciji."
     />
   );
