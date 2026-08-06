@@ -57,6 +57,17 @@ const product = {
   },
 } as Product;
 
+const greenChair = {
+  ...product,
+  sku: "CHAIR-GREEN",
+  slug: "chair-green",
+  colorPrimary: "Zelena",
+  variantFamily: {
+    ...product.variantFamily!,
+    selectedSku: "CHAIR-GREEN",
+  },
+} as Product;
+
 const greenTable = {
   ...product,
   sku: "TABLE-GREEN",
@@ -79,17 +90,22 @@ const oakChair = {
   variantFamily: undefined,
 } as Product;
 
-describe("family-aware filter boje", () => {
-  it("objavljuje sve family boje kao facete", () => {
-    expect(computeFacetValues([product]).colors).toEqual(["Crna", "Zelena"]);
+describe("SKU-level filter boje", () => {
+  it("računa svaku objavljenu family boju kao zaseban artikal", () => {
+    const facets = computeFacetValues([product, greenChair]);
+
+    expect(facets.colors).toEqual(["Crna", "Zelena"]);
+    expect(facets.counts.colors).toEqual({ Crna: 1, Zelena: 1 });
   });
 
-  it("zadržava jednu karticu i unapred bira boju koja odgovara filteru", () => {
-    const result = applyFilters([product], {
+  it("filter zadržava samo karticu konkretnog SKU-a bez prebacivanja druge kartice", () => {
+    const result = applyFilters([product, greenChair], {
       ...emptyFilterState(),
       colors: ["Zelena"],
     });
+
     expect(result).toHaveLength(1);
+    expect(result[0]?.sku).toBe("CHAIR-GREEN");
     expect(result[0]?.variantFamily?.selectedSku).toBe("CHAIR-GREEN");
   });
 });

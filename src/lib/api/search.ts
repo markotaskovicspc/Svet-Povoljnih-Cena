@@ -27,8 +27,6 @@ import { isWebAutoAvailabilityEnforced } from "@/lib/web-storefront-availability
 interface SuggestRow {
   sku: string;
   barcode: string | null;
-  family_id: string | null;
-  is_family_primary: boolean;
   slug: string;
   name: string;
   full_price: Prisma.Decimal;
@@ -50,18 +48,8 @@ export class SearchUnavailableError extends Error {
   }
 }
 
-export function selectSearchFamilyRepresentatives<
-  T extends Pick<SuggestRow, "sku" | "family_id" | "is_family_primary">,
->(rows: T[]) {
-  const familyRepresentatives = new Map<string, T>();
-  for (const row of rows) {
-    const key = row.family_id ? `family:${row.family_id}` : `sku:${row.sku}`;
-    const current = familyRepresentatives.get(key);
-    if (!current || (!current.is_family_primary && row.is_family_primary)) {
-      familyRepresentatives.set(key, row);
-    }
-  }
-  return [...familyRepresentatives.values()];
+export function paginateSearchSkuRows<T>(rows: T[], offset: number, limit: number) {
+  return rows.slice(offset, offset + limit);
 }
 
 async function searchProductHits(
@@ -85,8 +73,6 @@ async function searchProductHits(
     rows = await db.$queryRaw<SuggestRow[]>`
       SELECT p.sku,
              p.barcode,
-             pfm."familyId" AS family_id,
-             COALESCE(pf."primaryProductId" = p.id, false) AS is_family_primary,
              p.slug,
              p.name,
              p."fullPrice"   AS full_price,
@@ -108,7 +94,6 @@ async function searchProductHits(
                WHERE pc."productId" = p.id) AS breadcrumb
         FROM "Product" p
         LEFT JOIN "ProductFamilyMember" pfm ON pfm."productId" = p.id
-        LEFT JOIN "ProductFamily" pf ON pf.id = pfm."familyId"
        WHERE p."isActive" = true
          AND p."availableWebManual" = true
          AND (${!enforceAutoAvailability} OR p."availableWebAuto" = true)
@@ -190,8 +175,7 @@ async function searchProductHits(
   );
   if (exactNameRows.length) rows = exactNameRows;
   if (!exactIdentifier) {
-    rows = selectSearchFamilyRepresentatives(rows)
-      .slice(safeOffset, safeOffset + safeLimit);
+    rows = paginateSearchSkuRows(rows, safeOffset, safeLimit);
   }
 
   const products = await getProductCardsBySlugs(rows.map((row) => row.slug));

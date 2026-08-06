@@ -207,20 +207,13 @@ export function computeFacetValues(products: Product[]): FacetValues {
       counts.attributes[attribute] = (counts.attributes[attribute] ?? 0) + 1;
     }
 
-    const productColors = uniqueValues([p.colorPrimary, p.colorSecondary]);
-    for (const option of p.variantFamily?.options ?? []) {
-      const optionColors = uniqueValues([
-        option.label,
-        option.colorPrimary,
-        option.colorSecondary,
-      ]);
-      productColors.push(
-        ...optionColors.filter(
-          (color) => !productColors.some((existing) => facetValueEquals(existing, color)),
-        ),
-      );
-      if (option.colorHex) {
-        for (const color of optionColors) colorSwatches[color] ??= option.colorHex;
+    const productColors = productColorValues(p);
+    const currentFamilyOption = p.variantFamily?.options.find(
+      (option) => option.sku === p.sku,
+    );
+    if (currentFamilyOption?.colorHex) {
+      for (const color of productColors) {
+        colorSwatches[color] ??= currentFamilyOption.colorHex;
       }
     }
     for (const color of productColors) {
@@ -285,15 +278,7 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
       }
     }
     if (state.colors.length) {
-      const labels = uniqueValues([
-        p.colorPrimary,
-        p.colorSecondary,
-        ...(p.variantFamily?.options.flatMap((option) => [
-          option.label,
-          option.colorPrimary,
-          option.colorSecondary,
-        ]) ?? []),
-      ]);
+      const labels = productColorValues(p);
       if (!state.colors.some((c) => labels.some((label) => facetValueEquals(c, label)))) {
         return false;
       }
@@ -316,21 +301,6 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
       if (!v || !values.includes(v)) return false;
     }
     return true;
-  }).map((product) => {
-    if (!state.colors.length || !product.variantFamily) return product;
-    const selected = product.variantFamily.options.find((option) => {
-      const labels = [option.label, option.colorPrimary, option.colorSecondary]
-        .filter((value): value is string => Boolean(value?.trim()));
-      return state.colors.some((color) =>
-        labels.some((label) => facetValueEquals(color, label)),
-      );
-    });
-    return selected
-      ? {
-          ...product,
-          variantFamily: { ...product.variantFamily, selectedSku: selected.sku },
-        }
-      : product;
   });
 }
 
@@ -525,6 +495,19 @@ function uniqueValues(values: Array<string | null | undefined>): string[] {
     result.push(trimmed);
   }
   return result;
+}
+
+function productColorValues(product: Product) {
+  const currentFamilyOption = product.variantFamily?.options.find(
+    (option) => option.sku === product.sku,
+  );
+  return uniqueValues([
+    currentFamilyOption?.label,
+    product.colorPrimary,
+    product.colorSecondary,
+    currentFamilyOption?.colorPrimary,
+    currentFamilyOption?.colorSecondary,
+  ]);
 }
 
 function normalizeFacetValue(value: string) {

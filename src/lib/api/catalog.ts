@@ -711,18 +711,6 @@ function mapProductListRow(
   );
 }
 
-function dedupeProductFamilies(products: ProductDTO[]) {
-  const seen = new Set<string>();
-  return products.filter((product) => {
-    const key = product.variantFamily
-      ? `family:${product.variantFamily.id}`
-      : `sku:${product.sku}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function productStockAvailability(product: {
   stock: number;
   supplierStock: number | null;
@@ -1137,48 +1125,16 @@ async function loadProducts(
     where.materials = { some: { materialId: { in: input.materialIds } } };
   }
 
-  // A family occupies one stable listing row. Its primary SKU owns sorting,
-  // while any web-enabled member may satisfy category/search/filter criteria.
-  const familyAwareWhere: Prisma.ProductWhereInput = {
+  // Every published colour SKU occupies its own listing row and contributes
+  // independently to totals and cursor pagination. The family remains attached
+  // only so each card can offer the colour thumbnail selector.
+  appendAnd(where, {
     OR: [
-      { AND: [where, { familyMembership: { is: null } }] },
-      {
-        primaryForFamily: {
-          is: {
-            members: {
-              some: {
-                storefrontEnabled: true,
-                product: { is: where },
-              },
-            },
-          },
-        },
-      },
+      { familyMembership: { is: null } },
+      { familyMembership: { is: { storefrontEnabled: true } } },
     ],
-  };
-  const excludedFamily = input.excludeSku
-    ? await db.productFamilyMember.findFirst({
-        where: { product: { sku: input.excludeSku } },
-        select: { familyId: true },
-      })
-    : null;
-  const listingWhere: Prisma.ProductWhereInput = excludedFamily
-    ? {
-        AND: [
-          familyAwareWhere,
-          {
-            OR: [
-              { familyMembership: { is: null } },
-              {
-                familyMembership: {
-                  is: { familyId: { not: excludedFamily.familyId } },
-                },
-              },
-            ],
-          },
-        ],
-      }
-    : familyAwareWhere;
+  });
+  const listingWhere = where;
 
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = (() => {
     switch (input.sort) {
@@ -1270,7 +1226,7 @@ export const getProductBySlug = cache(getProductBySlugAcrossRequests);
 const getCachedProductRail = unstable_cache(
   async (input: ListProductsInput) =>
     listProducts({ ...input, includeTotal: false }),
-  ["catalog-product-rail-v2-family"],
+  ["catalog-product-rail-v3-sku"],
   {
     revalidate: 60,
     tags: ["catalog-products", "storefront-categories"],
@@ -1319,9 +1275,9 @@ export async function getProductCardsBySlugs(
         mapProductListRow(row, pricingRules, deliveryWindows),
       ]),
     );
-    return dedupeProductFamilies(orderedSlugs
+    return orderedSlugs
       .map((slug) => productsBySlug.get(slug))
-      .filter((product): product is ProductDTO => Boolean(product)));
+      .filter((product): product is ProductDTO => Boolean(product));
   } catch (error) {
     console.error("[catalog] Failed to batch-load product cards.", error);
     return [];
@@ -1352,9 +1308,9 @@ export async function getProductsBySkus(
         mapProductListRow(row, pricingRules, deliveryWindows),
       ]),
     );
-    return dedupeProductFamilies(orderedSkus
+    return orderedSkus
       .map((sku) => productsBySku.get(sku))
-      .filter((product): product is ProductDTO => Boolean(product)));
+      .filter((product): product is ProductDTO => Boolean(product));
   } catch (error) {
     console.error("[catalog] Failed to batch-load landing-page products.", error);
     return [];
@@ -1379,7 +1335,7 @@ export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
 export async function getFrequentlyBought(productId: string, limit = 6) {
   const p = await db.product.findUnique({
     where: { id: productId },
-    select: { collectionId: true, familyMembership: { select: { familyId: true } } },
+    select: { collectionId: true },
   });
   if (!p?.collectionId) return [];
   const [rows, pricingRules, deliveryWindows] = await Promise.all([
@@ -1396,16 +1352,16 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
     getActivePricingRules(),
     getDeliveryWindows(),
   ]);
-  return dedupeProductFamilies(rows.map((product) =>
-    mapProduct(product, pricingRules, deliveryWindows),
-  )).filter((product) => product.variantFamily?.id !== p.familyMembership?.familyId).slice(0, limit);
+  return rows
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .slice(0, limit);
 }
 
 /** "Slični artikli" — items in the same `group`. */
 export async function getRelatedProducts(productId: string, limit = 8) {
   const p = await db.product.findUnique({
     where: { id: productId },
-    select: { groupId: true, familyMembership: { select: { familyId: true } } },
+    select: { groupId: true },
   });
   if (!p?.groupId) return [];
   const [rows, pricingRules, deliveryWindows] = await Promise.all([
@@ -1422,9 +1378,9 @@ export async function getRelatedProducts(productId: string, limit = 8) {
     getActivePricingRules(),
     getDeliveryWindows(),
   ]);
-  return dedupeProductFamilies(rows.map((product) =>
-    mapProduct(product, pricingRules, deliveryWindows),
-  )).filter((product) => product.variantFamily?.id !== p.familyMembership?.familyId).slice(0, limit);
+  return rows
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .slice(0, limit);
 }
 
 /** Cross-sell list backing the post-add-to-cart "Predlog kupovine" modal. */
@@ -1439,11 +1395,9 @@ export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
     getDeliveryWindows(),
   ]);
   if (!rule) return [];
-  return dedupeProductFamilies(
-    rule.products.map((product) =>
-      mapProduct(product, pricingRules, deliveryWindows),
-    ),
-  ).slice(0, limit);
+  return rule.products
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .slice(0, limit);
 }
 
 export async function getCartRecommendationsForSkus(
@@ -1456,7 +1410,7 @@ export async function getCartRecommendationsForSkus(
 
   const cartProducts = await db.product.findMany({
     where: { sku: { in: uniqueSkus }, ...webStorefrontVisibleProductWhere() },
-    select: { groupId: true, familyMembership: { select: { familyId: true } } },
+    select: { groupId: true },
   });
   const groupIds = Array.from(
     new Set(cartProducts.map((product) => product.groupId).filter((id): id is string => Boolean(id))),
@@ -1474,11 +1428,6 @@ export async function getCartRecommendationsForSkus(
   ]);
 
   const seenSkus = new Set(uniqueSkus);
-  const seenFamilies = new Set(
-    cartProducts
-      .map((product) => product.familyMembership?.familyId)
-      .filter((id): id is string => Boolean(id)),
-  );
   const out: ProductDTO[] = [];
   for (const rule of rules) {
     for (const product of rule.products) {
@@ -1489,9 +1438,7 @@ export async function getCartRecommendationsForSkus(
         continue;
       }
       const mapped = mapProduct(product, pricingRules, deliveryWindows);
-      if (mapped.variantFamily && seenFamilies.has(mapped.variantFamily.id)) continue;
       seenSkus.add(product.sku);
-      if (mapped.variantFamily) seenFamilies.add(mapped.variantFamily.id);
       out.push(mapped);
       if (out.length >= limit) return out;
     }
