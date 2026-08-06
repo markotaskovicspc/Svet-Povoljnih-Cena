@@ -28,6 +28,7 @@ interface SuggestRow {
   sku: string;
   barcode: string | null;
   family_id: string | null;
+  is_family_primary: boolean;
   slug: string;
   name: string;
   full_price: Prisma.Decimal;
@@ -47,6 +48,20 @@ export class SearchUnavailableError extends Error {
     super(message);
     this.name = "SearchUnavailableError";
   }
+}
+
+export function selectSearchFamilyRepresentatives<
+  T extends Pick<SuggestRow, "sku" | "family_id" | "is_family_primary">,
+>(rows: T[]) {
+  const familyRepresentatives = new Map<string, T>();
+  for (const row of rows) {
+    const key = row.family_id ? `family:${row.family_id}` : `sku:${row.sku}`;
+    const current = familyRepresentatives.get(key);
+    if (!current || (!current.is_family_primary && row.is_family_primary)) {
+      familyRepresentatives.set(key, row);
+    }
+  }
+  return [...familyRepresentatives.values()];
 }
 
 async function searchProductHits(
@@ -71,6 +86,7 @@ async function searchProductHits(
       SELECT p.sku,
              p.barcode,
              pfm."familyId" AS family_id,
+             COALESCE(pf."primaryProductId" = p.id, false) AS is_family_primary,
              p.slug,
              p.name,
              p."fullPrice"   AS full_price,
@@ -92,6 +108,7 @@ async function searchProductHits(
                WHERE pc."productId" = p.id) AS breadcrumb
         FROM "Product" p
         LEFT JOIN "ProductFamilyMember" pfm ON pfm."productId" = p.id
+        LEFT JOIN "ProductFamily" pf ON pf.id = pfm."familyId"
        WHERE p."isActive" = true
          AND p."availableWebManual" = true
          AND (${!enforceAutoAvailability} OR p."availableWebAuto" = true)
@@ -173,14 +190,7 @@ async function searchProductHits(
   );
   if (exactNameRows.length) rows = exactNameRows;
   if (!exactIdentifier) {
-    const seenFamilies = new Set<string>();
-    rows = rows
-      .filter((row) => {
-        const key = row.family_id ? `family:${row.family_id}` : `sku:${row.sku}`;
-        if (seenFamilies.has(key)) return false;
-        seenFamilies.add(key);
-        return true;
-      })
+    rows = selectSearchFamilyRepresentatives(rows)
       .slice(safeOffset, safeOffset + safeLimit);
   }
 

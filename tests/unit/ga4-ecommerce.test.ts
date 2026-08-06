@@ -49,6 +49,24 @@ describe("GA4 ecommerce payloads", () => {
     expect(buildAddToCartPayload(input).value).toBe(1_800);
   });
 
+  it("keeps the concrete SKU while adding colour and family metadata", () => {
+    const payload = buildViewItemPayload({
+      sku: "110176",
+      name: "Trosed RELAXO",
+      unitPrice: 18_570,
+      variant: "Braon",
+      familyCode: "RELAXO",
+    });
+
+    expect(payload.items[0]).toEqual(
+      expect.objectContaining({
+        item_id: "110176",
+        item_variant: "Braon",
+        product_family: "RELAXO",
+      }),
+    );
+  });
+
   it("includes coupon and allocates order discount in begin_checkout value", () => {
     const payload = buildBeginCheckoutPayload(
       [
