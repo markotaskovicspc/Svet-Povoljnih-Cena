@@ -271,7 +271,9 @@ export async function propagateProductFamilySharedData(
         deletedAt: source.deletedAt,
         // Supplier approval remains a hard per-SKU publication gate.
         isActive:
-          target.supplierId && target.supplierApprovalStatus !== "APPROVED"
+          target.supplierId &&
+          target.supplierApprovalStatus != null &&
+          target.supplierApprovalStatus !== "APPROVED"
             ? false
             : source.isActive,
       });
