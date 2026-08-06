@@ -72,6 +72,71 @@ describe("ProductCard image regression", () => {
     expect(html).toMatch(/text-action[^>]*>1\.699 RSD/);
   });
 
+  it("ostavlja foto-opcije u toku kartice iznad obe cene", () => {
+    const familyProduct: Product = {
+      ...readyProduct,
+      fullPrice: 2_427,
+      loyaltyPrice: 1_699,
+      loyaltyDiscountPct: 30,
+      variantFamily: {
+        id: "family-card-1",
+        code: "QA-CARD",
+        primarySku: "QA-IMAGE-001",
+        selectedSku: "QA-IMAGE-001",
+        options: [
+          {
+            sku: "QA-IMAGE-001",
+            slug: "qa-image-001",
+            name: "QA proizvod",
+            label: "Siva",
+            position: 0,
+            isPrimary: true,
+            thumbnail: { url: "https://example.test/thumb-grey.jpg" },
+            media: readyProduct.media,
+            fullPrice: 2_427,
+            loyaltyPrice: 1_699,
+            loyaltyDiscountPct: 30,
+            stock: 1,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+          {
+            sku: "QA-IMAGE-002",
+            slug: "qa-image-002",
+            name: "QA proizvod",
+            label: "Braon",
+            position: 1,
+            isPrimary: false,
+            thumbnail: { url: "https://example.test/thumb-brown.jpg" },
+            media: readyProduct.media,
+            fullPrice: 2_427,
+            loyaltyPrice: 1_699,
+            loyaltyDiscountPct: 30,
+            stock: 1,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+        ],
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, { product: familyProduct }),
+    );
+
+    const colorOptions = html.indexOf('aria-label="Opcije boja"');
+    const fullPrice = html.indexOf("2.427 RSD");
+    const loyaltyPrice = html.indexOf("1.699 RSD");
+    const colorOptionsClass = html.match(
+      /<div class="([^"]+)" aria-label="Opcije boja">/,
+    )?.[1].split(" ");
+
+    expect(colorOptionsClass).toContain("min-h-4");
+    expect(colorOptionsClass).not.toContain("h-4");
+    expect(colorOptions).toBeGreaterThanOrEqual(0);
+    expect(fullPrice).toBeGreaterThan(colorOptions);
+    expect(loyaltyPrice).toBeGreaterThan(fullPrice);
+  });
+
   it("renders the ordered first card image in the initial HTML", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, { product: readyProduct }),

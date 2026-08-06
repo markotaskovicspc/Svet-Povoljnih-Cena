@@ -429,8 +429,8 @@ export function ProductCard({
           selectedSku={selectedSku}
           onSelectSku={setSelectedSku}
           className={cn(
-            "h-4 pt-0",
-            compactOnDesktop && "md:h-3.5 md:gap-1 md:[&>span]:size-3",
+            "min-h-4 pt-0",
+            compactOnDesktop && "md:min-h-3.5 md:gap-1 md:[&>span]:size-3",
           )}
         />
 
