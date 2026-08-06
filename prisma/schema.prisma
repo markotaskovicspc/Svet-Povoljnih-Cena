@@ -483,6 +483,8 @@ model Product {
   pictograms               ProductPictogram[]
   materials                ProductMaterial[]
   variants                 Variant[]
+  familyMembership         ProductFamilyMember?
+  primaryForFamily         ProductFamily?            @relation("ProductFamilyPrimary")
   assemblyCities           ProductAssemblyCity[]
   deliveryRules            DeliveryPriceRule[]
   recommendedBy            RecommendationRule[]      @relation("RecommendationRuleProducts")
@@ -522,6 +524,43 @@ model Product {
   @@index([supplierId])
   @@index([supplierId, supplierApprovalStatus])
   @@index([supplierId, lastSupplierStockSyncAt])
+}
+
+/// A storefront family groups fully independent ERP products that differ only
+/// by colour. The primary product owns the shared presentation/commercial data.
+model ProductFamily {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  primaryProductId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  primaryProduct Product?              @relation("ProductFamilyPrimary", fields: [primaryProductId], references: [id], onDelete: SetNull)
+  members        ProductFamilyMember[]
+
+  @@index([code])
+}
+
+/// Membership metadata is deliberately separate from Product: SKU, media,
+/// stock and supplier ownership remain authoritative on the concrete product.
+model ProductFamilyMember {
+  id                String   @id @default(cuid())
+  familyId          String
+  productId         String   @unique
+  label             String
+  labelKey          String
+  colorHex          String?
+  position          Int      @default(0)
+  storefrontEnabled Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  family  ProductFamily @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, labelKey])
+  @@index([familyId, position, productId])
+  @@index([storefrontEnabled])
 }
 
 model ArticleSequence {

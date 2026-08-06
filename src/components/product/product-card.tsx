@@ -7,7 +7,7 @@
  */
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Heart, PackageSearch } from "lucide-react";
 import type { Product } from "@/types";
@@ -60,13 +60,66 @@ const toneClasses: Record<BadgeTone, string> = {
 };
 
 export function ProductCard({
-  product,
+  product: familyProduct,
   className,
   preload,
   compactOnDesktop,
 }: ProductCardProps) {
   const reduced = useReducedMotion();
   const loyaltyEligible = useLoyaltyEligibility();
+  const familyKey = familyProduct.variantFamily?.id ?? `sku:${familyProduct.sku}`;
+  const defaultSelectedSku =
+    familyProduct.variantFamily?.selectedSku ?? familyProduct.sku;
+  const [selection, setSelection] = useState({
+    familyKey,
+    sku: defaultSelectedSku,
+  });
+  const selectedSku =
+    selection.familyKey === familyKey &&
+    (familyProduct.variantFamily?.options.some(
+      (option) => option.sku === selection.sku,
+    ) ?? selection.sku === familyProduct.sku)
+      ? selection.sku
+      : defaultSelectedSku;
+  const setSelectedSku = useCallback(
+    (sku: string) => setSelection({ familyKey, sku }),
+    [familyKey],
+  );
+  const product = useMemo(() => {
+    const option = familyProduct.variantFamily?.options.find(
+      (candidate) => candidate.sku === selectedSku,
+    );
+    if (!option) return familyProduct;
+    return {
+      ...familyProduct,
+      id: option.productId,
+      sku: option.sku,
+      slug: option.slug,
+      name: option.name,
+      colorPrimary: option.colorPrimary,
+      colorSecondary: option.colorSecondary,
+      media: option.media,
+      fullPrice: option.fullPrice,
+      salePrice: option.salePrice,
+      discountPct: option.discountPct,
+      loyaltyPrice: option.loyaltyPrice,
+      loyaltyDiscountPct: option.loyaltyDiscountPct,
+      stock: option.stock,
+      incomingStock: option.incomingStock,
+      supplierNextArrivalAt: option.supplierNextArrivalAt,
+      availabilitySource: option.availabilitySource,
+      deliveryDays: option.deliveryDays,
+      isHero: option.isHero ?? false,
+      isNew: option.isNew ?? false,
+      isLimited: option.isLimited ?? false,
+      isDtz: option.isDtz ?? false,
+      action: option.action,
+      actionPrices: option.actionPrices,
+      variantFamily: familyProduct.variantFamily
+        ? { ...familyProduct.variantFamily, selectedSku: option.sku }
+        : undefined,
+    };
+  }, [familyProduct, selectedSku]);
   const pricingProduct =
     product.loyaltyEligible === loyaltyEligible
       ? product
@@ -100,7 +153,16 @@ export function ProductCard({
     scrollLeft: 0,
     didDrag: false,
   });
-  const [activeImage, setActiveImage] = useState(0);
+  const [imageSelection, setImageSelection] = useState({ sku: "", index: 0 });
+  const activeImage =
+    imageSelection.sku === product.sku ? imageSelection.index : 0;
+  const setActiveImage = useCallback(
+    (index: number) => setImageSelection({ sku: product.sku, index }),
+    [product.sku],
+  );
+  useEffect(() => {
+    imageTrackRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [product.sku]);
   const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
@@ -129,7 +191,7 @@ export function ProductCard({
     if (!track) return;
     const index = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
     setActiveImage(Math.max(0, Math.min(index, images.length - 1)));
-  }, [images.length]);
+  }, [images.length, setActiveImage]);
 
   const showImage = useCallback(
     (index: number) => {
@@ -142,7 +204,7 @@ export function ProductCard({
       });
       setActiveImage(nextIndex);
     },
-    [images.length, reduced],
+    [images.length, reduced, setActiveImage],
   );
 
   const handleImageDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -364,6 +426,8 @@ export function ProductCard({
         </Link>
         <ProductColorOptions
           product={product}
+          selectedSku={selectedSku}
+          onSelectSku={setSelectedSku}
           className={cn(
             "h-4 pt-0",
             compactOnDesktop && "md:h-3.5 md:gap-1 md:[&>span]:size-3",

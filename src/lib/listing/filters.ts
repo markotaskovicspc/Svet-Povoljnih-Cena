@@ -161,6 +161,11 @@ export function computeFacetValues(products: Product[]): FacetValues {
     [p.colorPrimary, p.colorSecondary]
       .filter((c): c is string => Boolean(c?.trim()))
       .forEach((c) => colors.add(c));
+    for (const option of p.variantFamily?.options ?? []) {
+      [option.label, option.colorPrimary, option.colorSecondary]
+        .filter((c): c is string => Boolean(c?.trim()))
+        .forEach((c) => colors.add(c));
+    }
     for (const f of dynFacets) {
       const v = f.getValue(p);
       if (!v) continue;
@@ -206,7 +211,15 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
     }
     if (state.colors.length) {
       const labels = new Set(
-        [p.colorPrimary, p.colorSecondary].filter((c): c is string => Boolean(c?.trim())),
+        [
+          p.colorPrimary,
+          p.colorSecondary,
+          ...(p.variantFamily?.options.flatMap((option) => [
+            option.label,
+            option.colorPrimary,
+            option.colorSecondary,
+          ]) ?? []),
+        ].filter((c): c is string => Boolean(c?.trim())),
       );
       if (!state.colors.some((c) => labels.has(c))) return false;
     }
@@ -221,6 +234,19 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
       if (!v || !values.includes(v)) return false;
     }
     return true;
+  }).map((product) => {
+    if (!state.colors.length || !product.variantFamily) return product;
+    const selected = product.variantFamily.options.find((option) => {
+      const labels = [option.label, option.colorPrimary, option.colorSecondary]
+        .filter((value): value is string => Boolean(value?.trim()));
+      return state.colors.some((color) => labels.includes(color));
+    });
+    return selected
+      ? {
+          ...product,
+          variantFamily: { ...product.variantFamily, selectedSku: selected.sku },
+        }
+      : product;
   });
 }
 

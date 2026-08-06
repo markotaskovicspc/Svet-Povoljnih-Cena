@@ -8,6 +8,10 @@ const STORAGE_KEY = "svet-akcija-recent-products";
 const STORAGE_EVENT = "svet-akcija-recent-products-change";
 const MAX_ITEMS = 8;
 
+function productFamilyKey(product: Product) {
+  return product.variantFamily?.id ?? `sku:${product.sku}`;
+}
+
 function subscribe(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange);
   window.addEventListener(STORAGE_EVENT, onStoreChange);
@@ -38,7 +42,8 @@ export function RecentlyViewedProducts({ product }: { product: Product }) {
   useEffect(() => {
     const previous = items;
 
-    const filtered = previous.filter((item) => item.sku !== product.sku);
+    const currentKey = productFamilyKey(product);
+    const filtered = previous.filter((item) => productFamilyKey(item) !== currentKey);
 
     try {
       window.localStorage.setItem(
@@ -51,10 +56,16 @@ export function RecentlyViewedProducts({ product }: { product: Product }) {
     }
   }, [items, product]);
 
-  const visible = useMemo(
-    () => items.filter((item) => item.sku !== product.sku).slice(0, 6),
-    [items, product.sku],
-  );
+  const visible = useMemo(() => {
+    const currentKey = productFamilyKey(product);
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = productFamilyKey(item);
+      if (key === currentKey || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 6);
+  }, [items, product]);
   if (!visible.length) return null;
 
   return (

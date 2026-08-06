@@ -4,6 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type RowError = { row: number; field: string; message: string };
+type ImportPreview = {
+  rows: number;
+  creates: number;
+  updates: number;
+  families: number;
+  newFamilies: number;
+  detachments: number;
+};
 
 export function ArticleImportForm() {
   const [running, setRunning] = useState(false);
@@ -12,6 +20,7 @@ export function ArticleImportForm() {
     message: string;
     errors?: RowError[];
     warnings?: string[];
+    preview?: ImportPreview;
   } | null>(null);
 
   async function submit(formData: FormData) {
@@ -29,6 +38,7 @@ export function ArticleImportForm() {
             error?: string;
             errors?: RowError[];
             warnings?: string[];
+            preview?: ImportPreview;
           }
         | null;
       if (!response.ok || !payload?.ok) {
@@ -42,8 +52,11 @@ export function ArticleImportForm() {
       }
       setResult({
         ok: true,
-        message: `Uvezeno artikala: ${payload.imported ?? 0}.`,
+        message: payload.preview
+          ? "Provera je uspešna. Pregledajte sažetak i potvrdite atomski upis."
+          : `Uvezeno artikala: ${payload.imported ?? 0}.`,
         warnings: payload.warnings,
+        preview: payload.preview,
       });
     } finally {
       setRunning(false);
@@ -91,13 +104,30 @@ export function ArticleImportForm() {
           Kod izmene postojećeg SKU-a menjaju se samo kolone koje postoje u
           datoteci; ostali matični podaci ostaju nepromenjeni.
         </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Porodice boja koriste kolone: „Šifra porodice“, „Naziv boje“, „HEX boje“,
+          „Redosled boje“, „Glavna boja“ i „Boja spremna za web“. Prazna ćelija
+          šifre u prisutnoj koloni odvaja SKU; izostavljena kolona čuva postojeću vezu.
+        </p>
         <p className="mt-1 text-sm font-medium text-warning">
           Uvoz je atomski: ako bilo koji red nije ispravan, nijedan red neće
           biti upisan.
         </p>
-        <Button type="submit" className="mt-4" disabled={running}>
-          {running ? "Provera i uvoz…" : "Proveri i uvezi"}
+        <Button name="mode" value="preview" type="submit" className="mt-4" disabled={running}>
+          {running ? "Provera…" : "Prikaži preview"}
         </Button>
+        {result?.preview ? (
+          <Button
+            name="mode"
+            value="apply"
+            type="submit"
+            variant="secondary"
+            className="mt-4 ml-2"
+            disabled={running}
+          >
+            Potvrdi atomski uvoz
+          </Button>
+        ) : null}
       </form>
 
       {result ? (
@@ -110,6 +140,16 @@ export function ArticleImportForm() {
           }
         >
           <p>{result.message}</p>
+          {result.preview ? (
+            <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div><dt>Redova</dt><dd className="font-bold">{result.preview.rows}</dd></div>
+              <div><dt>Novi SKU</dt><dd className="font-bold">{result.preview.creates}</dd></div>
+              <div><dt>Izmene</dt><dd className="font-bold">{result.preview.updates}</dd></div>
+              <div><dt>Porodice</dt><dd className="font-bold">{result.preview.families}</dd></div>
+              <div><dt>Nove porodice</dt><dd className="font-bold">{result.preview.newFamilies}</dd></div>
+              <div><dt>Odvajanja</dt><dd className="font-bold">{result.preview.detachments}</dd></div>
+            </dl>
+          ) : null}
           {result.warnings?.length ? (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-warning">
               {result.warnings.map((warning) => (

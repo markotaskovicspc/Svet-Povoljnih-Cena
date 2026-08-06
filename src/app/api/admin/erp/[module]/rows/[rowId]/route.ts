@@ -51,6 +51,7 @@ import {
   normalizeCustomerPostalCode,
   normalizeCustomerRegistrationNumber,
 } from "@/lib/admin/customer-master";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -88,6 +89,11 @@ export async function PATCH(
       return NextResponse.json(
         { ok: false, error: "Ovo ERP polje još nema direktno mapiranje na bazu." },
         { status: 422 },
+      );
+    }
+    if (module === "artikli") {
+      await db.$transaction((tx) =>
+        propagateProductFamilySharedData(tx, rowId),
       );
     }
 

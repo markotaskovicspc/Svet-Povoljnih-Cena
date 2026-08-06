@@ -49,6 +49,7 @@ import {
   upsertActiveRetailPrice,
 } from "@/lib/pricing/retail-price-write.server";
 import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
@@ -496,6 +497,9 @@ async function upsertCatalogItem(
           orderBy: { order: "asc" },
           select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
         },
+        familyMembership: {
+          select: { family: { select: { primaryProductId: true } } },
+        },
       },
     });
     if (!existing) {
@@ -649,12 +653,18 @@ async function upsertCatalogItem(
           "lastSupplierSourceHash",
         ])
       : Prisma.JsonNull;
+    const isSecondaryFamilyMember = Boolean(
+      existing?.familyMembership &&
+        existing.familyMembership.family.primaryProductId !== existing.id,
+    );
     const riskyPrice = Boolean(
       existing &&
+        !isSecondaryFamilyMember &&
         !isRabaluxFieldLocked(overrideFields, "pricing") &&
         Number(existing.fullPrice) !== item.fullPrice &&
         isRiskyPriceChange(Number(existing.fullPrice), item.fullPrice),
     );
+    let familyConflictMessage: string | null = null;
     if (existing) {
       const updateData = omitSupplierProductNewnessUpdates(
         preserveExistingProductDescriptions(
@@ -683,6 +693,41 @@ async function upsertCatalogItem(
       }
       if (overrideFields.has("media")) {
         delete (updateData as Record<string, unknown>).isActive;
+      }
+      if (isSecondaryFamilyMember) {
+        const sharedSupplierFields = [
+          "name", "description", "shortDescription", "groupId", "widthCm",
+          "depthCm", "heightCm", "weightKg", "grossWeightKg",
+          "unitPackWidthCm", "unitPackDepthCm", "unitPackHeightCm",
+          "fullPrice", "technicalSpecs", "warrantyYears", "countryOfOrigin",
+          "hsCode",
+        ];
+        const blockedFields = sharedSupplierFields.filter((field) => {
+          const incoming = (updateData as Record<string, unknown>)[field];
+          const current = (existing as unknown as Record<string, unknown>)[field];
+          return field in updateData && JSON.stringify(incoming ?? null) !== JSON.stringify(current ?? null);
+        });
+        for (const field of sharedSupplierFields) {
+          delete (updateData as Record<string, unknown>)[field];
+        }
+        if (blockedFields.length) {
+          familyConflictMessage = `Sporedna boja ${existing.sku} ima konflikt zajedničkih supplier polja; autoritet je glavna boja porodice.`;
+          await tx.supplierSyncChange.create({
+            data: {
+              supplierId: supplier.id,
+              importRunId: runId,
+              productId: existing.id,
+              externalSku: item.sourceSku,
+              changeType: "FAMILY_SHARED_CONFLICT",
+              status: "CONFLICT",
+              fieldNames: blockedFields,
+              before: jsonSnapshot(existing),
+              after: jsonSnapshot(item),
+              reversible: false,
+              reason: familyConflictMessage,
+            },
+          });
+        }
       }
       await tx.product.update({ where: { id: existing.id }, data: updateData });
       productId = existing.id;
@@ -724,6 +769,7 @@ async function upsertCatalogItem(
 
     if (
       item.valid &&
+      !isSecondaryFamilyMember &&
       !isRabaluxFieldLocked(overrideFields, "pricing") &&
       (!riskyPrice || options.allowRiskyPrices)
     ) {
@@ -734,6 +780,7 @@ async function upsertCatalogItem(
     }
 
     if (
+      !isSecondaryFamilyMember &&
       categoryId &&
       !overrideFields.has("categories") &&
       !overrideFields.has("category")
@@ -742,7 +789,7 @@ async function upsertCatalogItem(
       await tx.productCategory.create({ data: { productId, categoryId } });
     }
 
-    if (!overrideFields.has("materials")) {
+    if (!isSecondaryFamilyMember && !overrideFields.has("materials")) {
       const materialIds: string[] = [];
       for (const label of item.materials) {
         const material = await tx.material.upsert({
@@ -779,7 +826,7 @@ async function upsertCatalogItem(
       await tx.product.update({ where: { id: productId }, data: { isActive: false } });
     }
 
-    if (attachmentsChanged && !overrideFields.has("attachments")) {
+    if (!isSecondaryFamilyMember && attachmentsChanged && !overrideFields.has("attachments")) {
       await tx.productAttachment.deleteMany({
         where: { productId, origin: "SUPPLIER" },
       });
@@ -798,6 +845,12 @@ async function upsertCatalogItem(
           })),
         });
       }
+    }
+
+    if (
+      existing?.familyMembership?.family.primaryProductId === productId
+    ) {
+      await propagateProductFamilySharedData(tx, productId);
     }
 
     const nextMedia = await tx.productMedia.findFirst({
@@ -889,7 +942,7 @@ async function upsertCatalogItem(
               assetType: "ATTACHMENT" as const,
             }
           : null,
-      conflict: null,
+      conflict: familyConflictMessage,
     };
   });
 

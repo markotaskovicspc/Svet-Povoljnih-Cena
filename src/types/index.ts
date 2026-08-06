@@ -160,8 +160,50 @@ export interface Product {
 
   media: ProductMedia;
 
+  /** One storefront card can represent several independent colour SKUs. */
+  variantFamily?: ProductVariantFamily;
+
   recommendedSkus: SKU[];
   frequentlyBoughtSkus: SKU[];
+}
+
+export interface ProductVariantOption {
+  productId?: string;
+  sku: SKU;
+  slug: Slug;
+  name: string;
+  label: string;
+  colorHex?: string;
+  colorPrimary?: string;
+  colorSecondary?: string;
+  position: number;
+  isPrimary: boolean;
+  thumbnail?: MediaAsset;
+  media: ProductMedia;
+  fullPrice: number;
+  salePrice?: number;
+  discountPct?: number;
+  loyaltyPrice?: number;
+  loyaltyDiscountPct?: number;
+  stock: number;
+  incomingStock: number;
+  supplierNextArrivalAt?: ISODate;
+  availabilitySource?: "DC" | "SUPPLIER" | "MIXED" | "NONE";
+  deliveryDays: { min: number; max: number };
+  isHero?: boolean;
+  isNew?: boolean;
+  isLimited?: boolean;
+  isDtz?: boolean;
+  action?: PromoAction;
+  actionPrices?: Product["actionPrices"];
+}
+
+export interface ProductVariantFamily {
+  id: string;
+  code: string;
+  primarySku?: SKU;
+  selectedSku: SKU;
+  options: ProductVariantOption[];
 }
 
 export interface Category {
@@ -285,6 +327,8 @@ export interface OrderItem {
   withAssembly?: boolean;
   assemblyPrice?: number;
   thumbnailUrl?: string;
+  variant?: string;
+  familyCode?: string;
 }
 
 export interface Order {

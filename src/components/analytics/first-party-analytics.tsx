@@ -182,6 +182,8 @@ export function CheckoutStartedAnalytics() {
           unitPrice: line.unitPriceSale,
           fullUnitPrice: line.unitPriceFull,
           quantity: line.qty,
+          variant: line.variant,
+          familyCode: line.familyCode,
         })),
         {
           coupon: voucher?.code,

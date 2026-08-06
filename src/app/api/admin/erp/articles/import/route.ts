@@ -26,6 +26,17 @@ import {
 } from "@/lib/product-newness";
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
+import {
+  defaultProductFamilyLabel,
+  normalizeProductFamilyCode,
+  normalizeProductFamilyHex,
+  normalizeProductFamilyLabel,
+  productFamilyLabelKey,
+} from "@/lib/product-family";
+import {
+  propagateProductFamilySharedData,
+  setProductFamilyMembership,
+} from "@/lib/product-family.server";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -79,6 +90,12 @@ type ArticleImportRow = {
   exportCheck: boolean | null;
   moq: number | null;
   newUntil: Date | null;
+  familyCode: string | null;
+  familyColorLabel: string | null;
+  familyColorHex: string | null;
+  familyPosition: number | null;
+  familyPrimary: boolean | null;
+  familyStorefrontEnabled: boolean | null;
 };
 
 const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
@@ -220,6 +237,18 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   moq: "moq",
   newuntil: "newUntil",
   novodo: "newUntil",
+  sifraporodice: "familyCode",
+  familycode: "familyCode",
+  nazivboje: "familyColorLabel",
+  colorname: "familyColorLabel",
+  hexboje: "familyColorHex",
+  colorhex: "familyColorHex",
+  redosledboje: "familyPosition",
+  colorposition: "familyPosition",
+  glavnaboja: "familyPrimary",
+  primarycolor: "familyPrimary",
+  bojaspremljenazaweb: "familyStorefrontEnabled",
+  colorstorefrontenabled: "familyStorefrontEnabled",
 };
 
 const LEGACY_TNC_HEADERS = new Set([
@@ -340,6 +369,7 @@ function statusFlags(status: ArticleStatus) {
 export async function POST(request: Request) {
   const admin = await requireAdminAction(["CONTENT"]);
   const form = await request.formData();
+  const mode = form.get("mode") === "apply" ? "apply" : "preview";
   const file = form.get("file");
   if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".xlsx")) {
     return NextResponse.json(
@@ -476,10 +506,123 @@ export async function POST(request: Request) {
       exportCheck: booleanCell(row, headers.get("exportCheck"), "exportCheck", errors),
       moq: numberCell(row, headers.get("moq"), "moq", errors, { integer: true, min: 0 }),
       newUntil: dateCell(row, headers.get("newUntil"), "newUntil", errors),
+      familyCode: textAt("familyCode") || null,
+      familyColorLabel: textAt("familyColorLabel") || null,
+      familyColorHex: textAt("familyColorHex") || null,
+      familyPosition: numberCell(
+        row,
+        headers.get("familyPosition"),
+        "familyPosition",
+        errors,
+        { integer: true, min: 0 },
+      ),
+      familyPrimary: booleanCell(
+        row,
+        headers.get("familyPrimary"),
+        "familyPrimary",
+        errors,
+      ),
+      familyStorefrontEnabled: booleanCell(
+        row,
+        headers.get("familyStorefrontEnabled"),
+        "familyStorefrontEnabled",
+        errors,
+      ),
     };
     rows.push(parsedRow);
   });
   if (!rows.length) errors.push({ row: 2, field: "file", message: "Datoteka nema artikle." });
+
+  if (headers.has("familyCode")) {
+    const byFamily = new Map<string, ArticleImportRow[]>();
+    for (const row of rows) {
+      if (!row.familyCode) continue;
+      try {
+        row.familyCode = normalizeProductFamilyCode(row.familyCode);
+        const derivedLabel = defaultProductFamilyLabel({
+            colorPrimary: row.color1,
+            colorSecondary: row.color2,
+          });
+        const familyColorLabel = row.familyColorLabel ?? (derivedLabel || null);
+        if (headers.has("familyColorLabel") && !familyColorLabel) {
+          throw new Error("Naziv boje je obavezan za član porodice.");
+        }
+        if (!row.sku && !familyColorLabel) {
+          throw new Error("Novi SKU u porodici mora imati naziv boje.");
+        }
+        row.familyColorLabel = familyColorLabel
+          ? normalizeProductFamilyLabel(familyColorLabel)
+          : null;
+        row.familyColorHex = normalizeProductFamilyHex(row.familyColorHex) ?? null;
+      } catch (error) {
+        errors.push({
+          row: row.row,
+          field: "familyCode",
+          message: error instanceof Error ? error.message : "Podaci porodice nisu ispravni.",
+        });
+        continue;
+      }
+      const grouped = byFamily.get(row.familyCode) ?? [];
+      grouped.push(row);
+      byFamily.set(row.familyCode, grouped);
+    }
+
+    const sharedFields: Array<keyof ArticleImportRow> = [
+      "shortName", "shortDescription", "description", "category", "group",
+      "subgroup", "collection", "attribute1", "attribute2", "attribute3",
+      "attribute4", "widthCm", "depthCm", "heightCm", "weightKg",
+      "grossWeightKg", "unitPackWidthCm", "unitPackDepthCm",
+      "unitPackHeightCm", "packQty", "packWidthCm", "packDepthCm",
+      "packHeightCm", "packGrossWeightKg", "containerQty",
+      "containerGrossWeightKg", "materialText", "status", "webCheck",
+      "wholesaleCheck", "exportCheck", "newUntil",
+    ];
+    for (const [familyCode, familyRows] of byFamily) {
+      const labelRows = new Map<string, number>();
+      for (const row of familyRows) {
+        const labelKey = productFamilyLabelKey(row.familyColorLabel ?? "");
+        const previousRow = labelRows.get(labelKey);
+        if (previousRow) {
+          errors.push({
+            row: row.row,
+            field: "familyColorLabel",
+            message: `Naziv boje je već korišćen u redu ${previousRow} porodice ${familyCode}.`,
+          });
+        } else {
+          labelRows.set(labelKey, row.row);
+        }
+      }
+      const primaryRows = familyRows.filter((row) => row.familyPrimary === true);
+      if (primaryRows.length > 1) {
+        for (const row of primaryRows) {
+          errors.push({
+            row: row.row,
+            field: "familyPrimary",
+            message: `Porodica ${familyCode} može imati samo jednu glavnu boju.`,
+          });
+        }
+      }
+      const baseline = familyRows[0]!;
+      for (const row of familyRows.slice(1)) {
+        for (const field of sharedFields) {
+          if (!headers.has(field)) continue;
+          const left = baseline[field] instanceof Date
+            ? baseline[field].toISOString()
+            : baseline[field];
+          const right = row[field] instanceof Date
+            ? row[field].toISOString()
+            : row[field];
+          if (JSON.stringify(left ?? null) !== JSON.stringify(right ?? null)) {
+            errors.push({
+              row: row.row,
+              field: String(field),
+              message: `Konflikt zajedničkog podatka u porodici ${familyCode} (osnovni red ${baseline.row}).`,
+            });
+          }
+        }
+      }
+    }
+  }
 
   const suppliers = await db.supplier.findMany({
     select: { id: true, code: true, name: true },
@@ -521,6 +664,41 @@ export async function POST(request: Request) {
       }
     }
   }
+  const importedFamilyCodes = Array.from(
+    new Set(rows.map((row) => row.familyCode).filter((code): code is string => Boolean(code))),
+  );
+  if (importedFamilyCodes.length) {
+    const existingFamilies = await db.productFamily.findMany({
+      where: { code: { in: importedFamilyCodes } },
+      select: {
+        code: true,
+        members: {
+          select: {
+            labelKey: true,
+            product: { select: { sku: true } },
+          },
+        },
+      },
+    });
+    const existingByCode = new Map(existingFamilies.map((family) => [family.code, family]));
+    for (const row of rows) {
+      if (!row.familyCode || !row.familyColorLabel) continue;
+      const conflict = existingByCode
+        .get(row.familyCode)
+        ?.members.find(
+          (member) =>
+            member.labelKey === productFamilyLabelKey(row.familyColorLabel!) &&
+            member.product.sku !== row.sku,
+        );
+      if (conflict) {
+        errors.push({
+          row: row.row,
+          field: "familyColorLabel",
+          message: `Naziv boje već pripada SKU-u ${conflict.product.sku} u porodici ${row.familyCode}.`,
+        });
+      }
+    }
+  }
   if (errors.length) {
     return NextResponse.json(
       {
@@ -531,6 +709,36 @@ export async function POST(request: Request) {
       },
       { status: 422 },
     );
+  }
+
+  if (mode === "preview") {
+    const existingSkus = seenSkus.size
+      ? await db.product.findMany({
+          where: { sku: { in: Array.from(seenSkus) } },
+          select: { sku: true },
+        })
+      : [];
+    const existingSkuSet = new Set(existingSkus.map((product) => product.sku));
+    const familyCodes = Array.from(
+      new Set(rows.map((row) => row.familyCode).filter((code): code is string => Boolean(code))),
+    );
+    const existingFamilies = familyCodes.length
+      ? await db.productFamily.count({ where: { code: { in: familyCodes } } })
+      : 0;
+    return NextResponse.json({
+      ok: true,
+      preview: {
+        rows: rows.length,
+        creates: rows.filter((row) => !row.sku || !existingSkuSet.has(row.sku)).length,
+        updates: rows.filter((row) => row.sku && existingSkuSet.has(row.sku)).length,
+        families: familyCodes.length,
+        newFamilies: familyCodes.length - existingFamilies,
+        detachments: headers.has("familyCode")
+          ? rows.filter((row) => !row.familyCode).length
+          : 0,
+      },
+      warnings,
+    });
   }
 
   try {
@@ -560,6 +768,15 @@ export async function POST(request: Request) {
                 lookupAssignments: {
                   include: {
                     lookupValue: { select: { kind: true, value: true } },
+                  },
+                },
+                familyMembership: {
+                  select: {
+                    label: true,
+                    colorHex: true,
+                    position: true,
+                    storefrontEnabled: true,
+                    family: { select: { code: true, primaryProductId: true } },
                   },
                 },
               },
@@ -853,6 +1070,35 @@ export async function POST(request: Request) {
             });
           }
         }
+        if (hasColumn("familyCode")) {
+          await setProductFamilyMembership(tx, {
+            productId: product.id,
+            familyCode: row.familyCode,
+            label:
+              (hasColumn("familyColorLabel")
+                ? row.familyColorLabel
+                : existing?.familyMembership?.label) ??
+              defaultProductFamilyLabel({
+                colorPrimary: product.colorPrimary,
+                colorSecondary: product.colorSecondary,
+              }),
+            colorHex: hasColumn("familyColorHex")
+              ? row.familyColorHex
+              : existing?.familyMembership?.colorHex,
+            position: hasColumn("familyPosition")
+              ? row.familyPosition ?? 0
+              : existing?.familyMembership?.position,
+            storefrontEnabled: hasColumn("familyStorefrontEnabled")
+              ? row.familyStorefrontEnabled ?? false
+              : existing?.familyMembership?.storefrontEnabled ?? false,
+            makePrimary: hasColumn("familyPrimary")
+              ? row.familyPrimary ?? false
+              : existing?.familyMembership?.family.primaryProductId === product.id,
+          });
+          if (row.familyCode) {
+            await propagateProductFamilySharedData(tx, product.id);
+          }
+        }
         if (row.stock !== null) {
           await setDefaultWarehouseStock(tx, {
             idempotencyKey: `article-import:${file.name}:${row.row}:${sku}`,
@@ -878,7 +1124,13 @@ export async function POST(request: Request) {
     actorId: admin.id,
     action: "erp.article.xlsx_import",
     entity: "Product",
-    diff: { filename: file.name, rows: rows.length },
+    diff: {
+      filename: file.name,
+      rows: rows.length,
+      familyCodes: Array.from(
+        new Set(rows.map((row) => row.familyCode).filter((code): code is string => Boolean(code))),
+      ),
+    },
   });
   revalidateTag("catalog-products", "max");
   revalidatePath("/admin/erp/artikli");

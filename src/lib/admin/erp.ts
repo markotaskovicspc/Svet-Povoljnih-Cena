@@ -208,6 +208,12 @@ const articleColumns: ErpColumn[] = [
   { key: "attribute4", label: "Atribut 4" },
   { key: "color1", label: "Boja 1" },
   { key: "color2", label: "Boja 2" },
+  { key: "familyCode", label: "Šifra porodice", defaultVisible: true },
+  { key: "familyColorLabel", label: "Naziv boje", defaultVisible: true },
+  { key: "familyColorHex", label: "HEX boje", defaultVisible: true },
+  { key: "familyPosition", label: "Redosled boje", type: "number", align: "right", defaultVisible: true },
+  { key: "familyPrimary", label: "Glavna boja", type: "boolean", align: "center", defaultVisible: true },
+  { key: "familyStorefrontEnabled", label: "Boja spremna za web", type: "boolean", align: "center", defaultVisible: true },
   { key: "benefits", label: "Benefiti" },
   { key: "siteDescription", label: "Opis za sajt" },
   { key: "stockTotal", label: "Ukupno fizičko stanje", type: "number", align: "right", defaultVisible: true },
@@ -1182,6 +1188,15 @@ async function getArticleRows(
         },
         select: { lookupValue: { select: { kind: true, value: true } } },
       },
+      familyMembership: {
+        select: {
+          label: true,
+          colorHex: true,
+          position: true,
+          storefrontEnabled: true,
+          family: { select: { code: true, primaryProductId: true } },
+        },
+      },
     },
   }), db.warehouse.findMany({
     where: { active: true },
@@ -1276,6 +1291,14 @@ async function getArticleRows(
         attribute4: product.attribute4 ?? null,
         color1: product.colorPrimary ?? null,
         color2: product.colorSecondary ?? null,
+        familyCode: product.familyMembership?.family.code ?? null,
+        familyColorLabel: product.familyMembership?.label ?? null,
+        familyColorHex: product.familyMembership?.colorHex ?? null,
+        familyPosition: product.familyMembership?.position ?? null,
+        familyPrimary:
+          product.familyMembership?.family.primaryProductId === product.id,
+        familyStorefrontEnabled:
+          product.familyMembership?.storefrontEnabled ?? false,
         benefits: benefits || null,
         certificates: certificates || null,
         siteDescription: richTextPlainText(product.description),

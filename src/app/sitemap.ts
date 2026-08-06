@@ -49,6 +49,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         where: {
           ...webStorefrontProductWhere(),
           deletedAt: null,
+          OR: [
+            { familyMembership: { is: null } },
+            { familyMembership: { is: { storefrontEnabled: true } } },
+          ],
         },
         select: { slug: true, updatedAt: true },
       }),

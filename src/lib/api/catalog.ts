@@ -6,6 +6,7 @@ import { db, hasDatabaseConnection } from "@/lib/db";
 import type {
   Category as CategoryDTO,
   Product as ProductDTO,
+  ProductVariantFamily,
 } from "@/types";
 import { BRAND } from "@/lib/brand";
 import { num, numOrNull } from "@/lib/api/_helpers";
@@ -66,33 +67,6 @@ import { formatProductAttributes } from "@/lib/product-attributes";
  * Prisma `Decimal`s become plain numbers, and M:N relations become flat arrays.
  */
 
-const productInclude = {
-  group: true,
-  collection: true,
-  action: true,
-  supplier: { select: { integrationKey: true, enabled: true } },
-  actionPrices: { include: { action: true } },
-  priceListEntries: {
-    where: { priceList: { active: true, kind: "RETAIL" } },
-    include: { priceList: true },
-    orderBy: { validFrom: "desc" },
-  },
-  categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
-  media: { where: { syncStatus: "READY" }, orderBy: { order: "asc" } },
-  pictograms: {
-    include: { pictogram: true },
-    orderBy: { pictogram: { label: "asc" } },
-  },
-  materials: { include: { material: true } },
-  assemblyCities: { include: { city: true } },
-  attachments: {
-    where: { syncStatus: "READY" },
-    orderBy: [{ section: "asc" }, { order: "asc" }],
-  },
-} satisfies Prisma.ProductInclude;
-
-type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
-
 function categoryPathLabels(
   categories: Array<{ category: { name: string } }>,
 ): string[] {
@@ -119,11 +93,14 @@ const slugify = (input: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 96);
 
-const productListSelect = {
+const productCardCoreSelect = {
   id: true,
   sku: true,
   slug: true,
   name: true,
+  isActive: true,
+  availableWebManual: true,
+  availableWebAuto: true,
   shortDescription: true,
   colorPrimary: true,
   colorSecondary: true,
@@ -178,7 +155,69 @@ const productListSelect = {
   materials: { include: { material: true } },
 } satisfies Prisma.ProductSelect;
 
+type ProductCardCoreRow = Prisma.ProductGetPayload<{
+  select: typeof productCardCoreSelect;
+}>;
+
+const familyMembershipSelect = {
+  label: true,
+  colorHex: true,
+  position: true,
+  storefrontEnabled: true,
+  family: {
+    select: {
+      id: true,
+      code: true,
+      primaryProductId: true,
+      members: {
+        orderBy: [{ position: "asc" }, { productId: "asc" }],
+        select: {
+          productId: true,
+          label: true,
+          colorHex: true,
+          position: true,
+          storefrontEnabled: true,
+          product: { select: productCardCoreSelect },
+        },
+      },
+    },
+  },
+} satisfies Prisma.ProductFamilyMemberSelect;
+
+const productListSelect = {
+  ...productCardCoreSelect,
+  familyMembership: { select: familyMembershipSelect },
+} satisfies Prisma.ProductSelect;
+
 type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
+
+const productInclude = {
+  group: true,
+  collection: true,
+  action: true,
+  supplier: { select: { integrationKey: true, enabled: true } },
+  actionPrices: { include: { action: true } },
+  priceListEntries: {
+    where: { priceList: { active: true, kind: "RETAIL" } },
+    include: { priceList: true },
+    orderBy: { validFrom: "desc" },
+  },
+  categories: { include: { category: true }, orderBy: { category: { level: "asc" } } },
+  media: { where: { syncStatus: "READY" }, orderBy: { order: "asc" } },
+  pictograms: {
+    include: { pictogram: true },
+    orderBy: { pictogram: { label: "asc" } },
+  },
+  materials: { include: { material: true } },
+  assemblyCities: { include: { city: true } },
+  attachments: {
+    where: { syncStatus: "READY" },
+    orderBy: [{ section: "asc" }, { order: "asc" }],
+  },
+  familyMembership: { select: familyMembershipSelect },
+} satisfies Prisma.ProductInclude;
+
+type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
 function mapImageMedia(m: {
   url: string;
@@ -356,9 +395,15 @@ function mapProduct(
     recommendedSkus: [],
     frequentlyBoughtSkus: [],
   };
-  return pricingRules
+  const pricedProduct = pricingRules
     ? applyActivePricingRules(product, pricingRules)
     : product;
+  return attachProductVariantFamily(
+    pricedProduct,
+    p.familyMembership,
+    pricingRules,
+    deliveryWindows,
+  );
 }
 
 function sourceDateToIso(value: string) {
@@ -449,7 +494,7 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
 }
 
 function mapProductListItem(
-  p: ProductListRow,
+  p: ProductCardCoreRow,
   pricingRules?: ActivePricingRules,
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
 ): ProductDTO {
@@ -541,6 +586,131 @@ function mapProductListItem(
   return pricingRules
     ? applyActivePricingRules(product, pricingRules)
     : product;
+}
+
+type FamilyMembershipRow = NonNullable<ProductListRow["familyMembership"]>;
+
+function attachProductVariantFamily(
+  product: ProductDTO,
+  membership: FamilyMembershipRow | null,
+  pricingRules?: ActivePricingRules,
+  deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+): ProductDTO {
+  if (!membership) return product;
+
+  const options = membership.family.members.flatMap((member) => {
+    if (
+      !member.storefrontEnabled ||
+      !isProductAvailableOnWeb(member.product) ||
+      member.product.priceListEntries.length === 0
+    ) {
+      return [];
+    }
+    const variant = mapProductListItem(
+      member.product,
+      pricingRules,
+      deliveryWindows,
+    );
+    return [{
+      productId: variant.id,
+      sku: variant.sku,
+      slug: variant.slug,
+      name: variant.name,
+      label: member.label,
+      colorHex: member.colorHex ?? undefined,
+      colorPrimary: variant.colorPrimary,
+      colorSecondary: variant.colorSecondary,
+      position: member.position,
+      isPrimary: member.productId === membership.family.primaryProductId,
+      thumbnail: variant.media.images[0],
+      media: variant.media,
+      fullPrice: variant.fullPrice,
+      salePrice: variant.salePrice,
+      discountPct: variant.discountPct,
+      loyaltyPrice: variant.loyaltyPrice,
+      loyaltyDiscountPct: variant.loyaltyDiscountPct,
+      stock: variant.stock,
+      incomingStock: variant.incomingStock,
+      supplierNextArrivalAt: variant.supplierNextArrivalAt,
+      availabilitySource: variant.availabilitySource,
+      deliveryDays: variant.deliveryDays,
+      isHero: variant.isHero,
+      isNew: variant.isNew,
+      isLimited: variant.isLimited,
+      isDtz: variant.isDtz,
+      action: variant.action,
+      actionPrices: variant.actionPrices,
+    }];
+  });
+  if (!options.length) return product;
+
+  const selected =
+    options.find((option) => option.sku === product.sku) ??
+    options.find((option) => option.isPrimary) ??
+    options[0]!;
+  const family: ProductVariantFamily = {
+    id: membership.family.id,
+    code: membership.family.code,
+    primarySku: options.find((option) => option.isPrimary)?.sku,
+    selectedSku: selected.sku,
+    options,
+  };
+
+  if (selected.sku === product.sku) {
+    return { ...product, variantFamily: family };
+  }
+  return {
+    ...product,
+    id: selected.productId,
+    sku: selected.sku,
+    slug: selected.slug,
+    name: selected.name,
+    colorPrimary: selected.colorPrimary,
+    colorSecondary: selected.colorSecondary,
+    media: selected.media,
+    fullPrice: selected.fullPrice,
+    salePrice: selected.salePrice,
+    discountPct: selected.discountPct,
+    loyaltyPrice: selected.loyaltyPrice,
+    loyaltyDiscountPct: selected.loyaltyDiscountPct,
+    stock: selected.stock,
+    incomingStock: selected.incomingStock,
+    supplierNextArrivalAt: selected.supplierNextArrivalAt,
+    availabilitySource: selected.availabilitySource,
+    deliveryDays: selected.deliveryDays,
+    isHero: selected.isHero ?? false,
+    isNew: selected.isNew ?? false,
+    isLimited: selected.isLimited ?? false,
+    isDtz: selected.isDtz ?? false,
+    action: selected.action,
+    actionPrices: selected.actionPrices,
+    variantFamily: family,
+  };
+}
+
+function mapProductListRow(
+  row: ProductListRow,
+  pricingRules?: ActivePricingRules,
+  deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+) {
+  return attachProductVariantFamily(
+    mapProductListItem(row, pricingRules, deliveryWindows),
+    row.familyMembership,
+    pricingRules,
+    deliveryWindows,
+  );
+}
+
+function dedupeProductFamilies(products: ProductDTO[]) {
+  const seen = new Set<string>();
+  return products.filter((product) => {
+    const key = product.variantFamily
+      ? `family:${product.variantFamily.id}`
+      : `sku:${product.sku}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function productStockAvailability(product: {
@@ -786,6 +956,20 @@ function appendAnd(where: Prisma.ProductWhereInput, condition: Prisma.ProductWhe
   ];
 }
 
+function webStorefrontVisibleProductWhere(): Prisma.ProductWhereInput {
+  return {
+    AND: [
+      webStorefrontProductWhere(),
+      {
+        OR: [
+          { familyMembership: { is: null } },
+          { familyMembership: { is: { storefrontEnabled: true } } },
+        ],
+      },
+    ],
+  };
+}
+
 async function loadProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
@@ -943,6 +1127,49 @@ async function loadProducts(
     where.materials = { some: { materialId: { in: input.materialIds } } };
   }
 
+  // A family occupies one stable listing row. Its primary SKU owns sorting,
+  // while any web-enabled member may satisfy category/search/filter criteria.
+  const familyAwareWhere: Prisma.ProductWhereInput = {
+    OR: [
+      { AND: [where, { familyMembership: { is: null } }] },
+      {
+        primaryForFamily: {
+          is: {
+            members: {
+              some: {
+                storefrontEnabled: true,
+                product: { is: where },
+              },
+            },
+          },
+        },
+      },
+    ],
+  };
+  const excludedFamily = input.excludeSku
+    ? await db.productFamilyMember.findFirst({
+        where: { product: { sku: input.excludeSku } },
+        select: { familyId: true },
+      })
+    : null;
+  const listingWhere: Prisma.ProductWhereInput = excludedFamily
+    ? {
+        AND: [
+          familyAwareWhere,
+          {
+            OR: [
+              { familyMembership: { is: null } },
+              {
+                familyMembership: {
+                  is: { familyId: { not: excludedFamily.familyId } },
+                },
+              },
+            ],
+          },
+        ],
+      }
+    : familyAwareWhere;
+
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = (() => {
     switch (input.sort) {
       case "price-asc":
@@ -961,7 +1188,7 @@ async function loadProducts(
   const limit = Math.min(Math.max(input.limit ?? 24, 1), 300);
 
   const rowsQuery = db.product.findMany({
-    where,
+    where: listingWhere,
     select: productListSelect,
     orderBy,
     take: limit + 1,
@@ -971,14 +1198,14 @@ async function loadProducts(
     rowsQuery,
     input.includeTotal === false
       ? Promise.resolve(0)
-      : db.product.count({ where }),
+      : db.product.count({ where: listingWhere }),
   ]);
 
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   return {
     items: slice.map((product) =>
-      mapProductListItem(product, pricingRules, deliveryWindows),
+      mapProductListRow(product, pricingRules, deliveryWindows),
     ),
     nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
     total,
@@ -1003,7 +1230,7 @@ async function loadProductBySlug(
   try {
     const [row, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findFirst({
-        where: { slug, ...webStorefrontProductWhere() },
+        where: { slug, ...webStorefrontVisibleProductWhere() },
         include: productInclude,
       }),
       getActivePricingRules(),
@@ -1019,7 +1246,7 @@ async function loadProductBySlug(
 
 const getProductBySlugAcrossRequests = unstable_cache(
   loadProductBySlug,
-  ["catalog-product-by-slug-v1"],
+  ["catalog-product-by-slug-v2-family"],
   {
     revalidate: 30,
     tags: ["catalog-products", "storefront-categories"],
@@ -1033,7 +1260,7 @@ export const getProductBySlug = cache(getProductBySlugAcrossRequests);
 const getCachedProductRail = unstable_cache(
   async (input: ListProductsInput) =>
     listProducts({ ...input, includeTotal: false }),
-  ["catalog-product-rail-v1"],
+  ["catalog-product-rail-v2-family"],
   {
     revalidate: 60,
     tags: ["catalog-products", "storefront-categories"],
@@ -1070,7 +1297,7 @@ export async function getProductCardsBySlugs(
   try {
     const [rows, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findMany({
-        where: { slug: { in: orderedSlugs }, ...webStorefrontProductWhere() },
+        where: { slug: { in: orderedSlugs }, ...webStorefrontVisibleProductWhere() },
         select: productListSelect,
       }),
       getActivePricingRules(),
@@ -1079,12 +1306,12 @@ export async function getProductCardsBySlugs(
     const productsBySlug = new Map(
       rows.map((row) => [
         row.slug,
-        mapProductListItem(row, pricingRules, deliveryWindows),
+        mapProductListRow(row, pricingRules, deliveryWindows),
       ]),
     );
-    return orderedSlugs
+    return dedupeProductFamilies(orderedSlugs
       .map((slug) => productsBySlug.get(slug))
-      .filter((product): product is ProductDTO => Boolean(product));
+      .filter((product): product is ProductDTO => Boolean(product)));
   } catch (error) {
     console.error("[catalog] Failed to batch-load product cards.", error);
     return [];
@@ -1103,7 +1330,7 @@ export async function getProductsBySkus(
   try {
     const [rows, pricingRules, deliveryWindows] = await Promise.all([
       db.product.findMany({
-        where: { sku: { in: orderedSkus }, ...webStorefrontProductWhere() },
+        where: { sku: { in: orderedSkus }, ...webStorefrontVisibleProductWhere() },
         select: productListSelect,
       }),
       getActivePricingRules(),
@@ -1112,12 +1339,12 @@ export async function getProductsBySkus(
     const productsBySku = new Map(
       rows.map((row) => [
         row.sku,
-        mapProductListItem(row, pricingRules, deliveryWindows),
+        mapProductListRow(row, pricingRules, deliveryWindows),
       ]),
     );
-    return orderedSkus
+    return dedupeProductFamilies(orderedSkus
       .map((sku) => productsBySku.get(sku))
-      .filter((product): product is ProductDTO => Boolean(product));
+      .filter((product): product is ProductDTO => Boolean(product)));
   } catch (error) {
     console.error("[catalog] Failed to batch-load landing-page products.", error);
     return [];
@@ -1128,7 +1355,7 @@ export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
   const [row, pricingRules, deliveryWindows] = await Promise.all([
     db.product.findFirst({
-      where: { sku, ...webStorefrontProductWhere() },
+      where: { sku, ...webStorefrontVisibleProductWhere() },
       include: productInclude,
     }),
     getActivePricingRules(),
@@ -1142,7 +1369,7 @@ export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
 export async function getFrequentlyBought(productId: string, limit = 6) {
   const p = await db.product.findUnique({
     where: { id: productId },
-    select: { collectionId: true },
+    select: { collectionId: true, familyMembership: { select: { familyId: true } } },
   });
   if (!p?.collectionId) return [];
   const [rows, pricingRules, deliveryWindows] = await Promise.all([
@@ -1150,25 +1377,25 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
       where: {
         collectionId: p.collectionId,
         id: { not: productId },
-        ...webStorefrontProductWhere(),
+        ...webStorefrontVisibleProductWhere(),
       },
       include: productInclude,
-      take: limit,
+      take: Math.min(limit * 4, 100),
       orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
   ]);
-  return rows.map((product) =>
+  return dedupeProductFamilies(rows.map((product) =>
     mapProduct(product, pricingRules, deliveryWindows),
-  );
+  )).filter((product) => product.variantFamily?.id !== p.familyMembership?.familyId).slice(0, limit);
 }
 
 /** "Slični artikli" — items in the same `group`. */
 export async function getRelatedProducts(productId: string, limit = 8) {
   const p = await db.product.findUnique({
     where: { id: productId },
-    select: { groupId: true },
+    select: { groupId: true, familyMembership: { select: { familyId: true } } },
   });
   if (!p?.groupId) return [];
   const [rows, pricingRules, deliveryWindows] = await Promise.all([
@@ -1176,18 +1403,18 @@ export async function getRelatedProducts(productId: string, limit = 8) {
       where: {
         groupId: p.groupId,
         id: { not: productId },
-        ...webStorefrontProductWhere(),
+        ...webStorefrontVisibleProductWhere(),
       },
       include: productInclude,
-      take: limit,
+      take: Math.min(limit * 4, 120),
       orderBy: [{ isHero: "desc" }, { discountPct: "desc" }],
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
   ]);
-  return rows.map((product) =>
+  return dedupeProductFamilies(rows.map((product) =>
     mapProduct(product, pricingRules, deliveryWindows),
-  );
+  )).filter((product) => product.variantFamily?.id !== p.familyMembership?.familyId).slice(0, limit);
 }
 
 /** Cross-sell list backing the post-add-to-cart "Predlog kupovine" modal. */
@@ -1202,9 +1429,11 @@ export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
     getDeliveryWindows(),
   ]);
   if (!rule) return [];
-  return rule.products
-    .slice(0, limit)
-    .map((product) => mapProduct(product, pricingRules, deliveryWindows));
+  return dedupeProductFamilies(
+    rule.products.map((product) =>
+      mapProduct(product, pricingRules, deliveryWindows),
+    ),
+  ).slice(0, limit);
 }
 
 export async function getCartRecommendationsForSkus(
@@ -1216,8 +1445,8 @@ export async function getCartRecommendationsForSkus(
   if (!uniqueSkus.length) return [];
 
   const cartProducts = await db.product.findMany({
-    where: { sku: { in: uniqueSkus }, ...webStorefrontProductWhere() },
-    select: { groupId: true },
+    where: { sku: { in: uniqueSkus }, ...webStorefrontVisibleProductWhere() },
+    select: { groupId: true, familyMembership: { select: { familyId: true } } },
   });
   const groupIds = Array.from(
     new Set(cartProducts.map((product) => product.groupId).filter((id): id is string => Boolean(id))),
@@ -1234,18 +1463,26 @@ export async function getCartRecommendationsForSkus(
     getDeliveryWindows(),
   ]);
 
-  const seen = new Set(uniqueSkus);
+  const seenSkus = new Set(uniqueSkus);
+  const seenFamilies = new Set(
+    cartProducts
+      .map((product) => product.familyMembership?.familyId)
+      .filter((id): id is string => Boolean(id)),
+  );
   const out: ProductDTO[] = [];
   for (const rule of rules) {
     for (const product of rule.products) {
       if (
-        seen.has(product.sku) ||
+        seenSkus.has(product.sku) ||
         !isProductAvailableOnWeb(product)
       ) {
         continue;
       }
-      seen.add(product.sku);
-      out.push(mapProduct(product, pricingRules, deliveryWindows));
+      const mapped = mapProduct(product, pricingRules, deliveryWindows);
+      if (mapped.variantFamily && seenFamilies.has(mapped.variantFamily.id)) continue;
+      seenSkus.add(product.sku);
+      if (mapped.variantFamily) seenFamilies.add(mapped.variantFamily.id);
+      out.push(mapped);
       if (out.length >= limit) return out;
     }
   }

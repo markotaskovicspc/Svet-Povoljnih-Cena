@@ -12,6 +12,7 @@ import {
 import { parseBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
 import { actionSalePriceError } from "@/lib/pricing/action-price";
 import { storefrontMonth } from "@/lib/storefront/promotion-filters";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 export type PricingMutationResult = {
   entityId: string;
@@ -482,6 +483,7 @@ export async function saveActionProduct(
             });
           }
         }
+        await propagateProductFamilySharedData(tx, product.id, ["commercial"]);
       });
       refreshPricing();
       return {
@@ -545,6 +547,7 @@ export async function deleteActionProduct(
           await tx.heroOfMonth.deleteMany({
             where: { actionId, productSku: product.sku },
           });
+          await propagateProductFamilySharedData(tx, productId, ["commercial"]);
         }
       });
       refreshPricing();

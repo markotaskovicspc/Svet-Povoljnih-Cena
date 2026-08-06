@@ -19,6 +19,8 @@ export const cartLineSchema = z.object({
   unitPriceFull: z.number().nonnegative(),
   unitPriceSale: z.number().nonnegative(),
   thumbnailUrl: z.string().max(2048).optional(),
+  variant: z.string().max(120).optional(),
+  familyCode: z.string().max(64).optional(),
   withAssembly: z.boolean().optional(),
   assemblyPrice: z.number().nonnegative().optional(),
 });

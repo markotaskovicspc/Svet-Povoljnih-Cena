@@ -8,8 +8,7 @@ import { getFeedsConfig } from "./config";
  * `g:` namespace), per the spec at:
  *   https://support.google.com/merchants/answer/7052112
  *
- * v1 emits only the required + commonly-recommended fields. Variants
- * and item-group_id are deferred to Phase 5.
+ * Every colour remains its own item and shares item_group_id with siblings.
  */
 export function buildGoogleMerchantXml(products: FeedProduct[]): string {
   const cfg = getFeedsConfig();
@@ -60,6 +59,12 @@ function renderItem(p: FeedProduct): string {
   }
   if (p.productType) {
     lines.push(`      <g:product_type>${escapeXml(p.productType)}</g:product_type>`);
+  }
+  if (p.itemGroupId) {
+    lines.push(`      <g:item_group_id>${escapeXml(p.itemGroupId)}</g:item_group_id>`);
+  }
+  if (p.color) {
+    lines.push(`      <g:color>${escapeXml(p.color)}</g:color>`);
   }
   return `    <item>\n${lines.join("\n")}\n    </item>`;
 }

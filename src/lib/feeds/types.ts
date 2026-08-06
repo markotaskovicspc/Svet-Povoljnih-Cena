@@ -26,4 +26,6 @@ export interface FeedProduct {
   productType: string | null;
   gtin: string | null;
   mpn: string;
+  itemGroupId?: string | null;
+  color?: string | null;
 }

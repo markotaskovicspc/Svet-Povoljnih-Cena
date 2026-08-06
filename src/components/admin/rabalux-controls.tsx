@@ -96,6 +96,10 @@ export function RabaluxControls({
               value={preview.summary.diff.identityConflicts}
             />
             <Stat
+              label="Konflikti sporednih boja"
+              value={preview.summary.diff.familyConflicts}
+            />
+            <Stat
               label="Mediji za obradu"
               value={preview.summary.diff.mediaPending}
             />

@@ -15,6 +15,8 @@ export interface CartLine {
   unitPriceLoyalty?: number;
   loyaltyDiscountPct?: number;
   thumbnailUrl?: string;
+  variant?: string;
+  familyCode?: string;
   withAssembly?: boolean;
   assemblyPrice?: number;
 }
@@ -89,6 +91,8 @@ export function normalizeCartLines(lines: unknown): CartLine[] {
           : Math.max(0, Math.min(100, normalizeMoney(row.loyaltyDiscountPct))),
       thumbnailUrl:
         typeof row.thumbnailUrl === "string" ? row.thumbnailUrl : undefined,
+      variant: typeof row.variant === "string" ? row.variant : undefined,
+      familyCode: typeof row.familyCode === "string" ? row.familyCode : undefined,
       withAssembly: Boolean(row.withAssembly),
       assemblyPrice:
         row.assemblyPrice == null ? undefined : normalizeMoney(row.assemblyPrice),

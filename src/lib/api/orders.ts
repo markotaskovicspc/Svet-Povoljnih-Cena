@@ -95,7 +95,21 @@ export async function getPublicOrderForConfirmation(
   const row = await db.order.findFirst({
     where: { OR: [{ id: numberOrId }, { number: numberOrId }] },
     include: {
-      items: { orderBy: { id: "asc" } },
+      items: {
+        orderBy: { id: "asc" },
+        include: {
+          product: {
+            select: {
+              familyMembership: {
+                select: {
+                  label: true,
+                  family: { select: { code: true } },
+                },
+              },
+            },
+          },
+        },
+      },
       payments: { orderBy: { createdAt: "desc" }, take: 1 },
       user: { select: { email: true } },
     },
@@ -125,6 +139,10 @@ export async function getPublicOrderForConfirmation(
       withAssembly: i.withAssembly,
       assemblyPrice: i.assemblyPrice ? num(i.assemblyPrice) : undefined,
       thumbnailUrl: i.thumbnailUrl ?? undefined,
+      variant:
+        i.product?.familyMembership?.label ??
+        ([i.color1, i.color2].filter(Boolean).join(" / ") || undefined),
+      familyCode: i.product?.familyMembership?.family.code ?? undefined,
     })),
     subtotal: num(row.subtotal),
     savings: num(row.savings),

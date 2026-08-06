@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { formatRsd } from "@/lib/format";
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,7 @@ async function saveEntry(_state: AdminActionState, formData: FormData) {
           });
           await lockSupplierOwnedFields(tx, product.id, actorId, ["pricing"]);
         }
+        await propagateProductFamilySharedData(tx, product.id, ["commercial"]);
         return entry;
       });
       updateTag("catalog-products");
@@ -145,6 +147,7 @@ async function deleteEntry(_state: AdminActionState, formData: FormData) {
           });
           await lockSupplierOwnedFields(tx, entry.productId, actorId, ["pricing"]);
         }
+        await propagateProductFamilySharedData(tx, entry.productId, ["commercial"]);
       });
       updateTag("catalog-products");
       updateTag("catalog-pricing");

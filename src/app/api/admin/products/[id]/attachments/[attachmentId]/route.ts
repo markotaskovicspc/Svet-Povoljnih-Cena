@@ -7,6 +7,7 @@ import {
   getManagedProductMediaStorageKey,
   getProductMediaBucket,
 } from "@/lib/supabase/storage";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 type RouteContext = {
   params: Promise<{ id: string; attachmentId: string }>;
@@ -49,7 +50,10 @@ export async function DELETE(_request: Request, context: RouteContext) {
       { status: 502 },
     );
   }
-  await db.productAttachment.delete({ where: { id: attachment.id } });
+  await db.$transaction(async (tx) => {
+    await tx.productAttachment.delete({ where: { id: attachment.id } });
+    await propagateProductFamilySharedData(tx, productId, ["master"]);
+  });
   await logAudit({
     actorId: admin.id,
     action: "product.attachment.delete",

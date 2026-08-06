@@ -37,4 +37,53 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
   });
+
+  it("porodicu prikazuje kao pristupačne foto-linkove ka konkretnom SKU-u", () => {
+    const familyProduct = {
+      ...product,
+      sku: "SOFA-BLACK",
+      variantFamily: {
+        id: "family-1",
+        code: "SOFA",
+        primarySku: "SOFA-BLACK",
+        selectedSku: "SOFA-BLACK",
+        options: [
+          {
+            sku: "SOFA-BLACK",
+            slug: "sofa-black",
+            name: "Sofa",
+            label: "Crna",
+            position: 0,
+            isPrimary: true,
+            media: { images: [] },
+            fullPrice: 100,
+            stock: 1,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+          {
+            sku: "SOFA-GREEN",
+            slug: "sofa-green",
+            name: "Sofa",
+            label: "Zelena",
+            position: 1,
+            isPrimary: false,
+            media: { images: [] },
+            fullPrice: 100,
+            stock: 2,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+        ],
+      },
+    } as Product;
+    const markup = renderToStaticMarkup(
+      <ProductColorOptions product={familyProduct} showLabels max={12} />,
+    );
+    expect(markup).toContain('href="/p/sofa-black"');
+    expect(markup).toContain('href="/p/sofa-green"');
+    expect(markup).toContain("Crna");
+    expect(markup).toContain("SKU SOFA-GREEN");
+    expect(markup).toContain('aria-current="page"');
+  });
 });

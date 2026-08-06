@@ -11,6 +11,8 @@ export interface Ga4ItemInput {
   fullUnitPrice?: number;
   categories?: string[];
   assemblyUnitPrice?: number;
+  variant?: string;
+  familyCode?: string;
 }
 
 export interface Ga4EcommerceItem {
@@ -27,6 +29,8 @@ export interface Ga4EcommerceItem {
   item_category4?: string;
   item_category5?: string;
   google_business_vertical: "retail";
+  item_variant?: string;
+  product_family?: string;
 }
 
 export function buildGa4Item(
@@ -58,6 +62,8 @@ export function buildGa4Item(
     ...(categories[2] ? { item_category3: categories[2] } : {}),
     ...(categories[3] ? { item_category4: categories[3] } : {}),
     ...(categories[4] ? { item_category5: categories[4] } : {}),
+    ...(input.variant ? { item_variant: input.variant } : {}),
+    ...(input.familyCode ? { product_family: input.familyCode } : {}),
     google_business_vertical: "retail",
   };
 }
@@ -107,6 +113,8 @@ export function buildPurchasePayload(order: Order) {
           fullUnitPrice: item.unitPriceFull,
           quantity: item.qty,
           assemblyUnitPrice: item.withAssembly ? item.assemblyPrice : 0,
+          variant: item.variant,
+          familyCode: item.familyCode,
         },
         index,
       ),

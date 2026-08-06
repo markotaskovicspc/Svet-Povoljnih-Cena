@@ -39,6 +39,10 @@ interface ProductRow {
   inTiktokCatalog: boolean;
   media: RowMedia[];
   categories: RowCategory[];
+  familyMembership: {
+    label: string;
+    family: { code: string };
+  } | null;
 }
 
 function toMajor(value: { toString(): string } | null): number | null {
@@ -63,7 +67,7 @@ function stripHtml(input: string): string {
 /**
  * Load active products flagged for a given ad channel and project them
  * into the channel-agnostic `FeedProduct` shape. The query intentionally
- * avoids variants for v1 — Phase 5 will introduce per-variant feed items.
+ * emits every SKU independently; family metadata groups colour variants.
  */
 export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduct[]> {
   const cfg = getFeedsConfig();
@@ -74,6 +78,10 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
       isActive: true,
       deletedAt: null,
       [flag]: true,
+      OR: [
+        { familyMembership: { is: null } },
+        { familyMembership: { is: { storefrontEnabled: true } } },
+      ],
     },
     take: cfg.maxItems,
     orderBy: { updatedAt: "desc" },
@@ -99,6 +107,12 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
       },
       categories: {
         select: { category: { select: { path: true, name: true } } },
+      },
+      familyMembership: {
+        select: {
+          label: true,
+          family: { select: { code: true } },
+        },
       },
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,6 +163,8 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
       productType,
       gtin: null,
       mpn: row.sku,
+      itemGroupId: row.familyMembership?.family.code ?? null,
+      color: row.familyMembership?.label ?? null,
     });
   }
   return items;

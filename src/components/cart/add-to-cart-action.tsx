@@ -50,6 +50,8 @@ export function commitAddToCart(
     unitPriceFull: price.full,
     unitPriceSale: sale,
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
+    variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
+    familyCode: product.variantFamily?.code,
   };
   useCart.getState().add(line, qty);
   recordFirstPartyEvent({
@@ -65,6 +67,8 @@ export function commitAddToCart(
     fullUnitPrice: price.full,
     quantity: qty,
     categories: product.categoryPath,
+    variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
+    familyCode: product.variantFamily?.code,
   });
 
   toast.custom((id) => <AddToast id={id} line={line} qty={qty} />, {

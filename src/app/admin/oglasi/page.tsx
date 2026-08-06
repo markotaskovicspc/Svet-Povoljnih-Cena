@@ -9,6 +9,7 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -46,6 +47,7 @@ async function saveFlag(_state: AdminActionState, formData: FormData) {
         revalidatePath("/admin/oglasi");
         revalidatePath("/api/feeds/google");
         revalidatePath("/api/feeds/meta");
+        revalidatePath("/api/feeds/tiktok");
         return {
           ok: true as const,
           entityId: channel,
@@ -74,13 +76,17 @@ async function toggleProductCatalog(_state: AdminActionState, formData: FormData
         if (!productId || !FIELD_BY_CHANNEL[channel]) {
           return { ok: false as const, error: "Pogrešni parametri." };
         }
-        await db.product.update({
-          where: { id: productId },
-          data: { [FIELD_BY_CHANNEL[channel]]: next },
+        await db.$transaction(async (tx) => {
+          await tx.product.update({
+            where: { id: productId },
+            data: { [FIELD_BY_CHANNEL[channel]]: next },
+          });
+          await propagateProductFamilySharedData(tx, productId, ["commercial"]);
         });
         revalidatePath("/admin/oglasi");
         revalidatePath("/api/feeds/google");
         revalidatePath("/api/feeds/meta");
+        revalidatePath("/api/feeds/tiktok");
         return {
           ok: true as const,
           entityId: productId,

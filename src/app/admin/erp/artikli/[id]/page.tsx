@@ -37,7 +37,7 @@ import {
   resolveNamedArticleRelation,
   syncArticleLookupAssignments,
 } from "@/lib/admin/article-master.server";
-import { optionalDateInput, dateInputValue } from "@/lib/article-master";
+import { articleSlug, optionalDateInput, dateInputValue } from "@/lib/article-master";
 import { normalizeArticleSku } from "@/lib/article-sku";
 import { ARTICLE_STATUS_OPTIONS } from "@/lib/article-status";
 import { sanitizeRichText } from "@/lib/rich-text";
@@ -77,6 +77,11 @@ import {
   articleCategorySelectionFromLeaf,
   resolveArticleCategorySelection,
 } from "@/lib/admin/article-category-hierarchy";
+import {
+  propagateProductFamilySharedData,
+  setProductFamilyMembership,
+} from "@/lib/product-family.server";
+import { defaultProductFamilyLabel } from "@/lib/product-family";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -144,6 +149,20 @@ const overrideSchema = z.object({
   availableWebManual: z.coerce.boolean().default(false),
   availableWholesaleManual: z.coerce.boolean().default(false),
   availableExportManual: z.coerce.boolean().default(false),
+  familyCode: z.string().max(64).optional().nullable(),
+  familyColorLabel: z.string().max(120).optional().nullable(),
+  familyColorHex: z.string().max(7).optional().nullable(),
+  familyPosition: z.coerce.number().int().min(0).max(10000).default(0),
+  familyPrimary: z.coerce.boolean().default(false),
+  familyStorefrontEnabled: z.coerce.boolean().default(false),
+}).superRefine((value, context) => {
+  if (value.familyCode?.trim() && !value.familyColorLabel?.trim()) {
+    context.addIssue({
+      code: "custom",
+      path: ["familyColorLabel"],
+      message: "Naziv boje je obavezan kada je artikal u porodici.",
+    });
+  }
 });
 
 const pictogramAssignmentSchema = z.object({
@@ -274,12 +293,30 @@ async function revalidateProductSurfaces(productId: string, slug?: string | null
     select: {
       slug: true,
       categories: { select: { category: { select: { path: true } } } },
+      familyMembership: {
+        select: {
+          family: {
+            select: {
+              members: {
+                select: {
+                  productId: true,
+                  product: { select: { slug: true } },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
   const productSlug = slug ?? product?.slug;
   revalidatePath("/admin/erp/artikli");
   revalidatePath(`/admin/erp/artikli/${productId}`);
   if (productSlug) revalidatePath(`/p/${productSlug}`);
+  for (const member of product?.familyMembership?.family.members ?? []) {
+    revalidatePath(`/admin/erp/artikli/${member.productId}`);
+    revalidatePath(`/p/${member.product.slug}`);
+  }
   for (const path of COMMON_PRODUCT_SURFACES) revalidatePath(path);
   for (const relation of product?.categories ?? []) {
     const categoryPath = relation.category.path.replace(/^\/+/, "");
@@ -375,6 +412,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           availableWholesaleManual: bool("availableWholesaleManual"),
           availableExportManual: bool("availableExportManual"),
           newUntilAutomatic: bool("newUntilAutomatic"),
+          familyPrimary: bool("familyPrimary"),
+          familyStorefrontEnabled: bool("familyStorefrontEnabled"),
         });
         if (!parsed.success) {
           return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -621,6 +660,21 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             benefits: d.benefits ?? "",
             certificates: d.certificates ?? "",
           });
+          await setProductFamilyMembership(tx, {
+            productId: d.id,
+            familyCode: d.familyCode,
+            label:
+              d.familyColorLabel ||
+              defaultProductFamilyLabel({
+                colorPrimary: d.colorPrimary,
+                colorSecondary: d.colorSecondary,
+              }),
+            colorHex: d.familyColorHex,
+            position: d.familyPosition,
+            storefrontEnabled: d.familyStorefrontEnabled,
+            makePrimary: d.familyPrimary,
+          });
+          await propagateProductFamilySharedData(tx, d.id);
           await setDefaultWarehouseStock(tx, {
             idempotencyKey: `product-edit:${d.operationId}:stock`,
             productId: d.id,
@@ -637,7 +691,17 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
         return {
           ok: true as const,
           entityId: d.id,
-          diff: data,
+          diff: {
+            ...data,
+            family: {
+              code: d.familyCode || null,
+              label: d.familyColorLabel || null,
+              colorHex: d.familyColorHex || null,
+              position: d.familyPosition,
+              primary: d.familyPrimary,
+              storefrontEnabled: d.familyStorefrontEnabled,
+            },
+          },
           message: "Proizvod je sačuvan.",
         };
       },
@@ -698,6 +762,7 @@ async function updateProductPictograms(_state: AdminActionState, formData: FormD
           actorId,
           ["pictograms"],
         );
+        await propagateProductFamilySharedData(tx, parsed.data.productId, ["master"]);
       });
       await revalidateProductSurfaces(parsed.data.productId);
       return {
@@ -996,6 +1061,98 @@ async function retryFailedRabaluxMedia(
   )(formData);
 }
 
+async function createFamilyColor(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["CONTENT", "OPS"],
+      action: "product.family.color.create",
+      entity: "ProductFamily",
+    },
+    async (_actorId, actionData: FormData) => {
+      const sourceProductId = String(actionData.get("sourceProductId") ?? "");
+      const sku = normalizeArticleSku(String(actionData.get("sku") ?? ""));
+      const label = String(actionData.get("label") ?? "").trim();
+      const colorHex = String(actionData.get("colorHex") ?? "").trim() || null;
+      if (!sourceProductId || !sku || !label) {
+        return { ok: false as const, error: "SKU i naziv nove boje su obavezni." };
+      }
+      const created = await db.$transaction(async (tx) => {
+        await assertArticleSkuAvailable(tx, sku);
+        const source = await tx.product.findUniqueOrThrow({
+          where: { id: sourceProductId },
+          select: {
+            name: true,
+            shortName: true,
+            description: true,
+            shortDescription: true,
+            fullPrice: true,
+            familyMembership: {
+              select: {
+                family: {
+                  select: {
+                    code: true,
+                    members: { select: { position: true } },
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (!source.familyMembership) {
+          throw new Error("Najpre povežite postojeći artikal sa porodicom boja.");
+        }
+        const product = await tx.product.create({
+          data: {
+            sku,
+            slug: `${articleSlug(`${source.shortName ?? source.name}-${sku}`)}-${randomBytes(3).toString("hex")}`,
+            name: source.name,
+            shortName: source.shortName,
+            description: source.description,
+            shortDescription: source.shortDescription,
+            fullPrice: source.fullPrice,
+            colorPrimary: label,
+            articleStatus: "UZ",
+            isActive: false,
+            availableWebManual: false,
+            availableWholesaleManual: false,
+            availableExportManual: false,
+          },
+        });
+        const nextPosition = Math.max(
+          0,
+          ...source.familyMembership.family.members.map((member) => member.position + 1),
+        );
+        await setProductFamilyMembership(tx, {
+          productId: product.id,
+          familyCode: source.familyMembership.family.code,
+          label,
+          colorHex,
+          position: nextPosition,
+          storefrontEnabled: false,
+        });
+        await propagateProductFamilySharedData(tx, sourceProductId);
+        await tx.product.update({
+          where: { id: product.id },
+          data: {
+            inGoogleMerchant: false,
+            inMetaCatalog: false,
+            inTiktokCatalog: false,
+          },
+        });
+        return product;
+      });
+      await revalidateProductSurfaces(sourceProductId);
+      return {
+        ok: true as const,
+        entityId: created.id,
+        diff: { sourceProductId, sku, label, colorHex, storefrontEnabled: false },
+        message: `Nova boja ${sku} je kreirana i čeka potvrdu spremnosti za web.`,
+      };
+    },
+  )(formData);
+}
+
 export default async function ProductDetail({
   params,
 }: {
@@ -1067,6 +1224,40 @@ export default async function ProductDetail({
             select: {
               warehouseId: true,
               warehouseReservedQty: true,
+            },
+          },
+          familyMembership: {
+            include: {
+              family: {
+                include: {
+                  members: {
+                    orderBy: [{ position: "asc" }, { productId: "asc" }],
+                    include: {
+                      product: {
+                        select: {
+                          id: true,
+                          sku: true,
+                          slug: true,
+                          name: true,
+                          stock: true,
+                          availableWebManual: true,
+                          availableWebAuto: true,
+                          media: {
+                            where: { kind: "IMAGE", syncStatus: "READY" },
+                            orderBy: { order: "asc" },
+                            take: 1,
+                          },
+                          priceListEntries: {
+                            where: { priceList: { kind: "RETAIL", active: true } },
+                            orderBy: { validFrom: "desc" },
+                            take: 1,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -1219,8 +1410,79 @@ export default async function ProductDetail({
       <div className="grid grid-cols-1 gap-6 px-8 py-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <Card>
-          <CardTitle description="Override-i preko XML feed-a — ovo polje sledeći import može da prepiše ako je polje označeno kao auto-sync.">
-            Osnovni podaci
+            <CardTitle description="Svaka boja ostaje zaseban SKU sa svojim slikama i zalihama.">
+              Boje u porodici
+            </CardTitle>
+            {product.familyMembership ? (
+              <div className="mt-4 space-y-2">
+                {product.familyMembership.family.members.map((member) => {
+                  const image = member.product.media[0];
+                  const price = member.product.priceListEntries[0]?.price;
+                  const isPrimary =
+                    member.productId === product.familyMembership?.family.primaryProductId;
+                  return (
+                    <div
+                      key={member.productId}
+                      className="grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-border/70 p-2.5"
+                    >
+                      <div className="relative size-12 overflow-hidden rounded-md bg-white ring-1 ring-border">
+                        {image ? (
+                          <Image
+                            src={resolveSupabaseStorageUrl(image.thumbUrl ?? image.url)}
+                            alt=""
+                            fill
+                            sizes="48px"
+                            className="object-contain p-1"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0 text-xs">
+                        <p className="truncate font-semibold text-ink-900">
+                          {member.label} {isPrimary ? "· glavna" : ""}
+                        </p>
+                        <p className="truncate text-ink-500">
+                          {member.product.sku} · {price ? formatRsd(Number(price)) : "bez MPC"} · stanje {member.product.stock}
+                        </p>
+                        <p className={member.storefrontEnabled ? "text-success" : "text-warning"}>
+                          {member.storefrontEnabled ? "Boja spremna za web" : "Boja nije spremna za web"}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/admin/erp/artikli/${member.productId}`}
+                        className="rounded-md border border-border px-3 py-2 text-xs font-semibold hover:border-walnut hover:text-walnut"
+                      >
+                        Uredi
+                      </Link>
+                    </div>
+                  );
+                })}
+                <AdminActionForm
+                  action={createFamilyColor}
+                  refreshOnSuccess
+                  className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-dashed border-brand-blue/35 bg-brand-blue-50/30 p-4 md:grid-cols-[1fr_1fr_140px_auto]"
+                >
+                  <input type="hidden" name="sourceProductId" value={product.id} />
+                  <Field label="SKU nove boje">
+                    <Input name="sku" required placeholder="Nova jedinstvena šifra" />
+                  </Field>
+                  <Field label="Naziv boje">
+                    <Input name="label" required placeholder="npr. Maslinasto zelena" />
+                  </Field>
+                  <Field label="HEX fallback">
+                    <Input name="colorHex" placeholder="#6B7456" pattern="#[0-9A-Fa-f]{6}" />
+                  </Field>
+                  <SubmitButton className="self-end">Nova boja</SubmitButton>
+                </AdminActionForm>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-ink-500">
+                Artikal još nije povezan sa drugim bojama. Unesite eksplicitnu šifru porodice u kartonu ispod.
+              </p>
+            )}
+          </Card>
+          <Card>
+          <CardTitle description="Zajednička polja se pri čuvanju primenjuju na sve članove porodice; SKU, boje, slike, zalihe, nabavne cene i supplier identitet ostaju samo na ovoj boji.">
+            Karton proizvoda
           </CardTitle>
           <AdminActionForm
             action={updateProduct}
@@ -1234,6 +1496,70 @@ export default async function ProductDetail({
               name="operationId"
               value={randomBytes(16).toString("hex")}
             />
+            <fieldset className="space-y-3 rounded-xl border border-brand-blue/25 bg-brand-blue-50/40 p-4">
+              <legend className="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-brand-blue">
+                Porodica boja
+              </legend>
+              <p className="text-xs text-ink-600">
+                Prazna šifra odvaja ovu boju bez brisanja SKU-a ili istorije. Promena zajedničkih podataka ispod važi za celu porodicu.
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                <Field label="Šifra porodice">
+                  <Input
+                    name="familyCode"
+                    defaultValue={product.familyMembership?.family.code ?? ""}
+                    placeholder="npr. SMAK-UGAONA"
+                  />
+                </Field>
+                <Field label="Naziv ove boje">
+                  <Input
+                    name="familyColorLabel"
+                    defaultValue={
+                      product.familyMembership?.label ??
+                      defaultProductFamilyLabel({
+                        colorPrimary: product.colorPrimary,
+                        colorSecondary: product.colorSecondary,
+                      })
+                    }
+                    placeholder="Crna / zlatna"
+                  />
+                </Field>
+                <Field label="HEX fallback">
+                  <Input
+                    name="familyColorHex"
+                    defaultValue={product.familyMembership?.colorHex ?? ""}
+                    placeholder="#1A1A1A"
+                    pattern="#[0-9A-Fa-f]{6}"
+                  />
+                </Field>
+                <Field label="Redosled">
+                  <Input
+                    name="familyPosition"
+                    type="number"
+                    min={0}
+                    defaultValue={product.familyMembership?.position ?? 0}
+                  />
+                </Field>
+                <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    name="familyPrimary"
+                    defaultChecked={
+                      product.familyMembership?.family.primaryProductId === product.id
+                    }
+                  />
+                  Glavna boja
+                </label>
+                <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    name="familyStorefrontEnabled"
+                    defaultChecked={product.familyMembership?.storefrontEnabled ?? false}
+                  />
+                  Boja spremna za web
+                </label>
+              </div>
+            </fieldset>
             <div className="rounded-xl border border-brand-blue/20 bg-brand-blue-50/40 p-3 text-sm text-ink-700">
               Puni naziv se automatski formira kao: kolekcija + kratki opis + kratki naziv.
               Trenutno: <strong>{product.name}</strong>

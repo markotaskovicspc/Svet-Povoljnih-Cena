@@ -16,5 +16,6 @@ export { loadFeedProducts } from "./source";
 export type { FeedChannel } from "./source";
 export { buildGoogleMerchantXml } from "./google";
 export { buildMetaCsv } from "./meta";
+export { buildTiktokCsv } from "./tiktok";
 export { listBudgets, upsertBudget } from "./budget";
 export type { BudgetState, AdChannelKey } from "./budget";

@@ -11,6 +11,7 @@ import type {
   SearchNavigationHit,
   SearchSuggestion,
 } from "@/types/search";
+import { isWebAutoAvailabilityEnforced } from "@/lib/web-storefront-availability";
 
 /**
  * Search layer (Phase 3C — item 8).
@@ -25,6 +26,8 @@ import type {
 
 interface SuggestRow {
   sku: string;
+  barcode: string | null;
+  family_id: string | null;
   slug: string;
   name: string;
   full_price: Prisma.Decimal;
@@ -55,7 +58,9 @@ async function searchProductHits(
   if (q.length < MIN_QUERY_LEN) return [];
   const safeLimit = Math.min(Math.max(limit, 1), 96);
   const safeOffset = Math.max(0, Math.round(offset));
+  const queryLimit = Math.min(1000, Math.max(safeLimit + safeOffset, safeLimit) * 4);
   const codeLike = /^[A-Z0-9_-]{2,8}$/.test(q) && !q.includes(" ");
+  const enforceAutoAvailability = isWebAutoAvailabilityEnforced();
   if (!hasDatabaseConnection()) {
     throw new SearchUnavailableError("Database connection string is not configured.");
   }
@@ -64,6 +69,8 @@ async function searchProductHits(
   try {
     rows = await db.$queryRaw<SuggestRow[]>`
       SELECT p.sku,
+             p.barcode,
+             pfm."familyId" AS family_id,
              p.slug,
              p.name,
              p."fullPrice"   AS full_price,
@@ -84,7 +91,22 @@ async function searchProductHits(
                 JOIN "Category" c ON c.id = pc."categoryId"
                WHERE pc."productId" = p.id) AS breadcrumb
         FROM "Product" p
+        LEFT JOIN "ProductFamilyMember" pfm ON pfm."productId" = p.id
        WHERE p."isActive" = true
+         AND p."availableWebManual" = true
+         AND (${!enforceAutoAvailability} OR p."availableWebAuto" = true)
+         AND (pfm.id IS NULL OR pfm."storefrontEnabled" = true)
+         AND EXISTS (
+           SELECT 1
+             FROM "PriceListEntry" ple
+             JOIN "PriceList" pl ON pl.id = ple."priceListId"
+            WHERE ple."productId" = p.id
+              AND ple.price > 0
+              AND ple."validFrom" <= now()
+              AND (ple."validTo" IS NULL OR ple."validTo" >= now())
+              AND pl.kind = 'RETAIL'
+              AND pl.active = true
+         )
          AND (
            (${codeLike} AND (
              lower(${q}) = ANY (
@@ -133,18 +155,34 @@ async function searchProductHits(
                 p."isHero" DESC,
                 COALESCE(p."discountPct", 0) DESC,
                 COALESCE(p."salePrice", p."fullPrice") ASC
-       LIMIT ${safeLimit}
-       OFFSET ${safeOffset}
+       LIMIT ${queryLimit}
     `;
   } catch (err) {
     throw new SearchUnavailableError("Real catalog search is unavailable.", err);
   }
 
   const normalizedQuery = q.toLocaleLowerCase("sr-Latn-RS");
+  const exactIdentifier = rows.find(
+    (row) =>
+      row.sku.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery ||
+      row.barcode?.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery,
+  );
+  if (exactIdentifier) rows = [exactIdentifier];
   const exactNameRows = rows.filter(
     (row) => row.name.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery,
   );
   if (exactNameRows.length) rows = exactNameRows;
+  if (!exactIdentifier) {
+    const seenFamilies = new Set<string>();
+    rows = rows
+      .filter((row) => {
+        const key = row.family_id ? `family:${row.family_id}` : `sku:${row.sku}`;
+        if (seenFamilies.has(key)) return false;
+        seenFamilies.add(key);
+        return true;
+      })
+      .slice(safeOffset, safeOffset + safeLimit);
+  }
 
   const products = await getProductCardsBySlugs(rows.map((row) => row.slug));
   const productsBySlug = new Map(products.map((product) => [product.slug, product]));

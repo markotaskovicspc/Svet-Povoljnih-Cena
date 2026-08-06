@@ -1,7 +1,10 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
+import { getMediaVariantUrl } from "@/lib/media";
 
 const COLOR_HEX: Record<string, string> = {
   bela: "#f8f7f2",
@@ -56,13 +59,109 @@ export function ProductColorOptions({
   label = "Opcije boja",
   max = 4,
   showLabels = false,
+  selectedSku,
+  onSelectSku,
 }: {
   product: Product;
   className?: string;
   label?: string;
   max?: number;
   showLabels?: boolean;
+  selectedSku?: string;
+  onSelectSku?: (sku: string) => void;
 }) {
+  const familyOptions = product.variantFamily?.options ?? [];
+  const activeSku = selectedSku ?? product.variantFamily?.selectedSku ?? product.sku;
+  if (familyOptions.length) {
+    const visibleOptions = familyOptions.slice(0, max);
+    return (
+      <div
+        className={cn("flex flex-wrap items-center gap-2", className)}
+        aria-label={label}
+      >
+        {showLabels ? (
+          <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
+        ) : null}
+        {visibleOptions.map((option) => {
+          const selected = option.sku === activeSku;
+          const content = (
+            <>
+              <span
+                className={cn(
+                  "relative block overflow-hidden rounded-md bg-white",
+                  showLabels ? "size-14" : "size-9",
+                )}
+              >
+                {option.thumbnail ? (
+                  <Image
+                    src={getMediaVariantUrl(option.thumbnail, "thumb")}
+                    alt=""
+                    fill
+                    sizes={showLabels ? "56px" : "36px"}
+                    className="object-contain p-0.5"
+                  />
+                ) : (
+                  <span
+                    className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                    style={{
+                      backgroundColor:
+                        option.colorHex ??
+                        COLOR_HEX[option.label.toLowerCase()] ??
+                        "#d8d4c8",
+                    }}
+                  />
+                )}
+              </span>
+              {showLabels ? (
+                <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
+                  {option.label}
+                </span>
+              ) : null}
+            </>
+          );
+          const classes = cn(
+            "inline-flex shrink-0 items-center rounded-lg bg-white transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
+            showLabels ? "gap-2 p-1.5 pr-2.5" : "p-0.5",
+            selected
+              ? "ring-2 ring-brand-blue"
+              : "ring-1 ring-border hover:ring-ink-500",
+          );
+          const ariaLabel = `${option.label} — SKU ${option.sku}`;
+          return onSelectSku ? (
+            <button
+              key={option.sku}
+              type="button"
+              aria-label={ariaLabel}
+              aria-pressed={selected}
+              title={option.label}
+              onClick={() => onSelectSku(option.sku)}
+              className={classes}
+            >
+              {content}
+            </button>
+          ) : (
+            <Link
+              key={option.sku}
+              href={`/p/${option.slug}`}
+              prefetch={false}
+              aria-label={ariaLabel}
+              aria-current={selected ? "page" : undefined}
+              title={option.label}
+              className={classes}
+            >
+              {content}
+            </Link>
+          );
+        })}
+        {familyOptions.length > visibleOptions.length ? (
+          <span className="text-xs font-semibold text-ink-500">
+            +{familyOptions.length - visibleOptions.length}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
   const colors = getProductColorOptions(product);
 
   if (!colors.length) {

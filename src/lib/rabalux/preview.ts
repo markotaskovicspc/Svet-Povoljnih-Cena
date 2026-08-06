@@ -30,6 +30,7 @@ export type RabaluxPreviewSummary = {
     stockUpdates: number;
     missingMappings: number;
     identityConflicts: number;
+    familyConflicts: number;
     mediaPending: number;
     unchanged: number;
   };
@@ -50,6 +51,7 @@ const EMPTY_DIFF: RabaluxPreviewSummary["diff"] = {
   stockUpdates: 0,
   missingMappings: 0,
   identityConflicts: 0,
+  familyConflicts: 0,
   mediaPending: 0,
   unchanged: 0,
 };
@@ -115,6 +117,9 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
       attachments: {
         orderBy: { order: "asc" },
         select: { sourceUrl: true, kind: true, order: true },
+      },
+      familyMembership: {
+        select: { family: { select: { primaryProductId: true } } },
       },
     },
   });
@@ -191,14 +196,50 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
       const fields = changedFields(before, after).filter(
         (field) => !fieldIsLocked(field, locked),
       );
+      const isSecondaryFamilyMember = Boolean(
+        existing.familyMembership &&
+          existing.familyMembership.family.primaryProductId !== existing.id,
+      );
       const riskyPrice =
+        !isSecondaryFamilyMember &&
         fields.includes("fullPrice") &&
         isRiskyPriceChange(Number(existing.fullPrice), item.fullPrice);
-      const updateFields = riskyPrice
+      const candidateUpdateFields = riskyPrice
         ? fields.filter(
             (field) => !["fullPrice", "salePrice", "discountPct"].includes(field),
           )
         : fields;
+      const sharedFamilyFields = new Set([
+        "name", "description", "shortDescription", "groupId", "categories",
+        "materials", "widthCm", "depthCm", "heightCm", "weightKg",
+        "grossWeightKg", "unitPackWidthCm", "unitPackDepthCm",
+        "unitPackHeightCm", "fullPrice", "salePrice", "discountPct",
+        "technicalSpecs", "warrantyYears", "countryOfOrigin", "hsCode",
+        "attachments",
+      ]);
+      const familyConflictFields = isSecondaryFamilyMember
+        ? candidateUpdateFields.filter((field) => sharedFamilyFields.has(field))
+        : [];
+      const updateFields = candidateUpdateFields.filter(
+        (field) => !familyConflictFields.includes(field),
+      );
+      if (familyConflictFields.length) {
+        diff.familyConflicts++;
+        changes.push(
+          change({
+            supplierId: supplier.id,
+            runId,
+            productId: existing.id,
+            externalSku: item.sourceSku,
+            changeType: "FAMILY_SHARED_CONFLICT",
+            status: "CONFLICT",
+            fields: familyConflictFields,
+            before,
+            after,
+            reversible: false,
+          }),
+        );
+      }
       if (updateFields.length) {
         diff.updates++;
         changes.push(
@@ -213,7 +254,7 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
             after,
           }),
         );
-      } else if (!riskyPrice) {
+      } else if (!riskyPrice && !familyConflictFields.length) {
         diff.unchanged++;
       }
       if (riskyPrice) {

@@ -124,6 +124,8 @@ export default async function ProductPage({ params }: RouteProps) {
           unitPrice: publicPrice.effective,
           fullUnitPrice: publicPrice.full,
           categories: product.categoryPath,
+          variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
+          familyCode: product.variantFamily?.code,
         }}
       />
       {/* Row I — Breadcrumbs */}
@@ -164,6 +166,7 @@ export default async function ProductPage({ params }: RouteProps) {
               className="mt-1.5 md:mt-2.5"
               label="Boja proizvoda"
               showLabels
+              max={12}
             />
             {product.attributes?.length ? (
               <div

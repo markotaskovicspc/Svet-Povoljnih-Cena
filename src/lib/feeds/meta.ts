@@ -26,6 +26,7 @@ const HEADERS = [
   "product_type",
   "mpn",
   "item_group_id",
+  "color",
 ] as const;
 
 export function buildMetaCsv(products: FeedProduct[]): string {
@@ -33,7 +34,8 @@ export function buildMetaCsv(products: FeedProduct[]): string {
   for (const p of products) {
     rows.push(
       [
-        csv(p.id),
+        csv(p.itemGroupId ?? ""),
+        csv(p.color ?? ""),
         csv(p.title),
         csv(p.description),
         csv(p.availability),

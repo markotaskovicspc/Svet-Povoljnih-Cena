@@ -13,6 +13,7 @@ import {
 } from "@/lib/supabase/storage";
 import { validateProductDocument } from "@/lib/product-documents.server";
 import { productAttachmentAdminLabel } from "@/lib/product-documents";
+import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 
 const uploadSchema = z.object({
   section: z.nativeEnum(ProductAttachmentSection).refine(
@@ -99,6 +100,7 @@ export async function POST(
             syncStatus: "READY",
           },
         });
+        await propagateProductFamilySharedData(tx, productId, ["master"]);
         return { attachment, replaced: existing };
       }
       const maxOrder = await tx.productAttachment.aggregate({
@@ -122,6 +124,7 @@ export async function POST(
           order: (maxOrder._max.order ?? -1) + 1,
         },
       });
+      await propagateProductFamilySharedData(tx, productId, ["master"]);
       return { attachment, replaced: [] };
     });
     const replacedStorageKeys = saved.replaced
