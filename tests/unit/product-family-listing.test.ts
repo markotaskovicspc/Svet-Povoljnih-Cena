@@ -57,6 +57,28 @@ const product = {
   },
 } as Product;
 
+const greenTable = {
+  ...product,
+  sku: "TABLE-GREEN",
+  slug: "table-green",
+  name: "Sto",
+  group: "trpezarijski-stolovi",
+  categoryPath: ["Nameštaj", "Trpezarijski stolovi"],
+  colorPrimary: "Zelena",
+  attributes: ["SKLOPIVO", "ZA 4 OSOBE"],
+  variantFamily: undefined,
+} as Product;
+
+const oakChair = {
+  ...product,
+  sku: "CHAIR-OAK",
+  slug: "chair-oak",
+  colorPrimary: "Natur",
+  attributes: ["SKLOPIVO"],
+  materials: [{ id: "oak", label: "Hrast" }],
+  variantFamily: undefined,
+} as Product;
+
 describe("family-aware filter boje", () => {
   it("objavljuje sve family boje kao facete", () => {
     expect(computeFacetValues([product]).colors).toEqual(["Crna", "Zelena"]);
@@ -69,5 +91,40 @@ describe("family-aware filter boje", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0]?.variantFamily?.selectedSku).toBe("CHAIR-GREEN");
+  });
+});
+
+describe("dinamički filteri listinga", () => {
+  it("izvodi grupe, boje i atribute samo iz prosleđenih artikala", () => {
+    const facets = computeFacetValues([greenTable, oakChair]);
+
+    expect(facets.groups).toEqual(["stolice", "trpezarijski-stolovi"]);
+    expect(facets.groupLabels).toMatchObject({
+      stolice: "Stolice",
+      "trpezarijski-stolovi": "Trpezarijski stolovi",
+    });
+    expect(facets.colors).toEqual(["Natur", "Zelena"]);
+    expect(facets.attributes).toEqual(["SKLOPIVO", "ZA 4 OSOBE"]);
+    expect(facets.counts.attributes).toEqual({ SKLOPIVO: 2, "ZA 4 OSOBE": 1 });
+  });
+
+  it("dozvoljava više grupa i atributa, sa OR logikom unutar jedne facete", () => {
+    const result = applyFilters([product, greenTable, oakChair], {
+      ...emptyFilterState(),
+      groups: ["stolice", "trpezarijski-stolovi"],
+      attributes: ["ZA 4 OSOBE", "SKLOPIVO"],
+    });
+
+    expect(result.map((item) => item.sku)).toEqual(["TABLE-GREEN", "CHAIR-OAK"]);
+  });
+
+  it("kombinuje različite facete AND logikom", () => {
+    const result = applyFilters([greenTable, oakChair], {
+      ...emptyFilterState(),
+      attributes: ["SKLOPIVO"],
+      colors: ["zelena"],
+    });
+
+    expect(result.map((item) => item.sku)).toEqual(["TABLE-GREEN"]);
   });
 });

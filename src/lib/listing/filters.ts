@@ -23,10 +23,14 @@ export interface DimensionRange {
 
 export interface FilterState {
   price?: [number, number];
+  /** Selected product groups from the currently loaded listing. */
+  groups: string[];
   /** Selected materials (label keys). */
   materials: string[];
   /** Selected color tokens. */
   colors: string[];
+  /** Selected free-form article attributes. */
+  attributes: string[];
   dimensions?: DimensionRange;
   availability: Availability[];
   /** Per-group dynamic filters: facet key → set of values. */
@@ -34,8 +38,10 @@ export interface FilterState {
 }
 
 export const emptyFilterState = (): FilterState => ({
+  groups: [],
   materials: [],
   colors: [],
+  attributes: [],
   availability: [],
   dynamic: {},
 });
@@ -92,8 +98,19 @@ export function computeExtents(products: Product[]): FacetExtents {
 
 /** Distinct facet values discovered in the source list. */
 export interface FacetValues {
+  groups: string[];
+  groupLabels: Record<string, string>;
   materials: string[];
   colors: string[];
+  colorSwatches: Record<string, string>;
+  attributes: string[];
+  counts: {
+    groups: Record<string, number>;
+    materials: Record<string, number>;
+    colors: Record<string, number>;
+    attributes: Record<string, number>;
+    availability: Record<Availability, number>;
+  };
   /** Per-dynamic-key list of values present (alphabetical). */
   dynamic: Record<string, string[]>;
 }
@@ -149,23 +166,70 @@ export function dynamicFacetsForGroups(groups: string[]) {
 }
 
 export function computeFacetValues(products: Product[]): FacetValues {
+  const groups = new Set<string>();
+  const groupLabels: Record<string, string> = {};
   const materials = new Set<string>();
   const colors = new Set<string>();
+  const colorSwatches: Record<string, string> = {};
+  const attributes = new Set<string>();
   const dynamic: Record<string, Set<string>> = {};
+  const counts = {
+    groups: {} as Record<string, number>,
+    materials: {} as Record<string, number>,
+    colors: {} as Record<string, number>,
+    attributes: {} as Record<string, number>,
+    availability: {
+      "in-stock": 0,
+      incoming: 0,
+      "out-of-stock": 0,
+    } satisfies Record<Availability, number>,
+  };
 
-  const groups = Array.from(new Set(products.map((p) => p.group)));
-  const dynFacets = dynamicFacetsForGroups(groups);
+  const productGroups = Array.from(new Set(products.map((p) => p.group)));
+  const dynFacets = dynamicFacetsForGroups(productGroups);
 
   for (const p of products) {
-    for (const m of p.materials) materials.add(m.label);
-    [p.colorPrimary, p.colorSecondary]
-      .filter((c): c is string => Boolean(c?.trim()))
-      .forEach((c) => colors.add(c));
-    for (const option of p.variantFamily?.options ?? []) {
-      [option.label, option.colorPrimary, option.colorSecondary]
-        .filter((c): c is string => Boolean(c?.trim()))
-        .forEach((c) => colors.add(c));
+    if (p.group?.trim()) {
+      groups.add(p.group);
+      groupLabels[p.group] ??= groupLabelFor(p);
+      counts.groups[p.group] = (counts.groups[p.group] ?? 0) + 1;
     }
+
+    const productMaterials = uniqueValues(p.materials.map((material) => material.label));
+    for (const material of productMaterials) {
+      materials.add(material);
+      counts.materials[material] = (counts.materials[material] ?? 0) + 1;
+    }
+
+    const productAttributes = uniqueValues(p.attributes ?? []);
+    for (const attribute of productAttributes) {
+      attributes.add(attribute);
+      counts.attributes[attribute] = (counts.attributes[attribute] ?? 0) + 1;
+    }
+
+    const productColors = uniqueValues([p.colorPrimary, p.colorSecondary]);
+    for (const option of p.variantFamily?.options ?? []) {
+      const optionColors = uniqueValues([
+        option.label,
+        option.colorPrimary,
+        option.colorSecondary,
+      ]);
+      productColors.push(
+        ...optionColors.filter(
+          (color) => !productColors.some((existing) => facetValueEquals(existing, color)),
+        ),
+      );
+      if (option.colorHex) {
+        for (const color of optionColors) colorSwatches[color] ??= option.colorHex;
+      }
+    }
+    for (const color of productColors) {
+      colors.add(color);
+      counts.colors[color] = (counts.colors[color] ?? 0) + 1;
+    }
+
+    counts.availability[availabilityOf(p)] += 1;
+
     for (const f of dynFacets) {
       const v = f.getValue(p);
       if (!v) continue;
@@ -173,10 +237,18 @@ export function computeFacetValues(products: Product[]): FacetValues {
     }
   }
 
-  const sorted = (s: Set<string>) => Array.from(s).sort((a, b) => a.localeCompare(b, "sr"));
+  const sorted = (s: Set<string>) =>
+    Array.from(s).sort((a, b) => a.localeCompare(b, "sr-Latn-RS"));
   return {
+    groups: Array.from(groups).sort((a, b) =>
+      groupLabels[a].localeCompare(groupLabels[b], "sr-Latn-RS"),
+    ),
+    groupLabels,
     materials: sorted(materials),
     colors: sorted(colors),
+    colorSwatches,
+    attributes: sorted(attributes),
+    counts,
     dynamic: Object.fromEntries(
       Object.entries(dynamic).map(([k, v]) => [k, sorted(v)]),
     ),
@@ -205,23 +277,33 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
       if (d && (p.dimensionsCm.d < d[0] || p.dimensionsCm.d > d[1])) return false;
       if (h && (p.dimensionsCm.h < h[0] || p.dimensionsCm.h > h[1])) return false;
     }
+    if (state.groups.length && !state.groups.includes(p.group)) return false;
     if (state.materials.length) {
-      const labels = new Set(p.materials.map((m) => m.label));
-      if (!state.materials.some((m) => labels.has(m))) return false;
+      const labels = p.materials.map((m) => m.label);
+      if (!state.materials.some((m) => labels.some((label) => facetValueEquals(m, label)))) {
+        return false;
+      }
     }
     if (state.colors.length) {
-      const labels = new Set(
-        [
-          p.colorPrimary,
-          p.colorSecondary,
-          ...(p.variantFamily?.options.flatMap((option) => [
-            option.label,
-            option.colorPrimary,
-            option.colorSecondary,
-          ]) ?? []),
-        ].filter((c): c is string => Boolean(c?.trim())),
-      );
-      if (!state.colors.some((c) => labels.has(c))) return false;
+      const labels = uniqueValues([
+        p.colorPrimary,
+        p.colorSecondary,
+        ...(p.variantFamily?.options.flatMap((option) => [
+          option.label,
+          option.colorPrimary,
+          option.colorSecondary,
+        ]) ?? []),
+      ]);
+      if (!state.colors.some((c) => labels.some((label) => facetValueEquals(c, label)))) {
+        return false;
+      }
+    }
+    if (state.attributes.length) {
+      const labels = p.attributes ?? [];
+      if (!state.attributes.some((attribute) =>
+        labels.some((label) => facetValueEquals(attribute, label)))) {
+        return false;
+      }
     }
     if (state.availability.length) {
       if (!state.availability.includes(availabilityOf(p))) return false;
@@ -239,7 +321,9 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
     const selected = product.variantFamily.options.find((option) => {
       const labels = [option.label, option.colorPrimary, option.colorSecondary]
         .filter((value): value is string => Boolean(value?.trim()));
-      return state.colors.some((color) => labels.includes(color));
+      return state.colors.some((color) =>
+        labels.some((label) => facetValueEquals(color, label)),
+      );
     });
     return selected
       ? {
@@ -333,6 +417,7 @@ export interface ActiveChip {
 export function activeChips(
   state: FilterState,
   extents: FacetExtents,
+  products: Product[] = [],
 ): ActiveChip[] {
   const chips: ActiveChip[] = [];
   if (
@@ -347,6 +432,14 @@ export function activeChips(
       remove: (s) => ({ ...s, price: undefined }),
     });
   }
+  for (const group of state.groups) {
+    const matchingProduct = products.find((product) => product.group === group);
+    chips.push({
+      id: `group:${group}`,
+      label: `Grupa: ${matchingProduct ? groupLabelFor(matchingProduct) : humanizeSlug(group)}`,
+      remove: (s) => ({ ...s, groups: s.groups.filter((x) => x !== group) }),
+    });
+  }
   for (const m of state.materials) {
     chips.push({
       id: `material:${m}`,
@@ -359,6 +452,16 @@ export function activeChips(
       id: `color:${c}`,
       label: `Boja: ${c}`,
       remove: (s) => ({ ...s, colors: s.colors.filter((x) => x !== c) }),
+    });
+  }
+  for (const attribute of state.attributes) {
+    chips.push({
+      id: `attribute:${attribute}`,
+      label: `Atribut: ${attribute}`,
+      remove: (s) => ({
+        ...s,
+        attributes: s.attributes.filter((x) => x !== attribute),
+      }),
     });
   }
   const dimAxes: { key: keyof DimensionRange; label: string; ext: [number, number] }[] = [
@@ -409,3 +512,45 @@ export function activeChips(
 
 export const availabilityLabel = (a: Availability) =>
   a === "in-stock" ? "Na stanju" : a === "incoming" ? "Na putu" : "Trenutno nedostupno";
+
+function uniqueValues(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+    const key = normalizeFacetValue(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function normalizeFacetValue(value: string) {
+  return value.trim().toLocaleLowerCase("sr-Latn-RS");
+}
+
+function facetValueEquals(left: string, right: string) {
+  return normalizeFacetValue(left) === normalizeFacetValue(right);
+}
+
+function groupLabelFor(product: Product) {
+  const normalizedGroup = normalizeFacetValue(product.group).replace(/[^a-z0-9]+/g, "-");
+  const categoryLabel = [...product.categoryPath]
+    .reverse()
+    .find(
+      (label) =>
+        normalizeFacetValue(label)
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") === normalizedGroup,
+    );
+  return categoryLabel ?? humanizeSlug(product.group);
+}
+
+function humanizeSlug(value: string) {
+  const label = value.replace(/[-_]+/g, " ").trim();
+  return label ? label.charAt(0).toLocaleUpperCase("sr-Latn-RS") + label.slice(1) : value;
+}

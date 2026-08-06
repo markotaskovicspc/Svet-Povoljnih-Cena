@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Filter sidebar — fixed facets (cena/boja/materijal/dimenzije/dostupnost)
- * + per-group dynamic facets discovered from the source list.
+ * Filter sidebar — price/dimensions plus checkbox facets discovered from the
+ * products that are currently loaded in the listing.
  *
  * Used inline on desktop and inside a Sheet on mobile (rendered by ListingShell).
  */
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -61,7 +61,10 @@ export function FilterSidebar({
 
   const reset = () => onChange(emptyFilterState());
 
-  const toggleArrayValue = (key: "materials" | "colors", value: string) => {
+  const toggleArrayValue = (
+    key: "groups" | "materials" | "colors" | "attributes",
+    value: string,
+  ) => {
     const arr = state[key];
     onChange({
       ...state,
@@ -137,38 +140,42 @@ export function FilterSidebar({
           </AccordionContent>
         </AccordionItem>
 
+        {facets.groups.length ? (
+          <AccordionItem value="grupe">
+            <AccordionTrigger className="text-sm font-medium text-ink-900">
+              <FacetTitle label="Grupa proizvoda" selected={state.groups.length} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <FacetChecklist
+                values={facets.groups}
+                selected={state.groups}
+                counts={facets.counts.groups}
+                labelFor={(group) => facets.groupLabels[group] ?? group}
+                onToggle={(group) => toggleArrayValue("groups", group)}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        ) : null}
+
         {facets.colors.length ? (
           <AccordionItem value="boja">
             <AccordionTrigger className="text-sm font-medium text-ink-900">
-              Boja
+              <FacetTitle label="Boja" selected={state.colors.length} />
             </AccordionTrigger>
             <AccordionContent>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {facets.colors.map((c) => {
-                  const active = state.colors.includes(c);
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => toggleArrayValue("colors", c)}
-                      aria-pressed={active}
-                      className={cn(
-                        "ring-border/60 hover:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ring-1 transition",
-                        active
-                          ? "bg-ink-900 text-canvas ring-ink-900"
-                          : "bg-surface text-ink-700",
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className="border-border/80 size-3 rounded-full border"
-                        style={{ backgroundColor: swatchFor(c) }}
-                      />
-                      {c}
-                    </button>
-                  );
-                })}
-              </div>
+              <FacetChecklist
+                values={facets.colors}
+                selected={state.colors}
+                counts={facets.counts.colors}
+                onToggle={(color) => toggleArrayValue("colors", color)}
+                leading={(color) => (
+                  <span
+                    aria-hidden
+                    className="border-border/80 size-4 shrink-0 rounded-full border shadow-[inset_0_0_0_1px_rgb(255_255_255/0.35)]"
+                    style={{ background: facets.colorSwatches[color] ?? swatchFor(color) }}
+                  />
+                )}
+              />
             </AccordionContent>
           </AccordionItem>
         ) : null}
@@ -176,22 +183,31 @@ export function FilterSidebar({
         {facets.materials.length ? (
           <AccordionItem value="materijal">
             <AccordionTrigger className="text-sm font-medium text-ink-900">
-              Materijal
+              <FacetTitle label="Materijal" selected={state.materials.length} />
             </AccordionTrigger>
             <AccordionContent>
-              <ul className="flex flex-col gap-2 pt-1">
-                {facets.materials.map((m) => (
-                  <li key={m}>
-                    <Label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
-                      <Checkbox
-                        checked={state.materials.includes(m)}
-                        onCheckedChange={() => toggleArrayValue("materials", m)}
-                      />
-                      {m}
-                    </Label>
-                  </li>
-                ))}
-              </ul>
+              <FacetChecklist
+                values={facets.materials}
+                selected={state.materials}
+                counts={facets.counts.materials}
+                onToggle={(material) => toggleArrayValue("materials", material)}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        ) : null}
+
+        {facets.attributes.length ? (
+          <AccordionItem value="atributi">
+            <AccordionTrigger className="text-sm font-medium text-ink-900">
+              <FacetTitle label="Atributi" selected={state.attributes.length} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <FacetChecklist
+                values={facets.attributes}
+                selected={state.attributes}
+                counts={facets.counts.attributes}
+                onToggle={(attribute) => toggleArrayValue("attributes", attribute)}
+              />
             </AccordionContent>
           </AccordionItem>
         ) : null}
@@ -249,10 +265,14 @@ export function FilterSidebar({
                 <li key={a}>
                   <Label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
                     <Checkbox
+                      aria-label={`${availabilityLabel(a)} (${facets.counts.availability[a]})`}
                       checked={state.availability.includes(a)}
                       onCheckedChange={() => toggleAvailability(a)}
                     />
-                    {availabilityLabel(a)}
+                    <span className="min-w-0 flex-1">{availabilityLabel(a)}</span>
+                    <span className="text-xs tabular-nums text-ink-300">
+                      {facets.counts.availability[a]}
+                    </span>
                   </Label>
                 </li>
               ))}
@@ -291,6 +311,60 @@ export function FilterSidebar({
   );
 }
 
+function FacetTitle({ label, selected }: { label: string; selected: number }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span>{label}</span>
+      {selected ? (
+        <span className="bg-ink-900 text-canvas inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none">
+          {selected}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function FacetChecklist({
+  values,
+  selected,
+  counts,
+  onToggle,
+  labelFor = (value) => value,
+  leading,
+}: {
+  values: string[];
+  selected: string[];
+  counts: Record<string, number>;
+  onToggle: (value: string) => void;
+  labelFor?: (value: string) => string;
+  leading?: (value: string) => ReactNode;
+}) {
+  return (
+    <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto pt-1 pr-1">
+      {values.map((value) => {
+        const label = labelFor(value);
+        const count = counts[value] ?? 0;
+        return (
+          <li key={value}>
+            <Label className="hover:bg-muted-bg/60 flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 text-sm text-ink-700 transition">
+              <Checkbox
+                aria-label={`${label} (${count})`}
+                checked={selected.includes(value)}
+                onCheckedChange={() => onToggle(value)}
+              />
+              {leading?.(value)}
+              <span className="min-w-0 flex-1 leading-snug">{label}</span>
+              <span className="text-xs tabular-nums text-ink-300">
+                {count}
+              </span>
+            </Label>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function DimensionRow({
   axis,
   ext,
@@ -324,13 +398,31 @@ function DimensionRow({
   );
 }
 
-/** Quick deterministic swatch hint for color chips. Phase 4 will source actual hex from the feed. */
+/** Fallback swatches for products that do not yet have a curated colour hex. */
 function swatchFor(label: string): string {
   const map: Record<string, string> = {
+    crna: "#171717",
+    bela: "#FFFFFF",
+    siva: "#8A8A8A",
+    srebrna: "#C0C0C0",
+    silver: "#C0C0C0",
+    crvena: "#C83A36",
+    plava: "#356AA0",
+    zelena: "#5F7F52",
+    mint: "#A9D6C2",
+    žuta: "#E6C743",
+    narandžasta: "#D97932",
+    roze: "#D98FA7",
+    ljubičasta: "#76548F",
+    bež: "#D8C7AA",
+    braon: "#72513D",
+    zlatna: "#C5A24A",
     hrast: "#C49A6C",
     orah: "#5A3A1F",
     jasen: "#E0CDA9",
     bor: "#D6B98E",
+    providna: "linear-gradient(135deg, #ffffff 0 44%, #cbd5e1 45% 55%, #ffffff 56% 100%)",
+    staklena: "linear-gradient(135deg, #eef7fa, #c9e5ec)",
   };
   const lower = label.toLowerCase();
   for (const k of Object.keys(map)) {

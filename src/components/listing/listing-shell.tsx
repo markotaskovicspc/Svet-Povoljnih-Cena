@@ -213,7 +213,10 @@ function ListingShellInner({
     visibleWindow.key === visibleKey
       ? visibleWindow.count
       : LISTING_PAGE_SIZE;
-  const chips = useMemo(() => activeChips(state, extents), [state, extents]);
+  const chips = useMemo(
+    () => activeChips(state, extents, subFiltered),
+    [state, extents, subFiltered],
+  );
   const shown = filtered.slice(0, visible);
   const hasLocalMore = filtered.length > shown.length;
   const hasServerMore = Boolean(nextCursor);

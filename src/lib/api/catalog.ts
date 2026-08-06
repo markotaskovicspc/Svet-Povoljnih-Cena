@@ -102,6 +102,10 @@ const productCardCoreSelect = {
   availableWebManual: true,
   availableWebAuto: true,
   shortDescription: true,
+  attribute1: true,
+  attribute2: true,
+  attribute3: true,
+  attribute4: true,
   colorPrimary: true,
   colorSecondary: true,
   widthCm: true,
@@ -524,6 +528,12 @@ function mapProductListItem(
     packageDimensionsCm: packageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
+    attributes: formatProductAttributes([
+      p.attribute1,
+      p.attribute2,
+      p.attribute3,
+      p.attribute4,
+    ]),
     materials: p.materials.map((m) => ({
       id: m.material.id,
       label: m.material.label,
