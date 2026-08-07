@@ -28,7 +28,8 @@ import {
 } from "./ownership";
 import { omitSupplierProductNewnessUpdates } from "@/lib/product-newness";
 import {
-  RABALUX_SUPPLIER_SAFETY_STOCK,
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
+  isRabaluxStockFresh,
   resolveRabaluxAvailability,
 } from "./availability";
 import {
@@ -50,9 +51,11 @@ import {
 } from "@/lib/pricing/retail-price-write.server";
 import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
 import { propagateProductFamilySharedData } from "@/lib/product-family.server";
+import { RABALUX_PICTOGRAMS } from "./pictograms";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
+const RABALUX_CATALOG_MODEL_VERSION = 2;
 
 type SyncSummary = {
   runId: string;
@@ -318,6 +321,15 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
     summary.metadata.missingPending = disappearance.pending;
     summary.metadata.deactivatedAfterGrace = disappearance.deactivated;
     summary.metadata.invalid = catalog.items.filter((item) => !item.valid).length;
+    Object.assign(
+      summary.metadata,
+      await rabaluxVisibilityCounters(supplier.id),
+      {
+        pictogramAssignments: await db.productPictogram.count({
+          where: { product: { supplierId: supplier.id, deletedAt: null } },
+        }),
+      },
+    );
     return await closeRun(run.id, summary);
   } catch (error) {
     summary.failed = Math.max(summary.failed, 1);
@@ -406,6 +418,7 @@ export async function syncRabaluxCatalogProduct(
     summary.ok = 1;
     summary[result.created ? "created" : "updated"] = 1;
     summary.mediaQueued = result.mediaQueued ? 1 : 0;
+    summary.metadata.pictogramAssignments = result.pictogramsAssigned;
     return await closeRun(run.id, summary);
   } catch (error) {
     summary.failed = 1;
@@ -483,6 +496,8 @@ async function upsertCatalogItem(
         countryOfOrigin: true,
         hsCode: true,
         isNew: true,
+        newUntil: true,
+        newUntilAutomatic: true,
         isActive: true,
         supplierApprovalStatus: true,
         categories: { select: { categoryId: true } },
@@ -495,7 +510,17 @@ async function upsertCatalogItem(
         attachments: {
           where: { origin: "SUPPLIER" },
           orderBy: { order: "asc" },
-          select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
+          select: {
+            sourceUrl: true,
+            kind: true,
+            section: true,
+            order: true,
+            syncStatus: true,
+          },
+        },
+        pictograms: {
+          orderBy: { pictogram: { code: "asc" } },
+          select: { pictogram: { select: { code: true } } },
         },
         familyMembership: {
           select: { family: { select: { primaryProductId: true } } },
@@ -535,12 +560,16 @@ async function upsertCatalogItem(
           created: false,
           mediaQueued: false,
           mediaTarget: null,
+          pictogramsAssigned: 0,
           conflict: message,
         };
       }
     }
     const overrideFields = parseOverrideFields(existing?.syncOverrides);
-    const itemSourceHash = stableSourceHash(item);
+    const itemSourceHash = stableSourceHash({
+      modelVersion: RABALUX_CATALOG_MODEL_VERSION,
+      item,
+    });
     if (
       existing &&
       existing.lastSupplierSourceHash === itemSourceHash &&
@@ -555,6 +584,7 @@ async function upsertCatalogItem(
         created: false,
         mediaQueued: false,
         mediaTarget: null,
+        pictogramsAssigned: existing.pictograms.length,
         conflict: null,
       };
     }
@@ -566,8 +596,10 @@ async function upsertCatalogItem(
     const incomingAttachments = item.attachments.map((asset) => ({
       sourceUrl: asset.sourceUrl,
       kind: asset.kind,
+      section: asset.section,
       order: asset.order,
     }));
+    const incomingPictograms = [...item.pictogramCodes].sort();
     const mediaChanged =
       !existing ||
       (!overrideFields.has("media") &&
@@ -576,6 +608,11 @@ async function upsertCatalogItem(
       !existing ||
       (!overrideFields.has("attachments") &&
         signature(existing.attachments) !== signature(incomingAttachments));
+    const pictogramsChanged =
+      !existing ||
+      (!overrideFields.has("pictograms") &&
+        signature(existing.pictograms.map((item) => item.pictogram.code).sort()) !==
+          signature(incomingPictograms));
     const hasReadyImage =
       !mediaChanged &&
       existing?.media.some(
@@ -631,6 +668,9 @@ async function upsertCatalogItem(
       countryOfOrigin: item.countryOfOrigin,
       hsCode: item.hsCode,
       isNew: false,
+      newUntil: null,
+      newUntilAutomatic: false,
+      isDtz: false,
       stock: 0,
       incomingStock: 0,
       supplierStock: 0,
@@ -675,6 +715,11 @@ async function upsertCatalogItem(
           existing,
         ),
       ) as Prisma.ProductUncheckedUpdateInput;
+      // Rabalux is never eligible for the automatic "Novo" or DTZ systems.
+      updateData.isNew = false;
+      updateData.newUntil = null;
+      updateData.newUntilAutomatic = false;
+      updateData.isDtz = false;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
       delete (updateData as Record<string, unknown>).incomingStock;
@@ -808,6 +853,31 @@ async function upsertCatalogItem(
       }
     }
 
+    if (
+      !isSecondaryFamilyMember &&
+      pictogramsChanged &&
+      !overrideFields.has("pictograms")
+    ) {
+      const pictogramIds: string[] = [];
+      for (const code of incomingPictograms) {
+        const definition = RABALUX_PICTOGRAMS.find((entry) => entry.code === code);
+        if (!definition) continue;
+        const pictogram = await tx.pictogram.upsert({
+          where: { code: definition.code },
+          create: definition,
+          update: { label: definition.label, iconUrl: definition.iconUrl },
+          select: { id: true },
+        });
+        pictogramIds.push(pictogram.id);
+      }
+      await tx.productPictogram.deleteMany({ where: { productId } });
+      if (pictogramIds.length) {
+        await tx.productPictogram.createMany({
+          data: pictogramIds.map((pictogramId) => ({ productId, pictogramId })),
+        });
+      }
+    }
+
     if (mediaChanged && !overrideFields.has("media")) {
       await tx.productMedia.deleteMany({ where: { productId } });
       if (item.media.length) {
@@ -834,7 +904,7 @@ async function upsertCatalogItem(
         await tx.productAttachment.createMany({
           data: item.attachments.map((asset) => ({
             productId,
-            section: "GENERAL",
+            section: asset.section,
             origin: "SUPPLIER",
             kind: asset.kind,
             label: asset.label,
@@ -894,6 +964,8 @@ async function upsertCatalogItem(
         countryOfOrigin: true,
         hsCode: true,
         isNew: true,
+        newUntil: true,
+        newUntilAutomatic: true,
         isActive: true,
         articleStatus: true,
         supplierApprovalStatus: true,
@@ -905,7 +977,17 @@ async function upsertCatalogItem(
         attachments: {
           where: { origin: "SUPPLIER" },
           orderBy: { order: "asc" },
-          select: { sourceUrl: true, kind: true, order: true, syncStatus: true },
+          select: {
+            sourceUrl: true,
+            kind: true,
+            section: true,
+            order: true,
+            syncStatus: true,
+          },
+        },
+        pictograms: {
+          orderBy: { pictogram: { code: "asc" } },
+          select: { pictogram: { select: { code: true } } },
         },
       },
     });
@@ -934,6 +1016,7 @@ async function upsertCatalogItem(
       productId,
       created: !existing,
       mediaQueued: mediaChanged || attachmentsChanged,
+      pictogramsAssigned: after.pictograms.length,
       mediaTarget: nextMedia
         ? { assetId: nextMedia.id, assetType: "MEDIA" as const }
         : nextAttachment
@@ -1100,6 +1183,15 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
     summary.metadata.zeroedAfterGrace = missingResult.zeroed;
     summary.metadata.restricted = stock.filter((item) => item.restricted).length;
     summary.metadata.outgoing = stock.filter((item) => item.outgoing).length;
+    Object.assign(
+      summary.metadata,
+      await rabaluxVisibilityCounters(supplier.id),
+      {
+        pictogramAssignments: await db.productPictogram.count({
+          where: { product: { supplierId: supplier.id, deletedAt: null } },
+        }),
+      },
+    );
     return await closeRun(run.id, summary);
   } catch (error) {
     summary.failed = Math.max(summary.failed, 1);
@@ -1146,7 +1238,12 @@ async function updateStockItem(
   options: RabaluxSyncOptions,
 ) {
   const now = new Date();
-  const nextStatus = item.restricted ? "ARH" : item.outgoing ? "DTZ" : "SP";
+  const nextStatus = item.restricted
+    ? "ARH"
+    : !isRabaluxFieldLocked(parseOverrideFields(product.syncOverrides), "flags") ||
+        product.articleStatus === "DTZ"
+      ? "SP"
+      : product.articleStatus;
   return db.$transaction(async (tx) => {
     const overrideFields = parseOverrideFields(product.syncOverrides);
     const stockLocked = isRabaluxFieldLocked(overrideFields, "stock");
@@ -1181,20 +1278,18 @@ async function updateStockItem(
               supplierNextArrivalAt: item.nextArrivalAt,
               lastSupplierStockSyncAt: now,
               availableWebAuto:
-                product.dcAvailableQty > 0 ||
-                (product.supplierApprovalStatus === "APPROVED" &&
-                  item.stock -
-                    product.supplierReservedStock -
-                    RABALUX_SUPPLIER_SAFETY_STOCK >
-                    0),
+                !item.restricted &&
+                (product.dcAvailableQty > 0 ||
+                  (product.supplierApprovalStatus === "APPROVED" &&
+                    item.stock > RABALUX_PUBLIC_STOCK_THRESHOLD)),
             }
           : {}),
-        ...(!flagsLocked
-          ? {
-              isDtz: item.outgoing,
-              articleStatus: nextStatus,
-              ...(item.restricted ? { isActive: false } : {}),
-            }
+        // Supplier status can never turn Rabalux into a DTZ product. Restricted
+        // is a hard safety state and therefore overrides manual flag locking.
+        isDtz: false,
+        articleStatus: nextStatus,
+        ...(item.restricted
+          ? { isActive: false, availableWebAuto: false }
           : {}),
         supplierStockMissingCount: 0,
         supplierStockMissingSince: null,
@@ -1476,6 +1571,34 @@ function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+async function rabaluxVisibilityCounters(supplierId: string) {
+  const products = await db.product.findMany({
+    where: { supplierId, deletedAt: null },
+    select: {
+      articleStatus: true,
+      dcAvailableQty: true,
+      supplierStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
+    },
+  });
+  return products.reduce(
+    (counts, product) => {
+      if (product.articleStatus === "ARH") counts.hiddenByPolicy++;
+      else if (product.dcAvailableQty > 0) counts.visibleDueToDc++;
+      else if (
+        product.supplierApprovalStatus === "APPROVED" &&
+        (product.supplierStock ?? 0) > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+        isRabaluxStockFresh(product.lastSupplierStockSyncAt)
+      ) {
+        counts.visibleDueToSupplier++;
+      } else counts.hiddenByPolicy++;
+      return counts;
+    },
+    { visibleDueToSupplier: 0, visibleDueToDc: 0, hiddenByPolicy: 0 },
+  );
+}
+
 function jsonSnapshotOmitting(
   value: Record<string, unknown>,
   omitted: string[],
@@ -1505,17 +1628,19 @@ function decimal(value: number | null) {
   return value == null ? null : new Prisma.Decimal(value);
 }
 
-function signature(
-  values: Array<{
-    sourceUrl: string | null;
-    kind: string;
-    order: number;
-  }>,
-) {
-  return JSON.stringify(
-    values
-      .map(({ sourceUrl, kind, order }) => ({ sourceUrl, kind, order }))
-      .sort((left, right) => left.order - right.order),
+function signature(values: readonly unknown[]) {
+  return stableSourceHash(
+    values.map((value) => {
+      if (!value || typeof value !== "object") return value;
+      const asset = value as Record<string, unknown>;
+      if (!("sourceUrl" in asset)) return value;
+      return {
+        sourceUrl: asset.sourceUrl ?? null,
+        kind: asset.kind,
+        ...(asset.section ? { section: asset.section } : {}),
+        order: asset.order,
+      };
+    }),
   );
 }
 

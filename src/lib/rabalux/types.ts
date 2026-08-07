@@ -15,6 +15,7 @@ export type RabaluxAttachmentAsset = {
   label: string;
   sourceUrl: string;
   order: number;
+  section: "ASSEMBLY_INSTRUCTIONS";
 };
 
 export type RabaluxCatalogItem = {
@@ -41,10 +42,12 @@ export type RabaluxCatalogItem = {
   unitPackDepthCm: number | null;
   unitPackHeightCm: number | null;
   warrantyYears: number;
+  warrantySource: "FEED" | "FALLBACK";
   countryOfOrigin: string | null;
   hsCode: string | null;
   isNew: boolean;
   technicalSpecs: RabaluxTechnicalSpec[];
+  pictogramCodes: string[];
   media: RabaluxMediaAsset[];
   attachments: RabaluxAttachmentAsset[];
   valid: boolean;

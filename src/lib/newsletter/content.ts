@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import { BRAND } from "@/lib/brand";
 import { formatRsd } from "@/lib/format";
 import { formatProductDisplayName } from "@/lib/product-name";
@@ -67,8 +68,7 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
         where: {
           sku: { in: productSkus },
           deletedAt: null,
-          isActive: true,
-          availableWebManual: true,
+          ...webStorefrontProductWhere(),
         },
         select: {
           sku: true,

@@ -40,13 +40,34 @@ describe("Rabalux catalog mapping", () => {
       item.unitPackHeightCm,
     ]).toEqual([13.5, 7.5, 23.5]);
     expect(item.warrantyYears).toBe(5);
+    expect(item.warrantySource).toBe("FALLBACK");
+    expect(item.pictogramCodes).toEqual(["rabalux-led"]);
     expect(item.materials).toEqual(["metal", "plastika"]);
     expect(item.media.filter((asset) => asset.kind === "IMAGE")).toHaveLength(1);
     expect(item.media.find((asset) => asset.kind === "IMAGE")?.sourceUrl).toContain(
       "7996_fhd.jpg",
     );
     expect(item.attachments).toHaveLength(2);
+    expect(item.attachments.every((item) => item.section === "ASSEMBLY_INSTRUCTIONS")).toBe(true);
     expect(item.description).toBe("<p>Bezbedan <strong>opis</strong></p>");
+  });
+
+  it("derives at most six premium pictograms and requires explicit warranty", () => {
+    const [item] = parseRabaluxCatalogXml(
+      PRODUCT.replace(
+        "<LED_technology>da</LED_technology>",
+        "<LED_technology>da</LED_technology><Warranty_years>5</Warranty_years><Dimmable>da</Dimmable><Remote_control>da</Remote_control><Wi-Fi>da</Wi-Fi><IP_protection>IP65</IP_protection>",
+      ),
+    );
+    expect(item.warrantySource).toBe("FEED");
+    expect(item.pictogramCodes).toEqual([
+      "rabalux-warranty-5",
+      "rabalux-led",
+      "rabalux-dimmable",
+      "rabalux-remote",
+      "rabalux-smart",
+      "rabalux-ip44-plus",
+    ]);
   });
 
   it("keeps invalid full-price products inactive candidates", () => {

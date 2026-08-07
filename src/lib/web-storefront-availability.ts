@@ -1,11 +1,29 @@
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
+import {
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
+  isRabaluxStockFresh,
+  rabaluxStockFreshAfter,
+} from "@/lib/rabalux/availability";
+import {
+  RABALUX_INTEGRATION_KEY,
+  isRabaluxEnabled,
+} from "@/lib/rabalux/config";
 
 type WebAvailabilityProduct = {
   isActive: boolean;
   availableWebManual: boolean;
   availableWebAuto: boolean;
+  articleStatus?: string;
+  dcAvailableQty?: number;
+  supplierStock?: number | null;
+  supplierApprovalStatus?: string | null;
+  lastSupplierStockSyncAt?: Date | string | null;
+  supplier?: {
+    integrationKey?: string | null;
+    enabled?: boolean;
+  } | null;
 };
 
 function enabled(value: string | undefined) {
@@ -30,6 +48,11 @@ export function isWebAutoAvailabilityEnforced() {
 
 export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
   const now = new Date();
+  const rabaluxSupplierStockWhere: Prisma.ProductWhereInput = {
+    supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
+    supplierApprovalStatus: "APPROVED",
+    lastSupplierStockSyncAt: { gte: rabaluxStockFreshAfter(now) },
+  };
   return {
     isActive: true,
     availableWebManual: true,
@@ -50,14 +73,67 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
         },
       },
     },
-    ...(isWebAutoAvailabilityEnforced() ? { availableWebAuto: true } : {}),
+    AND: [
+      ...(isWebAutoAvailabilityEnforced()
+        ? [{ availableWebAuto: true } satisfies Prisma.ProductWhereInput]
+        : []),
+      {
+        OR: [
+          {
+            NOT: {
+              supplier: {
+                is: { integrationKey: RABALUX_INTEGRATION_KEY },
+              },
+            },
+          },
+          {
+            AND: [
+              {
+                supplier: {
+                  is: {
+                    integrationKey: RABALUX_INTEGRATION_KEY,
+                  },
+                },
+              },
+              { articleStatus: { not: "ARH" } },
+              {
+                OR: [
+                  { dcAvailableQty: { gt: 0 } },
+                  ...(isRabaluxEnabled()
+                    ? [
+                        {
+                          AND: [
+                            { supplier: { is: { enabled: true } } },
+                            rabaluxSupplierStockWhere,
+                          ],
+                        } satisfies Prisma.ProductWhereInput,
+                      ]
+                    : []),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 
 export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
-  return (
+  const generallyAvailable =
     product.isActive &&
     product.availableWebManual &&
-    (!isWebAutoAvailabilityEnforced() || product.availableWebAuto)
+    (!isWebAutoAvailabilityEnforced() || product.availableWebAuto);
+  if (!generallyAvailable) return false;
+  if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) return true;
+  if (product.articleStatus === "ARH") return false;
+
+  if ((product.dcAvailableQty ?? 0) > 0) return true;
+  return Boolean(
+    product.supplier.enabled &&
+      isRabaluxEnabled() &&
+      product.supplierApprovalStatus === "APPROVED" &&
+      (product.supplierStock ?? 0) > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+      isRabaluxStockFresh(product.lastSupplierStockSyncAt),
   );
 }

@@ -82,6 +82,8 @@ export interface Material {
 export interface Product {
   /** Database id when the product originates from the canonical catalog. */
   id?: string;
+  /** Internal supplier profile key used for supplier-specific storefront rules. */
+  supplierIntegrationKey?: string;
   sku: SKU;
   slug: Slug;
   name: string;

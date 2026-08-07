@@ -65,6 +65,22 @@ export function RabaluxControls({
             <Stat label="Stock" value={preview.summary.stockRows} />
             <Stat label="Nevažeće cene" value={preview.summary.invalidPrice} />
             <Stat
+              label="Vidljivo zbog Rabalux stanja"
+              value={preview.summary.visibleDueToSupplier}
+            />
+            <Stat
+              label="Vidljivo zbog DC-a"
+              value={preview.summary.visibleDueToDc}
+            />
+            <Stat
+              label="Sakriveno pravilom dostupnosti"
+              value={preview.summary.hiddenByPolicy}
+            />
+            <Stat
+              label="Dodeljeni piktogrami"
+              value={preview.summary.pictogramAssignments}
+            />
+            <Stat
               label="Medija/dokumenti"
               value={
                 preview.summary.videos +

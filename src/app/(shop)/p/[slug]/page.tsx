@@ -9,6 +9,7 @@ import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
 import { PdpBenefits } from "@/components/product/pdp-benefits";
 import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
+import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
@@ -21,6 +22,7 @@ import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
 import { getPublishedContentPage } from "@/lib/cms/pages";
 import { getSystemContentPage } from "@/lib/cms/system-pages";
+import { resolveProductPdpLayout } from "@/lib/product-pdp-layout";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -112,6 +114,7 @@ export default async function ProductPage({ params }: RouteProps) {
   const cleanDescription = stripHtml(product.description);
 
   const materials = product.materials;
+  const pdpLayout = resolveProductPdpLayout(product);
   const dimensionsLabel = formatDimensions(product.dimensionsCm);
 
   return (
@@ -198,6 +201,8 @@ export default async function ProductPage({ params }: RouteProps) {
 
           <PdpBenefits deliveryDays={product.deliveryDays} />
 
+          <PdpPictograms pictograms={product.pictograms} />
+
           <div className="border-border/60 border-t pt-2 md:pt-2.5">
             <div>
               <PdpInfoLinks
@@ -225,13 +230,14 @@ export default async function ProductPage({ params }: RouteProps) {
                     (attachment) => attachment.section === "maintenance",
                   ),
                 }}
+                technicalSpecs={pdpLayout.descriptionTechnicalSpecs}
               />
             </div>
           </div>
         </div>
       </section>
 
-      {materials.length ? (
+      {pdpLayout.showStandaloneMaterials && materials.length ? (
         <Reveal>
           <section className="mx-auto mt-8 w-full max-w-[var(--container-page)] px-4 md:px-6">
             <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
@@ -265,7 +271,7 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
-      {product.technicalSpecs?.length ||
+      {pdpLayout.showStandaloneTechnicalAndDocuments && (product.technicalSpecs?.length ||
       product.attachments?.some((attachment) => attachment.section === "general") ? (
         <Reveal>
           <section className="mx-auto mt-8 grid w-full max-w-[var(--container-page)] gap-6 px-4 md:grid-cols-2 md:px-6">
@@ -317,7 +323,7 @@ export default async function ProductPage({ params }: RouteProps) {
             ) : null}
           </section>
         </Reveal>
-      ) : null}
+      ) : null)}
       {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail

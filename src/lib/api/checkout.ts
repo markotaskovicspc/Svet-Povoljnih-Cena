@@ -448,7 +448,9 @@ export async function createOrder(
       isActive: true,
       availableWebManual: true,
       availableWebAuto: true,
+      articleStatus: true,
       stock: true,
+      dcAvailableQty: true,
       supplierStock: true,
       supplierReservedStock: true,
       supplierApprovalStatus: true,
@@ -510,7 +512,7 @@ export async function createOrder(
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }
     const rabaluxAvailability = resolveRabaluxAvailability({
-      warehouseStock: p.stock,
+      warehouseStock: p.dcAvailableQty,
       supplierStock: p.supplierStock,
       supplierReservedStock: p.supplierReservedStock,
       lastSupplierStockSyncAt: p.lastSupplierStockSyncAt,
@@ -848,11 +850,21 @@ export async function createOrder(
         Array<{
           id: string;
           stock: number;
+          dcAvailableQty: number;
           supplierStock: number | null;
           supplierReservedStock: number;
+          supplierApprovalStatus: string | null;
+          lastSupplierStockSyncAt: Date | null;
+          articleStatus: string;
+          isActive: boolean;
+          availableWebManual: boolean;
+          availableWebAuto: boolean;
         }>
       >(Prisma.sql`
-        SELECT "id", "stock", "supplierStock", "supplierReservedStock"
+        SELECT "id", "stock", "dcAvailableQty", "supplierStock",
+               "supplierReservedStock", "supplierApprovalStatus",
+               "lastSupplierStockSyncAt", "articleStatus", "isActive",
+               "availableWebManual", "availableWebAuto"
         FROM "Product"
         WHERE "id" IN (${Prisma.join(
           input.lines.map((line) => bySku.get(line.sku)!.id),
@@ -883,24 +895,27 @@ export async function createOrder(
         if (!locked || !orderItem) {
           throw new StockReservationError(line.sku);
         }
+        if (!isProductAvailableOnWeb({ ...product, ...locked })) {
+          throw new StockReservationError(line.sku);
+        }
         const rabaluxAvailability = resolveRabaluxAvailability({
-          warehouseStock: locked.stock,
+          warehouseStock: locked.dcAvailableQty,
           supplierStock: locked.supplierStock,
           supplierReservedStock: locked.supplierReservedStock,
-          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          lastSupplierStockSyncAt: locked.lastSupplierStockSyncAt,
           supplierOperational: isRabaluxSupplierOperational(product.supplier),
-          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+          supplierApproved: locked.supplierApprovalStatus === "APPROVED",
         });
         const allocation =
           product.supplier?.integrationKey === "RABALUX" &&
-          rabaluxAvailability.supplierFresh
+          rabaluxAvailability.supplierEligible
             ? allocateStock(line.qty, {
-                warehouseStock: locked.stock,
+                warehouseStock: locked.dcAvailableQty,
                 supplierStock: locked.supplierStock,
                 supplierReservedStock: locked.supplierReservedStock,
                 supplierSafetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
               })
-            : locked.stock >= line.qty
+            : locked.dcAvailableQty >= line.qty
               ? { warehouseQty: line.qty, supplierQty: 0 }
               : null;
         if (!allocation) throw new StockReservationError(line.sku);

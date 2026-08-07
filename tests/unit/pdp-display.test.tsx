@@ -5,6 +5,7 @@ import {
   PdpMobilePriceContent,
 } from "@/components/product/pdp-add-to-cart";
 import { PdpBenefits } from "@/components/product/pdp-benefits";
+import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { PdpPriceContent } from "@/components/product/pdp-price";
 import { getProductAvailability } from "@/lib/product-availability";
 import type { EffectivePrice, ProductPriceQuote } from "@/lib/pricing";
@@ -127,6 +128,21 @@ describe("PDP price and benefit display", () => {
     expect(markup).toContain("Sigurna kupovina");
     expect(markup).not.toContain("Garancija");
     expect(markup).not.toContain("Precizne dimenzije");
+  });
+
+  it("renders no more than six product pictograms", () => {
+    const markup = renderToStaticMarkup(
+      <PdpPictograms
+        pictograms={Array.from({ length: 7 }, (_, index) => ({
+          id: String(index),
+          code: `icon-${index}`,
+          label: `Oznaka ${index}`,
+          iconUrl: "/brand/pictograms/rabalux/led.png",
+        }))}
+      />,
+    );
+    expect(markup.match(/<li/g)).toHaveLength(6);
+    expect(markup).not.toContain("Oznaka 6");
   });
 
   it("hides only the generic duplicate availability sentence", () => {

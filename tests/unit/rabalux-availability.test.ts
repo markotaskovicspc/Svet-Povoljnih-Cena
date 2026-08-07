@@ -11,7 +11,7 @@ describe("Rabalux customer availability", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,
-        supplierStock: 8,
+        supplierStock: 18,
         supplierReservedStock: 3,
         lastSupplierStockSyncAt: new Date("2026-07-27T11:45:00.000Z"),
         supplierOperational: true,
@@ -20,11 +20,46 @@ describe("Rabalux customer availability", () => {
       }),
     ).toMatchObject({
       warehouseAvailable: 2,
-      supplierAvailable: 4,
-      sellableStock: 6,
+      supplierAvailable: 14,
+      sellableStock: 16,
       source: "MIXED",
       supplierFresh: true,
     });
+  });
+
+  it("requires raw Serbia stock to be strictly greater than 10", () => {
+    const input = {
+      warehouseStock: 0,
+      supplierReservedStock: 0,
+      lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
+      supplierOperational: true,
+      supplierApproved: true,
+      now,
+    };
+    expect(resolveRabaluxAvailability({ ...input, supplierStock: 10 })).toMatchObject({
+      sellableStock: 0,
+      supplierEligible: false,
+      source: "NONE",
+    });
+    expect(resolveRabaluxAvailability({ ...input, supplierStock: 11 })).toMatchObject({
+      sellableStock: 10,
+      supplierEligible: true,
+      source: "SUPPLIER",
+    });
+  });
+
+  it("keeps DC stock available below the supplier threshold", () => {
+    expect(
+      resolveRabaluxAvailability({
+        warehouseStock: 2,
+        supplierStock: 10,
+        supplierReservedStock: 0,
+        lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
+        supplierOperational: true,
+        supplierApproved: true,
+        now,
+      }),
+    ).toMatchObject({ sellableStock: 2, source: "DC", supplierEligible: false });
   });
 
   it("fails closed for stale, unapproved or disabled supplier stock while preserving DC", () => {

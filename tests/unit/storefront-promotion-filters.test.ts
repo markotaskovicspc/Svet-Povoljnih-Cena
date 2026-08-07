@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  excludeRabaluxPromotionProductsWhere,
   heroProductsWhere,
   limitedOfferProductsWhere,
   permanentPriceProductsWhere,
@@ -48,6 +49,12 @@ describe("storefront promotion filters", () => {
   it("treats both limited and ERP DTZ articles as 'Dok traju zalihe'", () => {
     expect(limitedOfferProductsWhere()).toEqual({
       OR: [{ isLimited: true }, { isDtz: true }],
+    });
+  });
+
+  it("provides an explicit Rabalux exclusion for Novo and DTZ queries", () => {
+    expect(excludeRabaluxPromotionProductsWhere()).toEqual({
+      NOT: { supplier: { is: { integrationKey: "RABALUX" } } },
     });
   });
 

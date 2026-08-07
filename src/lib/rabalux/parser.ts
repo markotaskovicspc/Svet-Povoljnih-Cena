@@ -7,6 +7,7 @@ import type {
   RabaluxStockItem,
   RabaluxTechnicalSpec,
 } from "./types";
+import { deriveRabaluxPictogramCodes } from "./pictograms";
 
 const MEDIA_HOST = "rabaluxkep.plugin.hu";
 
@@ -21,8 +22,6 @@ const TECHNICAL_LABELS: Record<string, string> = {
   Technical_details_of_sensor: "Senzor",
   Lamp_colour: "Boja lampe",
   Colour_of_lampshade: "Boja abažura",
-  Material_of_lamp: "Materijal lampe",
-  Material_of_lampshade: "Materijal abažura",
   Light_source_lifetime_hrs: "Radni vek izvora svetlosti (h)",
   Light_source_included: "Izvor svetlosti uključen",
   Light_source_energy_class: "Energetska klasa",
@@ -146,16 +145,18 @@ export function rabaluxMediaStorageKey(sourceSku: string, sourceUrl: string, var
   return ["rabalux", sourceSku, variant, filename].filter(Boolean).join("/");
 }
 
-function fallbackWarranty(map: Map<string, XmlNode[]>, type: string) {
+function warranty(map: Map<string, XmlNode[]>, type: string) {
   const feedWarranty = positiveInt(text(map, "Warranty_years"));
-  if (feedWarranty) return feedWarranty;
+  if (feedWarranty) return { years: feedWarranty, source: "FEED" as const };
   const integratedLed =
     text(map, "LED_technology").toLowerCase() === "da" ||
     (text(map, "Luminaire_specifications").toLowerCase().includes("led") &&
       !text(map, "Socket_type"));
-  if (integratedLed) return 5;
-  if (/sijalic|izvor svetlosti|bulb/i.test(type)) return 3;
-  return 2;
+  if (integratedLed) return { years: 5, source: "FALLBACK" as const };
+  if (/sijalic|izvor svetlosti|bulb/i.test(type)) {
+    return { years: 3, source: "FALLBACK" as const };
+  }
+  return { years: 2, source: "FALLBACK" as const };
 }
 
 function technicalSpecs(map: Map<string, XmlNode[]>) {
@@ -207,7 +208,13 @@ function attachmentAssets(map: Map<string, XmlNode[]>) {
   const assets: RabaluxAttachmentAsset[] = [];
   const manual = normalizeRabaluxMediaUrl(text(map, "Manual_pdf"));
   if (manual) {
-    assets.push({ kind: "MANUAL", label: "Uputstvo", sourceUrl: manual, order: 0 });
+    assets.push({
+      kind: "MANUAL",
+      label: "Uputstvo",
+      sourceUrl: manual,
+      order: 1_000,
+      section: "ASSEMBLY_INSTRUCTIONS",
+    });
   }
   const energy = normalizeRabaluxMediaUrl(text(map, "Energylabel_pdf"));
   if (energy) {
@@ -215,7 +222,8 @@ function attachmentAssets(map: Map<string, XmlNode[]>) {
       kind: "ENERGY_LABEL",
       label: "Energetska oznaka",
       sourceUrl: energy,
-      order: 0,
+      order: 1_001,
+      section: "ASSEMBLY_INSTRUCTIONS",
     });
   }
   return assets;
@@ -244,6 +252,8 @@ function mapCatalogNode(node: XmlNode): RabaluxCatalogItem | null {
     text(map, "Material_of_lamp"),
     text(map, "Material_of_lampshade"),
   ].filter(Boolean);
+  const parsedWarranty = warranty(map, type ?? "");
+  const parsedTechnicalSpecs = technicalSpecs(map);
   return {
     sourceSku,
     sku: rabaluxSku(sourceSku),
@@ -270,11 +280,17 @@ function mapCatalogNode(node: XmlNode): RabaluxCatalogItem | null {
     unitPackWidthCm: numberOrNull(text(map, "Unique_box_size_X_cm")),
     unitPackDepthCm: numberOrNull(text(map, "Unique_box_size_Y_cm")),
     unitPackHeightCm: numberOrNull(text(map, "Unique_box_size_Z_cm")),
-    warrantyYears: fallbackWarranty(map, type ?? ""),
+    warrantyYears: parsedWarranty.years,
+    warrantySource: parsedWarranty.source,
     countryOfOrigin: text(map, "Country_of_origin") || null,
     hsCode: text(map, "Custom_tariff_nr_CTN") || null,
     isNew: text(map, "New_product").toLowerCase() === "new",
-    technicalSpecs: technicalSpecs(map),
+    technicalSpecs: parsedTechnicalSpecs,
+    pictogramCodes: deriveRabaluxPictogramCodes({
+      warrantyYears: parsedWarranty.years,
+      warrantyExplicit: parsedWarranty.source === "FEED",
+      technicalSpecs: parsedTechnicalSpecs,
+    }),
     media: mediaAssets(map),
     attachments: attachmentAssets(map),
     valid: errors.length === 0,

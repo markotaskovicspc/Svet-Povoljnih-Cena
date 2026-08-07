@@ -11,7 +11,7 @@ import {
 import { CmsMarkdown } from "@/components/content/cms-markdown";
 import { cn } from "@/lib/utils";
 import { sanitizeRichText } from "@/lib/rich-text";
-import type { ProductAttachment } from "@/types";
+import type { ProductAttachment, TechnicalSpecification } from "@/types";
 
 export type PdpInfoKey =
   | "description"
@@ -33,11 +33,13 @@ export function PdpInfoLinks({
   descriptionPreview,
   standardDeliveryTermsMarkdown,
   attachments = {},
+  technicalSpecs = [],
 }: {
   sections: Partial<Record<PdpInfoKey, string>>;
   descriptionPreview?: string;
   standardDeliveryTermsMarkdown?: string;
   attachments?: Partial<Record<PdpInfoKey, ProductAttachment[]>>;
+  technicalSpecs?: TechnicalSpecification[];
 }) {
   const deliveryTerms = resolveDeliveryTermsContent(
     sections.deliveryTerms,
@@ -137,6 +139,9 @@ export function PdpInfoLinks({
                       ) : (
                         <RichText content={item.content} />
                       )}
+                      {item.key === "description" && technicalSpecs.length ? (
+                        <TechnicalSpecs specs={technicalSpecs} />
+                      ) : null}
                       {item.attachments.length ? (
                         <ul className="mt-1 space-y-2 border-t border-border/60 pt-3">
                           {item.attachments.map((attachment) => (
@@ -163,6 +168,22 @@ export function PdpInfoLinks({
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+function TechnicalSpecs({ specs }: { specs: TechnicalSpecification[] }) {
+  return (
+    <dl className="mt-5 divide-y divide-border/70 rounded-xl border border-border/70 px-3">
+      {specs.map((spec) => (
+        <div
+          key={spec.key}
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 py-2.5 text-sm"
+        >
+          <dt className="text-ink-500">{spec.label}</dt>
+          <dd className="text-right font-medium text-ink-900">{spec.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

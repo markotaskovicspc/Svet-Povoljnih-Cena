@@ -7,6 +7,11 @@ import { isRiskyPriceChange, stableSourceHash } from "./safety";
 import { fetchRabaluxCatalog, fetchRabaluxStock } from "./sync";
 import type { RabaluxSyncTarget } from "./admin-sync";
 import type { RabaluxCatalogItem } from "./types";
+import {
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
+  isRabaluxStockFresh,
+} from "./availability";
+import { isRabaluxSupplierOperational } from "./config";
 
 export type RabaluxPreviewSummary = {
   source: "XML" | "CSV" | "DATABASE";
@@ -22,6 +27,10 @@ export type RabaluxPreviewSummary = {
   manuals: number;
   energyLabels: number;
   imageAssets: number;
+  visibleDueToSupplier: number;
+  visibleDueToDc: number;
+  hiddenByPolicy: number;
+  pictogramAssignments: number;
   diff: {
     creates: number;
     updates: number;
@@ -107,7 +116,14 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
       countryOfOrigin: true,
       hsCode: true,
       isNew: true,
+      newUntil: true,
+      newUntilAutomatic: true,
       isActive: true,
+      articleStatus: true,
+      dcAvailableQty: true,
+      supplierStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
       syncOverrides: true,
       categories: { select: { categoryId: true } },
       media: {
@@ -115,8 +131,13 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
         select: { sourceUrl: true, kind: true, order: true },
       },
       attachments: {
+        where: { origin: "SUPPLIER" },
         orderBy: { order: "asc" },
-        select: { sourceUrl: true, kind: true, order: true },
+        select: { sourceUrl: true, kind: true, section: true, order: true },
+      },
+      pictograms: {
+        orderBy: { pictogram: { code: "asc" } },
+        select: { pictogram: { select: { code: true } } },
       },
       familyMembership: {
         select: { family: { select: { primaryProductId: true } } },
@@ -186,12 +207,12 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
           changeType: "CREATE",
           fields: ["product"],
           before: null,
-          after: catalogItemSnapshot(item, mappingId, true),
+          after: catalogItemSnapshot(item, mappingId),
         }),
       );
     } else {
       const before = existingCatalogSnapshot(existing);
-      const after = catalogItemSnapshot(item, mappingId, existing.isNew);
+      const after = catalogItemSnapshot(item, mappingId);
       const locked = parseOverrideFields(existing.syncOverrides);
       const fields = changedFields(before, after).filter(
         (field) => !fieldIsLocked(field, locked),
@@ -215,7 +236,7 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
         "grossWeightKg", "unitPackWidthCm", "unitPackDepthCm",
         "unitPackHeightCm", "fullPrice", "salePrice", "discountPct",
         "technicalSpecs", "warrantyYears", "countryOfOrigin", "hsCode",
-        "attachments",
+        "attachments", "pictograms",
       ]);
       const familyConflictFields = isSecondaryFamilyMember
         ? candidateUpdateFields.filter((field) => sharedFamilyFields.has(field))
@@ -331,24 +352,35 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
       stockOnly: [],
       diff,
       changes,
+      policy: currentPolicyCounts(
+        products,
+        isRabaluxSupplierOperational(supplier),
+      ),
     }),
   };
 }
 
 async function prepareStockPreview(supplier: Supplier, runId: string) {
   const stock = await fetchRabaluxStock(supplier);
-  const products = await db.product.findMany({
-    where: { supplierId: supplier.id, deletedAt: null },
-    select: {
-      id: true,
-      supplierExternalId: true,
-      supplierStock: true,
-      supplierNextArrivalAt: true,
-      articleStatus: true,
-      isDtz: true,
-      syncOverrides: true,
-    },
-  });
+  const [products, pictogramAssignments] = await Promise.all([
+    db.product.findMany({
+      where: { supplierId: supplier.id, deletedAt: null },
+      select: {
+        id: true,
+        supplierExternalId: true,
+        supplierStock: true,
+        supplierNextArrivalAt: true,
+        articleStatus: true,
+        isDtz: true,
+        dcAvailableQty: true,
+        supplierApprovalStatus: true,
+        syncOverrides: true,
+      },
+    }),
+    db.productPictogram.count({
+      where: { product: { supplierId: supplier.id, deletedAt: null } },
+    }),
+  ]);
   const productByExternal = new Map(
     products
       .filter((product) => product.supplierExternalId)
@@ -374,13 +406,19 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
     const after = {
       supplierStock: item.stock,
       supplierNextArrivalAt: item.nextArrivalAt?.toISOString() ?? null,
-      articleStatus: item.restricted ? "ARH" : item.outgoing ? "DTZ" : "SP",
-      isDtz: item.outgoing,
+      articleStatus: item.restricted ? "ARH" : "SP",
+      isDtz: false,
     };
     const locked = parseOverrideFields(product.syncOverrides);
-    const fields = changedFields(before, after).filter(
-      (field) => !fieldIsLocked(field, locked),
-    );
+    const fields = changedFields(before, after).filter((field) => {
+      if (item.restricted && ["articleStatus", "isDtz"].includes(field)) {
+        return true;
+      }
+      if (field === "isDtz" || (field === "articleStatus" && before.articleStatus === "DTZ")) {
+        return true;
+      }
+      return !fieldIsLocked(field, locked);
+    });
     if (!fields.length) {
       diff.unchanged++;
       continue;
@@ -432,6 +470,12 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       stockOnly,
       diff,
       changes,
+      policy: incomingPolicyCounts(
+        products,
+        new Map(stock.map((item) => [item.sourceSku, item])),
+        isRabaluxSupplierOperational(supplier),
+      ),
+      pictogramAssignments,
     }),
   };
 }
@@ -498,6 +542,11 @@ function previewSummary(args: {
   changes: ChangeInput[];
   media?: Array<{ kind: string }>;
   attachments?: Array<{ kind: string }>;
+  policy?: Pick<
+    RabaluxPreviewSummary,
+    "visibleDueToSupplier" | "visibleDueToDc" | "hiddenByPolicy"
+  >;
+  pictogramAssignments?: number;
 }): RabaluxPreviewSummary {
   const media = args.media ?? args.catalog.flatMap((item) => item.media);
   const attachments =
@@ -516,6 +565,12 @@ function previewSummary(args: {
     manuals: attachments.filter((asset) => asset.kind === "MANUAL").length,
     energyLabels: attachments.filter((asset) => asset.kind === "ENERGY_LABEL").length,
     imageAssets: media.filter((asset) => asset.kind === "IMAGE").length,
+    visibleDueToSupplier: args.policy?.visibleDueToSupplier ?? 0,
+    visibleDueToDc: args.policy?.visibleDueToDc ?? 0,
+    hiddenByPolicy: args.policy?.hiddenByPolicy ?? 0,
+    pictogramAssignments:
+      args.pictogramAssignments ??
+      args.catalog.reduce((sum, item) => sum + item.pictogramCodes.length, 0),
     diff: args.diff,
     samples: args.changes.slice(0, 30).map((item) => ({
       externalSku: item.externalSku,
@@ -554,7 +609,6 @@ function change(args: {
 function catalogItemSnapshot(
   item: RabaluxCatalogItem,
   categoryId: string | undefined,
-  isNew: boolean,
 ) {
   return {
     sku: item.sku,
@@ -582,15 +636,18 @@ function catalogItemSnapshot(
     warrantyYears: item.warrantyYears,
     countryOfOrigin: item.countryOfOrigin,
     hsCode: item.hsCode,
-    // Newness is assigned once at product creation and is not supplier-owned.
-    isNew,
+    isNew: false,
+    newUntil: null,
+    newUntilAutomatic: false,
     categories: categoryId ? [categoryId] : [],
     media: item.media.map(({ sourceUrl, kind, order }) => ({ sourceUrl, kind, order })),
-    attachments: item.attachments.map(({ sourceUrl, kind, order }) => ({
+    attachments: item.attachments.map(({ sourceUrl, kind, section, order }) => ({
       sourceUrl,
       kind,
+      section,
       order,
     })),
+    pictograms: [...item.pictogramCodes].sort(),
   };
 }
 
@@ -623,9 +680,17 @@ function catalogProductShape(product: {
   countryOfOrigin: string | null;
   hsCode: string | null;
   isNew: boolean;
+  newUntil: Date | null;
+  newUntilAutomatic: boolean;
   categories: Array<{ categoryId: string }>;
   media: Array<{ sourceUrl: string | null; kind: string; order: number }>;
-  attachments: Array<{ sourceUrl: string | null; kind: string; order: number }>;
+  attachments: Array<{
+    sourceUrl: string | null;
+    kind: string;
+    section: string;
+    order: number;
+  }>;
+  pictograms: Array<{ pictogram: { code: string } }>;
 }) {
   return {
     sku: product.sku,
@@ -652,14 +717,83 @@ function catalogProductShape(product: {
     countryOfOrigin: product.countryOfOrigin,
     hsCode: product.hsCode,
     isNew: product.isNew,
+    newUntil: product.newUntil?.toISOString() ?? null,
+    newUntilAutomatic: product.newUntilAutomatic,
     categories: product.categories.map(({ categoryId }) => categoryId).sort(),
     media: product.media.map(({ sourceUrl, kind, order }) => ({ sourceUrl, kind, order })),
-    attachments: product.attachments.map(({ sourceUrl, kind, order }) => ({
+    attachments: product.attachments.map(({ sourceUrl, kind, section, order }) => ({
       sourceUrl,
       kind,
+      section,
       order,
     })),
+    pictograms: product.pictograms.map((item) => item.pictogram.code).sort(),
   };
+}
+
+type PolicyProduct = {
+  supplierExternalId: string | null;
+  dcAvailableQty: number;
+  supplierStock?: number | null;
+  supplierApprovalStatus: string | null;
+  lastSupplierStockSyncAt?: Date | null;
+  articleStatus: string;
+};
+
+function currentPolicyCounts(
+  products: PolicyProduct[],
+  supplierOperational: boolean,
+) {
+  return countPolicy(products, (product) => ({
+    stock: product.supplierStock ?? 0,
+    restricted: product.articleStatus === "ARH",
+    fresh:
+      supplierOperational &&
+      isRabaluxStockFresh(product.lastSupplierStockSyncAt),
+  }));
+}
+
+function incomingPolicyCounts(
+  products: PolicyProduct[],
+  stock: Map<string, { stock: number; restricted: boolean }>,
+  supplierOperational: boolean,
+) {
+  return countPolicy(products, (product) => {
+    const item = product.supplierExternalId
+      ? stock.get(product.supplierExternalId)
+      : undefined;
+    return {
+      stock: item?.stock ?? 0,
+      restricted: item?.restricted ?? false,
+      fresh: supplierOperational && Boolean(item),
+    };
+  });
+}
+
+function countPolicy(
+  products: PolicyProduct[],
+  stockFor: (product: PolicyProduct) => {
+    stock: number;
+    restricted: boolean;
+    fresh: boolean;
+  },
+) {
+  return products.reduce(
+    (counts, product) => {
+      const stock = stockFor(product);
+      if (stock.restricted) counts.hiddenByPolicy++;
+      else if (product.dcAvailableQty > 0) counts.visibleDueToDc++;
+      else if (
+        stock.fresh &&
+        product.supplierApprovalStatus === "APPROVED" &&
+        stock.stock > RABALUX_PUBLIC_STOCK_THRESHOLD
+      ) {
+        counts.visibleDueToSupplier++;
+      } else counts.hiddenByPolicy++;
+      return counts;
+    },
+    { visibleDueToSupplier: 0, visibleDueToDc: 0, hiddenByPolicy: 0 },
+  );
 }
 
 function decimalNumber(value: Prisma.Decimal | null) {
@@ -682,6 +816,7 @@ function fieldIsLocked(field: string, locked: ReturnType<typeof parseOverrideFie
   if (field === "categories") return locked.has("categories") || locked.has("category");
   if (field === "media") return locked.has("media");
   if (field === "attachments") return locked.has("attachments");
+  if (field === "pictograms") return locked.has("pictograms");
   if (field === "groupName") return locked.has("grouping");
   if (field.startsWith("supplier") || field === "articleStatus") return locked.has("stock");
   if (["isDtz", "isActive", "isNew"].includes(field)) return locked.has("flags");

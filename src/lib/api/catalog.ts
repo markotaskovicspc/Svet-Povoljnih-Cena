@@ -23,7 +23,7 @@ import {
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
 import {
-  RABALUX_SUPPLIER_SAFETY_STOCK,
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
   rabaluxStockFreshAfter,
   resolveRabaluxAvailability,
 } from "@/lib/rabalux/availability";
@@ -54,6 +54,7 @@ import {
 } from "@/lib/product-newness";
 import {
   heroProductsWhere,
+  excludeRabaluxPromotionProductsWhere,
   limitedOfferProductsWhere,
   permanentPriceProductsWhere,
   storefrontMonth,
@@ -61,6 +62,7 @@ import {
 import { buildProductDeclaration } from "@/lib/product-declaration";
 import { formatProductAttributes } from "@/lib/product-attributes";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -104,6 +106,7 @@ const productCardCoreSelect = {
   isActive: true,
   availableWebManual: true,
   availableWebAuto: true,
+  articleStatus: true,
   shortDescription: true,
   attribute1: true,
   attribute2: true,
@@ -115,6 +118,7 @@ const productCardCoreSelect = {
   depthCm: true,
   heightCm: true,
   stock: true,
+  dcAvailableQty: true,
   incomingStock: true,
   supplierStock: true,
   supplierReservedStock: true,
@@ -255,12 +259,27 @@ function mapProduct(
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
 ): ProductDTO {
   const availability = productStockAvailability(p);
+  const isRabalux = p.supplier?.integrationKey === "RABALUX";
+  const pictograms = p.pictograms
+    .map((pp) => ({
+      id: pp.pictogram.id,
+      code: pp.pictogram.code,
+      label: pp.pictogram.label,
+      iconUrl: pp.pictogram.iconUrl,
+    }))
+    .sort((left, right) =>
+      isRabalux
+        ? rabaluxPictogramPriority(left.code) -
+          rabaluxPictogramPriority(right.code)
+        : left.label.localeCompare(right.label, "sr-Latn"),
+    );
   const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
   const product: ProductDTO = {
     id: p.id,
+    supplierIntegrationKey: p.supplier?.integrationKey ?? undefined,
     sku: p.sku,
     slug: p.slug,
     name: formatProductDisplayName(p.name, p.sizeLabel),
@@ -292,21 +311,16 @@ function mapProduct(
       label: m.material.label,
       imageUrl: m.material.imageUrl ?? undefined,
     })),
-    pictograms: p.pictograms.map((pp) => ({
-      id: pp.pictogram.id,
-      code: pp.pictogram.code,
-      label: pp.pictogram.label,
-      iconUrl: pp.pictogram.iconUrl,
-    })),
+    pictograms,
     stock: availability.sellableStock,
     incomingStock: p.incomingStock,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
     isHero: p.isHero,
-    isNew: productNewUntilIsActive(p.newUntil),
-    newUntil: p.newUntil?.toISOString(),
-    isLimited: p.isLimited,
-    isDtz: p.isDtz,
+    isNew: isRabalux ? false : productNewUntilIsActive(p.newUntil),
+    newUntil: isRabalux ? undefined : p.newUntil?.toISOString(),
+    isLimited: isRabalux ? false : p.isLimited,
+    isDtz: isRabalux ? false : p.isDtz,
     fullPrice: retailPrice.price,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
@@ -509,12 +523,14 @@ function mapProductListItem(
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
 ): ProductDTO {
   const availability = productStockAvailability(p);
+  const isRabalux = p.supplier?.integrationKey === "RABALUX";
   const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
   const product: ProductDTO = {
     id: p.id,
+    supplierIntegrationKey: p.supplier?.integrationKey ?? undefined,
     sku: p.sku,
     slug: p.slug,
     name: formatProductDisplayName(p.name, p.sizeLabel),
@@ -552,10 +568,10 @@ function mapProductListItem(
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
     isHero: p.isHero,
-    isNew: productNewUntilIsActive(p.newUntil),
-    newUntil: p.newUntil?.toISOString(),
-    isLimited: p.isLimited,
-    isDtz: p.isDtz,
+    isNew: isRabalux ? false : productNewUntilIsActive(p.newUntil),
+    newUntil: isRabalux ? undefined : p.newUntil?.toISOString(),
+    isLimited: isRabalux ? false : p.isLimited,
+    isDtz: isRabalux ? false : p.isDtz,
     fullPrice: retailPrice.price,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
@@ -720,6 +736,7 @@ function mapProductListRow(
 
 function productStockAvailability(product: {
   stock: number;
+  dcAvailableQty: number;
   supplierStock: number | null;
   supplierReservedStock: number;
   supplierApprovalStatus: string | null;
@@ -736,7 +753,7 @@ function productStockAvailability(product: {
     };
   }
   return resolveRabaluxAvailability({
-    warehouseStock: product.stock,
+    warehouseStock: product.dcAvailableQty,
     supplierStock: product.supplierStock,
     supplierReservedStock: product.supplierReservedStock,
     lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
@@ -1083,9 +1100,13 @@ async function loadProducts(
       ),
     );
   }
-  if (input.limitedOnly) appendAnd(where, limitedOfferProductsWhere());
+  if (input.limitedOnly) {
+    appendAnd(where, limitedOfferProductsWhere());
+    appendAnd(where, excludeRabaluxPromotionProductsWhere());
+  }
   if (input.newOnly) {
     appendAnd(where, { newUntil: { gte: productNewUntilFloor(now) } });
+    appendAnd(where, excludeRabaluxPromotionProductsWhere());
   }
   if (input.outletOnly) {
     appendAnd(where, { discountPct: { gte: 30 }, ...liveSaleWhere(now) });
@@ -1097,11 +1118,11 @@ async function loadProducts(
     const freshAfter = rabaluxStockFreshAfter(now);
     appendAnd(where, {
       OR: [
-        { stock: { gt: 0 } },
+        { dcAvailableQty: { gt: 0 } },
         ...(isRabaluxEnabled()
           ? [
               {
-                supplierStock: { gt: RABALUX_SUPPLIER_SAFETY_STOCK },
+                supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
                 supplierApprovalStatus: "APPROVED",
                 lastSupplierStockSyncAt: { gte: freshAfter },
                 supplier: {
@@ -1403,6 +1424,7 @@ export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
   ]);
   if (!rule) return [];
   return rule.products
+    .filter((product) => isProductAvailableOnWeb(product))
     .map((product) => mapProduct(product, pricingRules, deliveryWindows))
     .slice(0, limit);
 }

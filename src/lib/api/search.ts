@@ -1,7 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
-import { num } from "@/lib/api/_helpers";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { getProductCardsBySlugs } from "@/lib/api/catalog";
@@ -185,18 +184,14 @@ async function searchProductHits(
   const products = await getProductCardsBySlugs(rows.map((row) => row.slug));
   const productsBySlug = new Map(products.map((product) => [product.slug, product]));
 
-  return rows.map((r) => {
+  return rows.flatMap((r) => {
     const product = productsBySlug.get(r.slug);
-    const fullPrice = product?.fullPrice ?? num(r.full_price);
-    const quote = resolveProductPriceQuote(
-      product ?? {
-        fullPrice,
-        salePrice: r.sale_price ? num(r.sale_price) : null,
-        discountPct: r.discount_pct,
-      },
-      { loggedIn: false },
-    );
-    return {
+    // The batch loader is the authoritative storefront-availability gate.
+    // Raw SQL candidates that fail it (including Rabalux <=10/stale stock)
+    // must not leak through the suggestion fallback.
+    if (!product) return [];
+    const quote = resolveProductPriceQuote(product, { loggedIn: false });
+    return [{
       type: "product" as const,
       href: `/p/${r.slug}`,
       sku: r.sku,
@@ -220,7 +215,7 @@ async function searchProductHits(
       salePrice: quote.actionOffer?.effective ?? quote.full,
       discountPct: quote.actionOffer?.discountPct ?? 0,
       isHero: r.is_hero,
-    };
+    }];
   });
 }
 

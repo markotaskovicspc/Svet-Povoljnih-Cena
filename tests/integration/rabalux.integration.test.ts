@@ -40,6 +40,8 @@ import {
   reviewRabaluxProduct,
   rollbackRabaluxRun,
 } from "@/lib/rabalux/governance";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
+import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 
 const PREFIX = "RAB-IT-";
 const testStartedAt = new Date();
@@ -211,7 +213,7 @@ async function createProduct(args: {
   supplierStock: number;
 }) {
   const sku = `${PREFIX}${args.suffix}`;
-  return db.product.create({
+  const product = await db.product.create({
     data: {
       sku,
       slug: sku.toLowerCase(),
@@ -226,6 +228,7 @@ async function createProduct(args: {
       unitPackDepthCm: 12,
       unitPackHeightCm: 12,
       stock: args.warehouseStock,
+      dcAvailableQty: args.warehouseStock,
       supplierStock: args.supplierStock,
       supplierReservedStock: 0,
       lastSupplierStockSyncAt: new Date(),
@@ -243,6 +246,10 @@ async function createProduct(args: {
       },
     },
   });
+  await db.$transaction((tx) =>
+    upsertActiveRetailPrice(tx, { productId: product.id, price: 1_000 }),
+  );
+  return product;
 }
 
 function orderInput(
@@ -270,6 +277,40 @@ function orderInput(
 }
 
 describe("Rabalux checkout integration", () => {
+  it("moves 10→11→10 through the public threshold and preserves the DC exception", async () => {
+    const product = await createProduct({
+      suffix: "THRESHOLD",
+      warehouseStock: 0,
+      supplierStock: 10,
+    });
+    const visible = () =>
+      db.product.count({
+        where: { id: product.id, ...webStorefrontProductWhere() },
+      });
+
+    expect(await visible()).toBe(0);
+    await db.product.update({
+      where: { id: product.id },
+      data: { supplierStock: 11, lastSupplierStockSyncAt: new Date() },
+    });
+    expect(await visible()).toBe(1);
+    await db.product.update({
+      where: { id: product.id },
+      data: { supplierStock: 10, dcAvailableQty: 0 },
+    });
+    expect(await visible()).toBe(0);
+    await db.product.update({
+      where: { id: product.id },
+      data: { dcAvailableQty: 1 },
+    });
+    expect(await visible()).toBe(1);
+    await db.product.update({
+      where: { id: product.id },
+      data: { articleStatus: "ARH", isActive: true },
+    });
+    expect(await visible()).toBe(0);
+  });
+
   it("repeats catalog sync without duplicates, preserves overrides and keeps stock reservations", async () => {
     let revision = 1;
     const originalFetch = globalThis.fetch;
@@ -283,6 +324,7 @@ describe("Rabalux checkout integration", () => {
             <Sku>IT-SYNC</Sku><Name>${name}</Name><Ean11>5999999999999</Ean11>
             <Product_category>Rabalux integration feed</Product_category>
             <Type>Rabalux integration feed tip</Type>
+            <Warranty_years>5</Warranty_years><LED_technology>da</LED_technology>
             <Recommended_price>${price}</Recommended_price>
             <Description>Integracioni feed</Description>
             <Product_fhdimages><Image>rabaluxkep.plugin.hu/images/IT-SYNC_fhd.jpg</Image></Product_fhdimages>
@@ -294,7 +336,7 @@ describe("Rabalux checkout integration", () => {
         return new Response(
           [
             '"Article number";Description;"International Article Number (EAN/UPC)";"Product type";"Product category";Status;"Available quantity";"Unit of Measure";"Next arrival date"',
-            'IT-SYNC;"Test";5999999999999;"Tip";"Kategorija";"";3;PCS;2026.09.10',
+            'IT-SYNC;"Test";5999999999999;"Tip";"Kategorija";"outgoing";11;PCS;2026.09.10',
           ].join("\n"),
           { status: 200 },
         );
@@ -335,13 +377,27 @@ describe("Rabalux checkout integration", () => {
         }),
       ).toBe(1);
 
+      const manualPictogram = await db.pictogram.upsert({
+        where: { code: "rabalux-integration-manual" },
+        create: {
+          code: "rabalux-integration-manual",
+          label: "Ručna integraciona oznaka",
+          iconUrl: "/brand/pictograms/rabalux/led.png",
+        },
+        update: {},
+      });
+      await db.productPictogram.deleteMany({ where: { productId: initial.id } });
+      await db.productPictogram.create({
+        data: { productId: initial.id, pictogramId: manualPictogram.id },
+      });
+
       await db.product.update({
         where: { id: initial.id },
         data: {
           name: "Ručni naziv",
           fullPrice: 777,
           supplierReservedStock: 2,
-          syncOverrides: { fields: ["name", "pricing"] },
+          syncOverrides: { fields: ["name", "pricing", "pictograms"] },
         },
       });
       revision = 2;
@@ -405,19 +461,29 @@ describe("Rabalux checkout integration", () => {
           fullPrice: true,
           supplierStock: true,
           supplierReservedStock: true,
+          pictograms: { select: { pictogram: { select: { code: true } } } },
         },
       });
       expect(updated.name).toBe("Ručni naziv");
       expect(Number(updated.fullPrice)).toBe(777);
-      expect(updated.supplierStock).toBe(3);
+      expect(updated.supplierStock).toBe(11);
       expect(updated.supplierReservedStock).toBe(2);
+      expect(updated.pictograms).toEqual([
+        { pictogram: { code: "rabalux-integration-manual" } },
+      ]);
       expect(
         effectiveSellableStock({
           warehouseStock: 0,
           supplierStock: updated.supplierStock,
           supplierReservedStock: updated.supplierReservedStock,
         }),
-      ).toBe(1);
+      ).toBe(9);
+      expect(
+        await db.product.findUniqueOrThrow({
+          where: { id: initial.id },
+          select: { isDtz: true, articleStatus: true },
+        }),
+      ).toEqual({ isDtz: false, articleStatus: "SP" });
     } finally {
       vi.stubGlobal("fetch", originalFetch);
       await db.backgroundJob.deleteMany({
@@ -425,6 +491,9 @@ describe("Rabalux checkout integration", () => {
       });
       await db.product.deleteMany({
         where: { supplierId, supplierExternalId: "IT-SYNC" },
+      });
+      await db.pictogram.deleteMany({
+        where: { code: "rabalux-integration-manual" },
       });
       if (runIds.length) {
         await db.importRun.deleteMany({ where: { id: { in: runIds } } });
@@ -760,12 +829,12 @@ describe("Rabalux checkout integration", () => {
     const mixed = await createProduct({
       suffix: "MIXED",
       warehouseStock: 2,
-      supplierStock: 5,
+      supplierStock: 15,
     });
     const supplierOnly = await createProduct({
       suffix: "SUPPLIER",
       warehouseStock: 0,
-      supplierStock: 2,
+      supplierStock: 12,
     });
     const input = orderInput(
       [
@@ -1005,19 +1074,19 @@ describe("Rabalux checkout integration", () => {
     const product = await createProduct({
       suffix: "RACE",
       warehouseStock: 0,
-      supplierStock: 3,
+      supplierStock: 12,
     });
     const [left, right] = await Promise.all([
       createOrder(
         orderInput(
-          [{ sku: product.sku, qty: 2 }],
+          [{ sku: product.sku, qty: 6 }],
           "rabalux-integration-race-left",
         ),
         null,
       ),
       createOrder(
         orderInput(
-          [{ sku: product.sku, qty: 2 }],
+          [{ sku: product.sku, qty: 6 }],
           "rabalux-integration-race-right",
         ),
         null,
@@ -1028,14 +1097,14 @@ describe("Rabalux checkout integration", () => {
       where: { id: product.id },
       select: { supplierReservedStock: true },
     });
-    expect(fresh.supplierReservedStock).toBe(2);
+    expect(fresh.supplierReservedStock).toBe(6);
   });
 
   it("uses both feature controls as a full supplier-stock and sync kill switch", async () => {
     const product = await createProduct({
       suffix: "KILL-SWITCH",
       warehouseStock: 0,
-      supplierStock: 5,
+      supplierStock: 12,
     });
     const fetchSpy = vi.fn();
     const originalFetch = globalThis.fetch;

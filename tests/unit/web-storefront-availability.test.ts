@@ -6,6 +6,7 @@ import {
 } from "@/lib/web-storefront-availability";
 
 const original = process.env.ENFORCE_WEB_AUTO_AVAILABILITY;
+const originalRabalux = process.env.RABALUX_ENABLED;
 
 afterEach(() => {
   if (original === undefined) {
@@ -13,6 +14,8 @@ afterEach(() => {
   } else {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = original;
   }
+  if (originalRabalux === undefined) delete process.env.RABALUX_ENABLED;
+  else process.env.RABALUX_ENABLED = originalRabalux;
 });
 
 describe("web storefront availability rollout", () => {
@@ -29,6 +32,7 @@ describe("web storefront availability rollout", () => {
           priceList: { is: { kind: "RETAIL", active: true } },
         },
       },
+      AND: expect.any(Array),
     });
     expect(
       isProductAvailableOnWeb({
@@ -55,22 +59,53 @@ describe("web storefront availability rollout", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
 
     expect(isWebAutoAvailabilityEnforced()).toBe(true);
-    expect(webStorefrontProductWhere()).toMatchObject({
-      isActive: true,
-      availableWebManual: true,
-      availableWebAuto: true,
-      priceListEntries: {
-        some: {
-          price: { gt: 0 },
-          priceList: { is: { kind: "RETAIL", active: true } },
-        },
-      },
-    });
+    expect(JSON.stringify(webStorefrontProductWhere())).toContain(
+      '"availableWebAuto":true',
+    );
     expect(
       isProductAvailableOnWeb({
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("enforces the Rabalux >10 rule even while global auto availability is off", () => {
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+    process.env.RABALUX_ENABLED = "true";
+    const base = {
+      isActive: true,
+      availableWebManual: true,
+      availableWebAuto: false,
+      dcAvailableQty: 0,
+      supplierApprovalStatus: "APPROVED",
+      lastSupplierStockSyncAt: new Date(),
+      supplier: { integrationKey: "RABALUX", enabled: true },
+    };
+
+    expect(isProductAvailableOnWeb({ ...base, supplierStock: 10 })).toBe(false);
+    expect(isProductAvailableOnWeb({ ...base, supplierStock: 11 })).toBe(true);
+    expect(
+      isProductAvailableOnWeb({
+        ...base,
+        supplierStock: 0,
+        dcAvailableQty: 1,
+      }),
+    ).toBe(true);
+    expect(
+      isProductAvailableOnWeb({
+        ...base,
+        isActive: false,
+        supplierStock: 50,
+      }),
+    ).toBe(false);
+    expect(
+      isProductAvailableOnWeb({
+        ...base,
+        isActive: true,
+        articleStatus: "ARH",
+        supplierStock: 50,
       }),
     ).toBe(false);
   });

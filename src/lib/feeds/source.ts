@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import type { FeedProduct } from "./types";
 import { getFeedsConfig } from "./config";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
@@ -75,7 +76,7 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
 
   const rows = (await db.product.findMany({
     where: {
-      isActive: true,
+      ...webStorefrontProductWhere(),
       deletedAt: null,
       [flag]: true,
       OR: [
