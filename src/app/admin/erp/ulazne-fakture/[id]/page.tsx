@@ -54,7 +54,9 @@ const invoiceSchema = z.object({
   invoiceValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   customsValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   transportValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
-  otherRelatedCostsRsd: z.coerce.number().nonnegative().max(1_000_000_000),
+  otherRelatedCostsRsd: z.coerce
+    .number()
+    .refine((value) => value === 0, "Ostali vezani troškovi moraju biti 0."),
   netValue: z.coerce.number().nonnegative().max(1_000_000_000),
   vatValue: z.coerce.number().nonnegative().max(1_000_000_000),
   grossValue: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -126,7 +128,6 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         invoiceValueRsd: data.invoiceValueRsd,
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
-        otherRelatedCostsRsd: data.otherRelatedCostsRsd,
         notes: data.notes.trim() || null,
       });
       revalidatePath(`/admin/erp/ulazne-fakture/${data.invoiceId}`);
@@ -454,10 +455,6 @@ export default async function InboundInvoicePage({
                     invoice.transportValueRsd == null
                       ? null
                       : Number(invoice.transportValueRsd),
-                  otherRelatedCostsRsd:
-                    invoice.otherRelatedCostsRsd == null
-                      ? null
-                      : Number(invoice.otherRelatedCostsRsd),
                   legacyNetValue: Number(invoice.netValue),
                 }}
               />

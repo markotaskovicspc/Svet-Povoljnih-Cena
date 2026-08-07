@@ -228,10 +228,15 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(form.locator('[name="invoiceValueRsd"]')).toHaveValue("8500");
       await expect(form.locator('[name="customsValueRsd"]')).toHaveValue("0");
       await expect(form.locator('[name="transportValueRsd"]')).toHaveValue("0");
-      await form.locator('[name="otherRelatedCostsRsd"]').fill("500");
-      await expect(form.locator('[name="netValue"]')).toHaveValue("9000");
-      await expect(form.locator('[name="vatValue"]')).toHaveValue("1800");
-      await expect(form.locator('[name="grossValue"]')).toHaveValue("10800");
+      await expect(form.locator('[name="otherRelatedCostsRsd"]')).toHaveValue(
+        "0",
+      );
+      await expect(
+        form.locator('[name="otherRelatedCostsRsd"]'),
+      ).toHaveAttribute("readonly", "");
+      await expect(form.locator('[name="netValue"]')).toHaveValue("8500");
+      await expect(form.locator('[name="vatValue"]')).toHaveValue("1700");
+      await expect(form.locator('[name="grossValue"]')).toHaveValue("10200");
       await form.locator('[name="notes"]').fill("QA trošak transporta");
       await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(form.getByRole("status")).toContainText(
@@ -260,17 +265,17 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         purchaseOrderId,
         type: "COGS",
         status: "RECEIVED",
-        net: 9_000,
-        vat: 1_800,
-        gross: 10_800,
+        net: 8_500,
+        vat: 1_700,
+        gross: 10_200,
         invoiceValueRsd: 8_500,
         customsValueRsd: 0,
         transportValueRsd: 0,
-        otherRelatedCostsRsd: 500,
+        otherRelatedCostsRsd: 0,
       });
       await expect(
         page.locator("tbody tr").filter({ hasText: fixture.sku }),
-      ).toContainText("180");
+      ).toContainText("170");
     });
 
     await test.step("double click opens the invoice and Uredi persists a change", async () => {
@@ -330,7 +335,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       expect(locked.status).toBe("POSTED");
       expect(locked.cogsStatus).toBe("LOCKED");
       expect(locked.lockedAt).not.toBeNull();
-      expect(Number(item.additionalCostAllocated)).toBe(500);
+      expect(Number(item.additionalCostAllocated)).toBe(0);
 
       const retry = await page.request.post(
         "/api/admin/erp/ulazne-fakture/commands",
@@ -346,10 +351,10 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
             })
           ).additionalCostAllocated,
         ),
-      ).toBe(500);
+      ).toBe(0);
     });
 
-    await test.step("goods receipt writes the weighted COGS 193.33 to the article", async () => {
+    await test.step("goods receipt writes the weighted COGS 190 to the article", async () => {
       await page.getByRole("link", { name: fixture.orderNumber }).click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/porudzbenice/${purchaseOrderId}$`),
@@ -376,13 +381,13 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         select: { stock: true, cogs: true },
       });
       expect(product.stock).toBe(150);
-      expect(Number(product.cogs)).toBe(193.33);
+      expect(Number(product.cogs)).toBe(190);
 
       await page.goto(`/admin/erp/ulazne-fakture/${invoiceId}`, {
         waitUntil: "domcontentloaded",
       });
       const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
-      await expect(cogsRow).toContainText("193,33 RSD");
+      await expect(cogsRow).toContainText("190 RSD");
       await expect(
         page.getByRole("button", { name: "Uredi", exact: true }),
       ).toBeDisabled();
