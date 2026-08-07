@@ -18,6 +18,17 @@ interface SuggestResponse {
   hits?: SearchSuggestion[];
 }
 
+type SuggestFailure = "rate_limited" | "timeout" | "unavailable";
+
+class SearchSuggestHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`Search suggest failed with status ${status}.`);
+    this.name = "SearchSuggestHttpError";
+  }
+}
+
+const SEARCH_SUGGEST_TIMEOUT_MS = 8_000;
+
 export function InstantSearch({
   className,
   presentation = "dropdown",
@@ -30,6 +41,8 @@ export function InstantSearch({
   const [results, setResults] = useState<SearchSuggestion[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<SuggestFailure | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -50,12 +63,17 @@ export function InstantSearch({
     const controller = new AbortController();
     abortRef.current = controller;
     let live = true;
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, SEARCH_SUGGEST_TIMEOUT_MS);
 
     fetch(`/api/search/suggest?q=${encodeURIComponent(debounced)}&limit=6`, {
       signal: controller.signal,
     })
       .then((response) => {
-        if (!response.ok) throw new Error("Search suggest failed");
+        if (!response.ok) throw new SearchSuggestHttpError(response.status);
         return response.json() as Promise<SuggestResponse>;
       })
       .then((data) => {
@@ -65,19 +83,30 @@ export function InstantSearch({
         }
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        if (live) setResults([]);
+        if (!live) return;
+        if (controller.signal.aborted && !timedOut) return;
+        setResults([]);
+        setFailure(
+          timedOut
+            ? "timeout"
+            : error instanceof SearchSuggestHttpError && error.status === 429
+              ? "rate_limited"
+              : "unavailable",
+        );
       })
       .finally(() => {
+        window.clearTimeout(timeoutId);
         if (live && !controller.signal.aborted) setPending(false);
+        if (live && timedOut) setPending(false);
       });
 
     return () => {
       live = false;
+      window.clearTimeout(timeoutId);
       controller.abort();
       if (abortRef.current === controller) abortRef.current = null;
     };
-  }, [debounced]);
+  }, [debounced, retryToken]);
 
   // Cmd-K / Ctrl-K to focus
   useEffect(() => {
@@ -123,6 +152,15 @@ export function InstantSearch({
     [onNavigate, router],
   );
 
+  const retrySearch = useCallback(() => {
+    if (queryTrimmed.length < 3) return;
+    abortRef.current?.abort();
+    setFailure(null);
+    setResults([]);
+    setPending(true);
+    setRetryToken((token) => token + 1);
+  }, [queryTrimmed]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       if (!open) return;
@@ -152,6 +190,23 @@ export function InstantSearch({
         <div className="flex items-center gap-2 px-4 py-6 text-sm text-ink-500">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           Tražim...
+        </div>
+      ) : failure ? (
+        <div className="space-y-3 px-4 py-5 text-sm text-ink-600" role="status">
+          <p>
+            {failure === "rate_limited"
+              ? "Previše brzih pretraga. Sačekajte trenutak pa pokušajte ponovo."
+              : failure === "timeout"
+                ? "Pretraga traje duže nego obično. Pokušajte ponovo ili pritisnite Enter."
+                : "Predlozi trenutno nisu dostupni. Pokušajte ponovo ili pritisnite Enter."}
+          </p>
+          <button
+            type="button"
+            onClick={retrySearch}
+            className="font-semibold text-walnut underline-offset-4 hover:underline"
+          >
+            Pokušaj ponovo
+          </button>
         </div>
       ) : results.length === 0 ? (
         <div className="px-4 py-6 text-sm text-ink-500">
@@ -262,9 +317,11 @@ export function InstantSearch({
               setDebounced("");
               setResults([]);
               setPending(false);
+              setFailure(null);
             } else if (trimmedChanged) {
               setResults([]);
               setPending(true);
+              setFailure(null);
             }
           }}
           onFocus={() => setOpen(true)}

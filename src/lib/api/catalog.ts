@@ -1659,6 +1659,7 @@ export function listProductRail(
  */
 export async function getProductCardsBySlugs(
   slugs: readonly string[],
+  options: { throwOnError?: boolean } = {},
 ): Promise<ProductDTO[]> {
   const orderedSlugs = Array.from(
     new Set(slugs.map((slug) => slug.trim()).filter(Boolean)),
@@ -1690,6 +1691,7 @@ export async function getProductCardsBySlugs(
       .filter((product): product is ProductDTO => Boolean(product));
   } catch (error) {
     console.error("[catalog] Failed to batch-load product cards.", error);
+    if (options.throwOnError) throw error;
     return [];
   }
 }

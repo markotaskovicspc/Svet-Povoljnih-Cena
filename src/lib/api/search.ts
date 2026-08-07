@@ -5,6 +5,7 @@ import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { getProductCardsBySlugs } from "@/lib/api/catalog";
 import { resolveProductPriceQuote } from "@/lib/pricing";
+import { logOperationalError } from "@/lib/monitoring";
 import type {
   SearchHit,
   SearchNavigationHit,
@@ -41,12 +42,53 @@ interface SuggestRow {
 }
 
 const MIN_QUERY_LEN = 3;
+const NAVIGATION_SUGGEST_TIMEOUT_MS = 1_500;
+const PRODUCT_SUGGEST_TIMEOUT_MS = 6_000;
+const FULL_SEARCH_TIMEOUT_MS = 10_000;
+
+export interface SearchSuggestionResult {
+  hits: SearchSuggestion[];
+  degraded: boolean;
+}
 
 export class SearchUnavailableError extends Error {
   constructor(message: string, readonly cause?: unknown) {
     super(message);
     this.name = "SearchUnavailableError";
   }
+}
+
+function withSearchTimeout<T>(promise: Promise<T>, timeoutMs: number, source: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new SearchUnavailableError(`${source} timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+export function mergeSearchSuggestionSources(
+  navigation: PromiseSettledResult<SearchNavigationHit[]>,
+  products: PromiseSettledResult<SearchHit[]>,
+): SearchSuggestionResult {
+  if (products.status === "rejected") {
+    throw new SearchUnavailableError(
+      "Product suggestions are unavailable.",
+      products.reason,
+    );
+  }
+
+  return {
+    hits: [
+      ...(navigation.status === "fulfilled" ? navigation.value : []),
+      ...products.value,
+    ],
+    degraded: navigation.status === "rejected",
+  };
 }
 
 export function paginateSearchSkuRows<T>(rows: T[], offset: number, limit: number) {
@@ -181,7 +223,10 @@ async function searchProductHits(
     rows = paginateSearchSkuRows(rows, safeOffset, safeLimit);
   }
 
-  const products = await getProductCardsBySlugs(rows.map((row) => row.slug));
+  const products = await getProductCardsBySlugs(
+    rows.map((row) => row.slug),
+    { throwOnError: true },
+  );
   const productsBySlug = new Map(products.map((product) => [product.slug, product]));
 
   return rows.flatMap((r) => {
@@ -197,7 +242,7 @@ async function searchProductHits(
       sku: r.sku,
       slug: r.slug,
       name:
-        product?.name ?? formatProductDisplayName(r.name, r.size_label),
+        product.name ?? formatProductDisplayName(r.name, r.size_label),
       breadcrumb: r.breadcrumb ?? "",
       thumbnailUrl: resolveSupabaseStorageUrl(
         getMediaVariantUrl(
@@ -266,17 +311,34 @@ async function searchNavigationHits(query: string): Promise<SearchNavigationHit[
     .slice(0, 6);
 }
 
-export async function suggest(query: string, limit = 8): Promise<SearchSuggestion[]> {
+export async function suggest(
+  query: string,
+  limit = 8,
+): Promise<SearchSuggestionResult> {
   const q = query.trim();
-  if (q.length < MIN_QUERY_LEN) return [];
+  if (q.length < MIN_QUERY_LEN) return { hits: [], degraded: false };
   if (!hasDatabaseConnection()) {
     throw new SearchUnavailableError("Database connection string is not configured.");
   }
-  const [navigation, products] = await Promise.all([
-    searchNavigationHits(q),
-    searchProductHits(q, limit),
+  const [navigation, products] = await Promise.allSettled([
+    withSearchTimeout(
+      searchNavigationHits(q),
+      NAVIGATION_SUGGEST_TIMEOUT_MS,
+      "Navigation suggestions",
+    ),
+    withSearchTimeout(
+      searchProductHits(q, limit),
+      PRODUCT_SUGGEST_TIMEOUT_MS,
+      "Product suggestions",
+    ),
   ]);
-  return [...navigation, ...products];
+  const result = mergeSearchSuggestionSources(navigation, products);
+  if (navigation.status === "rejected") {
+    logOperationalError("search.suggest.navigation_degraded", navigation.reason, {
+      queryLength: q.length,
+    });
+  }
+  return result;
 }
 
 export async function searchProducts(
@@ -284,5 +346,9 @@ export async function searchProducts(
   limit = 48,
   offset = 0,
 ): Promise<SearchHit[]> {
-  return searchProductHits(query, Math.min(Math.max(limit, 1), 120), offset);
+  return withSearchTimeout(
+    searchProductHits(query, Math.min(Math.max(limit, 1), 120), offset),
+    FULL_SEARCH_TIMEOUT_MS,
+    "Product search",
+  );
 }
