@@ -574,8 +574,8 @@ export async function POST(request: Request) {
       "grossWeightKg", "unitPackWidthCm", "unitPackDepthCm",
       "unitPackHeightCm", "packQty", "packWidthCm", "packDepthCm",
       "packHeightCm", "packGrossWeightKg", "containerQty",
-      "containerGrossWeightKg", "materialText", "status", "webCheck",
-      "wholesaleCheck", "exportCheck", "newUntil",
+      "containerGrossWeightKg", "materialText", "webCheck",
+      "wholesaleCheck", "exportCheck",
     ];
     for (const [familyCode, familyRows] of byFamily) {
       const labelRows = new Map<string, number>();

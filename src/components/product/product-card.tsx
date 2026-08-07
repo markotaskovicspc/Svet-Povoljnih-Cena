@@ -9,7 +9,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Heart, PackageSearch } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Heart,
+  PackageSearch,
+} from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatRsd, formatDate } from "@/lib/format";
@@ -131,6 +138,8 @@ export function ProductCard({
     (s) => s.lines.find((l) => l.sku === product.sku)?.qty ?? 0,
   );
   const visibleLineQty = cartHydrated ? lineQty : 0;
+  const [copiedSku, setCopiedSku] = useState<string | null>(null);
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const images = useMemo(
@@ -163,6 +172,12 @@ export function ProductCard({
   useEffect(() => {
     imageTrackRef.current?.scrollTo({ left: 0, behavior: "auto" });
   }, [product.sku]);
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+    },
+    [],
+  );
   const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
@@ -257,6 +272,19 @@ export function ProductCard({
       current.includes(url) ? current : [...current, url],
     );
   }, []);
+
+  const handleCopySku = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(product.sku);
+      setCopiedSku(product.sku);
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+      copyResetTimerRef.current = setTimeout(() => setCopiedSku(null), 1_800);
+    } catch {
+      setCopiedSku(null);
+    }
+  }, [product.sku]);
+
+  const skuCopied = copiedSku === product.sku;
 
   return (
     <motion.article
@@ -414,6 +442,34 @@ export function ProductCard({
             {product.name}
           </Link>
         </h3>
+        <div
+          data-product-card-sku={product.sku}
+          className={cn(
+            "flex min-w-0 items-center gap-1 text-[10px] leading-tight text-ink-500 md:text-[11px]",
+            compactOnDesktop && "md:text-[9px]",
+          )}
+        >
+          <span className="truncate">
+            Šifra artikla: <span className="font-mono text-ink-700">{product.sku}</span>
+          </span>
+          <button
+            type="button"
+            data-copy-product-sku={product.sku}
+            onClick={handleCopySku}
+            aria-label={`Kopiraj šifru artikla ${product.sku}`}
+            title={skuCopied ? "Kopirano" : "Kopiraj šifru"}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded text-ink-500 transition hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+          >
+            {skuCopied ? (
+              <Check className="size-3.5 text-success" aria-hidden />
+            ) : (
+              <Copy className="size-3.5" aria-hidden />
+            )}
+          </button>
+          <span className="sr-only" role="status" aria-live="polite">
+            {skuCopied ? `Šifra artikla ${product.sku} je kopirana.` : ""}
+          </span>
+        </div>
         <Link
           href={`/p/${product.slug}`}
           prefetch={false}

@@ -39,6 +39,23 @@ const readyProduct: Product = {
 };
 
 describe("ProductCard image regression", () => {
+  it("prikazuje šifru artikla sa prečicom za kopiranje odmah ispod naziva", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, { product: readyProduct }),
+    );
+
+    const nameEnd = html.indexOf("</h3>");
+    const skuLine = html.indexOf('data-product-card-sku="QA-IMAGE-001"');
+    const dimensions = html.indexOf("Dimenzije:");
+
+    expect(skuLine).toBeGreaterThan(nameEnd);
+    expect(dimensions).toBeGreaterThan(skuLine);
+    expect(html).toContain("Šifra artikla: <span");
+    expect(html).toContain(
+      'data-copy-product-sku="QA-IMAGE-001" aria-label="Kopiraj šifru artikla QA-IMAGE-001"',
+    );
+  });
+
   it("prikazuje dimenzije umesto kratkog opisa", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {

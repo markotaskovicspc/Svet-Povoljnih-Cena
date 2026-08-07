@@ -9,7 +9,7 @@ import {
 } from "@/lib/product-family";
 import { productAttachmentAdminLabel } from "@/lib/product-documents";
 
-export type ProductFamilySyncGroup = "master" | "commercial";
+export type ProductFamilySyncGroup = "master" | "publication";
 
 async function lockFamily(tx: Prisma.TransactionClient, familyId: string) {
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`spc:product-family:${familyId}`}))::text AS "lock"`;
@@ -158,13 +158,13 @@ export async function getProductFamilyProductIds(
 
 /**
  * Propagates fields that the business treats as family-owned. SKU identity,
- * colours/media, supplier ownership, stock, reservations and cost accounting
- * are intentionally absent from this routine.
+ * colours/media, supplier ownership, stock, prices, promotions, lifecycle
+ * statuses, reservations and cost accounting are intentionally absent.
  */
 export async function propagateProductFamilySharedData(
   tx: Prisma.TransactionClient,
   sourceProductId: string,
-  groups: ProductFamilySyncGroup[] = ["master", "commercial"],
+  groups: ProductFamilySyncGroup[] = ["master", "publication"],
 ) {
   const family = await getProductFamilyProductIds(tx, sourceProductId);
   if (!family || family.productIds.length < 2) return [];
@@ -181,20 +181,17 @@ export async function propagateProductFamilySharedData(
         where: { lookupValue: { kind: { not: "COLOR" } } },
         select: { lookupValueId: true },
       },
-      priceListEntries: true,
-      actionPrices: true,
-      loyaltyRules: true,
     },
   });
   const targetIds = family.productIds.filter((id) => id !== sourceProductId);
   if (!targetIds.length) return [];
   const targets = await tx.product.findMany({
     where: { id: { in: targetIds } },
-    select: { id: true, sku: true, supplierId: true, supplierApprovalStatus: true },
+    select: { id: true, sku: true },
   });
 
   const syncMaster = groups.includes("master");
-  const syncCommercial = groups.includes("commercial");
+  const syncPublication = groups.includes("publication");
   for (const target of targets) {
     const data: Prisma.ProductUncheckedUpdateInput = {};
     if (syncMaster) {
@@ -247,35 +244,14 @@ export async function propagateProductFamilySharedData(
         allowsAssembly: source.allowsAssembly,
       });
     }
-    if (syncCommercial) {
+    if (syncPublication) {
       Object.assign(data, {
-        fullPrice: source.fullPrice,
-        salePrice: source.salePrice,
-        discountPct: source.discountPct,
-        loyaltyPrice: source.loyaltyPrice,
-        loyaltyDiscountPct: source.loyaltyDiscountPct,
-        actionId: source.actionId,
-        articleStatus: source.articleStatus,
-        isHero: source.isHero,
-        isNew: source.isNew,
-        newUntil: source.newUntil,
-        newUntilAutomatic: source.newUntilAutomatic,
-        isLimited: source.isLimited,
-        isDtz: source.isDtz,
         availableWebManual: source.availableWebManual,
         availableWholesaleManual: source.availableWholesaleManual,
         availableExportManual: source.availableExportManual,
         inGoogleMerchant: source.inGoogleMerchant,
         inMetaCatalog: source.inMetaCatalog,
         inTiktokCatalog: source.inTiktokCatalog,
-        deletedAt: source.deletedAt,
-        // Supplier approval remains a hard per-SKU publication gate.
-        isActive:
-          target.supplierId &&
-          target.supplierApprovalStatus != null &&
-          target.supplierApprovalStatus !== "APPROVED"
-            ? false
-            : source.isActive,
       });
     }
     await tx.product.update({ where: { id: target.id }, data });
@@ -303,9 +279,6 @@ export async function propagateProductFamilySharedData(
           })),
         });
       }
-    }
-    if (syncCommercial) {
-      await replaceCommercialRelations(tx, target.id, source);
     }
   }
   return targetIds;
@@ -362,53 +335,6 @@ async function replaceSimpleRelations(
         lookupValueId,
       })),
       skipDuplicates: true,
-    });
-  }
-}
-
-async function replaceCommercialRelations(
-  tx: Prisma.TransactionClient,
-  productId: string,
-  source: {
-    priceListEntries: Array<{
-      priceListId: string;
-      price: Prisma.Decimal;
-      validFrom: Date;
-      validTo: Date | null;
-    }>;
-    actionPrices: Array<{ actionId: string; salePrice: Prisma.Decimal }>;
-    loyaltyRules: Array<{ loyaltyRuleId: string }>;
-  },
-) {
-  await tx.priceListEntry.deleteMany({ where: { productId } });
-  if (source.priceListEntries.length) {
-    await tx.priceListEntry.createMany({
-      data: source.priceListEntries.map((entry) => ({
-        productId,
-        priceListId: entry.priceListId,
-        price: entry.price,
-        validFrom: entry.validFrom,
-        validTo: entry.validTo,
-      })),
-    });
-  }
-  await tx.actionProduct.deleteMany({ where: { productId } });
-  if (source.actionPrices.length) {
-    await tx.actionProduct.createMany({
-      data: source.actionPrices.map((entry) => ({
-        productId,
-        actionId: entry.actionId,
-        salePrice: entry.salePrice,
-      })),
-    });
-  }
-  await tx.loyaltyRuleProduct.deleteMany({ where: { productId } });
-  if (source.loyaltyRules.length) {
-    await tx.loyaltyRuleProduct.createMany({
-      data: source.loyaltyRules.map((entry) => ({
-        productId,
-        loyaltyRuleId: entry.loyaltyRuleId,
-      })),
     });
   }
 }

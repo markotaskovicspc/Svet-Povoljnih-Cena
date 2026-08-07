@@ -81,7 +81,7 @@ async function toggleProductCatalog(_state: AdminActionState, formData: FormData
             where: { id: productId },
             data: { [FIELD_BY_CHANNEL[channel]]: next },
           });
-          await propagateProductFamilySharedData(tx, productId, ["commercial"]);
+          await propagateProductFamilySharedData(tx, productId, ["publication"]);
         });
         revalidatePath("/admin/oglasi");
         revalidatePath("/api/feeds/google");

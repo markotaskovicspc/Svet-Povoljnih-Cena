@@ -526,8 +526,9 @@ model Product {
   @@index([supplierId, lastSupplierStockSyncAt])
 }
 
-/// A storefront family groups fully independent ERP products that differ only
-/// by colour. The primary product owns the shared presentation/commercial data.
+/// A storefront family groups ERP products that differ only by colour. The
+/// primary product owns shared presentation data, while every member keeps its
+/// own prices, promotions and lifecycle statuses.
 model ProductFamily {
   id               String   @id @default(cuid())
   code             String   @unique

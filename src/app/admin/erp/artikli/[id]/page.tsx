@@ -1488,7 +1488,7 @@ export default async function ProductDetail({
             )}
           </Card>
           <Card>
-          <CardTitle description="Zajednička polja se pri čuvanju primenjuju na sve članove porodice; SKU, boje, slike, zalihe, nabavne cene i supplier identitet ostaju samo na ovoj boji.">
+          <CardTitle description="Opisni podaci se pri čuvanju primenjuju na sve članove porodice. SKU, boje, slike, zalihe, nabavne i prodajne cene, akcije, TNC/DTZ/Novo/Heroji oznake i supplier identitet ostaju samo na konkretnom artiklu.">
             Karton proizvoda
           </CardTitle>
           <AdminActionForm
@@ -1508,7 +1508,7 @@ export default async function ProductDetail({
                 Porodica boja
               </legend>
               <p className="text-xs text-ink-600">
-                Prazna šifra odvaja ovu boju bez brisanja SKU-a ili istorije. Promena zajedničkih podataka ispod važi za celu porodicu.
+                Prazna šifra odvaja ovu boju bez brisanja SKU-a ili istorije. Opisni podaci važe za celu porodicu; cene, akcije i statusi važe samo za ovaj SKU.
               </p>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <Field label="Šifra porodice">
