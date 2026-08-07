@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Filter sidebar — price/dimensions plus checkbox facets discovered from the
- * products that are currently loaded in the listing.
+ * Filter sidebar — price/dimensions plus checkbox facets for the complete
+ * server-side listing scope, with a local first-page fallback while they load.
  *
  * Used inline on desktop and inside a Sheet on mobile (rendered by ListingShell).
  */
@@ -32,6 +32,7 @@ import {
 
 interface FilterSidebarProps {
   source: Product[];
+  facetValues?: FacetValues;
   extents: FacetExtents;
   state: FilterState;
   onChange: (next: FilterState) => void;
@@ -42,16 +43,15 @@ const AVAILABILITY: Availability[] = ["in-stock", "incoming", "out-of-stock"];
 
 export function FilterSidebar({
   source,
+  facetValues,
   extents,
   state,
   onChange,
   className,
 }: FilterSidebarProps) {
-  const facets: FacetValues = useMemo(() => computeFacetValues(source), [source]);
-  const groups = useMemo(
-    () => Array.from(new Set(source.map((p) => p.group))),
-    [source],
-  );
+  const localFacets = useMemo(() => computeFacetValues(source), [source]);
+  const facets = facetValues ?? localFacets;
+  const groups = facets.groups;
   const dynFacets = useMemo(() => dynamicFacetsForGroups(groups), [groups]);
 
   const price = state.price ?? extents.price;

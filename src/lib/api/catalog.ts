@@ -61,8 +61,14 @@ import {
 } from "@/lib/storefront/promotion-filters";
 import { buildProductDeclaration } from "@/lib/product-declaration";
 import { formatProductAttributes } from "@/lib/product-attributes";
-import { formatProductDisplayName } from "@/lib/product-name";
 import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
+import { formatProductDisplayName } from "@/lib/product-name";
+import {
+  dynamicFacetsForGroups,
+  type Availability,
+  type FacetExtents,
+  type FacetValues,
+} from "@/lib/listing/filters";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -201,6 +207,41 @@ const productListSelect = {
 } satisfies Prisma.ProductSelect;
 
 type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
+
+const productFacetSelect = {
+  sku: true,
+  group: { select: { slug: true, name: true } },
+  colorPrimary: true,
+  colorSecondary: true,
+  attribute1: true,
+  attribute2: true,
+  attribute3: true,
+  attribute4: true,
+  widthCm: true,
+  depthCm: true,
+  heightCm: true,
+  stock: true,
+  dcAvailableQty: true,
+  incomingStock: true,
+  supplierStock: true,
+  supplierReservedStock: true,
+  supplierApprovalStatus: true,
+  lastSupplierStockSyncAt: true,
+  supplier: { select: { integrationKey: true, enabled: true } },
+  fullPrice: true,
+  salePrice: true,
+  priceListEntries: {
+    where: { priceList: { active: true, kind: "RETAIL" } },
+    include: { priceList: true },
+    orderBy: { validFrom: "desc" },
+  },
+  materials: { include: { material: true } },
+  familyMembership: { select: { label: true, colorHex: true } },
+} satisfies Prisma.ProductSelect;
+
+type ProductFacetRow = Prisma.ProductGetPayload<{
+  select: typeof productFacetSelect;
+}>;
 
 const productInclude = {
   group: true,
@@ -908,7 +949,11 @@ export interface ListProductsInput {
   /** Restrict to outlet (significant discount). */
   outletOnly?: boolean;
   groupSlug?: string;
+  /** Additional user-selected groups (OR within this facet). */
+  groupSlugs?: string[];
   collectionSlug?: string;
+  /** Case-insensitive category-label fragment used by listing sub-tabs. */
+  categoryKeyword?: string;
   excludeSku?: string;
   /** Restrict to products at or below this effective price. */
   maxPrice?: number;
@@ -918,6 +963,11 @@ export interface ListProductsInput {
   depthRange?: [number, number];
   heightRange?: [number, number];
   materialIds?: string[];
+  materialLabels?: string[];
+  colors?: string[];
+  attributes?: string[];
+  availability?: Availability[];
+  dynamicFilters?: Record<string, string[]>;
   inStockOnly?: boolean;
   sort?: ProductSort;
   /** Page size (default 24, max 300). */
@@ -932,6 +982,11 @@ export interface ListProductsResult {
   items: ProductDTO[];
   nextCursor: string | null;
   total: number;
+}
+
+export interface ListProductFacetsResult {
+  facets: FacetValues;
+  extents: FacetExtents;
 }
 
 function liveActionWhere(now: Date): Prisma.ActionWhereInput {
@@ -992,32 +1047,106 @@ function webStorefrontVisibleProductWhere(): Prisma.ProductWhereInput {
   };
 }
 
-async function loadProducts(
-  input: ListProductsInput = {},
-): Promise<ListProductsResult> {
-  if (!hasDatabaseConnection()) {
-    return { items: [], nextCursor: null, total: 0 };
+function storefrontInStockWhere(now: Date): Prisma.ProductWhereInput {
+  const freshAfter = rabaluxStockFreshAfter(now);
+  return {
+    OR: [
+      {
+        AND: [
+          {
+            OR: [
+              { supplier: { is: null } },
+              { supplier: { is: { integrationKey: null } } },
+              { supplier: { is: { integrationKey: { not: "RABALUX" } } } },
+            ],
+          },
+          { stock: { gt: 0 } },
+        ],
+      },
+      {
+        AND: [
+          { supplier: { is: { integrationKey: "RABALUX" } } },
+          { dcAvailableQty: { gt: 0 } },
+        ],
+      },
+      ...(isRabaluxEnabled()
+        ? [
+            {
+              supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
+              supplierApprovalStatus: "APPROVED",
+              lastSupplierStockSyncAt: { gte: freshAfter },
+              supplier: {
+                is: { integrationKey: "RABALUX", enabled: true },
+              },
+            } satisfies Prisma.ProductWhereInput,
+          ]
+        : []),
+    ],
+  };
+}
+
+function dynamicFilterWhere(
+  key: string,
+  values: string[],
+): Prisma.ProductWhereInput | null {
+  const widthConditions: Prisma.ProductWhereInput[] = [];
+
+  if (key === "sirina-lezista") {
+    for (const value of values) {
+      if (value === "180 cm") widthConditions.push({ widthCm: { gte: 180 } });
+      if (value === "160 cm") widthConditions.push({ widthCm: { gte: 160, lt: 180 } });
+      if (value === "140 cm") widthConditions.push({ widthCm: { gte: 140, lt: 160 } });
+      if (value === "≤ 120 cm") {
+        widthConditions.push({ OR: [{ widthCm: { lt: 140 } }, { widthCm: null }] });
+      }
+    }
+  } else if (key === "tip") {
+    if (values.includes("Ugaona")) widthConditions.push({ widthCm: { gte: 260 } });
+    if (values.includes("Ravna")) {
+      widthConditions.push({ OR: [{ widthCm: { lt: 260 } }, { widthCm: null }] });
+    }
+  } else if (key === "broj-vrata") {
+    for (const value of values) {
+      const count = Number.parseInt(value, 10);
+      if (!Number.isFinite(count) || count < 2) continue;
+      if (count === 2) {
+        widthConditions.push({ OR: [{ widthCm: { lt: 125 } }, { widthCm: null }] });
+      } else {
+        widthConditions.push({
+          widthCm: { gte: count * 50 - 25, lt: count * 50 + 25 },
+        });
+      }
+    }
   }
 
+  return widthConditions.length ? { OR: widthConditions } : null;
+}
+
+function buildProductListingWhere(
+  input: ListProductsInput,
+  now: Date,
+  pricingRules: ActivePricingRules,
+  monthlyHeroSkus: string[],
+) {
   const where: Prisma.ProductWhereInput = webStorefrontProductWhere();
-  const now = new Date();
-  const heroPeriod = input.heroOnly ? storefrontMonth(now) : null;
-  const [pricingRules, deliveryWindows, monthlyHeroes] = await Promise.all([
-    getActivePricingRules(),
-    getDeliveryWindows(),
-    heroPeriod
-      ? db.heroOfMonth.findMany({
-          where: heroPeriod,
-          orderBy: { order: "asc" },
-          select: { productSku: true },
-        })
-      : Promise.resolve([]),
-  ]);
 
   if (input.categoryPath) {
-    where.categories = {
-      some: { category: { path: { startsWith: input.categoryPath } } },
-    };
+    appendAnd(where, {
+      categories: {
+        some: { category: { path: { startsWith: input.categoryPath } } },
+      },
+    });
+  }
+  if (input.categoryKeyword) {
+    appendAnd(where, {
+      categories: {
+        some: {
+          category: {
+            name: { contains: input.categoryKeyword, mode: "insensitive" },
+          },
+        },
+      },
+    });
   }
   if (input.actionSlug) {
     appendAnd(where, {
@@ -1035,9 +1164,7 @@ async function loadProducts(
       ],
     });
   }
-  if (input.permanentOnly) {
-    appendAnd(where, permanentPriceProductsWhere());
-  }
+  if (input.permanentOnly) appendAnd(where, permanentPriceProductsWhere());
   if (input.onSaleOnly) {
     const hasGlobalLinearPromotion = pricingRules.linearPromotions.some(
       (promotion) =>
@@ -1092,13 +1219,7 @@ async function loadProducts(
     }
   }
   if (input.heroOnly) {
-    appendAnd(
-      where,
-      heroProductsWhere(
-        now,
-        monthlyHeroes.map((hero) => hero.productSku),
-      ),
-    );
+    appendAnd(where, heroProductsWhere(now, monthlyHeroSkus));
   }
   if (input.limitedOnly) {
     appendAnd(where, limitedOfferProductsWhere());
@@ -1111,46 +1232,90 @@ async function loadProducts(
   if (input.outletOnly) {
     appendAnd(where, { discountPct: { gte: 30 }, ...liveSaleWhere(now) });
   }
-  if (input.groupSlug) where.group = { slug: input.groupSlug };
-  if (input.collectionSlug) where.collection = { slug: input.collectionSlug };
-  if (input.excludeSku) where.sku = { not: input.excludeSku };
-  if (input.inStockOnly) {
-    const freshAfter = rabaluxStockFreshAfter(now);
+  if (input.groupSlug) appendAnd(where, { group: { is: { slug: input.groupSlug } } });
+  if (input.groupSlugs?.length) {
+    appendAnd(where, { group: { is: { slug: { in: input.groupSlugs } } } });
+  }
+  if (input.collectionSlug) {
+    appendAnd(where, { collection: { is: { slug: input.collectionSlug } } });
+  }
+  if (input.excludeSku) appendAnd(where, { sku: { not: input.excludeSku } });
+  if (input.inStockOnly) appendAnd(where, storefrontInStockWhere(now));
+
+  const effectivePriceWhere = (range: [number, number]): Prisma.ProductWhereInput => ({
+    OR: [
+      { salePrice: { gte: range[0], lte: range[1] } },
+      {
+        AND: [
+          { salePrice: null },
+          { fullPrice: { gte: range[0], lte: range[1] } },
+        ],
+      },
+    ],
+  });
+  if (input.maxPrice != null) {
+    appendAnd(where, effectivePriceWhere([0, input.maxPrice]));
+  }
+  if (input.priceRange) appendAnd(where, effectivePriceWhere(input.priceRange));
+  if (input.widthRange) {
+    appendAnd(where, { widthCm: { gte: input.widthRange[0], lte: input.widthRange[1] } });
+  }
+  if (input.depthRange) {
+    appendAnd(where, { depthCm: { gte: input.depthRange[0], lte: input.depthRange[1] } });
+  }
+  if (input.heightRange) {
+    appendAnd(where, { heightCm: { gte: input.heightRange[0], lte: input.heightRange[1] } });
+  }
+  if (input.materialIds?.length) {
+    appendAnd(where, { materials: { some: { materialId: { in: input.materialIds } } } });
+  }
+  if (input.materialLabels?.length) {
+    appendAnd(where, {
+      materials: {
+        some: {
+          material: {
+            is: { label: { in: input.materialLabels, mode: "insensitive" } },
+          },
+        },
+      },
+    });
+  }
+  if (input.colors?.length) {
+    const colors = { in: input.colors, mode: "insensitive" as const };
     appendAnd(where, {
       OR: [
-        { dcAvailableQty: { gt: 0 } },
-        ...(isRabaluxEnabled()
-          ? [
-              {
-                supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
-                supplierApprovalStatus: "APPROVED",
-                lastSupplierStockSyncAt: { gte: freshAfter },
-                supplier: {
-                  is: { integrationKey: "RABALUX", enabled: true },
-                },
-              } satisfies Prisma.ProductWhereInput,
-            ]
-          : []),
+        { colorPrimary: colors },
+        { colorSecondary: colors },
+        { familyMembership: { is: { label: colors } } },
       ],
     });
   }
-  if (input.maxPrice != null) {
-    where.OR = [
-      { salePrice: { lte: input.maxPrice } },
-      { AND: [{ salePrice: null }, { fullPrice: { lte: input.maxPrice } }] },
-    ];
+  if (input.attributes?.length) {
+    const attributes = { in: input.attributes, mode: "insensitive" as const };
+    appendAnd(where, {
+      OR: [
+        { attribute1: attributes },
+        { attribute2: attributes },
+        { attribute3: attributes },
+        { attribute4: attributes },
+      ],
+    });
   }
-  if (input.priceRange) {
-    where.OR = [
-      { salePrice: { gte: input.priceRange[0], lte: input.priceRange[1] } },
-      { AND: [{ salePrice: null }, { fullPrice: { gte: input.priceRange[0], lte: input.priceRange[1] } }] },
-    ];
+  if (input.availability?.length) {
+    const inStock = storefrontInStockWhere(now);
+    const availabilityWhere: Prisma.ProductWhereInput[] = [];
+    if (input.availability.includes("in-stock")) availabilityWhere.push(inStock);
+    if (input.availability.includes("incoming")) {
+      availabilityWhere.push({ AND: [{ NOT: inStock }, { incomingStock: { gt: 0 } }] });
+    }
+    if (input.availability.includes("out-of-stock")) {
+      availabilityWhere.push({ AND: [{ NOT: inStock }, { incomingStock: { lte: 0 } }] });
+    }
+    if (availabilityWhere.length) appendAnd(where, { OR: availabilityWhere });
   }
-  if (input.widthRange) where.widthCm = { gte: input.widthRange[0], lte: input.widthRange[1] };
-  if (input.depthRange) where.depthCm = { gte: input.depthRange[0], lte: input.depthRange[1] };
-  if (input.heightRange) where.heightCm = { gte: input.heightRange[0], lte: input.heightRange[1] };
-  if (input.materialIds?.length) {
-    where.materials = { some: { materialId: { in: input.materialIds } } };
+  for (const [key, values] of Object.entries(input.dynamicFilters ?? {})) {
+    const condition = dynamicFilterWhere(key, values);
+    if (condition) appendAnd(where, condition);
   }
 
   // Every published colour SKU occupies its own listing row and contributes
@@ -1162,8 +1327,35 @@ async function loadProducts(
       { familyMembership: { is: { storefrontEnabled: true } } },
     ],
   });
-  const listingWhere = where;
+  return where;
+}
 
+async function loadProducts(
+  input: ListProductsInput = {},
+): Promise<ListProductsResult> {
+  if (!hasDatabaseConnection()) {
+    return { items: [], nextCursor: null, total: 0 };
+  }
+
+  const now = new Date();
+  const heroPeriod = input.heroOnly ? storefrontMonth(now) : null;
+  const [pricingRules, deliveryWindows, monthlyHeroes] = await Promise.all([
+    getActivePricingRules(),
+    getDeliveryWindows(),
+    heroPeriod
+      ? db.heroOfMonth.findMany({
+          where: heroPeriod,
+          orderBy: { order: "asc" },
+          select: { productSku: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const listingWhere = buildProductListingWhere(
+    input,
+    now,
+    pricingRules,
+    monthlyHeroes.map((hero) => hero.productSku),
+  );
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = (() => {
     switch (input.sort) {
       case "price-asc":
@@ -1214,6 +1406,196 @@ export async function listProducts(
   } catch (error) {
     console.error("[catalog] Failed to list products.", error);
     return { items: [], nextCursor: null, total: 0 };
+  }
+}
+
+function emptyProductFacets(): ListProductFacetsResult {
+  return {
+    facets: {
+      groups: [],
+      groupLabels: {},
+      materials: [],
+      colors: [],
+      colorSwatches: {},
+      attributes: [],
+      counts: {
+        groups: {},
+        materials: {},
+        colors: {},
+        attributes: {},
+        availability: { "in-stock": 0, incoming: 0, "out-of-stock": 0 },
+      },
+      dynamic: {},
+    },
+    extents: {
+      price: [0, 0],
+      width: [0, 0],
+      depth: [0, 0],
+      height: [0, 0],
+    },
+  };
+}
+
+function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult {
+  if (!rows.length) return emptyProductFacets();
+
+  const result = emptyProductFacets();
+  const { facets } = result;
+  const groups = new Set<string>();
+  const materials = new Map<string, string>();
+  const colors = new Map<string, string>();
+  const attributes = new Map<string, string>();
+  const dynamic: Record<string, Set<string>> = {};
+  const prices: number[] = [];
+  const widths: number[] = [];
+  const depths: number[] = [];
+  const heights: number[] = [];
+
+  const collect = (
+    target: Map<string, string>,
+    counts: Record<string, number>,
+    values: Array<string | null | undefined>,
+  ) => {
+    const perProduct = new Set<string>();
+    for (const raw of values) {
+      const value = raw?.trim();
+      if (!value) continue;
+      const key = value.toLocaleLowerCase("sr-Latn-RS");
+      if (perProduct.has(key)) continue;
+      perProduct.add(key);
+      const canonical = target.get(key) ?? value;
+      target.set(key, canonical);
+      counts[canonical] = (counts[canonical] ?? 0) + 1;
+    }
+  };
+
+  const productGroups = Array.from(
+    new Set(rows.flatMap((row) => (row.group?.slug ? [row.group.slug] : []))),
+  );
+  const dynamicFacets = dynamicFacetsForGroups(productGroups);
+
+  for (const row of rows) {
+    if (row.group?.slug) {
+      groups.add(row.group.slug);
+      facets.groupLabels[row.group.slug] = row.group.name;
+      facets.counts.groups[row.group.slug] =
+        (facets.counts.groups[row.group.slug] ?? 0) + 1;
+    }
+    collect(
+      materials,
+      facets.counts.materials,
+      row.materials.map((item) => item.material.label),
+    );
+    collect(colors, facets.counts.colors, [
+      row.familyMembership?.label,
+      row.colorPrimary,
+      row.colorSecondary,
+    ]);
+    collect(
+      attributes,
+      facets.counts.attributes,
+      formatProductAttributes([
+        row.attribute1,
+        row.attribute2,
+        row.attribute3,
+        row.attribute4,
+      ]),
+    );
+
+    if (row.familyMembership?.label && row.familyMembership.colorHex) {
+      const key = row.familyMembership.label.toLocaleLowerCase("sr-Latn-RS");
+      const canonical = colors.get(key) ?? row.familyMembership.label;
+      facets.colorSwatches[canonical] ??= row.familyMembership.colorHex;
+    }
+
+    const availability = productStockAvailability(row);
+    const availabilityKey: Availability =
+      availability.sellableStock > 0
+        ? "in-stock"
+        : row.incomingStock > 0
+          ? "incoming"
+          : "out-of-stock";
+    facets.counts.availability[availabilityKey] += 1;
+
+    const dimensions = {
+      w: num(row.widthCm) || 0,
+      d: num(row.depthCm) || 0,
+      h: num(row.heightCm) || 0,
+    };
+    const retailPrice = resolveRetailPrice(row.priceListEntries, row.fullPrice);
+    prices.push(numOrNull(row.salePrice) ?? retailPrice.price);
+    widths.push(dimensions.w);
+    depths.push(dimensions.d);
+    heights.push(dimensions.h);
+
+    for (const facet of dynamicFacets) {
+      const value = facet.getValue({ dimensionsCm: dimensions } as ProductDTO);
+      if (value) (dynamic[facet.key] ??= new Set()).add(value);
+    }
+  }
+
+  const localeSort = (left: string, right: string) =>
+    left.localeCompare(right, "sr-Latn-RS");
+  facets.groups = Array.from(groups).sort((left, right) =>
+    (facets.groupLabels[left] ?? left).localeCompare(
+      facets.groupLabels[right] ?? right,
+      "sr-Latn-RS",
+    ),
+  );
+  facets.materials = Array.from(materials.values()).sort(localeSort);
+  facets.colors = Array.from(colors.values()).sort(localeSort);
+  facets.attributes = Array.from(attributes.values()).sort(localeSort);
+  facets.dynamic = Object.fromEntries(
+    Object.entries(dynamic).map(([key, values]) => [
+      key,
+      Array.from(values).sort(localeSort),
+    ]),
+  );
+
+  const extent = (
+    values: number[],
+    step: number,
+  ): [number, number] => [
+    Math.floor(Math.min(...values) / step) * step,
+    Math.ceil(Math.max(...values) / step) * step,
+  ];
+  result.extents = {
+    price: extent(prices, 1000),
+    width: extent(widths, 10),
+    depth: extent(depths, 10),
+    height: extent(heights, 10),
+  };
+  return result;
+}
+
+export async function listProductFacets(
+  input: ListProductsInput = {},
+): Promise<ListProductFacetsResult> {
+  if (!hasDatabaseConnection()) return emptyProductFacets();
+  try {
+    const now = new Date();
+    const heroPeriod = input.heroOnly ? storefrontMonth(now) : null;
+    const [pricingRules, monthlyHeroes] = await Promise.all([
+      getActivePricingRules(),
+      heroPeriod
+        ? db.heroOfMonth.findMany({
+            where: heroPeriod,
+            orderBy: { order: "asc" },
+            select: { productSku: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const where = buildProductListingWhere(
+      input,
+      now,
+      pricingRules,
+      monthlyHeroes.map((hero) => hero.productSku),
+    );
+    const rows = await db.product.findMany({ where, select: productFacetSelect });
+    return computeProductFacets(rows);
+  } catch (error) {
+    console.error("[catalog] Failed to list product facets.", error);
+    throw error;
   }
 }
 

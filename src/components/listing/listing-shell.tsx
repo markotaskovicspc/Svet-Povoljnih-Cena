@@ -7,8 +7,8 @@
  * Visual chrome: page header, breadcrumbs,
  * sticky desktop sidebar, mobile sheet trigger, active filter chip strip.
  *
- * Phase 1: pure client filtering over a pre-built product list. In Phase 4
- * `source` will be a server-paginated cursor — the same UI applies.
+ * Filters are executed by the catalog API over the complete listing scope;
+ * the client keeps the cursor, active query, and first-page fallback in sync.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -46,9 +46,12 @@ import {
 import {
   LISTING_PAGE_SIZE,
   type FilterState,
+  type FacetExtents,
+  type FacetValues,
   type ListingKind,
   type SortKey,
   activeChips,
+  appendFilterQueryParams,
   applyFilters,
   applySort,
   computeExtents,
@@ -145,8 +148,15 @@ function ListingShellInner({
 }: ListingShellInnerProps) {
   const [items, setItems] = useState(source);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
+  const [currentTotal, setCurrentTotal] = useState(total ?? source.length);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [facetData, setFacetData] = useState<{
+    query: string;
+    facets?: FacetValues;
+    extents?: FacetExtents;
+  }>();
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
   const [view, setView] = useState<3 | 5>(() => {
@@ -163,6 +173,7 @@ function ListingShellInner({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const listingQueryRef = useRef("");
   const displayTitleIcon =
     titleIcon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
 
@@ -188,6 +199,112 @@ function ListingShellInner({
     return () => window.removeEventListener("pagehide", persist);
   }, []);
 
+  const activeSubKeyword = useMemo(() => {
+    if (!subTabs?.length || !activeSub) return undefined;
+    return subTabs.find((tab) => tab.id === activeSub)?.matchKeyword;
+  }, [activeSub, subTabs]);
+  const facetQueryString = useMemo(() => {
+    const params = new URLSearchParams(pageQueryString);
+    if (activeSubKeyword) params.set("categoryKeyword", activeSubKeyword);
+    return params.toString();
+  }, [activeSubKeyword, pageQueryString]);
+  const serverFacets =
+    facetData?.query === facetQueryString ? facetData.facets : undefined;
+  const serverExtents =
+    facetData?.query === facetQueryString ? facetData.extents : undefined;
+  const listingQueryString = useMemo(() => {
+    const params = new URLSearchParams(pageQueryString);
+    appendFilterQueryParams(params, state, sort, activeSubKeyword);
+    return params.toString();
+  }, [activeSubKeyword, pageQueryString, sort, state]);
+  const hasServerQuery =
+    Boolean(activeSubKeyword) || sort !== "default" || !filterStateIsEmpty(state);
+
+  useEffect(() => {
+    listingQueryRef.current = listingQueryString;
+  }, [listingQueryString]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`/api/products/facets?${facetQueryString}`, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as {
+          facets?: FacetValues;
+          extents?: FacetExtents;
+        };
+      })
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setFacetData({
+          query: facetQueryString,
+          facets: data.facets,
+          extents: data.extents,
+        });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.error("[listing] Failed to load complete facets.", error);
+        }
+      });
+    return () => controller.abort();
+  }, [facetQueryString]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!hasServerQuery) {
+      void Promise.resolve().then(() => {
+        if (controller.signal.aborted) return;
+        setItems(source);
+        setNextCursor(initialNextCursor);
+        setCurrentTotal(total ?? source.length);
+        setRefreshing(false);
+        setLoadError(false);
+      });
+      return () => controller.abort();
+    }
+
+    const params = new URLSearchParams(listingQueryString);
+    params.set("limit", String(LISTING_PAGE_SIZE));
+    void Promise.resolve().then(() => {
+      if (controller.signal.aborted) return;
+      setRefreshing(true);
+      setLoadingMore(false);
+      setNextCursor(null);
+      setLoadError(false);
+    });
+    void fetch(`/api/products?${params.toString()}`, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return (await response.json()) as {
+          items?: Product[];
+          nextCursor?: string | null;
+          total?: number;
+        };
+      })
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setItems(data.items ?? []);
+        setNextCursor(data.nextCursor ?? null);
+        setCurrentTotal(data.total ?? 0);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.error("[listing] Failed to refresh filtered products.", error);
+        setLoadError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRefreshing(false);
+      });
+    return () => controller.abort();
+  }, [hasServerQuery, initialNextCursor, listingQueryString, source, total]);
+
   const subFiltered = useMemo(() => {
     if (!subTabs?.length || !activeSub) return items;
     const tab = subTabs.find((t) => t.id === activeSub);
@@ -198,7 +315,8 @@ function ListingShellInner({
     );
   }, [items, subTabs, activeSub]);
 
-  const extents = useMemo(() => computeExtents(subFiltered), [subFiltered]);
+  const localExtents = useMemo(() => computeExtents(subFiltered), [subFiltered]);
+  const extents = serverExtents ?? localExtents;
 
   const filtered = useMemo(
     () => applySort(applyFilters(subFiltered, state), sort, kind),
@@ -219,15 +337,16 @@ function ListingShellInner({
   );
   const shown = filtered.slice(0, visible);
   const hasLocalMore = filtered.length > shown.length;
-  const hasServerMore = Boolean(nextCursor);
-  const hasMore = hasLocalMore || hasServerMore;
+  const hasServerMore = !refreshing && Boolean(nextCursor);
+  const hasMore = !refreshing && (hasLocalMore || hasServerMore);
 
   const loadNextPage = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loadingMore || refreshing) return;
+    const requestQuery = listingQueryString;
     setLoadingMore(true);
     setLoadError(false);
     try {
-      const params = new URLSearchParams(pageQueryString);
+      const params = new URLSearchParams(listingQueryString);
       params.set("cursor", nextCursor);
       params.set("limit", String(LISTING_PAGE_SIZE));
       const response = await fetch(`/api/products?${params.toString()}`, {
@@ -237,20 +356,23 @@ function ListingShellInner({
       const data = (await response.json()) as {
         items?: Product[];
         nextCursor?: string | null;
+        total?: number;
       };
+      if (listingQueryRef.current !== requestQuery) return;
       setItems((current) => {
         const seen = new Set(current.map((product) => product.sku));
         const incoming = (data.items ?? []).filter((product) => !seen.has(product.sku));
         return incoming.length ? [...current, ...incoming] : current;
       });
       setNextCursor(data.nextCursor ?? null);
+      if (data.total != null) setCurrentTotal(data.total);
     } catch (error) {
       console.error("[listing] Failed to load more products.", error);
       setLoadError(true);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, nextCursor, pageQueryString]);
+  }, [listingQueryString, loadingMore, nextCursor, refreshing]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -281,6 +403,7 @@ function ListingShellInner({
   const sidebar = (
     <FilterSidebar
       source={subFiltered}
+      facetValues={serverFacets}
       extents={extents}
       state={state}
       onChange={setState}
@@ -406,12 +529,19 @@ function ListingShellInner({
                   </SheetContent>
                 </Sheet>
                 <p className="text-xs text-ink-500" aria-live="polite">
-                  {filtered.length}{" "}
-                  {filtered.length === 1 ? "rezultat" : "rezultata"}
-                  {filtered.length !== subFiltered.length
-                    ? ` od ${subFiltered.length}`
-                    : ""}
-                  {total && total > items.length ? ` (${items.length}/${total} učitano)` : ""}
+                  {refreshing ? (
+                    "Učitavam rezultate..."
+                  ) : (
+                    <>
+                      {hasServerQuery ? currentTotal : filtered.length}{" "}
+                      {(hasServerQuery ? currentTotal : filtered.length) === 1
+                        ? "rezultat"
+                        : "rezultata"}
+                      {currentTotal > items.length
+                        ? ` (${items.length}/${currentTotal} učitano)`
+                        : ""}
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -495,7 +625,20 @@ function ListingShellInner({
               </div>
             ) : null}
 
-            {shown.length ? (
+            {refreshing ? (
+              <div
+                className={cn(
+                  "grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4 sm:gap-y-6",
+                  view === 5
+                    ? "lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+                    : "lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4",
+                )}
+              >
+                {Array.from({ length: 10 }, (_, index) => (
+                  <ProductCardSkeleton key={index} />
+                ))}
+              </div>
+            ) : shown.length ? (
               <div
                 className={cn(
                   "grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4 sm:gap-y-6",
@@ -546,6 +689,19 @@ function buildPageQueryString(query: ListingPageQuery | undefined) {
     params.set(key, String(value));
   }
   return params.toString();
+}
+
+function filterStateIsEmpty(state: FilterState) {
+  return (
+    !state.price &&
+    !state.dimensions &&
+    state.groups.length === 0 &&
+    state.materials.length === 0 &&
+    state.colors.length === 0 &&
+    state.attributes.length === 0 &&
+    state.availability.length === 0 &&
+    Object.values(state.dynamic).every((values) => values.length === 0)
+  );
 }
 
 function EmptyState({ onReset }: { onReset: () => void }) {

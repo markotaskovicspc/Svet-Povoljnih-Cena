@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applyFilters, computeFacetValues, emptyFilterState } from "@/lib/listing/filters";
+import {
+  appendFilterQueryParams,
+  applyFilters,
+  computeFacetValues,
+  emptyFilterState,
+} from "@/lib/listing/filters";
 import type { Product } from "@/types";
 
 const product = {
@@ -122,6 +127,30 @@ describe("dinamički filteri listinga", () => {
     expect(facets.colors).toEqual(["Natur", "Zelena"]);
     expect(facets.attributes).toEqual(["SKLOPIVO", "ZA 4 OSOBE"]);
     expect(facets.counts.attributes).toEqual({ SKLOPIVO: 2, "ZA 4 OSOBE": 1 });
+  });
+
+  it("prosleđuje sve izabrane facete cursor API-ju", () => {
+    const params = appendFilterQueryParams(
+      new URLSearchParams("categoryPath=/namestaj"),
+      {
+        ...emptyFilterState(),
+        groups: ["stolice", "stolovi"],
+        colors: ["Crna"],
+        attributes: ["SKLOPIVO"],
+        price: [1000, 9000],
+        dimensions: { w: [40, 120] },
+        dynamic: { tip: ["Ravna", "Ugaona"] },
+      },
+      "price-asc",
+      "trpezar",
+    );
+
+    expect(params.getAll("groups")).toEqual(["stolice", "stolovi"]);
+    expect(params.getAll("dynamic.tip")).toEqual(["Ravna", "Ugaona"]);
+    expect(params.get("priceMin")).toBe("1000");
+    expect(params.get("widthMax")).toBe("120");
+    expect(params.get("sort")).toBe("price-asc");
+    expect(params.get("categoryKeyword")).toBe("trpezar");
   });
 
   it("dozvoljava više grupa i atributa, sa OR logikom unutar jedne facete", () => {

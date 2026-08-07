@@ -39,4 +39,37 @@ describe("product list query parsing", () => {
       ).permanentOnly,
     ).toBe(false);
   });
+
+  it("parses repeated complete-listing facets without comma splitting", () => {
+    const params = new URLSearchParams();
+    params.append("groups", "stolice");
+    params.append("groups", "trpezarijski-stolovi");
+    params.append("colors", "crna, mat");
+    params.append("attributes", "SKLOPIVO");
+    params.append("availability", "in-stock");
+    params.append("availability", "invalid");
+    params.append("dynamic.tip", "Ugaona");
+    params.set("priceMin", "1000");
+    params.set("priceMax", "25000");
+
+    expect(parseListProductsInput(params)).toMatchObject({
+      groupSlugs: ["stolice", "trpezarijski-stolovi"],
+      colors: ["crna, mat"],
+      attributes: ["SKLOPIVO"],
+      availability: ["in-stock"],
+      dynamicFilters: { tip: ["Ugaona"] },
+      priceRange: [1000, 25000],
+    });
+  });
+
+  it("ignores incomplete or reversed ranges", () => {
+    expect(
+      parseListProductsInput(
+        new URLSearchParams({ widthMin: "100", widthMax: "50" }),
+      ).widthRange,
+    ).toBeUndefined();
+    expect(
+      parseListProductsInput(new URLSearchParams({ widthMin: "50" })).widthRange,
+    ).toBeUndefined();
+  });
 });

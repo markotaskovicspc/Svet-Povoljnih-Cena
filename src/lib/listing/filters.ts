@@ -23,7 +23,7 @@ export interface DimensionRange {
 
 export interface FilterState {
   price?: [number, number];
-  /** Selected product groups from the currently loaded listing. */
+  /** Selected product groups from the complete listing scope. */
   groups: string[];
   /** Selected materials (label keys). */
   materials: string[];
@@ -45,6 +45,51 @@ export const emptyFilterState = (): FilterState => ({
   availability: [],
   dynamic: {},
 });
+
+/**
+ * Adds the interactive listing state to the catalog API query. Repeated
+ * parameters preserve labels that contain commas and keep OR semantics inside
+ * each facet; the catalog combines different facets with AND semantics.
+ */
+export function appendFilterQueryParams(
+  params: URLSearchParams,
+  state: FilterState,
+  sort: SortKey,
+  categoryKeyword?: string,
+) {
+  const appendAll = (key: string, values: string[]) => {
+    for (const value of values) params.append(key, value);
+  };
+
+  appendAll("groups", state.groups);
+  appendAll("materials", state.materials);
+  appendAll("colors", state.colors);
+  appendAll("attributes", state.attributes);
+  appendAll("availability", state.availability);
+
+  if (state.price) {
+    params.set("priceMin", String(state.price[0]));
+    params.set("priceMax", String(state.price[1]));
+  }
+  if (state.dimensions?.w) {
+    params.set("widthMin", String(state.dimensions.w[0]));
+    params.set("widthMax", String(state.dimensions.w[1]));
+  }
+  if (state.dimensions?.d) {
+    params.set("depthMin", String(state.dimensions.d[0]));
+    params.set("depthMax", String(state.dimensions.d[1]));
+  }
+  if (state.dimensions?.h) {
+    params.set("heightMin", String(state.dimensions.h[0]));
+    params.set("heightMax", String(state.dimensions.h[1]));
+  }
+  for (const [key, values] of Object.entries(state.dynamic)) {
+    appendAll(`dynamic.${key}`, values);
+  }
+  if (sort !== "default") params.set("sort", sort);
+  if (categoryKeyword) params.set("categoryKeyword", categoryKeyword);
+  return params;
+}
 
 /** Numeric extents (price + dimensions) needed to render the slider widgets. */
 export interface FacetExtents {
