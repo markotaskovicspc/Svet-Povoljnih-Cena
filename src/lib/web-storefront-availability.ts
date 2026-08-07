@@ -48,6 +48,17 @@ export function isWebAutoAvailabilityEnforced() {
 
 export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
   const now = new Date();
+  const nonRabaluxSupplierWhere: Prisma.ProductWhereInput = {
+    OR: [
+      { supplier: { is: null } },
+      { supplier: { is: { integrationKey: null } } },
+      {
+        supplier: {
+          is: { integrationKey: { not: RABALUX_INTEGRATION_KEY } },
+        },
+      },
+    ],
+  };
   const rabaluxSupplierStockWhere: Prisma.ProductWhereInput = {
     supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
     supplierApprovalStatus: "APPROVED",
@@ -79,13 +90,11 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
         : []),
       {
         OR: [
-          {
-            NOT: {
-              supplier: {
-                is: { integrationKey: RABALUX_INTEGRATION_KEY },
-              },
-            },
-          },
+          // PostgreSQL's three-valued NULL logic makes a relation-level
+          // `NOT integrationKey = RABALUX` exclude ordinary suppliers whose
+          // integration key is NULL. Spell out every non-Rabalux case so
+          // those products remain eligible for the storefront.
+          nonRabaluxSupplierWhere,
           {
             AND: [
               {

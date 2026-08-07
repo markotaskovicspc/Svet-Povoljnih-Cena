@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 
 export const articleCopySelect = {
   name: true,
@@ -214,4 +215,14 @@ export async function copyArticleRelations(
       skipDuplicates: true,
     });
   }
+}
+
+export async function copyArticleRetailPrice(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  source: Pick<ArticleCopySource, "fullPrice">,
+) {
+  const price = new Prisma.Decimal(source.fullPrice);
+  if (price.lte(0)) return null;
+  return upsertActiveRetailPrice(tx, { productId, price });
 }

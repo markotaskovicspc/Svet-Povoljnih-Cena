@@ -55,6 +55,22 @@ describe("web storefront availability rollout", () => {
     ).toBe(false);
   });
 
+  it("keeps ordinary suppliers with a null integration key storefront-eligible", () => {
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+
+    const serialized = JSON.stringify(webStorefrontProductWhere());
+    expect(serialized).toContain('"supplier":{"is":null}');
+    expect(serialized).toContain('"integrationKey":null');
+    expect(
+      isProductAvailableOnWeb({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        supplier: { integrationKey: null, enabled: true },
+      }),
+    ).toBe(true);
+  });
+
   it("requires automatic DC availability when strict enforcement is enabled", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
 

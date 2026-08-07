@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildCopiedArticleData,
+  copyArticleRetailPrice,
   type ArticleCopySource,
 } from "@/lib/admin/article-copy.server";
+import type { Prisma } from "@prisma/client";
 
 describe("kopiranje artikla", () => {
   it("kopira matične podatke, ali dodeljuje novu šifru i resetuje operativno stanje", () => {
@@ -53,5 +55,46 @@ describe("kopiranje artikla", () => {
     });
     expect(copied).not.toHaveProperty("media");
     expect(copied).not.toHaveProperty("attachments");
+  });
+
+  it("prenosi pozitivnu MP cenu u aktivni maloprodajni cenovnik", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "entry-1" });
+    const tx = {
+      priceList: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: "price-list-mp", code: "MP", currency: "RSD" },
+        ]),
+      },
+      priceListEntry: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create,
+      },
+    } as unknown as Prisma.TransactionClient;
+
+    await copyArticleRetailPrice(tx, "product-copy", {
+      fullPrice: 32_856,
+    } as ArticleCopySource);
+
+    expect(create).toHaveBeenCalledOnce();
+    const createData = create.mock.calls[0]?.[0]?.data;
+    expect(createData).toMatchObject({
+      priceListId: "price-list-mp",
+      productId: "product-copy",
+    });
+    expect(Number(createData?.price)).toBe(32_856);
+  });
+
+  it("ne pravi MP stavku kada izvorna cena nije pozitivna", async () => {
+    const tx = {
+      priceList: { findMany: vi.fn() },
+      priceListEntry: { findFirst: vi.fn(), create: vi.fn() },
+    } as unknown as Prisma.TransactionClient;
+
+    await expect(
+      copyArticleRetailPrice(tx, "product-copy", {
+        fullPrice: 0,
+      } as ArticleCopySource),
+    ).resolves.toBeNull();
+    expect(tx.priceList.findMany).not.toHaveBeenCalled();
   });
 });

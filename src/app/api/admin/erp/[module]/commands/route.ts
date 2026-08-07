@@ -23,6 +23,7 @@ import {
   articleCopySelect,
   buildCopiedArticleData,
   copyArticleRelations,
+  copyArticleRetailPrice,
 } from "@/lib/admin/article-copy.server";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 import {
@@ -367,11 +368,12 @@ async function createArticle(input: PurchasePriceCommandInput): Promise<CommandR
       data: buildCopiedArticleData(source, { sku, slug }),
     });
     await copyArticleRelations(tx, copied.id, source);
+    await copyArticleRetailPrice(tx, copied.id, source);
     return copied;
   });
   return {
     message: requestedSourceSku
-      ? `Artikal ${product.sku} je kreiran kao neobjavljena kopija artikla ${requestedSourceSku}, sa novom šifrom i bez slika i operativnih podataka izvornog artikla.`
+      ? `Artikal ${product.sku} je kreiran kao neobjavljena kopija artikla ${requestedSourceSku}. Pozitivna MP cena je preneta u aktivni maloprodajni cenovnik; slike i operativni podaci nisu kopirani.`
       : `Artikal ${product.sku} je kreiran neobjavljen. Dopunite obavezna polja.`,
     createdId: product.id,
     redirect: `/admin/erp/artikli/${product.id}`,
