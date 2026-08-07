@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
 import { getMediaVariantUrl } from "@/lib/media";
+import { isProductColorLabel } from "@/lib/product-colors";
 
 const COLOR_HEX: Record<string, string> = {
   bela: "#f8f7f2",
@@ -39,7 +40,7 @@ export type ProductColorOption = {
 export function getProductColorOptions(product: Product): ProductColorOption[] {
   const seen = new Set<string>();
   return [product.colorPrimary, product.colorSecondary]
-    .filter((color): color is string => Boolean(color?.trim()))
+    .filter((color): color is string => isProductColorLabel(color))
     .map((label) => label.trim().toLocaleUpperCase("sr-Latn-RS"))
     .filter((label) => {
       const key = label.toLowerCase();

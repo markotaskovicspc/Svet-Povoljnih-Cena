@@ -5,6 +5,7 @@
  * read layer. Keep them dependency-free and total-fn (no throws).
  */
 import type { Product } from "@/types";
+import { isProductColorLabel } from "@/lib/product-colors";
 
 export const LISTING_PAGE_SIZE = 36;
 
@@ -562,13 +563,15 @@ function productColorValues(product: Product) {
   const currentFamilyOption = product.variantFamily?.options.find(
     (option) => option.sku === product.sku,
   );
-  return uniqueValues([
-    currentFamilyOption?.colorHex ? currentFamilyOption.label : undefined,
-    product.colorPrimary,
-    product.colorSecondary,
-    currentFamilyOption?.colorPrimary,
-    currentFamilyOption?.colorSecondary,
-  ]);
+  return uniqueValues(
+    [
+      currentFamilyOption?.colorHex ? currentFamilyOption.label : undefined,
+      product.colorPrimary,
+      product.colorSecondary,
+      currentFamilyOption?.colorPrimary,
+      currentFamilyOption?.colorSecondary,
+    ].filter(isProductColorLabel),
+  );
 }
 
 function normalizeFacetValue(value: string) {

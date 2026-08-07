@@ -124,4 +124,14 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("Varijanta:");
     expect(markup).not.toContain("Boja:");
   });
+
+  it("ne prikazuje dimenziju koju je import pogrešno upisao kao boju", () => {
+    expect(
+      getProductColorOptions({
+        ...product,
+        colorPrimary: "190x80",
+        colorSecondary: undefined,
+      }),
+    ).toEqual([]);
+  });
 });

@@ -62,6 +62,7 @@ import { buildProductDeclaration } from "@/lib/product-declaration";
 import { formatProductAttributes } from "@/lib/product-attributes";
 import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { isProductColorLabel } from "@/lib/product-colors";
 import {
   dynamicFacetsForGroups,
   type Availability,
@@ -1442,11 +1443,15 @@ function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult 
       facets.counts.materials,
       row.materials.map((item) => item.material.label),
     );
-    collect(colors, facets.counts.colors, [
-      row.familyMembership?.colorHex ? row.familyMembership.label : null,
-      row.colorPrimary,
-      row.colorSecondary,
-    ]);
+    collect(
+      colors,
+      facets.counts.colors,
+      [
+        row.familyMembership?.colorHex ? row.familyMembership.label : null,
+        row.colorPrimary,
+        row.colorSecondary,
+      ].filter(isProductColorLabel),
+    );
     collect(
       attributes,
       facets.counts.attributes,

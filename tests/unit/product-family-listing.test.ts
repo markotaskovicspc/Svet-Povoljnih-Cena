@@ -209,4 +209,13 @@ describe("dinamički filteri listinga", () => {
 
     expect(computeFacetValues([sizeVariant]).colors).toEqual([]);
   });
+
+  it("odbacuje dimenziju koju je import pogrešno upisao u colorPrimary", () => {
+    const malformedColor = {
+      ...greenTable,
+      colorPrimary: "190x80",
+    } as Product;
+
+    expect(computeFacetValues([malformedColor]).colors).toEqual([]);
+  });
 });
