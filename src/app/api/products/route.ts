@@ -12,8 +12,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   try {
     const input = parseListProductsInput(searchParams);
-    const result = await listProducts(input);
-    return NextResponse.json({ ok: true, ...result });
+    const result = await listProducts(input, { throwOnError: true });
+    return NextResponse.json(
+      { ok: true, ...result },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     logOperationalError("api.products.list_failed", error, {
       query: Object.fromEntries(searchParams.entries()),
@@ -26,7 +29,13 @@ export async function GET(req: Request) {
         nextCursor: null,
         total: 0,
       },
-      { status: 500 },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Retry-After": "1",
+        },
+      },
     );
   }
 }

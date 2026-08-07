@@ -39,6 +39,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDate as formatStorefrontDate } from "@/lib/format";
+import { fetchListingPage } from "@/lib/listing/fetch-products";
 import {
   campaignStickers,
   type CampaignStickerKey,
@@ -275,18 +276,7 @@ function ListingShellInner({
       setNextCursor(null);
       setLoadError(false);
     });
-    void fetch(`/api/products?${params.toString()}`, {
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return (await response.json()) as {
-          items?: Product[];
-          nextCursor?: string | null;
-          total?: number;
-        };
-      })
+    void fetchListingPage(params, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         setItems(data.items ?? []);
@@ -348,15 +338,7 @@ function ListingShellInner({
       const params = new URLSearchParams(listingQueryString);
       params.set("cursor", nextCursor);
       params.set("limit", String(LISTING_PAGE_SIZE));
-      const response = await fetch(`/api/products?${params.toString()}`, {
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as {
-        items?: Product[];
-        nextCursor?: string | null;
-        total?: number;
-      };
+      const data = await fetchListingPage(params);
       if (listingQueryRef.current !== requestQuery) return;
       setItems((current) => {
         const seen = new Set(current.map((product) => product.sku));

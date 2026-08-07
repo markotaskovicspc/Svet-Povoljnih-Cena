@@ -1357,11 +1357,13 @@ async function loadProducts(
 
 export async function listProducts(
   input: ListProductsInput = {},
+  options: { throwOnError?: boolean } = {},
 ): Promise<ListProductsResult> {
   try {
     return await loadProducts(input);
   } catch (error) {
     console.error("[catalog] Failed to list products.", error);
+    if (options.throwOnError) throw error;
     return { items: [], nextCursor: null, total: 0 };
   }
 }
