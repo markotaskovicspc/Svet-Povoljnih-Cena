@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { BRAND } from "@/lib/brand";
 import { formatRsd } from "@/lib/format";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 const requiredText = z.string().trim().min(1).max(4_000);
 const optionalUrl = z.string().trim().max(2_000).refine(
@@ -74,6 +75,7 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
           slug: true,
           name: true,
           shortName: true,
+          sizeLabel: true,
           fullPrice: true,
           salePrice: true,
           media: {
@@ -117,10 +119,14 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
           const media = product.media[0];
           const imageUrl = media?.cardUrl ?? media?.url;
           const price = Number(product.salePrice ?? product.fullPrice);
+          const displayName = formatProductDisplayName(
+            product.shortName ?? product.name,
+            product.sizeLabel,
+          );
           const oldPrice = product.salePrice
             ? `<span style="color:#8A8178;text-decoration:line-through;margin-left:7px;">${escapeHtml(formatRsd(Number(product.fullPrice)))}</span>`
             : "";
-          return [`<td width="50%" valign="top" style="padding:8px;"><a href="${escapeAttr(href)}" style="color:#1A1714;text-decoration:none;">${imageUrl ? `<img src="${escapeAttr(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeAttr(media?.alt ?? product.name)}" width="260" style="display:block;width:100%;height:auto;border-radius:12px;border:0;margin-bottom:10px;">` : ""}<span style="display:block;font:700 14px Arial,sans-serif;line-height:1.35;margin-bottom:7px;">${escapeHtml(product.shortName ?? product.name)}</span><span style="font:700 14px Arial,sans-serif;color:#6B4423;">${escapeHtml(formatRsd(price))}</span>${oldPrice}</a></td>`];
+          return [`<td width="50%" valign="top" style="padding:8px;"><a href="${escapeAttr(href)}" style="color:#1A1714;text-decoration:none;">${imageUrl ? `<img src="${escapeAttr(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeAttr(media?.alt ?? displayName)}" width="260" style="display:block;width:100%;height:auto;border-radius:12px;border:0;margin-bottom:10px;">` : ""}<span style="display:block;font:700 14px Arial,sans-serif;line-height:1.35;margin-bottom:7px;">${escapeHtml(displayName)}</span><span style="font:700 14px Arial,sans-serif;color:#6B4423;">${escapeHtml(formatRsd(price))}</span>${oldPrice}</a></td>`];
         });
         if (!cards.length) return "";
         const rows: string[] = [];
@@ -145,7 +151,7 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
       case "voucher": return `Kod za popust: ${block.code}${block.text ? ` — ${block.text}` : ""}`;
       case "products": return block.skus.flatMap((sku) => {
         const product = bySku.get(sku);
-        return product ? [`${product.shortName ?? product.name} — ${formatRsd(Number(product.salePrice ?? product.fullPrice))} — ${baseUrl.replace(/\/$/, "")}/p/${product.slug}`] : [];
+        return product ? [`${formatProductDisplayName(product.shortName ?? product.name, product.sizeLabel)} — ${formatRsd(Number(product.salePrice ?? product.fullPrice))} — ${baseUrl.replace(/\/$/, "")}/p/${product.slug}`] : [];
       }).join("\n");
       case "divider": return "---";
     }

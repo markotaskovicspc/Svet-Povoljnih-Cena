@@ -10,6 +10,7 @@ import {
   productHref,
   sourceLongDescription,
   sourceMediaImages,
+  sourceProductDisplayName,
   sourceValue,
   svetAkcijaProducts,
 } from "@/lib/svet-akcija/catalog";
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
   const product = findStaticProduct(sifra);
   if (!product) return { title: "Proizvod" };
   return {
-    title: `${sourceValue(product, "Kratki naziv")} — ${sourceValue(product, "Šifra")}`,
+    title: `${sourceProductDisplayName(product)} — ${sourceValue(product, "Šifra")}`,
     description: sourceValue(product, "Opis"),
   };
 }
@@ -42,7 +43,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
 
   const gallery = sourceMediaImages(product);
   const related = await getRelatedSvetAkcijaProducts(product);
-  const name = sourceValue(product, "Kratki naziv");
+  const name = sourceProductDisplayName(product);
   const price = effectiveSourcePrice(product);
   const longDescription = sourceLongDescription(product);
 
@@ -136,7 +137,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
                   className="rounded-md border border-border bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-soft-2"
                 >
                   <p className="text-sm font-semibold text-ink-900">
-                    {sourceValue(item, "Kratki naziv")}
+                    {sourceProductDisplayName(item)}
                   </p>
                   <p className="mt-1 line-clamp-2 text-xs text-ink-500">
                     {sourceValue(item, "Opis")}

@@ -96,6 +96,8 @@ export interface Product {
   pricingCategoryPaths?: string[];
   description: string; // rich-text HTML or MDX
   shortDescription?: string;
+  /** Customer-facing size/volume/model label appended to the displayed name. */
+  sizeLabel?: string;
 
   dimensionsCm: Dimensions;
   packageDimensionsCm?: Dimensions;

@@ -8,6 +8,7 @@ import { buildInvoicePdf, type InvoiceOrderInput } from "@/lib/email/pdf";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { envValue } from "@/lib/env";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 const DEFAULT_RECEIPT_BUCKET = "order-receipts";
 
@@ -162,7 +163,7 @@ function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
     createdAt: order.createdAt,
     items: order.items.map((i) => ({
       sku: i.sku,
-      name: i.name,
+      name: formatProductDisplayName(i.name, i.attribute1),
       qty: i.qty,
       unitPriceSale: num(i.unitPriceSale),
       assemblyPrice: i.assemblyPrice ? num(i.assemblyPrice) : null,
@@ -216,7 +217,7 @@ function buildReceiptSnapshot(order: OrderForReceipt, recipient: string | null) 
       },
       items: order.items.map((i) => ({
         sku: i.sku,
-        name: i.name,
+        name: formatProductDisplayName(i.name, i.attribute1),
         qty: i.qty,
         unitPriceFull: num(i.unitPriceFull),
         unitPriceSale: num(i.unitPriceSale),

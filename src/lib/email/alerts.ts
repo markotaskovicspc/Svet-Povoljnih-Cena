@@ -8,6 +8,7 @@ import {
   sendOnSaleAlert,
 } from "./send";
 import { isEmailSuppressed } from "./tracking";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 export async function processEmailAlerts(limit = 100) {
   const [backInStock, onSale] = await Promise.all([
@@ -107,6 +108,7 @@ const alertProductSelect = {
     sku: true,
     slug: true,
     name: true,
+    sizeLabel: true,
     fullPrice: true,
     salePrice: true,
     discountPct: true,
@@ -119,7 +121,7 @@ function productForEmail(product: AlertProductRow) {
     id: product.id,
     sku: product.sku,
     slug: product.slug,
-    name: product.name,
+    name: formatProductDisplayName(product.name, product.sizeLabel),
     fullPrice: num(product.fullPrice),
     salePrice: product.salePrice ? num(product.salePrice) : null,
   };
@@ -137,6 +139,7 @@ type AlertProductRow = {
   sku: string;
   slug: string;
   name: string;
+  sizeLabel: string | null;
   fullPrice: Prisma.Decimal | number | bigint | null | undefined;
   salePrice: Prisma.Decimal | number | bigint | null | undefined;
   discountPct: number | null;

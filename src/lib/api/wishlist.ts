@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Wishlist + per-product alert toggles (Phase 3C — items 4 & 6).
@@ -30,6 +31,7 @@ export async function listWishlist(userId: string) {
           sku: true,
           slug: true,
           name: true,
+          sizeLabel: true,
           fullPrice: true,
           salePrice: true,
           discountPct: true,
@@ -44,7 +46,7 @@ export async function listWishlist(userId: string) {
   return rows.map((w) => ({
     sku: w.product.sku,
     slug: w.product.slug,
-    name: w.product.name,
+    name: formatProductDisplayName(w.product.name, w.product.sizeLabel),
     fullPrice: num(w.product.fullPrice),
     salePrice: w.product.salePrice ? num(w.product.salePrice) : null,
     discountPct: w.product.discountPct ?? 0,

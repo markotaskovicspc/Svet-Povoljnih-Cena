@@ -1,4 +1,5 @@
 import rawProducts from "@/data/svet-akcija-products.json";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 interface SvetAkcijaMediaAsset {
   url?: string | null;
@@ -24,6 +25,7 @@ export interface SvetAkcijaSource {
   "Kolekcija (brend)": string | null;
   "Opis": string | null;
   "Kratki naziv": string | null;
+  "Veličina"?: string | null;
   "Atribut 1": string | null;
   "Atribut 2": string | null;
   "Boja 1": string | null;
@@ -71,6 +73,13 @@ export function sourceValue(
   field: keyof SvetAkcijaSource,
 ): string {
   return product.source[field] ?? "";
+}
+
+export function sourceProductDisplayName(product: SvetAkcijaProduct): string {
+  return formatProductDisplayName(
+    sourceValue(product, "Kratki naziv"),
+    sourceValue(product, "Veličina"),
+  );
 }
 
 export function isMeaningfulSourceValue(value: string | null | undefined): value is string {

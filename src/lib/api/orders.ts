@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import type { Order } from "@/types";
 import { verifyOrderAccessToken } from "@/lib/api/order-access";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Order history reads for `/nalog/porudzbine`.
@@ -16,7 +17,16 @@ const orderListSelect = {
   status: true,
   total: true,
   createdAt: true,
-  items: { select: { sku: true, name: true, qty: true, thumbnailUrl: true }, take: 4 },
+  items: {
+    select: {
+      sku: true,
+      name: true,
+      attribute1: true,
+      qty: true,
+      thumbnailUrl: true,
+    },
+    take: 4,
+  },
 } satisfies Prisma.OrderSelect;
 
 export async function listOrders(userId: string) {
@@ -25,7 +35,14 @@ export async function listOrders(userId: string) {
     orderBy: { createdAt: "desc" },
     select: orderListSelect,
   });
-  return rows.map((o) => ({ ...o, total: num(o.total) }));
+  return rows.map((order) => ({
+    ...order,
+    total: num(order.total),
+    items: order.items.map((item) => ({
+      ...item,
+      name: formatProductDisplayName(item.name, item.attribute1),
+    })),
+  }));
 }
 
 export async function getOrderForUser(userId: string, numberOrId: string) {
@@ -51,6 +68,7 @@ export async function getOrderForUser(userId: string, numberOrId: string) {
     total: num(order.total),
     items: order.items.map((i) => ({
       ...i,
+      name: formatProductDisplayName(i.name, i.attribute1),
       unitPriceFull: num(i.unitPriceFull),
       unitPriceSale: num(i.unitPriceSale),
       assemblyPrice: i.assemblyPrice ? num(i.assemblyPrice) : null,
@@ -132,7 +150,7 @@ export async function getPublicOrderForConfirmation(
     status: ORDER_STATUS_LOWER[row.status],
     items: row.items.map((i) => ({
       sku: i.sku,
-      name: i.name,
+      name: formatProductDisplayName(i.name, i.attribute1),
       qty: i.qty,
       unitPriceFull: num(i.unitPriceFull),
       unitPriceSale: num(i.unitPriceSale),

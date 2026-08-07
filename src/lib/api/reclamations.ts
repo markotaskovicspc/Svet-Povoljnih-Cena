@@ -7,6 +7,7 @@ import {
   verifyReclamationUploads,
 } from "@/lib/api/uploads";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Reclamation flow (Phase 3C — item 5; spec §4.1).
@@ -225,6 +226,7 @@ export async function listOrdersForReclamation(userId: string) {
           id: true,
           sku: true,
           name: true,
+          attribute1: true,
           qty: true,
           reclamations: { select: { quantity: true } },
         },
@@ -238,7 +240,7 @@ export async function listOrdersForReclamation(userId: string) {
       items: order.items
         .map((item) => ({
           sku: item.sku,
-          name: item.name,
+          name: formatProductDisplayName(item.name, item.attribute1),
           purchasedQty: item.qty,
           remainingQty:
             item.qty - item.reclamations.reduce((sum, row) => sum + row.quantity, 0),

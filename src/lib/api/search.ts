@@ -12,6 +12,7 @@ import type {
   SearchSuggestion,
 } from "@/types/search";
 import { isWebAutoAvailabilityEnforced } from "@/lib/web-storefront-availability";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Search layer (Phase 3C — item 8).
@@ -29,6 +30,7 @@ interface SuggestRow {
   barcode: string | null;
   slug: string;
   name: string;
+  size_label: string | null;
   full_price: Prisma.Decimal;
   sale_price: Prisma.Decimal | null;
   discount_pct: number | null;
@@ -75,6 +77,7 @@ async function searchProductHits(
              p.barcode,
              p.slug,
              p.name,
+             p."sizeLabel"  AS size_label,
              p."fullPrice"   AS full_price,
              p."salePrice"   AS sale_price,
              p."discountPct" AS discount_pct,
@@ -119,6 +122,7 @@ async function searchProductHits(
            ))
            OR (${!codeLike} AND (
              p.name ILIKE ${'%' + q + '%'}
+             OR p."sizeLabel" ILIKE ${'%' + q + '%'}
              OR p.sku ILIKE ${'%' + q + '%'}
              OR p.barcode ILIKE ${'%' + q + '%'}
              OR EXISTS (
@@ -197,7 +201,8 @@ async function searchProductHits(
       href: `/p/${r.slug}`,
       sku: r.sku,
       slug: r.slug,
-      name: r.name,
+      name:
+        product?.name ?? formatProductDisplayName(r.name, r.size_label),
       breadcrumb: r.breadcrumb ?? "",
       thumbnailUrl: resolveSupabaseStorageUrl(
         getMediaVariantUrl(

@@ -4,6 +4,7 @@ import type { Order, Reclamation } from "@/types";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Phase 4D — adapt Prisma rows into the canonical `@/types` Order /
@@ -81,7 +82,7 @@ export async function loadOrderForEmail(
     status: ORDER_STATUS_LOWER[row.status],
     items: row.items.map((i) => ({
       sku: i.sku,
-      name: i.name,
+      name: formatProductDisplayName(i.name, i.attribute1),
       qty: i.qty,
       unitPriceFull: num(i.unitPriceFull),
       unitPriceSale: num(i.unitPriceSale),

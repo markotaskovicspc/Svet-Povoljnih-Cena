@@ -17,6 +17,7 @@ import {
   parseSourcePrice,
   sourceLongDescription,
   sourceMediaImages,
+  sourceProductDisplayName,
   sourceValue,
   svetAkcijaProducts,
   type SvetAkcijaProduct,
@@ -59,6 +60,7 @@ import {
 } from "@/lib/storefront/promotion-filters";
 import { buildProductDeclaration } from "@/lib/product-declaration";
 import { formatProductAttributes } from "@/lib/product-attributes";
+import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
  * Catalog read layer (Phase 3C).
@@ -98,6 +100,7 @@ const productCardCoreSelect = {
   sku: true,
   slug: true,
   name: true,
+  sizeLabel: true,
   isActive: true,
   availableWebManual: true,
   availableWebAuto: true,
@@ -260,7 +263,7 @@ function mapProduct(
     id: p.id,
     sku: p.sku,
     slug: p.slug,
-    name: p.name,
+    name: formatProductDisplayName(p.name, p.sizeLabel),
     group: p.group?.slug ?? "",
     groupId: p.groupId ?? undefined,
     collection: p.collection?.slug,
@@ -269,6 +272,7 @@ function mapProduct(
     pricingCategoryPaths: sortedCats.map((item) => item.category.path),
     description: p.description,
     shortDescription: p.shortDescription ?? undefined,
+    sizeLabel: p.sizeLabel ?? undefined,
     dimensionsCm: {
       w: num(p.widthCm) || 0,
       d: num(p.depthCm) || 0,
@@ -417,7 +421,8 @@ function sourceDateToIso(value: string) {
 
 function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
   const sku = sourceValue(product, "Šifra");
-  const name = sourceValue(product, "Kratki naziv") || sku;
+  const sourceName = sourceValue(product, "Kratki naziv") || sku;
+  const name = sourceProductDisplayName(product) || sourceName;
   const category = sourceValue(product, "Kategorija");
   const group = sourceValue(product, "Grupa");
   const fullPrice = parseSourcePrice(sourceValue(product, "MPC redovna")) ?? 0;
@@ -431,13 +436,14 @@ function mapSvetAkcijaFallback(product: SvetAkcijaProduct): ProductDTO {
 
   return {
     sku,
-    slug: slugify(`${name}-${sku}`),
+    slug: slugify(`${sourceName}-${sku}`),
     name,
     group: slugify(group),
     collection: slugify(sourceValue(product, "Kolekcija (brend)")),
     categoryPath: [category, group].filter(Boolean),
     description,
     shortDescription: sourceValue(product, "Opis") || undefined,
+    sizeLabel: sourceValue(product, "Veličina") || undefined,
     dimensionsCm: { w: 0, d: 0, h: 0 },
     colorPrimary: sourceValue(product, "Boja 1") || undefined,
     colorSecondary: sourceValue(product, "Boja 2") || undefined,
@@ -511,7 +517,7 @@ function mapProductListItem(
     id: p.id,
     sku: p.sku,
     slug: p.slug,
-    name: p.name,
+    name: formatProductDisplayName(p.name, p.sizeLabel),
     group: p.group?.slug ?? "",
     groupId: p.groupId ?? undefined,
     collection: p.collection?.slug,
@@ -520,6 +526,7 @@ function mapProductListItem(
     pricingCategoryPaths: sortedCats.map((item) => item.category.path),
     description: "",
     shortDescription: p.shortDescription ?? undefined,
+    sizeLabel: p.sizeLabel ?? undefined,
     dimensionsCm: {
       w: num(p.widthCm) || 0,
       d: num(p.depthCm) || 0,

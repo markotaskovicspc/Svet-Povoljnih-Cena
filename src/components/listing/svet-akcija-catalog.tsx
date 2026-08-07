@@ -15,6 +15,7 @@ import {
   parseSourcePrice,
   primaryImage,
   productHref,
+  sourceProductDisplayName,
   sourceValue,
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
@@ -62,6 +63,7 @@ export function SvetAkcijaCatalog({
       const haystack = [
         "Šifra",
         "Kratki naziv",
+        "Veličina",
         "Opis",
         "Kategorija",
         "Grupa",
@@ -306,6 +308,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
   const primaryColor = sourceValue(product, "Boja 1");
   const secondaryColor = sourceValue(product, "Boja 2");
   const image = primaryImage(product);
+  const displayName = sourceProductDisplayName(product);
   const imageUrl = getMediaVariantUrl(image, "card");
   const renderableImage =
     image && !imageFailed && isRenderableImageUrl(imageUrl)
@@ -317,12 +320,12 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
       <Link
         href={productHref(product)}
         className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-        aria-label={`${sourceValue(product, "Kratki naziv")} detalji`}
+        aria-label={`${displayName} detalji`}
       >
         {renderableImage ? (
           <Image
             src={renderableImage.url}
-            alt={renderableImage.alt ?? sourceValue(product, "Kratki naziv")}
+            alt={renderableImage.alt ?? displayName}
             fill
             sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
             onError={() => setImageFailed(true)}
@@ -343,7 +346,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
         <div className="min-w-0">
           <h2 className="line-clamp-2 text-base font-semibold text-ink-900">
             <Link href={productHref(product)} className="hover:text-brand-blue">
-              {sourceValue(product, "Kratki naziv")}
+              {displayName}
             </Link>
           </h2>
           <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-700">

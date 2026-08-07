@@ -31,6 +31,7 @@ async function fetchDbProducts() {
       select: {
         sku: true,
         name: true,
+        sizeLabel: true,
         description: true,
         shortDescription: true,
         fullPrice: true,
@@ -72,6 +73,7 @@ function mergeProduct(base: SvetAkcijaProduct, row: DbSvetAkcijaProduct | undefi
     source: {
       ...base.source,
       "Kratki naziv": row.name,
+      "Veličina": row.sizeLabel,
       "Opis": shortDescription,
       "MPC redovna": fullPrice,
       "Akcijska MPC": salePrice,
