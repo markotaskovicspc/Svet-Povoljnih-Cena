@@ -11,6 +11,23 @@ export const LISTING_PAGE_SIZE = 36;
 
 export type SortKey = "default" | "price-asc" | "price-desc" | "discount-desc";
 
+export interface ListingSubTab {
+  id: string;
+  label: string;
+  matchKeyword: string;
+  matchField?: "category" | "name";
+}
+
+export function matchesListingSubTab(product: Product, tab: ListingSubTab) {
+  const needle = tab.matchKeyword.toLocaleLowerCase("sr-Latn-RS");
+  if (tab.matchField === "name") {
+    return product.name.toLocaleLowerCase("sr-Latn-RS").includes(needle);
+  }
+  return product.categoryPath.some((segment) =>
+    segment.toLocaleLowerCase("sr-Latn-RS").includes(needle),
+  );
+}
+
 export type Availability = "in-stock" | "incoming" | "out-of-stock";
 
 export interface DimensionRange {

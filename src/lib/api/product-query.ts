@@ -23,6 +23,7 @@ export function parseListProductsInput(
     groupSlug: text(searchParams, "groupSlug"),
     collectionSlug: text(searchParams, "collectionSlug"),
     categoryKeyword: text(searchParams, "categoryKeyword"),
+    nameKeyword: text(searchParams, "nameKeyword"),
     groupSlugs: list(searchParams, "groups"),
     materialLabels: list(searchParams, "materials"),
     colors: list(searchParams, "colors"),

@@ -954,6 +954,8 @@ export interface ListProductsInput {
   collectionSlug?: string;
   /** Case-insensitive category-label fragment used by listing sub-tabs. */
   categoryKeyword?: string;
+  /** Case-insensitive product-name fragment used by listing sub-tabs. */
+  nameKeyword?: string;
   excludeSku?: string;
   /** Restrict to products at or below this effective price. */
   maxPrice?: number;
@@ -1108,6 +1110,11 @@ function buildProductListingWhere(
           },
         },
       },
+    });
+  }
+  if (input.nameKeyword) {
+    appendAnd(where, {
+      name: { contains: input.nameKeyword, mode: "insensitive" },
     });
   }
   if (input.actionSlug) {

@@ -53,11 +53,13 @@ import {
   type FacetExtents,
   type FacetValues,
   type ListingKind,
+  type ListingSubTab,
   type SortKey,
   activeChips,
   appendFilterQueryParams,
   computeExtents,
   emptyFilterState,
+  matchesListingSubTab,
   resolveListingProducts,
 } from "@/lib/listing/filters";
 
@@ -92,16 +94,17 @@ interface ListingShellProps {
   pageQuery?: ListingPageQuery;
   /**
    * Optional sub-tabs row above the grid (used by /novo).
-   * `matchKeyword` is matched (case-insensitive) against the product's `categoryPath`.
+   * Tabs may match either a category label or a product name.
    * Kept serialisable so server components can configure the shell directly.
    */
-  subTabs?: { id: string; label: string; matchKeyword: string }[];
+  subTabs?: ListingSubTab[];
   initialSubTab?: string;
+  /** Resolve interactions against `source` without another catalog request. */
+  sourceIsComplete?: boolean;
   featureBanner?: Banner;
   featureBannerMobileOnly?: boolean;
 }
 
-const VIEW_KEY = "spc:listing:view";
 const SCROLL_KEY = "spc:listing:scroll";
 
 export function ListingShell({
@@ -146,6 +149,7 @@ function ListingShellInner({
   pageQueryString,
   subTabs,
   initialSubTab,
+  sourceIsComplete = false,
   featureBanner,
   featureBannerMobileOnly = false,
 }: ListingShellInnerProps) {
@@ -162,12 +166,7 @@ function ListingShellInner({
   }>();
   const [state, setState] = useState<FilterState>(() => emptyFilterState());
   const [sort, setSort] = useState<SortKey>("default");
-  const [view, setView] = useState<3 | 5>(() => {
-    if (typeof window === "undefined") return 5;
-    const v = window.localStorage.getItem(VIEW_KEY);
-    if (v === "4") return 5;
-    return v === "3" || v === "5" ? (Number(v) as 3 | 5) : 5;
-  });
+  const [view, setView] = useState<3 | 5>(3);
   const [visibleWindow, setVisibleWindow] = useState({
     key: "",
     count: LISTING_PAGE_SIZE,
@@ -179,11 +178,6 @@ function ListingShellInner({
   const listingQueryRef = useRef("");
   const displayTitleIcon =
     titleIcon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(VIEW_KEY, String(view));
-  }, [view]);
 
   // Scroll-restore on back navigation.
   useEffect(() => {
@@ -202,32 +196,35 @@ function ListingShellInner({
     return () => window.removeEventListener("pagehide", persist);
   }, []);
 
-  const activeSubKeyword = useMemo(() => {
+  const activeSubTab = useMemo(() => {
     if (!subTabs?.length || !activeSub) return undefined;
-    return subTabs.find((tab) => tab.id === activeSub)?.matchKeyword;
+    return subTabs.find((tab) => tab.id === activeSub);
   }, [activeSub, subTabs]);
   const facetQueryString = useMemo(() => {
     const params = new URLSearchParams(pageQueryString);
-    if (activeSubKeyword) params.set("categoryKeyword", activeSubKeyword);
+    appendSubTabQueryParam(params, activeSubTab);
     return params.toString();
-  }, [activeSubKeyword, pageQueryString]);
+  }, [activeSubTab, pageQueryString]);
   const serverFacets =
     facetData?.query === facetQueryString ? facetData.facets : undefined;
   const serverExtents =
     facetData?.query === facetQueryString ? facetData.extents : undefined;
   const listingQueryString = useMemo(() => {
     const params = new URLSearchParams(pageQueryString);
-    appendFilterQueryParams(params, state, sort, activeSubKeyword);
+    appendFilterQueryParams(params, state, sort);
+    appendSubTabQueryParam(params, activeSubTab);
     return params.toString();
-  }, [activeSubKeyword, pageQueryString, sort, state]);
+  }, [activeSubTab, pageQueryString, sort, state]);
   const hasServerQuery =
-    Boolean(activeSubKeyword) || sort !== "default" || !filterStateIsEmpty(state);
+    !sourceIsComplete &&
+    (Boolean(activeSubTab) || sort !== "default" || !filterStateIsEmpty(state));
 
   useEffect(() => {
     listingQueryRef.current = listingQueryString;
   }, [listingQueryString]);
 
   useEffect(() => {
+    if (sourceIsComplete) return;
     const controller = new AbortController();
     const params = new URLSearchParams(facetQueryString);
     void fetchListingFacets(params, controller.signal)
@@ -245,7 +242,7 @@ function ListingShellInner({
         }
       });
     return () => controller.abort();
-  }, [facetQueryString]);
+  }, [facetQueryString, sourceIsComplete]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -289,14 +286,9 @@ function ListingShellInner({
   }, [hasServerQuery, initialNextCursor, listingQueryString, source, total]);
 
   const subFiltered = useMemo(() => {
-    if (!subTabs?.length || !activeSub) return items;
-    const tab = subTabs.find((t) => t.id === activeSub);
-    if (!tab) return items;
-    const needle = tab.matchKeyword.toLowerCase();
-    return items.filter((p) =>
-      p.categoryPath.some((seg) => seg.toLowerCase().includes(needle)),
-    );
-  }, [items, subTabs, activeSub]);
+    if (!activeSubTab) return items;
+    return items.filter((product) => matchesListingSubTab(product, activeSubTab));
+  }, [activeSubTab, items]);
 
   const localExtents = useMemo(() => computeExtents(subFiltered), [subFiltered]);
   const extents = serverExtents ?? localExtents;
@@ -305,6 +297,7 @@ function ListingShellInner({
     () => resolveListingProducts(subFiltered, state, sort, kind, hasServerQuery),
     [hasServerQuery, subFiltered, state, sort, kind],
   );
+  const displayedTotal = sourceIsComplete ? filtered.length : currentTotal;
 
   const visibleKey = useMemo(
     () => JSON.stringify({ state, sort, activeSub }),
@@ -508,9 +501,9 @@ function ListingShellInner({
                     "Učitavam rezultate..."
                   ) : (
                     <>
-                      {currentTotal} {currentTotal === 1 ? "rezultat" : "rezultata"}
-                      {currentTotal > items.length
-                        ? ` (${items.length}/${currentTotal} učitano)`
+                      {displayedTotal} {displayedTotal === 1 ? "rezultat" : "rezultata"}
+                      {displayedTotal > items.length
+                        ? ` (${items.length}/${displayedTotal} učitano)`
                         : ""}
                     </>
                   )}
@@ -560,7 +553,11 @@ function ListingShellInner({
                     aria-label="Sortiraj"
                     className="h-9 w-[200px] rounded-full text-xs"
                   >
-                    <SelectValue placeholder="Sortiraj" />
+                    <SelectValue>
+                      {(value) =>
+                        value ? SORT_LABELS[value as SortKey] : "Sortiraj"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Podrazumevano</SelectItem>
@@ -661,6 +658,24 @@ function buildPageQueryString(query: ListingPageQuery | undefined) {
     params.set(key, String(value));
   }
   return params.toString();
+}
+
+const SORT_LABELS: Record<SortKey, string> = {
+  default: "Podrazumevano",
+  "price-asc": "Cena: rastuće",
+  "price-desc": "Cena: opadajuće",
+  "discount-desc": "% popusta",
+};
+
+function appendSubTabQueryParam(
+  params: URLSearchParams,
+  tab?: ListingSubTab,
+) {
+  if (!tab) return;
+  params.set(
+    tab.matchField === "name" ? "nameKeyword" : "categoryKeyword",
+    tab.matchKeyword,
+  );
 }
 
 function filterStateIsEmpty(state: FilterState) {

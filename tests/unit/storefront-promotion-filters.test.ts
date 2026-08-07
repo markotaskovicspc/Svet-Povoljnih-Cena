@@ -52,7 +52,7 @@ describe("storefront promotion filters", () => {
     });
   });
 
-  it("provides an explicit Rabalux exclusion for Novo and DTZ queries", () => {
+  it("excludes Rabalux without dropping products whose supplier is nullable", () => {
     expect(excludeRabaluxPromotionProductsWhere()).toEqual({
       OR: [
         { supplier: { is: null } },

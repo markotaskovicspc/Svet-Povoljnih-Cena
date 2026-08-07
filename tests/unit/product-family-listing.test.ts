@@ -4,6 +4,7 @@ import {
   applyFilters,
   computeFacetValues,
   emptyFilterState,
+  matchesListingSubTab,
   resolveListingProducts,
 } from "@/lib/listing/filters";
 import type { Product } from "@/types";
@@ -119,6 +120,20 @@ describe("SKU-level filter boje", () => {
 });
 
 describe("dinamički filteri listinga", () => {
+  it("podtab prepoznaje proizvod po nazivu kada je kategorija šira", () => {
+    expect(
+      matchesListingSubTab(
+        { ...oakChair, name: "Kancelarijska stolica ERGO" },
+        {
+          id: "stolice",
+          label: "Stolice",
+          matchKeyword: "stolic",
+          matchField: "name",
+        },
+      ),
+    ).toBe(true);
+  });
+
   it("izvodi grupe, boje i atribute samo iz prosleđenih artikala", () => {
     const facets = computeFacetValues([greenTable, oakChair]);
 

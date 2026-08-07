@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { parseListProductsInput } from "@/lib/api/product-query";
 
 describe("product list query parsing", () => {
+  it("parses a product-name subfilter", () => {
+    expect(
+      parseListProductsInput(new URLSearchParams({ nameKeyword: "stolic" })),
+    ).toMatchObject({ nameKeyword: "stolic" });
+  });
+
   it("does not turn an omitted or blank max price into zero", () => {
     expect(parseListProductsInput(new URLSearchParams()).maxPrice).toBeUndefined();
     expect(
