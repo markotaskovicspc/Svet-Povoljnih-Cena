@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   getDatabaseConnectionString,
+  getDatabaseIdleTimeoutMillis,
   getDatabasePoolMax,
 } from "@/lib/db";
 
@@ -9,6 +10,7 @@ const ENV_KEYS = [
   "POSTGRES_PRISMA_URL",
   "POSTGRES_URL",
   "POSTGRES_URL_NON_POOLING",
+  "DATABASE_IDLE_TIMEOUT_MS",
   "DATABASE_POOL_MAX",
   "VERCEL",
 ] as const;
@@ -47,5 +49,17 @@ describe("database runtime configuration", () => {
 
     process.env.DATABASE_POOL_MAX = "4";
     expect(getDatabasePoolMax()).toBe(4);
+  });
+
+  it("closes idle Vercel sessions quickly while keeping local reuse", () => {
+    delete process.env.DATABASE_IDLE_TIMEOUT_MS;
+    delete process.env.VERCEL;
+    expect(getDatabaseIdleTimeoutMillis()).toBe(10_000);
+
+    process.env.VERCEL = "1";
+    expect(getDatabaseIdleTimeoutMillis()).toBe(1_000);
+
+    process.env.DATABASE_IDLE_TIMEOUT_MS = "2500";
+    expect(getDatabaseIdleTimeoutMillis()).toBe(2_500);
   });
 });

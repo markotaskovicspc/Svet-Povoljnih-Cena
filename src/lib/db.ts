@@ -1,5 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { attachDatabasePool } from "@vercel/functions";
+import { Pool } from "pg";
 
 /**
  * Prisma client singleton — avoids exhausting connections during HMR in dev.
@@ -69,6 +71,21 @@ export function getDatabasePoolMax() {
   // Vercel may multiply this pool across instances, so keep its implicit
   // default conservative unless the deployment sets DATABASE_POOL_MAX.
   return process.env.VERCEL ? 1 : 5;
+}
+
+export function getDatabaseIdleTimeoutMillis() {
+  const configured = Number.parseInt(
+    process.env.DATABASE_IDLE_TIMEOUT_MS ?? "",
+    10,
+  );
+  if (Number.isFinite(configured)) {
+    return Math.max(500, Math.min(configured, 60_000));
+  }
+
+  // Vercel freezes an invocation as soon as the response is sent. Its database
+  // pool helper keeps the invocation alive through this short idle window so
+  // node-postgres can actually close the session before the instance freezes.
+  return process.env.VERCEL ? 1_000 : 10_000;
 }
 
 function databaseConnectionTimeoutMillis() {
@@ -141,18 +158,18 @@ function createClient(): PrismaClient {
       console.info("[db-target]", JSON.stringify({ invalidUrl: true }));
     }
   }
-  const adapter = new PrismaPg(
-    {
-      connectionString: adapterOptions.connectionString,
-      // Next.js build workers and serverless instances each create a process-local
-      // pool. Keep the default at one so Supabase's session-mode limit is not
-      // multiplied by the worker count; deployments may raise it explicitly.
-      max: getDatabasePoolMax(),
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
-    },
-    { schema: adapterOptions.schema },
-  );
+  const pool = new Pool({
+    connectionString: adapterOptions.connectionString,
+    // Next.js build workers and serverless instances each create a process-local
+    // pool. Keep the default at one so Supabase's session-mode limit is not
+    // multiplied by the worker count; deployments may raise it explicitly.
+    max: getDatabasePoolMax(),
+    idleTimeoutMillis: getDatabaseIdleTimeoutMillis(),
+    connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
+    allowExitOnIdle: true,
+  });
+  if (process.env.VERCEL) attachDatabasePool(pool);
+  const adapter = new PrismaPg(pool, { schema: adapterOptions.schema });
   return new PrismaClient({
     adapter,
     transactionOptions: {

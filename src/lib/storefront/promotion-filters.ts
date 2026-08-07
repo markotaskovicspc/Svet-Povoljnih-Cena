@@ -51,7 +51,15 @@ export function limitedOfferProductsWhere(): Prisma.ProductWhereInput {
 /** Defense-in-depth for supplier catalogs that do not own promo flags. */
 export function excludeRabaluxPromotionProductsWhere(): Prisma.ProductWhereInput {
   return {
-    NOT: { supplier: { is: { integrationKey: "RABALUX" } } },
+    OR: [
+      { supplier: { is: null } },
+      { supplier: { is: { integrationKey: null } } },
+      {
+        supplier: {
+          is: { integrationKey: { not: "RABALUX" } },
+        },
+      },
+    ],
   };
 }
 

@@ -1363,7 +1363,11 @@ export async function listProducts(
     return await loadProducts(input);
   } catch (error) {
     console.error("[catalog] Failed to list products.", error);
-    if (options.throwOnError) throw error;
+    // A database outage is not an empty catalog. Throw by default so server
+    // pages render their retryable error boundary and failed cache refreshes do
+    // not persist a false zero-product result. Explicit fallback remains
+    // available only to non-authoritative callers that deliberately request it.
+    if (options.throwOnError !== false) throw error;
     return { items: [], nextCursor: null, total: 0 };
   }
 }
@@ -1566,21 +1570,16 @@ async function loadProductBySlug(
   slug: string,
 ): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
-  try {
-    const [row, pricingRules, deliveryWindows] = await Promise.all([
-      db.product.findFirst({
-        where: { slug, ...webStorefrontVisibleProductWhere() },
-        include: productInclude,
-      }),
-      getActivePricingRules(),
-      getDeliveryWindows(),
-    ]);
-    if (!row) return getSvetAkcijaFallbackBySlug(slug);
-    return mapProduct(row, pricingRules, deliveryWindows);
-  } catch (error) {
-    console.error(`[catalog] Failed to load product by slug "${slug}".`, error);
-    return getSvetAkcijaFallbackBySlug(slug);
-  }
+  const [row, pricingRules, deliveryWindows] = await Promise.all([
+    db.product.findFirst({
+      where: { slug, ...webStorefrontVisibleProductWhere() },
+      include: productInclude,
+    }),
+    getActivePricingRules(),
+    getDeliveryWindows(),
+  ]);
+  if (!row) return getSvetAkcijaFallbackBySlug(slug);
+  return mapProduct(row, pricingRules, deliveryWindows);
 }
 
 const getProductBySlugAcrossRequests = unstable_cache(

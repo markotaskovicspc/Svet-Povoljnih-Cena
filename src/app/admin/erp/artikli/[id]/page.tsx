@@ -82,6 +82,7 @@ import {
   setProductFamilyMembership,
 } from "@/lib/product-family.server";
 import { defaultProductFamilyLabel } from "@/lib/product-family";
+import { isProductColorLabel } from "@/lib/product-colors";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -103,8 +104,14 @@ const overrideSchema = z.object({
   newCollectionName: z.string().max(120).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),
   sizeLabel: z.string().max(80).optional().nullable(),
-  colorPrimary: z.string().max(120).optional().nullable(),
-  colorSecondary: z.string().max(120).optional().nullable(),
+  colorPrimary: z.string().max(120).optional().nullable().refine(
+    (value) => !value?.trim() || isProductColorLabel(value),
+    "Dimenziju upišite u polje za dimenziju, ne u boju.",
+  ),
+  colorSecondary: z.string().max(120).optional().nullable().refine(
+    (value) => !value?.trim() || isProductColorLabel(value),
+    "Dimenziju upišite u polje za dimenziju, ne u boju.",
+  ),
   attribute1: z.string().max(120).optional().nullable(),
   attribute2: z.string().max(120).optional().nullable(),
   attribute3: z.string().max(120).optional().nullable(),

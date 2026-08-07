@@ -54,7 +54,15 @@ describe("storefront promotion filters", () => {
 
   it("provides an explicit Rabalux exclusion for Novo and DTZ queries", () => {
     expect(excludeRabaluxPromotionProductsWhere()).toEqual({
-      NOT: { supplier: { is: { integrationKey: "RABALUX" } } },
+      OR: [
+        { supplier: { is: null } },
+        { supplier: { is: { integrationKey: null } } },
+        {
+          supplier: {
+            is: { integrationKey: { not: "RABALUX" } },
+          },
+        },
+      ],
     });
   });
 

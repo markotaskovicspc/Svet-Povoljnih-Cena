@@ -22,6 +22,7 @@ import {
   effectiveUnitPrice,
   type PricingLine,
 } from "@/lib/pricing";
+import { normalizeProductColorLabel } from "@/lib/product-colors";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { MYGLS_PROVIDER } from "@/lib/mygls";
@@ -642,11 +643,11 @@ export async function createOrder(
       shortDescriptionSnapshot: p.shortDescription ?? null,
       shortNameSnapshot: p.name,
       attribute1: p.sizeLabel ?? null,
-      attribute2: p.colorPrimary ?? null,
-      attribute3: p.colorSecondary ?? null,
+      attribute2: normalizeProductColorLabel(p.colorPrimary),
+      attribute3: normalizeProductColorLabel(p.colorSecondary),
       attribute4: null,
-      color1: p.colorPrimary ?? null,
-      color2: p.colorSecondary ?? null,
+      color1: normalizeProductColorLabel(p.colorPrimary),
+      color2: normalizeProductColorLabel(p.colorSecondary),
       supplierExternalSku: p.supplierExternalId ?? null,
     };
   });
