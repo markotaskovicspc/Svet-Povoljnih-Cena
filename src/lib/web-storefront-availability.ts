@@ -26,6 +26,11 @@ type WebAvailabilityProduct = {
   } | null;
 };
 
+export type StorefrontAvailability =
+  | "in-stock"
+  | "incoming"
+  | "out-of-stock";
+
 function enabled(value: string | undefined) {
   return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
 }
@@ -46,9 +51,8 @@ export function isWebAutoAvailabilityEnforced() {
   return enabled(process.env.ENFORCE_WEB_AUTO_AVAILABILITY);
 }
 
-export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
-  const now = new Date();
-  const nonRabaluxSupplierWhere: Prisma.ProductWhereInput = {
+function nonRabaluxSupplierWhere(): Prisma.ProductWhereInput {
+  return {
     OR: [
       { supplier: { is: null } },
       { supplier: { is: { integrationKey: null } } },
@@ -59,11 +63,84 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
       },
     ],
   };
-  const rabaluxSupplierStockWhere: Prisma.ProductWhereInput = {
+}
+
+function rabaluxSupplierStockWhere(now: Date): Prisma.ProductWhereInput {
+  return {
     supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
     supplierApprovalStatus: "APPROVED",
     lastSupplierStockSyncAt: { gte: rabaluxStockFreshAfter(now) },
   };
+}
+
+/** Database predicate that mirrors the stock exposed by catalog DTOs. */
+export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInput {
+  return {
+    OR: [
+      {
+        AND: [nonRabaluxSupplierWhere(), { stock: { gt: 0 } }],
+      },
+      {
+        AND: [
+          {
+            supplier: {
+              is: { integrationKey: RABALUX_INTEGRATION_KEY },
+            },
+          },
+          {
+            OR: [
+              { dcAvailableQty: { gt: 0 } },
+              ...(isRabaluxEnabled()
+                ? [
+                    {
+                      AND: [
+                        { supplier: { is: { enabled: true } } },
+                        rabaluxSupplierStockWhere(now),
+                      ],
+                    } satisfies Prisma.ProductWhereInput,
+                  ]
+                : []),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Builds mutually exclusive stock buckets without negating nullable relation
+ * predicates. PostgreSQL's three-valued NULL logic made `NOT in-stock` drop
+ * ordinary products whose supplier integration key is NULL.
+ */
+export function storefrontAvailabilityWhere(
+  selected: StorefrontAvailability[],
+  now = new Date(),
+): Prisma.ProductWhereInput {
+  const buckets: Prisma.ProductWhereInput[] = [];
+  const ordinaryOutOfStock: Prisma.ProductWhereInput = {
+    AND: [nonRabaluxSupplierWhere(), { stock: { lte: 0 } }],
+  };
+
+  if (selected.includes("in-stock")) {
+    buckets.push(storefrontInStockWhere(now));
+  }
+  if (selected.includes("incoming")) {
+    buckets.push({
+      AND: [ordinaryOutOfStock, { incomingStock: { gt: 0 } }],
+    });
+  }
+  if (selected.includes("out-of-stock")) {
+    buckets.push({
+      AND: [ordinaryOutOfStock, { incomingStock: { lte: 0 } }],
+    });
+  }
+
+  return { OR: buckets };
+}
+
+export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
+  const now = new Date();
   return {
     isActive: true,
     availableWebManual: true,
@@ -94,7 +171,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
           // `NOT integrationKey = RABALUX` exclude ordinary suppliers whose
           // integration key is NULL. Spell out every non-Rabalux case so
           // those products remain eligible for the storefront.
-          nonRabaluxSupplierWhere,
+          nonRabaluxSupplierWhere(),
           {
             AND: [
               {
@@ -113,7 +190,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
                         {
                           AND: [
                             { supplier: { is: { enabled: true } } },
-                            rabaluxSupplierStockWhere,
+                            rabaluxSupplierStockWhere(now),
                           ],
                         } satisfies Prisma.ProductWhereInput,
                       ]

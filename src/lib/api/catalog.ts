@@ -23,12 +23,9 @@ import {
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
 import {
-  RABALUX_PUBLIC_STOCK_THRESHOLD,
-  rabaluxStockFreshAfter,
   resolveRabaluxAvailability,
 } from "@/lib/rabalux/availability";
 import {
-  isRabaluxEnabled,
   isRabaluxSupplierOperational,
 } from "@/lib/rabalux/config";
 import {
@@ -38,6 +35,8 @@ import {
 } from "@/lib/pricing/rules";
 import {
   isProductAvailableOnWeb,
+  storefrontAvailabilityWhere,
+  storefrontInStockWhere,
   webStorefrontProductWhere,
 } from "@/lib/web-storefront-availability";
 import {
@@ -1047,44 +1046,6 @@ function webStorefrontVisibleProductWhere(): Prisma.ProductWhereInput {
   };
 }
 
-function storefrontInStockWhere(now: Date): Prisma.ProductWhereInput {
-  const freshAfter = rabaluxStockFreshAfter(now);
-  return {
-    OR: [
-      {
-        AND: [
-          {
-            OR: [
-              { supplier: { is: null } },
-              { supplier: { is: { integrationKey: null } } },
-              { supplier: { is: { integrationKey: { not: "RABALUX" } } } },
-            ],
-          },
-          { stock: { gt: 0 } },
-        ],
-      },
-      {
-        AND: [
-          { supplier: { is: { integrationKey: "RABALUX" } } },
-          { dcAvailableQty: { gt: 0 } },
-        ],
-      },
-      ...(isRabaluxEnabled()
-        ? [
-            {
-              supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
-              supplierApprovalStatus: "APPROVED",
-              lastSupplierStockSyncAt: { gte: freshAfter },
-              supplier: {
-                is: { integrationKey: "RABALUX", enabled: true },
-              },
-            } satisfies Prisma.ProductWhereInput,
-          ]
-        : []),
-    ],
-  };
-}
-
 function dynamicFilterWhere(
   key: string,
   values: string[],
@@ -1286,7 +1247,11 @@ function buildProductListingWhere(
       OR: [
         { colorPrimary: colors },
         { colorSecondary: colors },
-        { familyMembership: { is: { label: colors } } },
+        {
+          familyMembership: {
+            is: { label: colors, colorHex: { not: null } },
+          },
+        },
       ],
     });
   }
@@ -1302,16 +1267,7 @@ function buildProductListingWhere(
     });
   }
   if (input.availability?.length) {
-    const inStock = storefrontInStockWhere(now);
-    const availabilityWhere: Prisma.ProductWhereInput[] = [];
-    if (input.availability.includes("in-stock")) availabilityWhere.push(inStock);
-    if (input.availability.includes("incoming")) {
-      availabilityWhere.push({ AND: [{ NOT: inStock }, { incomingStock: { gt: 0 } }] });
-    }
-    if (input.availability.includes("out-of-stock")) {
-      availabilityWhere.push({ AND: [{ NOT: inStock }, { incomingStock: { lte: 0 } }] });
-    }
-    if (availabilityWhere.length) appendAnd(where, { OR: availabilityWhere });
+    appendAnd(where, storefrontAvailabilityWhere(input.availability, now));
   }
   for (const [key, values] of Object.entries(input.dynamicFilters ?? {})) {
     const condition = dynamicFilterWhere(key, values);
@@ -1487,7 +1443,7 @@ function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult 
       row.materials.map((item) => item.material.label),
     );
     collect(colors, facets.counts.colors, [
-      row.familyMembership?.label,
+      row.familyMembership?.colorHex ? row.familyMembership.label : null,
       row.colorPrimary,
       row.colorSecondary,
     ]);

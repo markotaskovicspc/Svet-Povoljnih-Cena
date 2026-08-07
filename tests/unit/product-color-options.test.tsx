@@ -53,6 +53,7 @@ describe("PDP boje proizvoda", () => {
             slug: "sofa-black",
             name: "Sofa",
             label: "Crna",
+            colorHex: "#111111",
             position: 0,
             isPrimary: true,
             media: { images: [] },
@@ -66,6 +67,7 @@ describe("PDP boje proizvoda", () => {
             slug: "sofa-green",
             name: "Sofa",
             label: "Zelena",
+            colorHex: "#228833",
             position: 1,
             isPrimary: false,
             media: { images: [] },
@@ -85,5 +87,41 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("Crna");
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
+  });
+
+  it("dimenzijsku porodicu naziva varijantom, a ne bojom", () => {
+    const familyProduct = {
+      ...product,
+      sku: "BED-190X80",
+      colorPrimary: undefined,
+      colorSecondary: undefined,
+      variantFamily: {
+        id: "bed-sizes",
+        code: "BED",
+        selectedSku: "BED-190X80",
+        options: [
+          {
+            sku: "BED-190X80",
+            slug: "bed-190x80",
+            name: "Krevet",
+            label: "190x80",
+            position: 0,
+            isPrimary: true,
+            media: { images: [] },
+            fullPrice: 100,
+            stock: 1,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+        ],
+      },
+    } as Product;
+
+    const markup = renderToStaticMarkup(
+      <ProductColorOptions product={familyProduct} showLabels />,
+    );
+    expect(markup).toContain('aria-label="Opcije proizvoda"');
+    expect(markup).toContain("Varijanta:");
+    expect(markup).not.toContain("Boja:");
   });
 });

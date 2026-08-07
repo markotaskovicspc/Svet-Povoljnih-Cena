@@ -52,10 +52,9 @@ import {
   type SortKey,
   activeChips,
   appendFilterQueryParams,
-  applyFilters,
-  applySort,
   computeExtents,
   emptyFilterState,
+  resolveListingProducts,
 } from "@/lib/listing/filters";
 
 export interface ListingPageQuery {
@@ -319,8 +318,8 @@ function ListingShellInner({
   const extents = serverExtents ?? localExtents;
 
   const filtered = useMemo(
-    () => applySort(applyFilters(subFiltered, state), sort, kind),
-    [subFiltered, state, sort, kind],
+    () => resolveListingProducts(subFiltered, state, sort, kind, hasServerQuery),
+    [hasServerQuery, subFiltered, state, sort, kind],
   );
 
   const visibleKey = useMemo(

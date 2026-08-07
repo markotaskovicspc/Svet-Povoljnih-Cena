@@ -73,14 +73,23 @@ export function ProductColorOptions({
   const familyOptions = product.variantFamily?.options ?? [];
   const activeSku = selectedSku ?? product.variantFamily?.selectedSku ?? product.sku;
   if (familyOptions.length) {
+    const isColorFamily = familyOptions.some(
+      (option) =>
+        Boolean(option.colorHex) ||
+        Boolean(option.colorPrimary?.trim()) ||
+        Boolean(option.colorSecondary?.trim()),
+    );
+    const familyLabel = isColorFamily ? label : "Opcije proizvoda";
     const visibleOptions = familyOptions.slice(0, max);
     return (
       <div
         className={cn("flex flex-wrap items-center gap-2", className)}
-        aria-label={label}
+        aria-label={familyLabel}
       >
         {showLabels ? (
-          <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
+          <span className="mr-0.5 text-xs font-medium text-ink-500">
+            {isColorFamily ? "Boja:" : "Varijanta:"}
+          </span>
         ) : null}
         {visibleOptions.map((option) => {
           const selected = option.sku === activeSku;

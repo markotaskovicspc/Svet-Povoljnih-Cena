@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   isProductAvailableOnWeb,
   isWebAutoAvailabilityEnforced,
+  storefrontAvailabilityWhere,
   webStorefrontProductWhere,
 } from "@/lib/web-storefront-availability";
 
@@ -124,5 +125,18 @@ describe("web storefront availability rollout", () => {
         supplierStock: 50,
       }),
     ).toBe(false);
+  });
+
+  it("builds incoming and unavailable buckets without nullable relation negation", () => {
+    const incoming = JSON.stringify(storefrontAvailabilityWhere(["incoming"]));
+    const unavailable = JSON.stringify(
+      storefrontAvailabilityWhere(["out-of-stock"]),
+    );
+
+    expect(incoming).toContain('"stock":{"lte":0}');
+    expect(incoming).toContain('"incomingStock":{"gt":0}');
+    expect(incoming).not.toContain('"NOT"');
+    expect(unavailable).toContain('"incomingStock":{"lte":0}');
+    expect(unavailable).not.toContain('"NOT"');
   });
 });

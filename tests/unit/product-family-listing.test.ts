@@ -4,6 +4,7 @@ import {
   applyFilters,
   computeFacetValues,
   emptyFilterState,
+  resolveListingProducts,
 } from "@/lib/listing/filters";
 import type { Product } from "@/types";
 
@@ -37,6 +38,7 @@ const product = {
         slug: "chair-black",
         name: "Stolica",
         label: "Crna",
+        colorHex: "#111111",
         position: 0,
         isPrimary: true,
         media: { images: [] },
@@ -50,6 +52,7 @@ const product = {
         slug: "chair-green",
         name: "Stolica",
         label: "Zelena",
+        colorHex: "#228833",
         position: 1,
         isPrimary: false,
         media: { images: [] },
@@ -171,5 +174,39 @@ describe("dinamički filteri listinga", () => {
     });
 
     expect(result.map((item) => item.sku)).toEqual(["TABLE-GREEN"]);
+  });
+
+  it("ne filtrira ponovo rezultate koje je API već rešio nad celom kategorijom", () => {
+    const result = resolveListingProducts(
+      [product],
+      { ...emptyFilterState(), price: [1, 100] },
+      "price-desc",
+      "kategorija",
+      true,
+    );
+
+    expect(result).toEqual([product]);
+  });
+
+  it("ne tretira dimenzijsku family oznaku kao boju", () => {
+    const sizeVariant = {
+      ...product,
+      sku: "BED-190X80",
+      colorPrimary: undefined,
+      variantFamily: {
+        ...product.variantFamily!,
+        selectedSku: "BED-190X80",
+        options: [
+          {
+            ...product.variantFamily!.options[0]!,
+            sku: "BED-190X80",
+            label: "190x80",
+            colorHex: undefined,
+          },
+        ],
+      },
+    } as Product;
+
+    expect(computeFacetValues([sizeVariant]).colors).toEqual([]);
   });
 });

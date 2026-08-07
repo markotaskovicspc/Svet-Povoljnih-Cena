@@ -350,6 +350,22 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
 }
 
 /**
+ * API responses are already filtered, sorted, and paginated over the complete
+ * listing scope. Re-applying local filters to that page can silently discard
+ * valid server matches when derived price/stock metadata differs from raw
+ * catalog fields.
+ */
+export function resolveListingProducts(
+  products: Product[],
+  state: FilterState,
+  sort: SortKey,
+  kind: ListingKind,
+  serverResolved: boolean,
+) {
+  return serverResolved ? products : applySort(applyFilters(products, state), sort, kind);
+}
+
+/**
  * Sort comparators.
  *
  * "default" varies per page kind — see `sortFor`. The named sorts are stable.
@@ -547,7 +563,7 @@ function productColorValues(product: Product) {
     (option) => option.sku === product.sku,
   );
   return uniqueValues([
-    currentFamilyOption?.label,
+    currentFamilyOption?.colorHex ? currentFamilyOption.label : undefined,
     product.colorPrimary,
     product.colorSecondary,
     currentFamilyOption?.colorPrimary,
