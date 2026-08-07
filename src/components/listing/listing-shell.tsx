@@ -39,7 +39,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDate as formatStorefrontDate } from "@/lib/format";
-import { fetchListingPage } from "@/lib/listing/fetch-products";
+import {
+  fetchListingFacets,
+  fetchListingPage,
+} from "@/lib/listing/fetch-products";
 import {
   campaignStickers,
   type CampaignStickerKey,
@@ -226,17 +229,8 @@ function ListingShellInner({
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`/api/products/facets?${facetQueryString}`, {
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return (await response.json()) as {
-          facets?: FacetValues;
-          extents?: FacetExtents;
-        };
-      })
+    const params = new URLSearchParams(facetQueryString);
+    void fetchListingFacets(params, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         setFacetData({

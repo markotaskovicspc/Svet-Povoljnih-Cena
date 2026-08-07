@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchListingPage } from "@/lib/listing/fetch-products";
+import {
+  fetchListingFacets,
+  fetchListingPage,
+} from "@/lib/listing/fetch-products";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -33,5 +36,29 @@ describe("listing API retry", () => {
       fetchListingPage(new URLSearchParams("priceMin=broken"), undefined, 0),
     ).rejects.toThrow("HTTP 400");
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("retries complete facets so filters never fall back to the loaded page", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({}, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({}, { status: 503 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          facets: { groups: ["plafonjere"] },
+          extents: { price: [0, 38000] },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchListingFacets(
+      new URLSearchParams("categoryPath=/sve-za-kucu/rasveta"),
+      undefined,
+      0,
+    );
+
+    expect(result.facets?.groups).toEqual(["plafonjere"]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

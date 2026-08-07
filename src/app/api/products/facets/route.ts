@@ -11,14 +11,23 @@ export async function GET(req: Request) {
   try {
     const input = parseListProductsInput(searchParams);
     const result = await listProductFacets(input);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(
+      { ok: true, ...result },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     logOperationalError("api.products.facets_failed", error, {
       query: Object.fromEntries(searchParams.entries()),
     });
     return NextResponse.json(
       { ok: false, error: "product_facets_unavailable" },
-      { status: 500 },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Retry-After": "1",
+        },
+      },
     );
   }
 }
