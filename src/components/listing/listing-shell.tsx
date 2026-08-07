@@ -514,10 +514,7 @@ function ListingShellInner({
                     "Učitavam rezultate..."
                   ) : (
                     <>
-                      {hasServerQuery ? currentTotal : filtered.length}{" "}
-                      {(hasServerQuery ? currentTotal : filtered.length) === 1
-                        ? "rezultat"
-                        : "rezultata"}
+                      {currentTotal} {currentTotal === 1 ? "rezultat" : "rezultata"}
                       {currentTotal > items.length
                         ? ` (${items.length}/${currentTotal} učitano)`
                         : ""}
