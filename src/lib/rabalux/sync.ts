@@ -56,6 +56,11 @@ import { RABALUX_PICTOGRAMS } from "./pictograms";
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
 const RABALUX_CATALOG_MODEL_VERSION = 2;
+const RABALUX_PICTOGRAM_CODES: ReadonlySet<string> = new Set(
+  RABALUX_PICTOGRAMS.map((definition) => definition.code),
+);
+
+type RabaluxPictogramIdMap = ReadonlyMap<string, string>;
 
 type SyncSummary = {
   runId: string;
@@ -90,6 +95,98 @@ async function getSupplier(requireEnabled = false) {
     throw new Error("Rabalux integration is disabled.");
   }
   return supplier;
+}
+
+async function ensureRabaluxPictogramDefinitions() {
+  return db.$transaction(async (tx) => {
+    const definitions = new Map<string, string>();
+    for (const definition of RABALUX_PICTOGRAMS) {
+      const pictogram = await tx.pictogram.upsert({
+        where: { code: definition.code },
+        create: {
+          code: definition.code,
+          label: definition.label,
+          iconUrl: definition.iconUrl,
+        },
+        update: {
+          label: definition.label,
+          iconUrl: definition.iconUrl,
+        },
+        select: { id: true },
+      });
+      definitions.set(definition.code, pictogram.id);
+    }
+    return definitions;
+  });
+}
+
+async function syncExistingRabaluxPictogramAssignments(
+  supplierId: string,
+  items: RabaluxCatalogItem[],
+  pictogramIdsByCode: RabaluxPictogramIdMap,
+) {
+  const itemBySourceSku = new Map(items.map((item) => [item.sourceSku, item]));
+  const products = await db.product.findMany({
+    where: { supplierId, deletedAt: null },
+    select: {
+      id: true,
+      supplierExternalId: true,
+      syncOverrides: true,
+      familyMembership: {
+        select: {
+          family: {
+            select: {
+              primaryProduct: {
+                select: { supplierExternalId: true, syncOverrides: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  const managedPictogramIds = [...pictogramIdsByCode.values()];
+  const targetProductIds: string[] = [];
+  const assignments: Array<{ productId: string; pictogramId: string }> = [];
+
+  for (const product of products) {
+    const primaryProduct = product.familyMembership?.family.primaryProduct;
+    if (
+      parseOverrideFields(product.syncOverrides).has("pictograms") ||
+      parseOverrideFields(primaryProduct?.syncOverrides).has("pictograms")
+    ) {
+      continue;
+    }
+    const sourceSku =
+      primaryProduct?.supplierExternalId ?? product.supplierExternalId;
+    if (!sourceSku) continue;
+    const item = itemBySourceSku.get(sourceSku);
+    if (!item) continue;
+    targetProductIds.push(product.id);
+    for (const code of item.pictogramCodes) {
+      const pictogramId = pictogramIdsByCode.get(code);
+      if (pictogramId) assignments.push({ productId: product.id, pictogramId });
+    }
+  }
+
+  if (!targetProductIds.length || !managedPictogramIds.length) {
+    return { products: 0, assignments: 0 };
+  }
+  await db.$transaction(async (tx) => {
+    await tx.productPictogram.deleteMany({
+      where: {
+        productId: { in: targetProductIds },
+        pictogramId: { in: managedPictogramIds },
+      },
+    });
+    if (assignments.length) {
+      await tx.productPictogram.createMany({
+        data: assignments,
+        skipDuplicates: true,
+      });
+    }
+  });
+  return { products: targetProductIds.length, assignments: assignments.length };
 }
 
 async function closeRun(
@@ -170,9 +267,13 @@ export async function fetchRabaluxCatalog(supplier: Supplier) {
 
 export async function fetchRabaluxStock(supplier: Supplier) {
   if (!supplier.stockFeedUrl) throw new Error("Rabalux stock feed URL is missing.");
+  const credentials = rabaluxStockCredentials(supplier);
+  if (!credentials.user || !credentials.pass) {
+    throw new Error("Rabalux stock API user or API key is not configured.");
+  }
   const raw = await fetchRabaluxFeed(
     supplier.stockFeedUrl,
-    rabaluxStockCredentials(supplier),
+    credentials,
     "text/csv, text/plain, */*;q=0.5",
   );
   const items = parseRabaluxStockCsv(raw);
@@ -271,12 +372,31 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
       missing: missing.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
+    const pictogramIdsByCode = await ensureRabaluxPictogramDefinitions();
+    const pictogramSync = await syncExistingRabaluxPictogramAssignments(
+      supplier.id,
+      catalog.items,
+      pictogramIdsByCode,
+    );
+    summary.metadata.pictogramProductsSynchronized = pictogramSync.products;
+    summary.metadata.pictogramAssignmentsSynchronized = pictogramSync.assignments;
+    await db.importRun.update({
+      where: { id: run.id },
+      data: { metadata: summary.metadata as Prisma.InputJsonValue },
+    });
 
     for (let start = 0; start < catalog.items.length; start += ITEM_CONCURRENCY) {
       const batch = catalog.items.slice(start, start + ITEM_CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map((item) =>
-          upsertCatalogItem(supplier, item, run.id, sourceHash, options),
+          upsertCatalogItem(
+            supplier,
+            item,
+            run.id,
+            sourceHash,
+            options,
+            pictogramIdsByCode,
+          ),
         ),
       );
       results.forEach((result, index) => {
@@ -407,12 +527,14 @@ export async function syncRabaluxCatalogProduct(
     const item = catalog.items.find((candidate) => candidate.sourceSku === normalizedSku);
     if (!item) throw new Error(`Rabalux product ${normalizedSku} is not in the complete feed.`);
     summary.read = 1;
+    const pictogramIdsByCode = await ensureRabaluxPictogramDefinitions();
     const result = await upsertCatalogItem(
       supplier,
       item,
       run.id,
       sourceHash,
       options,
+      pictogramIdsByCode,
     );
     if (result.conflict) throw new Error(result.conflict);
     summary.ok = 1;
@@ -443,6 +565,7 @@ async function upsertCatalogItem(
   runId: string,
   sourceHash: string,
   options: RabaluxSyncOptions,
+  pictogramIdsByCode: RabaluxPictogramIdMap,
 ) {
   const result = await db.$transaction(async (tx) => {
     const mapping =
@@ -566,6 +689,20 @@ async function upsertCatalogItem(
       }
     }
     const overrideFields = parseOverrideFields(existing?.syncOverrides);
+    const isSecondaryFamilyMember = Boolean(
+      existing?.familyMembership &&
+        existing.familyMembership.family.primaryProductId !== existing.id,
+    );
+    const incomingPictograms = [...item.pictogramCodes].sort();
+    const existingRabaluxPictograms =
+      existing?.pictograms
+        .map((entry) => entry.pictogram.code)
+        .filter((code) => RABALUX_PICTOGRAM_CODES.has(code))
+        .sort() ?? [];
+    const managedPictogramsMatch =
+      isSecondaryFamilyMember ||
+      overrideFields.has("pictograms") ||
+      signature(existingRabaluxPictograms) === signature(incomingPictograms);
     const itemSourceHash = stableSourceHash({
       modelVersion: RABALUX_CATALOG_MODEL_VERSION,
       item,
@@ -574,6 +711,7 @@ async function upsertCatalogItem(
       existing &&
       existing.lastSupplierSourceHash === itemSourceHash &&
       existing.supplierCatalogMissingCount === 0 &&
+      managedPictogramsMatch &&
       (!categoryId ||
         existing.categories.some((category) => category.categoryId === categoryId) ||
         overrideFields.has("categories") ||
@@ -599,7 +737,6 @@ async function upsertCatalogItem(
       section: asset.section,
       order: asset.order,
     }));
-    const incomingPictograms = [...item.pictogramCodes].sort();
     const mediaChanged =
       !existing ||
       (!overrideFields.has("media") &&
@@ -611,8 +748,7 @@ async function upsertCatalogItem(
     const pictogramsChanged =
       !existing ||
       (!overrideFields.has("pictograms") &&
-        signature(existing.pictograms.map((item) => item.pictogram.code).sort()) !==
-          signature(incomingPictograms));
+        signature(existingRabaluxPictograms) !== signature(incomingPictograms));
     const hasReadyImage =
       !mediaChanged &&
       existing?.media.some(
@@ -693,10 +829,6 @@ async function upsertCatalogItem(
           "lastSupplierSourceHash",
         ])
       : Prisma.JsonNull;
-    const isSecondaryFamilyMember = Boolean(
-      existing?.familyMembership &&
-        existing.familyMembership.family.primaryProductId !== existing.id,
-    );
     const riskyPrice = Boolean(
       existing &&
         !isSecondaryFamilyMember &&
@@ -858,22 +990,19 @@ async function upsertCatalogItem(
       pictogramsChanged &&
       !overrideFields.has("pictograms")
     ) {
-      const pictogramIds: string[] = [];
-      for (const code of incomingPictograms) {
-        const definition = RABALUX_PICTOGRAMS.find((entry) => entry.code === code);
-        if (!definition) continue;
-        const pictogram = await tx.pictogram.upsert({
-          where: { code: definition.code },
-          create: definition,
-          update: { label: definition.label, iconUrl: definition.iconUrl },
-          select: { id: true },
-        });
-        pictogramIds.push(pictogram.id);
-      }
-      await tx.productPictogram.deleteMany({ where: { productId } });
+      const pictogramIds = incomingPictograms
+        .map((code) => pictogramIdsByCode.get(code))
+        .filter((id): id is string => Boolean(id));
+      await tx.productPictogram.deleteMany({
+        where: {
+          productId,
+          pictogramId: { in: [...pictogramIdsByCode.values()] },
+        },
+      });
       if (pictogramIds.length) {
         await tx.productPictogram.createMany({
           data: pictogramIds.map((pictogramId) => ({ productId, pictogramId })),
+          skipDuplicates: true,
         });
       }
     }

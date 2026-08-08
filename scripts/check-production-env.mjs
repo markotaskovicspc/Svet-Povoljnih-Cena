@@ -234,11 +234,14 @@ if (enabled("RABALUX_ENABLED")) {
     "RABALUX_CATALOG_USER",
     "RABALUX_CATALOG_PASS",
     "RABALUX_STOCK_USER",
-    "RABALUX_STOCK_PASS",
     "CRON_SECRET",
     "SUPABASE_SERVICE_ROLE_KEY",
     "NEXT_PUBLIC_SUPABASE_URL",
     "EMAIL_FROM",
+  ]);
+  requireOneOf("Rabalux stock API", [
+    "RABALUX_STOCK_API_KEY",
+    "RABALUX_STOCK_PASS",
   ]);
   if (emailProvider === "none") {
     errors.push("Rabalux requires transactional email.");

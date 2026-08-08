@@ -30,6 +30,7 @@ import {
   isRenderableMediaUrl,
 } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
+import { PdpPictograms } from "@/components/product/pdp-pictograms";
 
 const FALLBACK_BLUR =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==";
@@ -284,6 +285,12 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               {badges}
             </div>
           ) : null}
+          {slide.kind === "image" ? (
+            <PdpPictograms
+              pictograms={product.pictograms}
+              className="absolute top-3 right-3 z-10"
+            />
+          ) : null}
           {slides.length > 1 ? (
             <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
               {slides.map((_, index) => (
@@ -390,6 +397,12 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
             </div>
+          ) : null}
+          {slide.kind === "image" ? (
+            <PdpPictograms
+              pictograms={product.pictograms}
+              className="absolute top-16 right-3 z-10"
+            />
           ) : null}
           {slides.length > 1 ? (
             <>

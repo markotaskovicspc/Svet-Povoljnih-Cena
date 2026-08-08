@@ -70,6 +70,23 @@ describe("Rabalux catalog mapping", () => {
     ]);
   });
 
+  it("keeps supplier diameter as a technical spec and uses it for round dimensions", () => {
+    const [item] = parseRabaluxCatalogXml(
+      PRODUCT.replace("<Horizontal_mm>120</Horizontal_mm>", "")
+        .replace("<Distance_from_wall>72</Distance_from_wall>", "")
+        .replace("<Vertical_mm>220</Vertical_mm>", "<Diameter_mm>300</Diameter_mm>"),
+    );
+
+    expect(item.widthCm).toBe(30);
+    expect(item.depthCm).toBe(30);
+    expect(item.heightCm).toBeNull();
+    expect(item.technicalSpecs).toContainEqual({
+      key: "Diameter_mm",
+      label: "Prečnik (mm)",
+      value: "300",
+    });
+  });
+
   it("keeps invalid full-price products inactive candidates", () => {
     const [item] = parseRabaluxCatalogXml(
       PRODUCT.replace("7390.00", "0").replace("<LED_technology>da", "<LED_technology>ne"),

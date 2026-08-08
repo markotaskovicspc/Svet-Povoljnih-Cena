@@ -1,30 +1,40 @@
 import Image from "next/image";
 import type { Pictogram } from "@/types";
+import { cn } from "@/lib/utils";
 
-export function PdpPictograms({ pictograms }: { pictograms: Pictogram[] }) {
+export function PdpPictograms({
+  pictograms,
+  className,
+}: {
+  pictograms: Pictogram[];
+  className?: string;
+}) {
   const visible = pictograms.slice(0, 6);
   if (!visible.length) return null;
 
   return (
     <ul
-      className="grid grid-cols-3 gap-2 py-1 sm:grid-cols-6 md:grid-cols-3 lg:grid-cols-6"
+      className={cn(
+        "pointer-events-none grid grid-cols-2 gap-1.5 md:grid-cols-3",
+        className,
+      )}
       aria-label="Karakteristike proizvoda"
     >
       {visible.map((pictogram) => (
         <li
           key={pictogram.code}
-          className="flex min-w-0 flex-col items-center gap-1 text-center"
+          title={pictogram.label}
+          className="relative size-11 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-12"
         >
           <Image
             src={pictogram.iconUrl}
             alt=""
             width={72}
             height={72}
-            className="size-12 object-contain md:size-14"
+            sizes="(min-width: 768px) 48px, 44px"
+            className="size-full object-contain p-0.5"
           />
-          <span className="text-[10px] leading-tight font-semibold text-ink-700">
-            {pictogram.label}
-          </span>
+          <span className="sr-only">{pictogram.label}</span>
         </li>
       ))}
     </ul>

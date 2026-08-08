@@ -9,7 +9,6 @@ import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
 import { PdpBenefits } from "@/components/product/pdp-benefits";
 import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
-import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { ProductColorOptions } from "@/components/product/color-options";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
@@ -200,8 +199,6 @@ export default async function ProductPage({ params }: RouteProps) {
           </div>
 
           <PdpBenefits deliveryDays={product.deliveryDays} />
-
-          <PdpPictograms pictograms={product.pictograms} />
 
           <div className="border-border/60 border-t pt-2 md:pt-2.5">
             <div>

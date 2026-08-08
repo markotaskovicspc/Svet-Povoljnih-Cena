@@ -397,7 +397,7 @@ describe("Rabalux checkout integration", () => {
           name: "Ručni naziv",
           fullPrice: 777,
           supplierReservedStock: 2,
-          syncOverrides: { fields: ["name", "pricing", "pictograms"] },
+          syncOverrides: { fields: ["name", "pricing"] },
         },
       });
       revision = 2;
@@ -468,8 +468,14 @@ describe("Rabalux checkout integration", () => {
       expect(Number(updated.fullPrice)).toBe(777);
       expect(updated.supplierStock).toBe(11);
       expect(updated.supplierReservedStock).toBe(2);
-      expect(updated.pictograms).toEqual([
-        { pictogram: { code: "rabalux-integration-manual" } },
+      expect(
+        updated.pictograms
+          .map(({ pictogram }) => pictogram.code)
+          .sort(),
+      ).toEqual([
+        "rabalux-integration-manual",
+        "rabalux-led",
+        "rabalux-warranty-5",
       ]);
       expect(
         effectiveSellableStock({

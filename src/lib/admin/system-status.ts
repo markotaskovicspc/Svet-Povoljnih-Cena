@@ -166,7 +166,7 @@ export function getIntegrationReadiness(
         present("RABALUX_CATALOG_USER"),
         present("RABALUX_CATALOG_PASS"),
         present("RABALUX_STOCK_USER"),
-        present("RABALUX_STOCK_PASS"),
+        presentOneOf("RABALUX_STOCK_API_KEY", "RABALUX_STOCK_PASS"),
       ],
     }),
     integration(env, {

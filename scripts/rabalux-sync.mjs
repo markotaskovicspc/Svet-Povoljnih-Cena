@@ -18,13 +18,13 @@ if (mode === "inspect") {
       args.get("catalog"),
       "https://rabalux.rs/downloadmanager/downloadha/nohtml/1/id/332",
       "RABALUX_CATALOG_USER",
-      "RABALUX_CATALOG_PASS",
+      ["RABALUX_CATALOG_PASS"],
     ),
     loadInput(
       args.get("stock"),
       "https://rabalux.hu/downloadmanager/downloadha/nohtml/1/id/11",
       "RABALUX_STOCK_USER",
-      "RABALUX_STOCK_PASS",
+      ["RABALUX_STOCK_API_KEY", "RABALUX_STOCK_PASS"],
     ),
   ]);
   const catalogSkus = matches(catalog, /<Sku>([^<]+)<\/Sku>/g);
@@ -71,12 +71,14 @@ const payload = await response.json();
 console.log(JSON.stringify(payload, null, 2));
 if (!response.ok || !payload.ok) process.exit(1);
 
-async function loadInput(path, url, userName, passName) {
+async function loadInput(path, url, userName, passNames) {
   if (path) return readFile(path, "utf8");
   const user = envValue(userName);
-  const pass = envValue(passName);
+  const pass = passNames.map(envValue).find(Boolean);
   if (!user || !pass) {
-    throw new Error(`${userName} and ${passName} are required without a local file.`);
+    throw new Error(
+      `${userName} and one of ${passNames.join(", ")} are required without a local file.`,
+    );
   }
   const response = await fetch(url, {
     headers: {

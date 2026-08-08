@@ -53,6 +53,7 @@ const TECHNICAL_LABELS: Record<string, string> = {
   Textile_cable: "Tekstilni kabl",
   Chargeable_w_USB: "USB punjenje",
   USB_charging_port: "USB priključak",
+  Diameter_mm: "Prečnik (mm)",
   Installation_size_mm: "Ugradna mera (mm)",
   Installation_depth_mm: "Dubina ugradnje (mm)",
   Sensor_type: "Tip senzora",
@@ -245,6 +246,7 @@ function mapCatalogNode(node: XmlNode): RabaluxCatalogItem | null {
   if (!type) errors.push("missing_type");
   const productWidth = numberOrNull(text(map, "Horizontal_mm"));
   const productDepth = numberOrNull(text(map, "Distance_from_wall"));
+  const productDiameter = numberOrNull(text(map, "Diameter_mm"));
   const productHeight =
     numberOrNull(text(map, "Vertical_mm")) ??
     numberOrNull(text(map, "Distance_from_ceiling"));
@@ -272,8 +274,18 @@ function mapCatalogNode(node: XmlNode): RabaluxCatalogItem | null {
     colorPrimary: text(map, "Lamp_colour") || null,
     colorSecondary: text(map, "Colour_of_lampshade") || null,
     materials: [...new Set(materialValues)],
-    widthCm: productWidth != null ? productWidth / 10 : null,
-    depthCm: productDepth != null ? productDepth / 10 : null,
+    widthCm:
+      productWidth != null
+        ? productWidth / 10
+        : productDiameter != null
+          ? productDiameter / 10
+          : null,
+    depthCm:
+      productDepth != null
+        ? productDepth / 10
+        : productDiameter != null
+          ? productDiameter / 10
+          : null,
     heightCm: productHeight != null ? productHeight / 10 : null,
     weightKg: numberOrNull(text(map, "Net_weight_kg")),
     grossWeightKg: numberOrNull(text(map, "Gross_weight")),

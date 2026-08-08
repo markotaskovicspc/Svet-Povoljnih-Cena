@@ -31,6 +31,7 @@ import {
   saveRabaluxCategoryMapping,
 } from "@/lib/rabalux/governance";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
+import { rabaluxStockAuthenticationStatus } from "@/lib/rabalux/config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -406,7 +407,7 @@ function jsonField(value: Prisma.JsonValue | null, key: string) {
   return typeof field === "number" || typeof field === "string" ? String(field) : "—";
 }
 
-function DashboardStat({ label, value }: { label: string; value: number }) {
+function DashboardStat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="text-xs text-ink-500">{label}</div>
@@ -437,6 +438,9 @@ export default async function XmlImportPage({
     }),
   ]);
   const rabalux = suppliers.find((supplier) => supplier.integrationKey === "RABALUX");
+  const rabaluxStockAuth = rabalux
+    ? rabaluxStockAuthenticationStatus(rabalux)
+    : null;
   const [
     pendingProducts,
     mappingConflicts,
@@ -551,14 +555,24 @@ export default async function XmlImportPage({
         <div className="space-y-6">
           {rabalux ? (
             <Card>
-              <CardTitle description="Katalog dnevno · lager na 15 minuta · mediji resumable">
+              <CardTitle description="Katalog dnevno · lager preko API ključa na 15 minuta · mediji resumable">
                 Rabalux
               </CardTitle>
               <RabaluxControls
                 previewAction={previewRabalux}
                 executeAction={executeRabalux}
               />
-              <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5">
+                <DashboardStat
+                  label="Stock API pristup"
+                  value={
+                    rabaluxStockAuth?.configured
+                      ? rabaluxStockAuth.dedicatedApiKey
+                        ? "API ključ"
+                        : "Povezan (legacy ključ)"
+                      : "Nedostaje"
+                  }
+                />
                 <DashboardStat label="Čeka odobrenje" value={pendingProducts.length} />
                 <DashboardStat label="Nemapirano" value={unmappedPairs.length} />
                 <DashboardStat label="Predlozi cena" value={priceProposals.length} />
@@ -712,8 +726,9 @@ export default async function XmlImportPage({
                 </div>
               </form>
               <p className="mt-3 text-xs text-ink-500">
-                Kredencijali su server-side env promenljive i ne prikazuju se u
-                administraciji.
+                Rabalux lager endpoint koristi API ključ uz korisnički
+                identifikator. Kredencijali su server-side env promenljive i
+                njihove vrednosti se ne prikazuju u administraciji.
               </p>
             </Card>
           ) : null}

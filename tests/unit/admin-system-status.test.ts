@@ -75,6 +75,21 @@ describe("admin system status", () => {
     expect(JSON.stringify(resend)).not.toContain(secret);
   });
 
+  it("accepts the Rabalux stock API key without exposing it", () => {
+    const apiKey = "rabalux-stock-api-key-secret";
+    const rabalux = getIntegrationReadiness({
+      RABALUX_ENABLED: "true",
+      RABALUX_CATALOG_USER: "catalog-user",
+      RABALUX_CATALOG_PASS: "catalog-secret",
+      RABALUX_STOCK_USER: "stock-user",
+      RABALUX_STOCK_API_KEY: apiKey,
+    }).find((item) => item.id === "rabalux");
+
+    expect(rabalux?.ready).toBe(true);
+    expect(rabalux?.missing).toEqual([]);
+    expect(JSON.stringify(rabalux)).not.toContain(apiKey);
+  });
+
   it("allows a complete X Express test account but gates production", () => {
     const env = {
       X_EXPRESS_ENABLED: "true",

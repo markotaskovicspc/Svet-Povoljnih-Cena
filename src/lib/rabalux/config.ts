@@ -34,9 +34,23 @@ export function rabaluxCatalogCredentials(supplier: Supplier) {
 }
 
 export function rabaluxStockCredentials(supplier: Supplier) {
+  // Rabalux protects the downloadable stock feed with HTTP Basic auth. The
+  // supplier-issued API key is sent as the secret half of that header. Keep
+  // the legacy PASS variable as a rollout fallback while production moves to
+  // the explicitly named API_KEY variable.
   return {
     user: resolveSecret(supplier.stockAuthUser, "RABALUX_STOCK_USER"),
-    pass: resolveSecret(supplier.stockAuthPass, "RABALUX_STOCK_PASS"),
+    pass:
+      envValue("RABALUX_STOCK_API_KEY") ??
+      resolveSecret(supplier.stockAuthPass, "RABALUX_STOCK_PASS"),
+  };
+}
+
+export function rabaluxStockAuthenticationStatus(supplier: Supplier) {
+  const credentials = rabaluxStockCredentials(supplier);
+  return {
+    configured: Boolean(credentials.user && credentials.pass),
+    dedicatedApiKey: Boolean(envValue("RABALUX_STOCK_API_KEY")),
   };
 }
 

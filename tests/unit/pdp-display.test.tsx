@@ -133,6 +133,7 @@ describe("PDP price and benefit display", () => {
   it("renders no more than six product pictograms", () => {
     const markup = renderToStaticMarkup(
       <PdpPictograms
+        className="absolute top-3 right-3"
         pictograms={Array.from({ length: 7 }, (_, index) => ({
           id: String(index),
           code: `icon-${index}`,
@@ -143,6 +144,9 @@ describe("PDP price and benefit display", () => {
     );
     expect(markup.match(/<li/g)).toHaveLength(6);
     expect(markup).not.toContain("Oznaka 6");
+    expect(markup).toContain("absolute top-3 right-3");
+    expect(markup.match(/sr-only/g)).toHaveLength(6);
+    expect(markup).not.toContain("text-\[10px\]");
   });
 
   it("hides only the generic duplicate availability sentence", () => {
