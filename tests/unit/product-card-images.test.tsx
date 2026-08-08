@@ -233,4 +233,24 @@ describe("ProductCard image regression", () => {
     expect(html).toContain("Slika proizvoda nije dostupna");
     expect(html).not.toContain("data-card-image=");
   });
+
+  it("prikazuje najviše šest adminskih piktograma preko fotografije", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          pictograms: Array.from({ length: 7 }, (_, index) => ({
+            id: `pictogram-${index}`,
+            code: `card-icon-${index}`,
+            label: `Kartica oznaka ${index}`,
+            iconUrl: "/brand/pictograms/rabalux/led.png",
+          })),
+        },
+      }),
+    );
+
+    expect(html).toContain("data-product-card-pictograms");
+    expect(html.match(/title="Kartica oznaka/g)).toHaveLength(6);
+    expect(html).not.toContain("Kartica oznaka 6");
+  });
 });

@@ -169,6 +169,10 @@ const productCardCoreSelect = {
     orderBy: { order: "asc" },
     take: 6,
   },
+  pictograms: {
+    select: { pictogram: true },
+    orderBy: { pictogram: { label: "asc" } },
+  },
   materials: { include: { material: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -565,6 +569,19 @@ function mapProductListItem(
 ): ProductDTO {
   const availability = productStockAvailability(p);
   const isRabalux = p.supplier?.integrationKey === "RABALUX";
+  const pictograms = p.pictograms
+    .map((assignment) => ({
+      id: assignment.pictogram.id,
+      code: assignment.pictogram.code,
+      label: assignment.pictogram.label,
+      iconUrl: assignment.pictogram.iconUrl,
+    }))
+    .sort((left, right) =>
+      isRabalux
+        ? rabaluxPictogramPriority(left.code) -
+          rabaluxPictogramPriority(right.code)
+        : left.label.localeCompare(right.label, "sr-Latn"),
+    );
   const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
@@ -603,7 +620,7 @@ function mapProductListItem(
       label: m.material.label,
       imageUrl: m.material.imageUrl ?? undefined,
     })),
-    pictograms: [],
+    pictograms,
     stock: availability.sellableStock,
     incomingStock: p.incomingStock,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
@@ -698,6 +715,7 @@ function attachProductVariantFamily(
       isPrimary: member.productId === membership.family.primaryProductId,
       thumbnail: variant.media.images[0],
       media: variant.media,
+      pictograms: variant.pictograms,
       fullPrice: variant.fullPrice,
       salePrice: variant.salePrice,
       discountPct: variant.discountPct,
@@ -742,6 +760,7 @@ function attachProductVariantFamily(
     colorPrimary: selected.colorPrimary,
     colorSecondary: selected.colorSecondary,
     media: selected.media,
+    pictograms: selected.pictograms ?? product.pictograms,
     fullPrice: selected.fullPrice,
     salePrice: selected.salePrice,
     discountPct: selected.discountPct,

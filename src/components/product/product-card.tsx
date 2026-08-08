@@ -106,6 +106,7 @@ export function ProductCard({
       colorPrimary: option.colorPrimary,
       colorSecondary: option.colorSecondary,
       media: option.media,
+      pictograms: option.pictograms ?? familyProduct.pictograms,
       fullPrice: option.fullPrice,
       salePrice: option.salePrice,
       discountPct: option.discountPct,
@@ -357,6 +358,11 @@ export function ProductCard({
           </div>
         ) : null}
         </Link>
+
+        <ProductCardPictograms
+          pictograms={product.pictograms}
+          compactOnDesktop={compactOnDesktop}
+        />
 
         {images.length > 1 ? (
           <>
@@ -671,6 +677,49 @@ function ProductBadge({ badge }: { badge: Badge }) {
     >
       {badge.label}
     </span>
+  );
+}
+
+function ProductCardPictograms({
+  pictograms,
+  compactOnDesktop,
+}: {
+  pictograms: Product["pictograms"];
+  compactOnDesktop?: boolean;
+}) {
+  const visible = pictograms.slice(0, 6);
+  if (!visible.length) return null;
+
+  return (
+    <ul
+      data-product-card-pictograms
+      aria-label="Karakteristike proizvoda"
+      className={cn(
+        "pointer-events-none absolute top-12 right-1.5 z-10 grid grid-cols-2 gap-1",
+        compactOnDesktop && "md:top-11 md:right-1 md:gap-0.5",
+      )}
+    >
+      {visible.map((pictogram) => (
+        <li
+          key={pictogram.code}
+          title={pictogram.label}
+          className={cn(
+            "relative size-6 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7",
+            compactOnDesktop && "md:size-6",
+          )}
+        >
+          <Image
+            src={pictogram.iconUrl}
+            alt=""
+            width={40}
+            height={40}
+            sizes="(min-width: 768px) 28px, 24px"
+            className="size-full object-contain p-px"
+          />
+          <span className="sr-only">{pictogram.label}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

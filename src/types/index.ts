@@ -184,6 +184,8 @@ export interface ProductVariantOption {
   isPrimary: boolean;
   thumbnail?: MediaAsset;
   media: ProductMedia;
+  /** SKU-specific pictograms shown when this colour variant is selected. */
+  pictograms?: Pictogram[];
   fullPrice: number;
   salePrice?: number;
   discountPct?: number;
