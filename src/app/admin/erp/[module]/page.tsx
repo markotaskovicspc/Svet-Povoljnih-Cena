@@ -46,6 +46,7 @@ export default async function ErpModulePage({
     "photo",
     "status",
     "sku",
+    "supplierExternalId",
     "shortName",
     "supplier",
     "rabaluxStock",
@@ -85,7 +86,9 @@ export default async function ErpModulePage({
             isRabaluxStockView ? rabaluxStockColumns : undefined
           }
           initialQuery={isRabaluxStockView ? "Rabalux" : ""}
-          initialSearchColumn={isRabaluxStockView ? "supplier" : ""}
+          initialSearchColumn={
+            isRabaluxStockView ? "supplierIntegrationKey" : ""
+          }
         />
       </div>
     </>

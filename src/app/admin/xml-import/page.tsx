@@ -586,6 +586,7 @@ export default async function XmlImportPage({
             MAX("lastSupplierStockSyncAt") AS "latestSyncAt"
           FROM "Product"
           WHERE "supplierId" = ${rabalux.id}
+            AND "supplierExternalId" IS NOT NULL
             AND "deletedAt" IS NULL
         `),
       ])

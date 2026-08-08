@@ -200,9 +200,11 @@ const articleColumns: ErpColumn[] = [
     defaultVisible: true,
   },
   { key: "sku", label: "Šifra", defaultVisible: true },
+  { key: "supplierExternalId", label: "Dobavljačka šifra" },
   { key: "shortDescription", label: "Kratki opis", defaultVisible: true },
   { key: "shortName", label: "Kratki naziv", defaultVisible: true },
   { key: "supplier", label: "Dobavljač", options: [], defaultVisible: true },
+  { key: "supplierIntegrationKey", label: "Integracija dobavljača" },
   { key: "category", label: "Kategorija", defaultVisible: true },
   { key: "group", label: "Interna grupa", defaultVisible: true },
   { key: "subgroup", label: "Podgrupa" },
@@ -1098,6 +1100,7 @@ async function getArticleRows(
       fullPrice: true,
       stock: true,
       incomingStock: true,
+      supplierExternalId: true,
       supplierStock: true,
       supplierReservedStock: true,
       lastSupplierStockSyncAt: true,
@@ -1285,7 +1288,9 @@ async function getArticleRows(
     const mediaUrl = resolveSupabaseStorageUrl(
       product.media[0]?.thumbUrl ?? product.media[0]?.url,
     );
-    const isRabalux = product.supplier?.integrationKey === "RABALUX";
+    const isRabalux =
+      product.supplier?.integrationKey === "RABALUX" &&
+      Boolean(product.supplierExternalId);
     const rabaluxStock = isRabalux
       ? resolveRabaluxSupplierStock({
           supplierStock: product.supplierStock,
@@ -1301,7 +1306,9 @@ async function getArticleRows(
         photo: mediaUrl || null,
         status: product.articleStatus,
         sku: product.sku,
+        supplierExternalId: product.supplierExternalId,
         supplier: product.supplier?.name ?? null,
+        supplierIntegrationKey: product.supplier?.integrationKey ?? null,
         category:
           product.categories[0]?.category.parent?.name ??
           product.categories[0]?.category.name ??

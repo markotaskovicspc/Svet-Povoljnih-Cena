@@ -55,6 +55,14 @@ export function articleSearchWhere(
   if (searchColumn === "supplier") {
     return { supplier: { name: { contains: search, mode: "insensitive" } } };
   }
+  if (searchColumn === "supplierIntegrationKey") {
+    return {
+      supplierExternalId: { not: null },
+      supplier: {
+        integrationKey: { equals: search, mode: "insensitive" },
+      },
+    };
+  }
   const numericSearch = Number(search.replace(",", "."));
   return {
     OR: [

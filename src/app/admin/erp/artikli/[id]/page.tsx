@@ -1362,7 +1362,8 @@ export default async function ProductDetail({
   );
   const rabaluxOperational = isRabaluxSupplierOperational(product.supplier);
   const rabaluxSupplierStock =
-    product.supplier?.integrationKey === "RABALUX"
+    product.supplier?.integrationKey === "RABALUX" &&
+    product.supplierExternalId
       ? resolveRabaluxSupplierStock({
           supplierStock: product.supplierStock,
           supplierReservedStock: product.supplierReservedStock,

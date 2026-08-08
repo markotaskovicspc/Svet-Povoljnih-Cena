@@ -60,6 +60,15 @@ describe("unos artikala", () => {
     });
   });
 
+  it("Rabalux pregled zahteva integraciju i dobavljačku šifru", () => {
+    expect(articleSearchWhere("RABALUX", "supplierIntegrationKey")).toEqual({
+      supplierExternalId: { not: null },
+      supplier: {
+        integrationKey: { equals: "RABALUX", mode: "insensitive" },
+      },
+    });
+  });
+
   it("koristi indeksni exact lookup za brojčanu šifru i bar-kod", () => {
     expect(articleSearchWhere("110083")).toEqual({
       OR: [
