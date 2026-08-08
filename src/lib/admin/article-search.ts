@@ -52,6 +52,9 @@ export function articleSearchWhere(
   if (searchColumn === "shortDescription") {
     return { shortDescription: { contains: search, mode: "insensitive" } };
   }
+  if (searchColumn === "supplier") {
+    return { supplier: { name: { contains: search, mode: "insensitive" } } };
+  }
   const numericSearch = Number(search.replace(",", "."));
   return {
     OR: [

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isRabaluxStockFresh,
   resolveRabaluxAvailability,
+  resolveRabaluxSupplierStock,
 } from "@/lib/rabalux/availability";
 
 describe("Rabalux customer availability", () => {
@@ -101,5 +102,53 @@ describe("Rabalux customer availability", () => {
     expect(
       isRabaluxStockFresh(new Date("2026-07-27T11:29:59.999Z"), now),
     ).toBe(false);
+  });
+
+  it("keeps exact supplier stock separate from the quantity allowed for sale", () => {
+    expect(
+      resolveRabaluxSupplierStock({
+        supplierStock: 18,
+        supplierReservedStock: 3,
+        lastSupplierStockSyncAt: new Date("2026-07-27T11:45:00.000Z"),
+        supplierOperational: true,
+        supplierApproved: true,
+        now,
+      }),
+    ).toMatchObject({
+      rawStock: 18,
+      reservedStock: 3,
+      safetyStock: 1,
+      netAfterSafety: 14,
+      sellableStock: 14,
+      status: "AVAILABLE",
+    });
+  });
+
+  it("still reports the exact stock when stale or below the public threshold", () => {
+    expect(
+      resolveRabaluxSupplierStock({
+        supplierStock: 10,
+        supplierReservedStock: 2,
+        lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
+        supplierOperational: true,
+        supplierApproved: true,
+        now,
+      }),
+    ).toMatchObject({
+      rawStock: 10,
+      netAfterSafety: 7,
+      sellableStock: 0,
+      status: "BELOW_THRESHOLD",
+    });
+    expect(
+      resolveRabaluxSupplierStock({
+        supplierStock: 25,
+        supplierReservedStock: 0,
+        lastSupplierStockSyncAt: new Date("2026-07-27T11:00:00.000Z"),
+        supplierOperational: true,
+        supplierApproved: true,
+        now,
+      }),
+    ).toMatchObject({ rawStock: 25, sellableStock: 0, status: "STALE" });
   });
 });

@@ -27,16 +27,36 @@ export async function generateMetadata({
 
 export default async function ErpModulePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ module: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { module: slug } = await params;
+  const search = await searchParams;
   await requireAdminAction(allowedRolesForErpModule(slug));
   if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
   const definition = getErpModuleDefinition(slug);
   if (definition?.redirectHref) redirect(definition.redirectHref);
   const erpModule = await getErpModule(slug);
   if (!erpModule) notFound();
+  const isRabaluxStockView =
+    slug === "artikli" && search.view === "rabalux-stock";
+  const rabaluxStockColumns = [
+    "photo",
+    "status",
+    "sku",
+    "shortName",
+    "supplier",
+    "rabaluxStock",
+    "rabaluxReserved",
+    "rabaluxSafetyStock",
+    "rabaluxSellableStock",
+    "rabaluxStockStatus",
+    "rabaluxStockSyncedAt",
+    "rabaluxNextArrivalAt",
+    "deliveryDays",
+  ];
 
   return (
     <>
@@ -58,7 +78,15 @@ export default async function ErpModulePage({
         }
       />
       <div className="px-8 py-6">
-        <ErpGrid key={erpModule.slug} module={erpModule} />
+        <ErpGrid
+          key={`${erpModule.slug}:${isRabaluxStockView ? "rabalux-stock" : "default"}`}
+          module={erpModule}
+          initialVisibleColumns={
+            isRabaluxStockView ? rabaluxStockColumns : undefined
+          }
+          initialQuery={isRabaluxStockView ? "Rabalux" : ""}
+          initialSearchColumn={isRabaluxStockView ? "supplier" : ""}
+        />
       </div>
     </>
   );

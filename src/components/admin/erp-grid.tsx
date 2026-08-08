@@ -257,10 +257,14 @@ export function ErpGrid({
   module,
   fixedFilters = EMPTY_FIXED_FILTERS,
   initialVisibleColumns,
+  initialQuery = "",
+  initialSearchColumn = "",
 }: {
   module: ErpModule;
   fixedFilters?: AdminGridFilter[];
   initialVisibleColumns?: string[];
+  initialQuery?: string;
+  initialSearchColumn?: string;
 }) {
   const router = useRouter();
   const clientReady = useClientReady();
@@ -278,8 +282,12 @@ export function ErpGrid({
     },
     [initialVisibleColumns, module.columns],
   );
-  const [query, setQuery] = useState("");
-  const [searchColumn, setSearchColumn] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [searchColumn, setSearchColumn] = useState(() =>
+    module.columns.some((column) => column.key === initialSearchColumn)
+      ? initialSearchColumn
+      : "",
+  );
   const [filters, setFilters] = useState<AdminGridFilter[]>([]);
   const [sorting, setSorting] = useState<AdminGridSort[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);

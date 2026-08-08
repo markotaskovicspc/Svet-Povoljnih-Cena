@@ -66,7 +66,13 @@ import {
   resolveDeliveryWindowForQuantity,
 } from "@/lib/delivery-windows";
 import { formatRsd } from "@/lib/format";
-import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
+import {
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
+  RABALUX_SUPPLIER_STOCK_STATUS_LABELS,
+  resolveRabaluxAvailability,
+  resolveRabaluxSupplierStock,
+} from "@/lib/rabalux/availability";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 import {
   defaultProductNewUntil,
   productNewUntilIsActive,
@@ -1354,14 +1360,24 @@ export default async function ProductDetail({
     (sum, item) => sum + Math.max(item.qty - item.receivedQty, 0),
     0,
   );
+  const rabaluxOperational = isRabaluxSupplierOperational(product.supplier);
+  const rabaluxSupplierStock =
+    product.supplier?.integrationKey === "RABALUX"
+      ? resolveRabaluxSupplierStock({
+          supplierStock: product.supplierStock,
+          supplierReservedStock: product.supplierReservedStock,
+          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          supplierOperational: rabaluxOperational,
+          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+          now,
+        })
+      : null;
   const availability = resolveRabaluxAvailability({
     warehouseStock: product.dcAvailableQty,
     supplierStock: product.supplierStock,
     supplierReservedStock: product.supplierReservedStock,
     lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
-    supplierOperational:
-      product.supplier?.enabled === true &&
-      product.supplier.integrationKey === "RABALUX",
+    supplierOperational: rabaluxOperational,
     supplierApproved: product.supplierApprovalStatus === "APPROVED",
     now,
   });
@@ -2131,6 +2147,70 @@ export default async function ProductDetail({
                 Status dobavljačkog odobrenja: {product.supplierApprovalStatus}
               </p>
             ) : null}
+            {rabaluxSupplierStock ? (
+              <div className="mt-4 space-y-3 border-t border-border pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-ink">Rabalux lager</p>
+                  <Link
+                    href="/admin/erp/artikli?view=rabalux-stock"
+                    className="text-xs text-walnut hover:underline"
+                  >
+                    Svi Rabalux artikli
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <SupplierStockStat
+                    label="Prijavljeno stanje"
+                    value={`${rabaluxSupplierStock.rawStock} kom`}
+                  />
+                  <SupplierStockStat
+                    label="Za prodaju"
+                    value={`${rabaluxSupplierStock.sellableStock} kom`}
+                  />
+                  <SupplierStockStat
+                    label="Rezervisano"
+                    value={`${rabaluxSupplierStock.reservedStock} kom`}
+                  />
+                  <SupplierStockStat
+                    label="Sigurnosna rezerva"
+                    value={`${rabaluxSupplierStock.safetyStock} kom`}
+                  />
+                  <SupplierStockStat
+                    label="Status"
+                    value={
+                      RABALUX_SUPPLIER_STOCK_STATUS_LABELS[
+                        rabaluxSupplierStock.status
+                      ]
+                    }
+                  />
+                  <SupplierStockStat
+                    label="Poslednje osveženje"
+                    value={
+                      product.lastSupplierStockSyncAt
+                        ? product.lastSupplierStockSyncAt.toLocaleString(
+                            "sr-Latn-RS",
+                            { timeZone: "Europe/Belgrade" },
+                          )
+                        : "Nije osveženo"
+                    }
+                  />
+                </div>
+                {product.supplierNextArrivalAt ? (
+                  <p className="text-xs text-ink-500">
+                    Najavljeni dolazak: {product.supplierNextArrivalAt.toLocaleDateString(
+                      "sr-Latn-RS",
+                      { timeZone: "Europe/Belgrade" },
+                    )}
+                  </p>
+                ) : null}
+                <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
+                  Kupcu se ne prikazuje tačan broj. Dobavljačko stanje ulazi u
+                  online prodaju samo kada je sveže, odobreno i strogo veće od{" "}
+                  {RABALUX_PUBLIC_STOCK_THRESHOLD} kom; zatim se oduzimaju
+                  rezervacije i jedan sigurnosni komad.
+                </p>
+              </div>
+            ) : null}
             {product.supplier?.integrationKey === "RABALUX" && product.supplierExternalId ? (
               <div className="mt-4 space-y-4 border-t border-border pt-4">
                 <AdminActionForm action={syncSingleRabaluxProduct} className="space-y-2">
@@ -2310,6 +2390,15 @@ function SourceSummary({
       >
         {source} →
       </Link>
+    </div>
+  );
+}
+
+function SupplierStockStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border p-2.5">
+      <div className="text-ink-500">{label}</div>
+      <div className="mt-1 font-mono font-semibold text-ink">{value}</div>
     </div>
   );
 }

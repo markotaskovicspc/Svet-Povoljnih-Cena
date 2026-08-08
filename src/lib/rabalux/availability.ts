@@ -7,6 +7,24 @@ export const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
 
 export type StockAvailabilitySource = "DC" | "SUPPLIER" | "MIXED" | "NONE";
 
+export type RabaluxSupplierStockStatus =
+  | "AVAILABLE"
+  | "BELOW_THRESHOLD"
+  | "STALE"
+  | "PENDING_APPROVAL"
+  | "DISABLED";
+
+export const RABALUX_SUPPLIER_STOCK_STATUS_LABELS: Record<
+  RabaluxSupplierStockStatus,
+  string
+> = {
+  AVAILABLE: "Dostupno",
+  BELOW_THRESHOLD: "Ispod praga",
+  STALE: "Zastarelo",
+  PENDING_APPROVAL: "Čeka odobrenje",
+  DISABLED: "Integracija isključena",
+};
+
 export function isRabaluxStockFresh(
   syncedAt: Date | string | null | undefined,
   now = new Date(),
@@ -23,6 +41,47 @@ export function rabaluxStockFreshAfter(now = new Date()) {
   return new Date(now.getTime() - RABALUX_STOCK_MAX_AGE_MS);
 }
 
+export function resolveRabaluxSupplierStock(input: {
+  supplierStock?: number | null;
+  supplierReservedStock?: number | null;
+  lastSupplierStockSyncAt?: Date | string | null;
+  supplierOperational: boolean;
+  supplierApproved: boolean;
+  now?: Date;
+}) {
+  const rawStock = nonnegativeInt(input.supplierStock ?? 0);
+  const reservedStock = nonnegativeInt(input.supplierReservedStock ?? 0);
+  const fresh = isRabaluxStockFresh(input.lastSupplierStockSyncAt, input.now);
+  const aboveThreshold = rawStock > RABALUX_PUBLIC_STOCK_THRESHOLD;
+  const eligible =
+    input.supplierOperational && input.supplierApproved && fresh && aboveThreshold;
+  const netAfterSafety = Math.max(
+    rawStock - reservedStock - RABALUX_SUPPLIER_SAFETY_STOCK,
+    0,
+  );
+  const status: RabaluxSupplierStockStatus = !input.supplierOperational
+    ? "DISABLED"
+    : !fresh
+      ? "STALE"
+      : !input.supplierApproved
+        ? "PENDING_APPROVAL"
+        : !aboveThreshold
+          ? "BELOW_THRESHOLD"
+          : "AVAILABLE";
+
+  return {
+    rawStock,
+    reservedStock,
+    safetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
+    netAfterSafety,
+    sellableStock: eligible ? netAfterSafety : 0,
+    fresh,
+    aboveThreshold,
+    eligible,
+    status,
+  };
+}
+
 export function resolveRabaluxAvailability(input: {
   warehouseStock: number;
   supplierStock?: number | null;
@@ -33,17 +92,12 @@ export function resolveRabaluxAvailability(input: {
   now?: Date;
 }) {
   const warehouseStock = nonnegativeInt(input.warehouseStock);
-  const rawSupplierStock = nonnegativeInt(input.supplierStock ?? 0);
-  const supplierEligible =
-    input.supplierOperational &&
-    input.supplierApproved &&
-    isRabaluxStockFresh(input.lastSupplierStockSyncAt, input.now) &&
-    rawSupplierStock > RABALUX_PUBLIC_STOCK_THRESHOLD;
+  const supplier = resolveRabaluxSupplierStock(input);
   const sellableStock = effectiveSellableStock({
     warehouseStock,
-    supplierStock: supplierEligible ? rawSupplierStock : 0,
-    supplierReservedStock: supplierEligible ? input.supplierReservedStock : 0,
-    supplierSafetyStock: supplierEligible ? RABALUX_SUPPLIER_SAFETY_STOCK : 0,
+    supplierStock: supplier.eligible ? supplier.rawStock : 0,
+    supplierReservedStock: supplier.eligible ? supplier.reservedStock : 0,
+    supplierSafetyStock: supplier.eligible ? supplier.safetyStock : 0,
   });
   const supplierAvailable = Math.max(sellableStock - warehouseStock, 0);
   const source: StockAvailabilitySource =
@@ -59,8 +113,8 @@ export function resolveRabaluxAvailability(input: {
     supplierAvailable,
     sellableStock,
     source,
-    supplierFresh: isRabaluxStockFresh(input.lastSupplierStockSyncAt, input.now),
-    supplierEligible,
+    supplierFresh: supplier.fresh,
+    supplierEligible: supplier.eligible,
   };
 }
 

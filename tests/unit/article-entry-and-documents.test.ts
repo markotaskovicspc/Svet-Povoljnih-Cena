@@ -54,6 +54,12 @@ describe("unos artikala", () => {
     expect(articleSearchWhere("abc")).toHaveProperty("OR");
   });
 
+  it("ograničava pretragu na dobavljača kada je izabrana ta kolona", () => {
+    expect(articleSearchWhere("Rabalux", "supplier")).toEqual({
+      supplier: { name: { contains: "Rabalux", mode: "insensitive" } },
+    });
+  });
+
   it("koristi indeksni exact lookup za brojčanu šifru i bar-kod", () => {
     expect(articleSearchWhere("110083")).toEqual({
       OR: [

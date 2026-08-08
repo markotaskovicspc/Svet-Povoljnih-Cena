@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import Link from "next/link";
 import { revalidatePath, updateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
@@ -31,7 +32,15 @@ import {
   saveRabaluxCategoryMapping,
 } from "@/lib/rabalux/governance";
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
-import { rabaluxStockAuthenticationStatus } from "@/lib/rabalux/config";
+import {
+  isRabaluxSupplierOperational,
+  rabaluxStockAuthenticationStatus,
+} from "@/lib/rabalux/config";
+import {
+  RABALUX_PUBLIC_STOCK_THRESHOLD,
+  RABALUX_SUPPLIER_SAFETY_STOCK,
+  rabaluxStockFreshAfter,
+} from "@/lib/rabalux/availability";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -416,6 +425,18 @@ function DashboardStat({ label, value }: { label: string; value: number | string
   );
 }
 
+type RabaluxStockSummaryRow = {
+  totalSkus: number;
+  withStockSkus: number;
+  aboveThresholdSkus: number;
+  onlineEligibleSkus: number;
+  staleSkus: number;
+  rawUnits: number;
+  reservedUnits: number;
+  onlineSellableUnits: number;
+  latestSyncAt: Date | null;
+};
+
 export default async function XmlImportPage({
   searchParams,
 }: {
@@ -441,6 +462,8 @@ export default async function XmlImportPage({
   const rabaluxStockAuth = rabalux
     ? rabaluxStockAuthenticationStatus(rabalux)
     : null;
+  const rabaluxOperational = isRabaluxSupplierOperational(rabalux);
+  const stockFreshAfter = rabaluxStockFreshAfter();
   const [
     pendingProducts,
     mappingConflicts,
@@ -449,6 +472,7 @@ export default async function XmlImportPage({
     categoryOptions,
     rabaluxQueue,
     staleRabaluxRunRows,
+    rabaluxStockSummaryRows,
   ] = rabalux
     ? await Promise.all([
         db.product.findMany({
@@ -527,9 +551,47 @@ export default async function XmlImportPage({
              AND "status" = 'RUNNING'
              AND COALESCE("heartbeatAt", "startedAt") < NOW() - INTERVAL '10 minutes'
         `),
+        db.$queryRaw<RabaluxStockSummaryRow[]>(Prisma.sql`
+          SELECT
+            COUNT(*)::int AS "totalSkus",
+            (COUNT(*) FILTER (WHERE COALESCE("supplierStock", 0) > 0))::int AS "withStockSkus",
+            (COUNT(*) FILTER (
+              WHERE COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+            ))::int AS "aboveThresholdSkus",
+            (COUNT(*) FILTER (
+              WHERE "supplierApprovalStatus" = 'APPROVED'
+                AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
+                AND COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+            ))::int AS "onlineEligibleSkus",
+            (COUNT(*) FILTER (
+              WHERE "lastSupplierStockSyncAt" IS NULL
+                 OR "lastSupplierStockSyncAt" < ${stockFreshAfter}
+            ))::int AS "staleSkus",
+            COALESCE(SUM(COALESCE("supplierStock", 0)), 0)::int AS "rawUnits",
+            COALESCE(SUM(COALESCE("supplierReservedStock", 0)), 0)::int AS "reservedUnits",
+            COALESCE(SUM(
+              CASE
+                WHEN "supplierApprovalStatus" = 'APPROVED'
+                  AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
+                  AND COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+                THEN GREATEST(
+                  COALESCE("supplierStock", 0) -
+                  COALESCE("supplierReservedStock", 0) -
+                  ${RABALUX_SUPPLIER_SAFETY_STOCK},
+                  0
+                )
+                ELSE 0
+              END
+            ), 0)::int AS "onlineSellableUnits",
+            MAX("lastSupplierStockSyncAt") AS "latestSyncAt"
+          FROM "Product"
+          WHERE "supplierId" = ${rabalux.id}
+            AND "deletedAt" IS NULL
+        `),
       ])
-    : [[], [], [], [], [], [], [{ count: 0 }]];
+    : [[], [], [], [], [], [], [{ count: 0 }], []];
   const staleRabaluxRuns = staleRabaluxRunRows[0]?.count ?? 0;
+  const rabaluxStockSummary = rabaluxStockSummaryRows[0] ?? null;
   const unmappedPairs = Array.from(
     new Map(
       mappingConflicts.flatMap((conflict) => {
@@ -581,6 +643,84 @@ export default async function XmlImportPage({
               <p className="mt-2 text-xs text-ink-500">
                 Media queue: {rabaluxQueue.map((row) => `${row.status} ${row._count._all}`).join(" · ") || "prazan"}
               </p>
+
+              {rabaluxStockSummary ? (
+                <div className="mt-5 space-y-3 border-t border-border pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-ink">
+                        Tačno Rabalux stanje iz API feeda
+                      </p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        Prijavljeno stanje je dobavljačev broj. Za prodaju se
+                        posebno primenjuju prag, rezervacije i sigurnosni komad.
+                      </p>
+                    </div>
+                    <Link
+                      href="/admin/erp/artikli?view=rabalux-stock"
+                      className="text-sm font-medium text-walnut hover:underline"
+                    >
+                      Otvori stanje po artiklu →
+                    </Link>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <DashboardStat
+                      label="Poslednje osveženje"
+                      value={
+                        rabaluxStockSummary.latestSyncAt
+                          ? rabaluxStockSummary.latestSyncAt.toLocaleString(
+                              "sr-Latn-RS",
+                              { timeZone: "Europe/Belgrade" },
+                            )
+                          : "Nije osveženo"
+                      }
+                    />
+                    <DashboardStat
+                      label="Ukupno prijavljeno"
+                      value={`${rabaluxStockSummary.rawUnits.toLocaleString("sr-Latn-RS")} kom`}
+                    />
+                    <DashboardStat
+                      label="SKU sa stanjem"
+                      value={`${rabaluxStockSummary.withStockSkus} / ${rabaluxStockSummary.totalSkus}`}
+                    />
+                    <DashboardStat
+                      label={`SKU iznad praga >${RABALUX_PUBLIC_STOCK_THRESHOLD}`}
+                      value={rabaluxStockSummary.aboveThresholdSkus}
+                    />
+                    <DashboardStat
+                      label="Za online prodaju"
+                      value={`${(
+                        rabaluxOperational
+                          ? rabaluxStockSummary.onlineSellableUnits
+                          : 0
+                      ).toLocaleString("sr-Latn-RS")} kom`}
+                    />
+                    <DashboardStat
+                      label="Online SKU"
+                      value={
+                        rabaluxOperational
+                          ? rabaluxStockSummary.onlineEligibleSkus
+                          : 0
+                      }
+                    />
+                    <DashboardStat
+                      label="Rezervisano"
+                      value={`${rabaluxStockSummary.reservedUnits.toLocaleString("sr-Latn-RS")} kom`}
+                    />
+                    <DashboardStat
+                      label="Zastareo podatak"
+                      value={rabaluxStockSummary.staleSkus}
+                    />
+                  </div>
+                  <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
+                    Pravilo je: dobavljač mora imati strogo više od{" "}
+                    {RABALUX_PUBLIC_STOCK_THRESHOLD} kom, stanje ne sme biti
+                    starije od 30 minuta, a zatim se od količine oduzimaju
+                    aktivne rezervacije i {RABALUX_SUPPLIER_SAFETY_STOCK}
+                    sigurnosni komad. Kupac i dalje ne vidi tačan broj.
+                  </p>
+                </div>
+              ) : null}
 
               {unmappedPairs.length ? (
                 <div className="mt-5 space-y-3 border-t border-border pt-4">

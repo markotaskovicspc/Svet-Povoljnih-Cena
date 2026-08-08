@@ -15,6 +15,11 @@ import {
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 import { articleSearchWhere } from "@/lib/admin/article-search";
 import { ARTICLE_STATUS_LABELS } from "@/lib/article-status";
+import {
+  RABALUX_SUPPLIER_STOCK_STATUS_LABELS,
+  resolveRabaluxSupplierStock,
+} from "@/lib/rabalux/availability";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -221,6 +226,13 @@ const articleColumns: ErpColumn[] = [
   { key: "availableTotal", label: "Ukupno raspoloživo", type: "number", align: "right", defaultVisible: true },
   { key: "stockDc", label: "Fizičko po magacinu", type: "number", align: "right" },
   { key: "availableDc", label: "Raspoloživo po magacinu", type: "number", align: "right" },
+  { key: "rabaluxStock", label: "Rabalux stanje", type: "number", align: "right", defaultVisible: true },
+  { key: "rabaluxReserved", label: "Rabalux rezervisano", type: "number", align: "right" },
+  { key: "rabaluxSafetyStock", label: "Sigurnosni komad", type: "number", align: "right" },
+  { key: "rabaluxSellableStock", label: "Rabalux za prodaju", type: "number", align: "right", defaultVisible: true },
+  { key: "rabaluxStockStatus", label: "Status Rabalux lagera", type: "status", defaultVisible: true },
+  { key: "rabaluxStockSyncedAt", label: "Rabalux osveženo", type: "date", defaultVisible: true },
+  { key: "rabaluxNextArrivalAt", label: "Rabalux sledeći dolazak", type: "date" },
   { key: "cogs", label: "COGS", type: "money", align: "right" },
   { key: "incomingTotal", label: "Količina u dolasku", type: "number", align: "right" },
   { key: "incomingAvailable", label: "Raspoloživo u dolasku", type: "number", align: "right" },
@@ -1087,6 +1099,10 @@ async function getArticleRows(
       stock: true,
       incomingStock: true,
       supplierStock: true,
+      supplierReservedStock: true,
+      lastSupplierStockSyncAt: true,
+      supplierNextArrivalAt: true,
+      supplierApprovalStatus: true,
       deliveryDaysMax: true,
       allowsAssembly: true,
       isActive: true,
@@ -1121,6 +1137,8 @@ async function getArticleRows(
           name: true,
           parity: true,
           deliveryDays: true,
+          integrationKey: true,
+          enabled: true,
         },
       },
       group: { select: { name: true } },
@@ -1267,6 +1285,16 @@ async function getArticleRows(
     const mediaUrl = resolveSupabaseStorageUrl(
       product.media[0]?.thumbUrl ?? product.media[0]?.url,
     );
+    const isRabalux = product.supplier?.integrationKey === "RABALUX";
+    const rabaluxStock = isRabalux
+      ? resolveRabaluxSupplierStock({
+          supplierStock: product.supplierStock,
+          supplierReservedStock: product.supplierReservedStock,
+          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          supplierOperational: isRabaluxSupplierOperational(product.supplier),
+          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+        })
+      : null;
     return {
       id: product.id,
       values: {
@@ -1307,6 +1335,21 @@ async function getArticleRows(
         availableTotal: stock.availableTotal,
         stockDc: stock.contextual.physical,
         availableDc: stock.contextual.available,
+        rabaluxStock: rabaluxStock?.rawStock ?? null,
+        rabaluxReserved: rabaluxStock?.reservedStock ?? null,
+        rabaluxSafetyStock: rabaluxStock?.safetyStock ?? null,
+        rabaluxSellableStock: rabaluxStock?.sellableStock ?? null,
+        rabaluxStockStatus: rabaluxStock
+          ? RABALUX_SUPPLIER_STOCK_STATUS_LABELS[rabaluxStock.status]
+          : null,
+        rabaluxStockSyncedAt:
+          isRabalux && product.lastSupplierStockSyncAt
+            ? product.lastSupplierStockSyncAt.toISOString()
+            : null,
+        rabaluxNextArrivalAt:
+          isRabalux && product.supplierNextArrivalAt
+            ? product.supplierNextArrivalAt.toISOString()
+            : null,
         cogs: asNumber(product.cogs) ?? (lastPurchase ? asNumber(lastPurchase.price) : null),
         incomingTotal: product.incomingStock,
         incomingAvailable: product.incomingStock,
