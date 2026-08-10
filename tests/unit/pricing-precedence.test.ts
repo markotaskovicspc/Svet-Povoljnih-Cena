@@ -32,9 +32,9 @@ describe("ERP pricing precedence", () => {
           },
         ],
       },
-      { now, loggedIn: true },
+      { now, loggedIn: false },
     );
-    expect(price.effective).toBe(7_000);
+    expect(price.effective).toBe(6_000);
     expect(price.kind).toBe("sale");
     expect(price.linearDiscountPct).toBe(20);
   });
@@ -90,7 +90,7 @@ describe("ERP pricing precedence", () => {
     expect(customer.payable.effective).toBe(8_000);
   });
 
-  it("uses an active action instead of loyalty, even when loyalty would be lower", () => {
+  it("stacks authenticated loyalty on top of an active action", () => {
     const quote = resolveProductPriceQuote(
       {
         fullPrice: 10_000,
@@ -107,9 +107,9 @@ describe("ERP pricing precedence", () => {
       { now, loggedIn: true },
     );
     expect(quote.actionOffer?.effective).toBe(8_000);
-    expect(quote.loyaltyOffer).toBeNull();
-    expect(quote.payable.effective).toBe(8_000);
-    expect(quote.payable.kind).toBe("sale");
+    expect(quote.loyaltyOffer?.effective).toBe(6_000);
+    expect(quote.payable.effective).toBe(6_000);
+    expect(quote.payable.kind).toBe("loyalty");
   });
 
   it("restores loyalty after the product action expires", () => {
@@ -160,6 +160,26 @@ describe("ERP pricing precedence", () => {
     expect(quote.actionOffer).toBeNull();
     expect(quote.loyaltyOffer?.effective).toBe(8_500);
     expect(quote.payable.kind).toBe("loyalty");
+  });
+
+  it("uses the 30-day public reference without including loyalty", () => {
+    const quote = resolveProductPriceQuote(
+      {
+        fullPrice: 10_000,
+        referencePrice: 9_000,
+        loyaltyDiscountPct: 30,
+        actionPrices: [{
+          price: 8_000,
+          priority: 1,
+          startsAt: "2026-07-01",
+          endsAt: "2026-07-31",
+        }],
+      },
+      { now, loggedIn: true },
+    );
+    expect(quote.full).toBe(9_000);
+    expect(quote.actionOffer?.full).toBe(9_000);
+    expect(quote.loyaltyOffer?.effective).toBe(5_600);
   });
 
   it("breaks equal action priorities by newer start and then lower price", () => {

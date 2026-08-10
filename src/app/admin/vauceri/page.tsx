@@ -38,6 +38,14 @@ const schema = z.object({
     .nullable()
     .optional(),
   active: z.coerce.boolean().default(true),
+}).superRefine((value, context) => {
+  if (value.kind === "PERCENT" && (value.amount < 5 || value.amount > 90)) {
+    context.addIssue({
+      code: "custom",
+      path: ["amount"],
+      message: "Procentualni vaučer mora biti između 5% i 90%.",
+    });
+  }
 });
 
 async function upsert(formData: FormData) {
@@ -104,7 +112,18 @@ export default async function VouchersPage({
   const params = await searchParams;
   const vouchers = await db.voucher.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { redemptions: true } } },
+    include: {
+      redemptions: {
+        where: {
+          order: {
+            fiscalDocuments: {
+              some: { kind: "SALE", status: "ISSUED" },
+            },
+          },
+        },
+        select: { id: true },
+      },
+    },
   });
   const selected = params.new === "1"
     ? undefined
@@ -150,7 +169,7 @@ export default async function VouchersPage({
                     <p className="text-[11px] text-ink-500">min. {v.minSubtotal ? formatRsd(num(v.minSubtotal)) : "bez minimuma"}</p>
                   </div>
                 ),
-                used: `${v._count.redemptions}${v.usageLimit ? ` / ${v.usageLimit}` : ""}`,
+                used: `${v.redemptions.length}${v.usageLimit ? ` / ${v.usageLimit}` : ""}`,
                 actions: (
                   <div className="flex justify-end gap-2">
                     <Link href={`/admin/vauceri?edit=${encodeURIComponent(v.code)}`} className="text-xs text-walnut hover:underline">
@@ -237,7 +256,13 @@ function VoucherForm({
           </select>
         </Field>
         <Field label="Vrednost">
-          <Input name="amount" type="number" min={0} required defaultValue={values?.amount ?? 0} />
+          <Input
+            name="amount"
+            type="number"
+            min={0}
+            required
+            defaultValue={values?.amount ?? 5}
+          />
         </Field>
       </div>
       <Field label="Min. iznos korpe (opciono)">

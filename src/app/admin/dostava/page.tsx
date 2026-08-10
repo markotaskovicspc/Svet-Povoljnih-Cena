@@ -293,7 +293,7 @@ export default async function DeliveryPage() {
     <>
       <PageHeader
         title="Pravila dostave"
-        description="Cene kurira, kamiona i montaže — globalno, po kategoriji, po proizvodu, po gradu."
+        description="Tarife dostave i rokovi — globalno, po kategoriji, po proizvodu i po gradu. Montaža je isključena pri lansiranju."
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Dostava" }]}
       />
       <div className="space-y-6 px-8 py-6">
@@ -320,7 +320,7 @@ export default async function DeliveryPage() {
             <SubmitButton pendingLabel="Čuvanje…">Sačuvaj rokove</SubmitButton>
           </AdminActionForm>
           <p className="mt-3 text-xs text-ink-500">
-            Kupcu se za dobavljačku zalihu prikazuje dostupnost kod dobavljača i rok, bez tačne količine.
+            Kupcu se prikazuje samo rok isporuke, bez oznake dobavljača i bez tačne dobavljačke količine.
           </p>
         </Card>
         <Card>

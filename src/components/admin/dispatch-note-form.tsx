@@ -148,6 +148,9 @@ export function DispatchNoteForm({
   const [destinationWarehouseId, setDestinationWarehouseId] = useState(
     detail?.destinationWarehouseId || "",
   );
+  const [priceListId, setPriceListId] = useState(
+    detail?.priceListId || options.priceLists[0]?.id || "",
+  );
   const [showPrices, setShowPrices] = useState(detail?.showPrices ?? true);
   const [notes, setNotes] = useState(detail?.notes ?? "");
   const [importFrom, setImportFrom] = useState(
@@ -233,8 +236,8 @@ export function DispatchNoteForm({
       patchLine(clientId, { error: "Unesite šifru artikla." });
       return;
     }
-    if (!receiverCustomerId) {
-      patchLine(clientId, { error: "Prvo izaberite firmu primaoca." });
+    if (!internal && !priceListId) {
+      patchLine(clientId, { error: "Prvo izaberite cenovnik." });
       return;
     }
     const duplicate = lines.some(
@@ -254,7 +257,8 @@ export function DispatchNoteForm({
     try {
       const params = new URLSearchParams({
         sku: normalizedSku,
-        receiverCustomerId,
+        priceListId,
+        internal: String(internal),
       });
       const response = await fetch(
         `/api/admin/erp/dispatch-notes/products?${params}`,
@@ -285,10 +289,16 @@ export function DispatchNoteForm({
 
   const importOrders = async () => {
     setMessage(null);
-    if (!receiverCustomerId || !sourceWarehouseId || !importFrom || !importTo) {
+    if (
+      !receiverCustomerId ||
+      !sourceWarehouseId ||
+      !priceListId ||
+      !importFrom ||
+      !importTo
+    ) {
       setMessage({
         ok: false,
-        text: "Izaberite firmu primaoca, izvorni magacin i ceo period.",
+        text: "Izaberite firmu primaoca, cenovnik, izvorni magacin i ceo period.",
       });
       return;
     }
@@ -314,6 +324,7 @@ export function DispatchNoteForm({
         sourceWarehouseId,
         from: importFrom,
         to: importTo,
+        priceListId,
       });
       if (detail?.id) params.set("excludeDispatchId", detail.id);
       const response = await fetch(
@@ -375,6 +386,10 @@ export function DispatchNoteForm({
       });
       return;
     }
+    if (!internal && !priceListId) {
+      setMessage({ ok: false, text: "Izaberite cenovnik za otpremnicu." });
+      return;
+    }
     if (internal && lines.some((line) => line.orderItemId)) {
       setMessage({
         ok: false,
@@ -414,6 +429,7 @@ export function DispatchNoteForm({
             destinationWarehouseId: internal
               ? destinationWarehouseId
               : null,
+            priceListId: internal ? null : priceListId,
             showPrices: internal ? false : showPrices,
             notes,
             importFrom,
@@ -601,6 +617,28 @@ export function DispatchNoteForm({
               ))}
             </select>
           </Field>
+          {!internal ? (
+            <Field label="Cenovnik">
+              <select
+                value={priceListId}
+                disabled={readOnly}
+                required
+                onChange={(event) => {
+                  setPriceListId(event.target.value);
+                  setLines([newLine()]);
+                }}
+                className="h-9 rounded-lg border border-input bg-surface px-3 text-sm disabled:opacity-60"
+                aria-label="Cenovnik otpremnice"
+              >
+                <option value="">— izaberite cenovnik —</option>
+                {options.priceLists.map((priceList) => (
+                  <option key={priceList.id} value={priceList.id}>
+                    {priceList.code} · {priceList.name} · {priceList.kind} · {priceList.currency}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
           {internal ? (
             <Field label="Magacin firme koja prima">
               <select

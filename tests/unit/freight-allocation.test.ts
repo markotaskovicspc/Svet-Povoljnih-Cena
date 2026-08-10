@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   allocateFreight,
   allocateLandedCost,
+  canReceivePurchaseOrder,
   weightedAverageUnitCost,
 } from "@/lib/admin/po";
+import { PurchaseOrderStatus } from "@prisma/client";
 
 describe("purchase-order freight allocation", () => {
   it("allocates freight proportionally to line purchase value", () => {
@@ -66,5 +68,21 @@ describe("purchase-order freight allocation", () => {
         incomingUnitCost: 180,
       }),
     ).toBeCloseTo(193.33, 2);
+  });
+
+  it("allows receipt only after a locked order was sent or confirmed", () => {
+    const lockedAt = new Date("2026-08-07T00:00:00.000Z");
+    expect(
+      canReceivePurchaseOrder({ status: PurchaseOrderStatus.SENT, lockedAt }),
+    ).toBe(true);
+    expect(
+      canReceivePurchaseOrder({ status: PurchaseOrderStatus.CONFIRMED, lockedAt }),
+    ).toBe(true);
+    expect(
+      canReceivePurchaseOrder({ status: PurchaseOrderStatus.DRAFT, lockedAt }),
+    ).toBe(false);
+    expect(
+      canReceivePurchaseOrder({ status: PurchaseOrderStatus.SENT, lockedAt: null }),
+    ).toBe(false);
   });
 });

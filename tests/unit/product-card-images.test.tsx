@@ -39,21 +39,13 @@ const readyProduct: Product = {
 };
 
 describe("ProductCard image regression", () => {
-  it("prikazuje šifru artikla sa prečicom za kopiranje odmah ispod naziva", () => {
+  it("ne prikazuje šifru artikla na kartici", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, { product: readyProduct }),
     );
 
-    const nameEnd = html.indexOf("</h3>");
-    const skuLine = html.indexOf('data-product-card-sku="QA-IMAGE-001"');
-    const dimensions = html.indexOf("Dimenzije:");
-
-    expect(skuLine).toBeGreaterThan(nameEnd);
-    expect(dimensions).toBeGreaterThan(skuLine);
-    expect(html).toContain("Šifra artikla: <span");
-    expect(html).toContain(
-      'data-copy-product-sku="QA-IMAGE-001" aria-label="Kopiraj šifru artikla QA-IMAGE-001"',
-    );
+    expect(html).not.toContain("Šifra artikla");
+    expect(html).not.toContain("data-copy-product-sku");
   });
 
   it("prikazuje dimenzije umesto kratkog opisa", () => {
@@ -67,7 +59,8 @@ describe("ProductCard image regression", () => {
       }),
     );
 
-    expect(html).toContain("Dimenzije: 54,5 × 61 × 88 cm");
+    expect(html).toContain("54,5 × 61 × 88 cm");
+    expect(html).not.toContain("Dimenzije:");
     expect(html).not.toContain("Ovaj tekst ne pripada kartici");
   });
 

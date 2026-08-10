@@ -170,7 +170,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
                 data: { path: update.path, level: update.level },
               });
             }
-            await ensureCategoryGroup(tx, category);
+            await ensureCategoryGroup(tx, category, current);
             return category;
           });
         } catch (error) {

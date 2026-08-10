@@ -69,7 +69,7 @@ Da, ako je opcija „Nastavi kao gost” ponuđena u checkout-u. Eventualni popu
 
 ### Da li sklapate nameštaj? {#montaza}
 
-Montaža se nudi samo kada je dostupna za konkretan artikal i adresu. Cena se prikazuje u checkout-u pre potvrde.
+Montaža nije dostupna u početnoj fazi prodaje.
 
 ### Kako da iskoristim vaučer? {#vaucer}
 
@@ -208,7 +208,7 @@ Za pitanja o ovim uslovima obratite se na [{{merchant.email}}](mailto:{{merchant
     heroNote: null,
     title: "Uslovi isporuke.",
     lead:
-      "Šta očekivati posle porudžbine — od potvrde, preko priprema, do dovoza i montaže.",
+      "Šta očekivati posle porudžbine — od potvrde, preko pripreme, do isporuke.",
     bodyMarkdown: `## Rokovi isporuke {#rokovi}
 
 Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupac zatraži odlaganje isporuke, novi termin dostave biće organizovan u skladu sa njegovim zahtevom. Kurirska služba može kontaktirati kupca pre isporuke radi potvrde termina dostave.
@@ -216,6 +216,8 @@ Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupa
 ## Cena isporuke {#tarifa}
 
 **Cena dostave se ne računa za svaki poseban paket, već kao suma svih težina po kategoriji.** Ukupan iznos dostave prikazuje se pre potvrde porudžbine.
+
+Za prijavljene kupce, dostava artikala I kategorije je besplatna kada njihov zbir prelazi 2.000 RSD.
 
 **I kategorija - paketi koji imaju sve dimenzije manje od 60cm:**
 
@@ -227,7 +229,7 @@ Težina od\tTežina do\tCena
       20\t  30\t899 rsd
       30      50\t999 rsd
 
-**II kategorija - paketi imaju bar jednu dimenziju veću od od 60cm do volumentrijske dimenzije 300cm:**
+**II kategorija - paketi imaju bar jednu dimenziju veću od 60cm do volumetrijske dimenzije 300cm:**
 
 Težina od\tTežina do\tCena
 
@@ -237,7 +239,7 @@ Težina od\tTežina do\tCena
       20\t  30\t999 rsd
       30      50\t1099 rsd
 
-Paketi sa volumentrijskom dimenzijom većom od 300 cm naplaćuju se po ceni II kategorije, uz doplatu od 300 rsd. Volumentrijska dimenzija se računa po formuli jedan puta najduža stranica plus dva puta širina i plus dva puta visina.
+Paketi sa volumetrijskom dimenzijom većom od 300 cm naplaćuju se po ceni II kategorije, uz doplatu od 300 RSD. Volumetrijska dimenzija se računa kao najduža stranica + 2 × druga stranica + 2 × treća stranica.
 
 ## Pri prijemu pošiljke {#prijem}
 
@@ -266,7 +268,7 @@ Prodavac je **{{merchant.name}}**, {{merchant.address}}, PIB {{merchant.pib}}, M
 
 ## Cene i porezi {#cene}
 
-Cene su izražene u dinarima i sadrže PDV. Konačna cena proizvoda, dostave i izabranih dodatnih usluga prikazuje se pre potvrde porudžbine. Oznaku najniže cene u prethodnih 30 dana ne prikazujemo dok ne postoji potpuna i proverljiva istorija cena.
+Cene su izražene u dinarima i sadrže PDV. Konačna cena proizvoda i dostave prikazuje se pre potvrde porudžbine. Kao referentnu punu cenu uz sniženu javnu cenu prikazujemo najnižu javnu cenu tog artikla u prethodnih 30 dana; loyalty cene se ne uključuju u taj obračun.
 
 ## Načini plaćanja {#kartice}
 

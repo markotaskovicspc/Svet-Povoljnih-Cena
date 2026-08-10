@@ -485,8 +485,8 @@ export default async function PurchaseOrderEditorPage({
               </SubmitButton>
             </AdminActionForm>
             {locked &&
-            order.status !== PurchaseOrderStatus.RECEIVED &&
-            order.status !== PurchaseOrderStatus.CANCELLED ? (
+            (order.status === PurchaseOrderStatus.SENT ||
+              order.status === PurchaseOrderStatus.CONFIRMED) ? (
               <AdminActionForm action={receiveAction}>
                 <input type="hidden" name="poId" value={order.id} />
                 <SubmitButton

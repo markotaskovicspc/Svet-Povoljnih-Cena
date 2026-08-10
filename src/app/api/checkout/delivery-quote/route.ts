@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveDeliveryQuote } from "@/lib/checkout/config";
+import { getCurrentUser } from "@/lib/auth/session";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -41,6 +42,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const quote = await resolveDeliveryQuote(parsed.data);
+  const user = await getCurrentUser();
+  const quote = await resolveDeliveryQuote({
+    ...parsed.data,
+    loggedIn: Boolean(user),
+  });
   return NextResponse.json({ ok: true, data: quote });
 }

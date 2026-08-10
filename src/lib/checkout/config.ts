@@ -12,6 +12,7 @@ import type { PaymentMethod as ClientPaymentMethod, SKU } from "@/types";
 import { getPaymentMethodAcceptance } from "@/lib/provider-acceptance";
 import {
   ASSEMBLY_PRICE_DEFAULT,
+  ASSEMBLY_ENABLED,
   DEFAULT_DELIVERY_QUOTE,
   DEFAULT_PAYMENT_METHOD_CONFIG,
   DEFAULT_TRUCK_CITY_NAMES,
@@ -20,6 +21,12 @@ import {
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
 } from "./config-shared";
+import { calculatePublishedDeliveryTariff } from "@/lib/delivery-tariff";
+import { effectiveUnitPrice } from "@/lib/pricing";
+import {
+  getActivePricingRules,
+  pricingRuleInputsForProduct,
+} from "@/lib/pricing/rules";
 
 const PAYMENT_TO_CLIENT = {
   IPS: "ips",
@@ -47,7 +54,36 @@ type QuoteProduct = {
   id: string;
   sku: string;
   allowsAssembly: boolean;
-  categories: Array<{ categoryId: string }>;
+  categories: Array<{ categoryId: string; category: { path: string } }>;
+  groupId: string | null;
+  fullPrice: Prisma.Decimal;
+  salePrice: Prisma.Decimal | null;
+  discountPct: number | null;
+  action: {
+    name: string;
+    startsAt: Date;
+    endsAt: Date;
+    isPermanent: boolean;
+  } | null;
+  actionPrices: Array<{
+    salePrice: Prisma.Decimal;
+    action: {
+      id: string;
+      name: string;
+      priority: number;
+      startsAt: Date;
+      endsAt: Date;
+      isPermanent: boolean;
+    };
+  }>;
+  packQty: number | null;
+  packWidthCm: Prisma.Decimal | null;
+  packDepthCm: Prisma.Decimal | null;
+  packHeightCm: Prisma.Decimal | null;
+  packGrossWeightKg: Prisma.Decimal | null;
+  grossWeightKg: Prisma.Decimal | null;
+  weightKg: Prisma.Decimal | null;
+  priceListEntries: Array<{ price: Prisma.Decimal }>;
 };
 
 type DeliveryRule = {
@@ -114,14 +150,16 @@ export async function isPaymentMethodEnabled(method: DbPaymentMethod) {
 export async function resolveDeliveryQuote({
   city,
   lines = [],
+  loggedIn = false,
 }: {
   city?: string | null;
   lines?: QuoteLineInput[];
+  loggedIn?: boolean;
 }): Promise<CheckoutDeliveryQuote> {
   const normalizedCity = normalizeCity(city);
   const skus = [...new Set(lines.map((line) => line.sku).filter(Boolean))];
 
-  const [cityCount, cityRow, products, truckCities] = await Promise.all([
+  const [cityCount, cityRow, products, truckCities, activePricingRules] = await Promise.all([
     db.deliveryCity.count(),
     normalizedCity
       ? db.deliveryCity.findFirst({
@@ -136,7 +174,56 @@ export async function resolveDeliveryQuote({
             id: true,
             sku: true,
             allowsAssembly: true,
-            categories: { select: { categoryId: true } },
+            categories: {
+              select: {
+                categoryId: true,
+                category: { select: { path: true } },
+              },
+            },
+            groupId: true,
+            fullPrice: true,
+            salePrice: true,
+            discountPct: true,
+            action: {
+              select: {
+                name: true,
+                startsAt: true,
+                endsAt: true,
+                isPermanent: true,
+              },
+            },
+            actionPrices: {
+              include: {
+                action: {
+                  select: {
+                    id: true,
+                    name: true,
+                    priority: true,
+                    startsAt: true,
+                    endsAt: true,
+                    isPermanent: true,
+                  },
+                },
+              },
+            },
+            packQty: true,
+            packWidthCm: true,
+            packDepthCm: true,
+            packHeightCm: true,
+            packGrossWeightKg: true,
+            grossWeightKg: true,
+            weightKg: true,
+            priceListEntries: {
+              where: {
+                price: { gt: 0 },
+                validFrom: { lte: new Date() },
+                OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+                priceList: { kind: "RETAIL", active: true },
+              },
+              orderBy: { validFrom: "desc" },
+              take: 1,
+              select: { price: true },
+            },
           },
         })
       : Promise.resolve([]),
@@ -145,6 +232,7 @@ export async function resolveDeliveryQuote({
       orderBy: { name: "asc" },
       select: { name: true },
     }),
+    getActivePricingRules(),
   ]);
 
   const productIds = products.map((product) => product.id);
@@ -188,7 +276,7 @@ export async function resolveDeliveryQuote({
     lines.map((line) => {
       const product = productBySku.get(line.sku) ?? null;
       const price =
-        product?.allowsAssembly === false
+        !ASSEMBLY_ENABLED || product?.allowsAssembly === false
           ? 0
           : pickRulePrice(
               rules,
@@ -211,13 +299,71 @@ export async function resolveDeliveryQuote({
       ? cityRow.truckEnabled
       : cityCount === 0 && fallbackTruckCities.some((name) => normalizeCity(name) === normalizedCity));
 
+  const publishedTariffLines = lines.flatMap((line) => {
+          const product = productBySku.get(line.sku);
+          if (!product) return [];
+          const ruleInputs = pricingRuleInputsForProduct(
+            {
+              id: product.id,
+              categoryIds: product.categories.map((item) => item.categoryId),
+              categoryPaths: product.categories.map((item) => item.category.path),
+              groupId: product.groupId,
+            },
+            activePricingRules,
+          );
+          const unitPrice = effectiveUnitPrice({
+            fullPrice: num(product.priceListEntries[0]?.price ?? product.fullPrice),
+            salePrice: product.salePrice == null ? null : num(product.salePrice),
+            discountPct: product.discountPct,
+            loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
+            loyaltyEligible: loggedIn,
+            action: product.action,
+            actionPrices: product.actionPrices.map((entry) => ({
+              price: num(entry.salePrice),
+              priority: entry.action.priority,
+              startsAt: entry.action.startsAt,
+              endsAt: entry.action.endsAt,
+              isPermanent: entry.action.isPermanent,
+              actionId: entry.action.id,
+              actionName: entry.action.name,
+            })),
+            linearPromotions: ruleInputs.linearPromotions,
+          }).effective;
+          return [{
+            qty: Math.max(1, line.qty ?? 1),
+            unitPrice,
+            packQty: product.packQty,
+            packWidthCm: product.packWidthCm == null ? null : num(product.packWidthCm),
+            packDepthCm: product.packDepthCm == null ? null : num(product.packDepthCm),
+            packHeightCm: product.packHeightCm == null ? null : num(product.packHeightCm),
+            packGrossWeightKg:
+              product.packGrossWeightKg == null
+                ? null
+                : num(product.packGrossWeightKg),
+            grossWeightKg:
+              product.grossWeightKg == null ? null : num(product.grossWeightKg),
+            weightKg: product.weightKg == null ? null : num(product.weightKg),
+          }];
+        });
+  const publishedTariff =
+    lines.length && publishedTariffLines.length === lines.length
+      ? calculatePublishedDeliveryTariff(publishedTariffLines, { loggedIn })
+    : null;
+  const publishedPrice = publishedTariff?.total;
+
   return {
     prices: {
-      kurir: normalizePrice(Math.max(...courierPrices), SHIPPING_PRICES.kurir),
-      kamion: normalizePrice(Math.max(...truckPrices), SHIPPING_PRICES.kamion),
+      kurir:
+        publishedPrice ??
+        normalizePrice(Math.max(...courierPrices), SHIPPING_PRICES.kurir),
+      kamion:
+        publishedPrice ??
+        normalizePrice(Math.max(...truckPrices), SHIPPING_PRICES.kamion),
     },
-    assemblyPrice: normalizePrice(assemblyPrice, DEFAULT_DELIVERY_QUOTE.assemblyPrice),
-    assemblyPricesBySku,
+    assemblyPrice: ASSEMBLY_ENABLED
+      ? normalizePrice(assemblyPrice, DEFAULT_DELIVERY_QUOTE.assemblyPrice)
+      : 0,
+    assemblyPricesBySku: ASSEMBLY_ENABLED ? assemblyPricesBySku : {},
     truckAvailable,
     truckCities: effectiveTruckCities,
   };

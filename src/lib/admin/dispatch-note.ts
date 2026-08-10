@@ -37,6 +37,7 @@ export const dispatchNoteInputSchema = z
     receiverCustomerId: z.string().trim().min(1, "Firma primalac je obavezna."),
     sourceWarehouseId: z.string().trim().min(1, "Izvorni magacin je obavezan."),
     destinationWarehouseId: z.string().trim().nullable().optional(),
+    priceListId: z.string().trim().min(1).nullable().optional(),
     showPrices: z.boolean().default(true),
     notes: z.string().trim().max(2_000, "Napomena može imati najviše 2.000 karaktera.").optional(),
     importFrom: optionalDateInput,
@@ -66,6 +67,13 @@ export const dispatchNoteInputSchema = z
         code: "custom",
         path: ["destinationWarehouseId"],
         message: "Odredišni magacin je obavezan za internu otpremnicu.",
+      });
+    }
+    if (!internal && !value.priceListId) {
+      context.addIssue({
+        code: "custom",
+        path: ["priceListId"],
+        message: "Cenovnik je obavezan za eksternu otpremnicu.",
       });
     }
     if (

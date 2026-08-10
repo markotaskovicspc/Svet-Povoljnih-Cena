@@ -1181,11 +1181,11 @@ function LoyaltyEditor({
             <Input
               name="discountPct"
               type="number"
-              min="0.01"
-              max="100"
+              min="30"
+              max="30"
               step="0.01"
               required
-              defaultValue={rule?.discountPct}
+              defaultValue={30}
             />
           </Field>
           <Field label="Važenje od">

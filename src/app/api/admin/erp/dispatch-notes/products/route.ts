@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   try {
     const product = await getDispatchNoteProduct(
       search.get("sku") ?? "",
-      search.get("receiverCustomerId") ?? "",
+      search.get("priceListId") ?? "",
+      search.get("internal") === "true",
     );
     return NextResponse.json({ ok: true, product });
   } catch (error) {

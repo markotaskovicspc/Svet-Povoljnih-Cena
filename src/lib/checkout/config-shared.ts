@@ -6,6 +6,7 @@ export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
 };
 
 export const ASSEMBLY_PRICE_DEFAULT = 2990;
+export const ASSEMBLY_ENABLED = false;
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   ips: "Raiffeisen IPS",
@@ -74,7 +75,7 @@ export const DEFAULT_PAYMENT_METHOD_CONFIG: CheckoutPaymentMethodConfig[] = [
 
 export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
   prices: SHIPPING_PRICES,
-  assemblyPrice: ASSEMBLY_PRICE_DEFAULT,
+  assemblyPrice: ASSEMBLY_ENABLED ? ASSEMBLY_PRICE_DEFAULT : 0,
   assemblyPricesBySku: {},
   truckAvailable: true,
   truckCities: [...DEFAULT_TRUCK_CITY_NAMES],

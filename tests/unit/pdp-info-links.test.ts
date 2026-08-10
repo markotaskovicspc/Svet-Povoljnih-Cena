@@ -11,15 +11,15 @@ describe("PDP uslovi isporuke", () => {
     });
   });
 
-  it("daje prednost posebnom tekstu artikla", () => {
+  it("daje prednost objavljenom centralnom CMS tekstu", () => {
     expect(
       resolveDeliveryTermsContent(
         "  Poseban rok isporuke je 5 dana.  ",
         "## Standardni uslovi",
       ),
     ).toEqual({
-      content: "Poseban rok isporuke je 5 dana.",
-      format: "richText",
+      content: "## Standardni uslovi",
+      format: "markdown",
     });
   });
 

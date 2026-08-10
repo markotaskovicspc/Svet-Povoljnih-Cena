@@ -89,6 +89,10 @@ import {
 } from "@/lib/product-family.server";
 import { defaultProductFamilyLabel } from "@/lib/product-family";
 import { isProductColorLabel } from "@/lib/product-colors";
+import {
+  deliveryCategory,
+  packageVolumetricDimension,
+} from "@/lib/delivery-tariff";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -1349,13 +1353,17 @@ export default async function ProductDetail({
       entry.action.startsAt <= now &&
       entry.action.endsAt >= now,
   );
-  const hasActionPrice = Boolean(activeAction || product.salePrice);
-  const loyaltyDiscountPct = loyaltyRule && !hasActionPrice
+  const loyaltyDiscountPct = loyaltyRule
     ? Number(loyaltyRule.discountPct)
     : null;
+  const loyaltyBasePrice = activeAction
+    ? Number(activeAction.salePrice)
+    : product.salePrice
+      ? num(product.salePrice)
+      : retailPrice.price;
   const loyaltyPrice = loyaltyDiscountPct === null
     ? null
-    : Math.max(0, retailPrice.price * (1 - loyaltyDiscountPct / 100));
+    : Math.max(0, loyaltyBasePrice * (1 - loyaltyDiscountPct / 100));
   const incomingStock = product.purchaseOrderItems.reduce(
     (sum, item) => sum + Math.max(item.qty - item.receivedQty, 0),
     0,
@@ -1390,6 +1398,15 @@ export default async function ProductDetail({
     },
     deliveryWindows,
   );
+  const transportDimensions = [
+    num(product.packWidthCm),
+    num(product.packDepthCm),
+    num(product.packHeightCm),
+  ] as const;
+  const transportCategory = deliveryCategory(transportDimensions);
+  const volumetricDimension = transportCategory
+    ? packageVolumetricDimension(transportDimensions)
+    : null;
   const editableAttachments: EditableProductAttachment[] = product.attachments
     .filter((attachment) => attachment.section !== "GENERAL")
     .map((attachment) => ({
@@ -1893,11 +1910,9 @@ export default async function ProductDetail({
                 <SourceSummary
                   label="Loyalty cena"
                   value={
-                    hasActionPrice
-                      ? "Ne primenjuje se zbog akcijske cene"
-                      : loyaltyPrice === null
-                        ? "Nema aktivnog pravila"
-                        : formatRsd(loyaltyPrice)
+                    loyaltyPrice === null
+                      ? "Nema aktivnog pravila"
+                      : formatRsd(loyaltyPrice)
                   }
                   source={loyaltyRule?.name ?? "Loyalty pravila"}
                   href="/admin/erp/loyalty"
@@ -1956,7 +1971,7 @@ export default async function ProductDetail({
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Transportno pakovanje
               </legend>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
                 <Field label="Kom/pak">
                   <Input name="packQty" type="number" min={0} defaultValue={product.packQty ?? ""} />
                 </Field>
@@ -1977,6 +1992,21 @@ export default async function ProductDetail({
                 </Field>
                 <Field label="Bruto kg za ceo kontejner">
                   <Input name="containerGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={product.containerGrossWeightKg ? num(product.containerGrossWeightKg) : ""} />
+                </Field>
+                <Field label="Volumetrijska dimenzija">
+                  <Input
+                    readOnly
+                    value={
+                      volumetricDimension === null
+                        ? "Dopunite dimenzije"
+                        : `${volumetricDimension.toLocaleString("sr-Latn-RS")} cm`
+                    }
+                  />
+                  <p className="mt-1 text-xs text-ink-500">
+                    {transportCategory
+                      ? `Kategorija ${transportCategory === 1 ? "I" : "II"}`
+                      : "Najveća + 2 × druga + 2 × treća dimenzija"}
+                  </p>
                 </Field>
               </div>
             </fieldset>

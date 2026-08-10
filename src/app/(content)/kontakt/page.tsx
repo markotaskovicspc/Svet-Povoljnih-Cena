@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 import {
   ContentBody,
   ContentHero,
@@ -17,30 +17,12 @@ export const metadata: Metadata = {
 };
 
 const channels = [
-  ...(MERCHANT_LEGAL_INFO.phone
-    ? [{
-        icon: Phone,
-        label: "Telefon",
-        value: MERCHANT_LEGAL_INFO.phone,
-        href: `tel:${MERCHANT_LEGAL_INFO.phone.replace(/\s/g, "")}`,
-        note: MERCHANT_LEGAL_INFO.supportHours ?? "Radno vreme biće objavljeno nakon potvrde.",
-      }]
-    : []),
-  ...(MERCHANT_LEGAL_INFO.viber
-    ? [{
-        icon: MessageSquare,
-        label: "Viber",
-        value: MERCHANT_LEGAL_INFO.viber,
-        href: `viber://chat?number=${encodeURIComponent(MERCHANT_LEGAL_INFO.viber.replace(/\s/g, ""))}`,
-        note: MERCHANT_LEGAL_INFO.supportHours ?? "Odgovaramo u okviru objavljenog radnog vremena.",
-      }]
-    : []),
   {
     icon: Mail,
     label: "E-pošta",
     value: MERCHANT_LEGAL_INFO.email,
     href: `mailto:${MERCHANT_LEGAL_INFO.email}`,
-    note: "Za pitanja o porudžbinama, proizvodima i reklamacijama",
+    note: `Za pitanja o porudžbinama, proizvodima i reklamacijama · ${MERCHANT_LEGAL_INFO.supportHours}`,
   },
   {
     icon: MapPin,
@@ -56,6 +38,15 @@ const channels = [
         value: MERCHANT_LEGAL_INFO.warehouseAddress,
         href: `https://maps.google.com/?q=${encodeURIComponent(MERCHANT_LEGAL_INFO.warehouseAddress)}`,
         note: "Dolazak isključivo nakon potvrde podrške",
+      }]
+    : []),
+  ...(MERCHANT_LEGAL_INFO.returnsAddress
+    ? [{
+        icon: MapPin,
+        label: "Povraćaj robe",
+        value: MERCHANT_LEGAL_INFO.returnsAddress,
+        href: `https://maps.google.com/?q=${encodeURIComponent(MERCHANT_LEGAL_INFO.returnsAddress)}`,
+        note: `${MERCHANT_LEGAL_INFO.returnsContactName} · ${MERCHANT_LEGAL_INFO.returnsContactPhone}`,
       }]
     : []),
 ];

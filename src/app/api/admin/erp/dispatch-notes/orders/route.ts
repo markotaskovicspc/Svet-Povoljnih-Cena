@@ -12,6 +12,7 @@ export async function GET(request: Request) {
       from: search.get("from") ?? "",
       to: search.get("to") ?? "",
       excludeDispatchId: search.get("excludeDispatchId"),
+      priceListId: search.get("priceListId") ?? "",
     });
     return NextResponse.json({ ok: true, lines });
   } catch (error) {

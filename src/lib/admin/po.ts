@@ -6,6 +6,7 @@ import {
   StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { goodsReceiptMasterIssues } from "@/lib/admin/goods-receipt-readiness";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
@@ -497,6 +498,17 @@ export function weightedAverageUnitCost(input: {
   );
 }
 
+export function canReceivePurchaseOrder(input: {
+  status: PurchaseOrderStatus;
+  lockedAt: Date | null;
+}) {
+  return (
+    input.lockedAt !== null &&
+    (input.status === PurchaseOrderStatus.SENT ||
+      input.status === PurchaseOrderStatus.CONFIRMED)
+  );
+}
+
 type LandedCostLine = {
   id: string;
   purchasePrice: number;
@@ -704,7 +716,42 @@ export async function receivePurchaseOrder(
   const order = await db.purchaseOrder.findUnique({
     where: { id },
     include: {
-      items: { include: { product: { select: { id: true, cogs: true } } } },
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              description: true,
+              cogs: true,
+              supplierId: true,
+              countryOfOrigin: true,
+              hsCode: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              grossWeightKg: true,
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              packGrossWeightKg: true,
+              categories: { select: { categoryId: true } },
+              priceListEntries: {
+                where: {
+                  price: { gt: 0 },
+                  validFrom: { lte: new Date() },
+                  OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+                  priceList: { kind: "RETAIL", active: true },
+                },
+                take: 1,
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
       receivingWarehouse: true,
     },
   });
@@ -712,12 +759,32 @@ export async function receivePurchaseOrder(
   if (order.status === PurchaseOrderStatus.RECEIVED) {
     return { received: false, postedLines: 0, warehouseName: null };
   }
+  if (!canReceivePurchaseOrder(order)) {
+    throw new Error(
+      "Prijem je dozvoljen samo za proknjiženu porudžbenicu koja je poslata ili potvrđena.",
+    );
+  }
+  const incomplete = order.items.flatMap((item) => {
+    if (item.qty <= 0) return [];
+    if (!item.product) return [`${item.sku}: artikal nije povezan sa masterom`];
+    const issues = goodsReceiptMasterIssues(item.product);
+    return issues.length ? [`${item.sku}: ${issues.join(", ")}`] : [];
+  });
+  if (incomplete.length) {
+    throw new Error(
+      `Prijem je blokiran dok se ne dopune obavezni podaci u masteru artikla: ${incomplete.join("; ")}.`,
+    );
+  }
 
   let postedLines = 0;
   let warehouseName: string | null = null;
   const received = await db.$transaction(async (tx) => {
     const locked = await tx.purchaseOrder.updateMany({
-      where: { id, status: { not: PurchaseOrderStatus.RECEIVED } },
+      where: {
+        id,
+        lockedAt: { not: null },
+        status: { in: [PurchaseOrderStatus.SENT, PurchaseOrderStatus.CONFIRMED] },
+      },
       data: { status: PurchaseOrderStatus.RECEIVED },
     });
     if (locked.count !== 1) return false;
@@ -745,32 +812,54 @@ export async function receivePurchaseOrder(
         where: { id: item.id },
         data: { receivedQty: item.qty, freightAllocated },
       });
-      if (item.productId && item.qty > 0) {
-        const onHand = await tx.warehouseStock.aggregate({
-          _sum: { qty: true },
-          where: { productId: item.productId },
-        });
-        const oldQty = onHand._sum.qty ?? 0;
+    }
+
+    const itemsByProduct = new Map<string, typeof order.items>();
+    for (const item of order.items) {
+      if (!item.productId || item.qty <= 0) continue;
+      const grouped = itemsByProduct.get(item.productId) ?? [];
+      grouped.push(item);
+      itemsByProduct.set(item.productId, grouped);
+    }
+
+    for (const [productId, items] of itemsByProduct) {
+      const onHand = await tx.warehouseStock.aggregate({
+        _sum: { qty: true },
+        where: { productId },
+      });
+      const oldQty = onHand._sum.qty ?? 0;
+      let incomingQty = 0;
+      let incomingCostTotal = 0;
+      for (const item of items) {
+        const freightAllocated = allocations.get(item.id) ?? 0;
         const purchaseRsd = Number(item.purchasePrice) * Number(order.exchangeRate);
         const customsRsd = purchaseRsd * (Number(item.customsRate ?? 0) / 100);
         const additionalPerUnit = Number(item.additionalCostAllocated ?? 0) / item.qty;
-        const newCogs =
+        const unitCogs =
           purchaseRsd + customsRsd + freightAllocated / item.qty + additionalPerUnit;
-        const oldCogs = item.product?.cogs != null ? Number(item.product.cogs) : newCogs;
-        const finalCogs = weightedAverageUnitCost({
-          existingQty: oldQty,
-          existingUnitCost: oldCogs,
-          incomingQty: item.qty,
-          incomingUnitCost: newCogs,
-        });
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { cogs: Number(finalCogs.toFixed(2)) },
-        });
+        incomingQty += item.qty;
+        incomingCostTotal += unitCogs * item.qty;
+      }
+      const incomingUnitCost = incomingCostTotal / incomingQty;
+      const oldCogs = items[0]?.product?.cogs != null
+        ? Number(items[0].product.cogs)
+        : incomingUnitCost;
+      const finalCogs = weightedAverageUnitCost({
+        existingQty: oldQty,
+        existingUnitCost: oldCogs,
+        incomingQty,
+        incomingUnitCost,
+      });
+      await tx.product.update({
+        where: { id: productId },
+        data: { cogs: Number(finalCogs.toFixed(2)) },
+      });
+
+      for (const item of items) {
         await adjustInventory(tx, {
           idempotencyKey: `purchase-order:${order.id}:receive:${item.id}`,
           warehouseId: warehouse.id,
-          productId: item.productId,
+          productId,
           sku: item.sku,
           qtyDelta: item.qty,
           kind: StockMovementKind.PURCHASE_RECEIPT,

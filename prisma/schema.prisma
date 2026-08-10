@@ -1284,7 +1284,7 @@ model Order {
   assemblyTotal         Decimal  @default(0) @db.Decimal(12, 2)
   voucherCode           String?
   voucherDiscount       Decimal? @db.Decimal(12, 2)
-  /// First-purchase 5% (Phase 3D pricing engine).
+  /// First-purchase 15%; consumed once a SALE receipt is fiscalized.
   firstPurchaseDiscount Decimal? @db.Decimal(12, 2)
   /// Saved-card 5% (Phase 3D pricing engine).
   savedCardDiscount     Decimal? @db.Decimal(12, 2)
@@ -2440,6 +2440,7 @@ model PriceList {
 
   entries             PriceListEntry[]
   orders              Order[]
+  dispatchNotes       DispatchNote[]
   defaultForSuppliers Supplier[]       @relation("SupplierDefaultPriceList")
 
   @@index([kind, active, validFrom])
@@ -2623,6 +2624,7 @@ model DispatchNote {
   status                     DocumentPostingStatus @default(DRAFT)
   issueDate                  DateTime              @default(now())
   orderId                    String?
+  priceListId                String?
   issuerCustomerId           String?
   receiverCustomerId         String?
   carrierCustomerId          String?
@@ -2685,6 +2687,7 @@ model DispatchNote {
   updatedAt                  DateTime              @updatedAt
 
   order                Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  priceList            PriceList?         @relation(fields: [priceListId], references: [id], onDelete: SetNull)
   issuerCustomer       Customer?          @relation("DispatchIssuerCustomer", fields: [issuerCustomerId], references: [id], onDelete: SetNull)
   receiverCustomer     Customer?          @relation("DispatchReceiverCustomer", fields: [receiverCustomerId], references: [id], onDelete: SetNull)
   carrierCustomer      Customer?          @relation("DispatchCarrierCustomer", fields: [carrierCustomerId], references: [id], onDelete: SetNull)
@@ -2694,6 +2697,7 @@ model DispatchNote {
   stockMovements       StockMovement[]
 
   @@index([orderId])
+  @@index([priceListId])
   @@index([issuerCustomerId, issueDate])
   @@index([receiverCustomerId, issueDate])
   @@index([carrierCustomerId])

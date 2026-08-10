@@ -8,7 +8,7 @@ export const DELIVERY_WINDOWS_SETTING_KEY = "delivery.windows";
 
 export const DEFAULT_DELIVERY_WINDOWS = {
   dc: { min: 3, max: 5 },
-  supplier: { min: 5, max: 8 },
+  supplier: { min: 2, max: 3 },
 } as const;
 
 const windowSchema = z

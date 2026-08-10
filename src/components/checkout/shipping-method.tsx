@@ -6,6 +6,7 @@ import { Loader2, MapPin, PackageOpen, Search, Truck, Wrench } from "lucide-reac
 import { motion } from "framer-motion";
 import { useCart } from "@/lib/hooks/use-cart";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
+import { ASSEMBLY_ENABLED } from "@/lib/checkout/config-shared";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CheckoutDeliveryPoint, CheckoutFormData } from "./checkout-flow";
@@ -78,7 +79,7 @@ export function ShippingMethodStep({
         />
       ) : null}
 
-      {method === "kamion" && lines.length > 0 ? (
+      {ASSEMBLY_ENABLED && method === "kamion" && lines.length > 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

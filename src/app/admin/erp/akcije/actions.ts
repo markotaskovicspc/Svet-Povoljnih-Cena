@@ -50,7 +50,9 @@ const actionProductSchema = z.object({
 const loyaltySchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(1).max(120),
-  discountPct: z.coerce.number().gt(0).lte(100),
+  discountPct: z.coerce.number().refine((value) => value === 30, {
+    message: "Loyalty popust je fiksiran na 30%.",
+  }),
   startsAt: z.string().min(1),
   endsAt: z.string().min(1),
   priority: z.coerce.number().int().min(0).default(0),
@@ -219,6 +221,28 @@ export async function deleteAction(
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID akcije." };
+      const action = await db.action.findUnique({
+        where: { id },
+        select: {
+          endsAt: true,
+          _count: { select: { actionPrices: true } },
+        },
+      });
+      if (!action) {
+        return { ok: false as const, error: "Akcija nije pronađena." };
+      }
+      const historyCutoff = new Date();
+      historyCutoff.setDate(historyCutoff.getDate() - 30);
+      if (
+        action._count.actionPrices > 0 &&
+        action.endsAt >= historyCutoff
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Akcija sa cenama ne može da se obriše dok ne prođe 30 dana od završetka. Tako se čuva zakonska istorija najniže javne cene.",
+        };
+      }
       await db.$transaction(async (tx) => {
         await tx.heroOfMonth.deleteMany({ where: { actionId: id } });
         await tx.action.delete({ where: { id } });

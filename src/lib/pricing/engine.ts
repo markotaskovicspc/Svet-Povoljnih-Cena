@@ -5,8 +5,8 @@
  *   1. Effective unit price = active sale price (if action period is valid)
  *      else fullPrice. Period validation lives here so listings, PDP, cart,
  *      and order creation all see the same answer.
- *   2. Order-level discount stack: voucher + first-purchase 5% + saved-card 5%,
- *      clamped by `MAX_STACK_PCT` of the eligible subtotal.
+ *   2. Order-level discount stack: voucher + first-purchase 15% + saved-card 5%,
+ *      with only a natural 100% subtotal floor.
  *
  * All money values are RSD (number, integer dinari). The engine is pure and
  * has no DB or session dependencies — callers project their entities into the
@@ -29,6 +29,8 @@ export interface PricingAction {
 
 export interface PricingProduct {
   fullPrice: number;
+  /** Customer-facing 30-day reference price; loyalty history is excluded. */
+  referencePrice?: number | null;
   salePrice?: number | null;
   discountPct?: number | null;
   loyaltyPrice?: number | null;
@@ -53,7 +55,7 @@ export interface PricingProduct {
   }>;
   /** Controls whether the publicly exposed loyalty offer is payable. */
   loyaltyEligible?: boolean;
-  /** Admin setting; launch default is 30%. */
+  /** Optional technical ceiling; launch default only prevents a negative total. */
   maxCombinedDiscountPct?: number;
 }
 
@@ -259,11 +261,21 @@ export function resolveProductPriceQuote(
     actionExpired,
     actionName: canonicalAction?.actionName ?? product.action?.name,
   });
-  // Client rule: a product-level action replaces loyalty pricing. Linear
-  // promotions are different: they are applied on top of whichever base is
-  // active (action, loyalty, or the full price).
-  const loyaltyBase =
-    actionBase == null ? resolveLoyaltyPrice(product, full) : null;
+  // Loyalty remains stackable with an active action. A configured loyalty
+  // percentage (or the percentage implied by an absolute loyalty price) is
+  // applied to the current action base, then linear promotions stack on top.
+  const configuredLoyalty = resolveLoyaltyPrice(product, full);
+  const loyaltyBase = configuredLoyalty
+    ? {
+        effective:
+          actionBase == null
+            ? configuredLoyalty.effective
+            : Math.round(
+                actionBase * (1 - configuredLoyalty.discountPct / 100),
+              ),
+        discountPct: configuredLoyalty.discountPct,
+      }
+    : null;
   const loyaltyOffer = loyaltyBase
     ? pricedOffer({
         full,
@@ -275,11 +287,36 @@ export function resolveProductPriceQuote(
       })
     : null;
   const eligible = options.loggedIn ?? product.loyaltyEligible ?? false;
-  const payable = eligible && loyaltyOffer ? loyaltyOffer : publicPrice;
+  const rawActionOffer = publicPrice.effective < full ? publicPrice : null;
+  const reference =
+    product.referencePrice != null &&
+    Number.isFinite(product.referencePrice) &&
+    product.referencePrice > 0
+      ? product.referencePrice
+      : full;
+  const hasReducedOffer = Boolean(rawActionOffer || loyaltyOffer);
+  const displayFull = hasReducedOffer ? reference : full;
+  const withReference = (offer: EffectivePrice | null) =>
+    offer
+      ? {
+          ...offer,
+          full: displayFull,
+          discountPct:
+            displayFull > offer.effective
+              ? Math.round(((displayFull - offer.effective) / displayFull) * 100)
+              : 0,
+        }
+      : null;
+  const actionOffer = withReference(rawActionOffer);
+  const referencedLoyaltyOffer = withReference(loyaltyOffer);
+  const payable =
+    eligible && referencedLoyaltyOffer
+      ? referencedLoyaltyOffer
+      : actionOffer ?? { ...publicPrice, full: displayFull };
   return {
-    full,
-    actionOffer: publicPrice.effective < full ? publicPrice : null,
-    loyaltyOffer,
+    full: displayFull,
+    actionOffer,
+    loyaltyOffer: referencedLoyaltyOffer,
     payable,
   };
 }
@@ -360,7 +397,7 @@ export interface OrderPricing {
   /** Voucher discount actually applied (after clamping). */
   voucherDiscount: number;
   voucherCode: string | null;
-  /** First-purchase 5% applied (after clamping). */
+  /** First-purchase 15% applied (after clamping). */
   firstPurchaseDiscount: number;
   /** Saved-card 5% applied (after clamping). */
   savedCardDiscount: number;
@@ -368,6 +405,42 @@ export interface OrderPricing {
   totalOrderDiscount: number;
   /** Whether the cap clipped any discount. */
   stackCapped: boolean;
+}
+
+export function capDiscountComponents(
+  requested: { voucher: number; first: number; card: number },
+  maxAllowed: number,
+) {
+  const keys = ["voucher", "first", "card"] as const;
+  const requestedTotal = keys.reduce((sum, key) => sum + requested[key], 0);
+  if (requestedTotal <= maxAllowed || requestedTotal <= 0) return { ...requested };
+
+  const scale = maxAllowed / requestedTotal;
+  const exact = keys.map((key, index) => ({
+    key,
+    index,
+    value: requested[key] * scale,
+  }));
+  const applied = {
+    voucher: Math.floor(exact[0]!.value),
+    first: Math.floor(exact[1]!.value),
+    card: Math.floor(exact[2]!.value),
+  };
+  let remainder = maxAllowed - keys.reduce((sum, key) => sum + applied[key], 0);
+  for (const part of exact
+    .slice()
+    .sort((a, b) => (b.value % 1) - (a.value % 1) || a.index - b.index)) {
+    if (remainder <= 0) break;
+    const increment = Math.min(
+      remainder,
+      1,
+      requested[part.key] - applied[part.key],
+    );
+    if (increment <= 0) continue;
+    applied[part.key] += increment;
+    remainder -= increment;
+  }
+  return applied;
 }
 
 /**
@@ -423,13 +496,7 @@ export function computeOrderPricing({
 
   if (requestedTotal > maxAllowed && requestedTotal > 0) {
     stackCapped = true;
-    // Scale each component proportionally to fit under the cap.
-    const scale = maxAllowed / requestedTotal;
-    applied = {
-      voucher: Math.floor(requested.voucher * scale),
-      first: Math.floor(requested.first * scale),
-      card: Math.floor(requested.card * scale),
-    };
+    applied = capDiscountComponents(requested, maxAllowed);
   }
 
   const totalOrderDiscount = Math.min(

@@ -13,6 +13,7 @@ const validInput = {
   receiverCustomerId: "receiver",
   sourceWarehouseId: "warehouse-a",
   destinationWarehouseId: null,
+  priceListId: "price-list-1",
   showPrices: true,
   shipmentMethod: 1,
   actualDispatchAt: "2026-07-25T08:00:00.000Z",

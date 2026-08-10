@@ -159,10 +159,13 @@ export default async function ProductPage({ params }: RouteProps) {
               {product.name}
             </h1>
             {dimensionsLabel ? (
-              <p className="mt-1 font-mono text-[11px] tracking-tight text-ink-500 md:text-xs">
+              <p className="mt-1 text-base font-bold tracking-tight text-ink-700 md:text-lg">
                 {dimensionsLabel}
               </p>
             ) : null}
+            <p className="mt-1 text-xs text-ink-500">
+              Šifra artikla: <span className="font-mono font-semibold text-ink-700">{product.sku}</span>
+            </p>
             <ProductColorOptions
               product={product}
               className="mt-1.5 md:mt-2.5"

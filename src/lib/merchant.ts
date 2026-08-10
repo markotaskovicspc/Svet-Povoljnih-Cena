@@ -17,8 +17,18 @@ export const MERCHANT_LEGAL_INFO = {
   phone: publicValue(process.env.NEXT_PUBLIC_MERCHANT_PHONE),
   viber: publicValue(process.env.NEXT_PUBLIC_MERCHANT_VIBER),
   warehouseAddress: publicValue(process.env.NEXT_PUBLIC_MERCHANT_WAREHOUSE_ADDRESS),
-  returnsAddress: publicValue(process.env.NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS),
-  supportHours: publicValue(process.env.NEXT_PUBLIC_MERCHANT_SUPPORT_HOURS),
+  returnsAddress:
+    publicValue(process.env.NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS) ??
+    publicValue(process.env.NEXT_PUBLIC_MERCHANT_WAREHOUSE_ADDRESS),
+  returnsContactName:
+    publicValue(process.env.NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_NAME) ??
+    "Marko Medić",
+  returnsContactPhone:
+    publicValue(process.env.NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_PHONE) ??
+    "060 511 5034",
+  supportHours:
+    publicValue(process.env.NEXT_PUBLIC_MERCHANT_SUPPORT_HOURS) ??
+    "Ponedeljak–subota, 08:00–20:00",
   bankAccount: "265-3310310005375-34",
   bankName: "Raiffeisen banka",
   pdvNote: "PDV je uključen u cenu.",

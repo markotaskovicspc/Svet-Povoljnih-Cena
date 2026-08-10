@@ -48,12 +48,12 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     const mixed = product.availabilitySource === "MIXED";
     return {
       canAddToCart: true,
-      label: supplierOnly ? "Dostupno kod dobavljača" : "Na stanju",
+      label: supplierOnly ? "Dostupno" : "Na stanju",
       addLabel: "Dodaj u korpu",
       message: supplierOnly
-        ? `Dostupno kod dobavljača · isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
+        ? `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
         : mixed
-          ? "Na stanju; dodatne količine su dostupne kod dobavljača"
+          ? "Spremno za poručivanje"
           : stock <= 2
             ? `Još ${stock} na stanju`
             : "Spremno za poručivanje",

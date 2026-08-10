@@ -19,13 +19,13 @@ describe("package routing", () => {
     ).toBe("COURIER_SMALL");
   });
 
-  it("routes a package over 30 kg or 60 cm through GLS", () => {
+  it("routes by the 60 cm dimension rule, regardless of weight", () => {
     expect(
       routeService({
         shippingMethod: "KURIR",
         items: [{ withAssembly: false, packGrossWeightKg: 30.01 }],
       }),
-    ).toBe("COURIER_BULKY");
+    ).toBe("COURIER_SMALL");
     expect(
       routeService({
         shippingMethod: "KURIR",
@@ -39,7 +39,7 @@ describe("package routing", () => {
     ).toBe("COURIER_BULKY");
   });
 
-  it("keeps one small package with bulky packages on GLS", () => {
+  it("keeps a small package on X Express even beside a GLS package", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
@@ -48,8 +48,8 @@ describe("package routing", () => {
       ],
     });
     expect(plan.map((item) => [item.courier, item.label])).toEqual([
-      ["GLS", "1/2"],
-      ["GLS", "2/2"],
+      ["GLS", "1/1"],
+      ["X_EXPRESS", "1/1"],
     ]);
   });
 

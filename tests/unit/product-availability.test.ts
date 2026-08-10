@@ -20,11 +20,11 @@ describe("product availability messaging", () => {
     });
     expect(result).toMatchObject({
       canAddToCart: true,
-      label: "Dostupno kod dobavljača",
+      label: "Dostupno",
       isSupplierSourced: true,
     });
     expect(result.message).toBe(
-      "Dostupno kod dobavljača · isporuka 7–10 radnih dana",
+      "Isporuka 7–10 radnih dana",
     );
     expect(result.message).not.toContain("10 na stanju");
   });

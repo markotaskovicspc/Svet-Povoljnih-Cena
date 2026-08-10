@@ -45,7 +45,10 @@ import {
   resolveDeliveryWindowForQuantity,
   type DeliveryWindows,
 } from "@/lib/delivery-windows";
-import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import {
+  lowestPublicPriceLast30Days,
+  resolveRetailPrice,
+} from "@/lib/pricing/retail-price";
 import { productAttachmentAdminLabel } from "@/lib/product-documents";
 import {
   productNewUntilFloor,
@@ -319,6 +322,11 @@ function mapProduct(
         : left.label.localeCompare(right.label, "sr-Latn"),
     );
   const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
+  const referencePrice = lowestPublicPriceLast30Days(
+    p.priceListEntries,
+    p.actionPrices,
+    retailPrice.price,
+  );
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -367,6 +375,7 @@ function mapProduct(
     isLimited: isRabalux ? false : p.isLimited,
     isDtz: isRabalux ? false : p.isDtz,
     fullPrice: retailPrice.price,
+    referencePrice,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
     loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
@@ -583,6 +592,11 @@ function mapProductListItem(
         : left.label.localeCompare(right.label, "sr-Latn"),
     );
   const retailPrice = resolveRetailPrice(p.priceListEntries, p.fullPrice);
+  const referencePrice = lowestPublicPriceLast30Days(
+    p.priceListEntries,
+    p.actionPrices,
+    retailPrice.price,
+  );
   const sortedCats = [...p.categories].sort(
     (a, b) => (a.category?.level ?? 0) - (b.category?.level ?? 0),
   );
@@ -631,6 +645,7 @@ function mapProductListItem(
     isLimited: isRabalux ? false : p.isLimited,
     isDtz: isRabalux ? false : p.isDtz,
     fullPrice: retailPrice.price,
+    referencePrice,
     salePrice: numOrNull(p.salePrice) ?? undefined,
     discountPct: p.discountPct ?? undefined,
     loyaltyPrice: numOrNull(p.loyaltyPrice) ?? undefined,
@@ -717,6 +732,7 @@ function attachProductVariantFamily(
       media: variant.media,
       pictograms: variant.pictograms,
       fullPrice: variant.fullPrice,
+      referencePrice: variant.referencePrice,
       salePrice: variant.salePrice,
       discountPct: variant.discountPct,
       loyaltyPrice: variant.loyaltyPrice,
@@ -762,6 +778,7 @@ function attachProductVariantFamily(
     media: selected.media,
     pictograms: selected.pictograms ?? product.pictograms,
     fullPrice: selected.fullPrice,
+    referencePrice: selected.referencePrice,
     salePrice: selected.salePrice,
     discountPct: selected.discountPct,
     loyaltyPrice: selected.loyaltyPrice,

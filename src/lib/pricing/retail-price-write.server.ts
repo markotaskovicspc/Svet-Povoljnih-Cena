@@ -62,12 +62,19 @@ export async function upsertActiveRetailPrice(
       OR: [{ validTo: null }, { validTo: { gte: now } }],
     },
     orderBy: { validFrom: "desc" },
-    select: { id: true },
+    select: { id: true, price: true, validFrom: true },
   });
   if (current) {
-    return tx.priceListEntry.update({
+    if (current.price.equals(price)) return current;
+    if (current.validFrom.getTime() >= now.getTime()) {
+      return tx.priceListEntry.update({
+        where: { id: current.id },
+        data: { price },
+      });
+    }
+    await tx.priceListEntry.update({
       where: { id: current.id },
-      data: { price },
+      data: { validTo: new Date(now.getTime() - 1) },
     });
   }
   return tx.priceListEntry.create({
@@ -85,7 +92,7 @@ export async function removeActiveRetailPrice(
   input: { productId: string; now?: Date },
 ) {
   const now = input.now ?? new Date();
-  return tx.priceListEntry.deleteMany({
+  return tx.priceListEntry.updateMany({
     where: {
       productId: input.productId,
       validFrom: { lte: now },
@@ -101,5 +108,6 @@ export async function removeActiveRetailPrice(
         },
       },
     },
+    data: { validTo: new Date(now.getTime() - 1) },
   });
 }

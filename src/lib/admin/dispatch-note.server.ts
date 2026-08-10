@@ -76,6 +76,13 @@ export type DispatchWarehouseOption = {
 export type DispatchNoteFormOptions = {
   companies: DispatchCompanyOption[];
   warehouses: DispatchWarehouseOption[];
+  priceLists: Array<{
+    id: string;
+    code: string;
+    name: string;
+    kind: string;
+    currency: string;
+  }>;
   defaultIssuerCustomerId: string;
   defaultWarehouseId: string;
 };
@@ -115,6 +122,7 @@ export type DispatchNoteDetail = {
   receiverCustomerId: string;
   sourceWarehouseId: string;
   destinationWarehouseId: string;
+  priceListId: string;
   showPrices: boolean;
   currency: string;
   notes: string;
@@ -246,74 +254,36 @@ function productMetadata(product: LoadedProduct) {
 async function resolveDispatchPrice(
   tx: Prisma.TransactionClient,
   product: LoadedProduct,
-  receiverCustomerId: string,
+  priceListId: string,
 ) {
   const now = new Date();
-  const recentOrder = await tx.order.findFirst({
+  const list = await tx.priceList.findFirst({
     where: {
-      customerId: receiverCustomerId,
-      priceListId: { not: null },
-      channel: { in: IMPORT_CHANNELS },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { priceListId: true },
-  });
-  if (recentOrder?.priceListId) {
-    const entry = await tx.priceListEntry.findFirst({
-      where: {
-        priceListId: recentOrder.priceListId,
-        productId: product.id,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gte: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-      include: { priceList: { select: { code: true, name: true } } },
-    });
-    if (entry) {
-      return {
-        price: decimal(entry.price),
-        source: `Cenovnik kupca ${entry.priceList.code} · ${entry.priceList.name}`,
-      };
-    }
-  }
-
-  const lists = await tx.priceList.findMany({
-    where: {
+      id: priceListId,
       active: true,
-      kind: { in: ["WHOLESALE", "EXPORT", "RETAIL"] },
       AND: [
         { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
         { OR: [{ validTo: null }, { validTo: { gte: now } }] },
       ],
     },
-    orderBy: { updatedAt: "desc" },
     select: { id: true, code: true, name: true, kind: true },
   });
-  lists.sort(
-    (left, right) =>
-      ["WHOLESALE", "EXPORT", "RETAIL"].indexOf(left.kind) -
-      ["WHOLESALE", "EXPORT", "RETAIL"].indexOf(right.kind),
-  );
-  for (const list of lists) {
-    const entry = await tx.priceListEntry.findFirst({
-      where: {
-        priceListId: list.id,
-        productId: product.id,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gte: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-    });
-    if (entry) {
-      return {
-        price: decimal(entry.price),
-        source: `${list.kind} cenovnik ${list.code} · ${list.name}`,
-      };
-    }
+  if (!list) throw new Error("Izabrani cenovnik nije aktivan.");
+  const entry = await tx.priceListEntry.findFirst({
+    where: {
+      priceListId: list.id,
+      productId: product.id,
+      validFrom: { lte: now },
+      OR: [{ validTo: null }, { validTo: { gte: now } }],
+    },
+    orderBy: { validFrom: "desc" },
+  });
+  if (!entry) {
+    throw new Error(`Artikal ${product.sku} nema aktivnu cenu u cenovniku ${list.code}.`);
   }
   return {
-    price: decimal(product.fullPrice),
-    source: "Matična MP cena artikla",
+    price: decimal(entry.price),
+    source: `${list.code} · ${list.name}`,
   };
 }
 
@@ -375,7 +345,7 @@ function belgradeDate(value: Date) {
 }
 
 export async function getDispatchNoteFormOptions(): Promise<DispatchNoteFormOptions> {
-  const [companies, warehouses] = await Promise.all([
+  const [companies, warehouses, priceLists] = await Promise.all([
     db.customer.findMany({
       where: { companyName: { not: null } },
       take: 3_000,
@@ -384,6 +354,11 @@ export async function getDispatchNoteFormOptions(): Promise<DispatchNoteFormOpti
     db.warehouse.findMany({
       where: { active: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    }),
+    db.priceList.findMany({
+      where: { active: true },
+      orderBy: [{ kind: "asc" }, { code: "asc" }],
+      select: { id: true, code: true, name: true, kind: true, currency: true },
     }),
   ]);
   const options = companies.map(companyOption);
@@ -397,6 +372,7 @@ export async function getDispatchNoteFormOptions(): Promise<DispatchNoteFormOpti
       city: warehouse.city ?? "",
       isDefault: warehouse.isDefault,
     })),
+    priceLists,
     defaultIssuerCustomerId:
       options.find((company) => company.pib === MERCHANT_LEGAL_INFO.pib)?.id ?? "",
     defaultWarehouseId:
@@ -406,11 +382,12 @@ export async function getDispatchNoteFormOptions(): Promise<DispatchNoteFormOpti
 
 export async function getDispatchNoteProduct(
   sku: string,
-  receiverCustomerId: string,
+  priceListId: string,
+  internal = false,
 ): Promise<DispatchProductData> {
   const normalizedSku = sku.trim();
   if (!normalizedSku) throw new Error("Unesite šifru artikla.");
-  if (!receiverCustomerId) throw new Error("Prvo izaberite firmu primaoca.");
+  if (!internal && !priceListId) throw new Error("Prvo izaberite cenovnik.");
   return db.$transaction(async (tx) => {
     const product = await tx.product.findUnique({
       where: { sku: normalizedSku },
@@ -419,7 +396,9 @@ export async function getDispatchNoteProduct(
     if (!product || product.deletedAt) {
       throw new Error(`Artikal sa šifrom ${normalizedSku} ne postoji.`);
     }
-    const price = await resolveDispatchPrice(tx, product, receiverCustomerId);
+    const price = internal
+      ? { price: 0, source: "Interni prenos bez cena" }
+      : await resolveDispatchPrice(tx, product, priceListId);
     return productFormData(product, price.price, price.source);
   });
 }
@@ -552,7 +531,10 @@ async function prepareLines(
         );
       }
       const metadata = productMetadata(item.product);
-      const unitPriceGross = internal ? 0 : decimal(item.unitPriceSale);
+      const selectedPrice = internal
+        ? { price: 0, source: "Interni prenos bez cena" }
+        : await resolveDispatchPrice(tx, item.product, data.priceListId!);
+      const unitPriceGross = selectedPrice.price;
       const totals = calculateDispatchLineTotals(line.qty, unitPriceGross);
       prepared.push({
         id: undefined,
@@ -573,7 +555,7 @@ async function prepareLines(
         color1: item.color1 ?? metadata.color1,
         color2: item.color2 ?? metadata.color2,
         unitPriceGross,
-        priceSource: "Sačuvana cena porudžbine",
+        priceSource: selectedPrice.source,
         qty: line.qty,
         maxQty: available,
         vatRate: DISPATCH_NOTE_VAT_RATE,
@@ -588,7 +570,7 @@ async function prepareLines(
     }
     const price = internal
       ? { price: 0, source: "Interni prenos bez cena" }
-      : await resolveDispatchPrice(tx, product, data.receiverCustomerId);
+      : await resolveDispatchPrice(tx, product, data.priceListId!);
     const totals = calculateDispatchLineTotals(line.qty, price.price);
     prepared.push({
       id: undefined,
@@ -756,6 +738,7 @@ function headerData(
       : DispatchNoteType.CUSTOMER,
     issueDate: dateAtUtcMidnight(data.issueDate),
     orderId: orderIds.length === 1 ? orderIds[0] : null,
+    priceListId: references.internal ? null : data.priceListId,
     sourceWarehouseId: references.sourceWarehouse.id,
     destinationWarehouseId: references.internal
       ? references.destinationWarehouse?.id ?? null
@@ -1515,9 +1498,11 @@ export async function getDispatchOrderLines(input: {
   from: string;
   to: string;
   excludeDispatchId?: string | null;
+  priceListId: string;
 }) {
   if (!input.receiverCustomerId) throw new Error("Izaberite firmu primaoca.");
   if (!input.sourceWarehouseId) throw new Error("Izaberite izvorni magacin.");
+  if (!input.priceListId) throw new Error("Izaberite cenovnik.");
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(input.from) ||
     !/^\d{4}-\d{2}-\d{2}$/.test(input.to)
@@ -1555,12 +1540,13 @@ export async function getDispatchOrderLines(input: {
       items.map((item) => item.id),
       input.excludeDispatchId,
     );
-    return items.flatMap((item): DispatchNoteFormLine[] => {
+    const resolved = await Promise.all(items.map(async (item): Promise<DispatchNoteFormLine[]> => {
       if (!item.product) return [];
       const available =
         originalWarehouseAllocation(item) - (allocations.get(item.id) ?? 0);
       if (available <= 0) return [];
       const metadata = productMetadata(item.product);
+      const price = await resolveDispatchPrice(tx, item.product, input.priceListId);
       return [
         {
           id: undefined,
@@ -1579,13 +1565,14 @@ export async function getDispatchOrderLines(input: {
           attribute4: item.attribute4 ?? metadata.attribute4,
           color1: item.color1 ?? metadata.color1,
           color2: item.color2 ?? metadata.color2,
-          unitPriceGross: decimal(item.unitPriceSale),
-          priceSource: `Porudžbina ${item.order.number}`,
+          unitPriceGross: price.price,
+          priceSource: price.source,
           qty: available,
           maxQty: available,
         },
       ];
-    });
+    }));
+    return resolved.flat();
   });
 }
 
@@ -1695,6 +1682,7 @@ export async function getDispatchNoteDetail(
     receiverCustomerId: note.receiverCustomerId ?? "",
     sourceWarehouseId: note.sourceWarehouseId,
     destinationWarehouseId: note.destinationWarehouseId ?? "",
+    priceListId: note.priceListId ?? "",
     showPrices: note.showPrices,
     currency: note.currency,
     notes: note.notes ?? "",

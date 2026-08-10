@@ -33,33 +33,23 @@ function expandedPackages(order: PackageRouteInput) {
       item.packDepthCm ?? 0,
       item.packHeightCm ?? 0,
     );
-    const bulky =
-      order.shippingMethod === "KAMION" ||
-      item.withAssembly ||
-      largestDimension > 60 ||
-      (item.packGrossWeightKg ?? 0) > 30;
+    const bulky = largestDimension > 60;
     return Array.from({ length: packageCount }, () => ({ bulky }));
   });
 }
 
 /**
  * Document routing:
- * - a dimension over 60 cm or weight over 30 kg is bulky;
- * - all-small orders go through X Express;
- * - bulky orders plus zero/one small package go entirely through GLS;
- * - with two or more small packages, bulky packages go through GLS and the
- *   small packages go through X Express.
+ * - packages at or below 60 cm on every side go through X Express;
+ * - packages with any side over 60 cm go through GLS;
+ * The legacy shipping-method value does not override the package dimensions.
  * Labels are numbered independently per courier (1/N, 2/N, ...).
  */
 export function routePackages(order: PackageRouteInput): RoutedPackage[] {
   const packages = expandedPackages(order);
-  const bulkyCount = packages.filter((item) => item.bulky).length;
-  const smallCount = packages.length - bulkyCount;
-  const couriers = packages.map((item): PackageCourier => {
-    if (bulkyCount === 0) return "X_EXPRESS";
-    if (smallCount <= 1) return "GLS";
-    return item.bulky ? "GLS" : "X_EXPRESS";
-  });
+  const couriers = packages.map(
+    (item): PackageCourier => (item.bulky ? "GLS" : "X_EXPRESS"),
+  );
   const totals = couriers.reduce<Record<PackageCourier, number>>(
     (counts, courier) => ({ ...counts, [courier]: counts[courier] + 1 }),
     { GLS: 0, X_EXPRESS: 0 },

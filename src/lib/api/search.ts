@@ -173,12 +173,6 @@ async function searchProductHits(
                 WHERE pc2."productId" = p.id
                   AND c2.name ILIKE ${'%' + q + '%'}
              )
-             OR EXISTS (
-               SELECT 1
-                 FROM "Group" g
-                WHERE g.id = p."groupId"
-                  AND g.name ILIKE ${'%' + q + '%'}
-             )
            ))
          )
        ORDER BY CASE
@@ -273,39 +267,23 @@ function navigationRank(name: string, query: string) {
 }
 
 async function searchNavigationHits(query: string): Promise<SearchNavigationHit[]> {
-  const [categories, groups] = await Promise.all([
-    db.category.findMany({
-      where: { name: { contains: query, mode: "insensitive" } },
-      select: { id: true, name: true, path: true, level: true },
-      take: 12,
-    }),
-    db.group.findMany({
-      where: { name: { contains: query, mode: "insensitive" } },
-      select: { id: true, name: true, slug: true },
-      take: 12,
-    }),
-  ]);
+  const categories = await db.category.findMany({
+    where: { name: { contains: query, mode: "insensitive" } },
+    select: { id: true, name: true, path: true, level: true },
+    take: 12,
+  });
 
-  return [
-    ...categories.map((category) => ({
+  return categories
+    .map((category) => ({
       type: "category" as const,
       id: category.id,
       name: category.name,
       href: `/k${category.path.startsWith("/") ? category.path : `/${category.path}`}`,
       breadcrumb: category.level > 0 ? "Kategorija" : "Glavna kategorija",
-    })),
-    ...groups.map((group) => ({
-      type: "group" as const,
-      id: group.id,
-      name: group.name,
-      href: `/pretraga?q=${encodeURIComponent(group.name)}`,
-      breadcrumb: "Grupa proizvoda",
-    })),
-  ]
+    }))
     .sort(
       (left, right) =>
         navigationRank(left.name, query) - navigationRank(right.name, query) ||
-        (left.type === right.type ? 0 : left.type === "category" ? -1 : 1) ||
         left.name.localeCompare(right.name, "sr"),
     )
     .slice(0, 6);

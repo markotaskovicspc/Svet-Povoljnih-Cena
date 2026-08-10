@@ -163,6 +163,9 @@ export interface CreateOrderResult {
   total: number;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
+  voucherDiscount: number;
+  firstPurchaseDiscount: number;
+  savedCardDiscount: number;
 }
 
 class StockReservationError extends Error {
@@ -183,6 +186,9 @@ type CreatedOrder = {
   total: Prisma.Decimal;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
+  voucherDiscount: Prisma.Decimal | null;
+  firstPurchaseDiscount: Prisma.Decimal | null;
+  savedCardDiscount: Prisma.Decimal | null;
   supplierFulfillmentIds: string[];
 };
 
@@ -340,6 +346,9 @@ async function findLockedCheckoutSessionOrder(
       total: true,
       paymentMethod: true,
       shippingMethod: true,
+      voucherDiscount: true,
+      firstPurchaseDiscount: true,
+      savedCardDiscount: true,
       supplierFulfillments: { select: { id: true } },
     },
   }).then((order) =>
@@ -389,6 +398,9 @@ export async function createOrder(
             total: true,
             paymentMethod: true,
             shippingMethod: true,
+            voucherDiscount: true,
+            firstPurchaseDiscount: true,
+            savedCardDiscount: true,
             supplierFulfillments: { select: { id: true } },
             items: {
               select: {
@@ -427,6 +439,9 @@ export async function createOrder(
           total: num(existing.total),
           paymentMethod: existing.paymentMethod,
           shippingMethod: existing.shippingMethod,
+          voucherDiscount: num(existing.voucherDiscount),
+          firstPurchaseDiscount: num(existing.firstPurchaseDiscount),
+          savedCardDiscount: num(existing.savedCardDiscount),
         },
       };
     }
@@ -571,6 +586,7 @@ export async function createOrder(
   const deliveryQuote = await resolveDeliveryQuote({
     city: input.shipping.city,
     lines: input.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
+    loggedIn: Boolean(userId),
   });
   if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
     return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
@@ -604,13 +620,19 @@ export async function createOrder(
 
   // Resolve eligibility from the auth context (server-only).
   const firstPurchase = userId
-    ? (await db.order.count({ where: { userId } })) === 0
+    ? (await db.order.count({
+        where: {
+          userId,
+          fiscalDocuments: {
+            some: { kind: "SALE", status: "ISSUED" },
+          },
+        },
+      })) === 0
     : false;
-  let useSavedCard = false;
-  if (input.useSavedCard && userId) {
-    const cardCount = await db.savedCard.count({ where: { userId } });
-    useSavedCard = cardCount > 0;
-  }
+  // A boolean supplied by the browser cannot prove which token will be
+  // charged. Keep the discount disabled until the selected payment instrument
+  // is server-verified and bound to the actual card authorization.
+  const useSavedCard = false;
 
   const pricing = computeOrderPricing({
     lines: pricingLines,
@@ -843,6 +865,9 @@ export async function createOrder(
           total: true,
           paymentMethod: true,
           shippingMethod: true,
+          voucherDiscount: true,
+          firstPurchaseDiscount: true,
+          savedCardDiscount: true,
         },
       });
       await recordCheckoutCompleted(tx, input, order);
@@ -1101,6 +1126,9 @@ export async function createOrder(
       total: num(created.total),
       paymentMethod: created.paymentMethod,
       shippingMethod: created.shippingMethod,
+      voucherDiscount: num(created.voucherDiscount ?? 0),
+      firstPurchaseDiscount: num(created.firstPurchaseDiscount ?? 0),
+      savedCardDiscount: num(created.savedCardDiscount ?? 0),
     },
   };
 }

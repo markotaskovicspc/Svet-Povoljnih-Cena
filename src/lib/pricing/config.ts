@@ -7,20 +7,17 @@
  * will write into this shape.
  */
 
-/** First-purchase discount, applied on the first ever order of a user. */
-export const FIRST_PURCHASE_PCT = 5;
+/** First-purchase discount, consumed when the first sale receipt is fiscalized. */
+export const FIRST_PURCHASE_PCT = 15;
 
 /** Discount when paying with a tokenized saved card. */
 export const SAVED_CARD_PCT = 5;
 
 /**
- * Maximum combined stack of order-level discounts (voucher + first-purchase
- * + saved-card), expressed as a percentage of the eligible subtotal.
- *
- * Per spec: "discounts not stackable beyond X% (admin)". 30 is the launch
- * default; admin override lands in Phase 5.
+ * There is no commercial stacking cap. 100 only protects the order total
+ * from becoming negative if several discounts cover the whole subtotal.
  */
-export const MAX_STACK_PCT = 30;
+export const MAX_STACK_PCT = 100;
 
 /**
  * Items already on action are NOT eligible for additional order-level

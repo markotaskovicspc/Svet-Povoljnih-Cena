@@ -123,6 +123,8 @@ export interface Product {
   isDtz?: boolean;
 
   fullPrice: number; // MPC (RSD)
+  /** Lowest public, non-loyalty price in the preceding 30-day reference window. */
+  referencePrice?: number;
   salePrice?: number; // akcijska MPC (RSD)
   discountPct?: number;
   loyaltyPrice?: number;
@@ -187,6 +189,7 @@ export interface ProductVariantOption {
   /** SKU-specific pictograms shown when this colour variant is selected. */
   pictograms?: Pictogram[];
   fullPrice: number;
+  referencePrice?: number;
   salePrice?: number;
   discountPct?: number;
   loyaltyPrice?: number;

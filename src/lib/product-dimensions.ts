@@ -6,10 +6,13 @@ const DIMENSION_FORMATTER = new Intl.NumberFormat("sr-Latn-RS", {
 
 export function formatProductCardDimensions(dimensions: Dimensions) {
   const values = [dimensions.w, dimensions.d, dimensions.h];
-  if (!values.every((value) => Number.isFinite(value) && value > 0)) {
-    return "Dimenzije nisu unete";
+  if (
+    !values.every((value) => Number.isFinite(value) && value > 0) ||
+    values.every((value) => value === 1)
+  ) {
+    return "";
   }
-  return `Dimenzije: ${values
+  return `${values
     .map((value) => DIMENSION_FORMATTER.format(value))
     .join(" × ")} cm`;
 }

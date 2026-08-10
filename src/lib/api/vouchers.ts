@@ -7,7 +7,7 @@ import { num } from "@/lib/api/_helpers";
  * Voucher validation (Phase 3C — item 3 of checkout flow / item 7 of plan).
  *
  * Returns the discount amount in RSD (always positive). Stacking & first-buyer
- * 5% / saved-card 5% interactions live in the pricing engine (Phase 3D); this
+ * 15% / saved-card 5% interactions live in the pricing engine (Phase 3D); this
  * function is concerned only with whether the code itself is valid for this
  * `(userId, subtotal, now)` triple.
  */
@@ -36,7 +36,18 @@ export async function validateVoucher(
 
   const v = await db.voucher.findUnique({
     where: { code },
-    include: { redemptions: { select: { userId: true } } },
+    include: {
+      redemptions: {
+        where: {
+          order: {
+            fiscalDocuments: {
+              some: { kind: "SALE", status: "ISSUED" },
+            },
+          },
+        },
+        select: { userId: true },
+      },
+    },
   });
   if (!v || !v.active) return { ok: false, reason: "Kod nije pronađen ili je istekao" };
 
@@ -132,7 +143,16 @@ export async function validateVoucherForCheckout(
   }
 
   if (v.usageLimit) {
-    const used = await tx.voucherRedemption.count({ where: { voucherCode: v.code } });
+    const used = await tx.voucherRedemption.count({
+      where: {
+        voucherCode: v.code,
+        order: {
+          fiscalDocuments: {
+            some: { kind: "SALE", status: "ISSUED" },
+          },
+        },
+      },
+    });
     if (used >= v.usageLimit) {
       return { ok: false, reason: "Vaučer je iskorišćen" };
     }
@@ -140,7 +160,15 @@ export async function validateVoucherForCheckout(
 
   if (v.perUserLimit && userId) {
     const usedByUser = await tx.voucherRedemption.count({
-      where: { voucherCode: v.code, userId },
+      where: {
+        voucherCode: v.code,
+        userId,
+        order: {
+          fiscalDocuments: {
+            some: { kind: "SALE", status: "ISSUED" },
+          },
+        },
+      },
     });
     if (usedByUser >= v.perUserLimit) {
       return { ok: false, reason: "Već ste iskoristili ovaj vaučer" };

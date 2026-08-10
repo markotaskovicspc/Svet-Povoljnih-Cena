@@ -191,13 +191,13 @@ export function resolveDeliveryTermsContent(
   override: string | undefined,
   standardMarkdown: string | undefined,
 ) {
-  const overrideContent = override?.trim();
-  if (overrideContent) {
-    return { content: overrideContent, format: "richText" as const };
-  }
   const standardContent = standardMarkdown?.trim();
   if (standardContent) {
     return { content: standardContent, format: "markdown" as const };
+  }
+  const overrideContent = override?.trim();
+  if (overrideContent) {
+    return { content: overrideContent, format: "richText" as const };
   }
   return {
     content: defaultContent("deliveryTerms"),

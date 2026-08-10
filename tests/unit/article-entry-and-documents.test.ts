@@ -132,7 +132,7 @@ describe("unos artikala", () => {
         { quantity: 3, dcAvailable: 2, supplierAvailable: 8 },
         DEFAULT_DELIVERY_WINDOWS,
       ),
-    ).toEqual({ min: 5, max: 8 });
+    ).toEqual({ min: 2, max: 3 });
   });
 });
 
