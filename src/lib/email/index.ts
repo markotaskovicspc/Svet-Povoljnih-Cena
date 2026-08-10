@@ -7,6 +7,7 @@ export { getEmailConfig } from "./config";
 export { dispatch } from "./transport";
 export type { DispatchResult, EmailAttachment } from "./transport";
 export { renderEmail } from "./render";
+export { processUrgentAdminAlerts } from "./admin-alerts";
 export {
   sendOrderConfirmation,
   sendIpsPaymentConfirmation,

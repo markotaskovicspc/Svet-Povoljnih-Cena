@@ -76,7 +76,7 @@ export function FirstPurchaseCta() {
             Prva kupovina
           </p>
           <h2 className="font-display mt-1 text-xl text-ink-900">
-            5% popusta za prvu kupovinu
+            15% popusta za prvu kupovinu
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-600">
             Registrujte se i popust se automatski aktivira na prvu porudžbinu
@@ -103,7 +103,7 @@ export function FirstPurchaseCta() {
         </div>
       </div>
       <Link
-        href="/nalog/registracija?offer=first-purchase-5"
+        href="/nalog/registracija?offer=first-purchase-15"
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-medium text-canvas transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
       >
         Registruj se

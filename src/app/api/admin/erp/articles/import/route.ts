@@ -37,6 +37,8 @@ import {
   propagateProductFamilySharedData,
   setProductFamilyMembership,
 } from "@/lib/product-family.server";
+import { validateNewArticleImportRequiredFields } from "@/lib/admin/article-import-required";
+import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -81,6 +83,8 @@ type ArticleImportRow = {
   certificates: string | null;
   barcode: string | null;
   hsCode: string | null;
+  countryOfOrigin: string | null;
+  retailPrice: number | null;
   customsRate: number | null;
   ananasBrokeragePct: number | null;
   ananasStoragePct: number | null;
@@ -218,6 +222,12 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   barkod: "barcode",
   hscode: "hsCode",
   hskod: "hsCode",
+  countryoforigin: "countryOfOrigin",
+  zemljaporekla: "countryOfOrigin",
+  poreklo: "countryOfOrigin",
+  retailprice: "retailPrice",
+  mpc: "retailPrice",
+  maloprodajnacena: "retailPrice",
   customsrate: "customsRate",
   carina: "customsRate",
   ananasbrokerage: "ananasBrokeragePct",
@@ -497,6 +507,14 @@ export async function POST(request: Request) {
       certificates: textAt("certificates") || null,
       barcode,
       hsCode: textAt("hsCode") || null,
+      countryOfOrigin: textAt("countryOfOrigin") || null,
+      retailPrice: numberCell(
+        row,
+        headers.get("retailPrice"),
+        "retailPrice",
+        errors,
+        { min: 0.01 },
+      ),
       customsRate: numberCell(row, headers.get("customsRate"), "customsRate", errors, { min: 0 }),
       ananasBrokeragePct: numberCell(row, headers.get("ananasBrokeragePct"), "ananasBrokeragePct", errors, { min: 0 }),
       ananasStoragePct: numberCell(row, headers.get("ananasStoragePct"), "ananasStoragePct", errors, { min: 0 }),
@@ -699,6 +717,19 @@ export async function POST(request: Request) {
       }
     }
   }
+  const existingSkus = seenSkus.size
+    ? await db.product.findMany({
+        where: { sku: { in: Array.from(seenSkus) } },
+        select: { sku: true },
+      })
+    : [];
+  const existingSkuSet = new Set(existingSkus.map((product) => product.sku));
+  for (const row of rows) {
+    if (row.sku && existingSkuSet.has(row.sku)) continue;
+    for (const issue of validateNewArticleImportRequiredFields(row)) {
+      errors.push({ row: row.row, field: issue.field, message: issue.message });
+    }
+  }
   if (errors.length) {
     return NextResponse.json(
       {
@@ -712,13 +743,6 @@ export async function POST(request: Request) {
   }
 
   if (mode === "preview") {
-    const existingSkus = seenSkus.size
-      ? await db.product.findMany({
-          where: { sku: { in: Array.from(seenSkus) } },
-          select: { sku: true },
-        })
-      : [];
-    const existingSkuSet = new Set(existingSkus.map((product) => product.sku));
     const familyCodes = Array.from(
       new Set(rows.map((row) => row.familyCode).filter((code): code is string => Boolean(code))),
     );
@@ -951,6 +975,9 @@ export async function POST(request: Request) {
             ? row.materialText
             : existing?.materialText ?? null,
           hsCode: hasColumn("hsCode") ? row.hsCode : existing?.hsCode ?? null,
+          countryOfOrigin: hasColumn("countryOfOrigin")
+            ? row.countryOfOrigin
+            : existing?.countryOfOrigin ?? null,
           customsRate: hasColumn("customsRate")
             ? row.customsRate
             : existing?.customsRate ?? null,
@@ -971,7 +998,7 @@ export async function POST(request: Request) {
           newUntil,
           newUntilAutomatic,
           isNew: productNewUntilIsActive(newUntil),
-          fullPrice: existing?.fullPrice ?? 0,
+          fullPrice: existing?.fullPrice ?? row.retailPrice ?? 0,
           ...statusFlags(status),
           deletedAt:
             status === "ARH" ? existing?.deletedAt ?? new Date() : null,
@@ -985,6 +1012,12 @@ export async function POST(request: Request) {
                 slug: `${articleSlug(`${row.shortName}-${sku}`)}-${randomBytes(3).toString("hex")}`,
               },
             });
+        if (row.retailPrice !== null) {
+          await upsertActiveRetailPrice(tx, {
+            productId: product.id,
+            price: row.retailPrice,
+          });
+        }
         if (
           (hasColumn("description") &&
             hasMeaningfulProductDescription(row.description)) ||

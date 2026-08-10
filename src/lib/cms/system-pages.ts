@@ -73,7 +73,7 @@ Montaža nije dostupna u početnoj fazi prodaje.
 
 ### Kako da iskoristim vaučer? {#vaucer}
 
-Vaučer unesite na koraku „Vaučer” u toku checkouta. Vaučeri se ne kombinuju, osim ako u uslovima vaučera nije drugačije navedeno.
+Vaučer unesite na koraku „Vaučer” u toku checkouta. U jednoj porudžbini možete uneti jedan vaučer, a njegov popust se sabira sa aktivnom akcijom, loyalty popustom i popustom za prvu kupovinu. Ukupan popust ne može spustiti iznos porudžbine ispod 0 RSD.
 
 ### Mogu li da vratim nameštaj? {#vracanje}
 

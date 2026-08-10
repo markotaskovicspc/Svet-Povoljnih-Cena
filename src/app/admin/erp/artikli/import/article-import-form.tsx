@@ -78,8 +78,11 @@ export function ArticleImportForm() {
           className="mt-2 block w-full rounded-lg border border-input bg-surface px-3 py-2 text-sm"
         />
         <p className="mt-3 text-sm text-ink-500">
-          Obavezna je samo kolona Kratki naziv. Ako SKU/Šifra nije uneta,
-          sistem je automatski dodeljuje. Uvoz podržava sva izvorna polja
+          Za novi artikal obavezni su: Kratki naziv, Opis za sajt, Dobavljač,
+          Kategorija, Zemlja porekla, Tarifni broj, dimenzije i bruto težina
+          artikla, broj komada, dimenzije i bruto težina transportnog paketa,
+          kao i MPC veća od nule. Ako SKU/Šifra nije uneta, sistem je automatski
+          dodeljuje. Uvoz podržava sva izvorna polja
           matičnog kartona: fotografiju kao URL, status, dobavljača,
           kategoriju/podgrupu, grupu,
           kolekciju, atribute, boje, benefite, formatirani opis, zalihe, COGS,

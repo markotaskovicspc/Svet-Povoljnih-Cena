@@ -31,7 +31,7 @@ export function EmailConfirmation({
       {includeFirstPurchaseOffer ? (
         <>
           <EmailDivider />
-          <EmailHeading>5% popusta za prvu kupovinu je aktivan</EmailHeading>
+          <EmailHeading>15% popusta za prvu kupovinu je aktivan</EmailHeading>
           <EmailParagraph>
             Nije potreban kod. Popust se automatski obračunava na prvu
             porudžbinu dok ste prijavljeni na nalog.

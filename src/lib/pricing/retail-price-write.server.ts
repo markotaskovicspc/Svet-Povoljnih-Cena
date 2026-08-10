@@ -31,7 +31,7 @@ export async function upsertActiveRetailPrice(
   const now = input.now ?? new Date();
   const price = new Prisma.Decimal(input.price);
   if (price.lte(0)) {
-    throw new Error("MP cena iz dobavljačkog izvora mora biti veća od nule.");
+    throw new Error("MP cena mora biti veća od nule.");
   }
   const priceLists = await tx.priceList.findMany({
     where: {
@@ -49,7 +49,7 @@ export async function upsertActiveRetailPrice(
     priceLists.find((candidate) => candidate.code.toUpperCase() === "MP") ??
     priceLists[0];
   if (!priceList) {
-    throw new Error("Nema aktivnog RETAIL cenovnika za dobavljačku MP cenu.");
+    throw new Error("Nema aktivnog RETAIL cenovnika za MP cenu.");
   }
   if (priceList.currency !== "RSD") {
     throw new Error(`RETAIL cenovnik ${priceList.code} nije u RSD.`);

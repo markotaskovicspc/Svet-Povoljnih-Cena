@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { db } from "@/lib/db";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -237,6 +237,9 @@ async function importOpeningInventory(
         }, { timeout: 30_000 });
         revalidatePath("/admin/erp/stanje-po-magacinima");
         revalidatePath("/admin/erp/artikli");
+        updateTag("catalog-products");
+        revalidatePath("/p/[slug]", "page");
+        revalidatePath("/k/[...slug]", "page");
       }
       return {
         ok: true as const,

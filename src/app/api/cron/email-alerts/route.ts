@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEmailConfig } from "@/lib/email";
 import { processEmailAlerts } from "@/lib/email/alerts";
+import { processUrgentAdminAlerts } from "@/lib/email/admin-alerts";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
@@ -19,8 +20,11 @@ async function run(req: Request) {
     Math.max(Number(url.searchParams.get("limit") ?? 100) || 100, 1),
     500,
   );
-  const summary = await processEmailAlerts(limit);
-  return NextResponse.json({ ok: true, summary });
+  const [customer, admin] = await Promise.all([
+    processEmailAlerts(limit),
+    processUrgentAdminAlerts(),
+  ]);
+  return NextResponse.json({ ok: true, summary: { customer, admin } });
 }
 
 export const GET = run;

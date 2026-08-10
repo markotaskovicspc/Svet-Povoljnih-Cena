@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "env": {
+    "NEXT_PUBLIC_MERCHANT_WAREHOUSE_ADDRESS": "Evropska bb, 22300 Stara Pazova",
+    "NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS": "Evropska bb, 22300 Stara Pazova",
+    "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_NAME": "Marko Medić",
+    "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_PHONE": "060 511 5034"
+  },
   "crons": [
     {
       "path": "/api/cron/background-jobs",

@@ -99,8 +99,8 @@ export function IdentityStep({
       id: "register",
       icon: UserPlus,
       title: "Registruj se",
-      desc: "Ostvari 5% popusta na prvu kupovinu i prati status porudžbine.",
-      accent: "Novo: 5% na prvu kupovinu",
+      desc: "Ostvari 15% popusta na prvu kupovinu i prati status porudžbine.",
+      accent: "Novo: 15% na prvu kupovinu",
     },
     {
       id: "guest",
