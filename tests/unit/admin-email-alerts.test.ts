@@ -33,6 +33,7 @@ vi.mock("@/lib/email/tracking", () => ({
 
 import {
   processUrgentAdminAlerts,
+  URGENT_ADMIN_ALERT_RECIPIENTS_SETTING_KEY,
   URGENT_ADMIN_ALERT_SETTING_KEY,
 } from "@/lib/email/admin-alerts";
 
@@ -47,8 +48,15 @@ describe("urgent SUPER admin email alerts", () => {
     mocks.admins.mockResolvedValue([
       { email: "first-admin@example.com" },
       { email: "second-admin@example.com" },
+      { email: "older-super@example.com" },
     ]);
-    mocks.setting.mockResolvedValue(null);
+    mocks.setting.mockImplementation(({ where }: { where: { key: string } }) =>
+      where.key === URGENT_ADMIN_ALERT_RECIPIENTS_SETTING_KEY
+        ? Promise.resolve({
+            value: ["first-admin@example.com", "second-admin@example.com"],
+          })
+        : Promise.resolve(null),
+    );
     mocks.upsertSetting.mockResolvedValue({ key: URGENT_ADMIN_ALERT_SETTING_KEY });
     mocks.trackedDispatch.mockResolvedValue({
       ok: true,

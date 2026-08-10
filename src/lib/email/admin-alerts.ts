@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { trackedDispatch } from "./tracking";
 
 export const URGENT_ADMIN_ALERT_SETTING_KEY = "alerts.urgent.lastFingerprint";
+export const URGENT_ADMIN_ALERT_RECIPIENTS_SETTING_KEY =
+  "alerts.urgent.recipientEmails";
 
 type UrgentIncident = {
   type: "BACKGROUND_JOB" | "EMAIL" | "FISCAL" | "REFUND" | "SHIPMENT";
@@ -19,6 +21,14 @@ function compactDetail(value: string | null | undefined) {
   const normalized = value?.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
   return normalized.slice(0, 300);
+}
+
+function recipientEmails(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((email): email is string => typeof email === "string")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function urgentIncidentFingerprint(incidents: readonly UrgentIncident[]) {
@@ -133,7 +143,7 @@ async function loadUrgentIncidents(): Promise<UrgentIncident[]> {
 }
 
 export async function processUrgentAdminAlerts() {
-  const [incidents, admins, setting] = await Promise.all([
+  const [incidents, allSuperAdmins, setting, recipientSetting] = await Promise.all([
     loadUrgentIncidents(),
     db.adminUser.findMany({
       where: { role: "SUPER", enabled: true },
@@ -144,7 +154,24 @@ export async function processUrgentAdminAlerts() {
       where: { key: URGENT_ADMIN_ALERT_SETTING_KEY },
       select: { value: true },
     }),
+    db.adminSetting.findUnique({
+      where: { key: URGENT_ADMIN_ALERT_RECIPIENTS_SETTING_KEY },
+      select: { value: true },
+    }),
   ]);
+  const allowedRecipients = new Set([
+    ...recipientEmails(recipientSetting?.value),
+    ...[
+      process.env.SUPER_ADMIN_MARKO_EMAIL,
+      process.env.SUPER_ADMIN_JOVANA_EMAIL,
+    ]
+      .filter((email): email is string => typeof email === "string")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ]);
+  const admins = allSuperAdmins.filter(({ email }) =>
+    allowedRecipients.has(email.trim().toLowerCase()),
+  );
   const previousFingerprint =
     typeof setting?.value === "string" ? setting.value : null;
 
