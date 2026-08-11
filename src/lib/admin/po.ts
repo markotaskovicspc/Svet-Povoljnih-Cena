@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { goodsReceiptMasterIssues } from "@/lib/admin/goods-receipt-readiness";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
+import { rebuildInboundInvoiceAllocations } from "@/lib/admin/inbound-invoice.server";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
 import { trackedDispatch } from "@/lib/email";
 import {
@@ -411,6 +412,8 @@ export async function postPurchaseOrder(id: string, actorId: string) {
         actorId,
       },
     });
+    await rebuildInboundInvoiceAllocations(tx, id);
+    await recomputeIncomingStockForPurchaseOrders(tx, [id]);
     return updated;
   });
 }

@@ -32,6 +32,16 @@ export type CogsPreviewLine = {
   incomingUnitCogsRsd: number;
 };
 
+export function assertInboundInvoicePurchaseOrderLocked(input: {
+  lockedAt: Date | null;
+}) {
+  if (!input.lockedAt) {
+    throw new Error(
+      "Povezana porudžbenica mora prvo da bude proknjižena i zaključana.",
+    );
+  }
+}
+
 function assertNonnegativeMoney(value: number, label: string) {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${label} mora biti nenegativan broj.`);

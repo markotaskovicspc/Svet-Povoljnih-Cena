@@ -1357,7 +1357,7 @@ async function getArticleRows(
           isRabalux && product.supplierNextArrivalAt
             ? product.supplierNextArrivalAt.toISOString()
             : null,
-        cogs: asNumber(product.cogs) ?? (lastPurchase ? asNumber(lastPurchase.price) : null),
+        cogs: asNumber(product.cogs),
         incomingTotal: product.incomingStock,
         incomingAvailable: product.incomingStock,
         widthCm: width,

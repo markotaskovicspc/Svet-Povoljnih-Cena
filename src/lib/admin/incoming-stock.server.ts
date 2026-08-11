@@ -18,6 +18,7 @@ export async function recomputeIncomingStockForProducts(
     where: {
       productId: { in: uniqueIds },
       purchaseOrder: {
+        lockedAt: { not: null },
         status: { notIn: ["RECEIVED", "CANCELLED"] },
         inboundInvoices: {
           some: { status: { in: ["RECEIVED", "POSTED"] } },

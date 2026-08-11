@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  assertInboundInvoicePurchaseOrderLocked,
   allocateInvoiceCostsByOrderValue,
   calculateInboundInvoiceAmounts,
   calculateLinkedInvoiceAdjustmentRsd,
@@ -172,14 +173,19 @@ export async function lockInboundInvoice(id: string) {
       },
     });
     if (!invoice) throw new Error("Ulazna faktura ne postoji.");
-    if (invoice.lockedAt) return invoice;
     if (!invoice.invoiceDate) throw new Error("Datum prijema je obavezan.");
     if (!invoice.supplier) throw new Error("Naziv dobavljača je obavezan.");
     if (!invoice.purchaseOrder) {
       throw new Error("Veza sa porudžbenicom je obavezna za COGS obračun.");
     }
+    assertInboundInvoicePurchaseOrderLocked(invoice.purchaseOrder);
     if (!invoice.purchaseOrder.items.length) {
       throw new Error("Povezana porudžbenica nema artikle za COGS obračun.");
+    }
+    if (invoice.lockedAt) {
+      await rebuildInboundInvoiceAllocations(tx, invoice.purchaseOrder.id);
+      await recomputeIncomingStockForPurchaseOrders(tx, [invoice.purchaseOrder.id]);
+      return tx.inboundInvoice.findUniqueOrThrow({ where: { id } });
     }
     validateInboundInvoiceTotals({
       netValue: Number(invoice.netValue),
@@ -231,7 +237,7 @@ export async function cancelInboundInvoice(id: string) {
   });
 }
 
-async function rebuildInboundInvoiceAllocations(
+export async function rebuildInboundInvoiceAllocations(
   tx: Prisma.TransactionClient,
   purchaseOrderId: string,
 ) {

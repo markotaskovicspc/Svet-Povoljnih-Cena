@@ -318,6 +318,8 @@ async function postAction(_state: AdminActionState, formData: FormData) {
       await postPurchaseOrder(id, actorId);
       revalidatePath(`/admin/erp/porudzbenice/${id}`);
       revalidatePath("/admin/erp/porudzbenice");
+      revalidatePath("/admin/erp/ulazne-fakture");
+      revalidatePath("/admin/erp/artikli");
       return { ok: true as const, entityId: id };
     },
   )(formData);

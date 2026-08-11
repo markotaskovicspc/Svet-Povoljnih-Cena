@@ -159,7 +159,7 @@ async function lockAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
-        message: "Faktura je zaključana i troškovi su uključeni u COGS.",
+        message: "Faktura i COGS kalkulacija su zaključane. Konačni COGS biće knjižen pri prijemu robe.",
       };
     },
   )(formData);
@@ -256,6 +256,9 @@ export default async function InboundInvoicePage({
   const cancelled = invoice.status === InboundInvoiceStatus.CANCELLED;
   const immutable = locked || cancelled;
   const editing = query.mode === "edit" && !immutable;
+  const purchaseOrderNeedsPosting = Boolean(
+    invoice.purchaseOrder && !invoice.purchaseOrder.lockedAt,
+  );
   const purchaseOrderOptions: InboundInvoicePurchaseOrderOption[] = purchaseOrders.map(
     (order) => {
       const defaults = calculatePurchaseOrderInvoiceDefaults({
@@ -378,8 +381,8 @@ export default async function InboundInvoicePage({
             <AdminActionForm action={lockAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
-                disabled={immutable}
-                confirm="Zaključati fakturu? Poslovni podaci više neće moći da se menjaju, a trošak će ući u COGS."
+                disabled={immutable || purchaseOrderNeedsPosting}
+                confirm="Zaključati fakturu i COGS kalkulaciju? Konačni COGS biće knjižen na artikal pri prijemu robe."
                 pendingLabel="Zaključavanje…"
               >
                 Zaključaj
@@ -401,6 +404,21 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        {purchaseOrderNeedsPosting && invoice.purchaseOrder ? (
+          <div role="alert" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            Povezana porudžbenica {invoice.purchaseOrder.number} još nije proknjižena. COGS osnova zato nije bezbedno zamrznuta.
+            {" "}
+            <Link
+              href={`/admin/erp/porudzbenice/${invoice.purchaseOrder.id}`}
+              className="font-semibold underline underline-offset-2"
+            >
+              Otvorite i proknjižite porudžbenicu
+            </Link>
+            {locked
+              ? "; postojeće raspodele biće tada ponovo usklađene."
+              : ", pa zatim zaključajte fakturu."}
+          </div>
+        ) : null}
         <Card id="podaci-fakture">
           <CardTitle description="Vrednosti fakture i obavezna veza sa porudžbenicom.">
             Podaci fakture
@@ -411,7 +429,7 @@ export default async function InboundInvoicePage({
             </p>
           ) : locked ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              Faktura je zaključana. Troškovi su raspoređeni po vrednosti artikala povezane porudžbenice.
+              Faktura i COGS kalkulacija su zaključane. Troškovi su raspoređeni po vrednosti artikala, a konačni COGS se knjiži na artikal pri prijemu robe.
             </p>
           ) : !editing ? (
             <p className="mb-4 rounded-lg border border-border/60 bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">

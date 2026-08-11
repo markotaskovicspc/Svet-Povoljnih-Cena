@@ -324,7 +324,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Zaključaj", exact: true }).click();
       await expect(
-        page.getByText(/Faktura je zaključana\. Troškovi su raspoređeni/),
+        page.getByText(/Faktura i COGS kalkulacija su zaključane\. Troškovi su raspoređeni/),
       ).toBeVisible();
       const [locked, item] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),

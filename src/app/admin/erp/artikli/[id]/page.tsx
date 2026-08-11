@@ -1209,6 +1209,7 @@ export default async function ProductDetail({
           purchaseOrderItems: {
             where: {
               purchaseOrder: {
+                lockedAt: { not: null },
                 status: { notIn: ["RECEIVED", "CANCELLED"] },
                 inboundInvoices: {
                   some: { status: { in: ["RECEIVED", "POSTED"] } },
@@ -2016,7 +2017,16 @@ export default async function ProductDetail({
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <Field label="COGS — iz ulaznih dokumenata">
-                  <Input readOnly value={product.cogs ? formatRsd(num(product.cogs)) : "Nije obračunat"} />
+                  <Input
+                    readOnly
+                    value={
+                      product.cogs != null
+                        ? formatRsd(num(product.cogs))
+                        : incomingStock > 0
+                          ? `Nije knjižen · ${incomingStock} kom u dolasku`
+                          : "Nije obračunat"
+                    }
+                  />
                   <Link href="/admin/erp/ulazne-fakture" className="mt-1 inline-block text-xs text-walnut hover:underline">
                     Otvori ulazne fakture
                   </Link>

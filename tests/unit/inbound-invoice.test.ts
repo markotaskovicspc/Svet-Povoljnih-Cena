@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateInvoiceCostsByOrderValue,
+  assertInboundInvoicePurchaseOrderLocked,
   calculateInboundInvoiceAmounts,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
@@ -10,6 +11,15 @@ import {
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
+  it("requires the linked purchase order to be posted before invoice locking", () => {
+    expect(() =>
+      assertInboundInvoicePurchaseOrderLocked({ lockedAt: null }),
+    ).toThrow(/mora prvo da bude proknjižena/);
+    expect(() =>
+      assertInboundInvoicePurchaseOrderLocked({ lockedAt: new Date() }),
+    ).not.toThrow();
+  });
+
   it("prefills RSD invoice, customs and transport values from the purchase order", () => {
     expect(
       calculatePurchaseOrderInvoiceDefaults({
