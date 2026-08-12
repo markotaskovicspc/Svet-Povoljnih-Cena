@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
-import { getMediaVariantUrl } from "@/lib/media";
 import { isProductColorLabel } from "@/lib/product-colors";
 
 const COLOR_HEX: Record<string, string> = {
@@ -34,12 +32,12 @@ const COLOR_HEX: Record<string, string> = {
 
 export type ProductColorOption = {
   label: string;
-  hex: string;
+  colors: string[];
 };
 
 export function getProductColorOptions(product: Product): ProductColorOption[] {
   const seen = new Set<string>();
-  return [product.colorPrimary, product.colorSecondary]
+  const labels = [product.colorPrimary, product.colorSecondary]
     .filter((color): color is string => isProductColorLabel(color))
     .map((label) => label.trim().toLocaleUpperCase("sr-Latn-RS"))
     .filter((label) => {
@@ -47,11 +45,56 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    })
-    .map((label) => ({
-      label,
-      hex: COLOR_HEX[label.toLowerCase()] ?? "#d8d4c8",
-    }));
+    });
+
+  return labels.length
+    ? [{
+        label: labels.join(" / "),
+        colors: labels.map(
+          (label) => COLOR_HEX[label.toLowerCase()] ?? "#d8d4c8",
+        ),
+      }]
+    : [];
+}
+
+function colorSwatchStyle(colors: string[]) {
+  const uniqueColors = Array.from(new Set(colors.filter(Boolean)));
+  if (uniqueColors.length < 2) {
+    return { backgroundColor: uniqueColors[0] ?? "#d8d4c8" };
+  }
+  return {
+    backgroundImage: `linear-gradient(90deg, ${uniqueColors[0]} 0 50%, ${uniqueColors[1]} 50% 100%)`,
+  };
+}
+
+function familyOptionColors(option: {
+  label: string;
+  colorHex?: string;
+  colorPrimary?: string;
+  colorSecondary?: string;
+}) {
+  const productColors = getProductColorOptions({
+    colorPrimary: option.colorPrimary,
+    colorSecondary: option.colorSecondary,
+  } as Product)[0];
+  if (productColors) return productColors.colors;
+  return [
+    option.colorHex ?? COLOR_HEX[option.label.toLowerCase()] ?? "#d8d4c8",
+  ];
+}
+
+function ColorSwatch({ colors, className }: { colors: string[]; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      data-color-count={Math.min(new Set(colors).size, 2)}
+      className={cn(
+        "shrink-0 rounded-full ring-1 ring-black/15",
+        className,
+      )}
+      style={colorSwatchStyle(colors)}
+    />
+  );
 }
 
 export function ProductColorOptions({
@@ -94,34 +137,13 @@ export function ProductColorOptions({
         ) : null}
         {visibleOptions.map((option) => {
           const selected = option.sku === activeSku;
+          const colors = familyOptionColors(option);
           const content = (
             <>
-              <span
-                className={cn(
-                  "relative block overflow-hidden rounded-md bg-white",
-                  showLabels ? "size-14" : "size-9",
-                )}
-              >
-                {option.thumbnail ? (
-                  <Image
-                    src={getMediaVariantUrl(option.thumbnail, "thumb")}
-                    alt=""
-                    fill
-                    sizes={showLabels ? "56px" : "36px"}
-                    className="object-contain p-0.5"
-                  />
-                ) : (
-                  <span
-                    className="absolute inset-1 rounded-sm ring-1 ring-black/10"
-                    style={{
-                      backgroundColor:
-                        option.colorHex ??
-                        COLOR_HEX[option.label.toLowerCase()] ??
-                        "#d8d4c8",
-                    }}
-                  />
-                )}
-              </span>
+              <ColorSwatch
+                colors={colors}
+                className={showLabels ? "size-5" : "size-3.5"}
+              />
               {showLabels ? (
                 <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
                   {option.label}
@@ -130,11 +152,11 @@ export function ProductColorOptions({
             </>
           );
           const classes = cn(
-            "inline-flex shrink-0 items-center rounded-lg bg-white transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
-            showLabels ? "gap-2 p-1.5 pr-2.5" : "p-0.5",
+            "inline-flex shrink-0 items-center transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
+            showLabels ? "gap-2 rounded-full bg-muted-bg py-1 pr-2.5 pl-1" : "rounded-full",
             selected
-              ? "ring-2 ring-brand-blue"
-              : "ring-1 ring-border hover:ring-ink-500",
+              ? "ring-2 ring-brand-blue ring-offset-1"
+              : "ring-1 ring-transparent hover:ring-ink-500 hover:ring-offset-1",
           );
           const ariaLabel = `${option.label} — SKU ${option.sku}`;
           return onSelectSku ? (
@@ -195,12 +217,9 @@ export function ProductColorOptions({
             showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
           )}
         >
-          <span
-            className={cn(
-              "shrink-0 rounded-full ring-1 ring-black/10",
-              showLabels ? "size-3.5" : "size-full",
-            )}
-            style={{ backgroundColor: color.hex }}
+          <ColorSwatch
+            colors={color.colors}
+            className={showLabels ? "size-3.5" : "size-full"}
           />
           {showLabels ? (
             <span className="text-xs font-semibold text-ink-800">

@@ -19,9 +19,13 @@ describe("PDP boje proizvoda", () => {
     expect(markup).not.toContain("Boja:");
     expect(markup).not.toContain("<button");
     expect(getProductColorOptions(product)).toEqual([
-      { label: "CRNA", hex: "#181716" },
-      { label: "NATUR", hex: "#c7a36f" },
+      {
+        label: "CRNA / NATUR",
+        colors: ["#181716", "#c7a36f"],
+      },
     ]);
+    expect(markup).toContain('data-color-count="2"');
+    expect(markup).toContain("linear-gradient(90deg");
   });
 
   it("na PDP-u prikazuje i tekstualne nazive boja bez lažnog izbora", () => {
@@ -38,7 +42,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup).not.toContain("<button");
   });
 
-  it("porodicu prikazuje kao pristupačne foto-linkove ka konkretnom SKU-u", () => {
+  it("porodicu prikazuje kao pristupačne linkove ka konkretnom SKU-u", () => {
     const familyProduct = {
       ...product,
       sku: "SOFA-BLACK",
@@ -87,6 +91,45 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("Crna");
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
+    expect(markup.match(/data-color-count=/g)).toHaveLength(2);
+  });
+
+  it("porodičnu dvobojnu varijantu prikazuje jednim podeljenim kružićem", () => {
+    const familyProduct = {
+      ...product,
+      sku: "MOP-RED-WHITE",
+      variantFamily: {
+        id: "mops",
+        code: "MOP",
+        selectedSku: "MOP-RED-WHITE",
+        options: [
+          {
+            sku: "MOP-RED-WHITE",
+            slug: "mop-red-white",
+            name: "Mop",
+            label: "Crvena / bela",
+            colorPrimary: "crvena",
+            colorSecondary: "bela",
+            position: 0,
+            isPrimary: true,
+            media: { images: [] },
+            fullPrice: 100,
+            stock: 1,
+            incomingStock: 0,
+            deliveryDays: { min: 3, max: 5 },
+          },
+        ],
+      },
+    } as Product;
+
+    const markup = renderToStaticMarkup(
+      <ProductColorOptions product={familyProduct} />,
+    );
+
+    expect(markup.match(/data-color-count=/g)).toHaveLength(1);
+    expect(markup).toContain('data-color-count="2"');
+    expect(markup).toContain("#c83a31 0 50%");
+    expect(markup).toContain("#f8f7f2 50% 100%");
   });
 
   it("dimenzijsku porodicu naziva varijantom, a ne bojom", () => {
