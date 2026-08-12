@@ -1,7 +1,6 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { canAccessOrder } from "@/lib/api/order-access";
 import {
   isAllowedReclamationPhotoUrl,
   verifyReclamationUploads,
@@ -26,7 +25,7 @@ const photoSchema = z.object({
   }),
   width: z.int().positive().optional(),
   height: z.int().positive().optional(),
-  bytes: z.int().positive().max(5 * 1024 * 1024).optional(),
+  bytes: z.int().positive().max(2 * 1024 * 1024).optional(),
 });
 
 export const createReclamationSchema = z.object({
@@ -34,14 +33,8 @@ export const createReclamationSchema = z.object({
   orderNumberOrFiscal: z.string().min(3).max(80),
   sku: z.string().min(1).max(64),
   quantity: z.int().min(1).max(999),
-  customerFirst: z.string().trim().min(2).max(80),
-  customerLast: z.string().trim().min(2).max(80),
-  customerEmail: z.email().optional(),
-  customerPhone: z.string().min(8).max(32).optional(),
   description: z.string().trim().min(5).max(250),
-  notifyVia: z.enum(["EMAIL", "PHONE"]),
   photos: z.array(photoSchema).max(5).default([]),
-  accessToken: z.string().min(16).max(256).optional(),
 });
 
 export type CreateReclamationInput = z.infer<typeof createReclamationSchema>;
@@ -53,7 +46,6 @@ export type CreateReclamationResult =
       reason:
         | "ORDER_NOT_FOUND"
         | "ITEM_NOT_FOUND"
-        | "MISSING_CONTACT"
         | "UNAUTHORIZED"
         | "INVALID_PHOTO"
         | "QUANTITY_EXCEEDED";
@@ -80,23 +72,30 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
 
 export async function createReclamation(
   input: CreateReclamationInput,
-  userId: string | null,
+  userId: string,
 ): Promise<CreateReclamationResult> {
-  if (input.notifyVia === "EMAIL" && !input.customerEmail) {
-    return { ok: false, reason: "MISSING_CONTACT" };
-  }
-  if (input.notifyVia === "PHONE" && !input.customerPhone) {
-    return { ok: false, reason: "MISSING_CONTACT" };
-  }
-
   const order = await lookupOrderForReclamation(input.orderNumberOrFiscal);
   if (!order) return { ok: false, reason: "ORDER_NOT_FOUND" };
+  if (order.userId !== userId) return { ok: false, reason: "UNAUTHORIZED" };
 
   const item = order.items.find((i) => i.sku === input.sku);
   if (!item) return { ok: false, reason: "ITEM_NOT_FOUND" };
-  if (!(await canAccessOrder({ order, token: input.accessToken }))) {
-    return { ok: false, reason: "UNAUTHORIZED" };
-  }
+  const account = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      firstName: true,
+      lastName: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  });
+  const [nameFirst, ...nameLast] = (account?.name ?? "").trim().split(/\s+/);
+  const customerFirst =
+    account?.firstName?.trim() || nameFirst || order.shipFirstName;
+  const customerLast =
+    account?.lastName?.trim() || nameLast.join(" ") || order.shipLastName;
+  const customerPhone = account?.phone?.trim() || order.shipPhone || null;
   try {
     await verifyReclamationUploads(input.photos, {
       orderNumber: order.number,
@@ -139,12 +138,14 @@ export async function createReclamation(
         productId: updated.productId,
         sku: input.sku,
         quantity: input.quantity,
-        customerFirst: input.customerFirst,
-        customerLast: input.customerLast,
-        customerEmail: input.customerEmail ?? null,
-        customerPhone: input.customerPhone ?? null,
+        customerFirst,
+        customerLast,
+        customerEmail: account?.email ?? order.guestEmail ?? null,
+        customerPhone,
         description: input.description,
-        notifyVia: input.notifyVia,
+        // Legacy non-null column retained for historical reporting. Customer
+        // communication now happens in the authenticated portal, not by email.
+        notifyVia: "PHONE",
         userId,
         photos: input.photos.length
           ? {
@@ -173,15 +174,6 @@ export async function createReclamation(
 
   if (!result) return { ok: false, reason: "QUANTITY_EXCEEDED" };
 
-  // Phase 4D: confirm receipt to the customer (only when they opted into
-  // the email channel). BCC to the admin inbox is added by the sender.
-  if (input.notifyVia === "EMAIL" && input.customerEmail) {
-    await enqueueBackgroundJob({
-      kind: "RECLAMATION_RECEIPT",
-      payload: { reclamationId: result.id },
-      idempotencyKey: `reclamation-receipt:${result.id}`,
-    });
-  }
   if (item.supplierExternalSku) {
     await enqueueBackgroundJob({
       kind: "SUPPLIER_RECLAMATION_EMAIL",
@@ -194,17 +186,8 @@ export async function createReclamation(
 }
 
 export async function listReclamationsForUser(userId: string) {
-  // Hide solved reclamations after 10 days, per spec §4.1.
-  const cutoff = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
   return db.reclamation.findMany({
-    where: {
-      userId,
-      OR: [
-        { status: { not: "RESENO" } },
-        { resolvedAt: null },
-        { resolvedAt: { gt: cutoff } },
-      ],
-    },
+    where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
       photos: true,

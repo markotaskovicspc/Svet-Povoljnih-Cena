@@ -350,6 +350,12 @@ async function persistProductCell(
     case "packQty":
       data.packQty = nullableInt(value, "Broj komada u pakovanju mora biti ceo broj.");
       break;
+    case "palletQty":
+      data.palletQty = nullablePositiveInt(
+        value,
+        "Broj komada na paleti mora biti ceo broj veći od nule.",
+      );
+      break;
     case "packWidthCm":
       data.packWidthCm = nullableDecimal(value, "Širina pakovanja mora biti broj.");
       break;

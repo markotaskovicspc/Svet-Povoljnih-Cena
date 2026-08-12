@@ -72,6 +72,7 @@ type ArticleImportRow = {
   unitPackDepthCm: number | null;
   unitPackHeightCm: number | null;
   packQty: number | null;
+  palletQty: number | null;
   packWidthCm: number | null;
   packDepthCm: number | null;
   packHeightCm: number | null;
@@ -192,6 +193,10 @@ const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
   packqty: "packQty",
   kompak: "packQty",
   brojartikalaupakovanju: "packQty",
+  palletqty: "palletQty",
+  kompaleta: "palletQty",
+  brojkomadanapaleti: "palletQty",
+  kolicinapaleta: "palletQty",
   packwidthcm: "packWidthCm",
   paksirinacm: "packWidthCm",
   paksirina: "packWidthCm",
@@ -496,6 +501,7 @@ export async function POST(request: Request) {
       unitPackDepthCm: numberCell(row, headers.get("unitPackDepthCm"), "unitPackDepthCm", errors, { min: 0 }),
       unitPackHeightCm: numberCell(row, headers.get("unitPackHeightCm"), "unitPackHeightCm", errors, { min: 0 }),
       packQty: numberCell(row, headers.get("packQty"), "packQty", errors, { integer: true, min: 0 }),
+      palletQty: numberCell(row, headers.get("palletQty"), "palletQty", errors, { integer: true, min: 1 }),
       packWidthCm: numberCell(row, headers.get("packWidthCm"), "packWidthCm", errors, { min: 0 }),
       packDepthCm: numberCell(row, headers.get("packDepthCm"), "packDepthCm", errors, { min: 0 }),
       packHeightCm: numberCell(row, headers.get("packHeightCm"), "packHeightCm", errors, { min: 0 }),
@@ -590,7 +596,7 @@ export async function POST(request: Request) {
       "subgroup", "collection", "attribute1", "attribute2", "attribute3",
       "attribute4", "widthCm", "depthCm", "heightCm", "weightKg",
       "grossWeightKg", "unitPackWidthCm", "unitPackDepthCm",
-      "unitPackHeightCm", "packQty", "packWidthCm", "packDepthCm",
+      "unitPackHeightCm", "packQty", "palletQty", "packWidthCm", "packDepthCm",
       "packHeightCm", "packGrossWeightKg", "containerQty",
       "containerGrossWeightKg", "materialText", "webCheck",
       "wholesaleCheck", "exportCheck",
@@ -950,6 +956,9 @@ export async function POST(request: Request) {
             ? row.unitPackHeightCm
             : existing?.unitPackHeightCm ?? null,
           packQty: hasColumn("packQty") ? row.packQty : existing?.packQty ?? null,
+          palletQty: hasColumn("palletQty")
+            ? row.palletQty
+            : existing?.palletQty ?? null,
           packWidthCm: hasColumn("packWidthCm")
             ? row.packWidthCm
             : existing?.packWidthCm ?? null,

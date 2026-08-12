@@ -95,7 +95,10 @@ export function buildDispatchNotePdf(note: PrintData) {
   }
   lines.push({ text: "" }, { text: "Stavke:", bold: true });
   note.items.forEach((item, index) => {
-    const base = `${index + 1}. ${item.sku} | ${item.shortName ?? item.name} | količina ${item.qty}`;
+    const pallet = item.palletQty
+      ? ` | komada na paleti ${item.palletQty}`
+      : "";
+    const base = `${index + 1}. ${item.sku} | ${item.shortName ?? item.name} | količina ${item.qty}${pallet}`;
     const priced = includePrices
       ? ` | cena ${money(item.unitPriceGross, note.currency)} | ukupno ${money(item.totalGross, note.currency)}`
       : "";

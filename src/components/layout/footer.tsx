@@ -3,7 +3,7 @@ import Image from "next/image";
 import { footerColumns, paymentMethods, socials } from "@/data/site";
 import { Marquee } from "@/components/motion/marquee";
 import { BRAND } from "@/lib/brand";
-import { getCmsFooterState } from "@/lib/cms/pages";
+import type { CmsFooterState } from "@/lib/cms/pages";
 
 const SOCIAL_ICON_SRC: Record<string, string> = {
   fb: "/icons/facebook.svg",
@@ -32,8 +32,7 @@ const REQUIRED_SERVICE_LINKS = new Set([
   "/komentari",
 ]);
 
-export async function Footer() {
-  const cmsFooter = await getCmsFooterState();
+export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
   const resolvedFooterColumns = cmsFooter
     ? footerColumns.map((column) => {
         const cmsColumn =

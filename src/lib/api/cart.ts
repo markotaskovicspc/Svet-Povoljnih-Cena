@@ -18,6 +18,8 @@ export const cartLineSchema = z.object({
   qty: z.int().min(0).max(99),
   unitPriceFull: z.number().nonnegative(),
   unitPriceSale: z.number().nonnegative(),
+  unitPriceLoyalty: z.number().nonnegative().optional(),
+  loyaltyDiscountPct: z.number().min(0).max(100).optional(),
   thumbnailUrl: z.string().max(2048).optional(),
   variant: z.string().max(120).optional(),
   familyCode: z.string().max(64).optional(),

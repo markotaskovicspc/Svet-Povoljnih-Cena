@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { envValue } from "@/lib/env";
 
 const DEFAULT_RECLAMATION_UPLOAD_BUCKET = "reclamation-uploads";
+const MAX_RECLAMATION_PHOTO_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = {
   "image/jpeg": ["jpg", "jpeg"],
   "image/png": ["png"],
@@ -19,12 +20,11 @@ export const presignSchema = z.object({
   filename: z.string().min(1).max(255),
   /** MIME type, e.g. "image/jpeg". */
   contentType: z.enum(ALLOWED_CONTENT_TYPES),
-  /** Bytes; capped at 5MB per spec §4.1. */
-  bytes: z.int().positive().max(5 * 1024 * 1024),
+  /** Optimized bytes; originals are resized client-side before upload. */
+  bytes: z.int().positive().max(MAX_RECLAMATION_PHOTO_BYTES),
   scope: z.enum(["reclamation"]).default("reclamation"),
   orderNumberOrFiscal: z.string().min(3).max(80),
   sku: z.string().min(1).max(64),
-  accessToken: z.string().min(16).max(256).optional(),
 }).superRefine((input, ctx) => {
   const ext = fileExtension(input.filename);
   if (!ext || !ALLOWED_IMAGE_TYPES[input.contentType].includes(ext as never)) {
@@ -134,7 +134,7 @@ export async function verifyReclamationUploads(
     }
     const { data, error } = await storage.download(key);
     if (error || !data) throw new Error("reclamation_photo_not_found");
-    if (data.size <= 0 || data.size > 5 * 1024 * 1024) {
+    if (data.size <= 0 || data.size > MAX_RECLAMATION_PHOTO_BYTES) {
       throw new Error("invalid_reclamation_photo_size");
     }
     if (photo.bytes && photo.bytes !== data.size) {

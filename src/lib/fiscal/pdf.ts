@@ -85,7 +85,7 @@ export function buildFiscalReceiptPdf(input: FiscalReceiptPdfInput): Buffer {
 
   lines.push({ text: "" });
   lines.push({
-    text: "Hvala na poverenju! Za reklamacije: reklamacije@svetpovoljnihcena.rs",
+    text: "Hvala na poverenju! Portal za reklamacije: svetpovoljnihcena.rs/nalog/reklamacije",
   });
 
   return buildPdf("Fiskalni račun", lines);

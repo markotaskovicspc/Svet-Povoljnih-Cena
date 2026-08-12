@@ -175,7 +175,6 @@ export function ProductColorOptions({
             <Link
               key={option.sku}
               href={`/p/${option.slug}`}
-              prefetch={false}
               aria-label={ariaLabel}
               aria-current={selected ? "page" : undefined}
               title={option.label}

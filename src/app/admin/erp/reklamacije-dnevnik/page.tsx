@@ -17,7 +17,6 @@ import {
   type ReclamationBreakdown,
 } from "@/lib/admin/reclamation-analytics";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { db } from "@/lib/db";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -103,12 +102,8 @@ async function updateStatus(formData: FormData) {
           data: { reclamationId: id, status, note, actorId },
         }),
       ]);
-      await enqueueBackgroundJob({
-        kind: "RECLAMATION_STATUS_EMAIL",
-        payload: { reclamationId: id },
-        idempotencyKey: `reclamation-status-email:${id}:${status}`,
-      });
       revalidatePath("/admin/erp/reklamacije-dnevnik");
+      revalidatePath("/nalog/reklamacije");
       return { ok: true as const, entityId: id, diff: { status, note } };
     },
   )(formData);
@@ -607,14 +602,9 @@ export default async function ReclamationsPage({
                         {" · "}{reclamation.customerFirst}{" "}
                         {reclamation.customerLast}
                       </p>
-                      {reclamation.customerEmail ? (
-                        <a
-                          href={`mailto:${reclamation.customerEmail}?subject=${encodeURIComponent(`Odgovor na reklamaciju ${reclamation.number}`)}&body=${encodeURIComponent(`Datum odgovora: ${(reclamation.respondedAt ?? new Date()).toLocaleDateString("sr-Latn-RS")}\n\n`)}`}
-                          className="mt-1 inline-block text-xs text-walnut hover:underline"
-                        >
-                          Pripremi odgovor kupcu
-                        </a>
-                      ) : null}
+                      <p className="mt-1 text-xs text-ink-500">
+                        Kupac prati status kroz portal „Moj nalog → Reklamacije”.
+                      </p>
                     </div>
                     <span className="rounded-full bg-muted-bg px-2 py-0.5 text-[11px]">
                       {STATUS_LABELS[reclamation.status]}

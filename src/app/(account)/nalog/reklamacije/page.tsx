@@ -8,7 +8,6 @@ import {
   listReclamationsForUser,
 } from "@/lib/api/reclamations";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
-import { db } from "@/lib/db";
 import { ReclamationForm } from "./reclamation-form";
 
 export const metadata: Metadata = {
@@ -33,29 +32,30 @@ const STATUS_TONE: Record<string, string> = {
   ODBIJENO: "bg-destructive/15 text-destructive",
 };
 
+const DECISION_LABELS: Record<string, string> = {
+  CEKA: "Čeka odluku",
+  PRIHVACENA: "Prihvaćena",
+  ODBIJENA: "Odbijena",
+};
+
+const RESOLUTION_LABELS: Record<string, string> = {
+  POVRAT_NOVCA: "Povrat novca",
+  ZAMENA_ARTIKLA: "Zamena artikla",
+  ZAMENA_DELA: "Zamena dela",
+  POPUST: "Popust",
+};
+
 export default async function AccountReclamationsPage() {
   const user = await requireUser("/nalog/reklamacije");
-  const [reclamations, orders, account] = await Promise.all([
+  const [reclamations, orders] = await Promise.all([
     listReclamationsForUser(user.id),
     listOrdersForReclamation(user.id),
-    db.user.findUnique({
-      where: { id: user.id },
-      select: { firstName: true, lastName: true, name: true, email: true, phone: true },
-    }),
   ]);
 
   // Photo bucket is private — swap stored canonical URLs for signed ones.
   const signedPhotoUrls = await signReclamationPhotoUrls(
     reclamations.flatMap((r) => r.photos.map((p) => p.url)),
   );
-
-  const [fallbackFirst, ...fallbackLastParts] = (account?.name ?? "").split(" ");
-  const defaults = {
-    firstName: account?.firstName ?? fallbackFirst ?? "",
-    lastName: account?.lastName ?? fallbackLastParts.join(" "),
-    email: account?.email ?? "",
-    phone: account?.phone ?? "",
-  };
 
   const orderOptions = orders.map((order) => ({
     number: order.number,
@@ -105,7 +105,7 @@ export default async function AccountReclamationsPage() {
         <section className="rounded-lg border border-border/70 bg-surface p-5 lg:order-2">
           <h2 className="font-display text-2xl text-ink-900">Nova reklamacija</h2>
           {orderOptions.length ? (
-            <ReclamationForm orders={orderOptions} defaults={defaults} />
+            <ReclamationForm orders={orderOptions} />
           ) : (
             <div className="mt-5 rounded-lg border border-dashed border-border bg-muted-bg/40 px-5 py-10 text-center">
               <ClipboardList className="mx-auto size-8 text-ink-300" aria-hidden />
@@ -152,6 +152,22 @@ export default async function AccountReclamationsPage() {
                       <p className="mt-1 text-xs text-ink-500">
                         SKU {r.sku} · količina {r.quantity}
                       </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-600">
+                        <span className="rounded-full bg-muted-bg px-2 py-1">
+                          Odluka: {DECISION_LABELS[r.decision] ?? r.decision}
+                        </span>
+                        {r.resolution ? (
+                          <span className="rounded-full bg-muted-bg px-2 py-1">
+                            Rešenje: {RESOLUTION_LABELS[r.resolution] ?? r.resolution}
+                          </span>
+                        ) : null}
+                      </div>
+                      {r.resolutionNote ? (
+                        <div className="mt-3 rounded-md bg-success/10 px-3 py-2 text-sm text-ink-700">
+                          <span className="font-medium text-ink-900">Odgovor službe: </span>
+                          {r.resolutionNote}
+                        </div>
+                      ) : null}
                       {r.photos.length ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {r.photos.map((photo) => (
@@ -172,6 +188,21 @@ export default async function AccountReclamationsPage() {
                             </a>
                           ))}
                         </div>
+                      ) : null}
+                      {r.events.length > 1 ? (
+                        <ol className="mt-3 space-y-1 border-l border-border pl-3 text-xs text-ink-500">
+                          {r.events.map((event) => (
+                            <li key={event.id}>
+                              <span className="font-medium text-ink-700">
+                                {STATUS_LABELS[event.status] ?? event.status}
+                              </span>{" "}
+                              · {event.createdAt.toLocaleString("sr-Latn-RS", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}
+                            </li>
+                          ))}
+                        </ol>
                       ) : null}
                     </div>
                   </div>

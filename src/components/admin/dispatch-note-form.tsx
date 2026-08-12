@@ -54,6 +54,7 @@ function emptyProduct(): DispatchProductData {
   return {
     productId: "",
     sku: "",
+    palletQty: null,
     subgroup: "",
     collection: "",
     shortDescription: "",
@@ -823,6 +824,7 @@ export function DispatchNoteForm({
                 <th className="w-36 px-3 py-3 text-left">Atribut 4</th>
                 <th className="w-32 px-3 py-3 text-left">Boja 1</th>
                 <th className="w-32 px-3 py-3 text-left">Boja 2</th>
+                <th className="w-32 px-3 py-3 text-right">Kom/paleta</th>
                 <th className="w-48 px-3 py-3 text-right">Cena</th>
                 <th className="w-32 px-3 py-3 text-right">Količina</th>
                 <th className="w-44 px-3 py-3 text-left">Porudžbina</th>
@@ -893,6 +895,9 @@ export function DispatchNoteForm({
                       <span className="line-clamp-3">{value || "—"}</span>
                     </td>
                   ))}
+                  <td className="px-3 py-3 text-right text-ink-800">
+                    {line.palletQty ?? "—"}
+                  </td>
                   <td className="px-3 py-3 text-right">
                     <span className="font-medium text-ink-900">
                       {internal

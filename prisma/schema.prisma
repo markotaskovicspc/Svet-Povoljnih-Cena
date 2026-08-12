@@ -368,6 +368,8 @@ model Product {
 
   // Transport package dimensions ŠxDxV (cm)
   packQty             Int?
+  /// Number of sellable units placed on one pallet.
+  palletQty           Int?
   packWidthCm         Decimal?  @db.Decimal(8, 2)
   packDepthCm         Decimal?  @db.Decimal(8, 2)
   packHeightCm        Decimal?  @db.Decimal(8, 2)
@@ -2714,6 +2716,8 @@ model DispatchNoteItem {
   sku               String
   name              String
   qty               Int
+  /// Product pallet quantity snapshotted when the dispatch note is saved.
+  palletQty         Int?
   sourceOrderNumber String?
   subgroup          String?
   collection        String?

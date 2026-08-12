@@ -20,6 +20,22 @@ import { formatProductDisplayName } from "@/lib/product-name";
 export const alertChannelSchema = z.enum(["EMAIL", "SMS", "VIBER"]);
 export type AlertChannel = z.infer<typeof alertChannelSchema>;
 
+export const wishlistSyncPayloadSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        sku: z.string().min(1).max(64),
+        notifyOnSale: z.boolean().optional().default(false),
+        notifyOnRestock: z.boolean().optional().default(false),
+      }),
+    )
+    .max(100),
+});
+
+export type WishlistSyncItem = z.infer<
+  typeof wishlistSyncPayloadSchema
+>["items"][number];
+
 export async function listWishlist(userId: string) {
   const rows = await db.wishlistItem.findMany({
     where: { userId },
@@ -81,6 +97,107 @@ export async function toggleWishlist(userId: string, sku: string): Promise<boole
     data: { userId, productId: product.id },
   });
   return true;
+}
+
+/**
+ * Reconciles a customer's complete wishlist with the durable database copy.
+ * Existing rows keep their original `addedAt`, while removals also tear down
+ * their matching alerts. Alert upserts deliberately preserve `notifiedAt`.
+ */
+export async function replaceWishlist(
+  userId: string,
+  items: WishlistSyncItem[],
+) {
+  const requestedBySku = new Map(items.map((item) => [item.sku, item]));
+  const products = requestedBySku.size
+    ? await db.product.findMany({
+        where: { sku: { in: [...requestedBySku.keys()] }, deletedAt: null },
+        select: { id: true, sku: true },
+      })
+    : [];
+  const desired = products.map((product) => ({
+    productId: product.id,
+    ...requestedBySku.get(product.sku)!,
+  }));
+  const desiredProductIds = desired.map((item) => item.productId);
+
+  await db.$transaction(async (tx) => {
+    const removed = await tx.wishlistItem.findMany({
+      where: {
+        userId,
+        ...(desiredProductIds.length
+          ? { productId: { notIn: desiredProductIds } }
+          : {}),
+      },
+      select: { productId: true },
+    });
+    const removedProductIds = removed.map((item) => item.productId);
+    if (removedProductIds.length) {
+      await tx.backInStockAlert.deleteMany({
+        where: { userId, productId: { in: removedProductIds } },
+      });
+      await tx.onSaleAlert.deleteMany({
+        where: { userId, productId: { in: removedProductIds } },
+      });
+      await tx.wishlistItem.deleteMany({
+        where: { userId, productId: { in: removedProductIds } },
+      });
+    }
+
+    for (const item of desired) {
+      await tx.wishlistItem.upsert({
+        where: {
+          userId_productId: { userId, productId: item.productId },
+        },
+        create: {
+          userId,
+          productId: item.productId,
+          notifyOnSale: item.notifyOnSale,
+          notifyOnRestock: item.notifyOnRestock,
+        },
+        update: {
+          notifyOnSale: item.notifyOnSale,
+          notifyOnRestock: item.notifyOnRestock,
+        },
+      });
+
+      if (item.notifyOnSale) {
+        await tx.onSaleAlert.upsert({
+          where: {
+            userId_productId_channel: {
+              userId,
+              productId: item.productId,
+              channel: "EMAIL",
+            },
+          },
+          create: { userId, productId: item.productId, channel: "EMAIL" },
+          update: {},
+        });
+      } else {
+        await tx.onSaleAlert.deleteMany({
+          where: { userId, productId: item.productId },
+        });
+      }
+
+      if (item.notifyOnRestock) {
+        await tx.backInStockAlert.upsert({
+          where: {
+            userId_productId_channel: {
+              userId,
+              productId: item.productId,
+              channel: "EMAIL",
+            },
+          },
+          create: { userId, productId: item.productId, channel: "EMAIL" },
+          update: {},
+        });
+      } else {
+        await tx.backInStockAlert.deleteMany({
+          where: { userId, productId: item.productId },
+        });
+      }
+    }
+  });
 }
 
 export async function setWishlistAlerts(

@@ -108,6 +108,7 @@ describe("dispatch note", () => {
           name: "Artikal & test",
           sourceOrderNumber: "POR-1",
           qty: 2,
+          palletQty: 24,
           attribute1: "A&B",
         },
       ],
@@ -122,6 +123,8 @@ describe("dispatch note", () => {
     expect(ubl).toContain("<cac:CarrierParty>");
     expect(ubl).toContain("<cbc:LicensePlateID>BG-123-AA</cbc:LicensePlateID>");
     expect(ubl).toContain("<cbc:LineID>N/A</cbc:LineID>");
+    expect(ubl).toContain("<cbc:Name>Komada na paleti</cbc:Name>");
+    expect(ubl).toContain("<cbc:Value>24</cbc:Value>");
     expect(ubl).not.toContain("<cac:Price>");
   });
 

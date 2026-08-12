@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth/session";
+import { getCurrentUser, requireUser } from "@/lib/auth/session";
 import {
   alertChannelSchema,
   listWishlist,
+  replaceWishlist,
   setWishlistAlerts,
   toggleWishlist,
+  wishlistSyncPayloadSchema,
 } from "@/lib/api/wishlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "customer") {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   return NextResponse.json({ items: await listWishlist(user.id) });
 }
 
@@ -29,6 +34,23 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+}
+
+export async function PUT(req: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "customer") {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const body = await req.json().catch(() => null);
+  const parsed = wishlistSyncPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "invalid", issues: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+  await replaceWishlist(user.id, parsed.data.items);
+  return NextResponse.json({ items: await listWishlist(user.id) });
 }
 
 const patchBody = z.object({

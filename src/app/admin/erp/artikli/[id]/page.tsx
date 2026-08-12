@@ -145,6 +145,7 @@ const overrideSchema = z.object({
   unitPackDepthCm: optionalNonnegativeNumber(),
   unitPackHeightCm: optionalNonnegativeNumber(),
   packQty: optionalNonnegativeInteger(),
+  palletQty: optionalPositiveInteger(),
   packWidthCm: optionalNonnegativeNumber(),
   packDepthCm: optionalNonnegativeNumber(),
   packHeightCm: optionalNonnegativeNumber(),
@@ -474,6 +475,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           unitPackDepthCm: d.unitPackDepthCm ?? null,
           unitPackHeightCm: d.unitPackHeightCm ?? null,
           packQty: d.packQty ?? null,
+          palletQty: d.palletQty ?? null,
           packWidthCm: d.packWidthCm ?? null,
           packDepthCm: d.packDepthCm ?? null,
           packHeightCm: d.packHeightCm ?? null,
@@ -1975,6 +1977,9 @@ export default async function ProductDetail({
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
                 <Field label="Kom/pak">
                   <Input name="packQty" type="number" min={0} defaultValue={product.packQty ?? ""} />
+                </Field>
+                <Field label="Komada na paleti">
+                  <Input name="palletQty" type="number" min={1} step={1} defaultValue={product.palletQty ?? ""} />
                 </Field>
                 <Field label="Širina (cm)">
                   <Input name="packWidthCm" type="number" min={0} step="0.01" defaultValue={product.packWidthCm ? num(product.packWidthCm) : ""} />

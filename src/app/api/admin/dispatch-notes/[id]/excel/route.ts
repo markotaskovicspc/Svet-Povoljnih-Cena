@@ -95,6 +95,7 @@ export async function GET(
     { header: "Atribut 4", key: "attribute4", width: 18 },
     { header: "Boja 1", key: "color1", width: 16 },
     { header: "Boja 2", key: "color2", width: 16 },
+    { header: "Komada na paleti", key: "palletQty", width: 18 },
   ];
   if (includePrices) {
     columns.push(
@@ -122,6 +123,7 @@ export async function GET(
       attribute4: item.attribute4 ?? "",
       color1: item.color1 ?? "",
       color2: item.color2 ?? "",
+      palletQty: item.palletQty ?? "",
       ...(includePrices
         ? {
             unitPriceGross: Number(item.unitPriceGross),

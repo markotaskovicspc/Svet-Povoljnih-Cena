@@ -68,7 +68,12 @@ export function Header({
         <div className="flex items-center gap-1">
           <Link
             href="/nalog"
-          className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold whitespace-nowrap text-brand-blue/80 transition hover:bg-brand-blue/10 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold whitespace-nowrap transition focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none",
+              isCustomerLoggedIn
+                ? "bg-action text-white shadow-soft-1 hover:bg-action/90 hover:text-white"
+                : "text-brand-blue/80 hover:bg-brand-blue/10 hover:text-brand-blue",
+            )}
           >
             <User2 className="size-4" aria-hidden />{" "}
             {isCustomerLoggedIn ? "Moj nalog" : "Prijava"}

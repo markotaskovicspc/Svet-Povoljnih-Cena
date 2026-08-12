@@ -9,6 +9,7 @@ import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytic
 import { getGa4MeasurementId } from "@/lib/analytics/config";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
+import { getCmsFooterState } from "@/lib/cms/pages";
 import { primaryNav, type NavNode } from "@/data/site";
 
 const gaId = getGa4MeasurementId();
@@ -38,10 +39,11 @@ function categoryNav(
  * Login and loyalty state are hydrated by the client session provider.
  */
 export async function StorefrontShell({ children }: { children: ReactNode }) {
-  const [activePromoBar, activeTabs, categoryTree] = await Promise.all([
+  const [activePromoBar, activeTabs, categoryTree, cmsFooter] = await Promise.all([
     getActivePromoBar(),
     getActiveTabs(),
     getCategoryTree(),
+    getCmsFooterState(),
   ]);
   const categories = categoryTree.length
     ? categoryNav(categoryTree)
@@ -60,7 +62,7 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
       <main className="flex-1">{children}</main>
       <FirstPurchaseCta />
       <NewsletterBand />
-      <Footer />
+      <Footer cmsFooter={cmsFooter} />
       <CookieConsent gaId={gaId} />
       <FirstPartyAnalytics />
     </>

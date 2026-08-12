@@ -6,7 +6,6 @@
  */
 import Link from "next/link";
 import Image from "next/image";
-import { useRef } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react";
 import type { Banner, MediaAsset, Product } from "@/types";
 import { ProductCard } from "@/components/product/product-card";
-import { DragHint } from "@/components/motion/drag-hint";
 import { cn } from "@/lib/utils";
 import {
   campaignStickers,
@@ -78,7 +76,6 @@ export function SectionRail({
   compactMobileHeader,
   emptyMessage,
 }: SectionRailProps) {
-  const railRef = useRef<HTMLDivElement | null>(null);
   const isEmpty = products.length === 0;
   if (isEmpty && !emptyMessage) return null;
 
@@ -201,13 +198,11 @@ export function SectionRail({
         </div>
       ) : (
         <div
-          ref={railRef}
           className={cn(
             "relative -mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:-mx-6 md:px-6 [&::-webkit-scrollbar]:hidden",
             dense ? "mt-2 md:mt-3" : "mt-3 md:mt-5",
           )}
         >
-          <DragHint scopeRef={railRef} />
           <motion.ul
             initial="hidden"
             whileInView="show"

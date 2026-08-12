@@ -220,6 +220,7 @@ export type DispatchNoteUblInput = {
     description?: string | null;
     sourceOrderNumber?: string | null;
     qty: number;
+    palletQty?: number | null;
     attribute1?: string | null;
     attribute2?: string | null;
     attribute3?: string | null;
@@ -340,6 +341,7 @@ export function buildDispatchNoteUbl(input: DispatchNoteUblInput) {
       ["Atribut 4", item.attribute4],
       ["Boja 1", item.color1],
       ["Boja 2", item.color2],
+      ["Komada na paleti", item.palletQty ? String(item.palletQty) : null],
     ]
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
       .map(

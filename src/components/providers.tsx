@@ -11,6 +11,7 @@ import { WishlistDrawer } from "@/components/cart/wishlist-drawer";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { PricingEligibilityProvider } from "@/components/pricing/pricing-eligibility";
 import { CartPricingSync } from "@/components/cart/cart-pricing-sync";
+import { CustomerCommerceSync } from "@/components/cart/customer-commerce-sync";
 
 export function Providers({
   children,
@@ -24,6 +25,7 @@ export function Providers({
       <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
         <MotionConfig reducedMotion="user">
           <CartPricingSync />
+          <CustomerCommerceSync />
           <TooltipProvider delay={150}>
             {children}
             <CartDrawer />

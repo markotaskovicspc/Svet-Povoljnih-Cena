@@ -23,6 +23,13 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "customer") {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized" },
+      { status: 401 },
+    );
+  }
   const body = await req.json().catch(() => null);
   const parsed = createReclamationSchema.safeParse(body);
   if (!parsed.success) {
@@ -40,9 +47,7 @@ export async function POST(req: Request) {
   if (!limited.ok) {
     return rateLimitJson(limited);
   }
-  const user = await getCurrentUser();
-  const userId = user?.userType === "customer" ? user.id : null;
-  const result = await createReclamation(parsed.data, userId);
+  const result = await createReclamation(parsed.data, user.id);
   if (!result.ok) {
     return NextResponse.json(result, {
       status:

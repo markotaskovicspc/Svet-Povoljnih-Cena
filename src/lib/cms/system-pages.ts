@@ -114,8 +114,8 @@ Pišite nam preko [kontakt strane](/kontakt), ili otvorite zahtev u [Servisu za 
 
 ## Kako podneti reklamaciju {#kako}
 
-1. Prijavite reklamaciju kroz formular u nalogu (*Moj nalog → Reklamacije*) ili e-poštom na [reklamacije@svetpovoljnihcena.rs](mailto:reklamacije@svetpovoljnihcena.rs).
-2. Dobićete potvrdu prijema u roku od 24h, sa brojem reklamacije.
+1. Prijavite se i otvorite portal [Moj nalog → Reklamacije](/nalog/reklamacije). Izaberite porudžbinu i artikal, dodajte komentar i fotografije.
+2. Broj reklamacije i svaku promenu statusa pratite u istom portalu.
 3. Tehnička služba donosi odluku u roku od **8 dana** (zakonski rok 15 dana).
 4. U dogovoru sa vama biramo: zamenu artikla, popravku, sniženje cene ili povraćaj sredstava.
 

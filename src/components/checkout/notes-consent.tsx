@@ -138,8 +138,8 @@ function TermsDialog({
               zaštiti potrošača).
             </li>
             <li>
-              Reklamacije se prijavljuju putem stranice „Servis za kupce” ili na
-              e-poštu reklamacije@svetpovoljnihcena.rs.
+              Reklamacije prijavljujete i pratite kroz portal „Moj nalog →
+              Reklamacije”, uz komentar i fotografije.
             </li>
             <li>
               Rok isporuke računa se od trenutka potvrde uplate (kartica) ili

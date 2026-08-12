@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { presignSchema, presignUpload } from "@/lib/api/uploads";
-import { canAccessOrder, readOrderAccessToken } from "@/lib/api/order-access";
 import { lookupOrderForReclamation } from "@/lib/api/reclamations";
+import { getCurrentUser } from "@/lib/auth/session";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -12,6 +12,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const user = await getCurrentUser();
+  if (!user || user.userType !== "customer") {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const body = await req.json().catch(() => null);
   const parsed = presignSchema.safeParse(body);
   if (!parsed.success) {
@@ -35,12 +39,7 @@ export async function POST(req: Request) {
     if (!item) {
       return NextResponse.json({ error: "unknown_item" }, { status: 422 });
     }
-    if (
-      !(await canAccessOrder({
-        order,
-        token: parsed.data.accessToken ?? readOrderAccessToken(req),
-      }))
-    ) {
+    if (order.userId !== user.id) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     return NextResponse.json(

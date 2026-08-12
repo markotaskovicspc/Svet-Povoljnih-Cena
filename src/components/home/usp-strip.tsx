@@ -40,7 +40,7 @@ const items: UspItem[] = [
     id: "support",
     icon: Headphones,
     title: "Podrška kupcima",
-    body: "Pitanja o proizvodima, porudžbinama i reklamacijama primamo e-poštom.",
+    body: "Pitanja primamo kroz podršku, a reklamacije se prijavljuju i prate u korisničkom portalu.",
   },
 ];
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, ImagePlus, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,56 +19,36 @@ type OrderOption = {
   }[];
 };
 
-type Defaults = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-};
-
 type PendingPhoto = {
   id: string;
   file: File;
   previewUrl: string;
   status: "pending" | "uploading" | "done" | "error";
   publicUrl?: string;
+  width: number;
+  height: number;
   error?: string;
 };
 
 const MAX_PHOTOS = 5;
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_SOURCE_PHOTO_BYTES = 15 * 1024 * 1024;
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+const MAX_PHOTO_DIMENSION = 1600;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const FIELD_ERROR_MESSAGES: Record<string, string> = {
   orderNumberOrFiscal: "Izaberite porudžbinu.",
   sku: "Izaberite artikal iz porudžbine.",
   quantity: "Količina mora biti u okviru preostale kupljene količine.",
-  customerFirst: "Unesite ime (najmanje 2 slova).",
-  customerLast: "Unesite prezime (najmanje 2 slova).",
-  customerEmail: "Unesite ispravnu e-adresu.",
-  customerPhone: "Unesite ispravan broj telefona (najmanje 8 cifara).",
   description: "Opis mora imati bar 5, a najviše 250 karaktera.",
-  notifyVia: "Izaberite način obaveštavanja.",
   photos: "Proverite priložene fotografije.",
 };
 
-export function ReclamationForm({
-  orders,
-  defaults,
-}: {
-  orders: OrderOption[];
-  defaults: Defaults;
-}) {
+export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
+  const router = useRouter();
   const [orderNumber, setOrderNumber] = useState(orders[0]?.number ?? "");
   const [sku, setSku] = useState(orders[0]?.items[0]?.sku ?? "");
   const [quantity, setQuantity] = useState(1);
-  const [firstName, setFirstName] = useState(defaults.firstName);
-  const [lastName, setLastName] = useState(defaults.lastName);
-  const [email, setEmail] = useState(defaults.email);
-  const [phone, setPhone] = useState(defaults.phone);
-  const [notifyVia, setNotifyVia] = useState<"EMAIL" | "PHONE">(
-    defaults.email ? "EMAIL" : "PHONE",
-  );
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -85,9 +66,16 @@ export function ReclamationForm({
   function resetForm() {
     setDescription("");
     setQuantity(1);
-    setPhotos([]);
+    clearPhotos();
     setFieldErrors({});
     setFormError(null);
+  }
+
+  function clearPhotos() {
+    setPhotos((current) => {
+      current.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+      return [];
+    });
   }
 
   async function handleFiles(fileList: FileList | null) {
@@ -106,16 +94,25 @@ export function ReclamationForm({
         setFormError("Dozvoljeni formati fotografija su JPG, PNG i WEBP.");
         continue;
       }
-      if (file.size > MAX_PHOTO_BYTES) {
-        setFormError("Svaka fotografija mora biti manja od 5 MB.");
+      if (file.size > MAX_SOURCE_PHOTO_BYTES) {
+        setFormError("Izvorna fotografija može imati najviše 15 MB.");
         continue;
       }
-      accepted.push({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-        status: "pending",
-      });
+      try {
+        const optimized = await optimizePhoto(file);
+        accepted.push({
+          id: `${optimized.file.name}-${optimized.file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file: optimized.file,
+          previewUrl: URL.createObjectURL(optimized.file),
+          width: optimized.width,
+          height: optimized.height,
+          status: "pending",
+        });
+      } catch {
+        setFormError(
+          "Fotografiju nije moguće obraditi. Probajte drugu JPG, PNG ili WEBP sliku.",
+        );
+      }
     }
     if (!accepted.length) return;
 
@@ -161,7 +158,11 @@ export function ReclamationForm({
       setPhotos((prev) =>
         prev.map((p) =>
           p.id === photo.id
-            ? { ...p, status: "done", publicUrl: presignData.publicUrl as string }
+            ? {
+                ...p,
+                status: "done",
+                publicUrl: presignData.publicUrl as string,
+              }
             : p,
         ),
       );
@@ -220,15 +221,16 @@ export function ReclamationForm({
         body: JSON.stringify({
           orderNumberOrFiscal: selectedOrder.number,
           sku,
-          customerFirst: firstName,
-          customerLast: lastName,
-          customerEmail: email || undefined,
-          customerPhone: phone || undefined,
+          quantity,
           description,
-          notifyVia,
           photos: photos
             .filter((p) => p.status === "done" && p.publicUrl)
-            .map((p) => ({ url: p.publicUrl })),
+            .map((p) => ({
+              url: p.publicUrl,
+              width: p.width,
+              height: p.height,
+              bytes: p.file.size,
+            })),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -242,10 +244,6 @@ export function ReclamationForm({
           }
           setFieldErrors(mapped);
           setFormError("Proverite označena polja.");
-        } else if (data?.reason === "MISSING_CONTACT") {
-          setFormError(
-            "Unesite kontakt (e-poštu ili telefon) koji odgovara izabranom načinu obaveštavanja.",
-          );
         } else if (data?.reason === "ORDER_NOT_FOUND") {
           setFormError("Porudžbina nije pronađena.");
         } else if (data?.reason === "ITEM_NOT_FOUND") {
@@ -265,6 +263,7 @@ export function ReclamationForm({
       }
       setSuccess(data.number as string);
       resetForm();
+      router.refresh();
     } catch {
       setFormError("Slanje reklamacije nije uspelo. Proverite internet konekciju.");
     } finally {
@@ -283,7 +282,7 @@ export function ReclamationForm({
           Broj reklamacije: <span className="font-mono">{success}</span>
         </p>
         <p className="mt-2 text-sm text-ink-600">
-          Potvrdu i status pratite ovde ili preko izabranog kontakta.
+          Potvrdu, tok obrade i konačan status pratite na ovoj stranici.
         </p>
         <Button
           type="button"
@@ -305,6 +304,7 @@ export function ReclamationForm({
           id="orderNumber"
           value={orderNumber}
           onChange={(e) => {
+            clearPhotos();
             setOrderNumber(e.target.value);
             const next = orders.find((o) => o.number === e.target.value);
             setSku(next?.items[0]?.sku ?? "");
@@ -327,6 +327,7 @@ export function ReclamationForm({
           id="sku"
           value={sku}
           onChange={(e) => {
+            clearPhotos();
             setSku(e.target.value);
             setQuantity(1);
           }}
@@ -363,97 +364,8 @@ export function ReclamationForm({
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="customerFirst">Ime</Label>
-          <Input
-            id="customerFirst"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-            minLength={2}
-            className="h-11 bg-white"
-          />
-          {fieldErrors.customerFirst ? (
-            <p className="text-xs text-destructive">{fieldErrors.customerFirst}</p>
-          ) : null}
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="customerLast">Prezime</Label>
-          <Input
-            id="customerLast"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-            minLength={2}
-            className="h-11 bg-white"
-          />
-          {fieldErrors.customerLast ? (
-            <p className="text-xs text-destructive">{fieldErrors.customerLast}</p>
-          ) : null}
-        </div>
-      </div>
-
       <div className="grid gap-2">
-        <Label>Način obaveštavanja o statusu</Label>
-        <div className="flex gap-4 text-sm text-ink-700">
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="notifyVia"
-              value="EMAIL"
-              checked={notifyVia === "EMAIL"}
-              onChange={() => setNotifyVia("EMAIL")}
-              className="size-4 accent-walnut"
-            />
-            E-poštom
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="notifyVia"
-              value="PHONE"
-              checked={notifyVia === "PHONE"}
-              onChange={() => setNotifyVia("PHONE")}
-              className="size-4 accent-walnut"
-            />
-            Telefonom
-          </label>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="customerEmail">
-            E-pošta {notifyVia === "EMAIL" ? "*" : ""}
-          </Label>
-          <Input
-            id="customerEmail"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required={notifyVia === "EMAIL"}
-            className="h-11 bg-white"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="customerPhone">
-            Telefon {notifyVia === "PHONE" ? "*" : ""}
-          </Label>
-          <Input
-            id="customerPhone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            required={notifyVia === "PHONE"}
-            minLength={8}
-            className="h-11 bg-white"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="description">Opis problema</Label>
+        <Label htmlFor="description">Komentar / opis problema</Label>
         <Textarea
           id="description"
           value={description}
@@ -472,7 +384,9 @@ export function ReclamationForm({
       </div>
 
       <div className="grid gap-2">
-        <Label>Fotografije (do {MAX_PHOTOS}, JPG/PNG/WEBP, do 5 MB)</Label>
+        <Label>
+          Fotografije (do {MAX_PHOTOS}, automatski optimizovane na 1600 px i do 2 MB)
+        </Label>
         <div className="flex flex-wrap gap-3">
           {photos.map((photo) => (
             <div
@@ -547,4 +461,82 @@ export function ReclamationForm({
       </Button>
     </form>
   );
+}
+
+async function optimizePhoto(file: File) {
+  const decoded = await decodePhoto(file);
+  try {
+    let scale = Math.min(
+      1,
+      MAX_PHOTO_DIMENSION / Math.max(decoded.width, decoded.height),
+    );
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const width = Math.max(1, Math.round(decoded.width * scale));
+      const height = Math.max(1, Math.round(decoded.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("canvas_unavailable");
+      context.drawImage(decoded.source, 0, 0, width, height);
+      const quality = Math.max(0.62, 0.84 - attempt * 0.05);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/webp", quality),
+      );
+      if (blob && blob.size <= MAX_PHOTO_BYTES) {
+        const baseName = file.name.replace(/\.[^.]+$/, "") || "fotografija";
+        return {
+          file: new File([blob], `${baseName}.webp`, { type: "image/webp" }),
+          width,
+          height,
+        };
+      }
+      scale *= 0.82;
+    }
+    throw new Error("optimized_photo_too_large");
+  } finally {
+    decoded.dispose();
+  }
+}
+
+async function decodePhoto(file: File): Promise<{
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  dispose: () => void;
+}> {
+  if ("createImageBitmap" in window) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        dispose: () => bitmap.close(),
+      };
+    } catch {
+      // Older WebKit versions can expose createImageBitmap but reject valid
+      // mobile camera images; fall through to the HTMLImageElement decoder.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("photo_decode_failed"));
+      element.src = objectUrl;
+    });
+    return {
+      source: image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      dispose: () => URL.revokeObjectURL(objectUrl),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
 }

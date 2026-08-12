@@ -90,6 +90,7 @@ export type DispatchNoteFormOptions = {
 export type DispatchProductData = {
   productId: string;
   sku: string;
+  palletQty: number | null;
   subgroup: string;
   collection: string;
   shortDescription: string;
@@ -238,6 +239,7 @@ function companySnapshot(
 function productMetadata(product: LoadedProduct) {
   const leaf = product.categories[0]?.category ?? null;
   return {
+    palletQty: product.palletQty,
     subgroup: leaf?.parent ? leaf.name : "",
     collection: product.collection?.name ?? "",
     shortDescription: product.shortDescription ?? "",
@@ -543,6 +545,7 @@ async function prepareLines(
         sourceOrderNumber: item.order.number,
         productId: item.product.id,
         sku: item.sku,
+        palletQty: metadata.palletQty,
         subgroup: item.subgroupName ?? metadata.subgroup,
         collection: item.collectionName ?? metadata.collection,
         shortDescription:
@@ -677,6 +680,7 @@ function itemCreateData(line: PreparedLine) {
     sku: line.sku,
     name: line.shortName,
     qty: line.qty,
+    palletQty: line.palletQty,
     sourceOrderNumber: line.sourceOrderNumber || null,
     subgroup: line.subgroup || null,
     collection: line.collection || null,
@@ -1429,6 +1433,7 @@ export async function sendDispatchNoteToSef(id: string) {
       description: item.shortDescription,
       sourceOrderNumber: item.sourceOrderNumber,
       qty: item.qty,
+      palletQty: item.palletQty,
       attribute1: item.attribute1,
       attribute2: item.attribute2,
       attribute3: item.attribute3,
@@ -1554,6 +1559,7 @@ export async function getDispatchOrderLines(input: {
           sourceOrderNumber: item.order.number,
           productId: item.product.id,
           sku: item.sku,
+          palletQty: metadata.palletQty,
           subgroup: item.subgroupName ?? metadata.subgroup,
           collection: item.collectionName ?? metadata.collection,
           shortDescription:
@@ -1627,6 +1633,7 @@ export async function getDispatchNoteDetail(
     const metadata = product
       ? productMetadata(product)
       : {
+          palletQty: item.palletQty,
           subgroup: "",
           collection: "",
           shortDescription: "",
@@ -1649,6 +1656,7 @@ export async function getDispatchNoteDetail(
       sourceOrderNumber: item.sourceOrderNumber ?? "",
       productId: item.productId ?? "",
       sku: item.sku,
+      palletQty: item.palletQty ?? metadata.palletQty,
       subgroup: item.subgroup ?? metadata.subgroup,
       collection: item.collection ?? metadata.collection,
       shortDescription: item.shortDescription ?? metadata.shortDescription,

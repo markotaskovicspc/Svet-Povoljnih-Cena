@@ -120,7 +120,7 @@ export function wishlistSnapshotFromProduct(product: Product): WishlistProductSn
   };
 }
 
-function normalizeWishlistItems(items: unknown): WishlistEntry[] {
+export function normalizeWishlistItems(items: unknown): WishlistEntry[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((item): WishlistEntry | null => {
