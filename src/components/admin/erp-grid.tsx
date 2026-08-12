@@ -89,6 +89,14 @@ function textValue(value: ErpValue) {
   return String(value);
 }
 
+function fieldValueLabel(
+  value: string,
+  labels: Record<string, string> | undefined,
+) {
+  if (!labels) return null;
+  return labels[value.trim().toLocaleLowerCase("sr-Latn-RS")] ?? null;
+}
+
 function formatValue(value: ErpValue, column: ErpColumn) {
   if (value === null || value === undefined || value === "") return "—";
   if (column.type === "boolean") return value ? "Da" : "Ne";
@@ -1209,16 +1217,21 @@ export function ErpGrid({
           <form className="grid gap-4" onSubmit={submitCommandForm}>
             {activeCommand?.fields?.map((field) => {
               const id = `erp-command-${field.key}`;
+              const value = commandInput[field.key] ?? "";
+              const valueLabel = fieldValueLabel(value, field.valueLabels);
               return (
-                <label key={field.key} htmlFor={id} className="grid gap-1.5">
-                  <span className="text-sm font-medium text-ink-800">
+                <div key={field.key} className="grid gap-1.5">
+                  <label
+                    htmlFor={id}
+                    className="text-sm font-medium text-ink-800"
+                  >
                     {field.label}
                     {field.required ? " *" : ""}
-                  </span>
+                  </label>
                   {field.options ? (
                     <select
                       id={id}
-                      value={commandInput[field.key] ?? ""}
+                      value={value}
                       required={field.required}
                       disabled={Boolean(runningCommand)}
                       onChange={(event) => {
@@ -1241,7 +1254,7 @@ export function ErpGrid({
                     <Input
                       id={id}
                       type={field.type}
-                      value={commandInput[field.key] ?? ""}
+                      value={value}
                       required={field.required}
                       min={field.min}
                       step={field.step}
@@ -1255,7 +1268,22 @@ export function ErpGrid({
                       }}
                     />
                   )}
-                </label>
+                  {field.valueLabels ? (
+                    <p
+                      aria-live="polite"
+                      className={cn(
+                        "text-sm",
+                        value && !valueLabel ? "text-danger" : "text-ink-500",
+                      )}
+                    >
+                      {value
+                        ? valueLabel
+                          ? `${field.valueLabel ?? "Naziv"}: ${valueLabel}`
+                          : field.valueNotFoundText ?? "Vrednost nije pronađena."
+                        : "Unesite šifru da proverite naziv artikla."}
+                    </p>
+                  ) : null}
+                </div>
               );
             })}
             {commandFormError ? (

@@ -51,6 +51,11 @@ describe("ERP purchase-price module", () => {
       ["validFrom", true],
       ["validTo", false],
     ]);
+    expect(
+      purchasePriceModule?.commands
+        .find((command) => command.action === "purchase-price.create")
+        ?.fields?.find((field) => field.key === "sku")?.options,
+    ).toBeUndefined();
   });
 
   it("composes attributes from article master data with a size fallback", () => {
