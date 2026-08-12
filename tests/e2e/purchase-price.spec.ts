@@ -219,10 +219,12 @@ test.describe("ERP module 3 purchase-price acceptance", () => {
       await page.getByRole("button", { name: "Unos nove", exact: true }).click();
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByLabel("Šifra artikla *")).toContainText(
-        fixture.skuA,
-      );
-      await dialog.getByLabel("Šifra artikla *").selectOption(fixture.skuA);
+      const skuInput = dialog.getByLabel("Šifra artikla *");
+      await expect(skuInput).toHaveAttribute("type", "text");
+      await skuInput.fill(fixture.skuA);
+      await expect(
+        dialog.getByText(`Naziv artikla: ${fixture.productA}`),
+      ).toBeVisible();
       await dialog.getByLabel("Nabavna cena *").fill("123.45");
       await dialog.getByLabel("Važenje cene od *").fill("2030-01-01");
       await dialog.getByLabel("Važenje cene do").fill("2030-12-31");

@@ -113,6 +113,10 @@ export type ErpCommand = {
     type: "text" | "number" | "date" | "email" | "tel";
     required?: boolean;
     options?: string[];
+    /** Optional value-to-label lookup shown below a freely editable field. */
+    valueLabels?: Record<string, string>;
+    valueLabel?: string;
+    valueNotFoundText?: string;
     min?: number;
     step?: number;
   }>;
@@ -562,7 +566,6 @@ const coreErpModules: ErpModule[] = [
             label: "Šifra artikla",
             type: "text",
             required: true,
-            options: [],
           },
           {
             key: "purchasePrice",
@@ -952,8 +955,20 @@ export async function getErpModule(
       ...field,
       options:
         purchasePriceContext && field.key === "sku"
-          ? purchasePriceContext.skus
+          ? undefined
           : field.options,
+      valueLabels:
+        purchasePriceContext && field.key === "sku"
+          ? purchasePriceContext.namesBySku
+          : field.valueLabels,
+      valueLabel:
+        purchasePriceContext && field.key === "sku"
+          ? "Naziv artikla"
+          : field.valueLabel,
+      valueNotFoundText:
+        purchasePriceContext && field.key === "sku"
+          ? "Artikal sa tom šifrom nije pronađen."
+          : field.valueNotFoundText,
     })),
   }));
   return {
@@ -1058,9 +1073,17 @@ async function getPurchasePriceModuleContext() {
   const products = await db.product.findMany({
     where: { deletedAt: null },
     orderBy: { sku: "asc" },
-    select: { sku: true },
+    select: { sku: true, name: true },
   });
-  return { skus: products.map((product) => product.sku) };
+  return {
+    skus: products.map((product) => product.sku),
+    namesBySku: Object.fromEntries(
+      products.map((product) => [
+        product.sku.toLocaleLowerCase("sr-Latn-RS"),
+        product.name,
+      ]),
+    ),
+  };
 }
 
 async function getArticleRows(
