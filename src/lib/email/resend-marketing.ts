@@ -84,7 +84,7 @@ export async function syncResendContact(input: SyncContactInput) {
       await resendRequest(
         "PATCH",
         `/contacts/${encodeURIComponent(email)}/topics`,
-        { topics },
+        topics,
         cfg.apiKey,
       );
     }
@@ -191,7 +191,7 @@ export async function syncResendMarketingContacts(limit = 500) {
 async function resendRequest(
   method: "POST" | "PATCH",
   path: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | ReadonlyArray<Record<string, unknown>>,
   apiKey: string,
 ) {
   const res = await fetch(`https://api.resend.com${path}`, {

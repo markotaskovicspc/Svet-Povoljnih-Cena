@@ -54,9 +54,16 @@ export function requireSafeE2EDatabase(
   }
 
   const databaseName = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
-  if (!/(^|[_-])(qa|test)([_-]|$)/i.test(databaseName)) {
+  const schemaName = url.searchParams.get("schema")?.trim() ?? "";
+  const hasIsolatedDatabaseName = /(^|[_-])(qa|test)([_-]|$)/i.test(
+    databaseName,
+  );
+  const hasIsolatedSchemaName = /(^|[_-])(qa|test|e2e)([_-]|$)/i.test(
+    schemaName,
+  );
+  if (!hasIsolatedDatabaseName && !hasIsolatedSchemaName) {
     throw new Error(
-      `Refusing E2E mutations against database “${databaseName || "(missing)"}”: its name must contain a separate qa or test segment.`,
+      `Refusing E2E mutations against database “${databaseName || "(missing)"}”: its name must contain a separate qa or test segment, or its schema must contain a separate qa, test, or e2e segment.`,
     );
   }
 

@@ -156,5 +156,8 @@ describe("Resend contact synchronization", () => {
       unsubscribed: true,
       topics: [{ id: "topic-promotions", subscription: "opt_out" }],
     });
+    expect(JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string)).toEqual([
+      { id: "topic-promotions", subscription: "opt_out" },
+    ]);
   });
 });

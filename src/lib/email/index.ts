@@ -49,6 +49,17 @@ export {
 export {
   normalizeInbound,
   handleInboundMessage,
+  classifyInboundMessage,
   type InboundMessage,
+  type InboundAttachmentMetadata,
   type InboundRouteResult,
 } from "./inbound";
+export {
+  processResendInboundEmail,
+  retrieveReceivedEmail,
+  loadInboundAttachmentLinks,
+  removeInboundAttachments,
+  inboundEmailIdFromSubject,
+  type StoredInboundAttachment,
+  type InboundAttachmentLink,
+} from "./resend-receiving";

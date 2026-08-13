@@ -26,6 +26,9 @@ testUrl.searchParams.set("schema", schema);
 const childEnv = {
   ...process.env,
   DATABASE_URL: testUrl.toString(),
+  E2E_DATABASE_URL: testUrl.toString(),
+  E2E_ALLOW_REMOTE_DATABASE: "1",
+  E2E_REMOTE_DATABASE_ACK: "I_UNDERSTAND_THIS_WILL_MUTATE_DATA",
   EMAIL_PROVIDER: "none",
   E2E_NEWSLETTER: "1",
 };

@@ -1,10 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import {
+  enqueueBackgroundJob,
+  processBackgroundJob,
+} from "@/lib/background-jobs";
 import { getEmailConfig, recordProviderEvent } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const cfg = getEmailConfig();
@@ -72,10 +77,44 @@ export async function POST(req: Request) {
     await withdrawMarketingEmail(payload.data.email, "resend-preference-page");
   }
 
+  let inbound:
+    | { queued: true; jobId: string; jobStatus: string }
+    | { queued: false; reason: string }
+    | null = null;
+  if (payload.type === "email.received") {
+    const emailId = payload.data?.email_id;
+    if (!emailId) {
+      inbound = { queued: false, reason: "missing_email_id" };
+    } else {
+      const job = await enqueueBackgroundJob({
+        kind: "RESEND_INBOUND_EMAIL",
+        payload: { emailId, eventId },
+        idempotencyKey: `resend-inbound:${emailId}`,
+        maxAttempts: 8,
+      });
+      inbound = { queued: true, jobId: job.id, jobStatus: job.status };
+      after(async () => {
+        try {
+          const result = await processBackgroundJob(job.id);
+          if (result.claimed && !result.ok) {
+            console.error("[email] immediate inbound processing failed", {
+              jobId: job.id,
+              exhausted: result.exhausted,
+              permanent: result.permanent,
+            });
+          }
+        } catch (error) {
+          console.error("[email] immediate inbound processing crashed", error);
+        }
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     duplicate: recorded.duplicate,
     newsletterMatched: newsletter.matched,
+    inbound,
   });
 }
 

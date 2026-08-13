@@ -10,10 +10,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Phase 4D — inbound webhook for Resend (`Resend-Webhook-Signature`) or
- * Postmark (`X-Postmark-Server-Token` style) inbound events. We accept any
- * payload but require a shared `EMAIL_INBOUND_SECRET` so the endpoint
- * cannot be hit anonymously to forge customer comments.
+ * Legacy/shared-secret inbound webhook for providers that POST the complete
+ * parsed message (for example Postmark). Resend Receiving is handled by the
+ * Svix-verified `/api/email/events` route and its durable background job.
  */
 export async function POST(req: Request) {
   const cfg = getEmailConfig();

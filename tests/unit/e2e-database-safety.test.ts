@@ -34,6 +34,19 @@ describe("E2E database safety", () => {
     ).toContain("auth_test");
   });
 
+  it("accepts an explicitly acknowledged isolated E2E schema", () => {
+    const url =
+      "postgresql://postgres:secret@db.example.test:5432/postgres?schema=newsletter_e2e_123_abc";
+    expect(
+      requireSafeE2EDatabase({
+        E2E_NEWSLETTER: "1",
+        E2E_DATABASE_URL: url,
+        E2E_ALLOW_REMOTE_DATABASE: "1",
+        E2E_REMOTE_DATABASE_ACK: "I_UNDERSTAND_THIS_WILL_MUTATE_DATA",
+      }),
+    ).toBe(url);
+  });
+
   it("rejects production-like database names and unacknowledged remote URLs", () => {
     expect(() =>
       requireSafeE2EDatabase({

@@ -20,6 +20,15 @@ export interface InboundMessage {
   subject: string;
   text: string;
   messageId: string | null;
+  attachments: InboundAttachmentMetadata[];
+}
+
+export interface InboundAttachmentMetadata {
+  id: string;
+  filename: string;
+  contentType: string;
+  contentDisposition: string | null;
+  size: number | null;
 }
 
 /** Best-effort normalizer for both Resend and Postmark inbound payloads. */
@@ -52,10 +61,14 @@ function resend(data: Record<string, unknown>): InboundMessage | null {
   return {
     from: fromAddr.address,
     fromName: fromAddr.name,
-    to: toList(data.to),
+    to: [...new Set([...toList(data.to), ...toList(data.received_for)])],
     subject,
     text,
-    messageId: pickString(data.message_id),
+    messageId:
+      pickString(data.id) ??
+      pickString(data.email_id) ??
+      pickString(data.message_id),
+    attachments: attachmentList(data.attachments),
   };
 }
 
@@ -82,6 +95,7 @@ function postmark(data: Record<string, unknown>): InboundMessage | null {
     subject: pickString(data.Subject) ?? "(bez naslova)",
     text: pickString(data.TextBody) ?? stripHtml(pickString(data.HtmlBody) ?? ""),
     messageId: pickString(data.MessageID),
+    attachments: [],
   };
 }
 
@@ -92,14 +106,12 @@ export type InboundRouteResult =
 export async function handleInboundMessage(
   msg: InboundMessage,
 ): Promise<InboundRouteResult> {
-  if (!msg.text.trim()) return { ok: false, reason: "empty" };
-
-  const cfg = getEmailConfig();
-  const recipients = msg.to.map((t) => t.toLowerCase());
-  const reclamation = recipients.includes(cfg.reclamationsInbox.toLowerCase());
-  const comment = recipients.includes(cfg.commentsInbox.toLowerCase());
-
-  if (!reclamation && !comment) return { ok: false, reason: "no_match" };
+  const route = classifyInboundMessage(msg);
+  if (!route) return { ok: false, reason: "no_match" };
+  if (!msg.text.trim() && !msg.attachments.length) {
+    return { ok: false, reason: "empty" };
+  }
+  const reclamation = route === "reclamation";
 
   if (msg.messageId) {
     const existing = await db.comment.findFirst({
@@ -109,7 +121,7 @@ export async function handleInboundMessage(
     if (existing)
       return {
         ok: true,
-        route: reclamation ? "reclamation" : "comment",
+        route,
         commentId: existing.id,
       };
   }
@@ -121,16 +133,31 @@ export async function handleInboundMessage(
       name: msg.fromName ?? msg.from,
       email: msg.from,
       subject: `${messageTag}${subjectPrefix} ${msg.subject}`.slice(0, 160),
-      body: msg.text.slice(0, 5000),
+      body: (msg.text.trim() || "Poruka nema tekst; pogledajte priloge.").slice(
+        0,
+        5000,
+      ),
     },
     select: { id: true },
   });
 
   return {
     ok: true,
-    route: reclamation ? "reclamation" : "comment",
+    route,
     commentId: created.id,
   };
+}
+
+export function classifyInboundMessage(
+  msg: Pick<InboundMessage, "to">,
+): "reclamation" | "comment" | null {
+  const cfg = getEmailConfig();
+  const recipients = msg.to.map((recipient) => recipient.trim().toLowerCase());
+  if (recipients.includes(cfg.reclamationsInbox.toLowerCase())) {
+    return "reclamation";
+  }
+  if (recipients.includes(cfg.commentsInbox.toLowerCase())) return "comment";
+  return null;
 }
 
 function pickString(v: unknown): string | null {
@@ -146,11 +173,45 @@ function toList(v: unknown): string[] {
       .filter(Boolean);
   return [];
 }
+function attachmentList(v: unknown): InboundAttachmentMetadata[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const item = entry as Record<string, unknown>;
+    const id = pickString(item.id);
+    const filename = pickString(item.filename);
+    const contentType = pickString(item.content_type);
+    if (!id || !filename || !contentType) return [];
+    const rawSize = item.size;
+    return [
+      {
+        id,
+        filename,
+        contentType: contentType.toLowerCase(),
+        contentDisposition: pickString(item.content_disposition),
+        size:
+          typeof rawSize === "number" && Number.isSafeInteger(rawSize) && rawSize >= 0
+            ? rawSize
+            : null,
+      },
+    ];
+  });
+}
 function parseAddress(s: string): { name: string | null; address: string } {
   const m = s.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
   if (m) return { name: (m[1] || "").trim() || null, address: m[2]!.trim() };
   return { name: null, address: s.trim() };
 }
 function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return s
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }

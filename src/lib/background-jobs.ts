@@ -19,6 +19,10 @@ const schemas = {
   NEWSLETTER_SYNC: z.object({ email: z.email() }),
   MARKETING_SYNC: z.object({ userId: z.string().min(1) }),
   RESEND_CONTACT_UNSUBSCRIBE: z.object({ email: z.email() }),
+  RESEND_INBOUND_EMAIL: z.object({
+    emailId: z.string().min(1).max(200),
+    eventId: z.string().min(1).max(200),
+  }),
   NEWSLETTER_CAMPAIGN_SEND: z.object({ campaignId: z.string().min(1) }),
   FISCAL_RECEIPT: z.object({
     orderId: z.string().min(1),
@@ -286,6 +290,15 @@ async function dispatchJob(job: JobRow) {
         source: "account-deletion",
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "RESEND_INBOUND_EMAIL": {
+      const { processResendInboundEmail } = await import(
+        "@/lib/email/resend-receiving"
+      );
+      await processResendInboundEmail(
+        payload as z.infer<typeof schemas.RESEND_INBOUND_EMAIL>,
+      );
       return;
     }
     case "NEWSLETTER_CAMPAIGN_SEND": {
