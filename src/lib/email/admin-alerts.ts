@@ -50,16 +50,32 @@ function escapeHtml(value: string) {
 
 function renderUrgentAlert(incidents: readonly UrgentIncident[]) {
   const adminUrl = `${BRAND.url}/admin/sistem`;
-  const rows = incidents
+  const grouped = Array.from(
+    incidents.reduce((groups, incident) => {
+      const key = `${incident.label}\u0000${incident.detail ?? ""}`;
+      const current = groups.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        groups.set(key, {
+          label: incident.label,
+          detail: incident.detail,
+          count: 1,
+        });
+      }
+      return groups;
+    }, new Map<string, { label: string; detail: string | null; count: number }>()),
+  ).map(([, group]) => group);
+  const rows = grouped
     .map(
       (incident) =>
-        `<li><strong>${escapeHtml(incident.label)}</strong>${incident.detail ? ` — ${escapeHtml(incident.detail)}` : ""}</li>`,
+        `<li><strong>${escapeHtml(incident.label)}${incident.count > 1 ? ` (${incident.count}×)` : ""}</strong>${incident.detail ? ` — ${escapeHtml(incident.detail)}` : ""}</li>`,
     )
     .join("");
-  const textRows = incidents
+  const textRows = grouped
     .map(
       (incident) =>
-        `- ${incident.label}${incident.detail ? ` — ${incident.detail}` : ""}`,
+        `- ${incident.label}${incident.count > 1 ? ` (${incident.count}×)` : ""}${incident.detail ? ` — ${incident.detail}` : ""}`,
     )
     .join("\n");
   return {
@@ -84,7 +100,13 @@ async function loadUrgentIncidents(): Promise<UrgentIncident[]> {
       select: { id: true, kind: true, error: true, updatedAt: true },
     }),
     db.fiscalDocument.findMany({
-      where: { status: "FAILED" },
+      where: {
+        status: "FAILED",
+        OR: [
+          { order: { status: { not: "OTKAZANO" } } },
+          { dispatchedAt: { not: null } },
+        ],
+      },
       orderBy: { updatedAt: "desc" },
       take: 50,
       select: { id: true, kind: true, orderId: true, error: true, updatedAt: true },
@@ -96,7 +118,7 @@ async function loadUrgentIncidents(): Promise<UrgentIncident[]> {
       select: { id: true, status: true, orderId: true, error: true, updatedAt: true },
     }),
     db.shipment.findMany({
-      where: { status: "FAILED" },
+      where: { status: "FAILED", order: { status: { not: "OTKAZANO" } } },
       orderBy: { updatedAt: "desc" },
       take: 50,
       select: { id: true, provider: true, orderId: true, syncError: true, updatedAt: true },

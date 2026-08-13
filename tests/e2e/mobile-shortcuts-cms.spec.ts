@@ -196,7 +196,12 @@ test.describe("mobile shortcut CMS acceptance", () => {
     await expect(mobileTile).toHaveAttribute("href", `/ponuda/${fixture.slug}`);
     await mobileTile.click();
     await expect(page).toHaveURL(new RegExp(`/ponuda/${fixture.slug}$`));
-    await expect(page.getByRole("heading", { name: fixture.title })).toBeVisible();
+    await expect(
+      page
+        .getByRole("main")
+        .getByRole("heading", { level: 1, name: fixture.title, exact: true })
+        .first(),
+    ).toBeVisible();
     await expect(page.getByText("Odredište mobilnog prečaca je uspešno otvoreno.")).toBeVisible();
 
     await page.setViewportSize({ width: 1280, height: 900 });

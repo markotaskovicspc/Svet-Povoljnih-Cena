@@ -16,7 +16,7 @@ export async function logAudit(args: {
     h.get("x-real-ip") ??
     null;
   const userAgent = h.get("user-agent") ?? null;
-  await db.auditLog.create({
+  return db.auditLog.create({
     data: {
       actorId: args.actorId ?? null,
       action: args.action,
@@ -25,6 +25,26 @@ export async function logAudit(args: {
       diff: (args.diff ?? undefined) as never,
       ip,
       userAgent,
+    },
+    select: { id: true },
+  });
+}
+
+/** Finalize the durable attempt marker instead of relying on a second insert. */
+export async function finalizeAudit(args: {
+  id: string;
+  action: string;
+  entity: string;
+  entityId?: string | null;
+  diff?: unknown;
+}) {
+  await db.auditLog.update({
+    where: { id: args.id },
+    data: {
+      action: args.action,
+      entity: args.entity,
+      entityId: args.entityId ?? null,
+      diff: (args.diff ?? undefined) as never,
     },
   });
 }

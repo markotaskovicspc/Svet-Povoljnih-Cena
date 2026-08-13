@@ -66,6 +66,20 @@ describe("fiscal transport", () => {
     if (!result.ok) expect(result.error).toContain("fiscal:config");
   });
 
+  it("treats GET_FROM placeholders as missing and never calls the fiscal provider", async () => {
+    process.env.FISCAL_PROVIDER = "badi";
+    process.env.BADI_API_KEY = "GET_FROM_BADI_PORTAL";
+    process.env.BADI_API_SECRET = "sandbox-secret";
+    process.env.BADI_CLIENT_ID = "sandbox-client";
+    __resetFiscalConfig();
+
+    const result = await fiscalize(invoice);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("fiscal:config");
+    expect(badiMock).not.toHaveBeenCalled();
+  });
+
   it("keeps deterministic development receipts only for the explicit none provider", async () => {
     process.env.FISCAL_PROVIDER = "none";
     __resetFiscalConfig();

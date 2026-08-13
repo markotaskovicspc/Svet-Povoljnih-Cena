@@ -353,6 +353,8 @@ export interface Order {
   assemblyTotal: number;
   voucherCode?: string;
   voucherDiscount?: number;
+  firstPurchaseDiscount?: number;
+  savedCardDiscount?: number;
   total: number;
   shippingMethod: ShippingMethod;
   paymentMethod: PaymentMethod;

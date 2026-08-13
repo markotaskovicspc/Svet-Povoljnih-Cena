@@ -30,6 +30,7 @@ export type OperationsSnapshot = {
     failedFiscalDocuments: number;
     failedBackgroundJobs: number;
     queuedBackgroundJobs: number;
+    unresolvedAuditAttempts: number;
   } | null;
   rabalux: {
     failedMediaJobs: number;
@@ -333,6 +334,7 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
       failedFiscalDocuments,
       failedBackgroundJobs,
       queuedBackgroundJobs,
+      unresolvedAuditAttempts,
       rabaluxSupplier,
       failedRabaluxMediaJobs,
       retryRabaluxMediaJobs,
@@ -343,10 +345,26 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
       lastRabaluxStock,
     ] = await Promise.all([
       db.emailMessage.count({ where: { status: "FAILED" } }),
-      db.shipment.count({ where: { status: "FAILED" } }),
-      db.fiscalDocument.count({ where: { status: "FAILED" } }),
+      db.shipment.count({
+        where: { status: "FAILED", order: { status: { not: "OTKAZANO" } } },
+      }),
+      db.fiscalDocument.count({
+        where: {
+          status: "FAILED",
+          OR: [
+            { order: { status: { not: "OTKAZANO" } } },
+            { dispatchedAt: { not: null } },
+          ],
+        },
+      }),
       db.backgroundJob.count({ where: { status: "FAILED" } }),
       db.backgroundJob.count({ where: { status: { in: ["QUEUED", "RETRY"] } } }),
+      db.auditLog.count({
+        where: {
+          action: { endsWith: ".attempt" },
+          diff: { path: ["auditStatus"], equals: "STARTED" },
+        },
+      }),
       db.supplier.findUnique({
         where: { integrationKey: "RABALUX" },
         select: { id: true },
@@ -411,6 +429,7 @@ export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {
         failedFiscalDocuments,
         failedBackgroundJobs,
         queuedBackgroundJobs,
+        unresolvedAuditAttempts,
       },
       rabalux: rabaluxSupplier
         ? {

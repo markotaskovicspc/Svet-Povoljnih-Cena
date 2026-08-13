@@ -7,6 +7,10 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 loadEnv();
 
+const RABALUX_INTEGRATION_KEY = "RABALUX";
+const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
+const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
+const RABALUX_STOCK_MAX_AGE_MS = 30 * 60 * 1_000;
 const connectionString = getConnectionString();
 const missingStorageSchemaRequested =
   process.env.RUNTIME_READINESS_ALLOW_MISSING_STORAGE_SCHEMA === "true";
@@ -34,11 +38,20 @@ try {
   // This check deliberately uses a one-connection pool. Run its queries in
   // sequence so queued requests do not exhaust their connection-acquisition
   // timeout while a preceding production query is still using that connection.
+  const now = new Date();
   const products = await prisma.product.findMany({
     where: { isActive: true, deletedAt: null },
     select: {
       sku: true,
       stock: true,
+      dcAvailableQty: true,
+      supplierStock: true,
+      supplierReservedStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
+      articleStatus: true,
+      availableWebManual: true,
+      availableWebAuto: true,
       fullPrice: true,
       salePrice: true,
       widthCm: true,
@@ -48,6 +61,28 @@ try {
       deliveryDaysMax: true,
       media: { select: { id: true }, take: 1 },
       warehouseStocks: { select: { qty: true } },
+      supplier: {
+        select: { integrationKey: true, enabled: true },
+      },
+      priceListEntries: {
+        where: {
+          price: { gt: 0 },
+          validFrom: { lte: now },
+          OR: [{ validTo: null }, { validTo: { gte: now } }],
+          priceList: {
+            is: {
+              kind: "RETAIL",
+              active: true,
+              AND: [
+                { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+                { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+              ],
+            },
+          },
+        },
+        select: { id: true },
+        take: 1,
+      },
     },
   });
   const payments = await prisma.paymentMethodConfig.findMany({
@@ -125,6 +160,7 @@ try {
 
   const catalog = products.map((product) => {
     const reasons = [];
+    const publicationBlockers = [];
     const price = Number(product.salePrice ?? product.fullPrice);
     if (!Number.isFinite(price) || price <= 0) reasons.push("invalid_price");
     if (
@@ -145,16 +181,41 @@ try {
       (sum, item) => sum + item.qty,
       0,
     );
+    const availability = checkoutAvailability(product, now);
+    if (!product.availableWebManual) publicationBlockers.push("web_manual_disabled");
+    if (enabledEnv("ENFORCE_WEB_AUTO_AVAILABILITY") && !product.availableWebAuto) {
+      publicationBlockers.push("web_auto_disabled");
+    }
+    if (!product.priceListEntries.length) {
+      publicationBlockers.push("missing_active_retail_price");
+    }
+    if (
+      product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY &&
+      product.articleStatus === "ARH"
+    ) {
+      publicationBlockers.push("rabalux_archived");
+    }
+    if (
+      product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY &&
+      !availability.publicationEligible
+    ) {
+      publicationBlockers.push("rabalux_unavailable");
+    }
     return {
       sku: product.sku,
       stock: product.stock,
       warehouseStock,
       ready: reasons.length === 0,
       reasons,
+      published: publicationBlockers.length === 0,
+      publicationBlockers,
+      ...availability,
     };
   });
   const ready = catalog.filter((product) => product.ready);
-  const purchasable = ready.filter((product) => product.stock > 0);
+  const published = catalog.filter((product) => product.published);
+  const checkoutSellable = published.filter((product) => product.sellableStock > 0);
+  const purchasable = checkoutSellable.filter((product) => product.ready);
   const reasonCounts = Object.fromEntries(
     ["invalid_price", "missing_dimensions", "missing_media", "invalid_delivery_window"].map(
       (reason) => [
@@ -168,7 +229,9 @@ try {
   );
 
   if (!purchasable.length) {
-    errors.push("No active, ready, in-stock product can be purchased.");
+    errors.push(
+      "No storefront-published, checkout-sellable product has complete launch data.",
+    );
   }
   if (stockMismatches.length) {
     errors.push(
@@ -244,17 +307,29 @@ try {
     catalog: {
       active: catalog.length,
       ready: ready.length,
-      purchasable: purchasable.map((product) => ({
+      published: published.length,
+      checkoutSellable: checkoutSellable.length,
+      purchasableCount: purchasable.length,
+      purchasableBySource: countValues(purchasable, "source"),
+      purchasableCanaries: purchasable.slice(0, 10).map((product) => ({
         sku: product.sku,
-        stock: product.stock,
+        sellableStock: product.sellableStock,
+        source: product.source,
       })),
       incompleteByReason: reasonCounts,
+      unpublishedByReason: countReasons(catalog, "publicationBlockers"),
       stockMismatchCount: stockMismatches.length,
     },
     checkout: {
       enabledPaymentMethods: payments.map((item) => item.method),
       activeWarehouses: warehouses.length,
       hasDefaultWarehouse: warehouses.some((warehouse) => warehouse.isDefault),
+    },
+    policy: {
+      rabaluxEnabled: enabledEnv("RABALUX_ENABLED"),
+      webAutoAvailabilityEnforced: enabledEnv("ENFORCE_WEB_AUTO_AVAILABILITY"),
+      rabaluxStockMaxAgeMinutes: RABALUX_STOCK_MAX_AGE_MS / 60_000,
+      rabaluxSafetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
     },
     database: {
       localMigrations: localMigrations.length,
@@ -299,10 +374,87 @@ function countGroup(rows, key, value) {
     .reduce((sum, row) => sum + row._count._all, 0);
 }
 
+function countReasons(rows, key) {
+  const counts = {};
+  for (const row of rows) {
+    for (const reason of row[key]) counts[reason] = (counts[reason] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function countValues(rows, key) {
+  const counts = {};
+  for (const row of rows) {
+    const value = row[key] ?? "UNKNOWN";
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function checkoutAvailability(product, now) {
+  if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) {
+    const sellableStock = nonnegativeInt(product.stock);
+    return {
+      sellableStock,
+      source: sellableStock > 0 ? "DC" : "NONE",
+      publicationEligible: true,
+    };
+  }
+
+  const warehouseStock = nonnegativeInt(product.dcAvailableQty);
+  const supplierStock = nonnegativeInt(product.supplierStock ?? 0);
+  const reservedStock = nonnegativeInt(product.supplierReservedStock ?? 0);
+  const supplierFresh = isFreshSupplierStock(product.lastSupplierStockSyncAt, now);
+  const supplierEligible =
+    enabledEnv("RABALUX_ENABLED") &&
+    product.supplier.enabled &&
+    product.supplierApprovalStatus === "APPROVED" &&
+    supplierStock > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+    supplierFresh;
+  const supplierAvailable = supplierEligible
+    ? Math.max(
+        supplierStock - reservedStock - RABALUX_SUPPLIER_SAFETY_STOCK,
+        0,
+      )
+    : 0;
+  const sellableStock = warehouseStock + supplierAvailable;
+  const source =
+    warehouseStock > 0 && supplierAvailable > 0
+      ? "MIXED"
+      : warehouseStock > 0
+        ? "DC"
+        : supplierAvailable > 0
+          ? "SUPPLIER"
+          : "NONE";
+
+  return {
+    sellableStock,
+    source,
+    publicationEligible: warehouseStock > 0 || supplierEligible,
+  };
+}
+
+function isFreshSupplierStock(value, now) {
+  if (!value) return false;
+  const timestamp = value instanceof Date ? value : new Date(value);
+  const age = now.getTime() - timestamp.getTime();
+  return Number.isFinite(age) && age >= -5 * 60 * 1_000 && age <= RABALUX_STOCK_MAX_AGE_MS;
+}
+
+function enabledEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value || value.startsWith("GET_FROM_")) return false;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function nonnegativeInt(value) {
+  return Number.isFinite(value) ? Math.max(Math.trunc(value), 0) : 0;
+}
+
 function getConnectionString() {
   const value = [
-    process.env.POSTGRES_URL_NON_POOLING,
     process.env.DATABASE_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
     process.env.POSTGRES_PRISMA_URL,
     process.env.POSTGRES_URL,
   ].find((candidate) => candidate?.trim());

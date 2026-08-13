@@ -431,6 +431,8 @@ function orderToPdfInput(order: Order) {
     assemblyTotal: order.assemblyTotal,
     voucherCode: order.voucherCode ?? null,
     voucherDiscount: order.voucherDiscount ?? null,
+    firstPurchaseDiscount: order.firstPurchaseDiscount ?? null,
+    savedCardDiscount: order.savedCardDiscount ?? null,
     total: order.total,
     paymentMethod: order.paymentMethod,
     shipping_address: {

@@ -10,7 +10,6 @@ import {
   UserPlus,
   UserRound,
   Mail,
-  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IdentityChoice } from "@/lib/checkout/store";
@@ -18,8 +17,9 @@ import { SocialProviderMark } from "@/components/account/social-auth-buttons";
 
 /**
  * Step 1 — three identity cards. The choice is bubbled to the parent (via
- * `onPick`) so it can be persisted in the checkout store and the next step can
- * unlock. Real auth wiring lands in Phase 3 (NextAuth providers).
+ * `onPick`) so it can be persisted in the checkout store. Every advertised
+ * auth option must navigate to a complete flow; incomplete transports stay
+ * hidden until they are actually available.
  */
 export function IdentityStep({
   value,
@@ -248,23 +248,15 @@ export function IdentityStep({
                 </button>
               ))}
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
+            <div className="mt-3">
+              <Link
+                href={`/nalog/${showSocial === "login" ? "prijava" : "registracija"}?callbackUrl=${encodeURIComponent("/checkout/podaci")}`}
                 className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
                 onClick={() => onPick(showSocial)}
               >
                 <Mail className="size-4" aria-hidden />
                 E-pošta i lozinka
-              </button>
-              <button
-                type="button"
-                className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
-                onClick={() => onPick(showSocial)}
-              >
-                <Phone className="size-4" aria-hidden />
-                SMS kod (OTP)
-              </button>
+              </Link>
             </div>
             {socialError ? (
               <p className="mt-3 text-[11px] text-action" aria-live="polite">

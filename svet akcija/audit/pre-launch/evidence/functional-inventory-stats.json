@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-08-11T09:42:19.648Z",
+  "total": 1780,
+  "pages": 101,
+  "apiHandlers": 113,
+  "controls": 1566,
+  "byStatus": {
+    "BLOCKED": 72,
+    "PARTIAL": 1695,
+    "PASS": 13
+  },
+  "byModule": {
+    "Admin ERP": 533,
+    "Admin/CMS": 783,
+    "Checkout i korpa": 92,
+    "Dostava": 2,
+    "Fiskalizacija": 1,
+    "Javni storefront": 176,
+    "Katalog i pretraga": 37,
+    "Nalog i autentikacija": 118,
+    "Newsletter": 10,
+    "Plaćanje": 6,
+    "Pozadinski poslovi/webhook": 18,
+    "Reklamacije": 4
+  }
+}

@@ -20,6 +20,7 @@ test("newsletter only shows success after the API accepts the signup", async ({ 
   await page.goto("/kontakt", { waitUntil: "domcontentloaded" });
   const section = page.locator("section").filter({ hasText: "Newsletter" }).last();
   const email = section.getByLabel("Email adresa");
+  await expect(email).toBeEnabled();
   await email.fill("playwright+newsletter@example.com");
   await Promise.all([
     page.waitForRequest("**/api/newsletter"),
@@ -37,6 +38,7 @@ test("newsletter exposes an API failure instead of a false success", async ({ pa
   await page.goto("/kontakt", { waitUntil: "domcontentloaded" });
   const section = page.locator("section").filter({ hasText: "Newsletter" }).last();
   const email = section.getByLabel("Email adresa");
+  await expect(email).toBeEnabled();
   await email.fill("playwright+failure@example.com");
   await email.press("Enter");
   await expect(section.getByRole("alert")).toContainText("trenutno nije moguća");

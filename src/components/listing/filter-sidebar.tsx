@@ -122,16 +122,24 @@ export function FilterSidebar({
           </AccordionTrigger>
           <AccordionContent>
             <div className="px-1 pt-2 pb-1">
-              <Slider
-                min={extents.price[0]}
-                max={extents.price[1]}
-                step={500}
-                value={[price[0], price[1]]}
-                onValueChange={(v) => {
-                  if (!Array.isArray(v) || v.length < 2) return;
-                  onChange({ ...state, price: [v[0], v[1]] });
-                }}
-              />
+              {extents.price[1] > extents.price[0] ? (
+                <Slider
+                  min={extents.price[0]}
+                  max={extents.price[1]}
+                  step={500}
+                  value={[price[0], price[1]]}
+                  onValueChange={(v) => {
+                    if (!Array.isArray(v) || v.length < 2) return;
+                    onChange({ ...state, price: [v[0], v[1]] });
+                  }}
+                />
+              ) : (
+                <div
+                  role="img"
+                  aria-label="Svi prikazani proizvodi imaju istu cenu"
+                  className="h-1 rounded-full bg-muted"
+                />
+              )}
               <div className="mt-3 flex items-center justify-between text-xs text-ink-500">
                 <span>{price[0].toLocaleString("sr-Latn-RS")} RSD</span>
                 <span>{price[1].toLocaleString("sr-Latn-RS")} RSD</span>
@@ -384,16 +392,24 @@ function DimensionRow({
           {value[0]}–{value[1]} cm
         </span>
       </div>
-      <Slider
-        min={ext[0]}
-        max={ext[1]}
-        step={1}
-        value={[value[0], value[1]]}
-        onValueChange={(v) => {
-          if (!Array.isArray(v) || v.length < 2) return;
-          onChange([v[0], v[1]]);
-        }}
-      />
+      {ext[1] > ext[0] ? (
+        <Slider
+          min={ext[0]}
+          max={ext[1]}
+          step={1}
+          value={[value[0], value[1]]}
+          onValueChange={(v) => {
+            if (!Array.isArray(v) || v.length < 2) return;
+            onChange([v[0], v[1]]);
+          }}
+        />
+      ) : (
+        <div
+          role="img"
+          aria-label={`${axis} je isti za sve prikazane proizvode`}
+          className="h-1 rounded-full bg-muted"
+        />
+      )}
     </div>
   );
 }

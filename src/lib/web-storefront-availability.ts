@@ -13,6 +13,7 @@ import {
 
 type WebAvailabilityProduct = {
   isActive: boolean;
+  deletedAt?: Date | string | null;
   availableWebManual: boolean;
   availableWebAuto: boolean;
   articleStatus?: string;
@@ -24,6 +25,11 @@ type WebAvailabilityProduct = {
     integrationKey?: string | null;
     enabled?: boolean;
   } | null;
+};
+
+type StorefrontPublicationProduct = WebAvailabilityProduct & {
+  hasActiveRetailPrice: boolean;
+  familyStorefrontEnabled?: boolean | null;
 };
 
 export type StorefrontAvailability =
@@ -143,6 +149,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
   const now = new Date();
   return {
     isActive: true,
+    deletedAt: null,
     availableWebManual: true,
     priceListEntries: {
       some: {
@@ -207,6 +214,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
 
 export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
   const generallyAvailable =
+    !product.deletedAt &&
     product.isActive &&
     product.availableWebManual &&
     (!isWebAutoAvailabilityEnforced() || product.availableWebAuto);
@@ -222,4 +230,44 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
       (product.supplierStock ?? 0) > RABALUX_PUBLIC_STOCK_THRESHOLD &&
       isRabaluxStockFresh(product.lastSupplierStockSyncAt),
   );
+}
+
+/** Human-readable mirror of every publication gate used by catalog queries. */
+export function storefrontPublicationBlockers(
+  product: StorefrontPublicationProduct,
+) {
+  const reasons: string[] = [];
+  if (product.deletedAt) reasons.push("Artikal je arhiviran");
+  if (!product.isActive) reasons.push("Artikal nije aktivan");
+  if (!product.availableWebManual) reasons.push("Web kanal je ručno isključen");
+  if (isWebAutoAvailabilityEnforced() && !product.availableWebAuto) {
+    reasons.push("Automatska web dostupnost je isključena");
+  }
+  if (!product.hasActiveRetailPrice) {
+    reasons.push("Nema važeću pozitivnu stavku aktivnog MP cenovnika");
+  }
+  if (product.familyStorefrontEnabled === false) {
+    reasons.push("Ova boja porodice nije uključena za web");
+  }
+
+  if (product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY) {
+    if (product.articleStatus === "ARH") reasons.push("Rabalux artikal je arhiviran");
+    if ((product.dcAvailableQty ?? 0) <= 0) {
+      if (!isRabaluxEnabled()) reasons.push("Rabalux integracija je isključena");
+      if (!product.supplier.enabled) reasons.push("Rabalux dobavljač je isključen");
+      if (product.supplierApprovalStatus !== "APPROVED") {
+        reasons.push("Rabalux artikal nije odobren");
+      }
+      if ((product.supplierStock ?? 0) <= RABALUX_PUBLIC_STOCK_THRESHOLD) {
+        reasons.push(
+          `Rabalux stanje nije veće od praga ${RABALUX_PUBLIC_STOCK_THRESHOLD}`,
+        );
+      }
+      if (!isRabaluxStockFresh(product.lastSupplierStockSyncAt)) {
+        reasons.push("Rabalux stanje je zastarelo");
+      }
+    }
+  }
+
+  return Array.from(new Set(reasons));
 }

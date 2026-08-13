@@ -104,6 +104,26 @@ describe("IPS callback wake-up endpoint", () => {
     expect(checkPaymentStatus).not.toHaveBeenCalled();
   });
 
+  it("rechecks a settled payment when the order expired and exposes review state", async () => {
+    findOrder.mockResolvedValue({
+      id: "order-id",
+      number: "SA-2026-0001",
+      status: "OTKAZANO",
+      stockRestoredAt: new Date("2026-08-07T00:00:00.000Z"),
+      payments: [{ status: "PAID" }],
+    });
+    checkPaymentStatus.mockResolvedValue({ paid: true, requiresReview: true });
+
+    const response = await callback({ orderId: "SA-2026-0001" });
+
+    expect(await response.json()).toEqual({
+      ok: true,
+      paid: true,
+      requiresReview: true,
+    });
+    expect(checkPaymentStatus).toHaveBeenCalledWith("SA-2026-0001");
+  });
+
   it("always acknowledges throttled and temporarily misconfigured callbacks", async () => {
     checkIpLimit.mockResolvedValueOnce({ ok: false });
     expect((await callback({ orderId: "SA-2026-0001" })).status).toBe(200);

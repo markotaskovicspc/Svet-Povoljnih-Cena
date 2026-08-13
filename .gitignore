@@ -18,6 +18,8 @@
 /playwright-report
 /tmp/
 /output/pdf/
+/svet akcija/tmp/
+/svet akcija/output/
 
 # next.js
 /.next/

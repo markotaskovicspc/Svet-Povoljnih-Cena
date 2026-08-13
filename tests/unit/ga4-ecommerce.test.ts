@@ -82,7 +82,7 @@ describe("GA4 ecommerce payloads", () => {
     expect(payload.items).toHaveLength(2);
   });
 
-  it("builds a purchase without adding shipping to GA4 value", () => {
+  it("builds a purchase with every order discount and without adding shipping", () => {
     const order = sampleOrder();
     const payload = buildPurchasePayload(order);
 
@@ -90,7 +90,7 @@ describe("GA4 ecommerce payloads", () => {
       expect.objectContaining({
         transaction_id: "SPC-2026-0001",
         currency: "RSD",
-        value: 1_850,
+        value: 1_775,
         shipping: 350,
         coupon: "POPUST100",
       }),
@@ -99,7 +99,7 @@ describe("GA4 ecommerce payloads", () => {
       expect.objectContaining({
         item_id: "SKU-1",
         quantity: 2,
-        price: 925,
+        price: 887.5,
       }),
     );
   });
@@ -144,7 +144,9 @@ function sampleOrder(): Order {
     assemblyTotal: 150,
     voucherCode: "POPUST100",
     voucherDiscount: 100,
-    total: 2_200,
+    firstPurchaseDiscount: 50,
+    savedCardDiscount: 25,
+    total: 2_125,
     shippingMethod: "kamion",
     paymentMethod: "pouzece_gotovina",
     shippingAddress: {

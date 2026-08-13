@@ -22,7 +22,7 @@ if (mode === "inspect") {
     ),
     loadInput(
       args.get("stock"),
-      "https://rabalux.hu/downloadmanager/downloadha/nohtml/1/id/11",
+      "https://rabalux.rs/downloadmanager/downloadha/nohtml/1/id/11",
       "RABALUX_STOCK_USER",
       ["RABALUX_STOCK_API_KEY", "RABALUX_STOCK_PASS"],
     ),
@@ -32,6 +32,11 @@ if (mode === "inspect") {
   const stockSkus = stockRows.map((row) => row[0].trim());
   const catalogSet = new Set(catalogSkus);
   const stockSet = new Set(stockSkus);
+  const serbiaStockEligible = stockRows.filter((row) => {
+    const quantity = Number.parseInt(row[6]?.trim() ?? "0", 10);
+    const restricted = /\brestricted\b/i.test(row[5]?.trim() ?? "");
+    return catalogSet.has(row[0].trim()) && !restricted && quantity > 10;
+  });
   const summary = {
     catalogRows: catalogSkus.length,
     stockRows: stockRows.length,
@@ -41,6 +46,8 @@ if (mode === "inspect") {
       .length,
     catalogOnly: [...catalogSet].filter((sku) => !stockSet.has(sku)).sort(),
     stockOnly: [...stockSet].filter((sku) => !catalogSet.has(sku)).sort(),
+    serbiaStockEligibleRows: serbiaStockEligible.length,
+    excludedBySerbiaStockPolicy: catalogSkus.length - serbiaStockEligible.length,
     videos: matches(catalog, /<Product_video>[^<]+<\/Product_video>/g).length,
     manuals: matches(catalog, /<Manual_pdf>[^<]+<\/Manual_pdf>/g).length,
     energyLabels: matches(catalog, /<Energylabel_pdf>[^<]+<\/Energylabel_pdf>/g)
@@ -49,7 +56,11 @@ if (mode === "inspect") {
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(
-    summary.catalogRows === 2_897 && summary.stockRows === 2_896 ? 0 : 1,
+    summary.catalogRows >= 2_000 &&
+      summary.stockRows >= 2_000 &&
+      summary.serbiaStockEligibleRows > 0
+      ? 0
+      : 1,
   );
 }
 

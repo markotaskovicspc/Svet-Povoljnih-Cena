@@ -24,7 +24,6 @@ export default async function SveDo999Page() {
       titleIcon={titleIcon ?? under999CampaignSticker}
       campaignSticker="under999"
       headerVariant="promo"
-      subtitle="Mali dodaci za dom i nameštaj u najnižem cenovnom rangu."
       trail={[{ label: "Sve do 999" }]}
       source={products}
       initialNextCursor={nextCursor}

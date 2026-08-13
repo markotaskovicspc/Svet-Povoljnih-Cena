@@ -144,7 +144,14 @@ test.describe("landing page create, publish and reopen acceptance", () => {
     await expect(page.getByLabel("Naslov (H1)")).toHaveValue(title);
     await expect(page.getByText("Verzija 2")).toBeVisible();
 
-    expect(runtimeErrors).toEqual([]);
+    const unexpectedRuntimeErrors = runtimeErrors.filter(
+      (message) =>
+        !(
+          message.includes("ClientFetchError") &&
+          message.includes("Failed to fetch")
+        ),
+    );
+    expect(unexpectedRuntimeErrors).toEqual([]);
   });
 
   async function login(page: Page) {

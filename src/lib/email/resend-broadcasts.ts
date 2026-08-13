@@ -72,6 +72,7 @@ async function resendJson(
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
       "Content-Type": "application/json",
+      "User-Agent": "SvetPovoljnihCena-Broadcasts/1.0",
     },
     ...(body ? { body: JSON.stringify(prune(body)) } : {}),
   });

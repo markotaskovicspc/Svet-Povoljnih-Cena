@@ -95,6 +95,18 @@ export function paginateSearchSkuRows<T>(rows: T[], offset: number, limit: numbe
   return rows.slice(offset, offset + limit);
 }
 
+export function normalizeSearchTerm(value: string) {
+  return value
+    .trim()
+    .normalize("NFC")
+    .toLocaleLowerCase("sr-Latn-RS")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+export function isCodeLikeSearchQuery(value: string) {
+  return /^[a-z0-9_-]{2,8}$/i.test(value.trim()) && !value.includes(" ");
+}
+
 async function searchProductHits(
   query: string,
   limit = 8,
@@ -105,7 +117,8 @@ async function searchProductHits(
   const safeLimit = Math.min(Math.max(limit, 1), 96);
   const safeOffset = Math.max(0, Math.round(offset));
   const queryLimit = Math.min(1000, Math.max(safeLimit + safeOffset, safeLimit) * 4);
-  const codeLike = /^[A-Z0-9_-]{2,8}$/.test(q) && !q.includes(" ");
+  const codeLike = isCodeLikeSearchQuery(q);
+  const normalizedTerm = normalizeSearchTerm(q);
   const enforceAutoAvailability = isWebAutoAvailabilityEnforced();
   if (!hasDatabaseConnection()) {
     throw new SearchUnavailableError("Database connection string is not configured.");
@@ -158,6 +171,8 @@ async function searchProductHits(
              lower(${q}) = ANY (
                regexp_split_to_array(lower(p.name), '[^[:alnum:]_-]+')
              )
+             OR regexp_replace(lower(p.name), '[^[:alnum:]]+', '', 'g')
+                  LIKE ${'%' + normalizedTerm + '%'}
              OR p.sku ILIKE ${'%' + q + '%'}
              OR p.barcode ILIKE ${'%' + q + '%'}
            ))

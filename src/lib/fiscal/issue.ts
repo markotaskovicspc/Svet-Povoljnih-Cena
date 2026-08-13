@@ -17,6 +17,7 @@ import { ipsPaymentProvider } from "@/lib/payments";
 import { providerForPaymentMethod } from "@/lib/payments/types";
 import { fiscalize, type FiscalDispatchResult } from "./transport";
 import { uploadFiscalPdf } from "./pdf-storage";
+import { isUnsafeFiscalRedispatch } from "./retry-safety";
 
 export type FiscalIssueOutcome =
   | {
@@ -140,6 +141,14 @@ export async function issueFiscalSale(input: {
   });
   if (existingDocument?.status === "ISSUED" && existingDocument.receiptNumber && existingDocument.issuedAt) {
     return saleOutcome(existingDocument, order, false);
+  }
+  if (existingDocument && isUnsafeFiscalRedispatch(existingDocument)) {
+    return {
+      ok: false,
+      reason: "gateway_failure",
+      error:
+        "Fiskalni zahtev je već poslat, ali odgovor nije pouzdano sačuvan. Proverite badi portal i povežite postojeći račun; ponovno slanje je blokirano da ne bi nastao dupli račun.",
+    };
   }
 
   const totals = sumDrafts(drafts);
@@ -298,6 +307,27 @@ export async function issueFiscalRefund(input: {
       include: { lines: true },
     });
     if (existing?.status === "ISSUED" && existing.receiptNumber && existing.issuedAt) {
+      const paymentJob = await db.$transaction((tx) =>
+        ensureFiscalPaymentRefundJob(tx, {
+          orderId: order.id,
+          orderNumber: order.number,
+          fiscalDocumentId: existing.id,
+          method: input.paymentReturnMethod,
+          amount: totals.totalGross,
+          actorId: input.actorId ?? null,
+        }),
+      );
+      const paymentError = await recordFiscalPaymentRefund({
+        orderId: order.id,
+        orderNumber: order.number,
+        fiscalDocumentId: existing.id,
+        method: input.paymentReturnMethod,
+        amount: totals.totalGross,
+        actorId: input.actorId ?? null,
+      });
+      if (paymentError) paymentErrors.push(paymentError);
+      else if (paymentJob) await markPaymentRefundJobCompleted(paymentJob.id);
+      refundedGross += totals.totalGross;
       documents.push({
         id: existing.id,
         receiptNumber: existing.receiptNumber,
@@ -305,6 +335,14 @@ export async function issueFiscalRefund(input: {
         issuedAt: existing.issuedAt,
       });
       continue;
+    }
+    if (existing && isUnsafeFiscalRedispatch(existing)) {
+      return {
+        ok: false,
+        reason: "gateway_failure",
+        error:
+          "Refundacioni fiskalni zahtev je već poslat, ali odgovor nije pouzdano sačuvan. Proverite badi portal; ponovno slanje je blokirano da ne bi nastao dupli dokument.",
+      };
     }
 
     const rawRequest = buildFiscalRequestPreview({
@@ -368,7 +406,7 @@ export async function issueFiscalRefund(input: {
 
     const pdfStored = await storeOfficialPdf(order.number, dispatch);
     const issuedAt = new Date(dispatch.receipt.fiscalizedAt);
-    await db.$transaction(async (tx) => {
+    const paymentJob = await db.$transaction(async (tx) => {
       await tx.fiscalDocument.update({
         where: { id: document.id },
         data: {
@@ -426,9 +464,17 @@ export async function issueFiscalRefund(input: {
           });
         }
       }
+      return ensureFiscalPaymentRefundJob(tx, {
+        orderId: order.id,
+        orderNumber: order.number,
+        fiscalDocumentId: document.id,
+        method: input.paymentReturnMethod,
+        amount: totals.totalGross,
+        actorId: input.actorId ?? null,
+      });
     });
 
-    const paymentError = await recordPaymentRefund({
+    const paymentError = await recordFiscalPaymentRefund({
       orderId: order.id,
       orderNumber: order.number,
       fiscalDocumentId: document.id,
@@ -437,6 +483,7 @@ export async function issueFiscalRefund(input: {
       actorId: input.actorId ?? null,
     });
     if (paymentError) paymentErrors.push(paymentError);
+    else if (paymentJob) await markPaymentRefundJobCompleted(paymentJob.id);
 
     refundedGross += totals.totalGross;
     documents.push({
@@ -896,7 +943,7 @@ async function markDocumentFailed(documentId: string, dispatch: Extract<FiscalDi
   });
 }
 
-async function recordPaymentRefund(args: {
+export async function recordFiscalPaymentRefund(args: {
   orderId: string;
   orderNumber: string;
   fiscalDocumentId: string;
@@ -905,6 +952,7 @@ async function recordPaymentRefund(args: {
   actorId: string | null;
 }): Promise<string | null> {
   const provider = providerForPaymentMethod(args.method);
+  const idempotencyKey = `fiscal-refund:${args.fiscalDocumentId}:${args.method}`.slice(0, 200);
   const status = "COMPLETED" as const;
   const rawRequest: Prisma.InputJsonValue | undefined = undefined;
   const rawResponse: Prisma.InputJsonValue | undefined = undefined;
@@ -914,7 +962,7 @@ async function recordPaymentRefund(args: {
   if (args.method === "IPS") {
     try {
       const result = await ipsPaymentProvider.refundPayment(args.orderNumber, args.amount, {
-        idempotencyKey: `fiscal-refund:${args.fiscalDocumentId}:IPS`,
+        idempotencyKey,
         actorId: args.actorId ?? undefined,
         fiscalDocumentId: args.fiscalDocumentId,
       });
@@ -927,24 +975,101 @@ async function recordPaymentRefund(args: {
     }
   }
 
-  await db.paymentRefund.create({
-    data: {
-      orderId: args.orderId,
-      fiscalDocumentId: args.fiscalDocumentId,
-      method: args.method,
-      provider,
-      status,
-      amount: decimal(args.amount),
-      providerRef,
-      rawRequest,
-      rawResponse,
-      error,
-      actorId: args.actorId,
-      completedAt: status === "COMPLETED" ? new Date() : null,
-    },
-  });
+  const existing = await db.paymentRefund.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    return existing.status === "COMPLETED"
+      ? null
+      : existing.error ?? "Povraćaj novca zahteva proveru.";
+  }
+
+  try {
+    await db.paymentRefund.create({
+      data: {
+        orderId: args.orderId,
+        fiscalDocumentId: args.fiscalDocumentId,
+        idempotencyKey,
+        method: args.method,
+        provider,
+        status,
+        amount: decimal(args.amount),
+        providerRef,
+        rawRequest,
+        rawResponse,
+        error,
+        actorId: args.actorId,
+        completedAt: status === "COMPLETED" ? new Date() : null,
+      },
+    });
+  } catch (createError) {
+    if (!(createError instanceof Prisma.PrismaClientKnownRequestError) || createError.code !== "P2002") {
+      throw createError;
+    }
+  }
 
   return error;
+}
+
+type FiscalPaymentRefundJobArgs = Parameters<typeof recordFiscalPaymentRefund>[0];
+
+async function ensureFiscalPaymentRefundJob(
+  tx: Prisma.TransactionClient,
+  args: FiscalPaymentRefundJobArgs,
+) {
+  const idempotencyKey = `payment-refund:${args.fiscalDocumentId}`.slice(0, 200);
+  const existingRefund = await tx.paymentRefund.findFirst({
+    where: { fiscalDocumentId: args.fiscalDocumentId },
+    select: { id: true },
+  });
+  if (existingRefund) return null;
+
+  const payload = {
+    ...args,
+    actorId: args.actorId ?? null,
+  } satisfies Prisma.InputJsonObject;
+  const existingJob = await tx.backgroundJob.findUnique({
+    where: { idempotencyKey },
+    select: { id: true, status: true },
+  });
+  if (existingJob) {
+    if (existingJob.status === "FAILED" || existingJob.status === "COMPLETED") {
+      return tx.backgroundJob.update({
+        where: { id: existingJob.id },
+        data: {
+          payload,
+          status: "QUEUED",
+          attempts: 0,
+          availableAt: new Date(),
+          lockedAt: null,
+          lastError: null,
+          completedAt: null,
+        },
+        select: { id: true },
+      });
+    }
+    return { id: existingJob.id };
+  }
+  return tx.backgroundJob.create({
+    data: {
+      kind: "PAYMENT_REFUND",
+      payload,
+      idempotencyKey,
+      maxAttempts: 8,
+    },
+    select: { id: true },
+  });
+}
+
+async function markPaymentRefundJobCompleted(jobId: string) {
+  await db.backgroundJob.updateMany({
+    where: { id: jobId, status: { in: ["QUEUED", "RETRY"] } },
+    data: {
+      status: "COMPLETED",
+      payload: {},
+      lockedAt: null,
+      completedAt: new Date(),
+      lastError: null,
+    },
+  });
 }
 
 function buildIdempotencyKey(...parts: string[]) {

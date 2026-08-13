@@ -95,17 +95,23 @@ export default async function AnalyticsConversionPage() {
             AND a."occurredAt" >= ${periodStart}
             AND a."occurredAt" < ${now}
           GROUP BY a."productId"
-        ), sales AS (
+        ), fiscalized AS (
           SELECT
             l."productId",
-            COALESCE(SUM(l.qty), 0)::int AS sold_qty,
             COALESCE(
-              SUM(GREATEST(l."totalGross" - l."serviceGross", 0)),
+              SUM(CASE WHEN f.kind = 'REFUND' THEN -l.qty ELSE l.qty END),
+              0
+            )::int AS sold_qty,
+            COALESCE(
+              SUM(
+                (CASE WHEN f.kind = 'REFUND' THEN -1 ELSE 1 END) *
+                GREATEST(l."totalGross" - l."serviceGross", 0)
+              ),
               0
             )::double precision AS fiscal_revenue
           FROM "FiscalDocumentLine" l
           JOIN "FiscalDocument" f ON f.id = l."fiscalDocumentId"
-          WHERE f.kind = 'SALE'
+          WHERE f.kind IN ('SALE', 'REFUND')
             AND f.status = 'ISSUED'
             AND f."issuedAt" >= ${periodStart}
             AND f."issuedAt" < ${now}
@@ -117,11 +123,11 @@ export default async function AnalyticsConversionPage() {
           p.sku,
           p.name,
           v.visits,
-          COALESCE(s.sold_qty, 0)::int AS sold_qty,
-          COALESCE(s.fiscal_revenue, 0)::double precision AS fiscal_revenue
+          COALESCE(f.sold_qty, 0)::int AS sold_qty,
+          COALESCE(f.fiscal_revenue, 0)::double precision AS fiscal_revenue
         FROM visits v
         JOIN "Product" p ON p.id = v."productId"
-        LEFT JOIN sales s ON s."productId" = v."productId"
+        LEFT JOIN fiscalized f ON f."productId" = v."productId"
         ORDER BY v.visits DESC, fiscal_revenue DESC, p.sku ASC
         LIMIT 50
       `),

@@ -65,6 +65,10 @@ export async function getOrderForUser(userId: string, numberOrId: string) {
     shipping: num(order.shipping),
     assemblyTotal: num(order.assemblyTotal),
     voucherDiscount: order.voucherDiscount ? num(order.voucherDiscount) : null,
+    firstPurchaseDiscount: order.firstPurchaseDiscount
+      ? num(order.firstPurchaseDiscount)
+      : null,
+    savedCardDiscount: order.savedCardDiscount ? num(order.savedCardDiscount) : null,
     total: num(order.total),
     items: order.items.map((i) => ({
       ...i,
@@ -168,6 +172,10 @@ export async function getPublicOrderForConfirmation(
     assemblyTotal: num(row.assemblyTotal),
     voucherCode: row.voucherCode ?? undefined,
     voucherDiscount: row.voucherDiscount ? num(row.voucherDiscount) : undefined,
+    firstPurchaseDiscount: row.firstPurchaseDiscount
+      ? num(row.firstPurchaseDiscount)
+      : undefined,
+    savedCardDiscount: row.savedCardDiscount ? num(row.savedCardDiscount) : undefined,
     total: num(row.total),
     shippingMethod: SHIPPING_METHOD_LOWER[row.shippingMethod],
     paymentMethod: PAYMENT_METHOD_LOWER[row.paymentMethod],

@@ -17,7 +17,13 @@ export async function GET(req: Request) {
       const status = await ipsPaymentProvider.checkPaymentStatus(order);
       return await redirectFinal({
         order,
-        status: status.paid ? "paid" : result === "success" ? "checking" : "failed",
+        status: status.requiresReview
+          ? "checking"
+          : status.paid
+            ? "paid"
+            : result === "success"
+              ? "checking"
+              : "failed",
       });
     } catch (err) {
       logOperationalError("payment.ips.return_status_failed", err, { order });

@@ -70,6 +70,10 @@ const supabaseOrigin = (() => {
   }
 })();
 const upgradeInsecureRequests = (() => {
+  // Local `next dev` is plain HTTP. A production HTTPS URL in `.env.local`
+  // must not make WebKit rewrite localhost scripts to HTTPS and block hydration.
+  if (process.env.NODE_ENV === "development") return false;
+
   const raw =
     process.env.AUTH_URL ??
     process.env.NEXTAUTH_URL ??

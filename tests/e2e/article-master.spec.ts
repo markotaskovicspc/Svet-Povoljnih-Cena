@@ -456,13 +456,29 @@ test.describe("article master acceptance", () => {
         ],
       });
     const storefrontPage = await context.newPage();
+    const categoryPath = `/qa-root-${runId}/qa-group-${runId}`;
+    const catalogResponse = await storefrontPage.request.get(
+      `/api/products?categoryPath=${encodeURIComponent(categoryPath)}&limit=24`,
+    );
+    const catalogPayload = (await catalogResponse.json()) as {
+      ok: boolean;
+      items: Array<{ sku: string }>;
+    };
+    expect(catalogResponse.ok(), JSON.stringify(catalogPayload)).toBe(true);
+    expect(catalogPayload.items.some((item) => item.sku === productSku)).toBe(true);
     await storefrontPage.goto(
       `/k/qa-root-${runId}/qa-group-${runId}`,
       { waitUntil: "domcontentloaded" },
     );
-    await expect(storefrontPage.getByText("N2212", { exact: false }).first()).toBeVisible({
-      timeout: 120_000,
-    });
+    await expect(
+      storefrontPage.locator("article").filter({
+        has: storefrontPage.getByRole("heading", {
+          level: 3,
+          name: `${tag} kolekcija Otvorena polica N2212`,
+          exact: true,
+        }),
+      }),
+    ).toBeVisible({ timeout: 120_000 });
     await storefrontPage.close();
     await expect(productForm.locator('input[name="sku"]')).toHaveValue(productSku);
     await expect(productForm.locator('[name="shortDescription"]')).toHaveValue(
@@ -816,12 +832,24 @@ test.describe("article master acceptance", () => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: xlsx,
     });
+    const initialPreviewResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/erp/articles/import") &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Prikaži preview" }).click();
+    const initialPreviewResponse = await initialPreviewResponsePromise;
+    const initialPreviewPayload = await initialPreviewResponse.json();
+    expect(initialPreviewResponse.ok(), JSON.stringify(initialPreviewPayload)).toBe(true);
+    await expect(page.getByRole("status")).toContainText("Provera je uspešna", {
+      timeout: 120_000,
+    });
     const initialImportResponsePromise = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/admin/erp/articles/import") &&
         response.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    await page.getByRole("button", { name: "Potvrdi atomski uvoz" }).click();
     const initialImportResponse = await initialImportResponsePromise;
     const initialImportPayload = await initialImportResponse.json();
     expect(initialImportResponse.ok(), JSON.stringify(initialImportPayload)).toBe(true);
@@ -911,7 +939,7 @@ test.describe("article master acceptance", () => {
         response.url().endsWith("/api/admin/erp/articles/import") &&
         response.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    await page.getByRole("button", { name: "Prikaži preview" }).click();
     const invalidHierarchyResponse = await invalidHierarchyResponsePromise;
     const invalidHierarchyPayload = await invalidHierarchyResponse.json();
     expect(invalidHierarchyResponse.status()).toBe(409);
@@ -929,12 +957,24 @@ test.describe("article master acceptance", () => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: Buffer.from(await partialWorkbook.xlsx.writeBuffer()),
     });
+    const partialPreviewResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/erp/articles/import") &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Prikaži preview" }).click();
+    const partialPreviewResponse = await partialPreviewResponsePromise;
+    const partialPreviewPayload = await partialPreviewResponse.json();
+    expect(partialPreviewResponse.ok(), JSON.stringify(partialPreviewPayload)).toBe(true);
+    await expect(page.getByRole("status")).toContainText("Provera je uspešna", {
+      timeout: 120_000,
+    });
     const partialImportResponsePromise = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/admin/erp/articles/import") &&
         response.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    await page.getByRole("button", { name: "Potvrdi atomski uvoz" }).click();
     const partialImportResponse = await partialImportResponsePromise;
     const partialImportPayload = await partialImportResponse.json();
     expect(partialImportResponse.ok(), JSON.stringify(partialImportPayload)).toBe(true);
@@ -1030,7 +1070,7 @@ test.describe("article master acceptance", () => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: Buffer.from(await rejectedWorkbook.xlsx.writeBuffer()),
     });
-    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    await page.getByRole("button", { name: "Prikaži preview" }).click();
     const importAlert = page
       .getByRole("alert")
       .filter({ hasText: "Cela datoteka je odbijena" });
@@ -1255,10 +1295,11 @@ test.describe("article master acceptance", () => {
     await page
       .getByRole("button", { name: "Uredi podržana polja", exact: true })
       .click();
-    await page
+    const articleRow = page.locator("tbody tr").filter({ hasText: productSku });
+    await articleRow
       .getByRole("button", { name: currentProduct.shortName ?? "—", exact: true })
       .click({ timeout: 30_000 });
-    const inlineShortName = page.getByRole("textbox", {
+    const inlineShortName = articleRow.getByRole("textbox", {
       name: "Izmeni Kratki naziv",
       exact: true,
     });
@@ -1286,7 +1327,6 @@ test.describe("article master acceptance", () => {
           .filter(Boolean)
           .join(" "),
       });
-    const articleRow = page.locator("tbody tr").filter({ hasText: productSku });
     await articleRow
       .getByRole("button", {
         name: currentProduct.shortDescription ?? "—",

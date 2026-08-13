@@ -4,20 +4,25 @@ import { Prisma, type Supplier } from "@prisma/client";
 import { db } from "@/lib/db";
 import { parseOverrideFields } from "./ownership";
 import { isRiskyPriceChange, stableSourceHash } from "./safety";
-import { fetchRabaluxCatalog, fetchRabaluxStock } from "./sync";
+import {
+  fetchRabaluxSerbiaCatalog,
+  fetchRabaluxStock,
+  rabaluxSerbiaCatalogSourceHash,
+} from "./sync";
 import type { RabaluxSyncTarget } from "./admin-sync";
 import type { RabaluxCatalogItem } from "./types";
-import {
-  RABALUX_PUBLIC_STOCK_THRESHOLD,
-  isRabaluxStockFresh,
-} from "./availability";
+import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "./availability";
 import { isRabaluxSupplierOperational } from "./config";
+import { isRabaluxSerbiaWebStockAvailable } from "./serbia-stock";
 
 export type RabaluxPreviewSummary = {
   source: "XML" | "CSV" | "DATABASE";
   sourceHash: string;
+  rawCatalogRows: number;
   catalogRows: number;
   stockRows: number;
+  serbiaStockEligibleRows: number;
+  excludedBySerbiaStockPolicy: number;
   catalogUnique: number;
   stockUnique: number;
   invalidPrice: number;
@@ -85,7 +90,7 @@ export async function prepareRabaluxPreview(args: {
 }
 
 async function prepareCatalogPreview(supplier: Supplier, runId: string) {
-  const catalog = await fetchRabaluxCatalog(supplier);
+  const catalog = await fetchRabaluxSerbiaCatalog(supplier);
   const products = await db.product.findMany({
     where: { supplierId: supplier.id, deletedAt: null },
     select: {
@@ -167,10 +172,10 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
   );
   const diff = { ...EMPTY_DIFF };
   const changes: ChangeInput[] = [];
-  const seen = new Set<string>();
+  const eligibleSeen = new Set<string>();
 
   for (const item of catalog.items) {
-    seen.add(item.sourceSku);
+    eligibleSeen.add(item.sourceSku);
     const existing = productByExternal.get(item.sourceSku);
     const mappingId =
       item.category && item.type
@@ -321,11 +326,17 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
     }
   }
 
-  const missing = products.filter(
-    (product) =>
-      product.supplierExternalId && !seen.has(product.supplierExternalId),
-  );
+  const rawSeen = new Set(catalog.rawItems.map((item) => item.sourceSku));
+  const missing = products.filter((product) => {
+    if (!product.supplierExternalId) return false;
+    if (eligibleSeen.has(product.supplierExternalId)) return false;
+    if (rawSeen.has(product.supplierExternalId) && product.dcAvailableQty > 0) {
+      return false;
+    }
+    return true;
+  });
   for (const product of missing) {
+    const outsideSerbiaStock = rawSeen.has(product.supplierExternalId!);
     diff.deactivations++;
     changes.push(
       change({
@@ -333,10 +344,16 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
         runId,
         productId: product.id,
         externalSku: product.supplierExternalId!,
-        changeType: "DEACTIVATE_MISSING",
-        fields: ["isActive"],
+        changeType: outsideSerbiaStock
+          ? "DEACTIVATE_OUTSIDE_SERBIA_STOCK"
+          : "DEACTIVATE_MISSING",
+        fields: outsideSerbiaStock
+          ? ["isActive", "availableWebAuto"]
+          : ["isActive"],
         before: { isActive: product.isActive },
-        after: { isActive: false, graceRequired: true },
+        after: outsideSerbiaStock
+          ? { isActive: false, availableWebAuto: false, graceRequired: false }
+          : { isActive: false, graceRequired: true },
       }),
     );
   }
@@ -345,15 +362,19 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
     changes,
     summary: previewSummary({
       source: catalog.source,
-      sourceHash: stableSourceHash(catalog.items),
+      sourceHash: rabaluxSerbiaCatalogSourceHash(catalog),
       catalog: catalog.items,
-      stockRows: 0,
+      rawCatalogRows: catalog.rawCatalogRows,
+      stockRows: catalog.stockRows,
+      serbiaStockEligibleRows: catalog.items.length,
+      excludedBySerbiaStockPolicy: catalog.excludedBySerbiaStockPolicy,
       catalogOnly: missing.map((product) => product.supplierExternalId!),
       stockOnly: [],
       diff,
       changes,
-      policy: currentPolicyCounts(
+      policy: incomingPolicyCounts(
         products,
+        catalog.stockBySku,
         isRabaluxSupplierOperational(supplier),
       ),
     }),
@@ -372,6 +393,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
         supplierNextArrivalAt: true,
         articleStatus: true,
         isDtz: true,
+        isActive: true,
         dcAvailableQty: true,
         supplierApprovalStatus: true,
         syncOverrides: true,
@@ -402,18 +424,23 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       supplierNextArrivalAt: product.supplierNextArrivalAt?.toISOString() ?? null,
       articleStatus: product.articleStatus,
       isDtz: product.isDtz,
+      isActive: product.isActive,
     };
+    const policyDeactivation =
+      product.dcAvailableQty <= 0 && !isRabaluxSerbiaWebStockAvailable(item);
     const after = {
       supplierStock: item.stock,
       supplierNextArrivalAt: item.nextArrivalAt?.toISOString() ?? null,
       articleStatus: item.restricted ? "ARH" : "SP",
       isDtz: false,
+      isActive: policyDeactivation ? false : product.isActive,
     };
     const locked = parseOverrideFields(product.syncOverrides);
     const fields = changedFields(before, after).filter((field) => {
       if (item.restricted && ["articleStatus", "isDtz"].includes(field)) {
         return true;
       }
+      if (policyDeactivation && field === "isActive") return true;
       if (field === "isDtz" || (field === "articleStatus" && before.articleStatus === "DTZ")) {
         return true;
       }
@@ -465,7 +492,12 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       source: "CSV",
       sourceHash: stableSourceHash(stock),
       catalog: [],
+      rawCatalogRows: 0,
       stockRows: stock.length,
+      serbiaStockEligibleRows: stock.filter(isRabaluxSerbiaWebStockAvailable).length,
+      excludedBySerbiaStockPolicy: stock.filter(
+        (item) => !isRabaluxSerbiaWebStockAvailable(item),
+      ).length,
       catalogOnly: catalogOnly.map((product) => product.supplierExternalId!),
       stockOnly,
       diff,
@@ -520,7 +552,10 @@ async function prepareMediaPreview(supplier: Supplier, runId: string) {
       source: "DATABASE",
       sourceHash: stableSourceHash(rows.map(({ id }) => id)),
       catalog: [],
+      rawCatalogRows: 0,
       stockRows: 0,
+      serbiaStockEligibleRows: 0,
+      excludedBySerbiaStockPolicy: 0,
       catalogOnly: [],
       stockOnly: [],
       diff,
@@ -535,7 +570,10 @@ function previewSummary(args: {
   source: RabaluxPreviewSummary["source"];
   sourceHash: string;
   catalog: RabaluxCatalogItem[];
+  rawCatalogRows: number;
   stockRows: number;
+  serbiaStockEligibleRows: number;
+  excludedBySerbiaStockPolicy: number;
   catalogOnly: string[];
   stockOnly: string[];
   diff: RabaluxPreviewSummary["diff"];
@@ -554,8 +592,11 @@ function previewSummary(args: {
   return {
     source: args.source,
     sourceHash: args.sourceHash,
+    rawCatalogRows: args.rawCatalogRows,
     catalogRows: args.catalog.length,
     stockRows: args.stockRows,
+    serbiaStockEligibleRows: args.serbiaStockEligibleRows,
+    excludedBySerbiaStockPolicy: args.excludedBySerbiaStockPolicy,
     catalogUnique: new Set(args.catalog.map((item) => item.sourceSku)).size,
     stockUnique: args.stockRows,
     invalidPrice: args.catalog.filter((item) => item.fullPrice <= 0).length,
@@ -739,19 +780,6 @@ type PolicyProduct = {
   lastSupplierStockSyncAt?: Date | null;
   articleStatus: string;
 };
-
-function currentPolicyCounts(
-  products: PolicyProduct[],
-  supplierOperational: boolean,
-) {
-  return countPolicy(products, (product) => ({
-    stock: product.supplierStock ?? 0,
-    restricted: product.articleStatus === "ARH",
-    fresh:
-      supplierOperational &&
-      isRabaluxStockFresh(product.lastSupplierStockSyncAt),
-  }));
-}
 
 function incomingPolicyCounts(
   products: PolicyProduct[],

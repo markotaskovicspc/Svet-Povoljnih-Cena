@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { issueAndDeliverFiscalReceipt } from "./deliver";
+import { isUnsafeFiscalRedispatch } from "./retry-safety";
 
 const MAX_ATTEMPTS = 5;
 const MIN_AGE_MS = 10 * 60 * 1000;
@@ -59,9 +60,7 @@ export async function retryPendingFiscalDocuments(limit = 25): Promise<FiscalRet
 
   const retriedOrders = new Set<string>();
   for (const document of documents) {
-    const maybeLanded =
-      document.dispatchedAt !== null && (document.error?.startsWith("fiscal:network") ?? true);
-    if (maybeLanded) {
+    if (isUnsafeFiscalRedispatch(document)) {
       summary.skippedUnsafe += 1;
       continue;
     }

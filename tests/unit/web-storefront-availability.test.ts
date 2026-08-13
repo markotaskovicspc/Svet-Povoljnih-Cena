@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   isProductAvailableOnWeb,
   isWebAutoAvailabilityEnforced,
+  storefrontPublicationBlockers,
   storefrontAvailabilityWhere,
   webStorefrontProductWhere,
 } from "@/lib/web-storefront-availability";
@@ -138,5 +139,36 @@ describe("web storefront availability rollout", () => {
     expect(incoming).not.toContain('"NOT"');
     expect(unavailable).toContain('"incomingStock":{"lte":0}');
     expect(unavailable).not.toContain('"NOT"');
+  });
+
+  it("reports the exact retail-price and family publication gates", () => {
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+    expect(
+      storefrontPublicationBlockers({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        supplier: { integrationKey: null, enabled: true },
+        hasActiveRetailPrice: false,
+        familyStorefrontEnabled: false,
+      }),
+    ).toEqual([
+      "Nema važeću pozitivnu stavku aktivnog MP cenovnika",
+      "Ova boja porodice nije uključena za web",
+    ]);
+  });
+
+  it("does not treat ordinary zero stock as a publication blocker", () => {
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+    expect(
+      storefrontPublicationBlockers({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        supplier: { integrationKey: null, enabled: true },
+        hasActiveRetailPrice: true,
+        familyStorefrontEnabled: null,
+      }),
+    ).toEqual([]);
   });
 });

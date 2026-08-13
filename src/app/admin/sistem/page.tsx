@@ -133,7 +133,7 @@ export default async function SystemStatusPage() {
             Operativno stanje
           </CardTitle>
           {snapshot.queues ? (
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
               <StatCard
                 label="Email greške"
                 value={String(snapshot.queues.failedEmails)}
@@ -163,6 +163,16 @@ export default async function SystemStatusPage() {
                 value={String(snapshot.queues.queuedBackgroundJobs)}
                 tone={
                   snapshot.queues.queuedBackgroundJobs ? "warning" : "success"
+                }
+              />
+              <StatCard
+                label="Nedovršeni audit zapisi"
+                value={String(snapshot.queues.unresolvedAuditAttempts)}
+                hint="Pokrenute admin akcije bez potvrđenog završnog ishoda"
+                tone={
+                  snapshot.queues.unresolvedAuditAttempts
+                    ? "danger"
+                    : "success"
                 }
               />
             </div>

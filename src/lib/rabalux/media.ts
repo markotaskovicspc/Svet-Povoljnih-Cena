@@ -26,6 +26,8 @@ import {
 } from "./safety";
 import type { RabaluxSyncOptions } from "./sync";
 import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
+import { normalizeRabaluxImageForStorage } from "./image-normalization";
+import { isRecoverableRabaluxMediaFailure } from "./media-recovery-policy";
 
 const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
@@ -157,16 +159,22 @@ async function mirrorMediaAsset(asset: {
     );
   }
 
-  const storage = createAdminClient().storage.from(getProductMediaBucket());
-  await upload(storage, asset.url, downloaded.buffer, downloaded.contentType);
-
-  const image = sharp(downloaded.buffer, { failOn: "error" }).rotate();
-  const metadata = await image.metadata();
-  if (!metadata.width || !metadata.height) {
+  let normalized;
+  try {
+    normalized = await normalizeRabaluxImageForStorage(downloaded.buffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new PermanentBackgroundJobError(
-      "Rabalux image dimensions could not be verified.",
+      `Rabalux image could not be normalized safely: ${message.slice(0, 500)}`,
     );
   }
+  const storage = createAdminClient().storage.from(getProductMediaBucket());
+  await upload(
+    storage,
+    asset.url,
+    normalized.buffer,
+    normalized.contentType,
+  );
   const variantKeys: Record<(typeof VARIANTS)[number]["name"], string> = {
     thumb: "",
     card: "",
@@ -191,8 +199,8 @@ async function mirrorMediaAsset(asset: {
     where: { id: asset.id },
     data: {
       syncStatus: "READY",
-      width: metadata.width,
-      height: metadata.height,
+      width: normalized.width,
+      height: normalized.height,
       thumbUrl: variantKeys.thumb,
       cardUrl: variantKeys.card,
       pdpUrl: variantKeys.pdp,
@@ -449,6 +457,43 @@ export async function retryFailedRabaluxProductMedia(productId: string) {
   if (!target) return { queued: false as const, reason: "no_failed_assets" };
   const job = await enqueueRabaluxMediaAsset(productId, target);
   return { queued: true as const, jobId: job.id, ...target };
+}
+
+export async function retryRecoverableFailedRabaluxMediaJobs(limit = 100) {
+  const cappedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+  const failed = await db.backgroundJob.findMany({
+    where: { kind: "RABALUX_MEDIA_PRODUCT", status: "FAILED" },
+    orderBy: { updatedAt: "asc" },
+    take: cappedLimit,
+    select: { id: true, lastError: true },
+  });
+  const recoverableIds = failed
+    .filter(({ lastError }) => isRecoverableRabaluxMediaFailure(lastError))
+    .map(({ id }) => id);
+  if (recoverableIds.length === 0) {
+    return {
+      scanned: failed.length,
+      requeued: 0,
+      skippedPermanent: failed.length,
+    };
+  }
+
+  const requeued = await db.backgroundJob.updateMany({
+    where: { id: { in: recoverableIds }, status: "FAILED" },
+    data: {
+      status: "QUEUED",
+      attempts: 0,
+      availableAt: new Date(),
+      lockedAt: null,
+      completedAt: null,
+      lastError: null,
+    },
+  });
+  return {
+    scanned: failed.length,
+    requeued: requeued.count,
+    skippedPermanent: failed.length - recoverableIds.length,
+  };
 }
 
 async function enqueueNextRabaluxMediaAsset(

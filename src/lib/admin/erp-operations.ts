@@ -25,6 +25,8 @@ import {
   STOCKTAKE_STATUS_LABEL,
 } from "@/lib/admin/stocktake-dispatch";
 import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
+import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
+import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -1743,23 +1745,33 @@ async function unpublishedRows(take: number): Promise<ErpRow[]> {
   const products = await db.product.findMany({
     take,
     orderBy: { updatedAt: "desc" },
-    include: { media: { take: 1, select: { id: true } } },
+    include: {
+      supplier: { select: { integrationKey: true, enabled: true } },
+      familyMembership: { select: { storefrontEnabled: true } },
+      priceListEntries: {
+        where: activeRetailPriceEntryWhere(),
+        take: 1,
+        select: { id: true },
+      },
+    },
   });
   return products
     .map((product) => {
-      const reasons: string[] = [];
-      if (!product.isActive) reasons.push("Artikal je ručno deaktiviran");
-      if (product.deletedAt) reasons.push("Artikal je arhiviran");
-      if (product.articleStatus === "ARH" || product.articleStatus === "UZ") {
-        reasons.push(`ERP status ${product.articleStatus} nije prodajan`);
-      }
-      if (Number(product.fullPrice) <= 0) reasons.push("MP cena nije veća od nule");
-      if (!product.description.trim()) reasons.push("Nedostaje opis za sajt");
-      if (!product.media.length) reasons.push("Nedostaje glavna fotografija");
-      if (!product.availableWebManual) reasons.push("Web kanal je ručno isključen");
-      if (product.stock <= 0 && product.incomingStock <= 0) {
-        reasons.push("Nema zaliha ni potvrđene količine u dolasku");
-      }
+      const reasons = storefrontPublicationBlockers({
+        isActive: product.isActive,
+        deletedAt: product.deletedAt,
+        availableWebManual: product.availableWebManual,
+        availableWebAuto: product.availableWebAuto,
+        articleStatus: product.articleStatus,
+        dcAvailableQty: product.dcAvailableQty,
+        supplierStock: product.supplierStock,
+        supplierApprovalStatus: product.supplierApprovalStatus,
+        lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+        supplier: product.supplier,
+        hasActiveRetailPrice: product.priceListEntries.length > 0,
+        familyStorefrontEnabled:
+          product.familyMembership?.storefrontEnabled ?? null,
+      });
       return {
         id: product.id,
         values: {

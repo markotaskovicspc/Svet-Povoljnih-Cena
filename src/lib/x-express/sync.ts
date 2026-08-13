@@ -24,6 +24,21 @@ import type {
  * don't exhaust the connection pool.
  */
 const SYNC_UPSERT_CONCURRENCY = 20;
+const DEACTIVATE_MISSING_STREETS_SQL = `
+  UPDATE "XExpressStreet"
+     SET "active" = false,
+         "updatedAt" = NOW()
+   WHERE NOT ("id" = ANY($1::integer[]))
+`;
+
+export function missingXExpressStreetDeactivation(
+  seenIds: readonly number[],
+) {
+  const uniqueIds = Array.from(new Set(seenIds));
+  return uniqueIds.length
+    ? { sql: DEACTIVATE_MISSING_STREETS_SQL, ids: uniqueIds }
+    : null;
+}
 
 async function runChunked<T>(
   items: readonly T[],
@@ -240,11 +255,11 @@ async function upsertStreets(streets: XExpressStreet[]) {
       },
     }),
   );
-  if (seenIds.length) {
-    await db.xExpressStreet.updateMany({
-      where: { id: { notIn: seenIds } },
-      data: { active: false },
-    });
+  const deactivation = missingXExpressStreetDeactivation(seenIds);
+  if (deactivation) {
+    // Passing the complete dictionary as one PostgreSQL array parameter avoids
+    // Prisma expanding a large `NOT IN` list past the database parameter limit.
+    await db.$executeRawUnsafe(deactivation.sql, deactivation.ids);
   }
 }
 

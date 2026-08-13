@@ -12,6 +12,8 @@ export interface CreatePaymentResult {
 
 export interface PaymentStatusResult {
   paid: boolean;
+  /** Money reached the provider, but the order cannot be safely confirmed automatically. */
+  requiresReview?: boolean;
   responseCode: string;
   providerRef: string | null;
   paymentReference: string | null;

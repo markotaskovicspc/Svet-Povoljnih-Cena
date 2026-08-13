@@ -27,6 +27,7 @@ export {
   getIssuedSaleDocumentsForOrder,
   ensureDefaultWarehouse,
   paymentMethodLabel,
+  recordFiscalPaymentRefund,
   type FiscalIssueOutcome,
   type FiscalRefundOutcome,
 } from "./issue";

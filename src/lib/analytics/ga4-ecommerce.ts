@@ -119,7 +119,9 @@ export function buildPurchasePayload(order: Order) {
         index,
       ),
     ),
-    order.voucherDiscount,
+    nonNegativeMoney(order.voucherDiscount) +
+      nonNegativeMoney(order.firstPurchaseDiscount) +
+      nonNegativeMoney(order.savedCardDiscount),
   );
 
   return {

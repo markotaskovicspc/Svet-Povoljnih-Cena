@@ -22,6 +22,9 @@ export default async function Home() {
 
   return (
     <>
+      <h1 className="sr-only">
+        Svet povoljnih cena — online prodavnica
+      </h1>
       <HeroCarousel banners={banners} />
       <div className="md:hidden">
         <ShortcutStrip tabs={mobileTabs} />

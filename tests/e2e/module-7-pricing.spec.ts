@@ -1279,7 +1279,10 @@ function actionForm(page: Page) {
 }
 
 function actionRow(page: Page, name: string) {
-  return page.getByRole("button", { name: new RegExp(escapeRegex(name)) });
+  return page.getByRole("button", {
+    name: new RegExp(`^${escapeRegex(name)}$`),
+    exact: true,
+  });
 }
 
 function loyaltyForm(page: Page) {

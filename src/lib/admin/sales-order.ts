@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const SUPPLIER_ALLOCATION = "SUPPLIER";
 export const SALES_VAT_RATE = 20;
+export const DECIMAL_12_2_MAX = 9_999_999_999.99;
 
 export const MANUAL_SALES_ORDER_STATUSES = [
   "KREIRANO",
@@ -40,6 +41,7 @@ export const manualSalesOrderInputSchema = z
   })
   .superRefine((value, context) => {
     const seen = new Set<string>();
+    let orderGross = 0;
     value.lines.forEach((line, index) => {
       const normalized = line.sku.toLocaleUpperCase("sr-Latn-RS");
       if (seen.has(normalized)) {
@@ -50,7 +52,23 @@ export const manualSalesOrderInputSchema = z
         });
       }
       seen.add(normalized);
+      const lineGross = roundSalesMoney(line.qty * line.unitPrice);
+      orderGross = roundSalesMoney(orderGross + lineGross);
+      if (lineGross > DECIMAL_12_2_MAX) {
+        context.addIssue({
+          code: "custom",
+          path: ["lines", index, "unitPrice"],
+          message: "Ukupna vrednost reda premašuje kapacitet baze.",
+        });
+      }
     });
+    if (orderGross > DECIMAL_12_2_MAX) {
+      context.addIssue({
+        code: "custom",
+        path: ["lines"],
+        message: "Ukupna vrednost porudžbine premašuje kapacitet baze.",
+      });
+    }
   });
 
 export type ManualSalesOrderInput = z.infer<typeof manualSalesOrderInputSchema>;

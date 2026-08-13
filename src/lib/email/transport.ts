@@ -72,6 +72,7 @@ async function dispatchResend(
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
+    "User-Agent": "SvetPovoljnihCena-Email/1.0",
   };
   if (input.idempotencyKey) headers["Idempotency-Key"] = input.idempotencyKey;
 

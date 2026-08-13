@@ -61,8 +61,16 @@ export function RabaluxControls({
       {preview ? (
         <div className="space-y-4 rounded-lg border border-border p-4">
           <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Katalog" value={preview.summary.catalogRows} />
-            <Stat label="Stock" value={preview.summary.stockRows} />
+            <Stat label="Sirovi RS katalog" value={preview.summary.rawCatalogRows} />
+            <Stat label="RS stock redovi" value={preview.summary.stockRows} />
+            <Stat
+              label="Za uvoz (RS lager >10)"
+              value={preview.summary.serbiaStockEligibleRows}
+            />
+            <Stat
+              label="Isključeno RS pravilom"
+              value={preview.summary.excludedBySerbiaStockPolicy}
+            />
             <Stat label="Nevažeće cene" value={preview.summary.invalidPrice} />
             <Stat
               label="Vidljivo zbog Rabalux stanja"
@@ -96,7 +104,7 @@ export function RabaluxControls({
               value={preview.summary.diff.priceProposals}
             />
             <Stat
-              label="Deaktivacije posle grace perioda"
+              label="Deaktivacije (RS lager/katalog)"
               value={preview.summary.diff.deactivations}
             />
             <Stat

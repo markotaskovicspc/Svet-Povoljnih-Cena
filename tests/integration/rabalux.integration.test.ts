@@ -58,6 +58,9 @@ beforeAll(async () => {
   process.env.RABALUX_STOCK_PASS = "integration-pass";
   process.env.RABALUX_MIN_CATALOG_ROWS = "1";
   process.env.RABALUX_MIN_STOCK_ROWS = "1";
+  // Tiny synthetic feeds must not inherit an unrelated seeded feed-volume
+  // baseline. The dedicated circuit-breaker scenario below restores 90%.
+  process.env.RABALUX_MIN_BASELINE_RATIO = "0.000001";
   await db.analyticsEvent.deleteMany({
     where: { anonymousId: { startsWith: "rabalux-integration-" } },
   });
@@ -276,6 +279,18 @@ function orderInput(
   };
 }
 
+function rabaluxStockFeed(
+  items: Array<{ sourceSku: string; stock?: number; status?: string }>,
+) {
+  return [
+    '"Article number";Description;"International Article Number (EAN/UPC)";"Product type";"Product category";Status;"Available quantity";"Unit of Measure";"Next arrival date"',
+    ...items.map(
+      (item) =>
+        `${item.sourceSku};"Test";;"Tip";"Kategorija";"${item.status ?? ""}";${item.stock ?? 11};PCS;`,
+    ),
+  ].join("\n");
+}
+
 describe("Rabalux checkout integration", () => {
   it("moves 10→11→10 through the public threshold and preserves the DC exception", async () => {
     const product = await createProduct({
@@ -369,7 +384,7 @@ describe("Rabalux checkout integration", () => {
           select: { sourceUrl: true },
         }),
       ).toEqual({
-        sourceUrl: "https://rabaluxkep.plugin.hu/images/IT-SYNC_fhd.jpg",
+        sourceUrl: "https://rabalux.com/images/products/IT-SYNC/IT-SYNC.jpg",
       });
       expect(
         await db.product.count({
@@ -423,7 +438,7 @@ describe("Rabalux checkout integration", () => {
       runIds.push(preview.token.split(".")[0]);
       expect(preview.summary).toMatchObject({
         catalogRows: 1,
-        stockRows: 0,
+        stockRows: 1,
         diff: { creates: 0 },
       });
       await expect(
@@ -525,6 +540,16 @@ describe("Rabalux checkout integration", () => {
           status: 200,
         });
       }
+      if (String(input).includes("/id/11")) {
+        return new Response(
+          rabaluxStockFeed(
+            Array.from({ length: 8 }, (_, index) => ({
+              sourceSku: `IT-CAT-${index + 1}`,
+            })),
+          ),
+          { status: 200 },
+        );
+      }
       throw new Error(`Unexpected integration-test URL: ${String(input)}`);
     });
 
@@ -600,6 +625,11 @@ describe("Rabalux checkout integration", () => {
           </Product></Products>`,
           { status: 200 },
         );
+      }
+      if (String(input).includes("/id/11")) {
+        return new Response(rabaluxStockFeed([{ sourceSku: "IT-APPROVAL" }]), {
+          status: 200,
+        });
       }
       throw new Error(`Unexpected integration-test URL: ${String(input)}`);
     });
@@ -704,10 +734,16 @@ describe("Rabalux checkout integration", () => {
           { status: 200 },
         );
       }
+      if (String(input).includes("/id/11")) {
+        return new Response(rabaluxStockFeed([{ sourceSku: "IT-DUMMY" }]), {
+          status: 200,
+        });
+      }
       throw new Error(`Unexpected integration-test URL: ${String(input)}`);
     });
     const runIds: string[] = [];
     try {
+      process.env.RABALUX_MIN_BASELINE_RATIO = "0.9";
       const baseline = await db.importRun.create({
         data: {
           supplierId,
@@ -729,7 +765,13 @@ describe("Rabalux checkout integration", () => {
         }),
       ).toEqual({ isActive: true, supplierStock: 4 });
 
-      await db.importRun.delete({ where: { id: baseline.id } });
+      // Keep the synthetic baseline authoritative for the remainder of this
+      // scenario. Deleting it exposed unrelated seeded/earlier successful runs
+      // and made the next one-row fixture trip the shrink circuit again.
+      await db.importRun.update({
+        where: { id: baseline.id },
+        data: { recordsRead: 1, recordsOk: 1, finishedAt: new Date() },
+      });
       const owner = await db.importRun.create({
         data: {
           supplierId,
@@ -787,6 +829,7 @@ describe("Rabalux checkout integration", () => {
         supplierApprovalStatus: "PENDING_APPROVAL",
       });
     } finally {
+      process.env.RABALUX_MIN_BASELINE_RATIO = "0.000001";
       delete process.env.RABALUX_CATALOG_MISSING_CONFIRMATIONS;
       delete process.env.RABALUX_CATALOG_MISSING_GRACE_HOURS;
       vi.stubGlobal("fetch", originalFetch);

@@ -152,6 +152,27 @@ describe("validacija ručne VP/INO porudžbine", () => {
     ).toBe(false);
   });
 
+  it("odbija red čija bruto vrednost ne staje u Decimal(12,2)", () => {
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        lines: [{ ...validInput.lines[0], qty: 11, unitPrice: 999_999_999.99 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("odbija zbir porudžbine koji ne staje u Decimal(12,2)", () => {
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        lines: [
+          { ...validInput.lines[0], sku: "SKU-1", qty: 6, unitPrice: 900_000_000 },
+          { ...validInput.lines[0], sku: "SKU-2", qty: 6, unitPrice: 900_000_000 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("odbija duplu šifru bez obzira na veličinu slova", () => {
     const parsed = manualSalesOrderInputSchema.safeParse({
       ...validInput,

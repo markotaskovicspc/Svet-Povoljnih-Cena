@@ -199,6 +199,7 @@ async function resendRequest(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "User-Agent": "SvetPovoljnihCena-Marketing/1.0",
     },
     body: JSON.stringify(body),
   });

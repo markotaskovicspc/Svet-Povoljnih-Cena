@@ -73,6 +73,7 @@ import {
   resolveRabaluxSupplierStock,
 } from "@/lib/rabalux/availability";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
 import {
   defaultProductNewUntil,
   productNewUntilIsActive,
@@ -1438,6 +1439,28 @@ export default async function ProductDetail({
       selectedLeafCategory &&
       product.group.slug !== selectedLeafCategory.slug,
   );
+  const publicationBlockers = storefrontPublicationBlockers({
+    isActive: product.isActive,
+    deletedAt: product.deletedAt,
+    availableWebManual: product.availableWebManual,
+    availableWebAuto: product.availableWebAuto,
+    articleStatus: product.articleStatus,
+    dcAvailableQty: product.dcAvailableQty,
+    supplierStock: product.supplierStock,
+    supplierApprovalStatus: product.supplierApprovalStatus,
+    lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+    supplier: product.supplier,
+    hasActiveRetailPrice: product.priceListEntries.some(
+      (entry) =>
+        Number(entry.price) > 0 &&
+        entry.validFrom <= now &&
+        (!entry.validTo || entry.validTo >= now) &&
+        (!entry.priceList.validFrom || entry.priceList.validFrom <= now) &&
+        (!entry.priceList.validTo || entry.priceList.validTo >= now),
+    ),
+    familyStorefrontEnabled:
+      product.familyMembership?.storefrontEnabled ?? null,
+  });
 
   return (
     <>
@@ -1453,6 +1476,22 @@ export default async function ProductDetail({
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
+          <Card>
+            <CardTitle description="Isti uslovi koje koriste PDP, kategorije i pretraga.">
+              Objava na sajtu
+            </CardTitle>
+            {publicationBlockers.length === 0 ? (
+              <p className="mt-3 text-sm font-medium text-success">
+                Artikal ispunjava sve tehničke uslove za objavu.
+              </p>
+            ) : (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-warning">
+                {publicationBlockers.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            )}
+          </Card>
           <Card>
             <CardTitle description="Svaka boja ostaje zaseban SKU sa svojim slikama i zalihama.">
               Boje u porodici

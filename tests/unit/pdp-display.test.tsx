@@ -169,4 +169,21 @@ describe("PDP price and benefit display", () => {
       }),
     ).toBe("Sledeći očekivani dolazak: 11. 9. 2026.");
   });
+
+  it("shows the same ordinary-stock message returned by the availability API", () => {
+    const availability = getProductAvailability({
+      stock: 8,
+      incomingStock: 0,
+      fullPrice: product.fullPrice,
+      dimensionsCm: { w: 60, d: 65, h: 130 },
+      media: { images: [{ url: "/game-throne.jpg" }] },
+      deliveryDays: product.deliveryDays,
+      availabilitySource: "DC",
+    });
+
+    expect(availability.message).toBe("Spremno za poručivanje");
+    expect(getPdpAvailabilityMessage(product, availability)).toBe(
+      availability.message,
+    );
+  });
 });

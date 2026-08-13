@@ -143,7 +143,11 @@ test.describe("DTZ admin acceptance", () => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: Buffer.from(await workbook.xlsx.writeBuffer()),
     });
-    await page.getByRole("button", { name: "Proveri i uvezi" }).click();
+    await page.getByRole("button", { name: "Prikaži preview" }).click();
+    await expect(page.getByRole("status")).toContainText("Provera je uspešna", {
+      timeout: 120_000,
+    });
+    await page.getByRole("button", { name: "Potvrdi atomski uvoz" }).click();
     const result = page.getByRole("status");
     await expect(result).toContainText("Uvezeno artikala: 1", {
       timeout: 120_000,

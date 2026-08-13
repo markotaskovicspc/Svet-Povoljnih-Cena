@@ -34,13 +34,9 @@ interface PdpAddToCartProps {
 }
 
 export function getPdpAvailabilityMessage(
-  product: Pick<Product, "deliveryDays">,
+  _product: Pick<Product, "deliveryDays">,
   availability: ProductAvailability,
 ) {
-  if (availability.isSupplierSourced) return availability.message;
-  if (availability.canAddToCart) {
-    return `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`;
-  }
   return availability.message ===
     "Trenutno nije dostupno za online kupovinu"
     ? null

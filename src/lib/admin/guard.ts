@@ -95,15 +95,21 @@ export function withAdminState<TArgs extends unknown[], TOut>(
 ): (...args: TArgs) => Promise<AdminActionState<TOut>> {
   return async (...args: TArgs) => {
     const admin = await requireAdminAction(meta.allowed);
-    const { logAudit } = await import("./audit");
+    const { finalizeAudit, logAudit } = await import("./audit");
     const requestId = randomUUID();
+    let attemptAuditId: string;
     try {
-      await logAudit({
+      const attempt = await logAudit({
         actorId: admin.id,
         action: `${meta.action}.attempt`,
         entity: meta.entity,
-        diff: { requestId },
+        diff: {
+          requestId,
+          auditStatus: "STARTED",
+          targetAction: meta.action,
+        },
       });
+      attemptAuditId = attempt.id;
     } catch (error) {
       logOperationalError("admin.audit.attempt_failed", error, {
         action: meta.action,
@@ -118,12 +124,15 @@ export function withAdminState<TArgs extends unknown[], TOut>(
       const out = await fn(admin.id, ...args);
       if (out.ok) {
         try {
-          await logAudit({
-            actorId: admin.id,
+          await finalizeAudit({
+            id: attemptAuditId,
             action: meta.action,
             entity: meta.entity,
             entityId: out.entityId ?? null,
-            diff: auditDiff(requestId, out.diff),
+            diff: {
+              ...auditDiff(requestId, out.diff),
+              auditStatus: "SUCCEEDED",
+            },
           });
         } catch (error) {
           logOperationalError("admin.audit.success_failed", error, {
@@ -138,8 +147,8 @@ export function withAdminState<TArgs extends unknown[], TOut>(
         return adminActionSuccess<TOut>(out.message, out.result);
       }
       const message = out.message ?? out.error ?? "Neispravan unos.";
-      await recordFailureAudit(logAudit, {
-        actorId: admin.id,
+      await recordFailureAudit(finalizeAudit, {
+        auditId: attemptAuditId,
         action: meta.action,
         entity: meta.entity,
         requestId,
@@ -149,8 +158,8 @@ export function withAdminState<TArgs extends unknown[], TOut>(
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Nepoznata greška.";
-      await recordFailureAudit(logAudit, {
-        actorId: admin.id,
+      await recordFailureAudit(finalizeAudit, {
+        auditId: attemptAuditId,
         action: meta.action,
         entity: meta.entity,
         requestId,
@@ -169,15 +178,15 @@ function auditDiff(requestId: string, diff: unknown) {
 }
 
 async function recordFailureAudit(
-  logAudit: (args: {
-    actorId?: string | null;
+  finalizeAudit: (args: {
+    id: string;
     action: string;
     entity: string;
     entityId?: string | null;
     diff?: unknown;
   }) => Promise<void>,
   args: {
-    actorId: string;
+    auditId: string;
     action: string;
     entity: string;
     requestId: string;
@@ -185,16 +194,20 @@ async function recordFailureAudit(
   },
 ) {
   try {
-    await logAudit({
-      actorId: args.actorId,
+    await finalizeAudit({
+      id: args.auditId,
       action: `${args.action}.error`,
       entity: args.entity,
-      diff: { requestId: args.requestId, error: args.error },
+      diff: {
+        requestId: args.requestId,
+        auditStatus: "FAILED",
+        error: args.error,
+      },
     });
   } catch (error) {
     logOperationalError("admin.audit.error_failed", error, {
       action: args.action,
-      actorId: args.actorId,
+      auditId: args.auditId,
       requestId: args.requestId,
     });
   }

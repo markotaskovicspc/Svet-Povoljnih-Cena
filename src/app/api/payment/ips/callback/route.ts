@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ipsPaymentProvider, IpsConfigError } from "@/lib/payments";
+import { isLateIpsPaymentState } from "@/lib/payments/ips";
 import { db } from "@/lib/db";
 import { logOperationalError } from "@/lib/monitoring";
 import {
@@ -52,6 +53,8 @@ export async function POST(req: Request) {
       select: {
         id: true,
         number: true,
+        status: true,
+        stockRestoredAt: true,
         payments: {
           where: { provider: "IPS" },
           orderBy: { createdAt: "desc" },
@@ -70,7 +73,10 @@ export async function POST(req: Request) {
     }
 
     // Already settled — nothing to re-check against the gateway.
-    if (order.payments[0]?.status === "PAID") {
+    if (
+      order.payments[0]?.status === "PAID" &&
+      !isLateIpsPaymentState(order.status, order.stockRestoredAt)
+    ) {
       return NextResponse.json({ ok: true, paid: true });
     }
 
@@ -83,7 +89,11 @@ export async function POST(req: Request) {
     if (!orderLimit.ok) return NextResponse.json({ ok: true });
 
     const result = await ipsPaymentProvider.checkPaymentStatus(order.number);
-    return NextResponse.json({ ok: true, paid: result.paid });
+    return NextResponse.json({
+      ok: true,
+      paid: result.paid,
+      ...(result.requiresReview ? { requiresReview: true } : {}),
+    });
   } catch (err) {
     if (err instanceof IpsConfigError) {
       logOperationalError("payment.ips.callback_not_configured", err, {

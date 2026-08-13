@@ -1,16 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Check, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const subscribeToHydration = () => () => undefined;
+const clientHydrationSnapshot = () => true;
+const serverHydrationSnapshot = () => false;
+
 export function NewsletterBand({ className }: { className?: string }) {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    clientHydrationSnapshot,
+    serverHydrationSnapshot,
+  );
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (state === "submitting") return;
@@ -99,16 +107,17 @@ export function NewsletterBand({ className }: { className?: string }) {
                     autoComplete="email"
                     placeholder="vasa@email.rs"
                     value={email}
+                    disabled={!hydrated}
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (state === "error") setState("idle");
                     }}
                     aria-invalid={state === "error"}
-                    className="h-12 w-full bg-transparent pr-44 pl-11 text-sm text-ink-900 placeholder:text-ink-500 outline-none"
+                    className="h-12 w-full bg-transparent pr-44 pl-11 text-sm text-ink-900 placeholder:text-ink-500 outline-none disabled:cursor-wait disabled:opacity-70"
                   />
                   <button
                     type="submit"
-                    disabled={state === "submitting"}
+                    disabled={!hydrated || state === "submitting"}
                     className="absolute top-1 right-1 inline-flex h-10 items-center gap-2 rounded-full bg-ink-900 px-4 text-sm text-canvas transition hover:bg-walnut disabled:opacity-60"
                   >
                     {state === "submitting" ? "Slanje…" : "Prijavi se"}

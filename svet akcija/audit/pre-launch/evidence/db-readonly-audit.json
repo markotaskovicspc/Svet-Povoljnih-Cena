@@ -1,0 +1,1242 @@
+{
+  "checkedAt": "2026-08-11T09:43:11.788Z",
+  "adminRoles": {
+    "SUPER:true": 3,
+    "SUPER:false": 2,
+    "CONTENT:false": 1
+  },
+  "qaAdminAccounts": [
+    {
+      "_count": {
+        "_all": 2
+      },
+      "role": "SUPER",
+      "enabled": false
+    },
+    {
+      "_count": {
+        "_all": 1
+      },
+      "role": "CONTENT",
+      "enabled": false
+    }
+  ],
+  "integrations": [
+    {
+      "provider": "ANANAS",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    },
+    {
+      "provider": "GLS_PICKUP",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    },
+    {
+      "provider": "NEWSLETTER",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    },
+    {
+      "provider": "SEF",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    },
+    {
+      "provider": "VIBER",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    },
+    {
+      "provider": "XEXPRESS_PICKUP",
+      "status": "NOT_CONFIGURED",
+      "missingKeyCount": 0,
+      "message": "Provera konfiguracije nije pokrenuta.",
+      "checkedAt": null,
+      "updatedAt": "2026-07-18T18:40:12.460Z"
+    }
+  ],
+  "orders": {
+    "grouped": {
+      "WEB:OTKAZANO:POUZECE_GOTOVINA": 5,
+      "WEB:OTKAZANO:KARTICA": 1,
+      "WEB:OTKAZANO:IPS": 1
+    },
+    "total": 7,
+    "lastCreatedAt": "2026-08-03T12:51:10.369Z"
+  },
+  "checkoutSessions": {
+    "ACTIVE:shipping": 4,
+    "ACTIVE:identity": 5,
+    "ACTIVE:review": 1,
+    "CONVERTED:review": 3
+  },
+  "payments": {
+    "COD:POUZECE_GOTOVINA:FAILED:RSD": 1,
+    "COD:POUZECE_GOTOVINA:PENDING:RSD": 3,
+    "IPS:IPS:PENDING:RSD": 1,
+    "RAIFFEISEN_CARD:KARTICA:PENDING:RSD": 1
+  },
+  "refunds": {},
+  "shipments": {
+    "X_EXPRESS:ORDER_DELIVERY:PICKED_UP": 1,
+    "MYGLS:ORDER_DELIVERY:FAILED": 3
+  },
+  "fiscal": {
+    "SALE:ISSUED:AUTO_PICKUP": 1,
+    "SALE:ISSUED:MANUAL": 1,
+    "SALE:FAILED:AUTO_PICKUP": 1
+  },
+  "email": {
+    "resend:order_status:FAILED": 7,
+    "resend:reclamation_receipt:FAILED": 1,
+    "resend:newsletter_opt_in:FAILED": 2,
+    "resend:order_confirmation:FAILED": 5,
+    "resend:urgent_admin_alert:FAILED": 13,
+    "none:fiscal_receipt:SENT": 1,
+    "none:email_confirmation:SENT": 3,
+    "resend:password_reset:FAILED": 1,
+    "resend:email_confirmation:FAILED": 9
+  },
+  "backgroundJobs": {
+    "MARKETING_SYNC:COMPLETED": 2,
+    "RABALUX_MEDIA_PRODUCT:QUEUED": 5,
+    "PASSWORD_RESET_EMAIL:FAILED": 1,
+    "RABALUX_MEDIA_PRODUCT:FAILED": 305,
+    "SUPPLIER_RESERVATION:FAILED": 1,
+    "BUYER_RECEIPT:FAILED": 2,
+    "SUPPLIER_RESERVATION:COMPLETED": 1,
+    "NEWSLETTER_SYNC:COMPLETED": 2,
+    "RABALUX_MEDIA_PRODUCT:RETRY": 3011,
+    "RABALUX_MEDIA_PRODUCT:COMPLETED": 23682
+  },
+  "oldestActionableJobs": [
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T06:37:27.068Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T07:35:51.622Z",
+      "updatedAt": "2026-08-11T06:05:27.068Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T07:22:27.561Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T07:45:55.085Z",
+      "updatedAt": "2026-08-11T06:50:27.562Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T10:03:26.294Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T07:52:28.769Z",
+      "updatedAt": "2026-08-11T09:31:26.294Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "FAILED",
+      "attempts": 12,
+      "maxAttempts": 12,
+      "availableAt": "2026-07-21T15:50:01.150Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T07:52:30.176Z",
+      "updatedAt": "2026-07-21T15:50:01.150Z",
+      "lastError": " Invalid `prisma.product.findFirst()` invocation: The column `Product.supplierApprovalStatus` does not exist in the current database."
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "FAILED",
+      "attempts": 12,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T02:55:25.673Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T07:58:05.462Z",
+      "updatedAt": "2026-08-11T02:55:25.673Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 4,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T02:34:43.469Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:00:39.330Z",
+      "updatedAt": "2026-08-11T02:30:43.469Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T06:17:38.563Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:03:04.737Z",
+      "updatedAt": "2026-08-11T05:45:38.563Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T09:17:42.294Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:07:05.443Z",
+      "updatedAt": "2026-08-11T08:45:42.294Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "FAILED",
+      "attempts": 12,
+      "maxAttempts": 12,
+      "availableAt": "2026-07-21T16:00:03.077Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:09:41.023Z",
+      "updatedAt": "2026-07-21T16:00:03.077Z",
+      "lastError": " Invalid `prisma.product.findFirst()` invocation: The column `Product.supplierApprovalStatus` does not exist in the current database."
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T00:07:26.084Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:12:57.212Z",
+      "updatedAt": "2026-08-10T23:35:26.084Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T01:27:27.218Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:14:29.732Z",
+      "updatedAt": "2026-08-11T00:55:27.218Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T06:02:25.258Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:17:56.112Z",
+      "updatedAt": "2026-08-11T05:30:25.258Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T06:47:34.911Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:18:53.511Z",
+      "updatedAt": "2026-08-11T06:15:34.911Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T07:03:25.538Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:19:06.466Z",
+      "updatedAt": "2026-08-11T06:31:25.538Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 6,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-10T21:56:26.056Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:24:03.905Z",
+      "updatedAt": "2026-08-10T21:40:26.057Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T01:02:33.981Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:27:26.183Z",
+      "updatedAt": "2026-08-11T00:30:33.981Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T01:42:24.836Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:28:06.434Z",
+      "updatedAt": "2026-08-11T01:10:24.836Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T02:12:24.920Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:28:34.454Z",
+      "updatedAt": "2026-08-11T01:40:24.920Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T02:37:26.368Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:28:53.296Z",
+      "updatedAt": "2026-08-11T02:05:26.368Z",
+      "lastError": "fetch failed"
+    },
+    {
+      "kind": "RABALUX_MEDIA_PRODUCT",
+      "status": "RETRY",
+      "attempts": 7,
+      "maxAttempts": 12,
+      "availableAt": "2026-08-11T06:02:39.406Z",
+      "lockedAt": null,
+      "createdAt": "2026-07-21T08:30:32.326Z",
+      "updatedAt": "2026-08-11T05:30:39.406Z",
+      "lastError": "fetch failed"
+    }
+  ],
+  "recentOperationalFailures": {
+    "emails": [
+      {
+        "provider": "resend",
+        "kind": "email_confirmation",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T09:36:25.955Z",
+        "updatedAt": "2026-08-11T09:36:26.093Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "email_confirmation",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T09:34:12.318Z",
+        "updatedAt": "2026-08-11T09:34:12.459Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T04:01:37.493Z",
+        "updatedAt": "2026-08-11T09:01:46.158Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T04:01:37.493Z",
+        "updatedAt": "2026-08-11T09:01:46.120Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T03:00:46.531Z",
+        "updatedAt": "2026-08-11T03:00:46.672Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-11T03:00:46.531Z",
+        "updatedAt": "2026-08-11T03:00:46.670Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T17:00:46.509Z",
+        "updatedAt": "2026-08-11T02:01:38.955Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T17:00:46.509Z",
+        "updatedAt": "2026-08-11T02:01:38.934Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T15:00:46.356Z",
+        "updatedAt": "2026-08-10T16:00:46.620Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T15:00:46.356Z",
+        "updatedAt": "2026-08-10T16:00:46.614Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T14:40:53.480Z",
+        "updatedAt": "2026-08-10T14:40:53.638Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T14:40:53.480Z",
+        "updatedAt": "2026-08-10T14:40:53.637Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T14:01:17.015Z",
+        "updatedAt": "2026-08-10T14:01:17.326Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T14:01:17.015Z",
+        "updatedAt": "2026-08-10T14:01:17.189Z"
+      },
+      {
+        "provider": "resend",
+        "kind": "urgent_admin_alert",
+        "status": "FAILED",
+        "error": "resend:403 The svetpovoljnihcena.rs domain is not verified. Please, add and verify your domain on <url>",
+        "createdAt": "2026-08-10T14:01:17.015Z",
+        "updatedAt": "2026-08-10T14:01:17.177Z"
+      }
+    ],
+    "shipments": [
+      {
+        "provider": "MYGLS",
+        "purpose": "ORDER_DELIVERY",
+        "status": "FAILED",
+        "syncError": "MyGLS etiketa obrisana.",
+        "createdAt": "2026-08-03T12:53:30.211Z",
+        "updatedAt": "2026-08-03T12:57:26.586Z"
+      },
+      {
+        "provider": "MYGLS",
+        "purpose": "ORDER_DELIVERY",
+        "status": "FAILED",
+        "syncError": "MyGLS etiketa obrisana (QA test cleanup).",
+        "createdAt": "2026-07-10T13:23:41.910Z",
+        "updatedAt": "2026-07-10T13:28:56.373Z"
+      },
+      {
+        "provider": "MYGLS",
+        "purpose": "ORDER_DELIVERY",
+        "status": "FAILED",
+        "syncError": "Unauthorized.",
+        "createdAt": "2026-07-02T22:38:53.073Z",
+        "updatedAt": "2026-07-02T22:42:22.444Z"
+      }
+    ],
+    "fiscal": [
+      {
+        "kind": "SALE",
+        "source": "AUTO_PICKUP",
+        "status": "FAILED",
+        "attemptCount": 0,
+        "error": "fiscal:network Failed to parse URL from GET_FROM_FISCAL_PROVIDER",
+        "createdAt": "2026-07-02T23:08:01.345Z",
+        "updatedAt": "2026-07-02T23:08:02.097Z"
+      }
+    ]
+  },
+  "courierSyncRuns": [
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "\nInvalid `prisma.xExpressStreet.updateMany()` invocation:\n\n\nThe query parameter limit supported by your database is exceeded.",
+      "startedAt": "2026-08-10T04:31:49.924Z",
+      "finishedAt": "2026-08-10T04:34:40.599Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 4721,
+      "recordsOk": 4721,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-10T04:31:11.391Z",
+      "finishedAt": "2026-08-10T04:31:49.919Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "STATUSES",
+      "status": "SUCCESS",
+      "recordsRead": 50,
+      "recordsOk": 50,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-10T04:31:11.391Z",
+      "finishedAt": "2026-08-10T04:31:12.060Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 169,
+      "recordsOk": 169,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-10T04:31:09.804Z",
+      "finishedAt": "2026-08-10T04:31:11.382Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "\nInvalid `prisma.xExpressStreet.updateMany()` invocation:\n\n\nThe query parameter limit supported by your database is exceeded.",
+      "startedAt": "2026-08-03T04:31:00.711Z",
+      "finishedAt": "2026-08-03T04:33:18.379Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 4721,
+      "recordsOk": 4721,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-03T04:30:27.278Z",
+      "finishedAt": "2026-08-03T04:31:00.706Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "STATUSES",
+      "status": "SUCCESS",
+      "recordsRead": 50,
+      "recordsOk": 50,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-03T04:30:27.278Z",
+      "finishedAt": "2026-08-03T04:30:27.854Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 169,
+      "recordsOk": 169,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-08-03T04:30:26.112Z",
+      "finishedAt": "2026-08-03T04:30:27.272Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "\nInvalid `prisma.xExpressStreet.updateMany()` invocation:\n\n\nThe query parameter limit supported by your database is exceeded.",
+      "startedAt": "2026-07-30T04:31:30.896Z",
+      "finishedAt": "2026-07-30T04:34:17.050Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 4721,
+      "recordsOk": 4721,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-30T04:30:48.450Z",
+      "finishedAt": "2026-07-30T04:31:30.891Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "STATUSES",
+      "status": "SUCCESS",
+      "recordsRead": 50,
+      "recordsOk": 50,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-30T04:30:48.450Z",
+      "finishedAt": "2026-07-30T04:30:49.141Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 169,
+      "recordsOk": 169,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-30T04:30:47.171Z",
+      "finishedAt": "2026-07-30T04:30:48.442Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "\nInvalid `prisma.xExpressStreet.updateMany()` invocation:\n\n\nThe query parameter limit supported by your database is exceeded.",
+      "startedAt": "2026-07-29T04:30:40.566Z",
+      "finishedAt": "2026-07-29T04:33:20.260Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 4721,
+      "recordsOk": 4721,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-29T04:30:01.795Z",
+      "finishedAt": "2026-07-29T04:30:40.555Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "STATUSES",
+      "status": "SUCCESS",
+      "recordsRead": 50,
+      "recordsOk": 50,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-29T04:30:01.795Z",
+      "finishedAt": "2026-07-29T04:30:02.374Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 169,
+      "recordsOk": 169,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-29T04:30:00.335Z",
+      "finishedAt": "2026-07-29T04:30:01.787Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-10T11:54:39.808Z",
+      "finishedAt": "2026-07-10T11:54:41.969Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "RUNNING",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-10T11:54:39.808Z",
+      "finishedAt": null
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "STATUSES",
+      "status": "SUCCESS",
+      "recordsRead": 49,
+      "recordsOk": 49,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-02T22:52:14.593Z",
+      "finishedAt": "2026-07-02T22:52:24.473Z"
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "RUNNING",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-02T22:52:14.593Z",
+      "finishedAt": null
+    },
+    {
+      "provider": "X_EXPRESS",
+      "kind": "LOCATIONS",
+      "status": "SUCCESS",
+      "recordsRead": 169,
+      "recordsOk": 169,
+      "recordsFail": 0,
+      "errorMessage": null,
+      "startedAt": "2026-07-02T22:51:37.966Z",
+      "finishedAt": "2026-07-02T22:52:14.447Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "fetch failed",
+      "startedAt": "2026-07-02T22:28:20.916Z",
+      "finishedAt": "2026-07-02T22:28:24.495Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "fetch failed",
+      "startedAt": "2026-07-02T22:28:20.916Z",
+      "finishedAt": "2026-07-02T22:28:23.874Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "fetch failed",
+      "startedAt": "2026-07-02T22:26:09.446Z",
+      "finishedAt": "2026-07-02T22:26:11.075Z"
+    },
+    {
+      "provider": "MYGLS",
+      "kind": "LOCATIONS",
+      "status": "FAILED",
+      "recordsRead": 0,
+      "recordsOk": 0,
+      "recordsFail": 0,
+      "errorMessage": "fetch failed",
+      "startedAt": "2026-07-02T22:26:09.446Z",
+      "finishedAt": "2026-07-02T22:26:10.869Z"
+    }
+  ],
+  "xExpressWebhooks": {
+    "total": 2,
+    "unprocessed": 1,
+    "failed": 1,
+    "lastReceivedAt": "2026-07-02T23:08:56.817Z"
+  },
+  "supplierImports": [
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T09:30:02.372Z",
+      "finishedAt": "2026-08-11T09:31:25.623Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T09:15:02.349Z",
+      "finishedAt": "2026-08-11T09:16:26.036Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T09:00:02.846Z",
+      "finishedAt": "2026-08-11T09:01:29.957Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T08:45:02.299Z",
+      "finishedAt": "2026-08-11T08:46:17.599Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T08:30:03.498Z",
+      "finishedAt": "2026-08-11T08:31:22.847Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T08:15:02.455Z",
+      "finishedAt": "2026-08-11T08:16:19.040Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T08:00:02.278Z",
+      "finishedAt": "2026-08-11T08:01:16.185Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T07:45:02.381Z",
+      "finishedAt": "2026-08-11T07:46:28.319Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T07:30:02.355Z",
+      "finishedAt": "2026-08-11T07:31:21.184Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T07:15:02.503Z",
+      "finishedAt": "2026-08-11T07:16:21.501Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T07:00:02.666Z",
+      "finishedAt": "2026-08-11T07:01:14.672Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T06:45:02.397Z",
+      "finishedAt": "2026-08-11T06:46:20.266Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T06:30:02.861Z",
+      "finishedAt": "2026-08-11T06:31:16.457Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T06:15:02.339Z",
+      "finishedAt": "2026-08-11T06:16:17.650Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T06:00:02.891Z",
+      "finishedAt": "2026-08-11T06:01:15.772Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T05:45:02.389Z",
+      "finishedAt": "2026-08-11T05:46:16.653Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T05:30:02.595Z",
+      "finishedAt": "2026-08-11T05:31:22.396Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T05:15:02.491Z",
+      "finishedAt": "2026-08-11T05:16:16.929Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T05:00:03.129Z",
+      "finishedAt": "2026-08-11T05:01:16.747Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T04:45:02.465Z",
+      "finishedAt": "2026-08-11T04:46:24.105Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T04:30:02.503Z",
+      "finishedAt": "2026-08-11T04:31:25.285Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T04:15:02.305Z",
+      "finishedAt": "2026-08-11T04:16:15.434Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T04:00:02.346Z",
+      "finishedAt": "2026-08-11T04:01:20.159Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T03:45:02.430Z",
+      "finishedAt": "2026-08-11T03:46:19.947Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T03:30:02.397Z",
+      "finishedAt": "2026-08-11T03:31:30.031Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T03:15:02.423Z",
+      "finishedAt": "2026-08-11T03:16:20.152Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T03:00:02.792Z",
+      "finishedAt": "2026-08-11T03:01:28.656Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T02:45:02.300Z",
+      "finishedAt": "2026-08-11T02:46:23.713Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "STOCK",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2883,
+      "recordsOk": 2883,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T02:30:02.643Z",
+      "finishedAt": "2026-08-11T02:31:28.398Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    },
+    {
+      "kind": "CATALOG",
+      "dryRun": false,
+      "status": "SUCCESS",
+      "recordsRead": 2884,
+      "recordsOk": 2884,
+      "recordsFail": 0,
+      "startedAt": "2026-08-11T02:17:12.332Z",
+      "finishedAt": "2026-08-11T02:18:55.995Z",
+      "errorMessage": null,
+      "supplier": {
+        "integrationKey": "RABALUX"
+      }
+    }
+  ],
+  "stockSnapshots": [
+    {
+      "provider": "RABALUX",
+      "snapshots": 6822,
+      "latest": "2026-08-11T07:31:11.014Z",
+      "fresh_30m": 0
+    }
+  ],
+  "stockObservations": [
+    {
+      "provider": "RABALUX",
+      "items": 2927,
+      "latest": "2026-08-11T09:31:25.230Z",
+      "fresh_30m": 2223,
+      "eligible_fresh_30m": 1558
+    }
+  ],
+  "financialIntegrity": {
+    "orderFormulaMismatches": 0,
+    "paymentOrderTotalMismatches": 0,
+    "invoiceOrderTotalMismatches": 0,
+    "fiscalGrossOrderTotalMismatches": 0,
+    "duplicatePaymentProviderRefs": 0,
+    "duplicateShipmentTrackingNumbers": 0
+  },
+  "financialMismatchDetails": []
+}

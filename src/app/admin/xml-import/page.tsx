@@ -6,6 +6,7 @@ import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { importSupplier } from "@/lib/xml";
 import {
+  retryRecoverableFailedRabaluxMediaJobs,
   syncPendingRabaluxMedia,
   syncRabaluxCatalog,
   syncRabaluxStock,
@@ -396,6 +397,35 @@ async function triggerImport(formData: FormData) {
   )(formData);
 }
 
+async function retryRabaluxMediaQueue(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "rabalux.mediaQueue.retryRecoverable",
+      entity: "BackgroundJob",
+    },
+    async (_actorId, formData: FormData) => {
+      const reason = String(formData.get("reason") ?? "").trim();
+      if (reason.length < 5) {
+        return { ok: false as const, error: "Razlog mora imati najmanje 5 znakova." };
+      }
+      const result = await retryRecoverableFailedRabaluxMediaJobs(100);
+      revalidatePath("/admin/xml-import");
+      return {
+        ok: true as const,
+        entityId: "rabalux-media-queue",
+        diff: { reason, ...result },
+        message: `${result.requeued} media job-ova je vraćeno u red; ${result.skippedPermanent} trajnih grešaka je bezbedno preskočeno.`,
+      };
+    },
+  )(formData);
+}
+
 function formatRunErrors(value: Prisma.JsonValue | null) {
   if (!Array.isArray(value) || value.length === 0) return null;
   return value
@@ -644,6 +674,33 @@ export default async function XmlImportPage({
               <p className="mt-2 text-xs text-ink-500">
                 Media queue: {rabaluxQueue.map((row) => `${row.status} ${row._count._all}`).join(" · ") || "prazan"}
               </p>
+              {rabaluxQueue.some((row) => row.status === "FAILED") ? (
+                <AdminActionForm
+                  action={retryRabaluxMediaQueue}
+                  className="mt-4 space-y-3 rounded-lg border border-border p-3"
+                >
+                  <Field label="Razlog ponovnog pokretanja media reda">
+                    <Textarea
+                      name="reason"
+                      rows={2}
+                      minLength={5}
+                      maxLength={500}
+                      required
+                    />
+                  </Field>
+                  <p className="text-xs text-ink-500">
+                    Vraća najviše 100 prolaznih grešaka i ranije 413 greške. Neispravni URL-ovi i drugi trajni kvarovi ostaju blokirani.
+                  </p>
+                  <SubmitButton
+                    size="sm"
+                    variant="secondary"
+                    pendingLabel="Vraćam u red…"
+                    confirm="Ponovo pokrenuti samo bezbedno oporavljive Rabalux media job-ove?"
+                  >
+                    Ponovo pokreni oporavljive media job-ove
+                  </SubmitButton>
+                </AdminActionForm>
+              ) : null}
 
               {rabaluxStockSummary ? (
                 <div className="mt-5 space-y-3 border-t border-border pt-4">

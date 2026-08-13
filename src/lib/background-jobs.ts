@@ -27,6 +27,14 @@ const schemas = {
   }),
   ORDER_STATUS_EMAIL: z.object({ orderId: z.string().min(1) }),
   IPS_PAYMENT_EMAIL: z.object({ orderId: z.string().min(1) }),
+  PAYMENT_REFUND: z.object({
+    orderId: z.string().min(1),
+    orderNumber: z.string().min(1),
+    fiscalDocumentId: z.string().min(1),
+    method: z.enum(["IPS", "KARTICA", "GOOGLE_PAY", "APPLE_PAY", "UPLATA_NA_RACUN", "POUZECE_GOTOVINA", "POUZECE_KARTICA"]),
+    amount: z.number().positive(),
+    actorId: z.string().min(1).nullable().optional(),
+  }),
   RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_STATUS_EMAIL: z.object({ reclamationId: z.string().min(1) }),
   RABALUX_MEDIA_PRODUCT: z.object({
@@ -320,6 +328,16 @@ async function dispatchJob(job: JobRow) {
       if (!loaded?.recipient) return;
       const result = await sendIpsPaymentConfirmation({ order: loaded.order, to: loaded.recipient });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "PAYMENT_REFUND": {
+      const { recordFiscalPaymentRefund } = await import("@/lib/fiscal/issue");
+      const refundPayload = payload as z.infer<typeof schemas.PAYMENT_REFUND>;
+      const error = await recordFiscalPaymentRefund({
+        ...refundPayload,
+        actorId: refundPayload.actorId ?? null,
+      });
+      if (error) throw new Error(error);
       return;
     }
     case "RECLAMATION_RECEIPT": {

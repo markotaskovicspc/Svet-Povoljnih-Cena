@@ -99,6 +99,18 @@ export default async function AccountOrderDetailPage({
                   value={`-${formatRsd(order.voucherDiscount)}`}
                 />
               ) : null}
+              {order.firstPurchaseDiscount ? (
+                <Row
+                  label="Popust za prvu kupovinu"
+                  value={`-${formatRsd(order.firstPurchaseDiscount)}`}
+                />
+              ) : null}
+              {order.savedCardDiscount ? (
+                <Row
+                  label="Popust za sačuvanu karticu"
+                  value={`-${formatRsd(order.savedCardDiscount)}`}
+                />
+              ) : null}
               <div className="border-t border-border/70 pt-3">
                 <Row label="Za plaćanje" value={formatRsd(order.total)} strong />
               </div>

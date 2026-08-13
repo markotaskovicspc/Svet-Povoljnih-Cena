@@ -96,6 +96,10 @@ export async function loadOrderForEmail(
     assemblyTotal: num(row.assemblyTotal),
     voucherCode: row.voucherCode ?? undefined,
     voucherDiscount: row.voucherDiscount ? num(row.voucherDiscount) : undefined,
+    firstPurchaseDiscount: row.firstPurchaseDiscount
+      ? num(row.firstPurchaseDiscount)
+      : undefined,
+    savedCardDiscount: row.savedCardDiscount ? num(row.savedCardDiscount) : undefined,
     total: num(row.total),
     shippingMethod: SHIPPING_METHOD_LOWER[row.shippingMethod],
     paymentMethod: PAYMENT_METHOD_LOWER[row.paymentMethod],

@@ -100,6 +100,9 @@ type CreateOrderApiResponse =
         total: number;
         paymentMethod: string;
         shippingMethod: string;
+        voucherDiscount: number;
+        firstPurchaseDiscount: number;
+        savedCardDiscount: number;
       };
     }
   | { ok: false; error?: { code?: string; reason?: string; sku?: string } };
@@ -444,6 +447,7 @@ export function CheckoutFlow({
       voucherDiscountRsd: voucher?.discountRsd ?? 0,
       voucherCode: voucher?.code,
       orderNumber: result.data.number,
+      serverPricing: result.data,
     });
     setLastOrder(order);
     clearCart();
@@ -1071,6 +1075,7 @@ function buildOrder({
   voucherDiscountRsd,
   voucherCode,
   orderNumber,
+  serverPricing,
 }: {
   data: CheckoutFormData;
   lines: ReturnType<typeof useCart.getState>["lines"];
@@ -1078,6 +1083,12 @@ function buildOrder({
   voucherDiscountRsd: number;
   voucherCode?: string;
   orderNumber: string;
+  serverPricing: {
+    total: number;
+    voucherDiscount: number;
+    firstPurchaseDiscount: number;
+    savedCardDiscount: number;
+  };
 }): Order {
   const itemsFull = lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0);
   const itemsSale = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
@@ -1157,8 +1168,10 @@ function buildOrder({
     shipping: totals.shipping,
     assemblyTotal: totals.assembly,
     voucherCode,
-    voucherDiscount: totals.voucherDiscount || undefined,
-    total: totals.total,
+    voucherDiscount: serverPricing.voucherDiscount || undefined,
+    firstPurchaseDiscount: serverPricing.firstPurchaseDiscount || undefined,
+    savedCardDiscount: serverPricing.savedCardDiscount || undefined,
+    total: serverPricing.total,
     shippingMethod: data.shippingMethod,
     paymentMethod: data.paymentMethod,
     shippingAddress,

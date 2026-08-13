@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { envValue } from "@/lib/env";
-import { Prisma, type PaymentMethod } from "@prisma/client";
+import { Prisma, type OrderStatus, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
@@ -113,6 +113,27 @@ export function formatIpsAmount(amount: number | Prisma.Decimal): string {
     throw new Error("IPS iznos mora biti pozitivan broj.");
   }
   return n.toFixed(2);
+}
+
+export function parseIpsAmountToMinorUnits(value: string): number | null {
+  const normalized = value.trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const [whole, fraction = ""] = normalized.split(".");
+  const minorUnits = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(minorUnits) ? minorUnits : null;
+}
+
+export function ipsAmountsMatch(reported: string, expected: string): boolean {
+  const reportedMinor = parseIpsAmountToMinorUnits(reported);
+  const expectedMinor = parseIpsAmountToMinorUnits(expected);
+  return reportedMinor !== null && expectedMinor !== null && reportedMinor === expectedMinor;
+}
+
+export function isLateIpsPaymentState(
+  status: OrderStatus,
+  stockRestoredAt: Date | null,
+): boolean {
+  return stockRestoredAt != null || status === "OTKAZANO" || status === "VRACENO";
 }
 
 async function createPayment(
@@ -512,18 +533,12 @@ async function applyIpsResult(
       id: true,
       number: true,
       total: true,
-      payments: {
-        where: { provider: "IPS" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { id: true, status: true, providerRef: true },
-      },
     },
   });
   if (!order) throw new Error(`IPS porudžbina ${payload.orderId} ne postoji.`);
 
   const expectedAmount = formatIpsAmount(num(order.total));
-  if (payload.amount !== expectedAmount) {
+  if (!ipsAmountsMatch(payload.amount, expectedAmount)) {
     throw new Error(`IPS iznos se ne poklapa: ${payload.amount} != ${expectedAmount}.`);
   }
 
@@ -535,6 +550,7 @@ async function applyIpsResult(
     orderId: payload.orderId,
   }) as Prisma.InputJsonValue;
   let didConfirm = false;
+  let requiresReview = false;
 
   // Payten has given us no enumerated terminal-decline code table, so a non-"00"
   // response is NOT proof the payment has failed — it may just mean "not yet
@@ -546,42 +562,59 @@ async function applyIpsResult(
   // fields and leave the payment PENDING — expiry.ts is what times it out and
   // restores stock.
   await db.$transaction(async (tx) => {
-    const existing = order.payments[0] ?? null;
-    if (existing?.status === "PAID") return;
+    const existing = await tx.payment.findFirst({
+      where: { orderId: order.id, provider: "IPS" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true },
+    });
 
-    if (existing) {
-      if (paid) {
-        const updated = await tx.payment.updateMany({
-          where: { id: existing.id, status: { not: "PAID" } },
-          data: {
-            status: "PAID",
-            providerRef: payload.paymentReference ?? undefined,
-            paymentReference: payload.paymentReference ?? undefined,
-            rawRequest: request,
-            rawResponse: raw,
-            paidAt: new Date(),
-          },
-        });
-        // Concurrent caller (callback + return-URL checkStatus) already won the
-        // race and confirmed this payment — don't double-fire side effects.
-        if (updated.count !== 1) return;
-      } else {
+    if (!paid) {
+      if (existing) {
         await tx.payment.update({
           where: { id: existing.id },
-          data: {
-            rawRequest: request,
-            rawResponse: raw,
-          },
+          data: { rawRequest: request, rawResponse: raw },
         });
       }
-    } else if (paid) {
+      return;
+    }
+
+    // Claim the order before changing payment state. This update serializes
+    // against payment expiry: whichever transition wins determines whether
+    // stock still belongs to this order.
+    const claimed = await tx.order.updateMany({
+      where: { id: order.id, status: "KREIRANO", stockRestoredAt: null },
+      data: { status: "POTVRDJENO" },
+    });
+    const currentOrder = await tx.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { status: true, stockRestoredAt: true },
+    });
+
+    let paymentBecamePaid = false;
+    if (existing && !["PAID", "REFUNDED", "PARTIAL_REFUND"].includes(existing.status)) {
+      const updated = await tx.payment.updateMany({
+        where: {
+          id: existing.id,
+          status: { notIn: ["PAID", "REFUNDED", "PARTIAL_REFUND"] },
+        },
+        data: {
+          status: "PAID",
+          providerRef: payload.paymentReference ?? undefined,
+          paymentReference: payload.paymentReference ?? undefined,
+          rawRequest: request,
+          rawResponse: raw,
+          paidAt: new Date(),
+        },
+      });
+      paymentBecamePaid = updated.count === 1;
+    } else if (!existing) {
       await tx.payment.create({
         data: {
           orderId: order.id,
           method: "IPS",
           provider: "IPS",
           status: "PAID",
-          amount: new Prisma.Decimal(payload.amount),
+          amount: new Prisma.Decimal(expectedAmount),
           providerRef: payload.paymentReference ?? null,
           paymentReference: payload.paymentReference ?? null,
           rawRequest: request,
@@ -589,24 +622,48 @@ async function applyIpsResult(
           paidAt: new Date(),
         },
       });
+      paymentBecamePaid = true;
     }
-    // No existing payment and not paid: nothing to persist — the start route is
-    // the only creator of PENDING IPS payments, so there's no PENDING row to
-    // touch and no FAILED status to invent.
 
-    if (paid) {
-      await tx.order.update({
-        where: { id: order.id },
-        data: { status: "POTVRDJENO" },
-      });
+    const latePayment = isLateIpsPaymentState(
+      currentOrder.status,
+      currentOrder.stockRestoredAt,
+    );
+    if (claimed.count === 1 || (paymentBecamePaid && !latePayment)) {
       await tx.orderStatusEvent.create({
         data: {
           orderId: order.id,
-          status: "POTVRDJENO",
+          status: currentOrder.status,
           note: `Plaćanje potvrđeno (IPS ${payload.paymentReference ?? payload.responseCode}).`,
         },
       });
       didConfirm = true;
+      return;
+    }
+
+    if (latePayment) {
+      requiresReview = true;
+      await tx.paymentRefund.upsert({
+        where: { idempotencyKey: `late-ips-payment:${order.id}` },
+        update: {
+          providerRef: payload.paymentReference ?? undefined,
+          rawResponse: raw,
+        },
+        create: {
+          orderId: order.id,
+          idempotencyKey: `late-ips-payment:${order.id}`,
+          method: "IPS",
+          provider: "IPS",
+          status: "NEEDS_REVIEW",
+          amount: new Prisma.Decimal(expectedAmount),
+          providerRef: payload.paymentReference ?? null,
+          rawRequest: request,
+          rawResponse: raw,
+          error:
+            `IPS uplata je potvrđena nakon što je porudžbina prešla u ${currentOrder.status}` +
+            `${currentOrder.stockRestoredAt ? " i zaliha je vraćena" : ""}. Potrebna je kontrola i povraćaj ili nova rezervacija.`,
+        },
+      });
     }
   });
 
@@ -627,6 +684,7 @@ async function applyIpsResult(
 
   return {
     paid,
+    requiresReview,
     responseCode: payload.responseCode,
     providerRef: payload.paymentReference ?? null,
     paymentReference: payload.paymentReference ?? null,

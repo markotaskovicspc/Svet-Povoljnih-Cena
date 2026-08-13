@@ -1,0 +1,34 @@
+[
+  {
+    "route": "/admin",
+    "finalUrl": "https://www.svetpovoljnihcena.rs/admin",
+    "status": {
+      "h1": [
+        "Kontrolna tabla"
+      ],
+      "title": "Kontrolna tabla · Svet Povoljnih Cena"
+    }
+  },
+  {
+    "route": "/nalog",
+    "finalUrl": "https://www.svetpovoljnihcena.rs/nalog/prijava?callbackUrl=%2Fnalog",
+    "status": {
+      "h1": [
+        "Prijava za bržu kupovinu"
+      ],
+      "title": "Prijava · Svet Povoljnih Cena"
+    }
+  },
+  {
+    "route": "/nalog/prijava",
+    "finalUrl": "https://www.svetpovoljnihcena.rs/nalog/prijava",
+    "status": {
+      "forms": 3,
+      "h1": [
+        "Prijava za bržu kupovinu"
+      ],
+      "passwordInputs": 1,
+      "title": "Prijava · Svet Povoljnih Cena"
+    }
+  }
+]

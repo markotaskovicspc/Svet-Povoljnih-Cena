@@ -45,7 +45,7 @@ describe("Rabalux catalog mapping", () => {
     expect(item.materials).toEqual(["metal", "plastika"]);
     expect(item.media.filter((asset) => asset.kind === "IMAGE")).toHaveLength(1);
     expect(item.media.find((asset) => asset.kind === "IMAGE")?.sourceUrl).toContain(
-      "7996_fhd.jpg",
+      "/7996/7996.jpg",
     );
     expect(item.attachments).toHaveLength(2);
     expect(item.attachments.every((item) => item.section === "ASSEMBLY_INSTRUCTIONS")).toBe(true);
@@ -95,13 +95,28 @@ describe("Rabalux catalog mapping", () => {
     expect(item.validationErrors).toContain("invalid_full_price");
   });
 
-  it("normalizes only the trusted HTTP media host", () => {
+  it("canonicalizes only trusted Rabalux media paths to the official HTTPS host", () => {
     expect(normalizeRabaluxMediaUrl("rabaluxkep.plugin.hu/images/a.jpg")).toBe(
-      "https://rabaluxkep.plugin.hu/images/a.jpg",
+      "https://rabalux.com/images/products/a/a.jpg",
     );
     expect(
       normalizeRabaluxMediaUrl("http://rabaluxkep.plugin.hu/images/a.jpg"),
-    ).toBe("https://rabaluxkep.plugin.hu/images/a.jpg");
+    ).toBe("https://rabalux.com/images/products/a/a.jpg");
+    expect(
+      normalizeRabaluxMediaUrl(
+        "https://rabaluxkep.plugin.hu/images/7024-3_fhd.jpg",
+      ),
+    ).toBe("https://rabalux.com/images/products/7024/7024-3.jpg");
+    expect(
+      normalizeRabaluxMediaUrl(
+        "https://rabalux.com/images/products/7996/7996.jpg",
+      ),
+    ).toBe("https://rabalux.com/images/products/7996/7996.jpg");
+    expect(
+      normalizeRabaluxMediaUrl(
+        "https://rabalux.com/images/products/other/7996.jpg",
+      ),
+    ).toBeNull();
     expect(normalizeRabaluxMediaUrl("https://evil.example/images/a.jpg")).toBeNull();
     expect(normalizeRabaluxMediaUrl("http://rabaluxkep.plugin.hu/other/a.jpg")).toBeNull();
   });

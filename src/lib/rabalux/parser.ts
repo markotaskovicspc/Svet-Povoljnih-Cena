@@ -9,7 +9,8 @@ import type {
 } from "./types";
 import { deriveRabaluxPictogramCodes } from "./pictograms";
 
-const MEDIA_HOST = "rabaluxkep.plugin.hu";
+const LEGACY_MEDIA_HOST = "rabaluxkep.plugin.hu";
+const MEDIA_HOST = "rabalux.com";
 
 const TECHNICAL_LABELS: Record<string, string> = {
   Style: "Stil",
@@ -129,11 +130,51 @@ export function normalizeRabaluxMediaUrl(raw: string) {
   } catch {
     return null;
   }
-  if (url.hostname.toLowerCase() !== MEDIA_HOST) return null;
+  const hostname = url.hostname.toLowerCase();
+  if (hostname !== LEGACY_MEDIA_HOST && hostname !== MEDIA_HOST) return null;
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  if (!url.pathname.startsWith("/images/") || url.username || url.password) return null;
+  if (url.username || url.password) return null;
+
+  const segments = url.pathname.split("/").filter(Boolean);
+  const legacyPath =
+    hostname === LEGACY_MEDIA_HOST &&
+    segments.length === 2 &&
+    segments[0] === "images";
+  const canonicalPath =
+    hostname === MEDIA_HOST &&
+    segments.length === 4 &&
+    segments[0] === "images" &&
+    segments[1] === "products";
+  if (!legacyPath && !canonicalPath) return null;
+
+  const filename = segments.at(-1) ?? "";
+  if (!/^[A-Za-z0-9._-]+$/.test(filename)) return null;
+  const productId = canonicalPath
+    ? segments[2]
+    : filename.match(/^(\d+)/)?.[1] ??
+      filename.match(
+        /^([A-Za-z0-9-]+?)(?=(?:_manual|-energylabel(?:_[A-Za-z]{2})?|_fhd)?\.[A-Za-z0-9]+$)/,
+      )?.[1];
+  if (!productId) return null;
+  if (!/^[A-Za-z0-9-]+$/.test(productId)) return null;
+  if (
+    canonicalPath &&
+    !filename.startsWith(`${productId}.`) &&
+    !filename.startsWith(`${productId}-`) &&
+    !filename.startsWith(`${productId}_`)
+  ) {
+    return null;
+  }
+
+  const canonicalFilename = filename.replace(/_fhd(?=\.jpg$)/i, "");
+
+  // The feed's legacy host only negotiates obsolete TLS. Rabalux publishes
+  // the same assets on its official HTTPS product path, so canonicalize there
+  // instead of weakening transport security or accepting arbitrary redirects.
+  url.hostname = MEDIA_HOST;
   url.protocol = "https:";
   url.port = "";
+  url.pathname = `/images/products/${productId}/${canonicalFilename}`;
   url.search = "";
   url.hash = "";
   return url.toString();

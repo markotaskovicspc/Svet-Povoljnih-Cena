@@ -553,6 +553,20 @@ function OrderRecap({ order }: { order: Order }) {
             action
           />
         ) : null}
+        {order.firstPurchaseDiscount ? (
+          <Row
+            label="Popust za prvu kupovinu"
+            value={`−${formatRsd(order.firstPurchaseDiscount)}`}
+            action
+          />
+        ) : null}
+        {order.savedCardDiscount ? (
+          <Row
+            label="Popust za sačuvanu karticu"
+            value={`−${formatRsd(order.savedCardDiscount)}`}
+            action
+          />
+        ) : null}
       </dl>
       <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
         <span className="text-sm font-medium text-ink-900">Ukupno</span>

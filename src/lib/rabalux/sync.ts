@@ -52,6 +52,12 @@ import {
 import { preserveExistingProductDescriptions } from "@/lib/product-descriptions";
 import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 import { RABALUX_PICTOGRAMS } from "./pictograms";
+import {
+  assertRabaluxSerbiaStockSource,
+  isRabaluxSerbiaWebStockAvailable,
+  rabaluxStockItemsBySku,
+  selectRabaluxSerbiaStockCatalog,
+} from "./serbia-stock";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
@@ -266,7 +272,8 @@ export async function fetchRabaluxCatalog(supplier: Supplier) {
 }
 
 export async function fetchRabaluxStock(supplier: Supplier) {
-  if (!supplier.stockFeedUrl) throw new Error("Rabalux stock feed URL is missing.");
+  assertRabaluxSerbiaStockSource(supplier);
+  if (!supplier.stockFeedUrl) throw new Error("Rabalux Serbia stock feed URL is missing.");
   const credentials = rabaluxStockCredentials(supplier);
   if (!credentials.user || !credentials.pass) {
     throw new Error("Rabalux stock API user or API key is not configured.");
@@ -277,21 +284,48 @@ export async function fetchRabaluxStock(supplier: Supplier) {
     "text/csv, text/plain, */*;q=0.5",
   );
   const items = parseRabaluxStockCsv(raw);
+  rabaluxStockItemsBySku(items);
   assertMinimumFeedRows(
-    "stock",
+    "Serbia stock",
     items.length,
     configuredPositiveInt("RABALUX_MIN_STOCK_ROWS", 2_000),
   );
   return items;
 }
 
-export async function inspectRabaluxLiveFeeds() {
-  const supplier = await getSupplier();
-  const [{ source, items: catalog }, stock] = await Promise.all([
+export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
+  const [catalog, stock] = await Promise.all([
     fetchRabaluxCatalog(supplier),
     fetchRabaluxStock(supplier),
   ]);
-  return { source, ...summarizeRabaluxDryRun(catalog, stock) };
+  const selection = selectRabaluxSerbiaStockCatalog(catalog.items, stock);
+  return {
+    source: catalog.source,
+    fallbackReason: catalog.fallbackReason,
+    rawItems: catalog.items,
+    stock,
+    ...selection,
+  };
+}
+
+export function rabaluxSerbiaCatalogSourceHash(
+  catalog: Awaited<ReturnType<typeof fetchRabaluxSerbiaCatalog>>,
+) {
+  return stableSourceHash({
+    catalog: catalog.rawItems,
+    eligibleStockSkus: catalog.eligibleStockSkus,
+  });
+}
+
+export async function inspectRabaluxLiveFeeds() {
+  const supplier = await getSupplier();
+  const catalog = await fetchRabaluxSerbiaCatalog(supplier);
+  return {
+    source: catalog.source,
+    ...summarizeRabaluxDryRun(catalog.rawItems, catalog.stock),
+    serbiaStockEligibleRows: catalog.items.length,
+    excludedBySerbiaStockPolicy: catalog.excludedBySerbiaStockPolicy,
+  };
 }
 
 export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
@@ -326,9 +360,9 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
       scope: "CATALOG",
     });
     leaseAcquired = true;
-    const catalog = await fetchRabaluxCatalog(supplier);
-    summary.read = catalog.items.length;
-    const sourceHash = stableSourceHash(catalog.items);
+    const catalog = await fetchRabaluxSerbiaCatalog(supplier);
+    summary.read = catalog.rawCatalogRows;
+    const sourceHash = rabaluxSerbiaCatalogSourceHash(catalog);
     summary.metadata.sourceHash = sourceHash;
     if (options.expectedSourceHash && options.expectedSourceHash !== sourceHash) {
       throw new Error(
@@ -336,6 +370,15 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
       );
     }
     summary.metadata.source = catalog.source;
+    summary.metadata.rawCatalogRows = catalog.rawCatalogRows;
+    summary.metadata.serbiaStockRows = catalog.stockRows;
+    summary.metadata.serbiaStockEligibleRows = catalog.items.length;
+    summary.metadata.excludedMissingSerbiaStock = catalog.excludedMissingStock;
+    summary.metadata.excludedBelowSerbiaStockThreshold =
+      catalog.excludedBelowThreshold;
+    summary.metadata.excludedRestrictedSerbiaStock = catalog.excludedRestricted;
+    summary.metadata.excludedBySerbiaStockPolicy =
+      catalog.excludedBySerbiaStockPolicy;
     if (catalog.fallbackReason) {
       summary.metadata.xmlFallbackReason = catalog.fallbackReason;
     }
@@ -349,11 +392,12 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
         isActive: true,
         supplierApprovalStatus: true,
         syncOverrides: true,
+        dcAvailableQty: true,
       },
     });
     assertFeedBaseline({
       kind: "catalog",
-      actual: catalog.items.length,
+      actual: catalog.rawCatalogRows,
       absoluteMinimum: configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
       previousSuccessfulRows: await previousSuccessfulRowCount(
         supplier.id,
@@ -361,15 +405,33 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
         run.id,
       ),
     });
-    const seen = new Set(catalog.items.map((item) => item.sourceSku));
+    const rawSeen = new Set(catalog.rawItems.map((item) => item.sourceSku));
+    const eligibleSeen = new Set(catalog.items.map((item) => item.sourceSku));
     const missing = existingProducts.filter(
       (product) =>
-        product.supplierExternalId && !seen.has(product.supplierExternalId),
+        product.supplierExternalId && !rawSeen.has(product.supplierExternalId),
+    );
+    const outsideSerbiaStock = existingProducts.filter(
+      (product) =>
+        product.supplierExternalId &&
+        rawSeen.has(product.supplierExternalId) &&
+        !eligibleSeen.has(product.supplierExternalId),
     );
     assertSafeMissingShare({
       kind: "catalog",
       existing: existingProducts.length,
       missing: missing.length,
+      allowLargeRemoval: options.allowLargeRemoval,
+    });
+    const activePolicyRemovals = outsideSerbiaStock.filter(
+      (product) => product.isActive && product.dcAvailableQty <= 0,
+    );
+    assertSafeMissingShare({
+      kind: "catalog Serbia-stock policy",
+      existing: existingProducts.filter(
+        (product) => product.isActive && product.dcAvailableQty <= 0,
+      ).length,
+      missing: activePolicyRemovals.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
     const pictogramIdsByCode = await ensureRabaluxPictogramDefinitions();
@@ -438,8 +500,18 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
       runId: run.id,
       products: missing,
     });
+    const stockPolicy = await deactivateOutsideSerbiaStockProducts({
+      supplierId: supplier.id,
+      runId: run.id,
+      products: outsideSerbiaStock,
+      reason: options.reason,
+      reviewedById: options.requestedById,
+    });
     summary.metadata.missingPending = disappearance.pending;
     summary.metadata.deactivatedAfterGrace = disappearance.deactivated;
+    summary.metadata.deactivatedOutsideSerbiaStock = stockPolicy.deactivated;
+    summary.metadata.alreadyHiddenOutsideSerbiaStock = stockPolicy.alreadyHidden;
+    summary.metadata.retainedOutsideSupplierStockDueToDc = stockPolicy.retainedDueToDc;
     summary.metadata.invalid = catalog.items.filter((item) => !item.valid).length;
     Object.assign(
       summary.metadata,
@@ -509,10 +581,10 @@ export async function syncRabaluxCatalogProduct(
       scope: "CATALOG",
     });
     leaseAcquired = true;
-    const catalog = await fetchRabaluxCatalog(supplier);
+    const catalog = await fetchRabaluxSerbiaCatalog(supplier);
     assertFeedBaseline({
       kind: "catalog",
-      actual: catalog.items.length,
+      actual: catalog.rawCatalogRows,
       absoluteMinimum: configuredPositiveInt("RABALUX_MIN_CATALOG_ROWS", 2_000),
       previousSuccessfulRows: await previousSuccessfulRowCount(
         supplier.id,
@@ -520,12 +592,23 @@ export async function syncRabaluxCatalogProduct(
         run.id,
       ),
     });
-    const sourceHash = stableSourceHash(catalog.items);
+    const sourceHash = rabaluxSerbiaCatalogSourceHash(catalog);
     summary.metadata.sourceHash = sourceHash;
-    summary.metadata.feedRows = catalog.items.length;
+    summary.metadata.feedRows = catalog.rawCatalogRows;
+    summary.metadata.serbiaStockRows = catalog.stockRows;
+    summary.metadata.serbiaStockEligibleRows = catalog.items.length;
     summary.metadata.source = catalog.source;
     const item = catalog.items.find((candidate) => candidate.sourceSku === normalizedSku);
-    if (!item) throw new Error(`Rabalux product ${normalizedSku} is not in the complete feed.`);
+    if (!item) {
+      const existsInCatalog = catalog.rawItems.some(
+        (candidate) => candidate.sourceSku === normalizedSku,
+      );
+      throw new Error(
+        existsInCatalog
+          ? `Rabalux product ${normalizedSku} is not eligible for import from Serbia stock (requires more than ${RABALUX_PUBLIC_STOCK_THRESHOLD} unrestricted units).`
+          : `Rabalux product ${normalizedSku} is not in the complete Serbia catalog feed.`,
+      );
+    }
     summary.read = 1;
     const pictogramIdsByCode = await ensureRabaluxPictogramDefinitions();
     const result = await upsertCatalogItem(
@@ -1255,6 +1338,22 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
       missing: catalogOnly.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
+    const stockBySourceSku = new Map(stock.map((item) => [item.sourceSku, item]));
+    const activeSupplierOnlyProducts = products.filter(
+      (product) => product.isActive && product.dcAvailableQty <= 0,
+    );
+    const activePolicyRemovals = activeSupplierOnlyProducts.filter((product) => {
+      const item = product.supplierExternalId
+        ? stockBySourceSku.get(product.supplierExternalId)
+        : undefined;
+      return Boolean(item && !isRabaluxSerbiaWebStockAvailable(item));
+    });
+    assertSafeMissingShare({
+      kind: "stock Serbia availability policy",
+      existing: activeSupplierOnlyProducts.length,
+      missing: activePolicyRemovals.length,
+      allowLargeRemoval: options.allowLargeRemoval,
+    });
     const stockOnly: string[] = [];
     for (let start = 0; start < stock.length; start += ITEM_CONCURRENCY) {
       const batch = stock.slice(start, start + ITEM_CONCURRENCY);
@@ -1367,6 +1466,9 @@ async function updateStockItem(
   options: RabaluxSyncOptions,
 ) {
   const now = new Date();
+  const serbiaWebStockAvailable = isRabaluxSerbiaWebStockAvailable(item);
+  const stockPolicyAllowsPublication =
+    product.dcAvailableQty > 0 || serbiaWebStockAvailable;
   const nextStatus = item.restricted
     ? "ARH"
     : !isRabaluxFieldLocked(parseOverrideFields(product.syncOverrides), "flags") ||
@@ -1413,11 +1515,11 @@ async function updateStockItem(
                     item.stock > RABALUX_PUBLIC_STOCK_THRESHOLD)),
             }
           : {}),
-        // Supplier status can never turn Rabalux into a DTZ product. Restricted
-        // is a hard safety state and therefore overrides manual flag locking.
+        // Supplier status can never turn Rabalux into a DTZ product. The Serbia
+        // stock publication rule is hard policy and overrides manual flags.
         isDtz: false,
         articleStatus: nextStatus,
-        ...(item.restricted
+        ...(!stockPolicyAllowsPublication
           ? { isActive: false, availableWebAuto: false }
           : {}),
         supplierStockMissingCount: 0,
@@ -1448,6 +1550,7 @@ async function updateStockItem(
         where: { id: product.id },
         data: {
           isActive:
+            stockPolicyAllowsPublication &&
             readiness.supplierApprovalStatus === "APPROVED" &&
             readiness.priceListEntries.length > 0 &&
             readiness.categories.length > 0 &&
@@ -1487,6 +1590,88 @@ async function updateStockItem(
     }
     return fieldNames.length > 0;
   });
+}
+
+async function deactivateOutsideSerbiaStockProducts(args: {
+  supplierId: string;
+  runId: string;
+  products: Array<{
+    id: string;
+    supplierExternalId: string | null;
+    supplierCatalogMissingCount: number;
+    supplierCatalogMissingSince: Date | null;
+    isActive: boolean;
+    dcAvailableQty: number;
+  }>;
+  reason?: string;
+  reviewedById?: string;
+}) {
+  const now = new Date();
+  let deactivated = 0;
+  let alreadyHidden = 0;
+  let retainedDueToDc = 0;
+
+  for (let start = 0; start < args.products.length; start += ITEM_CONCURRENCY) {
+    const results = await Promise.all(
+      args.products.slice(start, start + ITEM_CONCURRENCY).map(async (product) => {
+        if (product.dcAvailableQty > 0) {
+          await db.product.update({
+            where: { id: product.id },
+            data: {
+              supplierCatalogMissingCount: 0,
+              supplierCatalogMissingSince: null,
+              lastSupplierSyncAt: now,
+            },
+          });
+          return "retained" as const;
+        }
+
+        await db.$transaction(async (tx) => {
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              isActive: false,
+              availableWebAuto: false,
+              supplierCatalogMissingCount: 0,
+              supplierCatalogMissingSince: null,
+              lastSupplierSyncAt: now,
+            },
+          });
+          if (product.isActive) {
+            await tx.supplierSyncChange.create({
+              data: {
+                supplierId: args.supplierId,
+                importRunId: args.runId,
+                productId: product.id,
+                externalSku: product.supplierExternalId!,
+                changeType: "DEACTIVATE_OUTSIDE_SERBIA_STOCK",
+                status: "APPLIED",
+                fieldNames: ["isActive", "availableWebAuto"],
+                before: jsonSnapshot({ isActive: true }),
+                after: jsonSnapshot({
+                  isActive: false,
+                  availableWebAuto: false,
+                }),
+                appliedAt: now,
+                reason:
+                  args.reason ??
+                  `Not eligible in the Rabalux Serbia stock feed (requires more than ${RABALUX_PUBLIC_STOCK_THRESHOLD} unrestricted units).`,
+                reviewedById: args.reviewedById,
+              },
+            });
+          }
+        });
+        return product.isActive ? ("deactivated" as const) : ("hidden" as const);
+      }),
+    );
+    for (const result of results) {
+      if (result === "deactivated") deactivated++;
+      else if (result === "hidden") alreadyHidden++;
+      else retainedDueToDc++;
+    }
+  }
+
+  return { deactivated, alreadyHidden, retainedDueToDc };
 }
 
 async function reconcileMissingCatalogProducts(args: {
@@ -1592,6 +1777,7 @@ async function reconcileMissingStockProducts(args: {
     supplierReservedStock: number;
     lastSupplierStockSyncAt: Date | null;
     dcAvailableQty: number;
+    isActive: boolean;
     supplierApprovalStatus:
       | "PENDING_MAPPING"
       | "PENDING_APPROVAL"
@@ -1629,6 +1815,8 @@ async function reconcileMissingStockProducts(args: {
             confirmations,
             graceMs: graceMinutes * 60 * 1_000,
           });
+        const shouldDeactivate =
+          shouldZero && product.dcAvailableQty <= 0 && product.isActive;
         const availability = resolveRabaluxAvailability({
           warehouseStock: product.dcAvailableQty,
           supplierStock: shouldZero ? 0 : product.supplierStock,
@@ -1659,9 +1847,15 @@ async function reconcileMissingStockProducts(args: {
               ...(shouldZero
                 ? { supplierStock: 0, supplierNextArrivalAt: null }
                 : {}),
+              ...(shouldDeactivate ? { isActive: false } : {}),
             },
           });
-          if (shouldZero && (product.supplierStock ?? 0) !== 0) {
+          if (
+            shouldZero &&
+            ((product.supplierStock ?? 0) !== 0 || shouldDeactivate)
+          ) {
+            const fieldNames = ["supplierStock", "supplierNextArrivalAt"];
+            if (shouldDeactivate) fieldNames.push("isActive");
             await tx.supplierSyncChange.create({
               data: {
                 supplierId: args.supplierId,
@@ -1670,14 +1864,16 @@ async function reconcileMissingStockProducts(args: {
                 externalSku: product.supplierExternalId!,
                 changeType: "ZERO_MISSING_STOCK",
                 status: "APPLIED",
-                fieldNames: ["supplierStock", "supplierNextArrivalAt"],
+                fieldNames,
                 before: jsonSnapshot({
                   supplierStock: product.supplierStock,
                   supplierNextArrivalAt: product.supplierNextArrivalAt,
+                  isActive: product.isActive,
                 }),
                 after: jsonSnapshot({
                   supplierStock: 0,
                   supplierNextArrivalAt: null,
+                  isActive: shouldDeactivate ? false : product.isActive,
                 }),
                 appliedAt: now,
                 reason:

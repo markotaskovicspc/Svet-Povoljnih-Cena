@@ -61,7 +61,7 @@ export async function createRabaluxSyncPreview(
     summary = await prepareRabaluxPreview({ supplier, target, runId: id });
     const recordsRead =
       target === "catalog"
-        ? summary.catalogRows
+        ? summary.rawCatalogRows
         : target === "stock"
           ? summary.stockRows
           : summary.diff.mediaPending;

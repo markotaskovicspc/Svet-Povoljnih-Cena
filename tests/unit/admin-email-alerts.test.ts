@@ -103,6 +103,33 @@ describe("urgent SUPER admin email alerts", () => {
     );
   });
 
+  it("groups repeated incidents in the rendered digest", async () => {
+    mocks.backgroundJobs.mockResolvedValue([
+      {
+        id: "job-1",
+        kind: "RABALUX_MEDIA_PRODUCT",
+        lastError: "fetch failed",
+        updatedAt: new Date("2026-08-10T10:00:00.000Z"),
+      },
+      {
+        id: "job-2",
+        kind: "RABALUX_MEDIA_PRODUCT",
+        lastError: "fetch failed",
+        updatedAt: new Date("2026-08-10T10:01:00.000Z"),
+      },
+    ]);
+
+    await processUrgentAdminAlerts();
+
+    expect(mocks.trackedDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining(
+          "Pozadinski posao: RABALUX_MEDIA_PRODUCT (2×) — fetch failed",
+        ),
+      }),
+    );
+  });
+
   it("records a clear state without sending mail when no failure is open", async () => {
     await expect(processUrgentAdminAlerts()).resolves.toEqual({
       scanned: 0,

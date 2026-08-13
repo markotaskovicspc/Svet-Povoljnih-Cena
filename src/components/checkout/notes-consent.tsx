@@ -26,6 +26,7 @@ export function NotesConsent() {
     formState: { errors, isSubmitted },
   } = useFormContext<CheckoutFormData>();
   const notes = watch("notes") ?? "";
+  const paymentMethod = watch("paymentMethod");
   const consentErr = isSubmitted ? errors.consent?.message : undefined;
   const [openTerms, setOpenTerms] = useState(false);
 
@@ -94,13 +95,32 @@ export function NotesConsent() {
         ) : null}
         <p className="inline-flex items-center gap-1.5 pl-7 text-[11px] text-ink-500">
           <ShieldCheck className="size-3.5" aria-hidden />
-          Sigurna naplata preko IPS i 3-D Secure infrastrukture.
+          {getCheckoutPaymentTrustMessage(paymentMethod)}
         </p>
       </div>
 
       <TermsDialog open={openTerms} onOpenChange={setOpenTerms} />
     </div>
   );
+}
+
+export function getCheckoutPaymentTrustMessage(
+  paymentMethod: CheckoutFormData["paymentMethod"],
+) {
+  switch (paymentMethod) {
+    case "ips":
+      return "Plaćanje se obavlja preko bezbedne IPS Skeniraj infrastrukture.";
+    case "kartica":
+    case "google_pay":
+    case "apple_pay":
+      return "Kartično plaćanje zaštićeno je 3-D Secure infrastrukturom.";
+    case "uplata_na_racun":
+      return "Podaci za uplatu biće prikazani nakon potvrde porudžbine.";
+    case "pouzece_gotovina":
+      return "Plaćanje gotovinom obavlja se prilikom preuzimanja pošiljke.";
+    case "pouzece_kartica":
+      return "Plaćanje karticom obavlja se na POS terminalu kurira.";
+  }
 }
 
 function TermsDialog({

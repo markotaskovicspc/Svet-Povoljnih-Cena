@@ -16,6 +16,7 @@ export { isRabaluxEnabled, isRabaluxSupplierOperational } from "./config";
 export { RabaluxSyncBusyError } from "./safety";
 export {
   mirrorRabaluxProductMedia,
+  retryRecoverableFailedRabaluxMediaJobs,
   retryFailedRabaluxProductMedia,
   syncPendingRabaluxMedia,
 } from "./media";

@@ -143,6 +143,8 @@ interface InvoiceOrderInput {
   assemblyTotal: number;
   voucherCode?: string | null;
   voucherDiscount?: number | null;
+  firstPurchaseDiscount?: number | null;
+  savedCardDiscount?: number | null;
   total: number;
   paymentMethod: string;
   shipping_address: { firstName: string; lastName: string; street: string; postalCode: string; city: string };
@@ -189,6 +191,12 @@ export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
   if (order.assemblyTotal > 0) lines.push({ text: `Montaža: ${fmt(order.assemblyTotal)}` });
   if (order.voucherCode && order.voucherDiscount) {
     lines.push({ text: `Vaučer ${order.voucherCode}: -${fmt(order.voucherDiscount)}` });
+  }
+  if (order.firstPurchaseDiscount) {
+    lines.push({ text: `Popust za prvu kupovinu: -${fmt(order.firstPurchaseDiscount)}` });
+  }
+  if (order.savedCardDiscount) {
+    lines.push({ text: `Popust za sačuvanu karticu: -${fmt(order.savedCardDiscount)}` });
   }
   lines.push({ text: `Ukupno za uplatu: ${fmt(order.total)}`, bold: true, size: 13, spaceAbove: 6 });
   lines.push({ text: "" });
