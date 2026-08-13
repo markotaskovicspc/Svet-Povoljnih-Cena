@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 
 test.describe("landing page create, publish and reopen acceptance", () => {
   test.skip(
@@ -14,13 +15,12 @@ test.describe("landing page create, publish and reopen acceptance", () => {
   const runId = `${Date.now()}-${process.pid}`;
   const slug = `qa-landing-${runId}`;
   const title = `QA landing ${runId}`;
-  const lead = `QA uvod ${runId}`;
-  const blockTitle = `QA detalji ${runId}`;
-  const blockBody = `Ovo je provereni sadržaj landing strane ${runId}.`;
+  const ctaLabel = `Pogledaj proizvode ${runId}`;
   const adminEmail = `qa.landing.${runId}@example.invalid`;
   const adminPassword = `QaLanding!${runId}x`;
   let db: PrismaClient;
   let adminId = "";
+  let selectedProduct: { sku: string; name: string };
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -36,6 +36,24 @@ test.describe("landing page create, publish and reopen acceptance", () => {
       select: { id: true },
     });
     adminId = admin.id;
+    const product = await db.product.findFirst({
+      where: {
+        AND: [
+          webStorefrontProductWhere(),
+          {
+            OR: [
+              { familyMembership: { is: null } },
+              { familyMembership: { is: { storefrontEnabled: true } } },
+            ],
+          },
+        ],
+        deletedAt: null,
+      },
+      select: { sku: true, name: true },
+      orderBy: { sku: "asc" },
+    });
+    if (!product) throw new Error("Landing-page acceptance requires one web-visible product.");
+    selectedProduct = product;
   });
 
   test.afterAll(async () => {
@@ -75,13 +93,16 @@ test.describe("landing page create, publish and reopen acceptance", () => {
       page.getByRole("heading", { name: "Nova landing strana", exact: true }),
     ).toBeVisible();
     await page.getByLabel("Slug").fill(slug);
-    await page.getByLabel("Naslov (H1)").fill(title);
-    await page.getByLabel("Uvodni tekst").fill(lead);
-    await page.getByRole("button", { name: "Dodaj blok" }).click();
-    const block = page.locator('[data-block-type="RICH_TEXT"]');
-    await expect(block).toHaveCount(1);
-    await block.getByLabel("Naslov bloka (opciono)").fill(blockTitle);
-    await block.getByLabel("Markdown sadržaj").fill(blockBody);
+    await page.getByLabel("Naziv stranice (nevidljivi H1)").fill(title);
+    await page.getByLabel("Desktop slika").fill("/logo.jpeg");
+    await page.getByLabel("Naziv CTA dugmeta").fill(ctaLabel);
+    await page.getByLabel("CTA link").fill("#proizvodi");
+    await page.getByLabel("Pretraga po nazivu ili SKU-u").fill(selectedProduct.sku);
+    await page.getByRole("button", { name: "Pretraži" }).click();
+    const searchResult = page.getByRole("button").filter({ hasText: selectedProduct.sku });
+    await expect(searchResult).toHaveCount(1);
+    await searchResult.click();
+    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Sačuvaj nacrt" }).click();
     await expect(page).toHaveURL(
       /\/admin\/erp\/landing-strane\/(?!nova(?:[?#]|$))[^/?#]+$/,
@@ -119,13 +140,13 @@ test.describe("landing page create, publish and reopen acceptance", () => {
     expect(published.publishedRevisionId).toBe(published.draftRevisionId);
 
     await page.goto(`/ponuda/${slug}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-    await expect(page.getByText(lead, { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: blockTitle })).toBeVisible();
-    await expect(page.getByText(blockBody, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: title })).toHaveClass(/sr-only/);
+    await expect(page.getByRole("link", { name: ctaLabel })).toHaveAttribute("href", "#proizvodi");
+    await expect(page.getByRole("heading", { name: "Filteri" })).toBeVisible();
+    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-    await expect(page.getByText(blockBody, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: title })).toHaveClass(/sr-only/);
+    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
 
     await page.goto("/admin/erp/landing-strane", {
       waitUntil: "domcontentloaded",
@@ -141,7 +162,8 @@ test.describe("landing page create, publish and reopen acceptance", () => {
     );
     await expect(page.getByLabel("Slug")).toHaveValue(slug);
     await expect(page.getByLabel("Slug")).toHaveAttribute("readonly");
-    await expect(page.getByLabel("Naslov (H1)")).toHaveValue(title);
+    await expect(page.getByLabel("Naziv stranice (nevidljivi H1)")).toHaveValue(title);
+    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
     await expect(page.getByText("Verzija 2")).toBeVisible();
 
     const unexpectedRuntimeErrors = runtimeErrors.filter(

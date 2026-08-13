@@ -94,7 +94,35 @@ describe("landing page blocks", () => {
       startsAt: null,
       endsAt: null,
     });
+    expect(parsed.template).toBe("BUILDER");
+    expect(parsed.productSkus).toEqual([]);
     expect(parsed.legacySectionsFallback).toBe(false);
     expect(parsed.canonicalUrl).toBe("/ponuda/test-strana");
+  });
+
+  it("accepts an unbounded manual product list for the simple template", () => {
+    const productSkus = Array.from({ length: 1_250 }, (_, index) => `SKU-${index + 1}`);
+    const parsed = landingSnapshotSchema.parse({
+      template: "SIMPLE_PRODUCT_LIST",
+      title: "Velika ponuda",
+      lead: null,
+      heroImageUrl: "/images/hero.jpg",
+      heroMobileImageUrl: null,
+      heroImageAlt: "Velika ponuda",
+      heroCtaLabel: "Pogledajte proizvode",
+      heroCtaHref: "#proizvodi",
+      heroPictograms: EMPTY_HERO_PICTOGRAMS,
+      blocks: [],
+      productSkus,
+      seoTitle: null,
+      seoDescription: null,
+      ogImageUrl: null,
+      canonicalUrl: null,
+      robotsIndex: true,
+      startsAt: null,
+      endsAt: null,
+    });
+    expect(parsed.productSkus).toHaveLength(1_250);
+    expect(parsed.productSkus.at(-1)).toBe("SKU-1250");
   });
 });

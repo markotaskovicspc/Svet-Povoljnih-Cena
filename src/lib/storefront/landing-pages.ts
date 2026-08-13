@@ -29,6 +29,7 @@ export type StorefrontLandingPage = {
 function directSnapshot(page: LandingRow): LandingPageSnapshot {
   const parsedBlocks = parseLandingBlocks(page.blocks);
   return {
+    template: "BUILDER",
     legacySectionsFallback: false,
     title: page.title,
     lead: page.lead,
@@ -42,6 +43,7 @@ function directSnapshot(page: LandingRow): LandingPageSnapshot {
       ...Object.fromEntries(page.pictogramPlacements.map((item) => [item.slot, item.pictogramId])),
     },
     blocks: parsedBlocks.length ? parsedBlocks : legacySectionsToBlocks(page.sections),
+    productSkus: [],
     seoTitle: page.seoTitle,
     seoDescription: page.seoDescription,
     ogImageUrl: page.ogImageUrl,

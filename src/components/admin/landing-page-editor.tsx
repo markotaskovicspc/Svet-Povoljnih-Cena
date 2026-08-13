@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 type LandingEditorValues = {
   id?: string;
+  template: "BUILDER" | "SIMPLE_PRODUCT_LIST";
   slug: string;
   title: string;
   lead: string | null;
@@ -46,6 +47,7 @@ type LandingEditorValues = {
   heroCtaHref: string | null;
   heroPictograms: LandingHeroPictograms;
   blocks: LandingBlock[];
+  productSkus: string[];
   seoTitle: string | null;
   seoDescription: string | null;
   ogImageUrl: string | null;
@@ -155,7 +157,9 @@ export function LandingPageEditor({
   return (
     <AdminActionForm action={action} className="space-y-6">
       {values.id ? <input type="hidden" name="id" value={values.id} /> : null}
+      <input type="hidden" name="template" value={values.template} />
       <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
+      <input type="hidden" name="productSkus" value={JSON.stringify(values.productSkus)} />
       <input type="hidden" name="heroPictograms" value={JSON.stringify(heroPictograms)} />
       <input type="hidden" name="startsAt" value={toIsoDateTime(startsAt)} />
       <input type="hidden" name="endsAt" value={toIsoDateTime(endsAt)} />
@@ -295,7 +299,7 @@ function ThemeField({ value, onChange }: { value: "LIGHT" | "DARK"; onChange: (v
   return <Field label="Tema"><select value={value} onChange={(event) => onChange(event.target.value as "LIGHT" | "DARK")} className="h-9 rounded-lg border border-input bg-surface px-2 text-sm"><option value="LIGHT">Svetla</option><option value="DARK">Tamna</option></select></Field>;
 }
 
-function MediaUrlField({ pageId, label, name, value, onChange }: { pageId?: string; label: string; name?: string; value: string; onChange: (value: string) => void }) {
+export function MediaUrlField({ pageId, label, name, value, onChange }: { pageId?: string; label: string; name?: string; value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [media, setMedia] = useState<Array<{ name: string; url: string }>>([]);
   const [busy, setBusy] = useState(false);

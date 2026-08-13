@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { requireAdminAction } from "@/lib/admin";
-import { db } from "@/lib/db";
-import { EMPTY_HERO_PICTOGRAMS } from "@/lib/landing-pages/blocks";
-import { LandingPageEditor } from "@/components/admin/landing-page-editor";
+import { SimpleLandingPageEditor } from "@/components/admin/simple-landing-page-editor";
 import { PageHeader } from "@/components/admin/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { saveLandingPageAction } from "../actions";
@@ -12,10 +10,6 @@ export const metadata = { title: "Nova landing strana", robots: { index: false, 
 
 export default async function NewLandingPage() {
   await requireAdminAction(["CONTENT"]);
-  const pictograms = await db.pictogram.findMany({
-    select: { id: true, label: true, code: true, iconUrl: true },
-    orderBy: { label: "asc" },
-  });
   return <>
     <PageHeader
       title="Nova landing strana"
@@ -24,15 +18,14 @@ export default async function NewLandingPage() {
       actions={<Link href="/admin/erp/landing-strane" className={buttonVariants({ variant: "outline" })}>Nazad na listu</Link>}
     />
     <div className="px-8 py-6">
-      <LandingPageEditor
+      <SimpleLandingPageEditor
         action={saveLandingPageAction}
-        pictograms={pictograms}
+        initialProducts={[]}
         values={{
-          slug: "", title: "", lead: null,
+          slug: "", title: "",
           heroImageUrl: null, heroMobileImageUrl: null, heroImageAlt: null,
-          heroCtaLabel: null, heroCtaHref: null,
-          heroPictograms: EMPTY_HERO_PICTOGRAMS,
-          blocks: [], seoTitle: null, seoDescription: null, ogImageUrl: null,
+          heroCtaLabel: null, heroCtaHref: "#proizvodi",
+          productSkus: [], seoTitle: null, seoDescription: null, ogImageUrl: null,
           canonicalUrl: null, robotsIndex: true, startsAt: null, endsAt: null,
           lockedSlug: false,
         }}

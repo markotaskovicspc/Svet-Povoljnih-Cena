@@ -16,6 +16,12 @@ export const LANDING_BLOCK_TYPES = [
   "CTA",
 ] as const;
 
+export const LANDING_PAGE_TEMPLATES = [
+  "BUILDER",
+  "SIMPLE_PRODUCT_LIST",
+] as const;
+export type LandingPageTemplate = (typeof LANDING_PAGE_TEMPLATES)[number];
+
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 const requiredText = (max: number) => z.string().trim().min(1).max(max);
 const blockBase = {
@@ -130,6 +136,7 @@ export const EMPTY_HERO_PICTOGRAMS: LandingHeroPictograms = {
 };
 
 export const landingSnapshotSchema = z.object({
+  template: z.enum(LANDING_PAGE_TEMPLATES).default("BUILDER"),
   legacySectionsFallback: z.boolean().default(false),
   title: requiredText(160),
   lead: optionalText(1_000),
@@ -140,6 +147,7 @@ export const landingSnapshotSchema = z.object({
   heroCtaHref: optionalHref,
   heroPictograms: heroPictogramsSchema.default(EMPTY_HERO_PICTOGRAMS),
   blocks: landingBlocksSchema,
+  productSkus: z.array(z.string().trim().min(1).max(120)).default([]),
   seoTitle: optionalText(160),
   seoDescription: optionalText(500),
   ogImageUrl: optionalMediaUrl,

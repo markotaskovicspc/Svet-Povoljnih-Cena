@@ -103,6 +103,9 @@ interface ListingShellProps {
   sourceIsComplete?: boolean;
   featureBanner?: Banner;
   featureBannerMobileOnly?: boolean;
+  /** Hide page-level breadcrumbs/title when the listing is embedded below a landing hero. */
+  displayMode?: "page" | "products-only";
+  sectionId?: string;
 }
 
 const SCROLL_KEY = "spc:listing:scroll";
@@ -152,6 +155,8 @@ function ListingShellInner({
   sourceIsComplete = false,
   featureBanner,
   featureBannerMobileOnly = false,
+  displayMode = "page",
+  sectionId,
 }: ListingShellInnerProps) {
   const [items, setItems] = useState(source);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
@@ -380,10 +385,18 @@ function ListingShellInner({
 
   return (
     <div className="bg-canvas">
-      <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6 pb-20 md:pt-10">
-        <Breadcrumbs trail={trail} className="mb-6" />
+      <div
+        id={sectionId}
+        className={cn(
+          "mx-auto w-full max-w-[var(--container-page)] pb-20",
+          displayMode === "products-only"
+            ? "scroll-mt-24 px-4 pt-8 md:px-6 md:pt-10"
+            : "px-6 pt-6 md:pt-10",
+        )}
+      >
+        {displayMode === "page" ? <Breadcrumbs trail={trail} className="mb-6" /> : null}
 
-        <header className="mb-4 md:mb-5">
+        {displayMode === "page" ? <header className="mb-4 md:mb-5">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -426,7 +439,7 @@ function ListingShellInner({
               </p>
             ) : null}
           </motion.div>
-        </header>
+        </header> : null}
 
         {featureBanner ? (
           <div

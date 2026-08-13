@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { editableLandingSnapshot, landingAdminStatus } from "@/lib/landing-pages/admin";
+import { getLandingAdminProductsBySkus } from "@/lib/landing-pages/admin-products";
 import { LandingPageEditor } from "@/components/admin/landing-page-editor";
+import { SimpleLandingPageEditor } from "@/components/admin/simple-landing-page-editor";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
 import { PageHeader } from "@/components/admin/page-header";
@@ -42,6 +44,9 @@ export default async function EditLandingPage({ params }: { params: Promise<{ id
   ]);
   if (!page) notFound();
   const snapshot = editableLandingSnapshot(page);
+  const selectedProducts = snapshot.template === "SIMPLE_PRODUCT_LIST"
+    ? await getLandingAdminProductsBySkus(snapshot.productSkus)
+    : [];
   const status = landingAdminStatus(page);
   return <>
     <PageHeader
@@ -51,12 +56,21 @@ export default async function EditLandingPage({ params }: { params: Promise<{ id
       actions={<><Link href="/admin/erp/landing-strane" className={buttonVariants({ variant: "outline" })}>Nazad</Link><Link href={`/ponuda/${page.slug}?preview=1`} target="_blank" className={buttonVariants({ variant: "outline" })}>Pregled nacrta</Link></>}
     />
     <div className="space-y-6 px-8 py-6">
-      <LandingPageEditor
-        action={saveLandingPageAction}
-        pictograms={pictograms}
-        previewHref={`/ponuda/${page.slug}?preview=1`}
-        values={{ id: page.id, slug: page.slug, ...snapshot, lockedSlug: Boolean(page.publishedRevisionId) }}
-      />
+      {snapshot.template === "SIMPLE_PRODUCT_LIST" ? (
+        <SimpleLandingPageEditor
+          action={saveLandingPageAction}
+          initialProducts={selectedProducts}
+          previewHref={`/ponuda/${page.slug}?preview=1`}
+          values={{ id: page.id, slug: page.slug, ...snapshot, lockedSlug: Boolean(page.publishedRevisionId) }}
+        />
+      ) : (
+        <LandingPageEditor
+          action={saveLandingPageAction}
+          pictograms={pictograms}
+          previewHref={`/ponuda/${page.slug}?preview=1`}
+          values={{ id: page.id, slug: page.slug, ...snapshot, lockedSlug: Boolean(page.publishedRevisionId) }}
+        />
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>

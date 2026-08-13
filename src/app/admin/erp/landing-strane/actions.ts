@@ -7,6 +7,7 @@ import { z } from "zod";
 import { withAdminState } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { db } from "@/lib/db";
+import { landingStorefrontProductWhere } from "@/lib/landing-pages/admin-products";
 import {
   EMPTY_HERO_PICTOGRAMS,
   LANDING_PICTOGRAM_SLOTS,
@@ -19,7 +20,6 @@ import {
   type LandingHeroPictograms,
   type LandingPageSnapshot,
 } from "@/lib/landing-pages/blocks";
-import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 
 const landingSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -63,6 +63,7 @@ function parseLandingInput(formData: FormData) {
     id: textValue(formData, "id"),
     slug: normalizeLandingSlug(String(formData.get("slug") ?? "")),
     snapshot: {
+      template: String(formData.get("template") ?? "BUILDER"),
       legacySectionsFallback: false,
       title: String(formData.get("title") ?? "").trim(),
       lead: textValue(formData, "lead"),
@@ -73,6 +74,7 @@ function parseLandingInput(formData: FormData) {
       heroCtaHref: textValue(formData, "heroCtaHref"),
       heroPictograms: heroPictograms ?? EMPTY_HERO_PICTOGRAMS,
       blocks: blocksResult.success ? blocksResult.data : parseJson(formData.get("blocks")),
+      productSkus: parseJson(formData.get("productSkus")),
       seoTitle: textValue(formData, "seoTitle"),
       seoDescription: textValue(formData, "seoDescription"),
       ogImageUrl: textValue(formData, "ogImageUrl"),
@@ -116,6 +118,20 @@ function snapshotData(snapshot: LandingPageSnapshot) {
 
 async function validateReferencesForPublish(snapshot: LandingPageSnapshot) {
   const issues = validateLandingBlocksForPublish(snapshot.blocks);
+  if (snapshot.template === "SIMPLE_PRODUCT_LIST") {
+    if (!snapshot.heroImageUrl) {
+      issues.push("Jednostavna landing strana mora imati desktop sliku banera.");
+    }
+    if (!snapshot.heroCtaLabel || !snapshot.heroCtaHref) {
+      issues.push("Jednostavna landing strana mora imati naziv i link CTA dugmeta.");
+    }
+    if (!snapshot.productSkus.length) {
+      issues.push("Jednostavna landing strana mora imati najmanje jedan proizvod.");
+    }
+    if (snapshot.blocks.length) {
+      issues.push("Jednostavna landing strana ne može imati dodatne blokove.");
+    }
+  }
   if (snapshot.startsAt && snapshot.endsAt && snapshot.startsAt >= snapshot.endsAt) {
     issues.push("Kraj objave mora biti posle početka objave.");
   }
@@ -129,14 +145,24 @@ async function validateReferencesForPublish(snapshot: LandingPageSnapshot) {
     issues.push("Canonical URL mora biti interni put ili HTTPS URL.");
   }
 
-  const productSkus = Array.from(new Set(snapshot.blocks.flatMap((block) =>
-    block.type === "PRODUCT_GRID" ? block.productSkus : [],
-  )));
+  const rawProductSkus = snapshot.template === "SIMPLE_PRODUCT_LIST"
+    ? snapshot.productSkus
+    : snapshot.blocks.flatMap((block) =>
+        block.type === "PRODUCT_GRID" ? block.productSkus : [],
+      );
+  const productSkus = Array.from(new Set(rawProductSkus));
+  if (productSkus.length !== rawProductSkus.length) {
+    issues.push("Isti proizvod ne može biti dodat više puta.");
+  }
   if (productSkus.length) {
-    const found = await db.product.findMany({
-      where: { ...webStorefrontProductWhere(), sku: { in: productSkus }, deletedAt: null },
-      select: { sku: true },
-    });
+    const found: Array<{ sku: string }> = [];
+    for (const skus of chunkValues(productSkus, 500)) {
+      const batch = await db.product.findMany({
+        where: { ...landingStorefrontProductWhere(), sku: { in: skus }, deletedAt: null },
+        select: { sku: true },
+      });
+      found.push(...batch);
+    }
     const foundSet = new Set(found.map((product) => product.sku));
     const missing = productSkus.filter((sku) => !foundSet.has(sku));
     if (missing.length) issues.push(`Nepostojeći SKU kodovi: ${missing.join(", ")}.`);
@@ -159,6 +185,14 @@ async function validateReferencesForPublish(snapshot: LandingPageSnapshot) {
     }
   }
   return issues;
+}
+
+function chunkValues<T>(values: readonly T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }
 
 async function replaceHeroPlacements(
@@ -256,7 +290,13 @@ export async function saveLandingPageAction(
         entityId: saved.id,
         message: intent === "publish" ? "Landing strana je objavljena." : "Nacrt je sačuvan.",
         result: { id: saved.id, created: !existing },
-        diff: { slug: saved.slug, intent, blockCount: snapshot.blocks.length },
+        diff: {
+          slug: saved.slug,
+          intent,
+          template: snapshot.template,
+          blockCount: snapshot.blocks.length,
+          productCount: snapshot.productSkus.length,
+        },
       };
     },
   )(formData);
@@ -370,6 +410,7 @@ export async function duplicateLandingPageAction(
           ? legacySectionsToBlocks(page.sections)
           : source.data.blocks,
       } : {
+        template: "BUILDER",
         legacySectionsFallback: false,
         title: page.title,
         lead: page.lead,
@@ -380,6 +421,7 @@ export async function duplicateLandingPageAction(
         heroCtaHref: page.heroCtaHref,
         heroPictograms: { ...EMPTY_HERO_PICTOGRAMS, ...Object.fromEntries(page.pictogramPlacements.map((item) => [item.slot, item.pictogramId])) },
         blocks: parseLandingBlocks(page.blocks),
+        productSkus: [],
         seoTitle: page.seoTitle,
         seoDescription: page.seoDescription,
         ogImageUrl: page.ogImageUrl,

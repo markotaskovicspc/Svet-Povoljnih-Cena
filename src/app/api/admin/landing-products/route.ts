@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { landingStorefrontProductWhere } from "@/lib/landing-pages/admin-products";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
-import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 
 export async function GET(request: Request) {
   await requireAdminAction(["CONTENT"]);
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   if (query.length < 2) return NextResponse.json({ products: [] });
   const products = await db.product.findMany({
     where: {
-      ...webStorefrontProductWhere(),
+      ...landingStorefrontProductWhere(),
       deletedAt: null,
       OR: [
         { sku: { contains: query, mode: "insensitive" } },

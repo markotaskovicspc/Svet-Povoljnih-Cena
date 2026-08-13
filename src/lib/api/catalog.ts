@@ -1707,18 +1707,23 @@ export async function getProductsBySkus(
 ): Promise<ProductDTO[]> {
   const orderedSkus = Array.from(
     new Set(skus.map((sku) => sku.trim()).filter(Boolean)),
-  ).slice(0, 120);
+  );
   if (!orderedSkus.length || !hasDatabaseConnection()) return [];
 
   try {
-    const [rows, pricingRules, deliveryWindows] = await Promise.all([
-      db.product.findMany({
-        where: { sku: { in: orderedSkus }, ...webStorefrontVisibleProductWhere() },
-        select: productListSelect,
-      }),
+    const [pricingRules, deliveryWindows] = await Promise.all([
       getActivePricingRules(),
       getDeliveryWindows(),
     ]);
+    const rows: ProductListRow[] = [];
+    for (let index = 0; index < orderedSkus.length; index += 500) {
+      const batch = orderedSkus.slice(index, index + 500);
+      const batchRows = await db.product.findMany({
+        where: { sku: { in: batch }, ...webStorefrontVisibleProductWhere() },
+        select: productListSelect,
+      });
+      rows.push(...batchRows);
+    }
     const productsBySku = new Map(
       rows.map((row) => [
         row.sku,

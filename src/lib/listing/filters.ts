@@ -415,7 +415,8 @@ export type ListingKind =
   | "outlet"
   | "novo"
   | "kategorija"
-  | "kolekcija";
+  | "kolekcija"
+  | "landing";
 
 /**
  * Per-spec default sort:
@@ -448,6 +449,8 @@ function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
         p.newUntil ? new Date(p.newUntil).getTime() - Date.now() : -Infinity;
       return list.sort((a, b) => remaining(b) - remaining(a));
     }
+    case "landing":
+      return list;
     case "kategorija":
     case "kolekcija":
     default:

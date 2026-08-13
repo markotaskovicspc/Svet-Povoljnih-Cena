@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CmsMarkdown } from "@/components/content/cms-markdown";
+import { SimpleLandingHero } from "@/components/landing/simple-landing-hero";
+import { ListingShell } from "@/components/listing/listing-shell";
 import { ProductCard } from "@/components/product/product-card";
 import { buttonVariants } from "@/components/ui/button";
 import { getProductsBySkus } from "@/lib/api/catalog";
@@ -87,14 +89,19 @@ export default async function LandingPageRoute({ params, searchParams }: RoutePr
   if (!page) notFound();
 
   const blocks = page.snapshot.blocks.filter((block) => block.visible);
-  const skus = blocks.flatMap((block) =>
-    block.type === "PRODUCT_GRID" ? block.productSkus : [],
-  );
+  const simpleTemplate = page.snapshot.template === "SIMPLE_PRODUCT_LIST";
+  const skus = simpleTemplate
+    ? page.snapshot.productSkus
+    : blocks.flatMap((block) =>
+        block.type === "PRODUCT_GRID" ? block.productSkus : [],
+      );
   const pictogramIds = Array.from(
     new Set([
-      ...Object.values(page.snapshot.heroPictograms).filter(
-        (id): id is string => Boolean(id),
-      ),
+      ...(!simpleTemplate
+        ? Object.values(page.snapshot.heroPictograms).filter(
+            (id): id is string => Boolean(id),
+          )
+        : []),
       ...blocks.flatMap((block) =>
         block.type === "PICTOGRAM_ROW"
           ? block.items.map((item) => item.pictogramId)
@@ -107,12 +114,43 @@ export default async function LandingPageRoute({ params, searchParams }: RoutePr
     pictogramIds.length
       ? db.pictogram.findMany({ where: { id: { in: pictogramIds } } })
       : [],
-    getTabTitleIcon(`/ponuda/${encodeURIComponent(slug)}`),
+    simpleTemplate
+      ? Promise.resolve(null)
+      : getTabTitleIcon(`/ponuda/${encodeURIComponent(slug)}`),
   ]);
   const productBySku = new Map(products.map((product) => [product.sku, product]));
   const pictogramById = new Map(
     pictograms.map((pictogram) => [pictogram.id, pictogram]),
   );
+
+  if (simpleTemplate) {
+    return (
+      <div className="min-h-screen bg-canvas">
+        {preview ? (
+          <div className="bg-warning px-4 py-2 text-center text-sm font-semibold text-ink-900">
+            Admin pregled nacrta — ova verzija nije nužno javno objavljena.
+          </div>
+        ) : null}
+        <h1 className="sr-only">{page.snapshot.title}</h1>
+        <SimpleLandingHero snapshot={page.snapshot} />
+        {preview && page.snapshot.productSkus.length > products.length ? (
+          <p className="mx-auto mt-4 w-full max-w-[var(--container-page)] px-4 text-sm text-warning md:px-6">
+            Neki izabrani proizvodi nisu pronađeni ili trenutno nisu dostupni za web.
+          </p>
+        ) : null}
+        <ListingShell
+          kind="landing"
+          title={page.snapshot.title}
+          trail={[]}
+          source={products}
+          total={products.length}
+          sourceIsComplete
+          displayMode="products-only"
+          sectionId="proizvodi"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-canvas pb-16">
@@ -131,7 +169,7 @@ export default async function LandingPageRoute({ params, searchParams }: RoutePr
       <LandingHero
         snapshot={page.snapshot}
         pictogramById={pictogramById}
-        titleIcon={titleIcon}
+        titleIcon={titleIcon ?? undefined}
       />
       <div className="mx-auto w-full max-w-[var(--container-page)] space-y-12 px-4 py-10 md:px-6 md:py-14">
         {blocks.map((block) => (
