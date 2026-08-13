@@ -227,6 +227,41 @@ describe("ProductCard image regression", () => {
     expect(html).not.toContain("data-card-image=");
   });
 
+  it("prikazuje piktograme veličine oznake popusta direktno ispod nje", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          loyaltyPrice: 700,
+          loyaltyDiscountPct: 30,
+          pictograms: [
+            {
+              id: "pictogram-warranty",
+              code: "rabalux-warranty-3",
+              label: "3 godine garancije",
+              iconUrl: "/brand/pictograms/rabalux/warranty-3.png",
+            },
+            {
+              id: "pictogram-led",
+              code: "rabalux-led",
+              label: "LED tehnologija",
+              iconUrl: "/brand/pictograms/rabalux/led.png",
+            },
+          ],
+        },
+      }),
+    );
+
+    const discountBadge = html.indexOf("-30%");
+    const pictograms = html.indexOf("data-product-card-pictograms");
+
+    expect(discountBadge).toBeGreaterThanOrEqual(0);
+    expect(pictograms).toBeGreaterThan(discountBadge);
+    expect(html).toContain("size-[25px]");
+    expect(html).toContain('sizes="(min-width: 768px) 28px, 25px"');
+    expect(html).toContain("scale-[1.18]");
+  });
+
   it("prikazuje najviše šest adminskih piktograma preko fotografije", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {

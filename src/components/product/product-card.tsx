@@ -319,11 +319,12 @@ export function ProductCard({
               </div>
             )}
         </div>
-        {topLeftBadges.length ? (
+        {topLeftBadges.length || product.pictograms.length ? (
           <div className="pointer-events-none absolute top-0 left-0 flex max-w-[78%] flex-col items-start gap-1">
             {topLeftBadges.slice(0, 2).map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
+            <ProductCardPictograms pictograms={product.pictograms} />
           </div>
         ) : null}
         {bottomLeftBadges.length ? (
@@ -334,11 +335,6 @@ export function ProductCard({
           </div>
         ) : null}
         </Link>
-
-        <ProductCardPictograms
-          pictograms={product.pictograms}
-          compactOnDesktop={compactOnDesktop}
-        />
 
         {images.length > 1 ? (
           <>
@@ -629,10 +625,8 @@ function ProductBadge({ badge }: { badge: Badge }) {
 
 function ProductCardPictograms({
   pictograms,
-  compactOnDesktop,
 }: {
   pictograms: Product["pictograms"];
-  compactOnDesktop?: boolean;
 }) {
   const visible = pictograms.slice(0, 6);
   if (!visible.length) return null;
@@ -641,27 +635,21 @@ function ProductCardPictograms({
     <ul
       data-product-card-pictograms
       aria-label="Karakteristike proizvoda"
-      className={cn(
-        "pointer-events-none absolute top-12 right-1.5 z-10 grid grid-cols-2 gap-1",
-        compactOnDesktop && "md:top-11 md:right-1 md:gap-0.5",
-      )}
+      className="grid grid-cols-2 gap-1"
     >
       {visible.map((pictogram) => (
         <li
           key={pictogram.code}
           title={pictogram.label}
-          className={cn(
-            "relative size-6 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7",
-            compactOnDesktop && "md:size-6",
-          )}
+          className="relative size-[25px] overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7"
         >
           <Image
             src={pictogram.iconUrl}
             alt=""
             width={40}
             height={40}
-            sizes="(min-width: 768px) 28px, 24px"
-            className="size-full object-contain p-px"
+            sizes="(min-width: 768px) 28px, 25px"
+            className="size-full scale-[1.18] object-contain"
           />
           <span className="sr-only">{pictogram.label}</span>
         </li>
