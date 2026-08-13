@@ -57,14 +57,8 @@ export function calculateUnitLogistics(input: {
   containerQty?: number | null;
   containerGrossWeightKg?: number | null;
   packQty?: number | null;
-  widthCm?: number | null;
-  depthCm?: number | null;
-  heightCm?: number | null;
   grossWeightKg?: number | null;
   weightKg?: number | null;
-  unitPackWidthCm?: number | null;
-  unitPackDepthCm?: number | null;
-  unitPackHeightCm?: number | null;
   packWidthCm?: number | null;
   packDepthCm?: number | null;
   packHeightCm?: number | null;
@@ -72,34 +66,31 @@ export function calculateUnitLogistics(input: {
 }) {
   const containerQty =
     input.containerQty && input.containerQty > 0 ? input.containerQty : null;
-  const packQty = input.packQty && input.packQty > 0 ? input.packQty : 1;
-  const packVolume =
-    (input.packWidthCm ?? 0) *
-    (input.packDepthCm ?? 0) *
-    (input.packHeightCm ?? 0);
-  const unitPackVolume =
-    (input.unitPackWidthCm ?? 0) *
-    (input.unitPackDepthCm ?? 0) *
-    (input.unitPackHeightCm ?? 0);
-  const itemVolume =
-    (input.widthCm ?? 0) * (input.depthCm ?? 0) * (input.heightCm ?? 0);
+  const packQty = input.packQty && input.packQty > 0 ? input.packQty : null;
+  const packDimensions = [
+    input.packWidthCm ?? 0,
+    input.packDepthCm ?? 0,
+    input.packHeightCm ?? 0,
+  ];
+  const hasCompleteTransportPackage =
+    packQty !== null &&
+    packDimensions.every((dimension) => Number.isFinite(dimension) && dimension > 0);
   const volumeM3 =
     containerQty
       ? STANDARD_CONTAINER_VOLUME_M3 / containerQty
-      : packVolume > 0
-      ? packVolume / 1_000_000 / packQty
-      : unitPackVolume > 0
-        ? unitPackVolume / 1_000_000
-        : itemVolume > 0
-          ? itemVolume / 1_000_000
+      : hasCompleteTransportPackage
+        ? (packDimensions[0] * packDimensions[1] * packDimensions[2]) /
+          1_000_000 /
+          packQty
         : 0;
+  const weightPackQty = packQty ?? 1;
   const weightKg =
     containerQty &&
     input.containerGrossWeightKg != null &&
     input.containerGrossWeightKg > 0
       ? input.containerGrossWeightKg / containerQty
       : input.packGrossWeightKg != null && input.packGrossWeightKg > 0
-      ? input.packGrossWeightKg / packQty
+      ? input.packGrossWeightKg / weightPackQty
       : Math.max(input.grossWeightKg ?? input.weightKg ?? 0, 0);
   return {
     volumeM3: round(volumeM3, 6),

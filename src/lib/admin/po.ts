@@ -108,14 +108,8 @@ export async function addPurchaseOrderItem(input: {
       sizeLabel: true,
       colorPrimary: true,
       colorSecondary: true,
-      widthCm: true,
-      depthCm: true,
-      heightCm: true,
       weightKg: true,
       grossWeightKg: true,
-      unitPackWidthCm: true,
-      unitPackDepthCm: true,
-      unitPackHeightCm: true,
       packQty: true,
       packWidthCm: true,
       packDepthCm: true,
@@ -189,14 +183,8 @@ export async function addPurchaseOrderItem(input: {
     containerQty: product.containerQty,
     containerGrossWeightKg: Number(product.containerGrossWeightKg ?? 0),
     packQty: product.packQty,
-    widthCm: Number(product.widthCm ?? 0),
-    depthCm: Number(product.depthCm ?? 0),
-    heightCm: Number(product.heightCm ?? 0),
     weightKg: Number(product.weightKg ?? 0),
     grossWeightKg: Number(product.grossWeightKg ?? 0),
-    unitPackWidthCm: Number(product.unitPackWidthCm ?? 0),
-    unitPackDepthCm: Number(product.unitPackDepthCm ?? 0),
-    unitPackHeightCm: Number(product.unitPackHeightCm ?? 0),
     packWidthCm: Number(product.packWidthCm ?? 0),
     packDepthCm: Number(product.packDepthCm ?? 0),
     packHeightCm: Number(product.packHeightCm ?? 0),
@@ -304,14 +292,8 @@ export async function updatePurchaseOrderItem(input: {
       product: {
         select: {
           packQty: true,
-          widthCm: true,
-          depthCm: true,
-          heightCm: true,
           weightKg: true,
           grossWeightKg: true,
-          unitPackWidthCm: true,
-          unitPackDepthCm: true,
-          unitPackHeightCm: true,
           packWidthCm: true,
           packDepthCm: true,
           packHeightCm: true,
@@ -330,14 +312,8 @@ export async function updatePurchaseOrderItem(input: {
     containerQty: item.product?.containerQty,
     containerGrossWeightKg: Number(item.product?.containerGrossWeightKg ?? 0),
     packQty: item.product?.packQty,
-    widthCm: Number(item.product?.widthCm ?? 0),
-    depthCm: Number(item.product?.depthCm ?? 0),
-    heightCm: Number(item.product?.heightCm ?? 0),
     weightKg: Number(item.product?.weightKg ?? 0),
     grossWeightKg: Number(item.product?.grossWeightKg ?? 0),
-    unitPackWidthCm: Number(item.product?.unitPackWidthCm ?? 0),
-    unitPackDepthCm: Number(item.product?.unitPackDepthCm ?? 0),
-    unitPackHeightCm: Number(item.product?.unitPackHeightCm ?? 0),
     packWidthCm: Number(item.product?.packWidthCm ?? 0),
     packDepthCm: Number(item.product?.packDepthCm ?? 0),
     packHeightCm: Number(item.product?.packHeightCm ?? 0),
@@ -584,6 +560,7 @@ export function allocateLandedCost(
 
 /** Mark a purchase order as sent to the supplier (spec §4.1.3). */
 export async function sendPurchaseOrder(id: string, actorId: string) {
+  await recomputePurchaseOrderTotals(id);
   const order = await db.purchaseOrder.findUnique({
     where: { id },
     include: {
@@ -891,48 +868,109 @@ export async function receivePurchaseOrder(
   return { received, postedLines: received ? postedLines : 0, warehouseName };
 }
 
-/** Recompute purchase-order header totals from its line items. */
+/**
+ * Recompute an editable purchase order from the current product logistics.
+ * Posted orders keep their snapshotted logistics values.
+ */
 export async function recomputePurchaseOrderTotals(id: string) {
   const order = await db.purchaseOrder.findUnique({
     where: { id },
-    include: { items: true },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              packQty: true,
+              weightKg: true,
+              grossWeightKg: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              packGrossWeightKg: true,
+              containerQty: true,
+              containerGrossWeightKg: true,
+            },
+          },
+        },
+      },
+    },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
-  const items = order.items;
+  const items = order.items.map((item) => {
+    if (order.lockedAt || !item.product) {
+      return {
+        item,
+        packQty: item.packQty,
+        totalVolume: Number(item.totalVolume ?? 0),
+        totalWeight: Number(item.totalWeight ?? 0),
+      };
+    }
+    const logistics = calculateUnitLogistics({
+      containerQty: item.product.containerQty,
+      containerGrossWeightKg: Number(
+        item.product.containerGrossWeightKg ?? 0,
+      ),
+      packQty: item.product.packQty,
+      weightKg: Number(item.product.weightKg ?? 0),
+      grossWeightKg: Number(item.product.grossWeightKg ?? 0),
+      packWidthCm: Number(item.product.packWidthCm ?? 0),
+      packDepthCm: Number(item.product.packDepthCm ?? 0),
+      packHeightCm: Number(item.product.packHeightCm ?? 0),
+      packGrossWeightKg: Number(item.product.packGrossWeightKg ?? 0),
+    });
+    return {
+      item,
+      packQty: item.product.packQty,
+      totalVolume: Number((logistics.volumeM3 * item.qty).toFixed(3)),
+      totalWeight: Number((logistics.weightKg * item.qty).toFixed(3)),
+    };
+  });
   let totalVolume = 0;
   let totalWeight = 0;
   let totalPrice = 0;
-  for (const item of items) {
-    totalVolume += Number(item.totalVolume ?? 0);
-    totalWeight += Number(item.totalWeight ?? 0);
-    totalPrice += Number(item.purchasePrice) * item.qty;
+  for (const row of items) {
+    totalVolume += row.totalVolume;
+    totalWeight += row.totalWeight;
+    totalPrice += Number(row.item.purchasePrice) * row.item.qty;
   }
   const financials = calculatePurchaseOrderFinancials({
     exchangeRate: Number(order.exchangeRate),
     freightCost: Number(order.freightCost),
     freightExchangeRate: Number(order.freightExchangeRate),
-    lines: items.map((item) => ({
-      id: item.id,
-      qty: item.qty,
-      purchasePrice: Number(item.purchasePrice),
+    lines: items.map((row) => ({
+      id: row.item.id,
+      qty: row.item.qty,
+      purchasePrice: Number(row.item.purchasePrice),
       calcRetailPrice:
-        item.calcRetailPrice == null ? null : Number(item.calcRetailPrice),
+        row.item.calcRetailPrice == null
+          ? null
+          : Number(row.item.calcRetailPrice),
       customsRatePct:
-        item.customsRate == null ? null : Number(item.customsRate),
-      totalVolumeM3: Number(item.totalVolume ?? 0),
-      totalWeightKg: Number(item.totalWeight ?? 0),
+        row.item.customsRate == null ? null : Number(row.item.customsRate),
+      totalVolumeM3: row.totalVolume,
+      totalWeightKg: row.totalWeight,
     })),
   });
+  const financialsByItemId = new Map(
+    financials.lines.map((line) => [line.id, line]),
+  );
   await db.$transaction([
-    ...financials.lines.map((line) =>
-      db.purchaseOrderItem.update({
-        where: { id: line.id },
+    ...items.map((row) => {
+      const financial = financialsByItemId.get(row.item.id);
+      if (!financial) {
+        throw new Error(`Obračun stavke ${row.item.id} nije pronađen.`);
+      }
+      return db.purchaseOrderItem.update({
+        where: { id: row.item.id },
         data: {
-          freightAllocated: line.freightAllocatedRsd,
-          bmPct: line.bmPct,
+          packQty: row.packQty,
+          totalVolume: row.totalVolume,
+          totalWeight: row.totalWeight,
+          freightAllocated: financial.freightAllocatedRsd,
+          bmPct: financial.bmPct,
         },
-      }),
-    ),
+      });
+    }),
     db.purchaseOrder.update({
       where: { id },
       data: {
@@ -943,4 +981,24 @@ export async function recomputePurchaseOrderTotals(id: string) {
       },
     }),
   ]);
+}
+
+/** Refresh all non-posted orders that reference any of the changed products. */
+export async function recomputeOpenPurchaseOrderLogisticsForProducts(
+  productIds: readonly string[],
+) {
+  const uniqueProductIds = Array.from(
+    new Set(productIds.map((id) => id.trim()).filter(Boolean)),
+  );
+  if (!uniqueProductIds.length) return;
+  const orders = await db.purchaseOrder.findMany({
+    where: {
+      lockedAt: null,
+      items: { some: { productId: { in: uniqueProductIds } } },
+    },
+    select: { id: true },
+  });
+  for (const order of orders) {
+    await recomputePurchaseOrderTotals(order.id);
+  }
 }

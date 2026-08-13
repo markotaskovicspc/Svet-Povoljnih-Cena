@@ -94,6 +94,7 @@ import {
   deliveryCategory,
   packageVolumetricDimension,
 } from "@/lib/delivery-tariff";
+import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -707,6 +708,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
         if ("validationError" in updated) {
           return { ok: false as const, error: updated.validationError };
         }
+        await recomputeOpenPurchaseOrderLogisticsForProducts([d.id]);
         await revalidateProductSurfaces(d.id, updated.saved.slug);
         return {
           ok: true as const,
@@ -1402,14 +1404,14 @@ export default async function ProductDetail({
     },
     deliveryWindows,
   );
-  const transportDimensions = [
-    num(product.packWidthCm),
-    num(product.packDepthCm),
-    num(product.packHeightCm),
+  const unitPackageDimensions = [
+    num(product.unitPackWidthCm),
+    num(product.unitPackDepthCm),
+    num(product.unitPackHeightCm),
   ] as const;
-  const transportCategory = deliveryCategory(transportDimensions);
-  const volumetricDimension = transportCategory
-    ? packageVolumetricDimension(transportDimensions)
+  const unitPackageDeliveryCategory = deliveryCategory(unitPackageDimensions);
+  const volumetricDimension = unitPackageDeliveryCategory
+    ? packageVolumetricDimension(unitPackageDimensions)
     : null;
   const editableAttachments: EditableProductAttachment[] = product.attachments
     .filter((attachment) => attachment.section !== "GENERAL")
@@ -1997,7 +1999,7 @@ export default async function ProductDetail({
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Pakovanje pojedinačnog artikla
               </legend>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <Field label="Širina (cm)">
                   <Input name="unitPackWidthCm" type="number" min={0} step="0.01" defaultValue={product.unitPackWidthCm ? num(product.unitPackWidthCm) : ""} />
                 </Field>
@@ -2006,6 +2008,21 @@ export default async function ProductDetail({
                 </Field>
                 <Field label="Visina (cm)">
                   <Input name="unitPackHeightCm" type="number" min={0} step="0.01" defaultValue={product.unitPackHeightCm ? num(product.unitPackHeightCm) : ""} />
+                </Field>
+                <Field label="Volumetrijska dimenzija">
+                  <Input
+                    readOnly
+                    value={
+                      volumetricDimension === null
+                        ? "Dopunite dimenzije"
+                        : `${volumetricDimension.toLocaleString("sr-Latn-RS")} cm`
+                    }
+                  />
+                  <p className="mt-1 text-xs text-ink-500">
+                    {unitPackageDeliveryCategory
+                      ? `Kategorija ${unitPackageDeliveryCategory === 1 ? "I" : "II"}`
+                      : "Najveća + 2 × druga + 2 × treća dimenzija"}
+                  </p>
                 </Field>
               </div>
             </fieldset>
@@ -2037,21 +2054,6 @@ export default async function ProductDetail({
                 </Field>
                 <Field label="Bruto kg za ceo kontejner">
                   <Input name="containerGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={product.containerGrossWeightKg ? num(product.containerGrossWeightKg) : ""} />
-                </Field>
-                <Field label="Volumetrijska dimenzija">
-                  <Input
-                    readOnly
-                    value={
-                      volumetricDimension === null
-                        ? "Dopunite dimenzije"
-                        : `${volumetricDimension.toLocaleString("sr-Latn-RS")} cm`
-                    }
-                  />
-                  <p className="mt-1 text-xs text-ink-500">
-                    {transportCategory
-                      ? `Kategorija ${transportCategory === 1 ? "I" : "II"}`
-                      : "Najveća + 2 × druga + 2 × treća dimenzija"}
-                  </p>
                 </Field>
               </div>
             </fieldset>

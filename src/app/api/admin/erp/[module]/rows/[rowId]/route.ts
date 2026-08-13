@@ -52,6 +52,7 @@ import {
   normalizeCustomerRegistrationNumber,
 } from "@/lib/admin/customer-master";
 import { propagateProductFamilySharedData } from "@/lib/product-family.server";
+import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -66,6 +67,18 @@ const currencyFromUi: Record<string, ErpCurrency> = {
   USD: "USD",
   "$": "USD",
 };
+
+const PURCHASE_ORDER_LOGISTICS_COLUMNS = new Set([
+  "weightKg",
+  "grossWeightKg",
+  "packQty",
+  "packWidthCm",
+  "packDepthCm",
+  "packHeightCm",
+  "packGrossWeightKg",
+  "containerQty",
+  "containerGrossWeightKg",
+]);
 
 export async function PATCH(
   req: Request,
@@ -95,6 +108,9 @@ export async function PATCH(
       await db.$transaction((tx) =>
         propagateProductFamilySharedData(tx, rowId),
       );
+      if (PURCHASE_ORDER_LOGISTICS_COLUMNS.has(columnKey)) {
+        await recomputeOpenPurchaseOrderLogisticsForProducts([rowId]);
+      }
     }
 
     await logAudit({

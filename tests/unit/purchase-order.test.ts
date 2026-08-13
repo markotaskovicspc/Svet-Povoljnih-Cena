@@ -32,7 +32,7 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toBe("2026-07-22T00:00:00.000Z");
   });
 
-  it("uses transport dimensions per item, then unit packaging, then article dimensions", () => {
+  it("uses full-container quantity first, then complete transport packaging only", () => {
     expect(
       calculateUnitLogistics({
         containerQty: 230,
@@ -55,23 +55,26 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toEqual({ volumeM3: 0.1, weightKg: 10 });
     expect(
       calculateUnitLogistics({
-        unitPackWidthCm: 80,
-        unitPackDepthCm: 40,
-        unitPackHeightCm: 25,
-        widthCm: 100,
-        depthCm: 50,
-        heightCm: 40,
         grossWeightKg: 18,
       }),
-    ).toEqual({ volumeM3: 0.08, weightKg: 18 });
+    ).toEqual({ volumeM3: 0, weightKg: 18 });
     expect(
       calculateUnitLogistics({
-        widthCm: 100,
-        depthCm: 50,
-        heightCm: 40,
+        packWidthCm: 100,
+        packDepthCm: 50,
+        packHeightCm: 40,
         grossWeightKg: 18,
       }),
-    ).toEqual({ volumeM3: 0.2, weightKg: 18 });
+    ).toEqual({ volumeM3: 0, weightKg: 18 });
+    expect(
+      calculateUnitLogistics({
+        containerQty: 1_900,
+        packQty: 0,
+        packWidthCm: 0,
+        packDepthCm: 0,
+        packHeightCm: 0,
+      }),
+    ).toEqual({ volumeM3: 0.036316, weightKg: 0 });
   });
 
   it("marks quantities that are not divisible by package size", () => {

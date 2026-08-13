@@ -39,6 +39,7 @@ import {
 } from "@/lib/product-family.server";
 import { validateNewArticleImportRequiredFields } from "@/lib/admin/article-import-required";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
+import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -771,6 +772,19 @@ export async function POST(request: Request) {
     });
   }
 
+  const importedProductIds = new Set<string>();
+  const importsPurchaseOrderLogistics = [
+    "weightKg",
+    "grossWeightKg",
+    "packQty",
+    "packWidthCm",
+    "packDepthCm",
+    "packHeightCm",
+    "packGrossWeightKg",
+    "containerQty",
+    "containerGrossWeightKg",
+  ].some((field) => headers.has(field as keyof ArticleImportRow));
+
   try {
     await db.$transaction(async (tx) => {
       for (const row of rows) {
@@ -1021,6 +1035,7 @@ export async function POST(request: Request) {
                 slug: `${articleSlug(`${row.shortName}-${sku}`)}-${randomBytes(3).toString("hex")}`,
               },
             });
+        importedProductIds.add(product.id);
         if (row.retailPrice !== null) {
           await upsertActiveRetailPrice(tx, {
             productId: product.id,
@@ -1160,6 +1175,12 @@ export async function POST(request: Request) {
           ? error.message
           : "Uvoz nije upisan; transakcija je vraćena.";
     return NextResponse.json({ ok: false, error: message }, { status: 409 });
+  }
+
+  if (importsPurchaseOrderLogistics) {
+    await recomputeOpenPurchaseOrderLogisticsForProducts(
+      Array.from(importedProductIds),
+    );
   }
 
   await logAudit({
