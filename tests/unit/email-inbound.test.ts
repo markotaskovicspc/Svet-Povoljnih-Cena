@@ -87,6 +87,29 @@ describe("inbound email normalization and routing", () => {
     expect(classifyInboundMessage(message!)).toBe("comment");
   });
 
+  it("accepts receiving-only subdomain aliases without accepting lookalike domains", () => {
+    expect(
+      classifyInboundMessage({
+        to: ["reklamacije@inbound.svetpovoljnihcena.rs"],
+      }),
+    ).toBe("reclamation");
+    expect(
+      classifyInboundMessage({
+        to: ["komentar@inbound.svetpovoljnihcena.rs"],
+      }),
+    ).toBe("comment");
+    expect(
+      classifyInboundMessage({
+        to: ["reklamacije@svetpovoljnihcena.rs.example.com"],
+      }),
+    ).toBeNull();
+    expect(
+      classifyInboundMessage({
+        to: ["drugo@inbound.svetpovoljnihcena.rs"],
+      }),
+    ).toBeNull();
+  });
+
   it("creates an attachment-only reclamation with a safe fallback body", async () => {
     const result = await handleInboundMessage({
       from: "kupac@example.com",

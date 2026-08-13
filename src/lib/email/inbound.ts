@@ -153,11 +153,36 @@ export function classifyInboundMessage(
 ): "reclamation" | "comment" | null {
   const cfg = getEmailConfig();
   const recipients = msg.to.map((recipient) => recipient.trim().toLowerCase());
-  if (recipients.includes(cfg.reclamationsInbox.toLowerCase())) {
+  if (recipients.some((recipient) => matchesInboxOrSubdomainAlias(recipient, cfg.reclamationsInbox))) {
     return "reclamation";
   }
-  if (recipients.includes(cfg.commentsInbox.toLowerCase())) return "comment";
+  if (recipients.some((recipient) => matchesInboxOrSubdomainAlias(recipient, cfg.commentsInbox))) {
+    return "comment";
+  }
   return null;
+}
+
+/**
+ * A receiving-only subdomain can safely coexist with the root domain's mail
+ * provider. Accept the configured mailbox on that domain or one of its
+ * subdomains, while rejecting lookalike domains and different local parts.
+ */
+function matchesInboxOrSubdomainAlias(recipient: string, inbox: string) {
+  const expected = inbox.trim().toLowerCase();
+  if (recipient === expected) return true;
+
+  const recipientAt = recipient.lastIndexOf("@");
+  const expectedAt = expected.lastIndexOf("@");
+  if (recipientAt <= 0 || expectedAt <= 0) return false;
+
+  const recipientLocal = recipient.slice(0, recipientAt);
+  const recipientDomain = recipient.slice(recipientAt + 1);
+  const expectedLocal = expected.slice(0, expectedAt);
+  const expectedDomain = expected.slice(expectedAt + 1);
+  return (
+    recipientLocal === expectedLocal &&
+    recipientDomain.endsWith(`.${expectedDomain}`)
+  );
 }
 
 function pickString(v: unknown): string | null {
