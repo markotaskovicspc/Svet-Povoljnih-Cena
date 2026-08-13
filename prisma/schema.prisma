@@ -508,7 +508,6 @@ model Product {
   actionPrices             ActionProduct[]
   loyaltyRules            LoyaltyRuleProduct[]
   loyaltyPriceHistory      LoyaltyPriceHistory[]
-  mobileSearchPlacements  MobileSearchProduct[]
   dispatchNoteItems        DispatchNoteItem[]
   partnerReservations      PartnerReservation[]
   stockCountItems          StockCountItem[]
@@ -821,7 +820,6 @@ model Action {
   actionPrices        ActionProduct[]
   pictogramPlacements PictogramPlacement[]
   mobileTabs          MobileTab[]
-  mobileSearchItems   MobileSearchCurrentItem[]
 
   @@index([startsAt, endsAt])
 }
@@ -2915,7 +2913,6 @@ model LandingPage {
   sections            LandingPageSection[]
   pictogramPlacements PictogramPlacement[]
   mobileTabs          MobileTab[]
-  mobileSearchItems   MobileSearchCurrentItem[]
   revisions           LandingPageRevision[] @relation("LandingPageRevisions")
   draftRevision       LandingPageRevision?  @relation("LandingPageDraftRevision", fields: [draftRevisionId], references: [id], onDelete: SetNull)
   publishedRevision   LandingPageRevision?  @relation("LandingPagePublishedRevision", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
@@ -2996,53 +2993,6 @@ model MobileTab {
   landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
 
   @@index([enabled, position])
-}
-
-model MobileSearchConfig {
-  key             String   @id
-  viewAllHref     String   @default("/akcija")
-  frequentQueries String[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  currentItems MobileSearchCurrentItem[]
-  products     MobileSearchProduct[]
-}
-
-model MobileSearchCurrentItem {
-  id            String   @id @default(cuid())
-  configKey     String
-  position      Int
-  label         String
-  imageUrl      String
-  enabled       Boolean  @default(true)
-  actionId      String?
-  landingPageId String?
-  href          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  config      MobileSearchConfig @relation(fields: [configKey], references: [key], onDelete: Cascade)
-  action      Action?            @relation(fields: [actionId], references: [id], onDelete: SetNull)
-  landingPage LandingPage?       @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
-
-  @@unique([configKey, position])
-  @@index([actionId])
-  @@index([landingPageId])
-}
-
-model MobileSearchProduct {
-  id        String @id @default(cuid())
-  configKey String
-  productId String
-  position  Int
-
-  config  MobileSearchConfig @relation(fields: [configKey], references: [key], onDelete: Cascade)
-  product Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([configKey, position])
-  @@unique([configKey, productId])
-  @@index([productId])
 }
 
 enum AnalyticsEventType {

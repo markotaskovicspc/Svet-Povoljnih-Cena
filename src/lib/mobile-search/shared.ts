@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { normalizeMobileShortcutHref } from "@/lib/mobile-shortcuts/shared";
 
-export const MOBILE_SEARCH_CONFIG_KEY = "storefront";
+export const MOBILE_SEARCH_SETTING_KEY = "content.mobileSearch";
 export const MOBILE_SEARCH_CURRENT_COUNT = 2;
 export const MOBILE_SEARCH_PRODUCT_COUNT = 4;
 export const MOBILE_SEARCH_QUERY_COUNT = 6;
@@ -66,6 +66,46 @@ export const mobileSearchConfigInputSchema = z
   });
 
 export type MobileSearchConfigInput = z.infer<typeof mobileSearchConfigInputSchema>;
+
+export const mobileSearchStoredConfigSchema = z.object({
+  version: z.literal(1),
+  currentItems: z
+    .array(
+      z.object({
+        position: z.number().int().min(1).max(MOBILE_SEARCH_CURRENT_COUNT),
+        label: z.string().trim().min(2).max(60),
+        imageUrl: z.string().trim().min(1).max(2_000),
+        destination: z.string().trim().optional().default(""),
+        customHref: z.string().trim().max(1_000).optional().default(""),
+      }),
+    )
+    .length(MOBILE_SEARCH_CURRENT_COUNT),
+  productSkus: z
+    .array(z.string().trim().min(1).max(100))
+    .length(MOBILE_SEARCH_PRODUCT_COUNT),
+  frequentQueries: z
+    .array(z.string().trim().min(3).max(80))
+    .length(MOBILE_SEARCH_QUERY_COUNT),
+  viewAllDestination: z.string().trim().optional().default(""),
+  viewAllCustomHref: z.string().trim().max(1_000).optional().default(""),
+});
+
+export type MobileSearchStoredConfig = z.infer<
+  typeof mobileSearchStoredConfigSchema
+>;
+
+export function parseMobileSearchStoredConfig(value: unknown) {
+  const parsed = mobileSearchStoredConfigSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const configValidation = mobileSearchConfigInputSchema.safeParse({
+    currentItems: parsed.data.currentItems,
+    productSkus: parsed.data.productSkus,
+    frequentQueries: parsed.data.frequentQueries,
+    viewAllDestination: parsed.data.viewAllDestination,
+    viewAllCustomHref: parsed.data.viewAllCustomHref,
+  });
+  return configValidation.success ? parsed.data : null;
+}
 
 export function assertMobileSearchInternalHref(value: string) {
   const href = normalizeMobileShortcutHref(value);

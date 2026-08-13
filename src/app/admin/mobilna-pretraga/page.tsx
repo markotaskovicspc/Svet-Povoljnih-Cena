@@ -8,13 +8,13 @@ import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import { resolveMobileTabDestination } from "@/lib/mobile-shortcuts/server";
 import {
   DEFAULT_MOBILE_SEARCH_QUERIES,
-  MOBILE_SEARCH_CONFIG_KEY,
+  MOBILE_SEARCH_SETTING_KEY,
   assertMobileSearchInternalHref,
   parseMobileSearchConfigForm,
+  parseMobileSearchStoredConfig,
 } from "@/lib/mobile-search/shared";
 import {
   removeMobileSearchImages,
-  removeUnreferencedMobileSearchImages,
   uploadMobileSearchImage,
 } from "@/lib/mobile-search/image-storage.server";
 import { getMobileSearchContent } from "@/lib/mobile-search/server";
@@ -63,9 +63,9 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
     {
       allowed: ["CONTENT"],
       action: "mobileSearch.save",
-      entity: "MobileSearchConfig",
+      entity: "AdminSetting",
     },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const parsed = parseMobileSearchConfigForm(formData);
       if (!parsed.success) {
         return {
@@ -118,10 +118,11 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
         };
       }
 
-      const previous = await db.mobileSearchConfig.findUnique({
-        where: { key: MOBILE_SEARCH_CONFIG_KEY },
-        include: { currentItems: { orderBy: { position: "asc" } }, products: true },
+      const previous = await db.adminSetting.findUnique({
+        where: { key: MOBILE_SEARCH_SETTING_KEY },
+        select: { value: true },
       });
+      const previousConfig = parseMobileSearchStoredConfig(previous?.value);
       const uploads: Array<{ key: string; url: string }> = [];
       const imageUrls: string[] = [];
       try {
@@ -144,44 +145,28 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
           }
         }
 
-        await db.$transaction(async (tx) => {
-          await tx.mobileSearchConfig.upsert({
-            where: { key: MOBILE_SEARCH_CONFIG_KEY },
-            create: {
-              key: MOBILE_SEARCH_CONFIG_KEY,
-              viewAllHref: viewAllDestination.href,
-              frequentQueries: parsed.data.frequentQueries,
-            },
-            update: {
-              viewAllHref: viewAllDestination.href,
-              frequentQueries: parsed.data.frequentQueries,
-            },
-          });
-          await tx.mobileSearchCurrentItem.deleteMany({
-            where: { configKey: MOBILE_SEARCH_CONFIG_KEY },
-          });
-          await tx.mobileSearchProduct.deleteMany({
-            where: { configKey: MOBILE_SEARCH_CONFIG_KEY },
-          });
-          await tx.mobileSearchCurrentItem.createMany({
-            data: parsed.data.currentItems.map((item, index) => ({
-              configKey: MOBILE_SEARCH_CONFIG_KEY,
-              position: item.position,
-              label: item.label,
-              imageUrl: imageUrls[index]!,
-              enabled: true,
-              actionId: currentDestinations[index]!.data.actionId ?? null,
-              landingPageId: currentDestinations[index]!.data.landingPageId ?? null,
-              href: currentDestinations[index]!.data.href ?? null,
-            })),
-          });
-          await tx.mobileSearchProduct.createMany({
-            data: parsed.data.productSkus.map((sku, index) => ({
-              configKey: MOBILE_SEARCH_CONFIG_KEY,
-              productId: productsBySku.get(sku)!.id,
-              position: index + 1,
-            })),
-          });
+        const storedConfig = {
+          version: 1 as const,
+          currentItems: parsed.data.currentItems.map((item, index) => ({
+            position: item.position,
+            label: item.label,
+            imageUrl: imageUrls[index]!,
+            destination: item.destination ?? "",
+            customHref: item.customHref ?? "",
+          })),
+          productSkus: parsed.data.productSkus,
+          frequentQueries: parsed.data.frequentQueries,
+          viewAllDestination: parsed.data.viewAllDestination ?? "",
+          viewAllCustomHref: parsed.data.viewAllCustomHref ?? "",
+        };
+        await db.adminSetting.upsert({
+          where: { key: MOBILE_SEARCH_SETTING_KEY },
+          create: {
+            key: MOBILE_SEARCH_SETTING_KEY,
+            value: storedConfig,
+            updatedBy: actorId,
+          },
+          update: { value: storedConfig, updatedBy: actorId },
         });
       } catch (error) {
         await removeMobileSearchImages(uploads.map((upload) => upload.url), {
@@ -190,8 +175,10 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
         throw error;
       }
 
-      await removeUnreferencedMobileSearchImages(
-        previous?.currentItems.map((item) => item.imageUrl) ?? [],
+      await removeMobileSearchImages(
+        previousConfig?.currentItems
+          .map((item) => item.imageUrl)
+          .filter((url) => !imageUrls.includes(url)) ?? [],
         { reason: "images_replaced" },
       );
       updateTag("storefront-mobile-search");
@@ -199,16 +186,9 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
       revalidatePath("/");
       return {
         ok: true as const,
-        entityId: MOBILE_SEARCH_CONFIG_KEY,
+        entityId: MOBILE_SEARCH_SETTING_KEY,
         diff: {
-          before: previous
-            ? {
-                viewAllHref: previous.viewAllHref,
-                frequentQueries: previous.frequentQueries,
-                currentItems: previous.currentItems,
-                products: previous.products,
-              }
-            : null,
+          before: previousConfig,
           after: {
             viewAllHref: viewAllDestination.href,
             frequentQueries: parsed.data.frequentQueries,
@@ -227,45 +207,12 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-function editableDestination(row: {
-  actionId: string | null;
-  landingPageId: string | null;
-  href: string | null;
-}, knownValues: Set<string>) {
-  if (row.actionId) return { destination: `action:${row.actionId}`, customHref: "" };
-  if (row.landingPageId) return { destination: `landing:${row.landingPageId}`, customHref: "" };
-  const value = row.href ? `href:${row.href}` : "";
-  return knownValues.has(value)
-    ? { destination: value, customHref: "" }
-    : { destination: "", customHref: row.href ?? "" };
-}
-
 export default async function MobileSearchAdminPage() {
   await requireAdminAction(["CONTENT"]);
-  const [config, fallback, actions, landingPages, categories] = await Promise.all([
-    db.mobileSearchConfig.findUnique({
-      where: { key: MOBILE_SEARCH_CONFIG_KEY },
-      include: {
-        currentItems: { orderBy: { position: "asc" } },
-        products: {
-          orderBy: { position: "asc" },
-          include: {
-            product: {
-              select: {
-                sku: true,
-                name: true,
-                slug: true,
-                media: {
-                  where: { kind: "IMAGE", syncStatus: "READY" },
-                  orderBy: { order: "asc" },
-                  take: 1,
-                  select: { url: true, thumbUrl: true, cardUrl: true },
-                },
-              },
-            },
-          },
-        },
-      },
+  const [setting, fallback, actions, landingPages, categories] = await Promise.all([
+    db.adminSetting.findUnique({
+      where: { key: MOBILE_SEARCH_SETTING_KEY },
+      select: { value: true },
     }),
     getMobileSearchContent(),
     db.action.findMany({
@@ -282,6 +229,26 @@ export default async function MobileSearchAdminPage() {
       select: { id: true, name: true, path: true },
     }),
   ]);
+  const config = parseMobileSearchStoredConfig(setting?.value);
+  const configuredProducts = config
+    ? await db.product.findMany({
+        where: { sku: { in: config.productSkus } },
+        select: {
+          sku: true,
+          name: true,
+          slug: true,
+          media: {
+            where: { kind: "IMAGE", syncStatus: "READY" },
+            orderBy: { order: "asc" },
+            take: 1,
+            select: { url: true, thumbUrl: true, cardUrl: true },
+          },
+        },
+      })
+    : [];
+  const configuredProductsBySku = new Map(
+    configuredProducts.map((product) => [product.sku, product]),
+  );
 
   const destinationOptions = [
     ...fixedDestinations.map((item) => ({ label: item.label, value: `href:${item.href}` })),
@@ -303,7 +270,12 @@ export default async function MobileSearchAdminPage() {
     ? config.currentItems.map((item) => ({
         label: item.label,
         imageUrl: item.imageUrl,
-        ...editableDestination(item, knownValues),
+        destination: knownValues.has(item.destination) ? item.destination : "",
+        customHref:
+          item.customHref ||
+          (item.destination.startsWith("href:") && !knownValues.has(item.destination)
+            ? item.destination.slice("href:".length)
+            : ""),
       }))
     : fallback.currentItems.map((item) => ({
         label: item.label,
@@ -313,14 +285,19 @@ export default async function MobileSearchAdminPage() {
           : { destination: "", customHref: item.href }),
       }));
   const selectedProducts: MobileSearchAdminProduct[] = config
-    ? config.products.map(({ product }) => ({
-        sku: product.sku,
-        name: product.name,
-        slug: product.slug,
-        imageUrl: resolveSupabaseStorageUrl(
-          getMediaVariantUrl(product.media[0], "thumb"),
-        ),
-      }))
+    ? config.productSkus.flatMap((sku) => {
+        const product = configuredProductsBySku.get(sku);
+        return product
+          ? [{
+              sku: product.sku,
+              name: product.name,
+              slug: product.slug,
+              imageUrl: resolveSupabaseStorageUrl(
+                getMediaVariantUrl(product.media[0], "thumb"),
+              ),
+            }]
+          : [];
+      })
     : fallback.popularProducts.map((product) => ({
         sku: product.sku,
         name: product.name,
@@ -328,9 +305,17 @@ export default async function MobileSearchAdminPage() {
         imageUrl: product.thumbnailUrl,
       }));
   const viewAll = config
-    ? knownValues.has(`href:${config.viewAllHref}`)
-      ? { destination: `href:${config.viewAllHref}`, customHref: "" }
-      : { destination: "", customHref: config.viewAllHref }
+    ? {
+        destination: knownValues.has(config.viewAllDestination)
+          ? config.viewAllDestination
+          : "",
+        customHref:
+          config.viewAllCustomHref ||
+          (config.viewAllDestination.startsWith("href:") &&
+          !knownValues.has(config.viewAllDestination)
+            ? config.viewAllDestination.slice("href:".length)
+            : ""),
+      }
     : { destination: "href:/akcija", customHref: "" };
 
   return (

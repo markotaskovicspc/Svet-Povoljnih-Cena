@@ -7,6 +7,10 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import {
+  MOBILE_SEARCH_SETTING_KEY,
+  parseMobileSearchStoredConfig,
+} from "@/lib/mobile-search/shared";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -27,13 +31,13 @@ test.describe("mobile search CMS acceptance", () => {
   };
   let db: PrismaClient;
   let adminId: string | null = null;
-  let originalConfig: Awaited<ReturnType<typeof readConfig>> = null;
+  let originalSetting: Awaited<ReturnType<typeof readSetting>> = null;
   const createdImageUrls = new Set<string>();
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
-    originalConfig = await readConfig(db);
-    await db.mobileSearchConfig.deleteMany({ where: { key: "storefront" } });
+    originalSetting = await readSetting(db);
+    await db.adminSetting.deleteMany({ where: { key: MOBILE_SEARCH_SETTING_KEY } });
     const passwordHash = await bcrypt.hash(fixture.password, 12);
     const admin = await db.adminUser.create({
       data: {
@@ -52,14 +56,23 @@ test.describe("mobile search CMS acceptance", () => {
   test.afterAll(async () => {
     if (!db) return;
     try {
-      const saved = await readConfig(db);
+      const saved = parseMobileSearchStoredConfig((await readSetting(db))?.value);
+      const originalConfig = parseMobileSearchStoredConfig(originalSetting?.value);
       saved?.currentItems.forEach((item) => {
         if (!originalConfig?.currentItems.some((original) => original.imageUrl === item.imageUrl)) {
           createdImageUrls.add(item.imageUrl);
         }
       });
-      await db.mobileSearchConfig.deleteMany({ where: { key: "storefront" } });
-      if (originalConfig) await restoreConfig(db, originalConfig);
+      await db.adminSetting.deleteMany({ where: { key: MOBILE_SEARCH_SETTING_KEY } });
+      if (originalSetting) {
+        await db.adminSetting.create({
+          data: {
+            key: originalSetting.key,
+            value: originalSetting.value,
+            updatedBy: originalSetting.updatedBy,
+          },
+        });
+      }
       if (adminId) await db.auditLog.deleteMany({ where: { actorId: adminId } });
       await db.rateLimitBucket.deleteMany({ where: { key: { contains: fixture.email } } });
       await db.adminUser.deleteMany({ where: { email: fixture.email } });
@@ -134,18 +147,19 @@ test.describe("mobile search CMS acceptance", () => {
     await form.getByRole("button", { name: "Sačuvaj mobilnu pretragu" }).click();
     await expect(form.getByRole("status")).toContainText("Mobilna pretraga je sačuvana");
 
-    const saved = await db.mobileSearchConfig.findUniqueOrThrow({
-      where: { key: "storefront" },
-      include: {
-        currentItems: { orderBy: { position: "asc" } },
-        products: { orderBy: { position: "asc" }, include: { product: { select: { sku: true } } } },
-      },
+    const savedSetting = await db.adminSetting.findUniqueOrThrow({
+      where: { key: MOBILE_SEARCH_SETTING_KEY },
+      select: { value: true, updatedBy: true },
     });
+    const saved = parseMobileSearchStoredConfig(savedSetting.value);
+    expect(saved).not.toBeNull();
+    expect(savedSetting.updatedBy).toBe(adminId);
+    if (!saved) throw new Error("Saved mobile-search configuration is invalid.");
     expect(saved.currentItems.map((item) => item.label)).toEqual(fixture.labels);
     expect(saved.currentItems.every((item) => item.imageUrl.includes("/content/mobile-search/"))).toBe(true);
-    expect(saved.products.map((entry) => entry.product.sku)).toEqual(expectedSkus);
+    expect(saved.productSkus).toEqual(expectedSkus);
     expect(saved.frequentQueries).toEqual(fixture.queries);
-    expect(saved.viewAllHref).toBe("/akcija");
+    expect(saved.viewAllDestination).toBe("href:/akcija");
 
     const auditActions = new Set(
       (
@@ -179,43 +193,10 @@ test.describe("mobile search CMS acceptance", () => {
   }
 });
 
-function readConfig(db: PrismaClient) {
-  return db.mobileSearchConfig.findUnique({
-    where: { key: "storefront" },
-    include: {
-      currentItems: { orderBy: { position: "asc" } },
-      products: { orderBy: { position: "asc" } },
-    },
-  });
-}
-
-async function restoreConfig(
-  db: PrismaClient,
-  config: NonNullable<Awaited<ReturnType<typeof readConfig>>>,
-) {
-  await db.mobileSearchConfig.create({
-    data: {
-      key: config.key,
-      viewAllHref: config.viewAllHref,
-      frequentQueries: config.frequentQueries,
-      currentItems: {
-        create: config.currentItems.map((item) => ({
-          position: item.position,
-          label: item.label,
-          imageUrl: item.imageUrl,
-          enabled: item.enabled,
-          actionId: item.actionId,
-          landingPageId: item.landingPageId,
-          href: item.href,
-        })),
-      },
-      products: {
-        create: config.products.map((item) => ({
-          position: item.position,
-          productId: item.productId,
-        })),
-      },
-    },
+function readSetting(db: PrismaClient) {
+  return db.adminSetting.findUnique({
+    where: { key: MOBILE_SEARCH_SETTING_KEY },
+    select: { key: true, value: true, updatedBy: true },
   });
 }
 

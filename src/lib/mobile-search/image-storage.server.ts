@@ -2,7 +2,6 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import sharp from "sharp";
-import { db } from "@/lib/db";
 import { logOperationalError } from "@/lib/monitoring";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
@@ -74,25 +73,5 @@ export async function removeMobileSearchImages(
   const { error } = await createAdminClient().storage.from(getProductMediaBucket()).remove(keys);
   if (error) {
     logOperationalError("mobile_search.image_cleanup_failed", error, { ...context, keys });
-  }
-}
-
-export async function removeUnreferencedMobileSearchImages(
-  values: Array<string | null | undefined>,
-  context: Record<string, unknown>,
-) {
-  try {
-    const removable: string[] = [];
-    for (const url of new Set(values.filter((value): value is string => Boolean(value)))) {
-      if (!getManagedMobileSearchImageKey(url)) continue;
-      const references = await db.mobileSearchCurrentItem.count({ where: { imageUrl: url } });
-      if (references === 0) removable.push(url);
-    }
-    await removeMobileSearchImages(removable, context);
-  } catch (error) {
-    logOperationalError("mobile_search.image_reference_check_failed", error, {
-      ...context,
-      values,
-    });
   }
 }
