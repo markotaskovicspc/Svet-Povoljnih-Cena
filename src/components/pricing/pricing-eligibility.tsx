@@ -1,9 +1,28 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 import { useSession } from "next-auth/react";
 
 const PricingEligibilityContext = createContext(false);
+const subscribeToClientRuntime = () => () => undefined;
+
+export function resolvePricingEligibility({
+  clientReady,
+  isCustomerLoggedIn,
+  sessionStatus,
+  sessionUserType,
+}: {
+  clientReady: boolean;
+  isCustomerLoggedIn?: boolean;
+  sessionStatus: "authenticated" | "loading" | "unauthenticated";
+  sessionUserType?: string;
+}) {
+  if (!clientReady || sessionStatus === "loading") {
+    return Boolean(isCustomerLoggedIn);
+  }
+
+  return sessionStatus === "authenticated" && sessionUserType === "customer";
+}
 
 export function PricingEligibilityProvider({
   isCustomerLoggedIn,
@@ -13,10 +32,17 @@ export function PricingEligibilityProvider({
   children: React.ReactNode;
 }) {
   const { data: session, status } = useSession();
-  const sessionCustomer =
-    status === "authenticated" && session.user?.userType === "customer";
-  const eligible =
-    status === "loading" ? Boolean(isCustomerLoggedIn) : sessionCustomer;
+  const clientReady = useSyncExternalStore(
+    subscribeToClientRuntime,
+    () => true,
+    () => false,
+  );
+  const eligible = resolvePricingEligibility({
+    clientReady,
+    isCustomerLoggedIn,
+    sessionStatus: status,
+    sessionUserType: session?.user?.userType,
+  });
 
   return (
     <PricingEligibilityContext.Provider value={eligible}>

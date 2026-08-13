@@ -40,6 +40,20 @@ describe("CMS Markdown safety", () => {
     }
   });
 
+  it("routes reclamations exclusively through the customer portal", () => {
+    const reclamationPage = SYSTEM_CONTENT_PAGES.find(
+      (page) => page.slug === "reklamacije",
+    );
+
+    expect(reclamationPage?.bodyMarkdown).toContain(
+      "[Moj nalog → Reklamacije](/nalog/reklamacije)",
+    );
+    expect(reclamationPage?.bodyMarkdown).not.toContain("mailto:");
+    expect(reclamationPage?.bodyMarkdown).not.toContain(
+      "reklamacije@svetpovoljnihcena.rs",
+    );
+  });
+
   it("accepts supported content, stable anchors and safe links", () => {
     const markdown = `## Načini plaćanja {#kartice}
 
