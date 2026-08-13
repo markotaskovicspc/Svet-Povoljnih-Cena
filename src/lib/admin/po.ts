@@ -685,8 +685,9 @@ function escapeHtml(value: string) {
 
 /**
  * Receive a purchase order into stock (spec §4 "Proknjiži" / prijemnica):
- * sets receivedQty, posts WarehouseStock + StockMovement, recomputes
- * weighted-average COGS per line (spec §5.1), and flips status to RECEIVED.
+ * sets receivedQty, posts WarehouseStock + StockMovement, and flips status to
+ * RECEIVED. COGS is normally already booked by the posted inbound invoice;
+ * receipt calculates it only for legacy/orders without a posted invoice.
  * Idempotent — a PO already RECEIVED is skipped.
  */
 export async function receivePurchaseOrder(
@@ -768,6 +769,10 @@ export async function receivePurchaseOrder(
       data: { status: PurchaseOrderStatus.RECEIVED },
     });
     if (locked.count !== 1) return false;
+    const bookingState = await tx.purchaseOrder.findUniqueOrThrow({
+      where: { id },
+      select: { cogsBookedAt: true },
+    });
     const warehouse =
       order.receivingWarehouse?.active
         ? order.receivingWarehouse
@@ -803,37 +808,39 @@ export async function receivePurchaseOrder(
     }
 
     for (const [productId, items] of itemsByProduct) {
-      const onHand = await tx.warehouseStock.aggregate({
-        _sum: { qty: true },
-        where: { productId },
-      });
-      const oldQty = onHand._sum.qty ?? 0;
-      let incomingQty = 0;
-      let incomingCostTotal = 0;
-      for (const item of items) {
-        const freightAllocated = allocations.get(item.id) ?? 0;
-        const purchaseRsd = Number(item.purchasePrice) * Number(order.exchangeRate);
-        const customsRsd = purchaseRsd * (Number(item.customsRate ?? 0) / 100);
-        const additionalPerUnit = Number(item.additionalCostAllocated ?? 0) / item.qty;
-        const unitCogs =
-          purchaseRsd + customsRsd + freightAllocated / item.qty + additionalPerUnit;
-        incomingQty += item.qty;
-        incomingCostTotal += unitCogs * item.qty;
+      if (!bookingState.cogsBookedAt) {
+        const onHand = await tx.warehouseStock.aggregate({
+          _sum: { qty: true },
+          where: { productId },
+        });
+        const oldQty = onHand._sum.qty ?? 0;
+        let incomingQty = 0;
+        let incomingCostTotal = 0;
+        for (const item of items) {
+          const freightAllocated = allocations.get(item.id) ?? 0;
+          const purchaseRsd = Number(item.purchasePrice) * Number(order.exchangeRate);
+          const customsRsd = purchaseRsd * (Number(item.customsRate ?? 0) / 100);
+          const additionalPerUnit = Number(item.additionalCostAllocated ?? 0) / item.qty;
+          const unitCogs =
+            purchaseRsd + customsRsd + freightAllocated / item.qty + additionalPerUnit;
+          incomingQty += item.qty;
+          incomingCostTotal += unitCogs * item.qty;
+        }
+        const incomingUnitCost = incomingCostTotal / incomingQty;
+        const oldCogs = items[0]?.product?.cogs != null
+          ? Number(items[0].product.cogs)
+          : incomingUnitCost;
+        const finalCogs = weightedAverageUnitCost({
+          existingQty: oldQty,
+          existingUnitCost: oldCogs,
+          incomingQty,
+          incomingUnitCost,
+        });
+        await tx.product.update({
+          where: { id: productId },
+          data: { cogs: Number(finalCogs.toFixed(2)) },
+        });
       }
-      const incomingUnitCost = incomingCostTotal / incomingQty;
-      const oldCogs = items[0]?.product?.cogs != null
-        ? Number(items[0].product.cogs)
-        : incomingUnitCost;
-      const finalCogs = weightedAverageUnitCost({
-        existingQty: oldQty,
-        existingUnitCost: oldCogs,
-        incomingQty,
-        incomingUnitCost,
-      });
-      await tx.product.update({
-        where: { id: productId },
-        data: { cogs: Number(finalCogs.toFixed(2)) },
-      });
 
       for (const item of items) {
         await adjustInventory(tx, {

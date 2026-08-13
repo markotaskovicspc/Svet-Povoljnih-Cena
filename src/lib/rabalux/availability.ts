@@ -2,7 +2,7 @@ import { effectiveSellableStock } from "./allocation";
 
 export const RABALUX_STOCK_MAX_AGE_MS = 30 * 60 * 1_000;
 export const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
-/** Supplier feed quantity must be strictly greater than this value. */
+/** Minimum supplier feed quantity required for storefront publication. */
 export const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
 
 export type StockAvailabilitySource = "DC" | "SUPPLIER" | "MIXED" | "NONE";
@@ -52,7 +52,7 @@ export function resolveRabaluxSupplierStock(input: {
   const rawStock = nonnegativeInt(input.supplierStock ?? 0);
   const reservedStock = nonnegativeInt(input.supplierReservedStock ?? 0);
   const fresh = isRabaluxStockFresh(input.lastSupplierStockSyncAt, input.now);
-  const aboveThreshold = rawStock > RABALUX_PUBLIC_STOCK_THRESHOLD;
+  const aboveThreshold = rawStock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
   const eligible =
     input.supplierOperational && input.supplierApproved && fresh && aboveThreshold;
   const netAfterSafety = Math.max(

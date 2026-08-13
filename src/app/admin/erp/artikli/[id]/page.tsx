@@ -2292,7 +2292,7 @@ export default async function ProductDetail({
                 ) : null}
                 <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
                   Kupcu se ne prikazuje tačan broj. Dobavljačko stanje ulazi u
-                  online prodaju samo kada je sveže, odobreno i strogo veće od{" "}
+                  online prodaju samo kada je sveže, odobreno i najmanje{" "}
                   {RABALUX_PUBLIC_STOCK_THRESHOLD} kom; zatim se oduzimaju
                   rezervacije i jedan sigurnosni komad.
                 </p>

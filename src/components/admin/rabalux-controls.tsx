@@ -64,11 +64,11 @@ export function RabaluxControls({
             <Stat label="Sirovi RS katalog" value={preview.summary.rawCatalogRows} />
             <Stat label="RS stock redovi" value={preview.summary.stockRows} />
             <Stat
-              label="Za uvoz (RS lager >10)"
+              label="Za uvoz (pozitivan RS lager)"
               value={preview.summary.serbiaStockEligibleRows}
             />
             <Stat
-              label="Isključeno RS pravilom"
+              label="Za uklanjanje (nema RS lager)"
               value={preview.summary.excludedBySerbiaStockPolicy}
             />
             <Stat label="Nevažeće cene" value={preview.summary.invalidPrice} />
@@ -104,7 +104,7 @@ export function RabaluxControls({
               value={preview.summary.diff.priceProposals}
             />
             <Stat
-              label="Deaktivacije (RS lager/katalog)"
+              label="Uklanjanja/deaktivacije"
               value={preview.summary.diff.deactivations}
             />
             <Stat

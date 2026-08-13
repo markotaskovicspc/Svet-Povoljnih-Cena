@@ -710,7 +710,9 @@ async function receivePurchaseOrders(ids: string[], actorId: string): Promise<Co
 async function lockInboundInvoices(ids: string[]): Promise<CommandResult> {
   requireIds(ids);
   for (const id of ids) await lockInboundInvoice(id);
-  return { message: `Zaključano faktura: ${ids.length}.` };
+  return {
+    message: `Zaključano faktura: ${ids.length}. Konačni COGS je proknjižen na artikle.`,
+  };
 }
 
 async function cancelInboundInvoices(ids: string[]): Promise<CommandResult> {

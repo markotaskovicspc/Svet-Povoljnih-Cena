@@ -409,7 +409,7 @@ function checkoutAvailability(product, now) {
     enabledEnv("RABALUX_ENABLED") &&
     product.supplier.enabled &&
     product.supplierApprovalStatus === "APPROVED" &&
-    supplierStock > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+    supplierStock >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
     supplierFresh;
   const supplierAvailable = supplierEligible
     ? Math.max(

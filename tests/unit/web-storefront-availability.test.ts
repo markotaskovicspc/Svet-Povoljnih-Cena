@@ -89,7 +89,7 @@ describe("web storefront availability rollout", () => {
     ).toBe(false);
   });
 
-  it("enforces the Rabalux >10 rule even while global auto availability is off", () => {
+  it("enforces the Rabalux minimum-10 rule even while global auto availability is off", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
     process.env.RABALUX_ENABLED = "true";
     const base = {
@@ -102,8 +102,8 @@ describe("web storefront availability rollout", () => {
       supplier: { integrationKey: "RABALUX", enabled: true },
     };
 
-    expect(isProductAvailableOnWeb({ ...base, supplierStock: 10 })).toBe(false);
-    expect(isProductAvailableOnWeb({ ...base, supplierStock: 11 })).toBe(true);
+    expect(isProductAvailableOnWeb({ ...base, supplierStock: 9 })).toBe(false);
+    expect(isProductAvailableOnWeb({ ...base, supplierStock: 10 })).toBe(true);
     expect(
       isProductAvailableOnWeb({
         ...base,

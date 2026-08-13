@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RABALUX_SERBIA_STOCK_FEED_URL,
   assertRabaluxSerbiaStockSource,
+  isRabaluxSerbiaStockPresent,
   isRabaluxSerbiaWebStockAvailable,
   selectRabaluxSerbiaStockCatalog,
 } from "@/lib/rabalux/serbia-stock";
@@ -49,30 +50,38 @@ describe("Rabalux Serbia stock-only catalog policy", () => {
     ).toThrow("configured for Serbia");
   });
 
-  it("imports only unrestricted Serbian SKUs above the existing web threshold", () => {
+  it("imports every positive unrestricted Serbian SKU and publishes from 10", () => {
     const selection = selectRabaluxSerbiaStockCatalog(
-      ["AVAILABLE", "THRESHOLD", "ZERO", "RESTRICTED", "MISSING"].map(
+      ["AVAILABLE", "THRESHOLD", "LOW", "ZERO", "RESTRICTED", "MISSING"].map(
         catalogItem,
       ),
       [
         stockItem("AVAILABLE", 11),
         stockItem("THRESHOLD", 10),
+        stockItem("LOW", 1),
         stockItem("ZERO", 0),
         stockItem("RESTRICTED", 50, true),
       ],
     );
 
-    expect(selection.items.map((item) => item.sourceSku)).toEqual(["AVAILABLE"]);
+    expect(selection.items.map((item) => item.sourceSku)).toEqual([
+      "AVAILABLE",
+      "THRESHOLD",
+      "LOW",
+    ]);
     expect(selection).toMatchObject({
-      rawCatalogRows: 5,
-      stockRows: 4,
+      rawCatalogRows: 6,
+      stockRows: 5,
       excludedMissingStock: 1,
-      excludedBelowThreshold: 2,
+      excludedWithoutStock: 1,
       excludedRestricted: 1,
-      excludedBySerbiaStockPolicy: 4,
+      excludedBySerbiaStockPolicy: 3,
     });
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 10))).toBe(false);
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 11))).toBe(true);
+    expect(isRabaluxSerbiaStockPresent(stockItem("A", 1))).toBe(true);
+    expect(isRabaluxSerbiaStockPresent(stockItem("A", 0))).toBe(false);
+    expect(isRabaluxSerbiaStockPresent(stockItem("A", 20, true))).toBe(false);
+    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 9))).toBe(false);
+    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 10))).toBe(true);
   });
 
   it("fails closed instead of combining duplicate warehouse rows", () => {

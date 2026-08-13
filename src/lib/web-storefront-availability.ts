@@ -73,7 +73,7 @@ function nonRabaluxSupplierWhere(): Prisma.ProductWhereInput {
 
 function rabaluxSupplierStockWhere(now: Date): Prisma.ProductWhereInput {
   return {
-    supplierStock: { gt: RABALUX_PUBLIC_STOCK_THRESHOLD },
+    supplierStock: { gte: RABALUX_PUBLIC_STOCK_THRESHOLD },
     supplierApprovalStatus: "APPROVED",
     lastSupplierStockSyncAt: { gte: rabaluxStockFreshAfter(now) },
   };
@@ -227,7 +227,7 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
     product.supplier.enabled &&
       isRabaluxEnabled() &&
       product.supplierApprovalStatus === "APPROVED" &&
-      (product.supplierStock ?? 0) > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+      (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
       isRabaluxStockFresh(product.lastSupplierStockSyncAt),
   );
 }
@@ -258,9 +258,9 @@ export function storefrontPublicationBlockers(
       if (product.supplierApprovalStatus !== "APPROVED") {
         reasons.push("Rabalux artikal nije odobren");
       }
-      if ((product.supplierStock ?? 0) <= RABALUX_PUBLIC_STOCK_THRESHOLD) {
+      if ((product.supplierStock ?? 0) < RABALUX_PUBLIC_STOCK_THRESHOLD) {
         reasons.push(
-          `Rabalux stanje nije veće od praga ${RABALUX_PUBLIC_STOCK_THRESHOLD}`,
+          `Rabalux stanje je manje od minimuma ${RABALUX_PUBLIC_STOCK_THRESHOLD}`,
         );
       }
       if (!isRabaluxStockFresh(product.lastSupplierStockSyncAt)) {

@@ -40,7 +40,11 @@ export function assertRabaluxSerbiaStockSource(source: {
 }
 
 export function isRabaluxSerbiaWebStockAvailable(item: RabaluxStockItem) {
-  return !item.restricted && item.stock > RABALUX_PUBLIC_STOCK_THRESHOLD;
+  return !item.restricted && item.stock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
+}
+
+export function isRabaluxSerbiaStockPresent(item: RabaluxStockItem) {
+  return !item.restricted && item.stock > 0;
 }
 
 export function rabaluxStockItemsBySku(stock: RabaluxStockItem[]) {
@@ -65,7 +69,7 @@ export function selectRabaluxSerbiaStockCatalog(
   const items: RabaluxCatalogItem[] = [];
   const eligibleStockSkus: string[] = [];
   let excludedMissingStock = 0;
-  let excludedBelowThreshold = 0;
+  let excludedWithoutStock = 0;
   let excludedRestricted = 0;
 
   for (const item of catalog) {
@@ -74,8 +78,8 @@ export function selectRabaluxSerbiaStockCatalog(
       excludedMissingStock++;
     } else if (stockItem.restricted) {
       excludedRestricted++;
-    } else if (!isRabaluxSerbiaWebStockAvailable(stockItem)) {
-      excludedBelowThreshold++;
+    } else if (!isRabaluxSerbiaStockPresent(stockItem)) {
+      excludedWithoutStock++;
     } else {
       items.push(item);
       eligibleStockSkus.push(item.sourceSku);
@@ -89,9 +93,9 @@ export function selectRabaluxSerbiaStockCatalog(
     rawCatalogRows: catalog.length,
     stockRows: stock.length,
     excludedMissingStock,
-    excludedBelowThreshold,
+    excludedWithoutStock,
     excludedRestricted,
     excludedBySerbiaStockPolicy:
-      excludedMissingStock + excludedBelowThreshold + excludedRestricted,
+      excludedMissingStock + excludedWithoutStock + excludedRestricted,
   };
 }

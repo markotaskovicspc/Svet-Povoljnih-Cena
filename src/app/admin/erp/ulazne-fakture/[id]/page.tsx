@@ -159,7 +159,7 @@ async function lockAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
-        message: "Faktura i COGS kalkulacija su zaključane. Konačni COGS biće knjižen pri prijemu robe.",
+        message: "Faktura je zaključana, a konačni COGS je odmah proknjižen na artikle.",
       };
     },
   )(formData);
@@ -255,6 +255,13 @@ export default async function InboundInvoicePage({
   const locked = Boolean(invoice.lockedAt);
   const cancelled = invoice.status === InboundInvoiceStatus.CANCELLED;
   const immutable = locked || cancelled;
+  const cogsNeedsBackfill = Boolean(
+    locked &&
+      !cancelled &&
+      invoice.purchaseOrder &&
+      invoice.purchaseOrder.status !== PurchaseOrderStatus.RECEIVED &&
+      !invoice.purchaseOrder.cogsBookedAt,
+  );
   const editing = query.mode === "edit" && !immutable;
   const purchaseOrderNeedsPosting = Boolean(
     invoice.purchaseOrder && !invoice.purchaseOrder.lockedAt,
@@ -381,11 +388,21 @@ export default async function InboundInvoicePage({
             <AdminActionForm action={lockAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
-                disabled={immutable || purchaseOrderNeedsPosting}
-                confirm="Zaključati fakturu i COGS kalkulaciju? Konačni COGS biće knjižen na artikal pri prijemu robe."
-                pendingLabel="Zaključavanje…"
+                disabled={
+                  cancelled ||
+                  purchaseOrderNeedsPosting ||
+                  (locked && !cogsNeedsBackfill)
+                }
+                confirm={
+                  cogsNeedsBackfill
+                    ? "Proknjižiti COGS ove ranije zaključane fakture na artikle?"
+                    : "Zaključati fakturu i odmah proknjižiti konačni COGS na artikle?"
+                }
+                pendingLabel={
+                  cogsNeedsBackfill ? "Knjiženje COGS-a…" : "Zaključavanje…"
+                }
               >
-                Zaključaj
+                {cogsNeedsBackfill ? "Proknjiži COGS" : "Zaključaj"}
               </SubmitButton>
             </AdminActionForm>
             <AdminActionForm action={cancelAction}>
@@ -427,9 +444,13 @@ export default async function InboundInvoicePage({
             <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">
               Faktura je stornirana i više ne učestvuje u COGS-u ni količini u dolasku.
             </p>
+          ) : cogsNeedsBackfill ? (
+            <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+              Faktura je zaključana pre uvođenja trenutnog COGS workflow-a. Izaberite „Proknjiži COGS” da odmah upišete obračunate vrednosti na artikle, bez prijema količine u magacin.
+            </p>
           ) : locked ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              Faktura i COGS kalkulacija su zaključane. Troškovi su raspoređeni po vrednosti artikala, a konačni COGS se knjiži na artikal pri prijemu robe.
+              Faktura je zaključana. Troškovi su raspoređeni po vrednosti artikala i konačni COGS je proknjižen na artikle.
             </p>
           ) : !editing ? (
             <p className="mb-4 rounded-lg border border-border/60 bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">
@@ -541,8 +562,11 @@ export default async function InboundInvoicePage({
                           ? row.incomingUnitCogsRsd
                           : Number(product.cogs);
                       const finalCogs =
-                        invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED
-                          ? existingCogs
+                        (locked ||
+                          invoice.purchaseOrder?.status ===
+                            PurchaseOrderStatus.RECEIVED) &&
+                        product?.cogs != null
+                          ? Number(product.cogs)
                           : weightedAverageCogs({
                               existingQty,
                               existingUnitCogs: existingCogs,
@@ -567,7 +591,7 @@ export default async function InboundInvoicePage({
                 </table>
               </div>
               <p className="mt-4 text-xs text-ink-500">
-                Finalni COGS = (postojeća količina × postojeći COGS + količina novog prijema × COGS novog prijema) / ukupna količina.
+                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Knjiži se zaključavanjem fakture; prijem robe zatim knjiži količinu bez ponovnog COGS obračuna.
               </p>
             </>
           ) : (

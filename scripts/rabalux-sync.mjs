@@ -35,7 +35,7 @@ if (mode === "inspect") {
   const serbiaStockEligible = stockRows.filter((row) => {
     const quantity = Number.parseInt(row[6]?.trim() ?? "0", 10);
     const restricted = /\brestricted\b/i.test(row[5]?.trim() ?? "");
-    return catalogSet.has(row[0].trim()) && !restricted && quantity > 10;
+    return catalogSet.has(row[0].trim()) && !restricted && quantity > 0;
   });
   const summary = {
     catalogRows: catalogSkus.length,

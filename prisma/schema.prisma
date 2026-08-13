@@ -2130,6 +2130,8 @@ model PurchaseOrder {
   notes                String?             @db.Text
   lockedAt             DateTime?
   postedAt             DateTime?
+  cogsBookingSnapshot  Json?
+  cogsBookedAt         DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 

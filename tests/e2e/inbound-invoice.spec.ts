@@ -3,7 +3,7 @@
 // Acceptance: ACC-04
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
 
@@ -37,12 +37,37 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
   let supplierId = "";
   let productId = "";
   let warehouseId = "";
+  let categoryId = "";
+  let priceListId = "";
   let purchaseOrderId = "";
   let invoiceId = "";
   const pageErrors: string[] = [];
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
+    const [category, retailPriceList] = await Promise.all([
+      db.category.create({
+        data: {
+          slug: `qa-uf-${runId}`,
+          name: `QA UF kategorija ${runId}`,
+          path: `/qa-uf-${runId}`,
+        },
+        select: { id: true },
+      }),
+      db.priceList.create({
+        data: {
+          code: `QA-UF-MP-${runId}`.slice(0, 80),
+          name: `QA UF MP ${runId}`,
+          kind: "RETAIL",
+          currency: "RSD",
+          active: true,
+          validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        },
+        select: { id: true },
+      }),
+    ]);
+    categoryId = category.id;
+    priceListId = retailPriceList.id;
     const passwordHash = await bcrypt.hash(fixture.adminPassword, 12);
     const admin = await db.adminUser.create({
       data: {
@@ -88,6 +113,25 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         stock: 100,
         cogs: 200,
         supplierId,
+        countryOfOrigin: "Srbija",
+        hsCode: "9403609000",
+        widthCm: 100,
+        depthCm: 50,
+        heightCm: 40,
+        grossWeightKg: 20,
+        packQty: 1,
+        packWidthCm: 105,
+        packDepthCm: 55,
+        packHeightCm: 45,
+        packGrossWeightKg: 21,
+        categories: { create: { categoryId: category.id } },
+        priceListEntries: {
+          create: {
+            priceListId: retailPriceList.id,
+            price: 1_000,
+            validFrom: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        },
       },
       select: { id: true },
     });
@@ -324,37 +368,89 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Zaključaj", exact: true }).click();
       await expect(
-        page.getByText(/Faktura i COGS kalkulacija su zaključane\. Troškovi su raspoređeni/),
+        page.getByText(/konačni COGS je proknjižen na artikle/),
       ).toBeVisible();
-      const [locked, item] = await Promise.all([
+      const [locked, item, product, order] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
         db.purchaseOrderItem.findFirstOrThrow({
           where: { purchaseOrderId },
+        }),
+        db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stock: true, cogs: true },
+        }),
+        db.purchaseOrder.findUniqueOrThrow({
+          where: { id: purchaseOrderId },
+          select: { cogsBookedAt: true, cogsBookingSnapshot: true },
         }),
       ]);
       expect(locked.status).toBe("POSTED");
       expect(locked.cogsStatus).toBe("LOCKED");
       expect(locked.lockedAt).not.toBeNull();
       expect(Number(item.additionalCostAllocated)).toBe(0);
+      expect(product.stock).toBe(100);
+      expect(Number(product.cogs)).toBe(190);
+      expect(order.cogsBookedAt).not.toBeNull();
+      expect(order.cogsBookingSnapshot).not.toBeNull();
+
+      const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
+      await expect(cogsRow).toContainText("190 RSD");
 
       const retry = await page.request.post(
         "/api/admin/erp/ulazne-fakture/commands",
         { data: { action: "invoice.lock", ids: [invoiceId] } },
       );
       expect(retry.status()).toBe(200);
+      const [retriedItem, retriedProduct] = await Promise.all([
+        db.purchaseOrderItem.findFirstOrThrow({
+          where: { purchaseOrderId },
+          select: { additionalCostAllocated: true },
+        }),
+        db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { cogs: true },
+        }),
+      ]);
+      expect(Number(retriedItem.additionalCostAllocated)).toBe(0);
+      expect(Number(retriedProduct.cogs)).toBe(190);
+    });
+
+    await test.step("legacy locked invoice offers and completes an explicit COGS backfill", async () => {
+      await Promise.all([
+        db.purchaseOrder.update({
+          where: { id: purchaseOrderId },
+          data: { cogsBookedAt: null, cogsBookingSnapshot: Prisma.DbNull },
+        }),
+        db.product.update({
+          where: { id: productId },
+          data: { cogs: 200 },
+        }),
+      ]);
+      await page.goto(`/admin/erp/ulazne-fakture/${invoiceId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByText(/zaključana pre uvođenja trenutnog COGS workflow-a/)).toBeVisible();
+      const backfill = page.getByRole("button", {
+        name: "Proknjiži COGS",
+        exact: true,
+      });
+      await expect(backfill).toBeEnabled();
+      page.once("dialog", (dialog) => dialog.accept());
+      await backfill.click();
+      await expect(page.getByText(/konačni COGS je proknjižen na artikle/)).toBeVisible();
       expect(
         Number(
           (
-            await db.purchaseOrderItem.findFirstOrThrow({
-              where: { purchaseOrderId },
-              select: { additionalCostAllocated: true },
+            await db.product.findUniqueOrThrow({
+              where: { id: productId },
+              select: { cogs: true },
             })
-          ).additionalCostAllocated,
+          ).cogs,
         ),
-      ).toBe(0);
+      ).toBe(190);
     });
 
-    await test.step("goods receipt writes the weighted COGS 190 to the article", async () => {
+    await test.step("goods receipt keeps the already-booked COGS 190 and posts quantity", async () => {
       await page.getByRole("link", { name: fixture.orderNumber }).click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/porudzbenice/${purchaseOrderId}$`),
@@ -436,6 +532,12 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await db.warehouseStock.deleteMany({ where: { productId } });
       await db.product.deleteMany({ where: { id: productId } });
     }
+    if (priceListId) {
+      await db.priceList.deleteMany({ where: { id: priceListId } });
+    }
+    if (categoryId) {
+      await db.category.deleteMany({ where: { id: categoryId } });
+    }
     if (supplierId) {
       await db.supplier.deleteMany({ where: { id: supplierId } });
     }
@@ -463,6 +565,8 @@ function createDatabaseClient() {
     throw new Error("Database URL is required for inbound-invoice acceptance.");
   }
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
     url.searchParams.set(
       "sslmode",
@@ -471,10 +575,13 @@ function createDatabaseClient() {
     url.searchParams.delete("uselibpqcompat");
   }
   return new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: url.toString(),
-      max: 2,
-      connectionTimeoutMillis: 15_000,
-    }),
+    adapter: new PrismaPg(
+      {
+        connectionString: url.toString(),
+        max: 2,
+        connectionTimeoutMillis: 15_000,
+      },
+      { schema },
+    ),
   });
 }

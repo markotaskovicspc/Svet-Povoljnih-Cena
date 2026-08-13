@@ -16,6 +16,7 @@ import {
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   validateInboundInvoiceTotals,
+  weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 
@@ -38,6 +39,51 @@ function utcDateOnly(value: Date) {
   return new Date(
     Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
   );
+}
+
+type CogsBookingSnapshot = {
+  version: 1;
+  products: Array<{
+    productId: string;
+    sku: string;
+    stock: number;
+    cogs: number | null;
+  }>;
+};
+
+function readCogsBookingSnapshot(
+  value: Prisma.JsonValue | null,
+): CogsBookingSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, Prisma.JsonValue>;
+  if (candidate.version !== 1 || !Array.isArray(candidate.products)) return null;
+  const products: CogsBookingSnapshot["products"] = [];
+  for (const raw of candidate.products) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const product = raw as Record<string, Prisma.JsonValue>;
+    if (
+      typeof product.productId !== "string" ||
+      typeof product.sku !== "string" ||
+      typeof product.stock !== "number" ||
+      !Number.isInteger(product.stock) ||
+      product.stock < 0 ||
+      !(
+        product.cogs === null ||
+        (typeof product.cogs === "number" &&
+          Number.isFinite(product.cogs) &&
+          product.cogs >= 0)
+      )
+    ) {
+      return null;
+    }
+    products.push({
+      productId: product.productId,
+      sku: product.sku,
+      stock: product.stock,
+      cogs: product.cogs,
+    });
+  }
+  return { version: 1, products };
 }
 
 export async function createInboundInvoice(now = new Date()) {
@@ -312,14 +358,120 @@ export async function rebuildInboundInvoiceAllocations(
       lateCostByProduct.set(item.product.id, current);
     }
   }
-  for (const [productId, cost] of lateCostByProduct) {
-    if (cost.delta !== 0 && cost.stock > 0) {
-      await tx.product.update({
-        where: { id: productId },
+  if (order.status === PurchaseOrderStatus.RECEIVED) {
+    for (const [productId, cost] of lateCostByProduct) {
+      if (cost.delta !== 0 && cost.stock > 0) {
+        await tx.product.update({
+          where: { id: productId },
+          data: {
+            cogs: Number((cost.currentCogs + cost.delta / cost.stock).toFixed(2)),
+          },
+        });
+      }
+    }
+    return;
+  }
+
+  const hasPostedInvoice = order.inboundInvoices.length > 0;
+  let snapshot = readCogsBookingSnapshot(order.cogsBookingSnapshot);
+  if (order.cogsBookedAt && !snapshot) {
+    throw new Error(
+      `COGS snimak porudžbenice ${order.number} nije ispravan. Knjiženje je zaustavljeno da se nabavna cena ne bi obračunala dva puta.`,
+    );
+  }
+  if (hasPostedInvoice) {
+    if (!order.cogsBookedAt) {
+      const products = new Map<
+        string,
+        CogsBookingSnapshot["products"][number]
+      >();
+      for (const item of order.items) {
+        if (!item.product) continue;
+        products.set(item.product.id, {
+          productId: item.product.id,
+          sku: item.sku,
+          stock: item.product.stock,
+          cogs:
+            item.product.cogs == null ? null : Number(item.product.cogs),
+        });
+      }
+      snapshot = { version: 1, products: Array.from(products.values()) };
+      await tx.purchaseOrder.update({
+        where: { id: order.id },
         data: {
-          cogs: Number((cost.currentCogs + cost.delta / cost.stock).toFixed(2)),
+          cogsBookingSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+          cogsBookedAt: new Date(),
         },
       });
     }
+    if (!snapshot) {
+      throw new Error(
+        "COGS snimak nije napravljen. Knjiženje je bezbedno zaustavljeno.",
+      );
+    }
+
+    const snapshotByProduct = new Map(
+      snapshot.products.map((product) => [product.productId, product]),
+    );
+    const incomingByProduct = new Map<
+      string,
+      { qty: number; totalCostRsd: number }
+    >();
+    for (const item of order.items) {
+      if (!item.product || item.qty <= 0) continue;
+      const purchaseRsd =
+        Number(item.purchasePrice) * Number(order.exchangeRate) * item.qty;
+      const customsRsd =
+        purchaseRsd * (Number(item.customsRate ?? 0) / 100);
+      const current = incomingByProduct.get(item.product.id) ?? {
+        qty: 0,
+        totalCostRsd: 0,
+      };
+      current.qty += item.qty;
+      current.totalCostRsd +=
+        purchaseRsd +
+        customsRsd +
+        Number(item.freightAllocated ?? 0) +
+        (allocations.get(item.id) ?? 0);
+      incomingByProduct.set(item.product.id, current);
+    }
+
+    for (const [productId, incoming] of incomingByProduct) {
+      const before = snapshotByProduct.get(productId);
+      if (!before) {
+        throw new Error(
+          "COGS snimak ne sadrži sve artikle porudžbenice. Knjiženje je bezbedno zaustavljeno.",
+        );
+      }
+      if (incoming.qty <= 0) continue;
+      const incomingUnitCogs = incoming.totalCostRsd / incoming.qty;
+      const bookedCogs = weightedAverageCogs({
+        existingQty: before.stock,
+        existingUnitCogs: before.cogs ?? incomingUnitCogs,
+        incomingQty: incoming.qty,
+        incomingUnitCogs,
+      });
+      await tx.product.update({
+        where: { id: productId },
+        data: { cogs: bookedCogs },
+      });
+    }
+    return;
+  }
+
+  if (order.cogsBookedAt && snapshot) {
+    for (const product of snapshot.products) {
+      await tx.product.updateMany({
+        where: { id: product.productId },
+        data: { cogs: product.cogs },
+      });
+    }
+    await tx.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        cogsBookingSnapshot: Prisma.DbNull,
+        cogsBookedAt: null,
+      },
+    });
   }
 }

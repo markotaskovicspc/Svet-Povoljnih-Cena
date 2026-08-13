@@ -13,7 +13,10 @@ import type { RabaluxSyncTarget } from "./admin-sync";
 import type { RabaluxCatalogItem } from "./types";
 import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "./availability";
 import { isRabaluxSupplierOperational } from "./config";
-import { isRabaluxSerbiaWebStockAvailable } from "./serbia-stock";
+import {
+  isRabaluxSerbiaStockPresent,
+  isRabaluxSerbiaWebStockAvailable,
+} from "./serbia-stock";
 
 export type RabaluxPreviewSummary = {
   source: "XML" | "CSV" | "DATABASE";
@@ -345,14 +348,19 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
         productId: product.id,
         externalSku: product.supplierExternalId!,
         changeType: outsideSerbiaStock
-          ? "DEACTIVATE_OUTSIDE_SERBIA_STOCK"
+          ? "REMOVE_OUTSIDE_RS_STOCK"
           : "DEACTIVATE_MISSING",
         fields: outsideSerbiaStock
-          ? ["isActive", "availableWebAuto"]
+          ? ["isActive", "availableWebAuto", "deletedAt"]
           : ["isActive"],
-        before: { isActive: product.isActive },
+        before: { isActive: product.isActive, deletedAt: null },
         after: outsideSerbiaStock
-          ? { isActive: false, availableWebAuto: false, graceRequired: false }
+          ? {
+              isActive: false,
+              availableWebAuto: false,
+              deletedAt: "sync execution time",
+              graceRequired: false,
+            }
           : { isActive: false, graceRequired: true },
       }),
     );
@@ -385,7 +393,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
   const stock = await fetchRabaluxStock(supplier);
   const [products, pictogramAssignments] = await Promise.all([
     db.product.findMany({
-      where: { supplierId: supplier.id, deletedAt: null },
+      where: { supplierId: supplier.id },
       select: {
         id: true,
         supplierExternalId: true,
@@ -394,6 +402,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
         articleStatus: true,
         isDtz: true,
         isActive: true,
+        deletedAt: true,
         dcAvailableQty: true,
         supplierApprovalStatus: true,
         syncOverrides: true,
@@ -403,6 +412,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       where: { product: { supplierId: supplier.id, deletedAt: null } },
     }),
   ]);
+  const currentProducts = products.filter((product) => product.deletedAt === null);
   const productByExternal = new Map(
     products
       .filter((product) => product.supplierExternalId)
@@ -425,15 +435,22 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       articleStatus: product.articleStatus,
       isDtz: product.isDtz,
       isActive: product.isActive,
+      deletedAt: product.deletedAt?.toISOString() ?? null,
     };
     const policyDeactivation =
       product.dcAvailableQty <= 0 && !isRabaluxSerbiaWebStockAvailable(item);
+    const keepOnSite =
+      product.dcAvailableQty > 0 || isRabaluxSerbiaStockPresent(item);
+    const policyRemoval = product.deletedAt === null && !keepOnSite;
     const after = {
       supplierStock: item.stock,
       supplierNextArrivalAt: item.nextArrivalAt?.toISOString() ?? null,
       articleStatus: item.restricted ? "ARH" : "SP",
       isDtz: false,
       isActive: policyDeactivation ? false : product.isActive,
+      deletedAt: keepOnSite
+        ? null
+        : (product.deletedAt?.toISOString() ?? "sync execution time"),
     };
     const locked = parseOverrideFields(product.syncOverrides);
     const fields = changedFields(before, after).filter((field) => {
@@ -441,6 +458,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
         return true;
       }
       if (policyDeactivation && field === "isActive") return true;
+      if (policyRemoval && field === "deletedAt") return true;
       if (field === "isDtz" || (field === "articleStatus" && before.articleStatus === "DTZ")) {
         return true;
       }
@@ -464,7 +482,7 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       }),
     );
   }
-  const catalogOnly = products.filter(
+  const catalogOnly = currentProducts.filter(
     (product) =>
       product.supplierExternalId && !seen.has(product.supplierExternalId),
   );
@@ -477,12 +495,17 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
         productId: product.id,
         externalSku: product.supplierExternalId!,
         changeType: "ZERO_MISSING_STOCK",
-        fields: ["supplierStock", "supplierNextArrivalAt"],
+        fields: ["supplierStock", "supplierNextArrivalAt", "deletedAt"],
         before: {
           supplierStock: product.supplierStock,
           supplierNextArrivalAt: product.supplierNextArrivalAt?.toISOString() ?? null,
         },
-        after: { supplierStock: 0, supplierNextArrivalAt: null, graceRequired: true },
+        after: {
+          supplierStock: 0,
+          supplierNextArrivalAt: null,
+          deletedAt: "after missing-stock grace",
+          graceRequired: true,
+        },
       }),
     );
   }
@@ -494,16 +517,16 @@ async function prepareStockPreview(supplier: Supplier, runId: string) {
       catalog: [],
       rawCatalogRows: 0,
       stockRows: stock.length,
-      serbiaStockEligibleRows: stock.filter(isRabaluxSerbiaWebStockAvailable).length,
+      serbiaStockEligibleRows: stock.filter(isRabaluxSerbiaStockPresent).length,
       excludedBySerbiaStockPolicy: stock.filter(
-        (item) => !isRabaluxSerbiaWebStockAvailable(item),
+        (item) => !isRabaluxSerbiaStockPresent(item),
       ).length,
       catalogOnly: catalogOnly.map((product) => product.supplierExternalId!),
       stockOnly,
       diff,
       changes,
       policy: incomingPolicyCounts(
-        products,
+        currentProducts,
         new Map(stock.map((item) => [item.sourceSku, item])),
         isRabaluxSupplierOperational(supplier),
       ),
@@ -814,7 +837,7 @@ function countPolicy(
       else if (
         stock.fresh &&
         product.supplierApprovalStatus === "APPROVED" &&
-        stock.stock > RABALUX_PUBLIC_STOCK_THRESHOLD
+        stock.stock >= RABALUX_PUBLIC_STOCK_THRESHOLD
       ) {
         counts.visibleDueToSupplier++;
       } else counts.hiddenByPolicy++;

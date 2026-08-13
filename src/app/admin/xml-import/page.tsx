@@ -586,12 +586,12 @@ export default async function XmlImportPage({
             COUNT(*)::int AS "totalSkus",
             (COUNT(*) FILTER (WHERE COALESCE("supplierStock", 0) > 0))::int AS "withStockSkus",
             (COUNT(*) FILTER (
-              WHERE COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+              WHERE COALESCE("supplierStock", 0) >= ${RABALUX_PUBLIC_STOCK_THRESHOLD}
             ))::int AS "aboveThresholdSkus",
             (COUNT(*) FILTER (
               WHERE "supplierApprovalStatus" = 'APPROVED'
                 AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
-                AND COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+                AND COALESCE("supplierStock", 0) >= ${RABALUX_PUBLIC_STOCK_THRESHOLD}
             ))::int AS "onlineEligibleSkus",
             (COUNT(*) FILTER (
               WHERE "lastSupplierStockSyncAt" IS NULL
@@ -603,7 +603,7 @@ export default async function XmlImportPage({
               CASE
                 WHEN "supplierApprovalStatus" = 'APPROVED'
                   AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
-                  AND COALESCE("supplierStock", 0) > ${RABALUX_PUBLIC_STOCK_THRESHOLD}
+                  AND COALESCE("supplierStock", 0) >= ${RABALUX_PUBLIC_STOCK_THRESHOLD}
                 THEN GREATEST(
                   COALESCE("supplierStock", 0) -
                   COALESCE("supplierReservedStock", 0) -
@@ -742,7 +742,7 @@ export default async function XmlImportPage({
                       value={`${rabaluxStockSummary.withStockSkus} / ${rabaluxStockSummary.totalSkus}`}
                     />
                     <DashboardStat
-                      label={`SKU iznad praga >${RABALUX_PUBLIC_STOCK_THRESHOLD}`}
+                      label={`SKU sa najmanje ${RABALUX_PUBLIC_STOCK_THRESHOLD}`}
                       value={rabaluxStockSummary.aboveThresholdSkus}
                     />
                     <DashboardStat
@@ -771,7 +771,7 @@ export default async function XmlImportPage({
                     />
                   </div>
                   <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
-                    Pravilo je: dobavljač mora imati strogo više od{" "}
+                    Pravilo je: dobavljač mora imati najmanje{" "}
                     {RABALUX_PUBLIC_STOCK_THRESHOLD} kom, stanje ne sme biti
                     starije od 30 minuta, a zatim se od količine oduzimaju
                     aktivne rezervacije i {RABALUX_SUPPLIER_SAFETY_STOCK}

@@ -54,6 +54,7 @@ import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 import { RABALUX_PICTOGRAMS } from "./pictograms";
 import {
   assertRabaluxSerbiaStockSource,
+  isRabaluxSerbiaStockPresent,
   isRabaluxSerbiaWebStockAvailable,
   rabaluxStockItemsBySku,
   selectRabaluxSerbiaStockCatalog,
@@ -374,8 +375,7 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
     summary.metadata.serbiaStockRows = catalog.stockRows;
     summary.metadata.serbiaStockEligibleRows = catalog.items.length;
     summary.metadata.excludedMissingSerbiaStock = catalog.excludedMissingStock;
-    summary.metadata.excludedBelowSerbiaStockThreshold =
-      catalog.excludedBelowThreshold;
+    summary.metadata.excludedWithoutSerbiaStock = catalog.excludedWithoutStock;
     summary.metadata.excludedRestrictedSerbiaStock = catalog.excludedRestricted;
     summary.metadata.excludedBySerbiaStockPolicy =
       catalog.excludedBySerbiaStockPolicy;
@@ -423,15 +423,14 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
       missing: missing.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
-    const activePolicyRemovals = outsideSerbiaStock.filter(
-      (product) => product.isActive && product.dcAvailableQty <= 0,
+    const policyRemovals = outsideSerbiaStock.filter(
+      (product) => product.dcAvailableQty <= 0,
     );
     assertSafeMissingShare({
       kind: "catalog Serbia-stock policy",
-      existing: existingProducts.filter(
-        (product) => product.isActive && product.dcAvailableQty <= 0,
-      ).length,
-      missing: activePolicyRemovals.length,
+      existing: existingProducts.filter((product) => product.dcAvailableQty <= 0)
+        .length,
+      missing: policyRemovals.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
     const pictogramIdsByCode = await ensureRabaluxPictogramDefinitions();
@@ -458,6 +457,9 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
             sourceHash,
             options,
             pictogramIdsByCode,
+            isRabaluxSerbiaWebStockAvailable(
+              catalog.stockBySku.get(item.sourceSku)!,
+            ),
           ),
         ),
       );
@@ -509,8 +511,7 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
     });
     summary.metadata.missingPending = disappearance.pending;
     summary.metadata.deactivatedAfterGrace = disappearance.deactivated;
-    summary.metadata.deactivatedOutsideSerbiaStock = stockPolicy.deactivated;
-    summary.metadata.alreadyHiddenOutsideSerbiaStock = stockPolicy.alreadyHidden;
+    summary.metadata.removedOutsideSerbiaStock = stockPolicy.removed;
     summary.metadata.retainedOutsideSupplierStockDueToDc = stockPolicy.retainedDueToDc;
     summary.metadata.invalid = catalog.items.filter((item) => !item.valid).length;
     Object.assign(
@@ -605,7 +606,7 @@ export async function syncRabaluxCatalogProduct(
       );
       throw new Error(
         existsInCatalog
-          ? `Rabalux product ${normalizedSku} is not eligible for import from Serbia stock (requires more than ${RABALUX_PUBLIC_STOCK_THRESHOLD} unrestricted units).`
+          ? `Rabalux product ${normalizedSku} is not available in Serbia stock (requires a positive unrestricted quantity).`
           : `Rabalux product ${normalizedSku} is not in the complete Serbia catalog feed.`,
       );
     }
@@ -618,6 +619,7 @@ export async function syncRabaluxCatalogProduct(
       sourceHash,
       options,
       pictogramIdsByCode,
+      isRabaluxSerbiaWebStockAvailable(catalog.stockBySku.get(item.sourceSku)!),
     );
     if (result.conflict) throw new Error(result.conflict);
     summary.ok = 1;
@@ -649,6 +651,7 @@ async function upsertCatalogItem(
   sourceHash: string,
   options: RabaluxSyncOptions,
   pictogramIdsByCode: RabaluxPictogramIdMap,
+  canPublishFromSerbiaStock: boolean,
 ) {
   const result = await db.$transaction(async (tx) => {
     const mapping =
@@ -705,6 +708,7 @@ async function upsertCatalogItem(
         newUntil: true,
         newUntilAutomatic: true,
         isActive: true,
+        deletedAt: true,
         supplierApprovalStatus: true,
         categories: { select: { categoryId: true } },
         supplierCatalogMissingCount: true,
@@ -792,6 +796,8 @@ async function upsertCatalogItem(
     });
     if (
       existing &&
+      existing.deletedAt === null &&
+      canPublishFromSerbiaStock &&
       existing.lastSupplierSourceHash === itemSourceHash &&
       existing.supplierCatalogMissingCount === 0 &&
       managedPictogramsMatch &&
@@ -852,6 +858,7 @@ async function upsertCatalogItem(
         ? "PENDING_APPROVAL"
         : "PENDING_MAPPING";
     const activeCandidate =
+      canPublishFromSerbiaStock &&
       item.valid &&
       existing?.articleStatus !== "ARH" &&
       approvalStatus === "APPROVED" &&
@@ -897,6 +904,7 @@ async function upsertCatalogItem(
       supplierId: supplier.id,
       supplierExternalId: item.sourceSku,
       isActive: activeCandidate,
+      availableWebAuto: activeCandidate,
       supplierApprovalStatus: approvalStatus,
       supplierCatalogMissingCount: 0,
       supplierCatalogMissingSince: null,
@@ -935,6 +943,12 @@ async function upsertCatalogItem(
       updateData.newUntil = null;
       updateData.newUntilAutomatic = false;
       updateData.isDtz = false;
+      if (!canPublishFromSerbiaStock) {
+        updateData.isActive = false;
+        updateData.availableWebAuto = false;
+      }
+      // A positive Serbia-stock item may return after a prior soft removal.
+      updateData.deletedAt = null;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
       delete (updateData as Record<string, unknown>).incomingStock;
@@ -948,10 +962,10 @@ async function upsertCatalogItem(
         delete (updateData as Record<string, unknown>).salePrice;
         delete (updateData as Record<string, unknown>).discountPct;
       }
-      if (item.valid && !mediaChanged) {
+      if (item.valid && !mediaChanged && canPublishFromSerbiaStock) {
         delete (updateData as Record<string, unknown>).isActive;
       }
-      if (overrideFields.has("media")) {
+      if (overrideFields.has("media") && canPublishFromSerbiaStock) {
         delete (updateData as Record<string, unknown>).isActive;
       }
       if (isSecondaryFamilyMember) {
@@ -1294,7 +1308,7 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
       );
     }
     const products = await db.product.findMany({
-      where: { supplierId: supplier.id, deletedAt: null },
+      where: { supplierId: supplier.id },
       select: {
         id: true,
         supplierExternalId: true,
@@ -1309,9 +1323,11 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
         articleStatus: true,
         isDtz: true,
         isActive: true,
+        deletedAt: true,
         supplierApprovalStatus: true,
       },
     });
+    const currentProducts = products.filter((product) => product.deletedAt === null);
     assertFeedBaseline({
       kind: "stock",
       actual: stock.length,
@@ -1328,30 +1344,30 @@ export async function syncRabaluxStock(options: RabaluxSyncOptions = {}) {
         .map((product) => [product.supplierExternalId!, product]),
     );
     const seen = new Set(stock.map((item) => item.sourceSku));
-    const catalogOnly = products.filter(
+    const catalogOnly = currentProducts.filter(
       (product) =>
         product.supplierExternalId && !seen.has(product.supplierExternalId),
     );
     assertSafeMissingShare({
       kind: "stock",
-      existing: products.length,
+      existing: currentProducts.length,
       missing: catalogOnly.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
     const stockBySourceSku = new Map(stock.map((item) => [item.sourceSku, item]));
-    const activeSupplierOnlyProducts = products.filter(
-      (product) => product.isActive && product.dcAvailableQty <= 0,
+    const supplierOnlyProducts = currentProducts.filter(
+      (product) => product.dcAvailableQty <= 0,
     );
-    const activePolicyRemovals = activeSupplierOnlyProducts.filter((product) => {
+    const policyRemovals = supplierOnlyProducts.filter((product) => {
       const item = product.supplierExternalId
         ? stockBySourceSku.get(product.supplierExternalId)
         : undefined;
-      return Boolean(item && !isRabaluxSerbiaWebStockAvailable(item));
+      return Boolean(item && !isRabaluxSerbiaStockPresent(item));
     });
     assertSafeMissingShare({
-      kind: "stock Serbia availability policy",
-      existing: activeSupplierOnlyProducts.length,
-      missing: activePolicyRemovals.length,
+      kind: "stock Serbia removal policy",
+      existing: supplierOnlyProducts.length,
+      missing: policyRemovals.length,
       allowLargeRemoval: options.allowLargeRemoval,
     });
     const stockOnly: string[] = [];
@@ -1455,6 +1471,7 @@ async function updateStockItem(
     articleStatus: "SP" | "IT" | "DTZ" | "DOB" | "ARH" | "UZ";
     isDtz: boolean;
     isActive: boolean;
+    deletedAt: Date | null;
     supplierApprovalStatus:
       | "PENDING_MAPPING"
       | "PENDING_APPROVAL"
@@ -1466,9 +1483,11 @@ async function updateStockItem(
   options: RabaluxSyncOptions,
 ) {
   const now = new Date();
+  const serbiaStockPresent = isRabaluxSerbiaStockPresent(item);
   const serbiaWebStockAvailable = isRabaluxSerbiaWebStockAvailable(item);
   const stockPolicyAllowsPublication =
     product.dcAvailableQty > 0 || serbiaWebStockAvailable;
+  const keepOnSite = product.dcAvailableQty > 0 || serbiaStockPresent;
   const nextStatus = item.restricted
     ? "ARH"
     : !isRabaluxFieldLocked(parseOverrideFields(product.syncOverrides), "flags") ||
@@ -1499,6 +1518,7 @@ async function updateStockItem(
       articleStatus: product.articleStatus,
       isDtz: product.isDtz,
       isActive: product.isActive,
+      deletedAt: product.deletedAt,
     });
     await tx.product.update({
       where: { id: product.id },
@@ -1512,15 +1532,19 @@ async function updateStockItem(
                 !item.restricted &&
                 (product.dcAvailableQty > 0 ||
                   (product.supplierApprovalStatus === "APPROVED" &&
-                    item.stock > RABALUX_PUBLIC_STOCK_THRESHOLD)),
+                    item.stock >= RABALUX_PUBLIC_STOCK_THRESHOLD)),
             }
           : {}),
         // Supplier status can never turn Rabalux into a DTZ product. The Serbia
         // stock publication rule is hard policy and overrides manual flags.
         isDtz: false,
         articleStatus: nextStatus,
+        deletedAt: keepOnSite ? null : (product.deletedAt ?? now),
         ...(!stockPolicyAllowsPublication
-          ? { isActive: false, availableWebAuto: false }
+          ? {
+              isActive: false,
+              availableWebAuto: false,
+            }
           : {}),
         supplierStockMissingCount: 0,
         supplierStockMissingSince: null,
@@ -1566,6 +1590,7 @@ async function updateStockItem(
         articleStatus: true,
         isDtz: true,
         isActive: true,
+        deletedAt: true,
       },
     });
     const after = jsonSnapshot(finalProduct);
@@ -1607,8 +1632,7 @@ async function deactivateOutsideSerbiaStockProducts(args: {
   reviewedById?: string;
 }) {
   const now = new Date();
-  let deactivated = 0;
-  let alreadyHidden = 0;
+  let removed = 0;
   let retainedDueToDc = 0;
 
   for (let start = 0; start < args.products.length; start += ITEM_CONCURRENCY) {
@@ -1632,46 +1656,48 @@ async function deactivateOutsideSerbiaStockProducts(args: {
             data: {
               isActive: false,
               availableWebAuto: false,
+              deletedAt: now,
               supplierCatalogMissingCount: 0,
               supplierCatalogMissingSince: null,
               lastSupplierSyncAt: now,
             },
           });
-          if (product.isActive) {
-            await tx.supplierSyncChange.create({
-              data: {
-                supplierId: args.supplierId,
-                importRunId: args.runId,
-                productId: product.id,
-                externalSku: product.supplierExternalId!,
-                changeType: "DEACTIVATE_OUTSIDE_SERBIA_STOCK",
-                status: "APPLIED",
-                fieldNames: ["isActive", "availableWebAuto"],
-                before: jsonSnapshot({ isActive: true }),
-                after: jsonSnapshot({
-                  isActive: false,
-                  availableWebAuto: false,
-                }),
-                appliedAt: now,
-                reason:
-                  args.reason ??
-                  `Not eligible in the Rabalux Serbia stock feed (requires more than ${RABALUX_PUBLIC_STOCK_THRESHOLD} unrestricted units).`,
-                reviewedById: args.reviewedById,
-              },
-            });
-          }
+          await tx.supplierSyncChange.create({
+            data: {
+              supplierId: args.supplierId,
+              importRunId: args.runId,
+              productId: product.id,
+              externalSku: product.supplierExternalId!,
+              changeType: "REMOVE_OUTSIDE_RS_STOCK",
+              status: "APPLIED",
+              fieldNames: ["isActive", "availableWebAuto", "deletedAt"],
+              before: jsonSnapshot({
+                isActive: product.isActive,
+                deletedAt: null,
+              }),
+              after: jsonSnapshot({
+                isActive: false,
+                availableWebAuto: false,
+                deletedAt: now,
+              }),
+              appliedAt: now,
+              reason:
+                args.reason ??
+                "Not present with a positive unrestricted quantity in the Rabalux Serbia stock feed.",
+              reviewedById: args.reviewedById,
+            },
+          });
         });
-        return product.isActive ? ("deactivated" as const) : ("hidden" as const);
+        return "removed" as const;
       }),
     );
     for (const result of results) {
-      if (result === "deactivated") deactivated++;
-      else if (result === "hidden") alreadyHidden++;
+      if (result === "removed") removed++;
       else retainedDueToDc++;
     }
   }
 
-  return { deactivated, alreadyHidden, retainedDueToDc };
+  return { removed, retainedDueToDc };
 }
 
 async function reconcileMissingCatalogProducts(args: {
@@ -1806,17 +1832,15 @@ async function reconcileMissingStockProducts(args: {
           parseOverrideFields(product.syncOverrides),
           "stock",
         );
-        const shouldZero =
-          !stockLocked &&
-          missingGraceSatisfied({
-            nextCount,
-            firstMissingAt,
-            now,
-            confirmations,
-            graceMs: graceMinutes * 60 * 1_000,
-          });
-        const shouldDeactivate =
-          shouldZero && product.dcAvailableQty <= 0 && product.isActive;
+        const missingConfirmed = missingGraceSatisfied({
+          nextCount,
+          firstMissingAt,
+          now,
+          confirmations,
+          graceMs: graceMinutes * 60 * 1_000,
+        });
+        const shouldZero = !stockLocked && missingConfirmed;
+        const shouldRemove = missingConfirmed && product.dcAvailableQty <= 0;
         const availability = resolveRabaluxAvailability({
           warehouseStock: product.dcAvailableQty,
           supplierStock: shouldZero ? 0 : product.supplierStock,
@@ -1843,37 +1867,49 @@ async function reconcileMissingStockProducts(args: {
             data: {
               supplierStockMissingCount: nextCount,
               supplierStockMissingSince: firstMissingAt,
-              availableWebAuto: availability.sellableStock > 0,
+              availableWebAuto: shouldRemove
+                ? false
+                : availability.sellableStock > 0,
               ...(shouldZero
                 ? { supplierStock: 0, supplierNextArrivalAt: null }
                 : {}),
-              ...(shouldDeactivate ? { isActive: false } : {}),
+              ...(shouldRemove
+                ? { isActive: false, availableWebAuto: false, deletedAt: now }
+                : {}),
             },
           });
           if (
-            shouldZero &&
-            ((product.supplierStock ?? 0) !== 0 || shouldDeactivate)
+            (shouldZero && (product.supplierStock ?? 0) !== 0) ||
+            shouldRemove
           ) {
-            const fieldNames = ["supplierStock", "supplierNextArrivalAt"];
-            if (shouldDeactivate) fieldNames.push("isActive");
+            const fieldNames = shouldZero
+              ? ["supplierStock", "supplierNextArrivalAt"]
+              : [];
+            if (shouldRemove) fieldNames.push("isActive", "deletedAt");
             await tx.supplierSyncChange.create({
               data: {
                 supplierId: args.supplierId,
                 importRunId: args.runId,
                 productId: product.id,
                 externalSku: product.supplierExternalId!,
-                changeType: "ZERO_MISSING_STOCK",
+                changeType: shouldRemove
+                  ? "REMOVE_MISSING_RS_STOCK"
+                  : "ZERO_MISSING_STOCK",
                 status: "APPLIED",
                 fieldNames,
                 before: jsonSnapshot({
                   supplierStock: product.supplierStock,
                   supplierNextArrivalAt: product.supplierNextArrivalAt,
                   isActive: product.isActive,
+                  deletedAt: null,
                 }),
                 after: jsonSnapshot({
-                  supplierStock: 0,
-                  supplierNextArrivalAt: null,
-                  isActive: shouldDeactivate ? false : product.isActive,
+                  supplierStock: shouldZero ? 0 : product.supplierStock,
+                  supplierNextArrivalAt: shouldZero
+                    ? null
+                    : product.supplierNextArrivalAt,
+                  isActive: shouldRemove ? false : product.isActive,
+                  deletedAt: shouldRemove ? now : null,
                 }),
                 appliedAt: now,
                 reason:
@@ -1884,7 +1920,7 @@ async function reconcileMissingStockProducts(args: {
             });
           }
         });
-        if (shouldZero) zeroed++;
+        if (missingConfirmed) zeroed++;
         else pending++;
       }),
     );
@@ -1913,7 +1949,7 @@ async function rabaluxVisibilityCounters(supplierId: string) {
       else if (product.dcAvailableQty > 0) counts.visibleDueToDc++;
       else if (
         product.supplierApprovalStatus === "APPROVED" &&
-        (product.supplierStock ?? 0) > RABALUX_PUBLIC_STOCK_THRESHOLD &&
+        (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
         isRabaluxStockFresh(product.lastSupplierStockSyncAt)
       ) {
         counts.visibleDueToSupplier++;
