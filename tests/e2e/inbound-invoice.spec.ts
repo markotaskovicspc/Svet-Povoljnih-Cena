@@ -3,7 +3,7 @@
 // Acceptance: ACC-04
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
 
@@ -35,6 +35,8 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
   let db: PrismaClient;
   let adminId = "";
   let supplierId = "";
+  let loadingLocationId = "";
+  let transportTypeId = "";
   let productId = "";
   let warehouseId = "";
   let categoryId = "";
@@ -92,6 +94,27 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       select: { id: true },
     });
     supplierId = supplier.id;
+    const [loadingLocation, transportType] = await Promise.all([
+      db.supplierLoadingLocation.create({
+        data: {
+          supplierId,
+          name: `QA UF utovar ${runId}`,
+          position: 1,
+        },
+        select: { id: true },
+      }),
+      db.transportType.create({
+        data: {
+          code: `QA-UF-T-${runId}`.slice(0, 30),
+          name: `QA UF transport ${runId}`,
+          payloadKg: 25_000,
+          payloadM3: 71,
+        },
+        select: { id: true },
+      }),
+    ]);
+    loadingLocationId = loadingLocation.id;
+    transportTypeId = transportType.id;
 
     const warehouse = await db.warehouse.create({
       data: {
@@ -143,9 +166,10 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
     const order = await db.purchaseOrder.create({
       data: {
         number: fixture.orderNumber,
-        status: "CONFIRMED",
+        status: "DRAFT",
         supplierId,
-        receivingWarehouseId: warehouseId,
+        loadingLocationId,
+        transportTypeId,
         orderDate: new Date("2026-07-20T00:00:00.000Z"),
         totalPrice: 8_500,
         currency: "RSD",
@@ -154,8 +178,6 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         freightCurrency: "RSD",
         freightExchangeRate: 1,
         allocationBasis: "VALUE",
-        lockedAt: new Date(),
-        postedAt: new Date(),
         items: {
           create: {
             productId,
@@ -204,7 +226,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(
         page.getByRole("heading", { name: "Ulazne fakture" }),
       ).toBeVisible();
-      for (const command of ["Nova", "Uredi", "Zaključaj", "Storniraj", "Excel"]) {
+      for (const command of ["Nova", "Uredi", "Proknjiži", "Storniraj", "Excel"]) {
         await expect(
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
@@ -228,6 +250,33 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
           }),
         ).toBeAttached();
       }
+      await expect(page.locator("thead")).toHaveClass(/sticky/);
+      await expect(
+        page.locator("aside:visible").filter({
+          hasText: "Napomene iz specifikacije",
+        }),
+      ).toHaveCount(0);
+      await page.getByText("Prikaz tabele", { exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "Kolone", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Pogledi", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", {
+          name: "Napomene iz specifikacije",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page
+        .getByLabel("Kolona za novi filter")
+        .selectOption("invoiceValueRsd");
+      await page.getByRole("button", { name: "Filter", exact: true }).click();
+      const operator = page.getByLabel("Operator Vrednost fakture u RSD");
+      await operator.selectOption("gt");
+      await expect(operator).toHaveValue("gt");
+      await expect(operator.locator('option[value="gt"]')).toHaveText("veće od");
     });
 
     await test.step("Nova opens an editable individual invoice", async () => {
@@ -250,7 +299,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         page.getByRole("link", { name: "Završi uređivanje", exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Zaključaj", exact: true }),
+        page.getByRole("button", { name: "Proknjiži", exact: true }),
       ).toBeVisible();
       invoiceId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
       expect(invoiceId).not.toBe("");
@@ -265,6 +314,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await form
         .locator('[name="purchaseOrderId"]')
         .selectOption(purchaseOrderId);
+      await form.locator('[name="warehouseId"]').selectOption(warehouseId);
       await expect(form.locator('[name="supplierId"]')).toHaveValue(supplierId);
       await expect(form.locator('[name="type"]')).toHaveValue("COGS");
       await expect(form.locator('[name="currency"]')).toHaveValue("RSD");
@@ -294,6 +344,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         number: saved.number,
         supplierId: saved.supplierId,
         purchaseOrderId: saved.purchaseOrderId,
+        warehouseId: saved.warehouseId,
         type: saved.type,
         status: saved.status,
         net: Number(saved.netValue),
@@ -307,6 +358,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         number: fixture.invoiceNumber,
         supplierId,
         purchaseOrderId,
+        warehouseId,
         type: "COGS",
         status: "RECEIVED",
         net: 8_500,
@@ -364,11 +416,11 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         .toBe("QA trošak transporta i špedicije");
     });
 
-    await test.step("Zaključaj is idempotent and allocates the invoice once", async () => {
+    await test.step("Proknjiži completes invoice, order and warehouse receipt idempotently", async () => {
       page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Zaključaj", exact: true }).click();
+      await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
       await expect(
-        page.getByText(/konačni COGS je proknjižen na artikle/),
+        page.getByText(/faktura i porudžbenica su proknjižene.*roba je primljena/i),
       ).toBeVisible();
       const [locked, item, product, order] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
@@ -388,10 +440,28 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       expect(locked.cogsStatus).toBe("LOCKED");
       expect(locked.lockedAt).not.toBeNull();
       expect(Number(item.additionalCostAllocated)).toBe(0);
-      expect(product.stock).toBe(100);
+      expect(product.stock).toBe(150);
       expect(Number(product.cogs)).toBe(190);
       expect(order.cogsBookedAt).not.toBeNull();
       expect(order.cogsBookingSnapshot).not.toBeNull();
+      expect(
+        (
+          await db.purchaseOrder.findUniqueOrThrow({
+            where: { id: purchaseOrderId },
+            select: {
+              status: true,
+              lockedAt: true,
+              postedAt: true,
+              receivingWarehouseId: true,
+            },
+          })
+        ),
+      ).toMatchObject({
+        status: "RECEIVED",
+        receivingWarehouseId: warehouseId,
+        lockedAt: expect.any(Date),
+        postedAt: expect.any(Date),
+      });
 
       const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
       await expect(cogsRow).toContainText("190 RSD");
@@ -415,53 +485,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       expect(Number(retriedProduct.cogs)).toBe(190);
     });
 
-    await test.step("legacy locked invoice offers and completes an explicit COGS backfill", async () => {
-      await Promise.all([
-        db.purchaseOrder.update({
-          where: { id: purchaseOrderId },
-          data: { cogsBookedAt: null, cogsBookingSnapshot: Prisma.DbNull },
-        }),
-        db.product.update({
-          where: { id: productId },
-          data: { cogs: 200 },
-        }),
-      ]);
-      await page.goto(`/admin/erp/ulazne-fakture/${invoiceId}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(page.getByText(/zaključana pre uvođenja trenutnog COGS workflow-a/)).toBeVisible();
-      const backfill = page.getByRole("button", {
-        name: "Proknjiži COGS",
-        exact: true,
-      });
-      await expect(backfill).toBeEnabled();
-      page.once("dialog", (dialog) => dialog.accept());
-      await backfill.click();
-      await expect(page.getByText(/konačni COGS je proknjižen na artikle/)).toBeVisible();
-      expect(
-        Number(
-          (
-            await db.product.findUniqueOrThrow({
-              where: { id: productId },
-              select: { cogs: true },
-            })
-          ).cogs,
-        ),
-      ).toBe(190);
-    });
-
-    await test.step("goods receipt keeps the already-booked COGS 190 and posts quantity", async () => {
-      await page.getByRole("link", { name: fixture.orderNumber }).click();
-      await expect(page).toHaveURL(
-        new RegExp(`/admin/erp/porudzbenice/${purchaseOrderId}$`),
-      );
-      const receiveButton = page.getByRole("button", {
-        name: "Primi u magacin",
-        exact: true,
-      });
-      await expect(receiveButton).toHaveCount(1);
-      page.once("dialog", (dialog) => dialog.accept());
-      await receiveButton.click();
+    await test.step("the posting command already completed the warehouse receipt", async () => {
       await expect
         .poll(async () =>
           (
@@ -489,18 +513,16 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       ).toBeDisabled();
     });
 
-    await test.step("storno removes the invoice from COGS without duplicating incoming stock", async () => {
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Storniraj", exact: true }).click();
+    await test.step("a posted invoice cannot be cancelled through regular editing", async () => {
       await expect(
-        page.getByRole("status").filter({ hasText: "Faktura je stornirana" }),
-      ).toBeVisible();
+        page.getByRole("button", { name: "Storniraj", exact: true }),
+      ).toBeDisabled();
       const [invoice, product, item] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
         db.product.findUniqueOrThrow({ where: { id: productId } }),
         db.purchaseOrderItem.findFirstOrThrow({ where: { purchaseOrderId } }),
       ]);
-      expect(invoice.status).toBe("CANCELLED");
+      expect(invoice.status).toBe("POSTED");
       expect(Number(item.additionalCostAllocated)).toBe(0);
       expect(product.incomingStock).toBe(0);
       expect(Number(product.cogs)).toBe(190);
@@ -540,6 +562,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
     }
     if (supplierId) {
       await db.supplier.deleteMany({ where: { id: supplierId } });
+    }
+    if (transportTypeId) {
+      await db.transportType.deleteMany({ where: { id: transportTypeId } });
     }
     if (warehouseId) {
       await db.warehouse.deleteMany({ where: { id: warehouseId } });

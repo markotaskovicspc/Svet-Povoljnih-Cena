@@ -21,6 +21,7 @@ import {
   cancelInboundInvoice,
   createInboundInvoice,
   lockInboundInvoice,
+  postInboundInvoice,
   saveInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import {
@@ -30,6 +31,7 @@ import {
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 import type { AdminActionState } from "@/lib/admin/action-state";
+import { purchaseOrderCapacityWarnings } from "@/lib/admin/purchase-order";
 import {
   requireAdminAction,
   withAdminState,
@@ -48,6 +50,7 @@ const invoiceSchema = z.object({
   receiptDate: z.iso.date(),
   supplierId: z.string().min(1, "Naziv dobavljača je obavezan."),
   purchaseOrderId: z.string().min(1, "Veza sa dokumentom je obavezna."),
+  warehouseId: z.string().min(1, "Magacin prijema je obavezan."),
   type: z.literal("COGS"),
   currency: z.literal("RSD"),
   exchangeRate: z.coerce.number().refine((value) => value === 1),
@@ -66,7 +69,7 @@ const invoiceSchema = z.object({
 const statusLabel: Record<InboundInvoiceStatus, string> = {
   DRAFT: "Nacrt",
   RECEIVED: "Primljena",
-  POSTED: "Zaključana",
+  POSTED: "Proknjižena",
   CANCELLED: "Storno",
 };
 
@@ -125,6 +128,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         number: data.number,
         receiptDate: new Date(`${data.receiptDate}T00:00:00.000Z`),
         purchaseOrderId: data.purchaseOrderId,
+        warehouseId: data.warehouseId,
         invoiceValueRsd: data.invoiceValueRsd,
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
@@ -141,25 +145,32 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-async function lockAction(_state: AdminActionState, formData: FormData) {
+async function postAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
     {
       allowed: ["OPS"],
-      action: "inbound-invoice.lock",
+      action: "inbound-invoice.post",
       entity: "InboundInvoice",
     },
-    async (_actorId, actionData: FormData) => {
+    async (actorId, actionData: FormData) => {
       const id = String(actionData.get("invoiceId") ?? "");
       if (!id) return { ok: false as const, error: "Faktura nije izabrana." };
-      await lockInboundInvoice(id);
+      const backfillOnly = actionData.get("backfillOnly") === "true";
+      const result = backfillOnly
+        ? (await lockInboundInvoice(id), null)
+        : await postInboundInvoice(id, actorId);
       revalidatePath(`/admin/erp/ulazne-fakture/${id}`);
       revalidatePath("/admin/erp/ulazne-fakture");
+      revalidatePath("/admin/erp/porudzbenice");
+      revalidatePath("/admin/erp/stanje-po-magacinima");
       revalidatePath("/admin/erp/artikli");
       return {
         ok: true as const,
         entityId: id,
-        message: "Faktura je zaključana, a konačni COGS je odmah proknjižen na artikle.",
+        message: backfillOnly
+          ? "COGS ranije proknjižene fakture je usklađen."
+          : `Faktura i porudžbenica su proknjižene, a roba je primljena u magacin ${result?.warehouseName ?? ""}.`,
       };
     },
   )(formData);
@@ -198,13 +209,15 @@ export default async function InboundInvoicePage({
 }) {
   await requireAdminAction(["OPS"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [invoice, purchaseOrders] = await Promise.all([
+  const [invoice, purchaseOrders, warehouses] = await Promise.all([
     db.inboundInvoice.findUnique({
       where: { id },
       include: {
         supplier: true,
+        warehouse: true,
         purchaseOrder: {
           include: {
+            transportDefinition: true,
             items: {
               orderBy: { createdAt: "asc" },
               include: {
@@ -249,6 +262,16 @@ export default async function InboundInvoicePage({
         },
       },
     }),
+    db.warehouse.findMany({
+      where: { active: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isDefault: true,
+      },
+    }),
   ]);
   if (!invoice) notFound();
 
@@ -263,9 +286,20 @@ export default async function InboundInvoicePage({
       !invoice.purchaseOrder.cogsBookedAt,
   );
   const editing = query.mode === "edit" && !immutable;
-  const purchaseOrderNeedsPosting = Boolean(
-    invoice.purchaseOrder && !invoice.purchaseOrder.lockedAt,
-  );
+  const capacityWarnings = invoice.purchaseOrder
+    ? purchaseOrderCapacityWarnings({
+        totalVolumeM3: Number(invoice.purchaseOrder.totalVolume ?? 0),
+        totalWeightKg: Number(invoice.purchaseOrder.totalWeight ?? 0),
+        payloadM3:
+          invoice.purchaseOrder.transportDefinition?.payloadM3 == null
+            ? null
+            : Number(invoice.purchaseOrder.transportDefinition.payloadM3),
+        payloadKg:
+          invoice.purchaseOrder.transportDefinition?.payloadKg == null
+            ? null
+            : Number(invoice.purchaseOrder.transportDefinition.payloadKg),
+      })
+    : [];
   const purchaseOrderOptions: InboundInvoicePurchaseOrderOption[] = purchaseOrders.map(
     (order) => {
       const defaults = calculatePurchaseOrderInvoiceDefaults({
@@ -346,7 +380,7 @@ export default async function InboundInvoicePage({
     <>
       <PageHeader
         title={`Ulazna faktura ${invoice.number}`}
-        description={`${statusLabel[invoice.status]}${invoice.supplier ? ` · ${invoice.supplier.name}` : ""}${locked ? ` · zaključana ${dateOnly(invoice.lockedAt)}` : ""}`}
+        description={`${statusLabel[invoice.status]}${invoice.supplier ? ` · ${invoice.supplier.name}` : ""}${invoice.warehouse ? ` · ${invoice.warehouse.name}` : ""}${locked ? ` · proknjižena ${dateOnly(invoice.lockedAt)}` : ""}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -385,31 +419,35 @@ export default async function InboundInvoicePage({
                 Uredi
               </button>
             )}
-            <AdminActionForm action={lockAction}>
+            <AdminActionForm action={postAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
+              <input
+                type="hidden"
+                name="backfillOnly"
+                value={cogsNeedsBackfill ? "true" : "false"}
+              />
               <SubmitButton
                 disabled={
                   cancelled ||
-                  purchaseOrderNeedsPosting ||
                   (locked && !cogsNeedsBackfill)
                 }
                 confirm={
                   cogsNeedsBackfill
-                    ? "Proknjižiti COGS ove ranije zaključane fakture na artikle?"
-                    : "Zaključati fakturu i odmah proknjižiti konačni COGS na artikle?"
+                    ? "Uskladiti COGS ove ranije proknjižene fakture?"
+                    : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti ulaznu fakturu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
                 }
                 pendingLabel={
-                  cogsNeedsBackfill ? "Knjiženje COGS-a…" : "Zaključavanje…"
+                  cogsNeedsBackfill ? "Usklađivanje COGS-a…" : "Knjiženje…"
                 }
               >
-                {cogsNeedsBackfill ? "Proknjiži COGS" : "Zaključaj"}
+                {cogsNeedsBackfill ? "Uskladi COGS" : "Proknjiži"}
               </SubmitButton>
             </AdminActionForm>
             <AdminActionForm action={cancelAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
                 variant="destructive"
-                disabled={cancelled}
+                disabled={cancelled || locked}
                 confirm="Stornirati fakturu? COGS i količina u dolasku biće ponovo izračunati."
                 pendingLabel="Storniranje…"
               >
@@ -421,23 +459,26 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
-        {purchaseOrderNeedsPosting && invoice.purchaseOrder ? (
-          <div role="alert" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-            Povezana porudžbenica {invoice.purchaseOrder.number} još nije proknjižena. COGS osnova zato nije bezbedno zamrznuta.
-            {" "}
-            <Link
-              href={`/admin/erp/porudzbenice/${invoice.purchaseOrder.id}`}
-              className="font-semibold underline underline-offset-2"
-            >
-              Otvorite i proknjižite porudžbenicu
-            </Link>
-            {locked
-              ? "; postojeće raspodele biće tada ponovo usklađene."
-              : ", pa zatim zaključajte fakturu."}
+        {capacityWarnings.length && !locked ? (
+          <div
+            role="status"
+            className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"
+          >
+            <p className="font-semibold">
+              Informativno upozorenje — kapacitet transporta je prekoračen:
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {capacityWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Knjiženje nije blokirano; komanda „Proknjiži” traži dodatnu potvrdu.
+            </p>
           </div>
         ) : null}
         <Card id="podaci-fakture">
-          <CardTitle description="Vrednosti fakture i obavezna veza sa porudžbenicom.">
+          <CardTitle description="Vrednosti fakture, veza sa porudžbenicom i magacin stvarnog prijema robe.">
             Podaci fakture
           </CardTitle>
           {cancelled ? (
@@ -446,15 +487,15 @@ export default async function InboundInvoicePage({
             </p>
           ) : cogsNeedsBackfill ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-              Faktura je zaključana pre uvođenja trenutnog COGS workflow-a. Izaberite „Proknjiži COGS” da odmah upišete obračunate vrednosti na artikle, bez prijema količine u magacin.
+              Faktura je proknjižena pre uvođenja trenutnog COGS workflow-a. Izaberite „Uskladi COGS” da upišete obračunate vrednosti na artikle.
             </p>
           ) : locked ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              Faktura je zaključana. Troškovi su raspoređeni po vrednosti artikala i konačni COGS je proknjižen na artikle.
+              Faktura je proknjižena. Troškovi i COGS su obračunati, porudžbenica je završena, a roba je primljena u izabrani magacin.
             </p>
           ) : !editing ? (
             <p className="mb-4 rounded-lg border border-border/60 bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">
-              Izaberite komandu „Uredi” da promenite podatke, zatim „Zaključaj” za konačan COGS obračun.
+              Izaberite „Uredi” da dopunite podatke, zatim „Proknjiži” da završite fakturu, porudžbenicu i prijem robe.
             </p>
           ) : null}
           <AdminActionForm action={saveAction}>
@@ -474,6 +515,26 @@ export default async function InboundInvoicePage({
                   required
                   defaultValue={dateOnly(invoice.invoiceDate ?? invoice.createdAt)}
                 />
+              </Field>
+              <Field label="Magacin prijema">
+                <select
+                  name="warehouseId"
+                  required
+                  defaultValue={
+                    invoice.warehouseId ??
+                    invoice.purchaseOrder?.receivingWarehouseId ??
+                    ""
+                  }
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">— izaberite —</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} ({warehouse.code})
+                      {warehouse.isDefault ? " · podrazumevani" : ""}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <InboundInvoiceFields
                 purchaseOrders={purchaseOrderOptions}
@@ -510,7 +571,7 @@ export default async function InboundInvoicePage({
         </Card>
 
         <Card>
-          <CardTitle description="Neto vrednosti zaključanih vezanih faktura raspoređuju se srazmerno nabavnoj vrednosti svake šifre.">
+          <CardTitle description="Neto vrednosti proknjiženih vezanih faktura raspoređuju se srazmerno nabavnoj vrednosti svake šifre.">
             COGS obračun po šifri
           </CardTitle>
           {invoice.purchaseOrder ? (
@@ -591,7 +652,7 @@ export default async function InboundInvoicePage({
                 </table>
               </div>
               <p className="mt-4 text-xs text-ink-500">
-                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Knjiži se zaključavanjem fakture; prijem robe zatim knjiži količinu bez ponovnog COGS obračuna.
+                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna.
               </p>
             </>
           ) : (

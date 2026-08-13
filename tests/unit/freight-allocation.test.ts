@@ -70,7 +70,7 @@ describe("purchase-order freight allocation", () => {
     ).toBeCloseTo(193.33, 2);
   });
 
-  it("allows receipt only after a locked order was sent or confirmed", () => {
+  it("allows receipt after invoice posting locks an open order", () => {
     const lockedAt = new Date("2026-08-07T00:00:00.000Z");
     expect(
       canReceivePurchaseOrder({ status: PurchaseOrderStatus.SENT, lockedAt }),
@@ -80,7 +80,7 @@ describe("purchase-order freight allocation", () => {
     ).toBe(true);
     expect(
       canReceivePurchaseOrder({ status: PurchaseOrderStatus.DRAFT, lockedAt }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canReceivePurchaseOrder({ status: PurchaseOrderStatus.SENT, lockedAt: null }),
     ).toBe(false);

@@ -116,6 +116,9 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         supplierId,
         attribute1: "Masiv",
         colorPrimary: "Natur",
+        unitPackWidthCm: 100,
+        unitPackDepthCm: 50,
+        unitPackHeightCm: 10,
         packQty: 4,
         packWidthCm: 100,
         packDepthCm: 50,
@@ -254,7 +257,6 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       });
       await header.locator('[name="supplierId"]').selectOption(supplierId);
       await header.locator('[name="loadingLocationId"]').selectOption(loadingLocationId);
-      await header.locator('[name="receivingWarehouseId"]').selectOption(warehouseId);
       await header.locator('[name="transportTypeId"]').selectOption(transportId);
       await header.locator('[name="orderDate"]').fill("2026-07-01");
       await header.locator('[name="loadingDate"]').fill("2026-07-10");
@@ -270,9 +272,6 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await expect(header.locator('[name="supplierId"]')).toHaveValue(supplierId);
       await expect(header.locator('[name="loadingLocationId"]')).toHaveValue(
         loadingLocationId,
-      );
-      await expect(header.locator('[name="receivingWarehouseId"]')).toHaveValue(
-        warehouseId,
       );
       await expect(header.locator('[name="transportTypeId"]')).toHaveValue(
         transportId,
@@ -334,7 +333,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await expect(page.getByText("Nije deljivo sa 4")).toBeVisible();
     });
 
-    await test.step("server rejects wrong packs, capacity overflow and direct grid tampering", async () => {
+    await test.step("server rejects wrong packs and direct grid tampering while capacity is informational", async () => {
       const itemsModule = await page.request.get(
         "/api/admin/erp/porudzbenice-po-artiklima/rows?page=1&pageSize=100",
       );
@@ -357,11 +356,9 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         { data: { columnKey: "totalPrice", value: 1 } },
       );
       expect(directEdit.status()).toBe(422);
-      const postOverflow = await page.request.post(
-        "/api/admin/erp/porudzbenice/commands",
-        { data: { action: "po.post", ids: [purchaseOrderId] } },
-      );
-      expect(postOverflow.status()).toBe(400);
+      await expect(
+        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
+      ).toBeVisible();
     });
 
     await test.step("line correction recomputes freight, customs, totals and BM", async () => {
@@ -388,13 +385,17 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
     });
 
     await test.step("capacity warning clears and sending before posting locks the order date", async () => {
-      await expect(page.getByText("Kapacitet transporta je prekoračen:")).toBeVisible();
+      await expect(
+        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
+      ).toBeVisible();
       await db.transportType.update({
         where: { id: transportId },
         data: { payloadKg: 1_000, payloadM3: 10 },
       });
       await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.getByText("Kapacitet transporta je prekoračen:")).toHaveCount(0);
+      await expect(
+        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
+      ).toHaveCount(0);
       await page.getByRole("button", { name: "Pošalji dobavljaču" }).click();
       await expect
         .poll(async () =>
@@ -419,9 +420,13 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await expect(page.locator('select[name="status"]')).toHaveValue("SENT");
     });
 
-    await test.step("posting locks all business fields", async () => {
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Proknjiži porudžbenicu" }).click();
+    await test.step("invoice workflow backend can post and lock all business fields", async () => {
+      const response = await page.request.post(
+        "/api/admin/erp/porudzbenice/commands",
+        { data: { action: "po.post", ids: [purchaseOrderId] } },
+      );
+      expect(response.status()).toBe(200);
+      await page.reload({ waitUntil: "domcontentloaded" });
       await expect(page.getByText(/poslovni podaci su zaključani/i)).toBeVisible();
       const posted = await db.purchaseOrder.findUniqueOrThrow({
         where: { id: purchaseOrderId! },

@@ -174,7 +174,7 @@ function inboundInvoiceStatusLabel(status: string) {
   const labels: Record<string, string> = {
     DRAFT: "U pripremi",
     RECEIVED: "Primljena",
-    POSTED: "Zaključana",
+    POSTED: "Proknjižena",
     CANCELLED: "Storno",
   };
   return labels[status] ?? status;
@@ -184,7 +184,7 @@ function cogsStatusLabel(status: string) {
   const labels: Record<string, string> = {
     PENDING: "Čeka razradu",
     CALCULATED: "Razrađen",
-    LOCKED: "Zaključan",
+    LOCKED: "Proknjižen",
   };
   return labels[status] ?? status;
 }
@@ -391,8 +391,9 @@ const inboundInvoiceColumns: ErpColumn[] = [
   { key: "vatValue", label: "PDV (20%)", type: "money", align: "right", defaultVisible: true },
   { key: "grossValue", label: "Ukupno sa PDV-om", type: "money", align: "right", defaultVisible: true },
   { key: "purchaseOrder", label: "Veza sa dokumentom", defaultVisible: true },
-  { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Zaključana", "Storno"], defaultVisible: true },
-  { key: "locked", label: "Zaključano", type: "boolean", defaultVisible: true },
+  { key: "warehouse", label: "Magacin prijema", defaultVisible: true },
+  { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Proknjižena", "Storno"], defaultVisible: true },
+  { key: "locked", label: "Proknjiženo", type: "boolean", defaultVisible: true },
   { key: "type", label: "Tip", options: ["COGS"] },
   { key: "currency", label: "Valuta", options: ["RSD"] },
   { key: "exchangeRate", label: "Kurs", type: "number", align: "right" },
@@ -402,7 +403,7 @@ const inboundInvoiceColumns: ErpColumn[] = [
     type: "status",
     options: ["AUTO_UTILIZATION", "VALUE", "WEIGHT", "VOLUME", "MANUAL"],
   },
-  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Zaključan"] },
+  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Proknjižen"] },
 ];
 
 
@@ -630,13 +631,6 @@ const coreErpModules: ErpModule[] = [
         needsSelection: true,
         confirm: "Označiti izabrane porudžbenice kao poslate dobavljaču?",
       },
-      {
-        label: "Proknjiži porudžbenicu",
-        tone: "neutral",
-        action: "po.post",
-        needsSelection: true,
-        confirm: "Proknjižiti i zaključati izabrane porudžbenice?",
-      },
     ],
     columns: purchaseOrderColumns,
     editableColumns: [],
@@ -686,7 +680,7 @@ const coreErpModules: ErpModule[] = [
     number: "5",
     title: "Ulazne fakture",
     description:
-      "Domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama, zaključavanje i raspodela troškova za COGS.",
+      "Domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama, knjiženje prijema i raspodela troškova za COGS.",
     status: "ready",
     commands: [
       { label: "Nova", tone: "primary", action: "invoice.create" },
@@ -697,12 +691,12 @@ const coreErpModules: ErpModule[] = [
         needsSelection: true,
       },
       {
-        label: "Zaključaj",
+        label: "Proknjiži",
         tone: "neutral",
         action: "invoice.lock",
         needsSelection: true,
         confirm:
-          "Zaključati izabrane ulazne fakture i uključiti njihove troškove u COGS?",
+          "Proknjižiti izabrane ulazne fakture i porudžbenice i primiti robu u izabrane magacine?",
       },
       {
         label: "Storniraj",
@@ -719,7 +713,7 @@ const coreErpModules: ErpModule[] = [
     notes: [
       "Dvoklik na red otvara pojedinačnu fakturu.",
       "Trošak vezanih faktura raspoređuje se prema vrednosti svake šifre na porudžbenici.",
-      "Zaključana faktura se ne može menjati niti ponovo uključiti u COGS.",
+      "Proknjižena faktura se ne može redovno menjati niti ponovo uključiti u COGS.",
     ],
   },
   {
@@ -1619,6 +1613,7 @@ async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
     include: {
       supplier: { select: { name: true } },
       purchaseOrder: { select: { number: true } },
+      warehouse: { select: { name: true } },
     },
   });
 
@@ -1634,6 +1629,7 @@ async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
       type: invoice.type,
       supplier: invoice.supplier?.name ?? null,
       purchaseOrder: invoice.purchaseOrder?.number ?? null,
+      warehouse: invoice.warehouse?.name ?? null,
       status: inboundInvoiceStatusLabel(invoice.status),
       invoiceDate: dateOnly(invoice.invoiceDate),
       currency: currencyLabel(invoice.currency),

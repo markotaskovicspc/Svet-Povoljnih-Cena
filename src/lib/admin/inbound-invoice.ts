@@ -37,7 +37,7 @@ export function assertInboundInvoicePurchaseOrderLocked(input: {
 }) {
   if (!input.lockedAt) {
     throw new Error(
-      "Povezana porudžbenica mora prvo da bude proknjižena i zaključana.",
+      "Povezana porudžbenica mora da bude proknjižena.",
     );
   }
 }

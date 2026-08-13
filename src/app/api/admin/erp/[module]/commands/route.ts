@@ -13,7 +13,7 @@ import {
 import {
   cancelInboundInvoice,
   createInboundInvoice,
-  lockInboundInvoice,
+  postInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { articleSlug } from "@/lib/article-master";
@@ -255,7 +255,7 @@ async function runCommand(
       if (module !== "ulazne-fakture") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
-      return lockInboundInvoices(ids);
+      return postInboundInvoices(ids, actorId);
     case "invoice.cancel":
       if (module !== "ulazne-fakture") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
@@ -707,11 +707,18 @@ async function receivePurchaseOrders(ids: string[], actorId: string): Promise<Co
   };
 }
 
-async function lockInboundInvoices(ids: string[]): Promise<CommandResult> {
+async function postInboundInvoices(
+  ids: string[],
+  actorId: string,
+): Promise<CommandResult> {
   requireIds(ids);
-  for (const id of ids) await lockInboundInvoice(id);
+  let postedLines = 0;
+  for (const id of ids) {
+    const result = await postInboundInvoice(id, actorId);
+    postedLines += result.postedLines;
+  }
   return {
-    message: `Zaključano faktura: ${ids.length}. Konačni COGS je proknjižen na artikle.`,
+    message: `Proknjiženo faktura: ${ids.length}. Primljeno lager stavki: ${postedLines}.`,
   };
 }
 

@@ -92,6 +92,7 @@ import {
 import { defaultProductFamilyLabel } from "@/lib/product-family";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
+import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -178,6 +179,14 @@ const overrideSchema = z.object({
       code: "custom",
       path: ["familyColorLabel"],
       message: "Naziv boje je obavezan kada je artikal u porodici.",
+    });
+  }
+  if (!hasProductVolumeSource(value)) {
+    context.addIssue({
+      code: "custom",
+      path: ["containerQty"],
+      message:
+        "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
     });
   }
 });
@@ -1996,6 +2005,9 @@ export default async function ProductDetail({
               }
               palletQty={product.palletQty}
             />
+            <p className="text-xs text-ink-500">
+              Obavezno je uneti količinu za ceo kontejner ili kompletne dimenzije pakovanja pojedinačnog artikla (širina, dubina i visina).
+            </p>
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Transportno pakovanje

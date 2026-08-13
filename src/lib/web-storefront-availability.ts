@@ -17,6 +17,7 @@ type WebAvailabilityProduct = {
   availableWebManual: boolean;
   availableWebAuto: boolean;
   articleStatus?: string;
+  stock?: number;
   dcAvailableQty?: number;
   supplierStock?: number | null;
   supplierApprovalStatus?: string | null;
@@ -170,15 +171,27 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
     },
     AND: [
       ...(isWebAutoAvailabilityEnforced()
-        ? [{ availableWebAuto: true } satisfies Prisma.ProductWhereInput]
+        ? [
+            {
+              OR: [
+                { articleStatus: "SP" },
+                { availableWebAuto: true },
+              ],
+            } satisfies Prisma.ProductWhereInput,
+          ]
         : []),
       {
         OR: [
+          // SP is the client's permanent storefront assortment. Stock still
+          // controls whether checkout is possible, but not publication.
+          { articleStatus: "SP" },
           // PostgreSQL's three-valued NULL logic makes a relation-level
           // `NOT integrationKey = RABALUX` exclude ordinary suppliers whose
           // integration key is NULL. Spell out every non-Rabalux case so
           // those products remain eligible for the storefront.
-          nonRabaluxSupplierWhere(),
+          {
+            AND: [nonRabaluxSupplierWhere(), { stock: { gt: 0 } }],
+          },
           {
             AND: [
               {
@@ -217,12 +230,18 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
     !product.deletedAt &&
     product.isActive &&
     product.availableWebManual &&
-    (!isWebAutoAvailabilityEnforced() || product.availableWebAuto);
+    (!isWebAutoAvailabilityEnforced() ||
+      product.articleStatus === "SP" ||
+      product.availableWebAuto);
   if (!generallyAvailable) return false;
-  if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) return true;
+  if (product.articleStatus === "SP") return true;
+  const dcAvailable = product.dcAvailableQty ?? product.stock ?? 0;
+  if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) {
+    return dcAvailable > 0;
+  }
   if (product.articleStatus === "ARH") return false;
 
-  if ((product.dcAvailableQty ?? 0) > 0) return true;
+  if (dcAvailable > 0) return true;
   return Boolean(
     product.supplier.enabled &&
       isRabaluxEnabled() &&
@@ -240,7 +259,11 @@ export function storefrontPublicationBlockers(
   if (product.deletedAt) reasons.push("Artikal je arhiviran");
   if (!product.isActive) reasons.push("Artikal nije aktivan");
   if (!product.availableWebManual) reasons.push("Web kanal je ručno isključen");
-  if (isWebAutoAvailabilityEnforced() && !product.availableWebAuto) {
+  if (
+    isWebAutoAvailabilityEnforced() &&
+    product.articleStatus !== "SP" &&
+    !product.availableWebAuto
+  ) {
     reasons.push("Automatska web dostupnost je isključena");
   }
   if (!product.hasActiveRetailPrice) {
@@ -250,7 +273,18 @@ export function storefrontPublicationBlockers(
     reasons.push("Ova boja porodice nije uključena za web");
   }
 
-  if (product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY) {
+  if (
+    product.articleStatus !== "SP" &&
+    product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY &&
+    (product.dcAvailableQty ?? product.stock ?? 0) <= 0
+  ) {
+    reasons.push("Nema pozitivnu raspoloživu količinu");
+  }
+
+  if (
+    product.articleStatus !== "SP" &&
+    product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY
+  ) {
     if (product.articleStatus === "ARH") reasons.push("Rabalux artikal je arhiviran");
     if ((product.dcAvailableQty ?? 0) <= 0) {
       if (!isRabaluxEnabled()) reasons.push("Rabalux integracija je isključena");

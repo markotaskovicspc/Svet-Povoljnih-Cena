@@ -1958,6 +1958,7 @@ model Warehouse {
   fiscalDocuments         FiscalDocument[]
   orderItems              OrderItem[]
   purchaseOrdersReceiving PurchaseOrder[]      @relation("PurchaseOrderReceivingWarehouse")
+  inboundInvoicesReceiving InboundInvoice[]    @relation("InboundInvoiceReceivingWarehouse")
   outgoingDispatchNotes   DispatchNote[]       @relation("DispatchSourceWarehouse")
   incomingDispatchNotes   DispatchNote[]       @relation("DispatchDestinationWarehouse")
   stockCounts             StockCount[]
@@ -2203,6 +2204,7 @@ model InboundInvoice {
   type            InboundInvoiceType   @default(COGS)
   supplierId      String?
   purchaseOrderId String?
+  warehouseId     String?
   status          InboundInvoiceStatus @default(DRAFT)
   invoiceDate     DateTime?
   currency        ErpCurrency          @default(RSD)
@@ -2224,11 +2226,13 @@ model InboundInvoice {
 
   supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  warehouse     Warehouse?           @relation("InboundInvoiceReceivingWarehouse", fields: [warehouseId], references: [id], onDelete: SetNull)
   items         InboundInvoiceItem[]
 
   @@index([supplierId, invoiceDate])
   @@index([status, invoiceDate])
   @@index([purchaseOrderId])
+  @@index([warehouseId])
 }
 
 model InboundInvoiceItem {

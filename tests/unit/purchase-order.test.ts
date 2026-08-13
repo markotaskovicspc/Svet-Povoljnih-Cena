@@ -3,6 +3,8 @@ import {
   calculateDeliveryDate,
   calculatePurchaseOrderFinancials,
   calculateUnitLogistics,
+  canReceivePurchaseOrder,
+  hasProductVolumeSource,
   isPackQuantityValid,
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderCapacityWarnings,
@@ -32,11 +34,14 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toBe("2026-07-22T00:00:00.000Z");
   });
 
-  it("uses full-container quantity first, then complete transport packaging only", () => {
+  it("uses full-container quantity first, then individual article packaging", () => {
     expect(
       calculateUnitLogistics({
         containerQty: 230,
         containerGrossWeightKg: 11_500,
+        unitPackWidthCm: 10,
+        unitPackDepthCm: 10,
+        unitPackHeightCm: 10,
         packQty: 2,
         packWidthCm: 100,
         packDepthCm: 50,
@@ -46,6 +51,9 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toEqual({ volumeM3: 0.3, weightKg: 50 });
     expect(
       calculateUnitLogistics({
+        unitPackWidthCm: 100,
+        unitPackDepthCm: 50,
+        unitPackHeightCm: 20,
         packQty: 2,
         packWidthCm: 100,
         packDepthCm: 50,
@@ -77,10 +85,38 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toEqual({ volumeM3: 0.036316, weightKg: 0 });
   });
 
+  it("requires either container quantity or all three individual-package dimensions", () => {
+    expect(hasProductVolumeSource({ containerQty: 2_500 })).toBe(true);
+    expect(
+      hasProductVolumeSource({
+        unitPackWidthCm: 80,
+        unitPackDepthCm: 40,
+        unitPackHeightCm: 25,
+      }),
+    ).toBe(true);
+    expect(
+      hasProductVolumeSource({
+        unitPackWidthCm: 80,
+        unitPackDepthCm: 40,
+        unitPackHeightCm: null,
+      }),
+    ).toBe(false);
+    expect(hasProductVolumeSource({})).toBe(false);
+  });
+
   it("marks quantities that are not divisible by package size", () => {
     expect(isPackQuantityValid(12, 4)).toBe(true);
     expect(isPackQuantityValid(10, 4)).toBe(false);
     expect(isPackQuantityValid(10, null)).toBe(true);
+  });
+
+  it("allows the invoice workflow to receive a posted draft order", () => {
+    expect(
+      canReceivePurchaseOrder({ status: "DRAFT", lockedAt: new Date() }),
+    ).toBe(true);
+    expect(
+      canReceivePurchaseOrder({ status: "DRAFT", lockedAt: null }),
+    ).toBe(false);
   });
 
   it("allocates freight, converts purchase price and calculates customs and BM", () => {

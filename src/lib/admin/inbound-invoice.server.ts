@@ -25,6 +25,7 @@ export type SaveInboundInvoiceInput = {
   number: string;
   receiptDate: Date;
   purchaseOrderId: string;
+  warehouseId: string;
   invoiceValueRsd: number;
   customsValueRsd: number;
   transportValueRsd: number;
@@ -121,6 +122,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   const number = input.number.trim();
   if (!number) throw new Error("Broj fakture je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
+  if (!input.warehouseId) throw new Error("Magacin prijema je obavezan.");
   const amounts = calculateInboundInvoiceAmounts({
     invoiceValueRsd: input.invoiceValueRsd,
     customsValueRsd: input.customsValueRsd,
@@ -134,21 +136,30 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
     select: { lockedAt: true, purchaseOrderId: true },
   });
   if (!current) throw new Error("Ulazna faktura ne postoji.");
-  if (current.lockedAt) throw new Error("Zaključana faktura se ne može menjati.");
+  if (current.lockedAt) throw new Error("Proknjižena faktura se ne može menjati.");
 
-  const purchaseOrder = await db.purchaseOrder.findUnique({
-    where: { id: input.purchaseOrderId },
-    select: {
-      status: true,
-      supplierId: true,
-      supplier: { select: { enabled: true } },
-    },
-  });
+  const [purchaseOrder, warehouse] = await Promise.all([
+    db.purchaseOrder.findUnique({
+      where: { id: input.purchaseOrderId },
+      select: {
+        status: true,
+        supplierId: true,
+        supplier: { select: { enabled: true } },
+      },
+    }),
+    db.warehouse.findUnique({
+      where: { id: input.warehouseId },
+      select: { id: true, active: true },
+    }),
+  ]);
   if (!purchaseOrder || purchaseOrder.status === PurchaseOrderStatus.CANCELLED) {
     throw new Error("Izabrana porudžbenica nije dostupna.");
   }
   if (!purchaseOrder.supplierId || !purchaseOrder.supplier?.enabled) {
     throw new Error("Porudžbenica nema aktivnog dobavljača.");
+  }
+  if (!warehouse?.active) {
+    throw new Error("Izaberite aktivan magacin prijema.");
   }
 
   try {
@@ -159,6 +170,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         invoiceDate: utcDateOnly(input.receiptDate),
         supplierId: purchaseOrder.supplierId,
         purchaseOrderId: input.purchaseOrderId,
+        warehouseId: warehouse.id,
         type: InboundInvoiceType.COGS,
         currency: ErpCurrency.RSD,
         exchangeRate: 1,
@@ -177,7 +189,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       },
     });
     if (updated.count !== 1) {
-      throw new Error("Faktura je u međuvremenu zaključana i nije izmenjena.");
+      throw new Error("Faktura je u međuvremenu proknjižena i nije izmenjena.");
     }
     await recomputeIncomingStockForPurchaseOrders(
       db,
@@ -262,14 +274,67 @@ export async function lockInboundInvoice(id: string) {
   });
 }
 
+/**
+ * Completes the client-approved receiving workflow. The linked purchase order
+ * is posted automatically, the invoice is posted, and the ordered quantities
+ * are received into the warehouse selected on the invoice. Every step is
+ * idempotent so a retry safely finishes an interrupted sequence.
+ */
+export async function postInboundInvoice(id: string, actorId: string) {
+  const invoice = await db.inboundInvoice.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      purchaseOrderId: true,
+      warehouseId: true,
+      warehouse: { select: { id: true, name: true, active: true } },
+    },
+  });
+  if (!invoice) throw new Error("Ulazna faktura ne postoji.");
+  if (invoice.status === InboundInvoiceStatus.CANCELLED) {
+    throw new Error("Stornirana faktura ne može da se proknjiži.");
+  }
+  if (!invoice.purchaseOrderId) {
+    throw new Error("Veza sa porudžbenicom je obavezna.");
+  }
+  if (!invoice.warehouse?.active || !invoice.warehouseId) {
+    throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
+  }
+
+  const { postPurchaseOrder, receivePurchaseOrder } = await import(
+    "@/lib/admin/po"
+  );
+  await db.purchaseOrder.update({
+    where: { id: invoice.purchaseOrderId },
+    data: { receivingWarehouseId: invoice.warehouseId },
+  });
+  await postPurchaseOrder(invoice.purchaseOrderId, actorId);
+  await lockInboundInvoice(id);
+  const receipt = await receivePurchaseOrder(invoice.purchaseOrderId, actorId);
+  return {
+    invoiceId: id,
+    purchaseOrderId: invoice.purchaseOrderId,
+    warehouseId: invoice.warehouseId,
+    warehouseName: invoice.warehouse.name,
+    received: receipt.received,
+    postedLines: receipt.postedLines,
+  };
+}
+
 export async function cancelInboundInvoice(id: string) {
   return db.$transaction(async (tx) => {
     const invoice = await tx.inboundInvoice.findUnique({
       where: { id },
-      select: { id: true, status: true, purchaseOrderId: true },
+      select: { id: true, status: true, lockedAt: true, purchaseOrderId: true },
     });
     if (!invoice) throw new Error("Ulazna faktura ne postoji.");
     if (invoice.status === InboundInvoiceStatus.CANCELLED) return invoice;
+    if (invoice.lockedAt || invoice.status === InboundInvoiceStatus.POSTED) {
+      throw new Error(
+        "Proknjižena faktura se ne može stornirati bez kontrolisanog storna robnog prijema.",
+      );
+    }
 
     await tx.inboundInvoice.update({
       where: { id },

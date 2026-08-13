@@ -1324,7 +1324,7 @@ export function ErpGrid({
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div>
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <p className="text-sm text-ink-500">
@@ -1351,6 +1351,123 @@ export function ErpGrid({
               <Button type="button" variant="outline" onClick={resetColumns}>
                 Reset kolona
               </Button>
+              <details className="group relative">
+                <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:bg-muted [&::-webkit-details-marker]:hidden">
+                  <Settings2 className="size-4" aria-hidden />
+                  Prikaz tabele
+                </summary>
+                <div className="absolute right-0 top-11 z-50 w-[min(92vw,420px)] max-h-[70vh] overflow-y-auto rounded-2xl border border-border/70 bg-surface p-4 shadow-xl">
+                  <section>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Settings2 className="size-4 text-ink-500" aria-hidden />
+                      <h2 className="text-sm font-medium text-ink-900">Kolone</h2>
+                    </div>
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {columnOrder
+                        .map((key) =>
+                          module.columns.find((column) => column.key === key),
+                        )
+                        .filter((column): column is ErpColumn => Boolean(column))
+                        .map((column) => (
+                          <label
+                            key={column.key}
+                            draggable
+                            onDragStart={() => setDraggedColumn(column.key)}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (draggedColumn) {
+                                moveColumn(draggedColumn, column.key);
+                              }
+                              setDraggedColumn(null);
+                            }}
+                            onDragEnd={() => setDraggedColumn(null)}
+                            className={cn(
+                              "flex cursor-grab items-center gap-2 rounded-lg px-1 py-1 text-sm text-ink-700 transition hover:bg-muted-bg",
+                              draggedColumn === column.key && "opacity-40",
+                            )}
+                          >
+                            <GripVertical
+                              className="size-3.5 text-ink-300"
+                              aria-hidden
+                            />
+                            <Checkbox
+                              checked={visibleColumns.includes(column.key)}
+                              onCheckedChange={() => toggleColumn(column.key)}
+                            />
+                            <span>{column.label}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </section>
+
+                  <section className="mt-4 border-t border-border/60 pt-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Eye className="size-4 text-ink-500" aria-hidden />
+                      <h2 className="text-sm font-medium text-ink-900">Pogledi</h2>
+                    </div>
+                    {views.length ? (
+                      <div className="space-y-2">
+                        {views.map((view) => (
+                          <div
+                            key={view.id ?? view.name}
+                            className="flex overflow-hidden rounded-lg border border-border/60"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => applyView(view)}
+                              className="min-w-0 flex-1 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
+                            >
+                              {view.name}
+                            </button>
+                            {view.id ? (
+                              <button
+                                type="button"
+                                aria-label={
+                                  pendingDeleteViewId === view.id
+                                    ? `Potvrdi brisanje pogleda ${view.name}`
+                                    : `Obriši pogled ${view.name}`
+                                }
+                                onClick={() => {
+                                  if (pendingDeleteViewId === view.id) {
+                                    void deleteView(view);
+                                  } else {
+                                    setPendingDeleteViewId(view.id ?? null);
+                                  }
+                                }}
+                                className="border-l border-border/60 px-2 text-danger transition hover:bg-danger/5"
+                              >
+                                {pendingDeleteViewId === view.id ? (
+                                  <span className="text-xs">Potvrdi</span>
+                                ) : (
+                                  <Trash2 className="size-4" aria-hidden />
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-ink-500">
+                        Snimite kombinaciju filtera i kolona kao lični pogled.
+                      </p>
+                    )}
+                  </section>
+
+                  {module.notes?.length ? (
+                    <section className="mt-4 border-t border-border/60 pt-4">
+                      <h2 className="text-sm font-medium text-ink-900">
+                        Napomene iz specifikacije
+                      </h2>
+                      <ul className="mt-3 space-y-2 text-sm text-ink-600">
+                        {module.notes.map((note) => (
+                          <li key={note}>{note}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </div>
 
@@ -1386,9 +1503,9 @@ export function ErpGrid({
             </div>
           ) : null}
 
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100vh-14rem)] overflow-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-muted-bg/70 text-xs uppercase tracking-[0.12em] text-ink-500">
+              <thead className="sticky top-0 z-20 bg-muted-bg text-xs uppercase tracking-[0.12em] text-ink-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
                   <th className="w-10 px-3 py-3 text-center">
                     <Checkbox
@@ -1800,117 +1917,6 @@ export function ErpGrid({
           </div>
         </div>
 
-        <aside className="space-y-5">
-          <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <Settings2 className="size-4 text-ink-500" aria-hidden />
-              <h2 className="text-sm font-medium text-ink-900">Kolone</h2>
-            </div>
-            <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
-              {columnOrder
-                .map((key) => module.columns.find((column) => column.key === key))
-                .filter((column): column is ErpColumn => Boolean(column))
-                .map((column) => (
-                  <label
-                    key={column.key}
-                    draggable
-                    onDragStart={() => setDraggedColumn(column.key)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (draggedColumn) moveColumn(draggedColumn, column.key);
-                      setDraggedColumn(null);
-                    }}
-                    onDragEnd={() => setDraggedColumn(null)}
-                    className={cn(
-                      "flex cursor-grab items-center gap-2 rounded-lg px-1 py-1 text-sm text-ink-700 transition hover:bg-muted-bg",
-                      draggedColumn === column.key && "opacity-40",
-                    )}
-                  >
-                    <GripVertical className="size-3.5 text-ink-300" aria-hidden />
-                    <Checkbox
-                      checked={visibleColumns.includes(column.key)}
-                      onCheckedChange={() => toggleColumn(column.key)}
-                    />
-                    <span>{column.label}</span>
-                  </label>
-                ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <Eye className="size-4 text-ink-500" aria-hidden />
-              <h2 className="text-sm font-medium text-ink-900">Pogledi</h2>
-            </div>
-            {views.length ? (
-              <div className="space-y-2">
-                {views.map((view) => (
-                  <div
-                    key={view.id ?? view.name}
-                    className="flex overflow-hidden rounded-lg border border-border/60"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => applyView(view)}
-                      className="min-w-0 flex-1 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
-                    >
-                      {view.name}
-                    </button>
-                    {view.id ? (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={
-                            pendingDeleteViewId === view.id
-                              ? `Potvrdi brisanje pogleda ${view.name}`
-                              : `Obriši pogled ${view.name}`
-                          }
-                          onClick={() => {
-                            if (pendingDeleteViewId === view.id) void deleteView(view);
-                            else setPendingDeleteViewId(view.id ?? null);
-                          }}
-                          className="border-l border-border/60 px-2 text-danger transition hover:bg-danger/5"
-                        >
-                          {pendingDeleteViewId === view.id ? (
-                            <span className="text-xs">Potvrdi</span>
-                          ) : (
-                            <Trash2 className="size-4" aria-hidden />
-                          )}
-                        </button>
-                        {pendingDeleteViewId === view.id ? (
-                          <button
-                            type="button"
-                            aria-label={`Otkaži brisanje pogleda ${view.name}`}
-                            onClick={() => setPendingDeleteViewId(null)}
-                            className="border-l border-border/60 px-2 text-xs text-ink-500 transition hover:bg-muted-bg"
-                          >
-                            Otkaži
-                          </button>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-ink-500">
-                Snimite kombinaciju filtera i kolona kao lični pogled.
-              </p>
-            )}
-          </div>
-
-          {module.notes?.length ? (
-            <div className="rounded-2xl border border-border/60 bg-muted-bg/40 p-4">
-              <h2 className="text-sm font-medium text-ink-900">Napomene iz specifikacije</h2>
-              <ul className="mt-3 space-y-2 text-sm text-ink-600">
-                {module.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </aside>
       </div>
       </fieldset>
     </div>

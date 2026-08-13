@@ -40,6 +40,7 @@ import {
 import { validateNewArticleImportRequiredFields } from "@/lib/admin/article-import-required";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
+import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -727,14 +728,49 @@ export async function POST(request: Request) {
   const existingSkus = seenSkus.size
     ? await db.product.findMany({
         where: { sku: { in: Array.from(seenSkus) } },
-        select: { sku: true },
+        select: {
+          sku: true,
+          containerQty: true,
+          unitPackWidthCm: true,
+          unitPackDepthCm: true,
+          unitPackHeightCm: true,
+        },
       })
     : [];
   const existingSkuSet = new Set(existingSkus.map((product) => product.sku));
+  const existingVolumeSourceBySku = new Map(
+    existingSkus.map((product) => [product.sku, product]),
+  );
   for (const row of rows) {
-    if (row.sku && existingSkuSet.has(row.sku)) continue;
-    for (const issue of validateNewArticleImportRequiredFields(row)) {
-      errors.push({ row: row.row, field: issue.field, message: issue.message });
+    if (!(row.sku && existingSkuSet.has(row.sku))) {
+      for (const issue of validateNewArticleImportRequiredFields(row)) {
+        errors.push({ row: row.row, field: issue.field, message: issue.message });
+      }
+    }
+    const existing = row.sku
+      ? existingVolumeSourceBySku.get(row.sku)
+      : undefined;
+    const prospectiveVolumeSource = {
+      containerQty: headers.has("containerQty")
+        ? row.containerQty
+        : existing?.containerQty ?? null,
+      unitPackWidthCm: headers.has("unitPackWidthCm")
+        ? row.unitPackWidthCm
+        : Number(existing?.unitPackWidthCm ?? 0),
+      unitPackDepthCm: headers.has("unitPackDepthCm")
+        ? row.unitPackDepthCm
+        : Number(existing?.unitPackDepthCm ?? 0),
+      unitPackHeightCm: headers.has("unitPackHeightCm")
+        ? row.unitPackHeightCm
+        : Number(existing?.unitPackHeightCm ?? 0),
+    };
+    if (!hasProductVolumeSource(prospectiveVolumeSource)) {
+      errors.push({
+        row: row.row,
+        field: "containerQty",
+        message:
+          "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
+      });
     }
   }
   if (errors.length) {
@@ -776,6 +812,9 @@ export async function POST(request: Request) {
   const importsPurchaseOrderLogistics = [
     "weightKg",
     "grossWeightKg",
+    "unitPackWidthCm",
+    "unitPackDepthCm",
+    "unitPackHeightCm",
     "packQty",
     "packWidthCm",
     "packDepthCm",

@@ -11,10 +11,10 @@ import {
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
-  it("requires the linked purchase order to be posted before invoice locking", () => {
+  it("requires the linked purchase order to be posted before invoice cost booking", () => {
     expect(() =>
       assertInboundInvoicePurchaseOrderLocked({ lockedAt: null }),
-    ).toThrow(/mora prvo da bude proknjižena/);
+    ).toThrow(/mora da bude proknjižena/);
     expect(() =>
       assertInboundInvoicePurchaseOrderLocked({ lockedAt: new Date() }),
     ).not.toThrow();

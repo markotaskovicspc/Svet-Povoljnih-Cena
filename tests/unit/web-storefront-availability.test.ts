@@ -41,6 +41,7 @@ describe("web storefront availability rollout", () => {
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
+        articleStatus: "SP",
       }),
     ).toBe(true);
   });
@@ -68,6 +69,7 @@ describe("web storefront availability rollout", () => {
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
+        dcAvailableQty: 1,
         supplier: { integrationKey: null, enabled: true },
       }),
     ).toBe(true);
@@ -87,6 +89,15 @@ describe("web storefront availability rollout", () => {
         availableWebAuto: false,
       }),
     ).toBe(false);
+    expect(
+      isProductAvailableOnWeb({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        articleStatus: "SP",
+        dcAvailableQty: 0,
+      }),
+    ).toBe(true);
   });
 
   it("enforces the Rabalux minimum-10 rule even while global auto availability is off", () => {
@@ -149,6 +160,7 @@ describe("web storefront availability rollout", () => {
         availableWebManual: true,
         availableWebAuto: false,
         supplier: { integrationKey: null, enabled: true },
+        dcAvailableQty: 1,
         hasActiveRetailPrice: false,
         familyStorefrontEnabled: false,
       }),
@@ -158,13 +170,25 @@ describe("web storefront availability rollout", () => {
     ]);
   });
 
-  it("does not treat ordinary zero stock as a publication blocker", () => {
+  it("shows only SP without stock and requires positive quantity for other statuses", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
     expect(
       storefrontPublicationBlockers({
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
+        supplier: { integrationKey: null, enabled: true },
+        hasActiveRetailPrice: true,
+        familyStorefrontEnabled: null,
+      }),
+    ).toEqual(["Nema pozitivnu raspoloživu količinu"]);
+    expect(
+      storefrontPublicationBlockers({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        articleStatus: "SP",
+        dcAvailableQty: 0,
         supplier: { integrationKey: null, enabled: true },
         hasActiveRetailPrice: true,
         familyStorefrontEnabled: null,

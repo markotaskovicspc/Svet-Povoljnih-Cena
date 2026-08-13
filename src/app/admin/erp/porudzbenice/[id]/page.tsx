@@ -15,8 +15,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   addPurchaseOrderItem,
   changePurchaseOrderStatus,
-  postPurchaseOrder,
-  receivePurchaseOrder,
   recomputePurchaseOrderTotals,
   sendPurchaseOrder,
   updatePurchaseOrderItem,
@@ -76,7 +74,6 @@ const headerSchema = z.object({
   poId: z.string().min(1),
   supplierId: z.string().min(1, "Izaberite dobavljača."),
   loadingLocationId: z.string().min(1, "Izaberite mesto utovara."),
-  receivingWarehouseId: z.string().min(1, "Izaberite magacin za prijem."),
   transportTypeId: z.string().min(1, "Izaberite tip transporta."),
   orderDate: z.iso.date(),
   loadingDate: z.union([z.iso.date(), z.literal("")]),
@@ -120,12 +117,11 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           error: "Proknjižena porudžbenica je zaključana za izmene.",
         };
       }
-      const [supplier, loadingLocation, warehouse, transport] = await Promise.all([
+      const [supplier, loadingLocation, transport] = await Promise.all([
         db.supplier.findUnique({ where: { id: data.supplierId } }),
         db.supplierLoadingLocation.findUnique({
           where: { id: data.loadingLocationId },
         }),
-        db.warehouse.findUnique({ where: { id: data.receivingWarehouseId } }),
         db.transportType.findUnique({ where: { id: data.transportTypeId } }),
       ]);
       if (!supplier?.enabled) {
@@ -136,9 +132,6 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           ok: false as const,
           error: "Mesto utovara ne pripada izabranom dobavljaču.",
         };
-      }
-      if (!warehouse?.active) {
-        return { ok: false as const, error: "Izabrani magacin nije aktivan." };
       }
       if (!transport?.active) {
         return { ok: false as const, error: "Izabrani tip transporta nije aktivan." };
@@ -173,7 +166,6 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
         data: {
           supplierId: supplier.id,
           loadingLocationId: loadingLocation.id,
-          receivingWarehouseId: warehouse.id,
           transportTypeId: transport.id,
           transportType: transport.name,
           orderDate,
@@ -309,22 +301,6 @@ async function statusAction(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-async function postAction(_state: AdminActionState, formData: FormData) {
-  "use server";
-  return withAdminState(
-    { allowed: ["OPS"], action: "po.post", entity: "PurchaseOrder" },
-    async (actorId, actionData: FormData) => {
-      const id = String(actionData.get("poId") ?? "");
-      await postPurchaseOrder(id, actorId);
-      revalidatePath(`/admin/erp/porudzbenice/${id}`);
-      revalidatePath("/admin/erp/porudzbenice");
-      revalidatePath("/admin/erp/ulazne-fakture");
-      revalidatePath("/admin/erp/artikli");
-      return { ok: true as const, entityId: id };
-    },
-  )(formData);
-}
-
 async function sendAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
@@ -339,20 +315,6 @@ async function sendAction(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
-async function receiveAction(_state: AdminActionState, formData: FormData) {
-  "use server";
-  return withAdminState(
-    { allowed: ["OPS"], action: "po.receive", entity: "PurchaseOrder" },
-    async (actorId, actionData: FormData) => {
-      const id = String(actionData.get("poId") ?? "");
-      await receivePurchaseOrder(id, actorId);
-      revalidatePath(`/admin/erp/porudzbenice/${id}`);
-      revalidatePath("/admin/erp/porudzbenice");
-      return { ok: true as const, entityId: id };
-    },
-  )(formData);
-}
-
 export default async function PurchaseOrderEditorPage({
   params,
 }: {
@@ -360,13 +322,12 @@ export default async function PurchaseOrderEditorPage({
 }) {
   await requireAdminAction(["OPS"]);
   const { id } = await params;
-  const [order, suppliers, warehouses, transports, products] = await Promise.all([
+  const [order, suppliers, transports, products] = await Promise.all([
     db.purchaseOrder.findUnique({
       where: { id },
       include: {
         supplier: { include: { loadingLocations: { orderBy: { position: "asc" } } } },
         loadingLocation: true,
-        receivingWarehouse: true,
         transportDefinition: true,
         items: {
           orderBy: { createdAt: "asc" },
@@ -394,10 +355,6 @@ export default async function PurchaseOrderEditorPage({
       where: { enabled: true },
       orderBy: { name: "asc" },
       include: { loadingLocations: { orderBy: { position: "asc" } } },
-    }),
-    db.warehouse.findMany({
-      where: { active: true },
-      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     }),
     db.transportType.findMany({
       where: { active: true },
@@ -461,23 +418,16 @@ export default async function PurchaseOrderEditorPage({
             >
               Vezani dokumenti
             </Link>
-            {!locked ? (
-              <AdminActionForm action={postAction}>
-                <input type="hidden" name="poId" value={order.id} />
-                <SubmitButton
-                  variant="outline"
-                  confirm="Proknjižiti i zaključati porudžbenicu?"
-                  pendingLabel="Knjiženje…"
-                >
-                  Proknjiži porudžbenicu
-                </SubmitButton>
-              </AdminActionForm>
-            ) : null}
             <AdminActionForm action={sendAction}>
               <input type="hidden" name="poId" value={order.id} />
               <SubmitButton
                 variant="outline"
                 pendingLabel="Slanje…"
+                confirm={
+                  capacityWarnings.length
+                    ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da pošaljete porudžbenicu?`
+                    : undefined
+                }
                 disabled={
                   order.status === PurchaseOrderStatus.RECEIVED ||
                   order.status === PurchaseOrderStatus.CANCELLED
@@ -486,27 +436,14 @@ export default async function PurchaseOrderEditorPage({
                 Pošalji dobavljaču
               </SubmitButton>
             </AdminActionForm>
-            {locked &&
-            (order.status === PurchaseOrderStatus.SENT ||
-              order.status === PurchaseOrderStatus.CONFIRMED) ? (
-              <AdminActionForm action={receiveAction}>
-                <input type="hidden" name="poId" value={order.id} />
-                <SubmitButton
-                  confirm="Primiti celu porudžbenicu u izabrani magacin i ažurirati COGS?"
-                  pendingLabel="Prijem…"
-                >
-                  Primi u magacin
-                </SubmitButton>
-              </AdminActionForm>
-            ) : null}
           </div>
         }
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
         {capacityWarnings.length ? (
-          <div role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
-            <p className="font-semibold">Kapacitet transporta je prekoračen:</p>
+          <div role="status" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            <p className="font-semibold">Informativno upozorenje — kapacitet transporta je prekoračen:</p>
             <ul className="mt-1 list-disc pl-5">
               {capacityWarnings.map((warning) => (
                 <li key={warning}>{warning}</li>
@@ -517,7 +454,7 @@ export default async function PurchaseOrderEditorPage({
 
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(620px,0.9fr)_minmax(0,1.1fr)]">
           <Card>
-            <CardTitle description="Dobavljački podaci, rokovi, transport, valute i magacin za prijem.">
+            <CardTitle description="Dobavljački podaci, rokovi, transport i valute. Magacin prijema bira se na ulaznoj fakturi.">
               Zaglavlje
             </CardTitle>
             {locked ? (
@@ -587,21 +524,6 @@ export default async function PurchaseOrderEditorPage({
                 </Field>
                 <Field label="Datum isporuke" hint="Automatski: datum utovara + tranzit, odnosno datum porudžbine + rok isporuke.">
                   <Input value={dtLocal(order.deliveryDate)} readOnly />
-                </Field>
-                <Field label="Magacin za prijem">
-                  <select
-                    name="receivingWarehouseId"
-                    required
-                    defaultValue={order.receivingWarehouseId ?? ""}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                  >
-                    <option value="">— izaberite —</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name} ({warehouse.code}){warehouse.isDefault ? " · podrazumevani" : ""}
-                      </option>
-                    ))}
-                  </select>
                 </Field>
                 <Field label="Tip transporta">
                   <select

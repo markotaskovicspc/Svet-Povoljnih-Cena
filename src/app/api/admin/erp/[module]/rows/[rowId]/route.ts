@@ -53,6 +53,7 @@ import {
 } from "@/lib/admin/customer-master";
 import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
+import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -71,6 +72,9 @@ const currencyFromUi: Record<string, ErpCurrency> = {
 const PURCHASE_ORDER_LOGISTICS_COLUMNS = new Set([
   "weightKg",
   "grossWeightKg",
+  "unitPackWidthCm",
+  "unitPackDepthCm",
+  "unitPackHeightCm",
   "packQty",
   "packWidthCm",
   "packDepthCm",
@@ -445,6 +449,47 @@ async function persistProductCell(
       return null;
   }
   await db.$transaction(async (tx) => {
+    if (
+      [
+        "unitPackWidthCm",
+        "unitPackDepthCm",
+        "unitPackHeightCm",
+        "containerQty",
+      ].includes(columnKey)
+    ) {
+      const current = await tx.product.findUniqueOrThrow({
+        where: { id: rowId },
+        select: {
+          containerQty: true,
+          unitPackWidthCm: true,
+          unitPackDepthCm: true,
+          unitPackHeightCm: true,
+        },
+      });
+      const prospective = {
+        containerQty:
+          "containerQty" in data
+            ? (data.containerQty as number | null)
+            : current.containerQty,
+        unitPackWidthCm:
+          "unitPackWidthCm" in data
+            ? Number(data.unitPackWidthCm ?? 0)
+            : Number(current.unitPackWidthCm ?? 0),
+        unitPackDepthCm:
+          "unitPackDepthCm" in data
+            ? Number(data.unitPackDepthCm ?? 0)
+            : Number(current.unitPackDepthCm ?? 0),
+        unitPackHeightCm:
+          "unitPackHeightCm" in data
+            ? Number(data.unitPackHeightCm ?? 0)
+            : Number(current.unitPackHeightCm ?? 0),
+      };
+      if (!hasProductVolumeSource(prospective)) {
+        throw new Error(
+          "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
+        );
+      }
+    }
     await tx.product.update({ where: { id: rowId }, data });
     if (["shortName", "name", "shortDescription"].includes(columnKey)) {
       const product = await tx.product.findUniqueOrThrow({

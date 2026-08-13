@@ -16,11 +16,13 @@ import {
   calculateDeliveryDate,
   calculatePurchaseOrderFinancials,
   calculateUnitLogistics,
+  canReceivePurchaseOrder,
   isPackQuantityValid,
   PURCHASE_ORDER_EMAIL_BODY,
-  purchaseOrderCapacityWarnings,
   purchaseOrderEmailSubject,
 } from "@/lib/admin/purchase-order";
+
+export { canReceivePurchaseOrder } from "@/lib/admin/purchase-order";
 
 const PURCHASE_ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   DRAFT: "U obradi",
@@ -110,6 +112,9 @@ export async function addPurchaseOrderItem(input: {
       colorSecondary: true,
       weightKg: true,
       grossWeightKg: true,
+      unitPackWidthCm: true,
+      unitPackDepthCm: true,
+      unitPackHeightCm: true,
       packQty: true,
       packWidthCm: true,
       packDepthCm: true,
@@ -182,6 +187,9 @@ export async function addPurchaseOrderItem(input: {
   const logistics = calculateUnitLogistics({
     containerQty: product.containerQty,
     containerGrossWeightKg: Number(product.containerGrossWeightKg ?? 0),
+    unitPackWidthCm: Number(product.unitPackWidthCm ?? 0),
+    unitPackDepthCm: Number(product.unitPackDepthCm ?? 0),
+    unitPackHeightCm: Number(product.unitPackHeightCm ?? 0),
     packQty: product.packQty,
     weightKg: Number(product.weightKg ?? 0),
     grossWeightKg: Number(product.grossWeightKg ?? 0),
@@ -294,6 +302,9 @@ export async function updatePurchaseOrderItem(input: {
           packQty: true,
           weightKg: true,
           grossWeightKg: true,
+          unitPackWidthCm: true,
+          unitPackDepthCm: true,
+          unitPackHeightCm: true,
           packWidthCm: true,
           packDepthCm: true,
           packHeightCm: true,
@@ -311,6 +322,9 @@ export async function updatePurchaseOrderItem(input: {
   const logistics = calculateUnitLogistics({
     containerQty: item.product?.containerQty,
     containerGrossWeightKg: Number(item.product?.containerGrossWeightKg ?? 0),
+    unitPackWidthCm: Number(item.product?.unitPackWidthCm ?? 0),
+    unitPackDepthCm: Number(item.product?.unitPackDepthCm ?? 0),
+    unitPackHeightCm: Number(item.product?.unitPackHeightCm ?? 0),
     packQty: item.product?.packQty,
     weightKg: Number(item.product?.weightKg ?? 0),
     grossWeightKg: Number(item.product?.grossWeightKg ?? 0),
@@ -342,7 +356,6 @@ export async function postPurchaseOrder(id: string, actorId: string) {
       items: true,
       supplier: true,
       loadingLocation: true,
-      receivingWarehouse: true,
       transportDefinition: true,
     },
   });
@@ -351,7 +364,6 @@ export async function postPurchaseOrder(id: string, actorId: string) {
   if (!order.supplier) throw new Error("Izaberite dobavljača pre knjiženja.");
   if (!order.items.length) throw new Error("Porudžbenica mora imati bar jednu stavku.");
   if (!order.loadingLocation) throw new Error("Izaberite mesto utovara pre knjiženja.");
-  if (!order.receivingWarehouse) throw new Error("Izaberite magacin za prijem pre knjiženja.");
   if (!order.transportDefinition) throw new Error("Izaberite tip transporta pre knjiženja.");
   const invalidPacks = order.items.filter(
     (item) => !isPackQuantityValid(item.qty, item.packQty),
@@ -361,19 +373,6 @@ export async function postPurchaseOrder(id: string, actorId: string) {
       `Količina nije deljiva pakovanjem: ${invalidPacks.map((item) => item.sku).join(", ")}.`,
     );
   }
-  const warnings = purchaseOrderCapacityWarnings({
-    totalVolumeM3: Number(order.totalVolume ?? 0),
-    totalWeightKg: Number(order.totalWeight ?? 0),
-    payloadM3:
-      order.transportDefinition.payloadM3 == null
-        ? null
-        : Number(order.transportDefinition.payloadM3),
-    payloadKg:
-      order.transportDefinition.payloadKg == null
-        ? null
-        : Number(order.transportDefinition.payloadKg),
-  });
-  if (warnings.length) throw new Error(warnings.join(" "));
   const now = new Date();
   return db.$transaction(async (tx) => {
     const updated = await tx.purchaseOrder.update({
@@ -477,17 +476,6 @@ export function weightedAverageUnitCost(input: {
   );
 }
 
-export function canReceivePurchaseOrder(input: {
-  status: PurchaseOrderStatus;
-  lockedAt: Date | null;
-}) {
-  return (
-    input.lockedAt !== null &&
-    (input.status === PurchaseOrderStatus.SENT ||
-      input.status === PurchaseOrderStatus.CONFIRMED)
-  );
-}
-
 type LandedCostLine = {
   id: string;
   purchasePrice: number;
@@ -566,7 +554,6 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
     include: {
       supplier: true,
       loadingLocation: true,
-      receivingWarehouse: true,
       transportDefinition: true,
       items: { orderBy: { createdAt: "asc" } },
     },
@@ -587,9 +574,6 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
   if (!order.loadingLocation) {
     throw new Error("Izaberite mesto utovara pre slanja porudžbenice.");
   }
-  if (!order.receivingWarehouse) {
-    throw new Error("Izaberite magacin za prijem pre slanja porudžbenice.");
-  }
   if (!order.transportDefinition) {
     throw new Error("Izaberite tip transporta pre slanja porudžbenice.");
   }
@@ -601,19 +585,6 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       `Količina nije deljiva pakovanjem: ${invalidPacks.map((item) => item.sku).join(", ")}.`,
     );
   }
-  const warnings = purchaseOrderCapacityWarnings({
-    totalVolumeM3: Number(order.totalVolume ?? 0),
-    totalWeightKg: Number(order.totalWeight ?? 0),
-    payloadM3:
-      order.transportDefinition?.payloadM3 == null
-        ? null
-        : Number(order.transportDefinition.payloadM3),
-    payloadKg:
-      order.transportDefinition?.payloadKg == null
-        ? null
-        : Number(order.transportDefinition.payloadKg),
-  });
-  if (warnings.length) throw new Error(warnings.join(" "));
   const pdf = buildPurchaseOrderPdf({
     ...order,
     freightCost: Number(order.freightCost),
@@ -742,7 +713,7 @@ export async function receivePurchaseOrder(
   }
   if (!canReceivePurchaseOrder(order)) {
     throw new Error(
-      "Prijem je dozvoljen samo za proknjiženu porudžbenicu koja je poslata ili potvrđena.",
+      "Prijem je dozvoljen samo za proknjiženu porudžbenicu koja nije otkazana ili već primljena.",
     );
   }
   const incomplete = order.items.flatMap((item) => {
@@ -764,7 +735,13 @@ export async function receivePurchaseOrder(
       where: {
         id,
         lockedAt: { not: null },
-        status: { in: [PurchaseOrderStatus.SENT, PurchaseOrderStatus.CONFIRMED] },
+        status: {
+          in: [
+            PurchaseOrderStatus.DRAFT,
+            PurchaseOrderStatus.SENT,
+            PurchaseOrderStatus.CONFIRMED,
+          ],
+        },
       },
       data: { status: PurchaseOrderStatus.RECEIVED },
     });
@@ -890,6 +867,9 @@ export async function recomputePurchaseOrderTotals(id: string) {
               packQty: true,
               weightKg: true,
               grossWeightKg: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
               packWidthCm: true,
               packDepthCm: true,
               packHeightCm: true,
@@ -917,6 +897,9 @@ export async function recomputePurchaseOrderTotals(id: string) {
       containerGrossWeightKg: Number(
         item.product.containerGrossWeightKg ?? 0,
       ),
+      unitPackWidthCm: Number(item.product.unitPackWidthCm ?? 0),
+      unitPackDepthCm: Number(item.product.unitPackDepthCm ?? 0),
+      unitPackHeightCm: Number(item.product.unitPackHeightCm ?? 0),
       packQty: item.product.packQty,
       weightKg: Number(item.product.weightKg ?? 0),
       grossWeightKg: Number(item.product.grossWeightKg ?? 0),

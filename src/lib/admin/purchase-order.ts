@@ -1,3 +1,5 @@
+import type { PurchaseOrderStatus } from "@prisma/client";
+
 export type PurchaseOrderLineCalculationInput = {
   id: string;
   qty: number;
@@ -56,6 +58,9 @@ export function calculateDeliveryDate(input: {
 export function calculateUnitLogistics(input: {
   containerQty?: number | null;
   containerGrossWeightKg?: number | null;
+  unitPackWidthCm?: number | null;
+  unitPackDepthCm?: number | null;
+  unitPackHeightCm?: number | null;
   packQty?: number | null;
   grossWeightKg?: number | null;
   weightKg?: number | null;
@@ -67,21 +72,22 @@ export function calculateUnitLogistics(input: {
   const containerQty =
     input.containerQty && input.containerQty > 0 ? input.containerQty : null;
   const packQty = input.packQty && input.packQty > 0 ? input.packQty : null;
-  const packDimensions = [
-    input.packWidthCm ?? 0,
-    input.packDepthCm ?? 0,
-    input.packHeightCm ?? 0,
+  const unitPackDimensions = [
+    input.unitPackWidthCm ?? 0,
+    input.unitPackDepthCm ?? 0,
+    input.unitPackHeightCm ?? 0,
   ];
-  const hasCompleteTransportPackage =
-    packQty !== null &&
-    packDimensions.every((dimension) => Number.isFinite(dimension) && dimension > 0);
+  const hasCompleteUnitPackage = unitPackDimensions.every(
+    (dimension) => Number.isFinite(dimension) && dimension > 0,
+  );
   const volumeM3 =
     containerQty
       ? STANDARD_CONTAINER_VOLUME_M3 / containerQty
-      : hasCompleteTransportPackage
-        ? (packDimensions[0] * packDimensions[1] * packDimensions[2]) /
-          1_000_000 /
-          packQty
+      : hasCompleteUnitPackage
+        ? (unitPackDimensions[0] *
+            unitPackDimensions[1] *
+            unitPackDimensions[2]) /
+          1_000_000
         : 0;
   const weightPackQty = packQty ?? 1;
   const weightKg =
@@ -96,6 +102,36 @@ export function calculateUnitLogistics(input: {
     volumeM3: round(volumeM3, 6),
     weightKg: round(weightKg, 6),
   };
+}
+
+/** Client rule: either a full-container quantity or all unit-package dimensions. */
+export function hasProductVolumeSource(input: {
+  containerQty?: number | null;
+  unitPackWidthCm?: number | null;
+  unitPackDepthCm?: number | null;
+  unitPackHeightCm?: number | null;
+}) {
+  if (input.containerQty != null && input.containerQty > 0) return true;
+  return [
+    input.unitPackWidthCm,
+    input.unitPackDepthCm,
+    input.unitPackHeightCm,
+  ].every(
+    (dimension) =>
+      dimension != null && Number.isFinite(dimension) && dimension > 0,
+  );
+}
+
+export function canReceivePurchaseOrder(input: {
+  status: PurchaseOrderStatus;
+  lockedAt: Date | null;
+}) {
+  return (
+    input.lockedAt !== null &&
+    (input.status === "DRAFT" ||
+      input.status === "SENT" ||
+      input.status === "CONFIRMED")
+  );
 }
 
 /**
