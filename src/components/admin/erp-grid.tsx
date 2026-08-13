@@ -292,8 +292,11 @@ export function ErpGrid({
   const [sorting, setSorting] = useState<AdminGridSort[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
   const [cellEdits, setCellEdits] = useState<Record<string, Record<string, ErpValue>>>({});
+  // Keep the server render and the first client render identical. Reading a
+  // saved browser-only order in the state initializer changes the rendered
+  // <th> sequence during hydration and makes React discard the server tree.
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
-    readColumnOrder(module.slug, module.columns),
+    module.columns.map((column) => column.key),
   );
   const [views, setViews] = useState<SavedView[]>([]);
   const [showSaveViewForm, setShowSaveViewForm] = useState(false);
@@ -349,6 +352,13 @@ export function ErpGrid({
     setPage(1);
     setVisibleColumns(value);
   };
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setColumnOrder(readColumnOrder(module.slug, module.columns));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [module.columns, module.slug]);
 
   useEffect(() => {
     let cancelled = false;

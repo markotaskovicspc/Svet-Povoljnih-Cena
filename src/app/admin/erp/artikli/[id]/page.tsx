@@ -27,6 +27,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { ProductCategorySelector } from "@/components/admin/product-category-selector";
 import { ProductNewnessField } from "@/components/admin/product-newness-field";
+import { ProductUnitPackagingFields } from "@/components/admin/product-unit-packaging-fields";
 import {
   ProductAttachmentsEditor,
   type EditableProductAttachment,
@@ -90,10 +91,6 @@ import {
 } from "@/lib/product-family.server";
 import { defaultProductFamilyLabel } from "@/lib/product-family";
 import { isProductColorLabel } from "@/lib/product-colors";
-import {
-  deliveryCategory,
-  packageVolumetricDimension,
-} from "@/lib/delivery-tariff";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
 
 export const dynamic = "force-dynamic";
@@ -1404,15 +1401,6 @@ export default async function ProductDetail({
     },
     deliveryWindows,
   );
-  const unitPackageDimensions = [
-    num(product.unitPackWidthCm),
-    num(product.unitPackDepthCm),
-    num(product.unitPackHeightCm),
-  ] as const;
-  const unitPackageDeliveryCategory = deliveryCategory(unitPackageDimensions);
-  const volumetricDimension = unitPackageDeliveryCategory
-    ? packageVolumetricDimension(unitPackageDimensions)
-    : null;
   const editableAttachments: EditableProductAttachment[] = product.attachments
     .filter((attachment) => attachment.section !== "GENERAL")
     .map((attachment) => ({
@@ -1995,37 +1983,18 @@ export default async function ProductDetail({
                 <Input name="grossWeightKg" type="number" min={0} step="0.001" defaultValue={product.grossWeightKg ? num(product.grossWeightKg) : ""} />
               </Field>
             </div>
-            <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
-              <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
-                Pakovanje pojedinačnog artikla
-              </legend>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <Field label="Širina (cm)">
-                  <Input name="unitPackWidthCm" type="number" min={0} step="0.01" defaultValue={product.unitPackWidthCm ? num(product.unitPackWidthCm) : ""} />
-                </Field>
-                <Field label="Dubina (cm)">
-                  <Input name="unitPackDepthCm" type="number" min={0} step="0.01" defaultValue={product.unitPackDepthCm ? num(product.unitPackDepthCm) : ""} />
-                </Field>
-                <Field label="Visina (cm)">
-                  <Input name="unitPackHeightCm" type="number" min={0} step="0.01" defaultValue={product.unitPackHeightCm ? num(product.unitPackHeightCm) : ""} />
-                </Field>
-                <Field label="Volumetrijska dimenzija">
-                  <Input
-                    readOnly
-                    value={
-                      volumetricDimension === null
-                        ? "Dopunite dimenzije"
-                        : `${volumetricDimension.toLocaleString("sr-Latn-RS")} cm`
-                    }
-                  />
-                  <p className="mt-1 text-xs text-ink-500">
-                    {unitPackageDeliveryCategory
-                      ? `Kategorija ${unitPackageDeliveryCategory === 1 ? "I" : "II"}`
-                      : "Najveća + 2 × druga + 2 × treća dimenzija"}
-                  </p>
-                </Field>
-              </div>
-            </fieldset>
+            <ProductUnitPackagingFields
+              key={product.id}
+              widthCm={
+                product.unitPackWidthCm ? num(product.unitPackWidthCm) : null
+              }
+              depthCm={
+                product.unitPackDepthCm ? num(product.unitPackDepthCm) : null
+              }
+              heightCm={
+                product.unitPackHeightCm ? num(product.unitPackHeightCm) : null
+              }
+            />
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Transportno pakovanje

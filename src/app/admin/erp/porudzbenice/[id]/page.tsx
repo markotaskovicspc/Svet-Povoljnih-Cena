@@ -745,7 +745,14 @@ export default async function PurchaseOrderEditorPage({
                         <td className="px-3 py-2">
                           {photo ? (
                             <Link href={`/admin/erp/artikli/${item.productId}#mediji`}>
-                              <Image src={photo} alt="" width={48} height={48} className="size-12 rounded-md object-cover" />
+                              <Image
+                                src={photo}
+                                alt=""
+                                width={48}
+                                height={48}
+                                style={{ width: 48, height: 48, maxWidth: "none" }}
+                                className="rounded-md object-cover"
+                              />
                             </Link>
                           ) : "—"}
                         </td>

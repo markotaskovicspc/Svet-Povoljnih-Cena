@@ -26,6 +26,7 @@ if (baseUrl.port === "6543") {
   );
 }
 const schema = `inbound_invoice_e2e_${Date.now()}_${randomBytes(3).toString("hex")}`;
+const e2eDistDir = ".next-erp-e2e";
 const testUrl = new URL(baseUrl);
 testUrl.searchParams.set("schema", schema);
 const childEnv = {
@@ -36,13 +37,14 @@ const childEnv = {
   E2E_REMOTE_DATABASE_ACK: "I_UNDERSTAND_THIS_WILL_MUTATE_DATA",
   EMAIL_PROVIDER: "none",
   E2E_INBOUND_INVOICES: "1",
+  NEXT_DIST_DIR: e2eDistDir,
 };
 
 let exitCode = 1;
 try {
   // Prisma's generated runtime shape is bundled by Next dev. A previous local
   // bundle can otherwise survive a schema change and exercise stale fields.
-  rmSync(resolve(process.cwd(), ".next", "dev"), {
+  rmSync(resolve(process.cwd(), e2eDistDir), {
     recursive: true,
     force: true,
   });
