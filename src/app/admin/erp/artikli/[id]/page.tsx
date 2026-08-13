@@ -1994,6 +1994,7 @@ export default async function ProductDetail({
               heightCm={
                 product.unitPackHeightCm ? num(product.unitPackHeightCm) : null
               }
+              palletQty={product.palletQty}
             />
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
@@ -2002,9 +2003,6 @@ export default async function ProductDetail({
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
                 <Field label="Kom/pak">
                   <Input name="packQty" type="number" min={0} defaultValue={product.packQty ?? ""} />
-                </Field>
-                <Field label="Komada na paleti">
-                  <Input name="palletQty" type="number" min={1} step={1} defaultValue={product.palletQty ?? ""} />
                 </Field>
                 <Field label="Širina (cm)">
                   <Input name="packWidthCm" type="number" min={0} step="0.01" defaultValue={product.packWidthCm ? num(product.packWidthCm) : ""} />

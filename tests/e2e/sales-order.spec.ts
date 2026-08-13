@@ -1,6 +1,7 @@
 // Acceptance: SALE-01
 // Acceptance: SALE-02
 // Acceptance: CRM-01
+import ExcelJS from "exceljs";
 import { expect as baseExpect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -46,6 +47,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
   let createdWarehouse = false;
   let dcProductId = "";
   let supplierProductId = "";
+  let dispatchId = "";
   let orderId: string | null = null;
   let webOrderId: string | null = null;
   let webOrderNumber = "";
@@ -163,6 +165,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
           attribute4: "A4",
           colorPrimary: "Plava",
           colorSecondary: "Bela",
+          palletQty: 48,
         },
         select: { id: true },
       }),
@@ -314,6 +317,78 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await expect(page.getByLabel("Firma koja prima", { exact: true })).toContainText(
         fixture.uiCompany,
       );
+    });
+
+    await test.step("otpremnica preuzima i prikazuje komade na paleti u UI, bazi, Excelu i PDF-u", async () => {
+      await page.getByLabel("Firma koja izdaje", { exact: true }).selectOption(
+        uiCompanyId,
+      );
+      await page.getByLabel("Firma koja prima", { exact: true }).selectOption(
+        customerId,
+      );
+      await page.getByLabel("Magacin iz kog se izdaje").selectOption(
+        dcWarehouseId,
+      );
+      await page.getByLabel("Cenovnik otpremnice").selectOption(priceListId);
+      await page.getByLabel("Šifra artikla red 1").fill(fixture.dcSku);
+      await page.getByRole("button", { name: "Učitaj", exact: true }).click();
+
+      const draftRow = page.getByRole("row").filter({
+        has: page.getByLabel("Šifra artikla red 1"),
+      });
+      await expect(draftRow.getByText("48", { exact: true })).toBeVisible();
+      await expect(
+        page.getByRole("columnheader", { name: "Kom/paleta", exact: true }),
+      ).toBeVisible();
+      await page.getByLabel("Količina red 1").fill("2");
+      await page.getByLabel("Registarska oznaka vozila").fill("BG-QA-48");
+      await page.getByRole("button", { name: "Kreiraj otpremnicu" }).click();
+      await expect(page).toHaveURL(
+        /\/admin\/erp\/otpremnice\/(?!nova$)[^/?]+$/,
+      );
+      dispatchId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+      expect(dispatchId).not.toBe("");
+
+      const storedDispatch = await db.dispatchNote.findUniqueOrThrow({
+        where: { id: dispatchId },
+        include: { items: true },
+      });
+      expect(storedDispatch.items).toHaveLength(1);
+      expect(storedDispatch.items[0]).toMatchObject({
+        sku: fixture.dcSku,
+        qty: 2,
+        palletQty: 48,
+      });
+
+      const savedRow = page.getByRole("row").filter({
+        has: page.getByLabel("Šifra artikla red 1"),
+      });
+      await expect(savedRow.getByText("48", { exact: true })).toBeVisible();
+
+      const excelResponse = await page.request.get(
+        `/api/admin/dispatch-notes/${dispatchId}/excel`,
+      );
+      expect(excelResponse.status()).toBe(200);
+      expect(excelResponse.headers()["content-type"]).toContain(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load((await excelResponse.body()) as never);
+      const itemsSheet = workbook.getWorksheet("Stavke");
+      expect(itemsSheet).toBeDefined();
+      const headerValues = itemsSheet!.getRow(1).values;
+      const palletColumn = Array.isArray(headerValues)
+        ? headerValues.findIndex((value) => value === "Komada na paleti")
+        : -1;
+      expect(palletColumn).toBeGreaterThan(0);
+      expect(itemsSheet!.getRow(2).getCell(palletColumn).value).toBe(48);
+
+      const pdfResponse = await page.request.get(
+        `/api/admin/dispatch-notes/${dispatchId}/pdf`,
+      );
+      expect(pdfResponse.status()).toBe(200);
+      expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+      expect((await pdfResponse.body()).byteLength).toBeGreaterThan(1_000);
     });
 
     await test.step("pregled sadrži sve zahtevane komande i kolone", async () => {
@@ -698,6 +773,10 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
 
   async function cleanup() {
     if (!db) return;
+    if (dispatchId) {
+      await db.dispatchNote.deleteMany({ where: { id: dispatchId } });
+      dispatchId = "";
+    }
     await db.order.deleteMany({
       where: {
         OR: [

@@ -18,10 +18,12 @@ export function ProductUnitPackagingFields({
   widthCm,
   depthCm,
   heightCm,
+  palletQty,
 }: {
   widthCm: number | null;
   depthCm: number | null;
   heightCm: number | null;
+  palletQty: number | null;
 }) {
   const [dimensions, setDimensions] = useState<Record<DimensionKey, string>>({
     width: initialDimension(widthCm),
@@ -70,10 +72,19 @@ export function ProductUnitPackagingFields({
       <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
         Pakovanje pojedinačnog artikla
       </legend>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {dimensionInput("width", "unitPackWidthCm", "Širina (cm)")}
         {dimensionInput("depth", "unitPackDepthCm", "Dubina (cm)")}
         {dimensionInput("height", "unitPackHeightCm", "Visina (cm)")}
+        <Field label="Komada na paleti">
+          <Input
+            name="palletQty"
+            type="number"
+            min={1}
+            step={1}
+            defaultValue={palletQty ?? ""}
+          />
+        </Field>
         <Field label="Volumetrijska dimenzija">
           <Input
             readOnly

@@ -233,6 +233,101 @@ test.describe("article master acceptance", () => {
     }
   });
 
+  test("groups, calculates and persists individual packaging data", async ({
+    context,
+    page,
+  }) => {
+    await context.addCookies([
+      {
+        name: "spc_cookie_consent",
+        value: "essential",
+        url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3107",
+      },
+    ]);
+    await login(page);
+    await page.goto(`/admin/erp/artikli/${productId}`, { waitUntil: "load" });
+
+    const productForm = page
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Sačuvaj izmene" }) });
+    const unitPackagingFieldset = productForm.locator("fieldset").filter({
+      hasText: "Pakovanje pojedinačnog artikla",
+    });
+    const transportPackagingFieldset = productForm.locator("fieldset").filter({
+      hasText: "Transportno pakovanje",
+    });
+    const palletInput = unitPackagingFieldset.locator(
+      'input[name="palletQty"]',
+    );
+
+    await expect(unitPackagingFieldset).toHaveCount(1);
+    await expect(palletInput).toHaveCount(1);
+    await expect(palletInput).toHaveAttribute("min", "1");
+    await expect(palletInput).toHaveAttribute("step", "1");
+    await expect(
+      transportPackagingFieldset.locator('input[name="palletQty"]'),
+    ).toHaveCount(0);
+
+    await unitPackagingFieldset
+      .locator('input[name="unitPackWidthCm"]')
+      .fill("31.5");
+    await unitPackagingFieldset
+      .locator('input[name="unitPackDepthCm"]')
+      .fill("22.25");
+    await unitPackagingFieldset
+      .locator('input[name="unitPackHeightCm"]')
+      .fill("11");
+    await palletInput.fill("48");
+    await expect(
+      unitPackagingFieldset.getByLabel("Volumetrijska dimenzija"),
+    ).toHaveValue("98 cm");
+
+    await productForm.getByRole("button", { name: "Sačuvaj izmene" }).click();
+    await expect(productForm.getByRole("status")).toContainText(
+      "Proizvod je sačuvan.",
+      { timeout: 120_000 },
+    );
+    await expect
+      .poll(
+        () =>
+          db.product.findUniqueOrThrow({
+            where: { id: productId },
+            select: {
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
+              palletQty: true,
+            },
+          }),
+        { timeout: 120_000 },
+      )
+      .toMatchObject({ palletQty: 48 });
+    const stored = await db.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: {
+        unitPackWidthCm: true,
+        unitPackDepthCm: true,
+        unitPackHeightCm: true,
+      },
+    });
+    expect([
+      Number(stored.unitPackWidthCm),
+      Number(stored.unitPackDepthCm),
+      Number(stored.unitPackHeightCm),
+    ]).toEqual([31.5, 22.25, 11]);
+
+    await page.reload({ waitUntil: "load" });
+    const reloadedPackaging = page.locator("fieldset").filter({
+      hasText: "Pakovanje pojedinačnog artikla",
+    });
+    await expect(reloadedPackaging.locator('input[name="palletQty"]')).toHaveValue(
+      "48",
+    );
+    await expect(
+      reloadedPackaging.getByLabel("Volumetrijska dimenzija"),
+    ).toHaveValue("98 cm");
+  });
+
   test("edits the full card, calculates stock/channels and imports XLSX", async ({
     context,
     page,
