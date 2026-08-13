@@ -43,6 +43,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
   let priceListId = "";
   let purchaseOrderId = "";
   let invoiceId = "";
+  let duplicateInvoiceId = "";
   const pageErrors: string[] = [];
 
   test.beforeAll(async () => {
@@ -374,6 +375,64 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       ).toContainText("170");
     });
 
+    await test.step("a linked purchase order cannot be selected or forced onto another invoice", async () => {
+      await page
+        .locator("header")
+        .getByRole("button", { name: "Nova", exact: true })
+        .click();
+      await expect
+        .poll(() => new URL(page.url()).pathname.split("/").at(-1))
+        .not.toBe(invoiceId);
+      await expect(page).toHaveURL(
+        /\/admin\/erp\/ulazne-fakture\/[^?]+\?mode=edit$/,
+      );
+      duplicateInvoiceId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+      expect(duplicateInvoiceId).not.toBe("");
+
+      const form = page.locator("form").filter({
+        has: page.getByRole("button", { name: "Sačuvaj", exact: true }),
+      });
+      const purchaseOrderSelect = form.locator('[name="purchaseOrderId"]');
+      await expect(
+        purchaseOrderSelect.locator(`option[value="${purchaseOrderId}"]`),
+      ).toHaveCount(0);
+
+      await expect(
+        db.inboundInvoice.create({
+          data: {
+            number: `QA-UF-DUP-${runId}`,
+            purchaseOrderId,
+          },
+        }),
+      ).rejects.toMatchObject({ code: "P2002" });
+
+      await form.locator('[name="number"]').fill(`QA-UF-FORCED-${runId}`);
+      await form.locator('[name="warehouseId"]').selectOption(warehouseId);
+      await purchaseOrderSelect.evaluate((element, orderId) => {
+        const select = element as HTMLSelectElement;
+        select.append(new Option("Prinudno poslata porudžbenica", orderId));
+        select.value = orderId;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }, purchaseOrderId);
+      await form.locator('[name="supplierId"]').evaluate((element, id) => {
+        (element as HTMLInputElement).value = id;
+      }, supplierId);
+      await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+      await expect(form.getByRole("alert")).toContainText(
+        "već povezana sa ulaznom fakturom",
+      );
+      await expect
+        .poll(async () =>
+          (
+            await db.inboundInvoice.findUniqueOrThrow({
+              where: { id: duplicateInvoiceId },
+              select: { purchaseOrderId: true },
+            })
+          ).purchaseOrderId,
+        )
+        .toBeNull();
+    });
+
     await test.step("double click opens the invoice and Uredi persists a change", async () => {
       await page.goto("/admin/erp/ulazne-fakture", {
         waitUntil: "domcontentloaded",
@@ -414,6 +473,45 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
           ).notes,
         )
         .toBe("QA trošak transporta i špedicije");
+    });
+
+    await test.step("a receipt blocker does not partially post the invoice or order", async () => {
+      await db.productCategory.deleteMany({ where: { productId } });
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
+      await expect(
+        page.getByRole("alert").filter({
+          hasText: "Prijem je blokiran dok se ne dopune obavezni podaci",
+        }),
+      ).toBeVisible();
+
+      const [invoice, order, product, movements] = await Promise.all([
+        db.inboundInvoice.findUniqueOrThrow({
+          where: { id: invoiceId },
+          select: { status: true, lockedAt: true },
+        }),
+        db.purchaseOrder.findUniqueOrThrow({
+          where: { id: purchaseOrderId },
+          select: { status: true, lockedAt: true, postedAt: true },
+        }),
+        db.product.findUniqueOrThrow({
+          where: { id: productId },
+          select: { stock: true, cogs: true },
+        }),
+        db.stockMovement.count({ where: { productId } }),
+      ]);
+      expect(invoice).toMatchObject({ status: "RECEIVED", lockedAt: null });
+      expect(order).toMatchObject({
+        status: "DRAFT",
+        lockedAt: null,
+        postedAt: null,
+      });
+      expect(product.stock).toBe(100);
+      expect(Number(product.cogs)).toBe(200);
+      expect(movements).toBe(0);
+
+      await db.productCategory.create({ data: { productId, categoryId } });
+      await page.reload({ waitUntil: "domcontentloaded" });
     });
 
     await test.step("Proknjiži completes invoice, order and warehouse receipt idempotently", async () => {
@@ -543,8 +641,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
 
   async function cleanup() {
     if (!db) return;
-    if (invoiceId) {
-      await db.inboundInvoice.deleteMany({ where: { id: invoiceId } });
+    const invoiceIds = [invoiceId, duplicateInvoiceId].filter(Boolean);
+    if (invoiceIds.length) {
+      await db.inboundInvoice.deleteMany({ where: { id: { in: invoiceIds } } });
     }
     if (purchaseOrderId) {
       await db.purchaseOrder.deleteMany({ where: { id: purchaseOrderId } });

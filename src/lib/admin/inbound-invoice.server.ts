@@ -138,7 +138,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   if (!current) throw new Error("Ulazna faktura ne postoji.");
   if (current.lockedAt) throw new Error("Proknjižena faktura se ne može menjati.");
 
-  const [purchaseOrder, warehouse] = await Promise.all([
+  const [purchaseOrder, warehouse, linkedInvoice] = await Promise.all([
     db.purchaseOrder.findUnique({
       where: { id: input.purchaseOrderId },
       select: {
@@ -151,6 +151,13 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       where: { id: input.warehouseId },
       select: { id: true, active: true },
     }),
+    db.inboundInvoice.findFirst({
+      where: {
+        purchaseOrderId: input.purchaseOrderId,
+        id: { not: input.id },
+      },
+      select: { number: true },
+    }),
   ]);
   if (!purchaseOrder || purchaseOrder.status === PurchaseOrderStatus.CANCELLED) {
     throw new Error("Izabrana porudžbenica nije dostupna.");
@@ -160,6 +167,11 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   }
   if (!warehouse?.active) {
     throw new Error("Izaberite aktivan magacin prijema.");
+  }
+  if (linkedInvoice) {
+    throw new Error(
+      `Porudžbenica je već povezana sa ulaznom fakturom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom ulaznom fakturom.`,
+    );
   }
 
   try {
@@ -200,6 +212,18 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
     return db.inboundInvoice.findUniqueOrThrow({ where: { id: input.id } });
   } catch (error) {
     if (isPrismaUniqueError(error)) {
+      const linkedInvoice = await db.inboundInvoice.findFirst({
+        where: {
+          purchaseOrderId: input.purchaseOrderId,
+          id: { not: input.id },
+        },
+        select: { number: true },
+      });
+      if (linkedInvoice) {
+        throw new Error(
+          `Porudžbenica je u međuvremenu povezana sa ulaznom fakturom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom ulaznom fakturom.`,
+        );
+      }
       throw new Error(`Faktura sa brojem ${number} već postoji.`);
     }
     throw error;
@@ -302,9 +326,14 @@ export async function postInboundInvoice(id: string, actorId: string) {
     throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
   }
 
-  const { postPurchaseOrder, receivePurchaseOrder } = await import(
+  const {
+    assertPurchaseOrderGoodsReceiptMasterReady,
+    postPurchaseOrder,
+    receivePurchaseOrder,
+  } = await import(
     "@/lib/admin/po"
   );
+  await assertPurchaseOrderGoodsReceiptMasterReady(invoice.purchaseOrderId);
   await db.purchaseOrder.update({
     where: { id: invoice.purchaseOrderId },
     data: { receivingWarehouseId: invoice.warehouseId },
@@ -360,9 +389,10 @@ export async function rebuildInboundInvoiceAllocations(
           product: { select: { id: true, stock: true, cogs: true } },
         },
       },
-      inboundInvoices: {
-        where: { lockedAt: { not: null }, status: InboundInvoiceStatus.POSTED },
+      inboundInvoice: {
         select: {
+          lockedAt: true,
+          status: true,
           netValue: true,
           exchangeRate: true,
           invoiceValueRsd: true,
@@ -386,12 +416,20 @@ export async function rebuildInboundInvoiceAllocations(
       defaults.invoiceValueRsd +
       defaults.customsValueRsd +
       defaults.transportValueRsd,
-    invoices: order.inboundInvoices.map((linked) => ({
-      netValue: Number(linked.netValue),
-      exchangeRate: Number(linked.exchangeRate),
-      invoiceValueRsd:
-        linked.invoiceValueRsd == null ? null : Number(linked.invoiceValueRsd),
-    })),
+    invoices:
+      order.inboundInvoice?.lockedAt &&
+      order.inboundInvoice.status === InboundInvoiceStatus.POSTED
+        ? [
+            {
+              netValue: Number(order.inboundInvoice.netValue),
+              exchangeRate: Number(order.inboundInvoice.exchangeRate),
+              invoiceValueRsd:
+                order.inboundInvoice.invoiceValueRsd == null
+                  ? null
+                  : Number(order.inboundInvoice.invoiceValueRsd),
+            },
+          ]
+        : [],
   });
   const allocations = allocateInvoiceCostsByOrderValue(
     linkedCostRsd,
@@ -437,7 +475,10 @@ export async function rebuildInboundInvoiceAllocations(
     return;
   }
 
-  const hasPostedInvoice = order.inboundInvoices.length > 0;
+  const hasPostedInvoice = Boolean(
+    order.inboundInvoice?.lockedAt &&
+      order.inboundInvoice.status === InboundInvoiceStatus.POSTED,
+  );
   let snapshot = readCogsBookingSnapshot(order.cogsBookingSnapshot);
   if (order.cogsBookedAt && !snapshot) {
     throw new Error(

@@ -661,6 +661,66 @@ function escapeHtml(value: string) {
  * receipt calculates it only for legacy/orders without a posted invoice.
  * Idempotent — a PO already RECEIVED is skipped.
  */
+export async function assertPurchaseOrderGoodsReceiptMasterReady(id: string) {
+  const order = await db.purchaseOrder.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      items: {
+        select: {
+          qty: true,
+          sku: true,
+          product: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              description: true,
+              supplierId: true,
+              countryOfOrigin: true,
+              hsCode: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              grossWeightKg: true,
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              packGrossWeightKg: true,
+              categories: { select: { categoryId: true } },
+              priceListEntries: {
+                where: {
+                  price: { gt: 0 },
+                  validFrom: { lte: new Date() },
+                  OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+                  priceList: { kind: "RETAIL", active: true },
+                },
+                take: 1,
+                select: { id: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!order) throw new Error("Porudžbenica ne postoji.");
+  if (order.status === PurchaseOrderStatus.RECEIVED) return;
+
+  const incomplete = order.items.flatMap((item) => {
+    if (item.qty <= 0) return [];
+    if (!item.product) return [`${item.sku}: artikal nije povezan sa masterom`];
+    const issues = goodsReceiptMasterIssues(item.product);
+    return issues.length ? [`${item.sku}: ${issues.join(", ")}`] : [];
+  });
+  if (incomplete.length) {
+    throw new Error(
+      `Prijem je blokiran dok se ne dopune obavezni podaci u masteru artikla: ${incomplete.join("; ")}.`,
+    );
+  }
+}
+
 export async function receivePurchaseOrder(
   id: string,
   actorId: string,

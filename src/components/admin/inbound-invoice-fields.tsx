@@ -111,7 +111,7 @@ export function InboundInvoiceFields({
       </Field>
       <Field
         label="Veza sa dokumentom"
-        hint="Izbor porudžbenice popunjava dobavljača i prve tri vrednosti."
+        hint="Prikazane su samo porudžbenice koje nisu povezane sa drugom ulaznom fakturom. Izbor popunjava dobavljača i prve tri vrednosti."
       >
         <select
           name="purchaseOrderId"

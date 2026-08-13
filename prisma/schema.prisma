@@ -2142,7 +2142,7 @@ model PurchaseOrder {
   transportDefinition TransportType?             @relation(fields: [transportTypeId], references: [id], onDelete: SetNull)
   items               PurchaseOrderItem[]
   events              PurchaseOrderStatusEvent[]
-  inboundInvoices     InboundInvoice[]
+  inboundInvoice      InboundInvoice?
 
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
@@ -2203,7 +2203,7 @@ model InboundInvoice {
   number          String               @unique
   type            InboundInvoiceType   @default(COGS)
   supplierId      String?
-  purchaseOrderId String?
+  purchaseOrderId String?              @unique
   warehouseId     String?
   status          InboundInvoiceStatus @default(DRAFT)
   invoiceDate     DateTime?
@@ -2231,7 +2231,6 @@ model InboundInvoice {
 
   @@index([supplierId, invoiceDate])
   @@index([status, invoiceDate])
-  @@index([purchaseOrderId])
   @@index([warehouseId])
 }
 

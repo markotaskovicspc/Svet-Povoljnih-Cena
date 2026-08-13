@@ -78,7 +78,7 @@ try {
           productId: { not: null },
           purchaseOrder: {
             status: { notIn: ["RECEIVED", "CANCELLED"] },
-            inboundInvoices: { some: { status: { in: ["RECEIVED", "POSTED"] } } },
+            inboundInvoice: { is: { status: { in: ["RECEIVED", "POSTED"] } } },
           },
         },
         select: {

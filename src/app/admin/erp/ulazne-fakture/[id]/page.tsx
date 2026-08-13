@@ -226,7 +226,7 @@ export default async function InboundInvoicePage({
                 },
               },
             },
-            inboundInvoices: {
+            inboundInvoice: {
               select: {
                 id: true,
                 number: true,
@@ -242,7 +242,13 @@ export default async function InboundInvoicePage({
       },
     }),
     db.purchaseOrder.findMany({
-      where: { status: { not: PurchaseOrderStatus.CANCELLED } },
+      where: {
+        status: { not: PurchaseOrderStatus.CANCELLED },
+        OR: [
+          { inboundInvoice: { is: null } },
+          { inboundInvoice: { is: { id } } },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       take: 1000,
       select: {
@@ -285,6 +291,13 @@ export default async function InboundInvoicePage({
       invoice.purchaseOrder.status !== PurchaseOrderStatus.RECEIVED &&
       !invoice.purchaseOrder.cogsBookedAt,
   );
+  const receiptNeedsCompletion = Boolean(
+    locked &&
+      !cancelled &&
+      invoice.purchaseOrder &&
+      invoice.purchaseOrder.status !== PurchaseOrderStatus.RECEIVED &&
+      invoice.purchaseOrder.cogsBookedAt,
+  );
   const editing = query.mode === "edit" && !immutable;
   const capacityWarnings = invoice.purchaseOrder
     ? purchaseOrderCapacityWarnings({
@@ -321,13 +334,9 @@ export default async function InboundInvoicePage({
       };
     },
   );
-  const relevantInvoices =
-    invoice.purchaseOrder?.inboundInvoices
-      .filter(
-        (linked) =>
-          linked.id === invoice.id ||
-          (linked.lockedAt && linked.status === InboundInvoiceStatus.POSTED),
-      ) ?? [];
+  const relevantInvoices = invoice.purchaseOrder?.inboundInvoice
+    ? [invoice.purchaseOrder.inboundInvoice]
+    : [];
   const purchaseOrderDefaults = invoice.purchaseOrder
     ? calculatePurchaseOrderInvoiceDefaults({
         exchangeRate: Number(invoice.purchaseOrder.exchangeRate),
@@ -429,18 +438,28 @@ export default async function InboundInvoicePage({
               <SubmitButton
                 disabled={
                   cancelled ||
-                  (locked && !cogsNeedsBackfill)
+                  (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
                 }
                 confirm={
                   cogsNeedsBackfill
                     ? "Uskladiti COGS ove ranije proknjižene fakture?"
+                    : receiptNeedsCompletion
+                      ? "Knjiženje fakture i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
                     : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti ulaznu fakturu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
                 }
                 pendingLabel={
-                  cogsNeedsBackfill ? "Usklađivanje COGS-a…" : "Knjiženje…"
+                  cogsNeedsBackfill
+                    ? "Usklađivanje COGS-a…"
+                    : receiptNeedsCompletion
+                      ? "Dovršavanje prijema…"
+                      : "Knjiženje…"
                 }
               >
-                {cogsNeedsBackfill ? "Uskladi COGS" : "Proknjiži"}
+                {cogsNeedsBackfill
+                  ? "Uskladi COGS"
+                  : receiptNeedsCompletion
+                    ? "Dovrši prijem"
+                    : "Proknjiži"}
               </SubmitButton>
             </AdminActionForm>
             <AdminActionForm action={cancelAction}>
@@ -484,6 +503,10 @@ export default async function InboundInvoicePage({
           {cancelled ? (
             <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">
               Faktura je stornirana i više ne učestvuje u COGS-u ni količini u dolasku.
+            </p>
+          ) : receiptNeedsCompletion ? (
+            <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+              Faktura i porudžbenica su proknjižene, ali prijem robe nije završen. Izaberite „Dovrši prijem” posle dopune obaveznih podataka artikla.
             </p>
           ) : cogsNeedsBackfill ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
