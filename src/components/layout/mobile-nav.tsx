@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Home,
   Menu,
-  Search,
   User2,
   X,
 } from "lucide-react";
@@ -30,7 +29,9 @@ import {
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
+import type { MobileSearchContent } from "@/types/mobile-search";
 import { InstantSearch } from "./instant-search";
+import { MobileSearchSheet } from "./mobile-search-sheet";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { getCategoryMenuImage } from "./category-menu-image";
 
@@ -74,9 +75,11 @@ const mobileMenuShortcutTabs = [
 export function MobileNav({
   tabs,
   categories,
+  mobileSearchContent,
 }: {
   tabs: Tab[];
   categories: NavNode[];
+  mobileSearchContent: MobileSearchContent;
 }) {
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
@@ -84,7 +87,6 @@ export function MobileNav({
   const [stack, setStack] = useState<Crumb[]>([
     { label: "Sve kategorije", nodes: categories },
   ]);
-  const [searchOpen, setSearchOpen] = useState(false);
   const shortcutTabs = tabs.length ? tabs : mobileMenuShortcutTabs;
 
   const current = stack[stack.length - 1];
@@ -101,7 +103,6 @@ export function MobileNav({
 
   const close = () => {
     setOpen(false);
-    setSearchOpen(false);
     setTimeout(
       () => setStack([{ label: "Sve kategorije", nodes: categories }]),
       250,
@@ -437,35 +438,7 @@ export function MobileNav({
         </SheetContent>
       </Sheet>
 
-      <Sheet open={searchOpen} onOpenChange={setSearchOpen}>
-        <SheetTrigger
-          aria-label="Pretraži"
-          className="hover:bg-muted-bg inline-flex size-10 -translate-x-1.5 items-center justify-center rounded-full text-ink-700 hover:text-ink-900"
-        >
-          <Search className="size-5" aria-hidden />
-        </SheetTrigger>
-        {/*
-         * Fullscreen mobile search overlay (per spec: search must take the
-         * whole screen). The Sheet is forced to 100vh + full width via
-         * `w-screen h-[100dvh]` and side="top".
-         */}
-        <SheetContent
-          side="top"
-          className="!inset-0 !h-[100dvh] !w-screen !max-w-none gap-0 overflow-hidden rounded-none border-0 p-0"
-        >
-          <SheetHeader className="shrink-0 border-b border-border bg-surface px-4 py-3">
-            <SheetTitle className="font-display text-base text-ink-900">
-              Pretraga
-            </SheetTitle>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-surface p-4">
-            <InstantSearch
-              presentation="inline"
-              onNavigate={() => setSearchOpen(false)}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+      <MobileSearchSheet content={mobileSearchContent} />
     </div>
   );
 }

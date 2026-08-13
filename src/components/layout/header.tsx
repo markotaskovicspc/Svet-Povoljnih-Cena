@@ -14,6 +14,7 @@ import { MobileNav } from "./mobile-nav";
 import { DesktopMenu } from "./desktop-menu";
 import { BRAND } from "@/lib/brand";
 import type { NavNode } from "@/data/site";
+import type { MobileSearchContent } from "@/types/mobile-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 
 const SCROLL_THRESHOLD = 16;
@@ -21,9 +22,11 @@ const SCROLL_THRESHOLD = 16;
 export function Header({
   tabs,
   categories,
+  mobileSearchContent,
 }: {
   tabs: Tab[];
   categories: NavNode[];
+  mobileSearchContent: MobileSearchContent;
 }) {
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
@@ -120,6 +123,7 @@ export function Header({
         <MobileNav
           tabs={tabs}
           categories={categories}
+          mobileSearchContent={mobileSearchContent}
         />
         <Link
           href="/"

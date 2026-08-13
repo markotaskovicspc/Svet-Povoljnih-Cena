@@ -2,32 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { Search, ArrowRight, FolderTree, Layers3, Loader2 } from "lucide-react";
-import type { SearchHit, SearchSuggestion } from "@/types/search";
-import { formatRsd } from "@/lib/format";
+import { Search, ArrowRight, Loader2 } from "lucide-react";
+import type { SearchSuggestion } from "@/types/search";
 import { cn } from "@/lib/utils";
+import { SearchSuggestionRow } from "./search-suggestion-row";
+import {
+  searchSuggestFailureMessage,
+  useSearchSuggestions,
+} from "./use-search-suggestions";
 
 interface InstantSearchProps {
   className?: string;
   presentation?: "dropdown" | "inline";
   onNavigate?: () => void;
 }
-
-interface SuggestResponse {
-  hits?: SearchSuggestion[];
-}
-
-type SuggestFailure = "rate_limited" | "timeout" | "unavailable";
-
-class SearchSuggestHttpError extends Error {
-  constructor(readonly status: number) {
-    super(`Search suggest failed with status ${status}.`);
-    this.name = "SearchSuggestHttpError";
-  }
-}
-
-const SEARCH_SUGGEST_TIMEOUT_MS = 8_000;
 
 export function InstantSearch({
   className,
@@ -36,77 +24,18 @@ export function InstantSearch({
 }: InstantSearchProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [results, setResults] = useState<SearchSuggestion[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<SuggestFailure | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const queryTrimmed = query.trim();
-
-  // Debounce query → debounced (150ms)
-  useEffect(() => {
-    if (queryTrimmed.length < 3) return;
-    const id = window.setTimeout(() => {
-      setDebounced(queryTrimmed);
-    }, 150);
-    return () => window.clearTimeout(id);
-  }, [queryTrimmed]);
-
-  useEffect(() => {
-    if (!debounced) return;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    let live = true;
-    let timedOut = false;
-    const timeoutId = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, SEARCH_SUGGEST_TIMEOUT_MS);
-
-    fetch(`/api/search/suggest?q=${encodeURIComponent(debounced)}&limit=6`, {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new SearchSuggestHttpError(response.status);
-        return response.json() as Promise<SuggestResponse>;
-      })
-      .then((data) => {
-        if (live) {
-          setActiveIndex(0);
-          setResults(Array.isArray(data.hits) ? data.hits : []);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!live) return;
-        if (controller.signal.aborted && !timedOut) return;
-        setResults([]);
-        setFailure(
-          timedOut
-            ? "timeout"
-            : error instanceof SearchSuggestHttpError && error.status === 429
-              ? "rate_limited"
-              : "unavailable",
-        );
-      })
-      .finally(() => {
-        window.clearTimeout(timeoutId);
-        if (live && !controller.signal.aborted) setPending(false);
-        if (live && timedOut) setPending(false);
-      });
-
-    return () => {
-      live = false;
-      window.clearTimeout(timeoutId);
-      controller.abort();
-      if (abortRef.current === controller) abortRef.current = null;
-    };
-  }, [debounced, retryToken]);
+  const {
+    query,
+    queryTrimmed,
+    results,
+    pending,
+    failure,
+    setQuery,
+    retry: retrySearch,
+  } = useSearchSuggestions(6);
 
   // Cmd-K / Ctrl-K to focus
   useEffect(() => {
@@ -152,15 +81,6 @@ export function InstantSearch({
     [onNavigate, router],
   );
 
-  const retrySearch = useCallback(() => {
-    if (queryTrimmed.length < 3) return;
-    abortRef.current?.abort();
-    setFailure(null);
-    setResults([]);
-    setPending(true);
-    setRetryToken((token) => token + 1);
-  }, [queryTrimmed]);
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       if (!open) return;
@@ -193,13 +113,7 @@ export function InstantSearch({
         </div>
       ) : failure ? (
         <div className="space-y-3 px-4 py-5 text-sm text-ink-600" role="status">
-          <p>
-            {failure === "rate_limited"
-              ? "Previše brzih pretraga. Sačekajte trenutak pa pokušajte ponovo."
-              : failure === "timeout"
-                ? "Pretraga traje duže nego obično. Pokušajte ponovo ili pritisnite Enter."
-                : "Predlozi trenutno nisu dostupni. Pokušajte ponovo ili pritisnite Enter."}
-          </p>
+          <p>{searchSuggestFailureMessage(failure)}</p>
           <button
             type="button"
             onClick={retrySearch}
@@ -238,41 +152,16 @@ export function InstantSearch({
             )}
           >
             {results.map((hit, i) => (
-              <li key={hit.type === "product" ? hit.sku : `${hit.type}-${hit.id}`}>
-                <button
-                  type="button"
-                  onMouseEnter={() => setActiveIndex(i)}
-                  onClick={() => goHit(hit)}
-                  role="option"
-                  aria-selected={activeIndex === i}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-2 text-left transition",
-                    activeIndex === i ? "bg-muted-bg" : "hover:bg-muted-bg/60",
-                  )}
-                >
-                  <div className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-white text-walnut ring-1 ring-border/60">
-                    {hit.type === "product" && hit.thumbnailUrl ? (
-                      <Image
-                        src={hit.thumbnailUrl}
-                        alt=""
-                        fill
-                        sizes="48px"
-                        className="object-contain p-1"
-                      />
-                    ) : hit.type === "category" ? (
-                      <FolderTree className="size-5" aria-hidden />
-                    ) : hit.type === "group" ? (
-                      <Layers3 className="size-5" aria-hidden />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-ink-900">{hit.name}</div>
-                    <div className="truncate font-mono text-[11px] text-ink-500">
-                      {hit.breadcrumb}
-                    </div>
-                  </div>
-                  {hit.type === "product" ? <SearchHitPrices hit={hit} /> : null}
-                </button>
+              <li
+                key={hit.type === "product" ? hit.sku : `${hit.type}-${hit.id}`}
+                role="none"
+              >
+                <SearchSuggestionRow
+                  hit={hit}
+                  active={activeIndex === i}
+                  onActivate={() => setActiveIndex(i)}
+                  onSelect={() => goHit(hit)}
+                />
               </li>
             ))}
           </ul>
@@ -307,22 +196,9 @@ export function InstantSearch({
           value={query}
           onChange={(e) => {
             const nextQuery = e.target.value;
-            const nextTrimmed = nextQuery.trim();
-            const trimmedChanged = nextTrimmed !== queryTrimmed;
-            if (trimmedChanged) abortRef.current?.abort();
             setQuery(nextQuery);
             setOpen(true);
-            if (trimmedChanged) setActiveIndex(0);
-            if (nextTrimmed.length < 3) {
-              setDebounced("");
-              setResults([]);
-              setPending(false);
-              setFailure(null);
-            } else if (trimmedChanged) {
-              setResults([]);
-              setPending(true);
-              setFailure(null);
-            }
+            setActiveIndex(0);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
@@ -334,31 +210,6 @@ export function InstantSearch({
       </div>
 
       {panel}
-    </div>
-  );
-}
-
-function SearchHitPrices({ hit }: { hit: SearchHit }) {
-  const hasReducedPrice = Boolean(hit.actionPrice || hit.loyaltyPrice);
-  return (
-    <div className="shrink-0 text-right text-[11px] leading-tight">
-      {hasReducedPrice ? (
-        <div className="text-ink-400 line-through">{formatRsd(hit.fullPrice)}</div>
-      ) : (
-        <div className="text-sm font-semibold text-ink-900">
-          {formatRsd(hit.fullPrice)}
-        </div>
-      )}
-      {hit.actionPrice ? (
-        <div className="font-semibold text-action">
-          Akcija {formatRsd(hit.actionPrice)}
-        </div>
-      ) : null}
-      {hit.loyaltyPrice ? (
-        <div className="font-semibold text-walnut">
-          Loyalty {formatRsd(hit.loyaltyPrice)}
-        </div>
-      ) : null}
     </div>
   );
 }

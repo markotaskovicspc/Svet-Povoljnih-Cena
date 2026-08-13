@@ -11,6 +11,7 @@ import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
 import { getCmsFooterState } from "@/lib/cms/pages";
 import { primaryNav, type NavNode } from "@/data/site";
+import { getMobileSearchContent } from "@/lib/mobile-search/server";
 
 const gaId = getGa4MeasurementId();
 
@@ -39,11 +40,12 @@ function categoryNav(
  * Login and loyalty state are hydrated by the client session provider.
  */
 export async function StorefrontShell({ children }: { children: ReactNode }) {
-  const [activePromoBar, activeTabs, categoryTree, cmsFooter] = await Promise.all([
+  const [activePromoBar, activeTabs, categoryTree, cmsFooter, mobileSearchContent] = await Promise.all([
     getActivePromoBar(),
     getActiveTabs(),
     getCategoryTree(),
     getCmsFooterState(),
+    getMobileSearchContent(),
   ]);
   const categories = categoryTree.length
     ? categoryNav(categoryTree)
@@ -57,7 +59,7 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
           className="h-[max(env(safe-area-inset-top),1.5rem)] bg-white md:hidden"
         />
         {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
-        <Header tabs={activeTabs} categories={categories} />
+        <Header tabs={activeTabs} categories={categories} mobileSearchContent={mobileSearchContent} />
       </div>
       <main className="flex-1">{children}</main>
       <FirstPurchaseCta />
