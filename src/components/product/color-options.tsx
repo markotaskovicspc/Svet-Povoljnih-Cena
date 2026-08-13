@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
+import { getMediaVariantUrl } from "@/lib/media";
 import { isProductColorLabel } from "@/lib/product-colors";
 
 const COLOR_HEX: Record<string, string> = {
@@ -67,22 +69,6 @@ function colorSwatchStyle(colors: string[]) {
   };
 }
 
-function familyOptionColors(option: {
-  label: string;
-  colorHex?: string;
-  colorPrimary?: string;
-  colorSecondary?: string;
-}) {
-  const productColors = getProductColorOptions({
-    colorPrimary: option.colorPrimary,
-    colorSecondary: option.colorSecondary,
-  } as Product)[0];
-  if (productColors) return productColors.colors;
-  return [
-    option.colorHex ?? COLOR_HEX[option.label.toLowerCase()] ?? "#d8d4c8",
-  ];
-}
-
 function ColorSwatch({ colors, className }: { colors: string[]; className?: string }) {
   return (
     <span
@@ -94,6 +80,48 @@ function ColorSwatch({ colors, className }: { colors: string[]; className?: stri
       )}
       style={colorSwatchStyle(colors)}
     />
+  );
+}
+
+function ProductColorDisplay({
+  colors,
+  label,
+  showLabels,
+}: {
+  colors: ProductColorOption[];
+  label: string;
+  showLabels: boolean;
+}) {
+  if (!colors.length) return null;
+
+  const color = colors[0]!;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5"
+      aria-label={label}
+      data-product-colors
+    >
+      {showLabels ? (
+        <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
+      ) : null}
+      <span
+        title={color.label}
+        className={cn(
+          "inline-flex shrink-0 items-center rounded-full",
+          showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
+        )}
+      >
+        <ColorSwatch
+          colors={color.colors}
+          className={showLabels ? "size-3.5" : "size-full"}
+        />
+        {showLabels ? (
+          <span className="text-xs font-semibold text-ink-800">
+            {color.label}
+          </span>
+        ) : null}
+      </span>
+    </div>
   );
 }
 
@@ -116,117 +144,119 @@ export function ProductColorOptions({
 }) {
   const familyOptions = product.variantFamily?.options ?? [];
   const activeSku = selectedSku ?? product.variantFamily?.selectedSku ?? product.sku;
+  const colors = getProductColorOptions(product);
+
   if (familyOptions.length) {
-    const isColorFamily = familyOptions.some(
-      (option) =>
-        Boolean(option.colorHex) ||
-        Boolean(option.colorPrimary?.trim()) ||
-        Boolean(option.colorSecondary?.trim()),
-    );
-    const familyLabel = isColorFamily ? label : "Opcije proizvoda";
     const visibleOptions = familyOptions.slice(0, max);
     return (
-      <div
-        className={cn("flex flex-wrap items-center gap-2", className)}
-        aria-label={familyLabel}
-      >
-        {showLabels ? (
-          <span className="mr-0.5 text-xs font-medium text-ink-500">
-            {isColorFamily ? "Boja:" : "Varijanta:"}
-          </span>
-        ) : null}
-        {visibleOptions.map((option) => {
-          const selected = option.sku === activeSku;
-          const colors = familyOptionColors(option);
-          const content = (
-            <>
-              <ColorSwatch
-                colors={colors}
-                className={showLabels ? "size-5" : "size-3.5"}
-              />
-              {showLabels ? (
-                <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
-                  {option.label}
+      <div className={cn("grid gap-1.5", className)}>
+        <div
+          className="flex flex-wrap items-center gap-2"
+          aria-label="Opcije proizvoda"
+          data-product-variants
+        >
+          {showLabels ? (
+            <span className="basis-full text-xs font-medium text-ink-500 md:mr-0.5 md:basis-auto">
+              Varijanta:
+            </span>
+          ) : null}
+          {visibleOptions.map((option) => {
+            const selected = option.sku === activeSku;
+            const content = (
+              <>
+                <span
+                  className={cn(
+                    "relative block overflow-hidden rounded-md bg-white",
+                    showLabels ? "size-14" : "size-9",
+                  )}
+                  data-variant-thumbnail
+                >
+                  {option.thumbnail ? (
+                    <Image
+                      src={getMediaVariantUrl(option.thumbnail, "thumb")}
+                      alt=""
+                      fill
+                      sizes={showLabels ? "56px" : "36px"}
+                      className="object-contain p-0.5"
+                    />
+                  ) : (
+                    <span
+                      className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                      style={{
+                        backgroundColor:
+                          option.colorHex ??
+                          COLOR_HEX[option.label.toLowerCase()] ??
+                          "#d8d4c8",
+                      }}
+                    />
+                  )}
                 </span>
-              ) : null}
-            </>
-          );
-          const classes = cn(
-            "inline-flex shrink-0 items-center transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
-            showLabels ? "gap-2 rounded-full bg-muted-bg py-1 pr-2.5 pl-1" : "rounded-full",
-            selected
-              ? "ring-2 ring-brand-blue ring-offset-1"
-              : "ring-1 ring-transparent hover:ring-ink-500 hover:ring-offset-1",
-          );
-          const ariaLabel = `${option.label} — SKU ${option.sku}`;
-          return onSelectSku ? (
-            <button
-              key={option.sku}
-              type="button"
-              aria-label={ariaLabel}
-              aria-pressed={selected}
-              title={option.label}
-              onClick={() => onSelectSku(option.sku)}
-              className={classes}
-            >
-              {content}
-            </button>
-          ) : (
-            <Link
-              key={option.sku}
-              href={`/p/${option.slug}`}
-              aria-label={ariaLabel}
-              aria-current={selected ? "page" : undefined}
-              title={option.label}
-              className={classes}
-            >
-              {content}
-            </Link>
-          );
-        })}
-        {familyOptions.length > visibleOptions.length ? (
-          <span className="text-xs font-semibold text-ink-500">
-            +{familyOptions.length - visibleOptions.length}
-          </span>
-        ) : null}
+                {showLabels ? (
+                  <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
+                    {option.label}
+                  </span>
+                ) : null}
+              </>
+            );
+            const classes = cn(
+              "inline-flex shrink-0 items-center rounded-lg bg-white transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
+              showLabels ? "gap-2 p-1.5 pr-2.5" : "p-0.5",
+              selected
+                ? "ring-2 ring-brand-blue"
+                : "ring-1 ring-border hover:ring-ink-500",
+            );
+            const ariaLabel = `${option.label} — SKU ${option.sku}`;
+            return onSelectSku ? (
+              <button
+                key={option.sku}
+                type="button"
+                aria-label={ariaLabel}
+                aria-pressed={selected}
+                title={option.label}
+                onClick={() => onSelectSku(option.sku)}
+                className={classes}
+              >
+                {content}
+              </button>
+            ) : (
+              <Link
+                key={option.sku}
+                href={`/p/${option.slug}`}
+                aria-label={ariaLabel}
+                aria-current={selected ? "page" : undefined}
+                title={option.label}
+                className={classes}
+              >
+                {content}
+              </Link>
+            );
+          })}
+          {familyOptions.length > visibleOptions.length ? (
+            <span className="text-xs font-semibold text-ink-500">
+              +{familyOptions.length - visibleOptions.length}
+            </span>
+          ) : null}
+        </div>
+        <ProductColorDisplay
+          colors={colors}
+          label={label}
+          showLabels={showLabels}
+        />
       </div>
     );
   }
-
-  const colors = getProductColorOptions(product);
 
   if (!colors.length) {
     return <div className={cn("h-5", className)} aria-hidden />;
   }
 
   return (
-    <div
-      className={cn("flex flex-wrap items-center gap-1.5", className)}
-      aria-label={label}
-    >
-      {showLabels ? (
-        <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
-      ) : null}
-      {colors.slice(0, max).map((color) => (
-        <span
-          key={color.label}
-          title={color.label}
-          className={cn(
-            "inline-flex shrink-0 items-center rounded-full",
-            showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
-          )}
-        >
-          <ColorSwatch
-            colors={color.colors}
-            className={showLabels ? "size-3.5" : "size-full"}
-          />
-          {showLabels ? (
-            <span className="text-xs font-semibold text-ink-800">
-              {color.label}
-            </span>
-          ) : null}
-        </span>
-      ))}
+    <div className={className}>
+      <ProductColorDisplay
+        colors={colors}
+        label={label}
+        showLabels={showLabels}
+      />
     </div>
   );
 }

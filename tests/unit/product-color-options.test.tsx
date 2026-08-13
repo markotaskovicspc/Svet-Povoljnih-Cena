@@ -46,6 +46,7 @@ describe("PDP boje proizvoda", () => {
     const familyProduct = {
       ...product,
       sku: "SOFA-BLACK",
+      colorSecondary: undefined,
       variantFamily: {
         id: "family-1",
         code: "SOFA",
@@ -60,7 +61,8 @@ describe("PDP boje proizvoda", () => {
             colorHex: "#111111",
             position: 0,
             isPrimary: true,
-            media: { images: [] },
+            thumbnail: { url: "/products/sofa-black.webp" },
+            media: { images: [{ url: "/products/sofa-black.webp" }] },
             fullPrice: 100,
             stock: 1,
             incomingStock: 0,
@@ -74,7 +76,8 @@ describe("PDP boje proizvoda", () => {
             colorHex: "#228833",
             position: 1,
             isPrimary: false,
-            media: { images: [] },
+            thumbnail: { url: "/products/sofa-green.webp" },
+            media: { images: [{ url: "/products/sofa-green.webp" }] },
             fullPrice: 100,
             stock: 2,
             incomingStock: 0,
@@ -91,13 +94,19 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("Crna");
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
-    expect(markup.match(/data-color-count=/g)).toHaveLength(2);
+    expect(markup).toContain("Varijanta:");
+    expect(markup).toContain("Boja:");
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(2);
+    expect(markup.match(/<img/g)).toHaveLength(2);
+    expect(markup.match(/data-color-count=/g)).toHaveLength(1);
   });
 
-  it("porodičnu dvobojnu varijantu prikazuje jednim podeljenim kružićem", () => {
+  it("porodičnu varijantu prikazuje thumbnailom, a njene dve boje jednim podeljenim kružićem", () => {
     const familyProduct = {
       ...product,
       sku: "MOP-RED-WHITE",
+      colorPrimary: "crvena",
+      colorSecondary: "bela",
       variantFamily: {
         id: "mops",
         code: "MOP",
@@ -112,7 +121,8 @@ describe("PDP boje proizvoda", () => {
             colorSecondary: "bela",
             position: 0,
             isPrimary: true,
-            media: { images: [] },
+            thumbnail: { url: "/products/mop-red-white.webp" },
+            media: { images: [{ url: "/products/mop-red-white.webp" }] },
             fullPrice: 100,
             stock: 1,
             incomingStock: 0,
@@ -126,6 +136,7 @@ describe("PDP boje proizvoda", () => {
       <ProductColorOptions product={familyProduct} />,
     );
 
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
     expect(markup.match(/data-color-count=/g)).toHaveLength(1);
     expect(markup).toContain('data-color-count="2"');
     expect(markup).toContain("#c83a31 0 50%");
