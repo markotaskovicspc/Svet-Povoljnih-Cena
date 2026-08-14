@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import {
   InboundInvoiceStatus,
   PurchaseOrderStatus,
@@ -165,6 +165,7 @@ async function postAction(_state: AdminActionState, formData: FormData) {
       revalidatePath("/admin/erp/porudzbenice");
       revalidatePath("/admin/erp/stanje-po-magacinima");
       revalidatePath("/admin/erp/artikli");
+      if (!backfillOnly) updateTag("catalog-products");
       return {
         ok: true as const,
         entityId: id,
@@ -217,6 +218,7 @@ export default async function InboundInvoicePage({
         warehouse: true,
         purchaseOrder: {
           include: {
+            receivingWarehouse: true,
             transportDefinition: true,
             items: {
               orderBy: { createdAt: "asc" },
@@ -298,6 +300,8 @@ export default async function InboundInvoicePage({
       invoice.purchaseOrder.status !== PurchaseOrderStatus.RECEIVED &&
       invoice.purchaseOrder.cogsBookedAt,
   );
+  const receiptWarehouse =
+    invoice.warehouse ?? invoice.purchaseOrder?.receivingWarehouse ?? null;
   const editing = query.mode === "edit" && !immutable;
   const capacityWarnings = invoice.purchaseOrder
     ? purchaseOrderCapacityWarnings({
@@ -389,7 +393,7 @@ export default async function InboundInvoicePage({
     <>
       <PageHeader
         title={`Ulazna faktura ${invoice.number}`}
-        description={`${statusLabel[invoice.status]}${invoice.supplier ? ` · ${invoice.supplier.name}` : ""}${invoice.warehouse ? ` · ${invoice.warehouse.name}` : ""}${locked ? ` · proknjižena ${dateOnly(invoice.lockedAt)}` : ""}`}
+        description={`${statusLabel[invoice.status]}${invoice.supplier ? ` · ${invoice.supplier.name}` : ""}${receiptWarehouse ? ` · ${receiptWarehouse.name}` : ""}${locked ? ` · proknjižena ${dateOnly(invoice.lockedAt)}` : ""}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -506,7 +510,11 @@ export default async function InboundInvoicePage({
             </p>
           ) : receiptNeedsCompletion ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-              Faktura i porudžbenica su proknjižene, ali prijem robe nije završen. Izaberite „Dovrši prijem” posle dopune obaveznih podataka artikla.
+              Faktura i porudžbenica su proknjižene, ali prijem robe nije završen.
+              {receiptWarehouse
+                ? ` Prijem će biti završen u magacin ${receiptWarehouse.name} (${receiptWarehouse.code}).`
+                : " Magacin prijema nije izabran."}{" "}
+              Izaberite „Dovrši prijem” posle dopune obaveznih podataka artikla.
             </p>
           ) : cogsNeedsBackfill ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">

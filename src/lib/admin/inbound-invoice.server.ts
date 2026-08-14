@@ -15,6 +15,7 @@ import {
   calculateInboundInvoiceAmounts,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
+  resolveInboundReceiptWarehouse,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
@@ -313,6 +314,13 @@ export async function postInboundInvoice(id: string, actorId: string) {
       purchaseOrderId: true,
       warehouseId: true,
       warehouse: { select: { id: true, name: true, active: true } },
+      purchaseOrder: {
+        select: {
+          receivingWarehouse: {
+            select: { id: true, name: true, active: true },
+          },
+        },
+      },
     },
   });
   if (!invoice) throw new Error("Ulazna faktura ne postoji.");
@@ -322,9 +330,12 @@ export async function postInboundInvoice(id: string, actorId: string) {
   if (!invoice.purchaseOrderId) {
     throw new Error("Veza sa porudžbenicom je obavezna.");
   }
-  if (!invoice.warehouse?.active || !invoice.warehouseId) {
-    throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
-  }
+  const warehouse = resolveInboundReceiptWarehouse({
+    invoiceWarehouseId: invoice.warehouseId,
+    invoiceWarehouse: invoice.warehouse,
+    purchaseOrderWarehouse:
+      invoice.purchaseOrder?.receivingWarehouse ?? null,
+  });
 
   const {
     assertPurchaseOrderGoodsReceiptMasterReady,
@@ -334,18 +345,24 @@ export async function postInboundInvoice(id: string, actorId: string) {
     "@/lib/admin/po"
   );
   await assertPurchaseOrderGoodsReceiptMasterReady(invoice.purchaseOrderId);
-  await db.purchaseOrder.update({
-    where: { id: invoice.purchaseOrderId },
-    data: { receivingWarehouseId: invoice.warehouseId },
-  });
+  await db.$transaction([
+    db.inboundInvoice.update({
+      where: { id },
+      data: { warehouseId: warehouse.id },
+    }),
+    db.purchaseOrder.update({
+      where: { id: invoice.purchaseOrderId },
+      data: { receivingWarehouseId: warehouse.id },
+    }),
+  ]);
   await postPurchaseOrder(invoice.purchaseOrderId, actorId);
   await lockInboundInvoice(id);
   const receipt = await receivePurchaseOrder(invoice.purchaseOrderId, actorId);
   return {
     invoiceId: id,
     purchaseOrderId: invoice.purchaseOrderId,
-    warehouseId: invoice.warehouseId,
-    warehouseName: invoice.warehouse.name,
+    warehouseId: warehouse.id,
+    warehouseName: warehouse.name,
     received: receipt.received,
     postedLines: receipt.postedLines,
   };
