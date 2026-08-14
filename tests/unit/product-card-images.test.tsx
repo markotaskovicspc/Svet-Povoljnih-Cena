@@ -138,12 +138,8 @@ describe("ProductCard image regression", () => {
     const productOptions = html.indexOf('aria-label="Opcije proizvoda"');
     const fullPrice = html.indexOf("2.427 RSD");
     const loyaltyPrice = html.indexOf("1.699 RSD");
-    const productOptionsClass = html.match(
-      /<div class="([^"]+)"[^>]*><div class="[^"]+" aria-label="Opcije proizvoda"/,
-    )?.[1].split(" ");
-
-    expect(productOptionsClass).toContain("min-h-4");
-    expect(productOptionsClass).not.toContain("h-4");
+    expect(html).toContain("min-h-10");
+    expect(html).not.toContain("min-h-4");
     expect(productOptions).toBeGreaterThanOrEqual(0);
     expect(fullPrice).toBeGreaterThan(productOptions);
     expect(loyaltyPrice).toBeGreaterThan(fullPrice);

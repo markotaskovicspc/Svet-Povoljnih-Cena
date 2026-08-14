@@ -90,7 +90,7 @@ describe("PDP boje proizvoda", () => {
       },
     } as Product;
     const markup = renderToStaticMarkup(
-      <ProductColorOptions product={familyProduct} showLabels max={12} />,
+      <ProductColorOptions product={familyProduct} showLabels />,
     );
     expect(markup).toContain('href="/p/sofa-black"');
     expect(markup).toContain('href="/p/sofa-green"');
@@ -105,7 +105,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("linear-gradient(135deg");
   });
 
-  it("na kartici prikazuje prve četiri uređene boje i zbir preostalih", () => {
+  it("na kartici prikazuje sve boje u jednom pristupačnom karuselu", () => {
     const options = Array.from({ length: 6 }, (_, index) => ({
       sku: `SKU-${index + 1}`,
       slug: `sku-${index + 1}`,
@@ -132,12 +132,22 @@ describe("PDP boje proizvoda", () => {
             options,
           },
         } as Product}
+        selectedSku="SKU-1"
+        onSelectSku={() => undefined}
       />,
     );
 
-    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(4);
-    expect(markup).toContain("+2");
-    expect(markup).not.toContain('href="/p/sku-5"');
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(6);
+    expect(markup.match(/data-variant-option/g)).toHaveLength(6);
+    expect(markup.match(/<button/g)).toHaveLength(8);
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('aria-roledescription="carousel"');
+    expect(markup).toContain("flex-nowrap");
+    expect(markup).toContain("overflow-x-auto");
+    expect(markup).toContain("Prethodna varijanta");
+    expect(markup).toContain("Sledeća varijanta");
+    expect(markup).not.toContain("+2");
+    expect(markup).not.toContain('href="/p/sku-6"');
   });
 
   it("porodičnu varijantu prikazuje thumbnailom bez dodatnog kružića ispod", () => {

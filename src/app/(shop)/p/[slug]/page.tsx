@@ -172,7 +172,6 @@ export default async function ProductPage({ params }: RouteProps) {
               className="mt-1.5 md:mt-2.5"
               label="Boja proizvoda"
               showLabels
-              max={product.variantFamily?.options.length ?? 4}
             />
             {product.attributes?.length ? (
               <div
