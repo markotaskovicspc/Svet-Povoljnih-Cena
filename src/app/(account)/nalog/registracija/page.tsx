@@ -18,6 +18,7 @@ import { registerCustomer } from "@/lib/auth/credentials";
 import { setMarketingConsent } from "@/lib/auth/gdpr";
 import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
 import { customerCallback } from "@/lib/auth/customer-callback";
+import { isValidCustomerPassword } from "@/lib/auth/customer-password-policy";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
 import { BRAND } from "@/lib/brand";
 import {
@@ -37,11 +38,6 @@ export const dynamic = "force-dynamic";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function optionalText(raw: FormDataEntryValue | null) {
-  const value = String(raw ?? "").trim();
-  return value || undefined;
-}
-
 function registrationUrl(error: RegistrationErrorCode, callbackUrl: string) {
   return `/nalog/registracija?error=${error}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
 }
@@ -54,7 +50,6 @@ async function registerAction(formData: FormData) {
   );
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const marketingEmailConsent =
     formData.get("marketingEmailConsent") === "true";
 
@@ -70,11 +65,8 @@ async function registerAction(formData: FormData) {
   if (!emailPattern.test(email)) {
     redirect(registrationUrl("invalid_email", callbackUrl));
   }
-  if (password.length < 8 || password.length > 200) {
+  if (!isValidCustomerPassword(password)) {
     redirect(registrationUrl("weak_password", callbackUrl));
-  }
-  if (password !== confirmPassword) {
-    redirect(registrationUrl("password_mismatch", callbackUrl));
   }
 
   let registrationError: RegistrationErrorCode | null = null;
@@ -83,8 +75,6 @@ async function registerAction(formData: FormData) {
     const user = await registerCustomer({
       email,
       password,
-      firstName: optionalText(formData.get("firstName")),
-      lastName: optionalText(formData.get("lastName")),
     });
     if (marketingEmailConsent) {
       await setMarketingConsent(user.id, { email: true });

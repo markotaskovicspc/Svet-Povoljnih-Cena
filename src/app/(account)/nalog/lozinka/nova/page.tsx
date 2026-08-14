@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { consumePasswordResetToken } from "@/lib/auth/credentials";
+import { isValidCustomerPassword } from "@/lib/auth/customer-password-policy";
 import {
   checkRateLimit,
   getClientIpFromHeaders,
@@ -21,7 +22,7 @@ async function resetPassword(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   const password = String(formData.get("password") ?? "");
   const confirmation = String(formData.get("confirmPassword") ?? "");
-  if (!token || password.length < 8 || password.length > 200 || password !== confirmation) {
+  if (!token || !isValidCustomerPassword(password) || password !== confirmation) {
     redirect(`/nalog/lozinka/nova?token=${encodeURIComponent(token)}&error=invalid`);
   }
   const requestHeaders = await headers();
@@ -44,7 +45,7 @@ export default async function NewPasswordPage({ searchParams }: { searchParams: 
         <p className="mt-2 text-sm text-ink-600">Link je jednokratan i važi 60 minuta.</p>
         {error ? (
           <p role="alert" className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            {error === "expired" ? "Link nije važeći ili je istekao. Zatražite novi." : error === "rate_limited" ? "Previše pokušaja. Pokušajte kasnije." : "Lozinke moraju biti jednake i imati najmanje 8 karaktera."}
+            {error === "expired" ? "Link nije važeći ili je istekao. Zatražite novi." : error === "rate_limited" ? "Previše pokušaja. Pokušajte kasnije." : "Lozinke moraju biti jednake i imati najmanje 6 karaktera."}
           </p>
         ) : null}
         {token ? (

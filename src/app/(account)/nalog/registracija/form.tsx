@@ -6,11 +6,14 @@ import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  CUSTOMER_PASSWORD_MAX_LENGTH,
+  CUSTOMER_PASSWORD_MIN_LENGTH,
+} from "@/lib/auth/customer-password-policy";
 
 export type RegistrationErrorCode =
   | "email_taken"
   | "invalid_email"
-  | "password_mismatch"
   | "weak_password"
   | "rate_limited"
   | "generic";
@@ -18,8 +21,7 @@ export type RegistrationErrorCode =
 const errorMessages: Record<RegistrationErrorCode, string> = {
   email_taken: "Već postoji nalog za ovu e-poštu. Prijavite se ili koristite drugu adresu.",
   invalid_email: "Unesite ispravnu e-poštu.",
-  password_mismatch: "Lozinke se ne poklapaju.",
-  weak_password: "Lozinka mora imati najmanje 8 karaktera.",
+  weak_password: "Lozinka mora imati najmanje 6 karaktera.",
   rate_limited: "Previše pokušaja registracije. Pokušajte ponovo kasnije.",
   generic: "Registracija trenutno nije uspela. Pokušajte ponovo.",
 };
@@ -43,26 +45,6 @@ export function CustomerRegistrationFields() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="firstName">Ime</Label>
-          <Input
-            id="firstName"
-            name="firstName"
-            autoComplete="given-name"
-            className="h-11 bg-white"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="lastName">Prezime</Label>
-          <Input
-            id="lastName"
-            name="lastName"
-            autoComplete="family-name"
-            className="h-11 bg-white"
-          />
-        </div>
-      </div>
       <div className="space-y-2">
         <Label htmlFor="email">E-pošta</Label>
         <Input
@@ -84,21 +66,8 @@ export function CustomerRegistrationFields() {
           type="password"
           required
           autoComplete="new-password"
-          minLength={8}
-          maxLength={200}
-          className="h-11 bg-white"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Potvrdite lozinku</Label>
-        <Input
-          id="confirmPassword"
-          name="confirmPassword"
-          type="password"
-          required
-          autoComplete="new-password"
-          minLength={8}
-          maxLength={200}
+          minLength={CUSTOMER_PASSWORD_MIN_LENGTH}
+          maxLength={CUSTOMER_PASSWORD_MAX_LENGTH}
           className="h-11 bg-white"
         />
       </div>

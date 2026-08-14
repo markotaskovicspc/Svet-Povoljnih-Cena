@@ -10,16 +10,28 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { authConfig } from "@/lib/auth/auth.config";
+import {
+  CUSTOMER_PASSWORD_MAX_LENGTH,
+  CUSTOMER_PASSWORD_MIN_LENGTH,
+} from "@/lib/auth/customer-password-policy";
 import { envValue } from "@/lib/env";
 import { checkRateLimit, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
 
-const credentialsSchema = z.object({
+const customerCredentialsSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(200),
+  password: z
+    .string()
+    .min(CUSTOMER_PASSWORD_MIN_LENGTH)
+    .max(CUSTOMER_PASSWORD_MAX_LENGTH),
   remember: z
     .union([z.string(), z.boolean()])
     .optional()
     .transform((v) => v === true || v === "true"),
+});
+
+const adminCredentialsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(200),
 });
 
 const DAY = 60 * 60 * 24;
@@ -95,7 +107,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         remember: { label: "Zapamti me", type: "checkbox" },
       },
       async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
+        const parsed = customerCredentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const { email, password, remember } = parsed.data;
         const normalizedEmail = email.trim().toLowerCase();
@@ -194,7 +206,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Lozinka", type: "password" },
       },
       async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
+        const parsed = adminCredentialsSchema.safeParse(raw);
         if (!parsed.success) {
           console.warn("[admin-credentials] invalid credentials payload", {
             issues: parsed.error.issues.map((issue) => issue.path.join(".")),

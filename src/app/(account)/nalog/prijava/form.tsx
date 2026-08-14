@@ -5,6 +5,7 @@ import { LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CUSTOMER_PASSWORD_MIN_LENGTH } from "@/lib/auth/customer-password-policy";
 
 export type LoginErrorCode = "invalid" | "generic";
 
@@ -48,7 +49,7 @@ export function CustomerLoginFields() {
           type="password"
           required
           autoComplete="current-password"
-          minLength={8}
+          minLength={CUSTOMER_PASSWORD_MIN_LENGTH}
           className="h-10 bg-white md:h-11"
         />
       </div>
