@@ -44,6 +44,8 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
   let purchaseOrderId = "";
   let invoiceId = "";
   let duplicateInvoiceId = "";
+  let legacyPurchaseOrderId = "";
+  let legacyInvoiceId = "";
   const pageErrors: string[] = [];
 
   test.beforeAll(async () => {
@@ -611,7 +613,157 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       ).toBeDisabled();
     });
 
+    await test.step("a legacy posted invoice reuses the purchase-order warehouse and finishes stock receipt", async () => {
+      const before = await db.product.findUniqueOrThrow({
+        where: { id: productId },
+        select: { stock: true, cogs: true },
+      });
+      const now = new Date();
+      const legacyOrder = await db.purchaseOrder.create({
+        data: {
+          number: `${fixture.orderNumber}-LEGACY`,
+          status: "DRAFT",
+          supplierId,
+          loadingLocationId,
+          receivingWarehouseId: warehouseId,
+          transportTypeId,
+          orderDate: new Date("2026-07-25T00:00:00.000Z"),
+          totalPrice: 950,
+          currency: "RSD",
+          exchangeRate: 1,
+          freightCost: 0,
+          freightCurrency: "RSD",
+          freightExchangeRate: 1,
+          allocationBasis: "VALUE",
+          lockedAt: now,
+          postedAt: now,
+          cogsBookedAt: now,
+          cogsBookingSnapshot: {
+            version: 1,
+            products: [
+              {
+                productId,
+                sku: fixture.sku,
+                stock: before.stock,
+                cogs: Number(before.cogs),
+              },
+            ],
+          },
+          items: {
+            create: {
+              productId,
+              sku: fixture.sku,
+              name: fixture.productName,
+              purchasePrice: 190,
+              currency: "RSD",
+              qty: 5,
+              receivedQty: 0,
+              customsRate: 0,
+              freightAllocated: 0,
+              totalVolume: 1,
+              totalWeight: 5,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      legacyPurchaseOrderId = legacyOrder.id;
+      const legacyInvoice = await db.inboundInvoice.create({
+        data: {
+          number: `${fixture.invoiceNumber}-LEGACY`,
+          type: "COGS",
+          status: "POSTED",
+          cogsStatus: "LOCKED",
+          supplierId,
+          purchaseOrderId: legacyPurchaseOrderId,
+          warehouseId: null,
+          invoiceDate: new Date("2026-07-25T00:00:00.000Z"),
+          currency: "RSD",
+          exchangeRate: 1,
+          invoiceValueRsd: 950,
+          customsValueRsd: 0,
+          transportValueRsd: 0,
+          otherRelatedCostsRsd: 0,
+          value: 950,
+          netValue: 950,
+          vatValue: 190,
+          grossValue: 1_140,
+          allocationBasis: "VALUE",
+          lockedAt: now,
+        },
+        select: { id: true },
+      });
+      legacyInvoiceId = legacyInvoice.id;
+
+      await page.goto(`/admin/erp/ulazne-fakture/${legacyInvoiceId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByText(/prijem robe nije završen.*magacin.*QA UF magacin/s),
+      ).toBeVisible();
+      await expect(page.locator('select[name="warehouseId"]')).toHaveValue(
+        warehouseId,
+      );
+      await expect(
+        page.getByRole("button", { name: "Uredi", exact: true }),
+      ).toBeDisabled();
+
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: "Dovrši prijem", exact: true })
+        .click();
+      await expect(
+        page.getByText(/roba je primljena u magacin.*QA UF magacin/i),
+      ).toBeVisible();
+
+      const [storedInvoice, storedOrder, storedItem, storedProduct, stockRow] =
+        await Promise.all([
+          db.inboundInvoice.findUniqueOrThrow({
+            where: { id: legacyInvoiceId },
+            select: { warehouseId: true },
+          }),
+          db.purchaseOrder.findUniqueOrThrow({
+            where: { id: legacyPurchaseOrderId },
+            select: { status: true, receivingWarehouseId: true },
+          }),
+          db.purchaseOrderItem.findFirstOrThrow({
+            where: { purchaseOrderId: legacyPurchaseOrderId },
+            select: { receivedQty: true },
+          }),
+          db.product.findUniqueOrThrow({
+            where: { id: productId },
+            select: { stock: true },
+          }),
+          db.warehouseStock.findUniqueOrThrow({
+            where: { warehouseId_productId: { warehouseId, productId } },
+            select: { qty: true },
+          }),
+        ]);
+      expect(storedInvoice.warehouseId).toBe(warehouseId);
+      expect(storedOrder).toEqual({
+        status: "RECEIVED",
+        receivingWarehouseId: warehouseId,
+      });
+      expect(storedItem.receivedQty).toBe(5);
+      expect(storedProduct.stock).toBe(before.stock + 5);
+      expect(stockRow.qty).toBe(before.stock + 5);
+
+      await page.goto("/admin/erp/stanje-po-magacinima", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page
+          .getByRole("row")
+          .filter({ hasText: fixture.sku })
+          .filter({ hasText: String(before.stock + 5) })
+          .first(),
+      ).toBeVisible();
+    });
+
     await test.step("a posted invoice cannot be cancelled through regular editing", async () => {
+      await page.goto(`/admin/erp/ulazne-fakture/${invoiceId}`, {
+        waitUntil: "domcontentloaded",
+      });
       await expect(
         page.getByRole("button", { name: "Storniraj", exact: true }),
       ).toBeDisabled();
@@ -641,12 +793,21 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
 
   async function cleanup() {
     if (!db) return;
-    const invoiceIds = [invoiceId, duplicateInvoiceId].filter(Boolean);
+    const invoiceIds = [
+      invoiceId,
+      duplicateInvoiceId,
+      legacyInvoiceId,
+    ].filter(Boolean);
     if (invoiceIds.length) {
       await db.inboundInvoice.deleteMany({ where: { id: { in: invoiceIds } } });
     }
-    if (purchaseOrderId) {
-      await db.purchaseOrder.deleteMany({ where: { id: purchaseOrderId } });
+    const purchaseOrderIds = [purchaseOrderId, legacyPurchaseOrderId].filter(
+      Boolean,
+    );
+    if (purchaseOrderIds.length) {
+      await db.purchaseOrder.deleteMany({
+        where: { id: { in: purchaseOrderIds } },
+      });
     }
     if (productId) {
       await db.stockMovement.deleteMany({ where: { productId } });

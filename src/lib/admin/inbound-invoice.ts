@@ -11,6 +11,37 @@ export type InboundInvoiceCostBreakdown = {
   otherRelatedCostsRsd: number;
 };
 
+export type InboundReceiptWarehouse = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
+/**
+ * Legacy posted invoices may not have their own warehouse snapshot even
+ * though the linked purchase order already has an explicit receiving
+ * warehouse. Reuse only that trusted order value; never guess a warehouse.
+ */
+export function resolveInboundReceiptWarehouse(input: {
+  invoiceWarehouseId: string | null;
+  invoiceWarehouse: InboundReceiptWarehouse | null;
+  purchaseOrderWarehouse: InboundReceiptWarehouse | null;
+}) {
+  if (input.invoiceWarehouseId) {
+    if (
+      !input.invoiceWarehouse?.active ||
+      input.invoiceWarehouse.id !== input.invoiceWarehouseId
+    ) {
+      throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
+    }
+    return input.invoiceWarehouse;
+  }
+  if (input.purchaseOrderWarehouse?.active) {
+    return input.purchaseOrderWarehouse;
+  }
+  throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
+}
+
 export const INBOUND_INVOICE_VAT_RATE = 0.2;
 
 export type PurchaseOrderCostLine = {

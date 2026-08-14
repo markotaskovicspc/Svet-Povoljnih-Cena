@@ -6,11 +6,54 @@ import {
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
+  resolveInboundReceiptWarehouse,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
+  it("reuses the purchase-order warehouse for a legacy posted invoice", () => {
+    expect(
+      resolveInboundReceiptWarehouse({
+        invoiceWarehouseId: null,
+        invoiceWarehouse: null,
+        purchaseOrderWarehouse: {
+          id: "warehouse-dc",
+          name: "DC",
+          active: true,
+        },
+      }),
+    ).toEqual({ id: "warehouse-dc", name: "DC", active: true });
+  });
+
+  it("does not replace an explicit inactive invoice warehouse", () => {
+    expect(() =>
+      resolveInboundReceiptWarehouse({
+        invoiceWarehouseId: "warehouse-old",
+        invoiceWarehouse: {
+          id: "warehouse-old",
+          name: "Stari magacin",
+          active: false,
+        },
+        purchaseOrderWarehouse: {
+          id: "warehouse-dc",
+          name: "DC",
+          active: true,
+        },
+      }),
+    ).toThrow(/aktivan magacin prijema/);
+  });
+
+  it("requires an explicit trusted warehouse when no fallback exists", () => {
+    expect(() =>
+      resolveInboundReceiptWarehouse({
+        invoiceWarehouseId: null,
+        invoiceWarehouse: null,
+        purchaseOrderWarehouse: null,
+      }),
+    ).toThrow(/aktivan magacin prijema/);
+  });
+
   it("requires the linked purchase order to be posted before invoice cost booking", () => {
     expect(() =>
       assertInboundInvoicePurchaseOrderLocked({ lockedAt: null }),
