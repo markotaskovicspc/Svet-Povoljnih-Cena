@@ -110,7 +110,7 @@ export function MobileNav({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           aria-label="Otvori navigaciju"
-          className="hover:bg-muted-bg inline-flex size-10 items-center justify-center rounded-full text-ink-700 hover:text-ink-900"
+          className="hover:bg-muted-bg inline-flex size-10 -translate-x-1 items-center justify-center rounded-full text-ink-700 hover:text-ink-900"
         >
           <Menu className="size-5" aria-hidden />
         </SheetTrigger>
