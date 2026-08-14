@@ -10,6 +10,7 @@ import { PdpBenefits } from "@/components/product/pdp-benefits";
 import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { ProductColorOptions } from "@/components/product/color-options";
+import { ProductSkuCopy } from "@/components/product/product-sku-copy";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
@@ -164,7 +165,7 @@ export default async function ProductPage({ params }: RouteProps) {
               </p>
             ) : null}
             <p className="mt-1 text-xs text-ink-500">
-              Šifra artikla: <span className="font-mono font-semibold text-ink-700">{product.sku}</span>
+              Šifra artikla: <ProductSkuCopy sku={product.sku} />
             </p>
             <ProductColorOptions
               product={product}

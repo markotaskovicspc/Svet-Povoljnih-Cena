@@ -20,6 +20,18 @@ export type ResolvedArticleCategorySelection = ArticleCategorySelection & {
   leafCategoryId: string | null;
 };
 
+export function requiredArticleCategorySelectionError(
+  input: Partial<ArticleCategorySelection>,
+) {
+  if (!input.siteCategoryId?.trim()) {
+    return "Kategorija je obavezna. Izaberite kategoriju pre čuvanja artikla.";
+  }
+  if (!input.siteGroupId?.trim()) {
+    return "Grupa je obavezna. Izaberite grupu pre čuvanja artikla.";
+  }
+  return null;
+}
+
 const categoryCollator = new Intl.Collator("sr", {
   sensitivity: "base",
   numeric: true,

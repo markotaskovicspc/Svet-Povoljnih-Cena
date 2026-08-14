@@ -50,6 +50,10 @@ test.describe("mobilna fullscreen pretraga", () => {
         await delayedJson(route, { hits: suggestionHits }, 250);
       });
 
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const visibleSearch = page.getByRole("button", { name: "Pretraži" });
+      await expect(visibleSearch).toBeVisible();
+      await expect(visibleSearch).toContainText("Pretraga proizvoda...");
       await openMobileSearch(page);
       const sheet = page.locator('[data-slot="sheet-content"]');
       await expect

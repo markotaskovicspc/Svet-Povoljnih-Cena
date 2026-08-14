@@ -3,6 +3,7 @@ import {
   articleCategoryChildren,
   articleCategorySelectionAfterChange,
   articleCategorySelectionFromLeaf,
+  requiredArticleCategorySelectionError,
   resolveArticleCategorySelection,
   type ArticleCategoryNode,
 } from "@/lib/admin/article-category-hierarchy";
@@ -90,5 +91,26 @@ describe("article category hierarchy", () => {
         siteSubgroupId: "lamps",
       }),
     ).toThrow("ne pripada izabranoj grupi");
+  });
+
+  it("requires both category and group before the article can be saved", () => {
+    expect(
+      requiredArticleCategorySelectionError({
+        siteCategoryId: "",
+        siteGroupId: "",
+      }),
+    ).toContain("Kategorija je obavezna");
+    expect(
+      requiredArticleCategorySelectionError({
+        siteCategoryId: "root",
+        siteGroupId: "",
+      }),
+    ).toContain("Grupa je obavezna");
+    expect(
+      requiredArticleCategorySelectionError({
+        siteCategoryId: "root",
+        siteGroupId: "dining",
+      }),
+    ).toBeNull();
   });
 });

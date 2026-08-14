@@ -98,10 +98,10 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("Boja:");
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(2);
     expect(markup.match(/<img/g)).toHaveLength(2);
-    expect(markup.match(/data-color-count=/g)).toHaveLength(1);
+    expect(markup).not.toContain("data-color-count=");
   });
 
-  it("porodičnu varijantu prikazuje thumbnailom, a njene dve boje jednim podeljenim kružićem", () => {
+  it("porodičnu varijantu prikazuje thumbnailom bez dodatnog kružića ispod", () => {
     const familyProduct = {
       ...product,
       sku: "MOP-RED-WHITE",
@@ -137,10 +137,8 @@ describe("PDP boje proizvoda", () => {
     );
 
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
-    expect(markup.match(/data-color-count=/g)).toHaveLength(1);
-    expect(markup).toContain('data-color-count="2"');
-    expect(markup).toContain("#c83a31 0 50%");
-    expect(markup).toContain("#f8f7f2 50% 100%");
+    expect(markup).not.toContain("data-color-count=");
+    expect(markup).not.toContain("linear-gradient(90deg");
   });
 
   it("dimenzijsku porodicu naziva varijantom, a ne bojom", () => {

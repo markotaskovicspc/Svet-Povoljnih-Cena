@@ -85,9 +85,10 @@ export function MobileSearchSheet({ content }: { content: MobileSearchContent })
     >
       <SheetTrigger
         aria-label="Pretraži"
-        className="inline-flex size-10 -translate-x-1.5 items-center justify-center rounded-full text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className="flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-white px-4 text-left text-sm text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
       >
-        <Search className="size-5" aria-hidden />
+        <span>Pretraga proizvoda...</span>
+        <Search className="size-5 shrink-0 text-brand-blue" aria-hidden />
       </SheetTrigger>
       <SheetContent
         side="top"

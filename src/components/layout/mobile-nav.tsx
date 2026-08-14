@@ -29,9 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
-import type { MobileSearchContent } from "@/types/mobile-search";
 import { InstantSearch } from "./instant-search";
-import { MobileSearchSheet } from "./mobile-search-sheet";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { getCategoryMenuImage } from "./category-menu-image";
 
@@ -75,11 +73,9 @@ const mobileMenuShortcutTabs = [
 export function MobileNav({
   tabs,
   categories,
-  mobileSearchContent,
 }: {
   tabs: Tab[];
   categories: NavNode[];
-  mobileSearchContent: MobileSearchContent;
 }) {
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
@@ -437,8 +433,6 @@ export function MobileNav({
           </div>
         </SheetContent>
       </Sheet>
-
-      <MobileSearchSheet content={mobileSearchContent} />
     </div>
   );
 }

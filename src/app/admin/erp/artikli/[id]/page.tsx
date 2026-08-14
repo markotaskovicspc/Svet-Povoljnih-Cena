@@ -83,6 +83,7 @@ import {
 import { ensureCategoryGroup } from "@/lib/category-groups.server";
 import {
   articleCategorySelectionFromLeaf,
+  requiredArticleCategorySelectionError,
   resolveArticleCategorySelection,
 } from "@/lib/admin/article-category-hierarchy";
 import {
@@ -445,6 +446,14 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         }
         const d = parsed.data;
+        const categoryValidationError = requiredArticleCategorySelectionError({
+          siteCategoryId: d.siteCategoryId ?? "",
+          siteGroupId: d.siteGroupId ?? "",
+          siteSubgroupId: d.siteSubgroupId ?? "",
+        });
+        if (categoryValidationError) {
+          return { ok: false as const, error: categoryValidationError };
+        }
         const sku = normalizeArticleSku(d.sku);
         const requestedNewUntil = optionalDateInput(d.newUntil);
         const statusFlags =

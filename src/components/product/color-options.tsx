@@ -87,10 +87,12 @@ function ProductColorDisplay({
   colors,
   label,
   showLabels,
+  showSwatch = true,
 }: {
   colors: ProductColorOption[];
   label: string;
   showLabels: boolean;
+  showSwatch?: boolean;
 }) {
   if (!colors.length) return null;
 
@@ -111,10 +113,12 @@ function ProductColorDisplay({
           showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
         )}
       >
-        <ColorSwatch
-          colors={color.colors}
-          className={showLabels ? "size-3.5" : "size-full"}
-        />
+        {showSwatch ? (
+          <ColorSwatch
+            colors={color.colors}
+            className={showLabels ? "size-3.5" : "size-full"}
+          />
+        ) : null}
         {showLabels ? (
           <span className="text-xs font-semibold text-ink-800">
             {color.label}
@@ -237,11 +241,14 @@ export function ProductColorOptions({
             </span>
           ) : null}
         </div>
-        <ProductColorDisplay
-          colors={colors}
-          label={label}
-          showLabels={showLabels}
-        />
+        {showLabels ? (
+          <ProductColorDisplay
+            colors={colors}
+            label={label}
+            showLabels
+            showSwatch={false}
+          />
+        ) : null}
       </div>
     );
   }

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { InstantSearch } from "./instant-search";
 import { CartButton, WishlistButton } from "./header-icons";
 import { MobileNav } from "./mobile-nav";
+import { MobileSearchSheet } from "./mobile-search-sheet";
 import { DesktopMenu } from "./desktop-menu";
 import { BRAND } from "@/lib/brand";
 import type { NavNode } from "@/data/site";
@@ -123,7 +124,6 @@ export function Header({
         <MobileNav
           tabs={tabs}
           categories={categories}
-          mobileSearchContent={mobileSearchContent}
         />
         <Link
           href="/"
@@ -160,6 +160,9 @@ export function Header({
           />
           <CartButton className="size-9 text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40 [&_svg]:size-4" />
         </div>
+      </div>
+      <div className="px-3 pb-3 md:hidden">
+        <MobileSearchSheet content={mobileSearchContent} />
       </div>
     </motion.header>
   );

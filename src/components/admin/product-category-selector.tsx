@@ -45,10 +45,11 @@ export function ProductCategorySelector({
         Pozicija u navigaciji sajta
       </legend>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Field label="Kategorija">
+        <Field label="Kategorija *">
           <select
             name="siteCategoryId"
             value={siteCategoryId}
+            required
             onChange={(event) => {
               setSelection((current) =>
                 articleCategorySelectionAfterChange(
@@ -60,7 +61,7 @@ export function ProductCategorySelector({
             }}
             className={selectClassName}
           >
-            <option value="">Bez kategorije</option>
+            <option value="">Izaberite kategoriju</option>
             {rootCategories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -68,10 +69,11 @@ export function ProductCategorySelector({
             ))}
           </select>
         </Field>
-        <Field label="Grupa">
+        <Field label="Grupa *">
           <select
             name="siteGroupId"
             value={siteGroupId}
+            required
             disabled={!siteCategoryId || groups.length === 0}
             onChange={(event) => {
               setSelection((current) =>
@@ -84,7 +86,7 @@ export function ProductCategorySelector({
             }}
             className={selectClassName}
           >
-            <option value="">Bez grupe</option>
+            <option value="">Izaberite grupu</option>
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
@@ -118,8 +120,8 @@ export function ProductCategorySelector({
         </Field>
       </div>
       <p className="text-xs text-ink-500">
-        Najdublji izabrani nivo određuje gde se artikal prikazuje u meniju i na
-        kategorijskim stranicama.
+        Kategorija i grupa su obavezne. Najdublji izabrani nivo određuje gde se
+        artikal prikazuje u meniju i na kategorijskim stranicama.
       </p>
     </fieldset>
   );
