@@ -86,7 +86,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                 <span className="inline-flex size-8 items-center justify-center rounded-full bg-success/20 text-success">
                   <Check className="size-4" aria-hidden />
                 </span>
-                Proverite e-poštu i potvrdite newsletter prijavu.
+                Ako adresa već nije prijavljena, proverite e-poštu i potvrdite prijavu.
               </motion.div>
             ) : (
               <motion.div

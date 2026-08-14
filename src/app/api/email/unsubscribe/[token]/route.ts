@@ -38,14 +38,14 @@ export async function POST(
   if (payload.purpose === "newsletter") {
     await enqueueBackgroundJob({
       kind: "NEWSLETTER_SYNC",
-      payload: { email: payload.email },
+      payload: { email: payload.email, subscriptionIntent: "withdraw" },
       idempotencyKey: `newsletter-unsubscribe:${payload.email}:${Date.now()}`,
     });
   }
   if (payload.purpose === "marketing") {
     await enqueueBackgroundJob({
       kind: "MARKETING_SYNC",
-      payload: { userId: payload.userId },
+      payload: { userId: payload.userId, subscriptionIntent: "withdraw" },
       idempotencyKey: `marketing-unsubscribe:${payload.userId}:${Date.now()}`,
     });
   }

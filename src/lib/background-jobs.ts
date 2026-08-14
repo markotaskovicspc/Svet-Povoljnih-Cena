@@ -16,8 +16,14 @@ const schemas = {
     orderNumber: z.string().min(1),
     lines: z.array(z.object({ productId: z.string().min(1), qty: z.number().int().positive() })).min(1),
   }),
-  NEWSLETTER_SYNC: z.object({ email: z.email() }),
-  MARKETING_SYNC: z.object({ userId: z.string().min(1) }),
+  NEWSLETTER_SYNC: z.object({
+    email: z.email(),
+    subscriptionIntent: z.enum(["grant", "withdraw", "preserve"]).default("preserve"),
+  }),
+  MARKETING_SYNC: z.object({
+    userId: z.string().min(1),
+    subscriptionIntent: z.enum(["grant", "withdraw", "preserve"]).default("preserve"),
+  }),
   RESEND_CONTACT_UNSUBSCRIBE: z.object({ email: z.email() }),
   RESEND_INBOUND_EMAIL: z.object({
     emailId: z.string().min(1).max(200),
@@ -219,7 +225,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
       )),
     );
   }
-  const [, , , partnerReservations, staleRabaluxProducts] = await Promise.all([
+  const [, , , , partnerReservations, staleRabaluxProducts] = await Promise.all([
     db.backgroundJob.deleteMany({
       where: { status: "COMPLETED", completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) } },
     }),
@@ -234,6 +240,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
         error: "Refund submission did not reach a final recorded state; reconcile with provider before retrying.",
       },
     }),
+    db.newsletterOptInToken.deleteMany({ where: { expiresAt: { lt: now } } }),
     expirePartnerReservations(),
     expireStaleRabaluxWebAvailability(now),
   ]);
@@ -271,13 +278,15 @@ async function dispatchJob(job: JobRow) {
     }
     case "NEWSLETTER_SYNC": {
       const { syncNewsletterSubscriberToResend } = await import("@/lib/email/resend-marketing");
-      const result = await syncNewsletterSubscriberToResend((payload as z.infer<typeof schemas.NEWSLETTER_SYNC>).email);
+      const input = payload as z.infer<typeof schemas.NEWSLETTER_SYNC>;
+      const result = await syncNewsletterSubscriberToResend(input.email, input.subscriptionIntent);
       if (!result.ok) throw new Error(result.error);
       return;
     }
     case "MARKETING_SYNC": {
       const { syncUserMarketingConsentToResend } = await import("@/lib/email/resend-marketing");
-      await syncUserMarketingConsentToResend((payload as z.infer<typeof schemas.MARKETING_SYNC>).userId);
+      const input = payload as z.infer<typeof schemas.MARKETING_SYNC>;
+      await syncUserMarketingConsentToResend(input.userId, input.subscriptionIntent);
       return;
     }
     case "RESEND_CONTACT_UNSUBSCRIBE": {
@@ -287,6 +296,7 @@ async function dispatchJob(job: JobRow) {
         email,
         unsubscribed: true,
         promotionalAudience: false,
+        subscriptionIntent: "withdraw",
         source: "account-deletion",
       });
       if (!result.ok) throw new Error(result.error);

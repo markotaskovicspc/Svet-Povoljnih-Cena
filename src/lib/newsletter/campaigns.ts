@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
 import { trackedDispatch } from "@/lib/email/tracking";
 import { syncResendContact } from "@/lib/email/resend-marketing";
+import { withdrawMarketingEmail } from "./contacts";
 import {
   addResendContactToSegment,
   cancelResendBroadcast,
@@ -173,15 +174,28 @@ export async function submitNewsletterCampaignForReview(campaignId: string, acto
 }
 
 export async function approveNewsletterCampaign(campaignId: string, actorId: string) {
-  const campaign = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
+  const campaign = await db.newsletterCampaign.findUniqueOrThrow({
+    where: { id: campaignId },
+    include: { audience: true },
+  });
   if (campaign.status !== "IN_REVIEW") throw new Error("Kampanja prvo mora da bude poslata na proveru.");
-  const count = campaign.recipients ?? 0;
+  const filter = newsletterAudienceFilterSchema.parse(
+    campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
+  );
+  const resolved = await resolveNewsletterAudience(filter);
+  const count = resolved.recipients.length;
   if (count >= twoPersonThreshold() && campaign.createdById === actorId) {
     throw new Error(`Kampanju za ${count} primalaca mora da odobri drugi administrator.`);
   }
   return db.newsletterCampaign.update({
     where: { id: campaignId },
-    data: { status: "APPROVED", approvedAt: new Date(), approvedById: actorId },
+    data: {
+      status: "APPROVED",
+      approvedAt: new Date(),
+      approvedById: actorId,
+      recipients: count,
+      audienceBreakdown: resolved.breakdown,
+    },
   });
 }
 
@@ -199,8 +213,14 @@ export async function scheduleNewsletterCampaign(
   const filter = newsletterAudienceFilterSchema.parse(
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
+  const resolved = await resolveNewsletterAudience(filter);
+  if (requiresSecondApprover(campaign, resolved.recipients.length)) {
+    await reopenCampaignReview(campaignId, resolved.recipients.length, resolved.breakdown);
+    throw new Error(
+      `Publika sada ima ${resolved.recipients.length} primalaca. Kampanju mora ponovo da odobri drugi administrator.`,
+    );
+  }
   if (campaign.audienceMode === "FIXED") {
-    const resolved = await resolveNewsletterAudience(filter);
     await replaceCampaignRecipients(campaignId, resolved.recipients);
   }
   await db.newsletterCampaign.update({
@@ -211,6 +231,8 @@ export async function scheduleNewsletterCampaign(
       cancelledAt: null,
       failureReason: null,
       updatedById: actorId,
+      recipients: resolved.recipients.length,
+      audienceBreakdown: resolved.breakdown,
     },
   });
   if (scheduledAt.getTime() <= Date.now() + 60_000) {
@@ -435,6 +457,14 @@ export async function sendNewsletterCampaign(campaignId: string) {
   }
   const recipients = await finalEligibleRecipients(campaignId);
   if (!recipients.length) throw new Error("Nema podobnih primalaca u trenutku slanja.");
+  if (requiresSecondApprover(campaign, recipients.length)) {
+    await reopenCampaignReview(campaignId, recipients.length);
+    return {
+      ok: false as const,
+      approvalRequired: true as const,
+      recipients: recipients.length,
+    };
+  }
   const rendered = await renderNewsletterCampaign({
     subject: campaign.subject,
     previewText: campaign.previewText,
@@ -464,12 +494,17 @@ export async function sendNewsletterCampaign(campaignId: string) {
   if (cfg.provider !== "resend") throw new Error("Newsletter Broadcast slanje zahteva Resend provider.");
   if (!cfg.promotionsTopicId) throw new Error("RESEND_TOPIC_PROMOTIONS_ID nije konfigurisan.");
 
-  let segmentId = campaign.providerSegmentId;
-  if (!segmentId) {
-    const segment = await createResendSegment(`SPC ${campaign.id} ${campaign.title}`.slice(0, 120));
-    segmentId = segment.id;
-    await db.newsletterCampaign.update({ where: { id: campaignId }, data: { providerSegmentId: segmentId } });
-  }
+  // A failed preparation may have partially populated its segment. Every new
+  // attempt before broadcast creation therefore gets a clean segment.
+  const segment = await createResendSegment(
+    `SPC ${campaign.id} ${campaign.title} ${Date.now()}`.slice(0, 120),
+  );
+  const segmentId = segment.id;
+  await db.newsletterCampaign.update({
+    where: { id: campaignId },
+    data: { providerSegmentId: segmentId },
+  });
+  const providerOptOuts: string[] = [];
   for (let start = 0; start < recipients.length; start += 10) {
     const batch = recipients.slice(start, start + 10);
     await Promise.all(batch.map(async (recipient) => {
@@ -477,14 +512,33 @@ export async function sendNewsletterCampaign(campaignId: string) {
         email: recipient.email,
         firstName: recipient.firstName,
         lastName: recipient.lastName,
-        userId: recipient.contact?.userId ?? undefined,
         unsubscribed: false,
         promotionalAudience: true,
+        subscriptionIntent: "preserve",
         source: "campaign",
       });
       if (!sync.ok) throw new Error(sync.error);
+      if (sync.providerOptedOut) {
+        providerOptOuts.push(recipient.email);
+        await withdrawMarketingEmail(recipient.email, "resend-preference-reconciliation");
+        return;
+      }
       await addResendContactToSegment(recipient.email, segmentId!);
     }));
+  }
+  if (providerOptOuts.length) {
+    await db.newsletterCampaignRecipient.updateMany({
+      where: { campaignId, email: { in: providerOptOuts }, status: "QUEUED" },
+      data: {
+        status: "UNSUBSCRIBED",
+        failureReason: "provider_preference_opt_out",
+        unsubscribedAt: new Date(),
+      },
+    });
+  }
+  const providerEligibleCount = recipients.length - providerOptOuts.length;
+  if (!providerEligibleCount) {
+    throw new Error("Nema primalaca nakon usklađivanja provider odjava.");
   }
   const remote = await createResendBroadcast({
     name: campaign.title,
@@ -503,7 +557,7 @@ export async function sendNewsletterCampaign(campaignId: string) {
   });
   await sendResendBroadcast(remote.id);
   await markCampaignAccepted(campaignId);
-  return { ok: true as const, providerBroadcastId: remote.id, recipients: recipients.length };
+  return { ok: true as const, providerBroadcastId: remote.id, recipients: providerEligibleCount };
 }
 
 export async function failNewsletterCampaign(campaignId: string, error: unknown) {
@@ -532,7 +586,8 @@ export async function recordNewsletterProviderEvent(payload: unknown) {
     where: { campaignId_email: { campaignId: campaign.id, email } },
   });
   if (!recipient) return { matched: false as const };
-  const transition = newsletterRecipientTransition(event.data.type, recipient.status);
+  const occurredAt = eventTime(event.data.created_at);
+  const transition = newsletterRecipientTransition(event.data.type, recipient.status, occurredAt);
   if (transition) {
     await db.newsletterCampaignRecipient.update({
       where: { id: recipient.id },
@@ -548,25 +603,37 @@ export async function recordNewsletterProviderEvent(payload: unknown) {
 }
 
 export async function refreshCampaignStats(campaignId: string) {
-  const grouped = await db.newsletterCampaignRecipient.groupBy({
-    by: ["status"],
-    where: { campaignId },
-    _count: { _all: true },
-  });
-  const count = (statuses: NewsletterRecipientStatus[]) => grouped
-    .filter((row) => statuses.includes(row.status))
-    .reduce((sum, row) => sum + row._count._all, 0);
+  const [recipients, delivered, opened, clicked, bounced, complained, unsubscribed, failed] =
+    await Promise.all([
+      db.newsletterCampaignRecipient.count({ where: { campaignId } }),
+      db.newsletterCampaignRecipient.count({
+        where: { campaignId, OR: [{ deliveredAt: { not: null } }, { openedAt: { not: null } }, { clickedAt: { not: null } }] },
+      }),
+      db.newsletterCampaignRecipient.count({
+        where: { campaignId, OR: [{ openedAt: { not: null } }, { clickedAt: { not: null } }] },
+      }),
+      db.newsletterCampaignRecipient.count({ where: { campaignId, clickedAt: { not: null } } }),
+      db.newsletterCampaignRecipient.count({ where: { campaignId, bouncedAt: { not: null } } }),
+      db.newsletterCampaignRecipient.count({ where: { campaignId, complainedAt: { not: null } } }),
+      db.newsletterCampaignRecipient.count({ where: { campaignId, unsubscribedAt: { not: null } } }),
+      db.newsletterCampaignRecipient.count({
+        where: {
+          campaignId,
+          OR: [{ status: "FAILED" }, { bouncedAt: { not: null } }, { complainedAt: { not: null } }],
+        },
+      }),
+    ]);
   await db.newsletterCampaign.update({
     where: { id: campaignId },
     data: {
-      recipients: grouped.reduce((sum, row) => sum + row._count._all, 0),
-      delivered: count(["DELIVERED", "OPENED", "CLICKED"]),
-      opened: count(["OPENED", "CLICKED"]),
-      clicked: count(["CLICKED"]),
-      bounced: count(["BOUNCED"]),
-      complained: count(["COMPLAINED"]),
-      unsubscribed: count(["UNSUBSCRIBED"]),
-      failed: count(["FAILED", "BOUNCED", "COMPLAINED"]),
+      recipients,
+      delivered,
+      opened,
+      clicked,
+      bounced,
+      complained,
+      unsubscribed,
+      failed,
     },
   });
 }
@@ -656,7 +723,9 @@ const webhookSchema = z.object({
     broadcast_id: z.string().optional(),
     email_id: z.string().optional(),
     to: z.union([z.string(), z.array(z.string())]).optional(),
+    created_at: z.string().optional(),
   }),
+  created_at: z.string().optional(),
 });
 
 function firstEmail(value?: string | string[]) {
@@ -686,6 +755,37 @@ export function newsletterRecipientTransition(
   const next = mapping[type];
   if (!next) return null;
   if (rank[current] >= 9 && rank[next.status] < 9) return null;
-  if (rank[next.status] < rank[current]) return null;
+  if (rank[next.status] <= rank[current]) return null;
   return next;
+}
+
+export function requiresSecondApprover(
+  campaign: { createdById: string | null; approvedById: string | null },
+  recipientCount: number,
+) {
+  return recipientCount >= twoPersonThreshold() && campaign.createdById === campaign.approvedById;
+}
+
+async function reopenCampaignReview(
+  campaignId: string,
+  recipients: number,
+  breakdown?: Prisma.InputJsonValue,
+) {
+  await db.newsletterCampaign.update({
+    where: { id: campaignId },
+    data: {
+      status: "IN_REVIEW",
+      approvedAt: null,
+      approvedById: null,
+      scheduledAt: null,
+      recipients,
+      ...(breakdown ? { audienceBreakdown: breakdown } : {}),
+      failureReason: "Publika je prešla prag za obavezno odobrenje drugog administratora.",
+    },
+  });
+}
+
+function eventTime(value?: string) {
+  const timestamp = value ? new Date(value) : new Date();
+  return Number.isFinite(timestamp.getTime()) ? timestamp : new Date();
 }

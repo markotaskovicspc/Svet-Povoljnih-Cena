@@ -229,7 +229,8 @@ function isSuppressingEvent(type: string) {
   return (
     type === "email.bounced" ||
     type === "email.complained" ||
-    type === "email.suppressed"
+    type === "email.suppressed" ||
+    type === "suppression.added"
   );
 }
 
@@ -241,7 +242,8 @@ function extractRecipient(payload: Prisma.InputJsonValue) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return null;
   }
-  const to = (data as Record<string, unknown>).to;
+  const record = data as Record<string, unknown>;
+  const to = record.to ?? record.email;
   const email = Array.isArray(to) ? to[0] : to;
   return typeof email === "string" ? email.trim().toLowerCase() : null;
 }

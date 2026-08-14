@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptyAudienceFilter,
   matchesAudienceFilter,
+  newsletterAudienceFilterSchema,
   type AudienceProfile,
 } from "@/lib/newsletter/audience";
 
@@ -83,5 +84,38 @@ describe("newsletter audience matcher", () => {
       ...emptyAudienceFilter(),
       excludeCampaignIds: ["campaign-old"],
     })).toBe(false);
+  });
+
+  it("uses exact matching for equals and substring matching only for contains", () => {
+    const filter = (operator: "equals" | "contains", value: string) => ({
+      ...emptyAudienceFilter(),
+      groups: [{
+        id: "sku",
+        logic: "AND" as const,
+        rules: [{ id: "sku-rule", field: "purchasedSku" as const, operator, value }],
+      }],
+    });
+    expect(matchesAudienceFilter(profile, filter("equals", "SKU-1"))).toBe(true);
+    expect(matchesAudienceFilter(profile, filter("equals", "SKU"))).toBe(false);
+    expect(matchesAudienceFilter(profile, filter("contains", "SKU"))).toBe(true);
+  });
+
+  it("rejects blank values and invalid field/operator combinations", () => {
+    expect(newsletterAudienceFilterSchema.safeParse({
+      ...emptyAudienceFilter(),
+      groups: [{
+        id: "invalid",
+        logic: "AND",
+        rules: [{ id: "blank", field: "city", operator: "equals", value: "  " }],
+      }],
+    }).success).toBe(false);
+    expect(newsletterAudienceFilterSchema.safeParse({
+      ...emptyAudienceFilter(),
+      groups: [{
+        id: "invalid",
+        logic: "AND",
+        rules: [{ id: "wrong-op", field: "registered", operator: "contains", value: "true" }],
+      }],
+    }).success).toBe(false);
   });
 });

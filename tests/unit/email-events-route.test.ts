@@ -89,6 +89,23 @@ describe("Resend events route", () => {
     expect(mocks.afterCallbacks).toHaveLength(0);
   });
 
+  it("returns immediately for a replayed event without repeating side effects", async () => {
+    mocks.recordProviderEvent.mockResolvedValue({ ok: true, duplicate: true });
+    const response = await POST(signedRequest({
+      type: "email.received",
+      data: { email_id: "received-replay" },
+    }, "event-replay"));
+
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      duplicate: true,
+      newsletterMatched: false,
+      inbound: null,
+    });
+    expect(mocks.recordNewsletterProviderEvent).not.toHaveBeenCalled();
+    expect(mocks.enqueueBackgroundJob).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid Svix signature before any database write", async () => {
     const request = new Request("https://example.test/api/email/events", {
       method: "POST",

@@ -1,16 +1,12 @@
 import "server-only";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import {
-  requestNewsletterOptIn,
-  withdrawMarketingEmail,
-} from "@/lib/newsletter/contacts";
+import { requestNewsletterOptIn } from "@/lib/newsletter/contacts";
 
 /**
- * Newsletter subscribe / unsubscribe (Phase 3C — item 7).
+ * Newsletter double-opt-in request entry point.
  *
- * Idempotent: re-subscribing flips `unsubscribedAt` back to null. Source is a
- * free-form tag (e.g. "footer", "checkout", "popup") used for attribution.
+ * Unsubscribe operations intentionally use signed links instead of a public
+ * email-only endpoint. Source is a free-form attribution tag.
  */
 
 export const subscribeSchema = z.object({
@@ -29,12 +25,4 @@ export async function subscribeNewsletter(
     source: input.source,
     evidence,
   });
-}
-
-export async function unsubscribeNewsletter(email: string) {
-  const normalized = email.trim().toLowerCase();
-  const exists = await db.newsletterSubscriber.findUnique({ where: { email: normalized } });
-  if (!exists) throw new Error("not_found");
-  await withdrawMarketingEmail(normalized, "newsletter-api");
-  return { email: normalized };
 }

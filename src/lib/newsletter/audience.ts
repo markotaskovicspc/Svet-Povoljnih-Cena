@@ -33,11 +33,40 @@ export const audienceOperatorSchema = z.enum([
   "is_false",
 ]);
 
-export const audienceRuleSchema = z.object({
+const audienceRuleBaseSchema = z.object({
   id: z.string().min(1).max(80),
   field: audienceFieldSchema,
   operator: audienceOperatorSchema,
   value: z.union([z.string().max(500), z.number(), z.boolean()]).optional(),
+});
+
+export const audienceRuleSchema = audienceRuleBaseSchema.superRefine((rule, ctx) => {
+  const allowed = operatorsForField(rule.field);
+  if (!allowed.includes(rule.operator)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["operator"],
+      message: `Operator ${rule.operator} nije dozvoljen za polje ${rule.field}.`,
+    });
+  }
+  if (rule.operator === "is_true" || rule.operator === "is_false") return;
+  if (typeof rule.value === "string" && !rule.value.trim() || rule.value == null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["value"],
+      message: "Vrednost pravila je obavezna.",
+    });
+    return;
+  }
+  if ((rule.field === "orderCount" || rule.field === "totalSpend") && !Number.isFinite(Number(rule.value))) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Unesite ispravan broj." });
+  }
+  if (
+    (rule.field === "subscribedAt" || rule.field === "lastPurchaseAt") &&
+    (typeof rule.value !== "string" || !Number.isFinite(new Date(rule.value).getTime()))
+  ) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Unesite ispravan datum." });
+  }
 });
 
 export const audienceGroupSchema = z.object({
@@ -102,18 +131,27 @@ export function matchesAudienceFilter(profile: AudienceProfile, rawFilter: unkno
   return filter.logic === "AND" ? groupResults.every(Boolean) : groupResults.some(Boolean);
 }
 
-export async function resolveNewsletterAudience(rawFilter: unknown, limit = 50_000) {
+export async function resolveNewsletterAudience(
+  rawFilter: unknown,
+  limit = maximumAudienceContacts(),
+) {
   const filter = newsletterAudienceFilterSchema.parse(rawFilter ?? {});
   const fields = new Set(filter.groups.flatMap((group) => group.rules.map((rule) => rule.field)));
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 250_000);
   const contacts = await db.marketingContact.findMany({
     where: {
       status: "ACTIVE",
       subscribedAt: { not: null },
       ...(filter.manualContactIds.length ? { id: { in: filter.manualContactIds } } : {}),
     },
-    take: Math.min(Math.max(limit, 1), 50_000),
+    take: safeLimit + 1,
     orderBy: { subscribedAt: "asc" },
   });
+  if (contacts.length > safeLimit) {
+    throw new Error(
+      `Publika prelazi bezbedni limit od ${safeLimit.toLocaleString("sr-Latn-RS")} aktivnih kontakata. Sužite filter pre slanja.`,
+    );
+  }
   const userIds = unique(contacts.map((contact) => contact.userId).filter(isString));
   const needsOrderStats = (["orderCount", "totalSpend", "lastPurchaseAt"] as const).some((field) => fields.has(field));
   const needsCity = fields.has("city");
@@ -262,9 +300,12 @@ function matchRule(profile: AudienceProfile, rule: AudienceRule) {
   if (rule.operator === "is_false") return !Boolean(value);
   if (Array.isArray(value)) {
     const needle = normalize(expected);
+    const exact = value.some((item) => normalize(item) === needle);
     const contains = value.some((item) => normalize(item).includes(needle));
-    if (rule.operator === "contains" || rule.operator === "equals") return contains;
-    if (rule.operator === "not_contains" || rule.operator === "not_equals") return !contains;
+    if (rule.operator === "equals") return exact;
+    if (rule.operator === "not_equals") return !exact;
+    if (rule.operator === "contains") return contains;
+    if (rule.operator === "not_contains") return !contains;
     return false;
   }
   if (value instanceof Date || rule.field === "subscribedAt" || rule.field === "lastPurchaseAt") {
@@ -315,6 +356,18 @@ function ruleValue(profile: AudienceProfile, field: z.infer<typeof audienceField
 
 function normalize(value: unknown) {
   return String(value ?? "").trim().toLocaleLowerCase("sr-Latn");
+}
+
+function operatorsForField(field: z.infer<typeof audienceFieldSchema>) {
+  if (field === "registered") return ["is_true", "is_false"];
+  if (field === "subscribedAt" || field === "lastPurchaseAt") return ["before", "after"];
+  if (field === "orderCount" || field === "totalSpend") return ["gte", "lte", "equals"];
+  return ["equals", "not_equals", "contains", "not_contains"];
+}
+
+function maximumAudienceContacts() {
+  const configured = Number.parseInt(process.env.NEWSLETTER_AUDIENCE_MAX_CONTACTS ?? "50000", 10);
+  return Number.isFinite(configured) ? Math.min(Math.max(configured, 1), 250_000) : 50_000;
 }
 
 function unique(values: string[]) {

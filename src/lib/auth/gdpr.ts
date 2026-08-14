@@ -67,11 +67,21 @@ export async function softDeleteAccount(userId: string) {
   // Strip PII while keeping financial / legal records for the retention
   // window required by Serbian commerce law.
   const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const marketingContact = await db.marketingContact.findFirst({
+    where: {
+      OR: [
+        { userId },
+        ...(user?.email ? [{ email: user.email.trim().toLowerCase() }] : []),
+      ],
+    },
+    select: { id: true, status: true },
+  });
+  const deletedAt = new Date();
   await db.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: userId },
       data: {
-        deletedAt: new Date(),
+        deletedAt,
         email: null,
         phone: null,
         name: null,
@@ -108,6 +118,28 @@ export async function softDeleteAccount(userId: string) {
         ? tx.newsletterSubscriber.deleteMany({ where: { email: user.email } })
         : Promise.resolve(),
     ]);
+    if (marketingContact) {
+      await tx.marketingContact.update({
+        where: { id: marketingContact.id },
+        data: {
+          ...(marketingContact.status === "SUPPRESSED"
+            ? {}
+            : { status: "UNSUBSCRIBED", unsubscribedAt: deletedAt }),
+          userId: null,
+          firstName: null,
+          lastName: null,
+        },
+      });
+      if (marketingContact.status !== "SUPPRESSED") {
+        await tx.marketingConsentEvent.create({
+          data: {
+            contactId: marketingContact.id,
+            type: "WITHDRAWN",
+            source: "account-deletion",
+          },
+        });
+      }
+    }
     if (user?.email) {
       await tx.backgroundJob.upsert({
         where: { idempotencyKey: `account-deletion-unsubscribe:${userId}` },
@@ -145,7 +177,10 @@ export async function setMarketingConsent(
     await syncAccountMarketingContact(userId, channels.email);
     await enqueueBackgroundJob({
       kind: "MARKETING_SYNC",
-      payload: { userId },
+      payload: {
+        userId,
+        subscriptionIntent: channels.email ? "grant" : "withdraw",
+      },
       idempotencyKey: `marketing-sync:${userId}:${consent.updatedAt.toISOString()}`,
     });
   }

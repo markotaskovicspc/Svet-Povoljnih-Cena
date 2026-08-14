@@ -18,6 +18,16 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const preview = await previewNewsletterAudience(parsed.data);
-  return NextResponse.json({ ok: true, ...preview });
+  try {
+    const preview = await previewNewsletterAudience(parsed.data);
+    return NextResponse.json({ ok: true, ...preview });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : "Pregled publike nije uspeo.",
+      },
+      { status: 400 },
+    );
+  }
 }

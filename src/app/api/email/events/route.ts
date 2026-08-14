@@ -66,6 +66,14 @@ export async function POST(req: Request) {
     providerMessageId,
     payload: payload as Prisma.InputJsonValue,
   });
+  if (recorded.duplicate) {
+    return NextResponse.json({
+      ok: true,
+      duplicate: true,
+      newsletterMatched: false,
+      inbound: null,
+    });
+  }
   const { recordNewsletterProviderEvent } = await import("@/lib/newsletter/campaigns");
   const newsletter = await recordNewsletterProviderEvent(payload);
   if (
@@ -120,6 +128,7 @@ export async function POST(req: Request) {
 
 interface ResendWebhookEvent {
   type?: string;
+  created_at?: string;
   data?: {
     id?: string;
     email_id?: string;

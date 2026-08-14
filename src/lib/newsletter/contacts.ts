@@ -13,7 +13,10 @@ export const NEWSLETTER_CONSENT_VERSION = "newsletter-v2-2026-07";
 export const NEWSLETTER_POLICY_VERSION = "privacy-2026-07";
 const OPT_IN_TTL_MS = 24 * 60 * 60 * 1_000;
 
-const emailSchema = z.email().transform((value) => value.trim().toLowerCase());
+const emailSchema = z.preprocess(
+  (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+  z.email(),
+);
 
 export async function requestNewsletterOptIn(input: {
   email: string;
@@ -27,7 +30,7 @@ export async function requestNewsletterOptIn(input: {
     return { ok: true as const, status: "suppressed" as const };
   }
   if (existing?.status === "ACTIVE") {
-    await syncMarketingContact(email);
+    await syncMarketingContact(email, "preserve");
     return { ok: true as const, status: "active" as const };
   }
 
@@ -128,7 +131,7 @@ export async function confirmNewsletterOptIn(token: string) {
     });
     return { ok: true as const, email: row.contact.email };
   }).then(async (result) => {
-    if (result.ok) await syncMarketingContact(result.email);
+    if (result.ok) await syncMarketingContact(result.email, "grant");
     return result;
   });
 }
@@ -202,13 +205,13 @@ export async function syncAccountMarketingContact(userId: string, optedIn: boole
       create: { email, source: "account", consent: true },
       update: { consent: true, unsubscribedAt: null },
     });
-  } else if (!optedIn) {
+  } else {
     await db.newsletterSubscriber.updateMany({
       where: { email },
       data: { consent: false, unsubscribedAt: now },
     });
   }
-  await syncMarketingContact(email);
+  await syncMarketingContact(email, status === "ACTIVE" ? "grant" : "withdraw");
   return contact;
 }
 
@@ -220,24 +223,34 @@ export async function confirmAccountMarketingContact(userId: string) {
 
 export async function withdrawMarketingEmail(emailRaw: string, source: string) {
   const email = emailSchema.parse(emailRaw);
-  const contact = await db.marketingContact.findUnique({ where: { email } });
+  const [contact, account] = await Promise.all([
+    db.marketingContact.findUnique({ where: { email } }),
+    db.user.findFirst({ where: { email }, select: { id: true } }),
+  ]);
   const now = new Date();
-  if (contact && contact.status !== "SUPPRESSED") {
-    await db.$transaction([
-      db.marketingContact.update({
+  const userId = contact?.userId ?? account?.id;
+  await db.$transaction(async (tx) => {
+    if (contact && contact.status !== "SUPPRESSED") {
+      await tx.marketingContact.update({
         where: { id: contact.id },
         data: { status: "UNSUBSCRIBED", unsubscribedAt: now },
-      }),
-      db.marketingConsentEvent.create({
+      });
+      await tx.marketingConsentEvent.create({
         data: { contactId: contact.id, type: "WITHDRAWN", source },
-      }),
-    ]);
-  }
-  await db.newsletterSubscriber.updateMany({
-    where: { email },
-    data: { consent: false, unsubscribedAt: now },
+      });
+    }
+    await tx.newsletterSubscriber.updateMany({
+      where: { email },
+      data: { consent: false, unsubscribedAt: now },
+    });
+    if (userId) {
+      await tx.marketingConsent.updateMany({
+        where: { userId },
+        data: { email: false },
+      });
+    }
   });
-  await syncMarketingContact(email);
+  await syncMarketingContact(email, "withdraw");
 }
 
 export async function suppressMarketingEmail(emailRaw: string, reason: string, provider?: string | null) {
@@ -250,6 +263,10 @@ export async function suppressMarketingEmail(emailRaw: string, reason: string, p
   });
   await db.marketingConsentEvent.create({
     data: { contactId: contact.id, type: "SUPPRESSED", source: provider ?? "provider", evidence: { reason } },
+  });
+  await db.newsletterSubscriber.updateMany({
+    where: { email },
+    data: { consent: false, unsubscribedAt: now },
   });
 }
 
@@ -292,10 +309,13 @@ async function sendNewsletterOptInEmail(args: { email: string; token: string }) 
   });
 }
 
-async function syncMarketingContact(email: string) {
+async function syncMarketingContact(
+  email: string,
+  subscriptionIntent: "grant" | "withdraw" | "preserve",
+) {
   await enqueueBackgroundJob({
     kind: "NEWSLETTER_SYNC",
-    payload: { email },
+    payload: { email, subscriptionIntent },
     idempotencyKey: `newsletter-sync:${email}:${Date.now()}`,
   });
 }
