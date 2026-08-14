@@ -170,7 +170,7 @@ export function ProductColorOptions({
               <>
                 <span
                   className={cn(
-                    "relative block overflow-hidden rounded-md bg-white",
+                    "relative block overflow-hidden rounded-md bg-[linear-gradient(135deg,#f6f5f1_0_50%,#ebe9e3_50%)]",
                     showLabels ? "size-14" : "size-9",
                   )}
                   data-variant-thumbnail

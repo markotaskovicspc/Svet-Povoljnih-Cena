@@ -4,6 +4,7 @@ import {
   normalizeProductFamilyCode,
   normalizeProductFamilyHex,
   normalizeProductFamilyLabel,
+  productFamilyReadinessReasons,
   productFamilyLabelKey,
 } from "@/lib/product-family";
 
@@ -30,5 +31,37 @@ describe("porodice boja proizvoda", () => {
       }),
     ).toBe("Crna / Zlatna");
     expect(() => normalizeProductFamilyHex("#fff")).toThrow(/#RRGGBB/);
+  });
+
+  it("izvodi naziv samo iz Boje 1 i Boje 2, normalizuje veličinu slova i uklanja duplikat", () => {
+    expect(
+      defaultProductFamilyLabel({
+        colorPrimary: "  CRNA ",
+        colorSecondary: "crna",
+      }),
+    ).toBe("Crna");
+    expect(
+      defaultProductFamilyLabel({
+        colorPrimary: "MASLINASTO ZELENA",
+        colorSecondary: "ZLATNA",
+      }),
+    ).toBe("Maslinasto zelena / Zlatna");
+  });
+
+  it("objavu blokira bez boje, READY slike i važeće MP cene", () => {
+    expect(
+      productFamilyReadinessReasons({
+        colorPrimary: null,
+        colorSecondary: null,
+        hasReadyImage: false,
+        publicationBlockers: [
+          "Nema važeću pozitivnu stavku aktivnog MP cenovnika",
+        ],
+      }),
+    ).toEqual([
+      "Nije uneta Boja 1",
+      "Nema važeću pozitivnu stavku aktivnog MP cenovnika",
+      "Nema spremnu glavnu fotografiju",
+    ]);
   });
 });

@@ -48,5 +48,39 @@ export function defaultProductFamilyLabel(input: {
   const values = [input.colorPrimary, input.colorSecondary]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(values)).join(" / ");
+  const seen = new Set<string>();
+  return values
+    .map(formatProductFamilyColor)
+    .filter((value) => {
+      const key = value
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("sr-Latn-RS");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(" / ");
+}
+
+function formatProductFamilyColor(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim().toLocaleLowerCase("sr-Latn-RS");
+  if (!normalized) return "";
+  return `${normalized[0]!.toLocaleUpperCase("sr-Latn-RS")}${normalized.slice(1)}`;
+}
+
+export function productFamilyReadinessReasons(input: {
+  colorPrimary?: string | null;
+  colorSecondary?: string | null;
+  hasReadyImage: boolean;
+  publicationBlockers?: readonly string[];
+}) {
+  const reasons = [...(input.publicationBlockers ?? [])];
+  if (!defaultProductFamilyLabel(input)) {
+    reasons.unshift("Nije uneta Boja 1");
+  }
+  if (!input.hasReadyImage) {
+    reasons.push("Nema spremnu glavnu fotografiju");
+  }
+  return Array.from(new Set(reasons));
 }

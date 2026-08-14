@@ -99,6 +99,42 @@ describe("PDP boje proizvoda", () => {
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(2);
     expect(markup.match(/<img/g)).toHaveLength(2);
     expect(markup).not.toContain("data-color-count=");
+    expect(markup).toContain("linear-gradient(135deg");
+  });
+
+  it("na kartici prikazuje prve četiri uređene boje i zbir preostalih", () => {
+    const options = Array.from({ length: 6 }, (_, index) => ({
+      sku: `SKU-${index + 1}`,
+      slug: `sku-${index + 1}`,
+      name: "Artikal",
+      label: `Boja ${index + 1}`,
+      position: index,
+      isPrimary: index === 0,
+      thumbnail: { url: `/products/sku-${index + 1}.webp` },
+      media: { images: [{ url: `/products/sku-${index + 1}.webp` }] },
+      fullPrice: 100,
+      stock: 1,
+      incomingStock: 0,
+      deliveryDays: { min: 3, max: 5 },
+    }));
+    const markup = renderToStaticMarkup(
+      <ProductColorOptions
+        product={{
+          ...product,
+          sku: "SKU-1",
+          variantFamily: {
+            id: "six-colors",
+            code: "SIX",
+            selectedSku: "SKU-1",
+            options,
+          },
+        } as Product}
+      />,
+    );
+
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(4);
+    expect(markup).toContain("+2");
+    expect(markup).not.toContain('href="/p/sku-5"');
   });
 
   it("porodičnu varijantu prikazuje thumbnailom bez dodatnog kružića ispod", () => {
