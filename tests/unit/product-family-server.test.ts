@@ -14,6 +14,7 @@ import {
   propagateProductFamilySharedData,
   setProductColorFamilyPrimary,
   setProductFamilyMembership,
+  updateProductFamilyMemberColors,
 } from "@/lib/product-family.server";
 
 describe("upravljanje članovima porodice boja", () => {
@@ -224,6 +225,75 @@ describe("upravljanje članovima porodice boja", () => {
       expect(data).not.toHaveProperty("media");
       expect(data).not.toHaveProperty("actionId");
     }
+  });
+
+  it("menja boje iz porodičnog panela i atomarno osvežava naziv člana", async () => {
+    syncArticleLookupAssignmentsMock.mockClear();
+    const updateProduct = vi.fn().mockResolvedValue({});
+    const upsertMember = vi.fn().mockResolvedValue({ id: "member-gray" });
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      product: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          attribute1: "LED",
+          attribute2: null,
+          attribute3: null,
+          attribute4: null,
+          lookupAssignments: [
+            { lookupValue: { kind: "BENEFIT", value: "5 godina garancije" } },
+            { lookupValue: { kind: "CERTIFICATE", value: "CE" } },
+          ],
+        }),
+        update: updateProduct,
+      },
+      productFamilyMember: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({
+            family: { code: "NOAH" },
+            colorHex: null,
+            position: 3,
+            storefrontEnabled: true,
+          })
+          .mockResolvedValueOnce({ familyId: "family-1" }),
+        findFirst: vi.fn().mockResolvedValue(null),
+        upsert: upsertMember,
+      },
+      productFamily: {
+        upsert: vi.fn().mockResolvedValue({
+          id: "family-1",
+          primaryProductId: "white",
+        }),
+        findUnique: vi.fn().mockResolvedValue({
+          primaryProductId: "white",
+          members: [{ productId: "white" }, { productId: "gray" }],
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    const result = await updateProductFamilyMemberColors(tx as never, {
+      productId: "gray",
+      colorPrimary: "Siva",
+      colorSecondary: null,
+    });
+
+    expect(updateProduct).toHaveBeenCalledWith({
+      where: { id: "gray" },
+      data: { colorPrimary: "Siva", colorSecondary: null },
+    });
+    expect(syncArticleLookupAssignmentsMock).toHaveBeenCalledWith(tx, "gray", {
+      attributes: ["LED", null, null, null],
+      colors: ["Siva", null],
+      benefits: ["5 godina garancije"],
+      certificates: ["CE"],
+    });
+    expect(upsertMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ label: "Siva", labelKey: "siva" }),
+      }),
+    );
+    expect(result.label).toBe("Siva");
   });
 });
 

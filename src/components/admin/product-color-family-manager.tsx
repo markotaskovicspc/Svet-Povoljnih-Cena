@@ -49,6 +49,7 @@ export function ProductColorFamilyManager({
   familyCode,
   members,
   colorOptions,
+  updateMemberAction,
   linkExistingAction,
   createDraftAction,
   moveAction,
@@ -65,6 +66,7 @@ export function ProductColorFamilyManager({
   familyCode: string | null;
   members: ProductColorFamilyManagerMember[];
   colorOptions: string[];
+  updateMemberAction: AdminFormAction;
   linkExistingAction: AdminFormAction;
   createDraftAction: AdminFormAction;
   moveAction: AdminFormAction;
@@ -275,14 +277,66 @@ export function ProductColorFamilyManager({
                   ))}
                 </ul>
               ) : null}
+              <AdminActionForm
+                action={updateMemberAction}
+                refreshOnSuccess
+                className="mt-3 grid gap-2 border-t border-border/60 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
+              >
+                <input type="hidden" name="productId" value={member.productId} />
+                <Field label={`Boja 1 · ${member.sku}`}>
+                  <Input
+                    name="colorPrimary"
+                    required
+                    list={colorListId}
+                    defaultValue={member.colorPrimary ?? ""}
+                  />
+                </Field>
+                <Field label="Boja 2 (opciono)">
+                  <Input
+                    name="colorSecondary"
+                    list={colorListId}
+                    defaultValue={member.colorSecondary ?? ""}
+                  />
+                </Field>
+                <SubmitButton variant="outline" size="sm">
+                  Sačuvaj boje
+                </SubmitButton>
+              </AdminActionForm>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-ink-500">
-          Ovaj SKU još nema porodicu boja. Povežite postojeći artikal ili napravite
-          novi draft SKU.
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm text-ink-500">
+            Ovaj SKU još nema porodicu boja. Sačuvajte njegovu osnovnu boju, pa
+            povežite postojeći artikal ili napravite novi draft SKU.
+          </p>
+          <AdminActionForm
+            action={updateMemberAction}
+            refreshOnSuccess
+            className="grid gap-2 rounded-xl border border-border/70 bg-background p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
+          >
+            <input type="hidden" name="productId" value={source.id} />
+            <Field label={`Boja 1 · ${source.sku}`}>
+              <Input
+                name="colorPrimary"
+                required
+                list={colorListId}
+                defaultValue={source.colorPrimary ?? ""}
+              />
+            </Field>
+            <Field label="Boja 2 (opciono)">
+              <Input
+                name="colorSecondary"
+                list={colorListId}
+                defaultValue={source.colorSecondary ?? ""}
+              />
+            </Field>
+            <SubmitButton variant="outline" size="sm">
+              Sačuvaj boje
+            </SubmitButton>
+          </AdminActionForm>
+        </div>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">

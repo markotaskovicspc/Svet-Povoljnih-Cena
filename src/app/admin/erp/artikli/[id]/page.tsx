@@ -96,6 +96,7 @@ import {
   setProductColorFamilyPrimary,
   setProductColorFamilyStorefrontEnabled,
   syncProductFamilyMembershipColor,
+  updateProductFamilyMemberColors,
 } from "@/lib/product-family.server";
 import { defaultProductFamilyLabel } from "@/lib/product-family";
 import { isProductColorLabel } from "@/lib/product-colors";
@@ -1164,6 +1165,62 @@ async function createFamilyColor(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
+async function updateFamilyMemberColors(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["CONTENT", "OPS"],
+      action: "product.family.member.colors.update",
+      entity: "ProductFamily",
+    },
+    async (actorId, actionData: FormData) => {
+      const productId = String(actionData.get("productId") ?? "");
+      const colorPrimary = String(actionData.get("colorPrimary") ?? "").trim();
+      const colorSecondary =
+        String(actionData.get("colorSecondary") ?? "").trim() || null;
+      if (!productId || !colorPrimary) {
+        return { ok: false as const, error: "Artikal i Boja 1 su obavezni." };
+      }
+      if (
+        !isProductColorLabel(colorPrimary) ||
+        (colorSecondary && !isProductColorLabel(colorSecondary))
+      ) {
+        return {
+          ok: false as const,
+          error: "Boja mora biti naziv boje, bez dimenzija ili drugih atributa.",
+        };
+      }
+
+      const updated = await db.$transaction(async (tx) => {
+        const result = await updateProductFamilyMemberColors(tx, {
+          productId,
+          colorPrimary,
+          colorSecondary,
+        });
+        await lockSupplierOwnedFields(tx, productId, actorId, ["specifications"]);
+        return result;
+      });
+      await revalidateProductSurfaces(productId);
+      return {
+        ok: true as const,
+        entityId: productId,
+        diff: {
+          productId,
+          colorPrimary,
+          colorSecondary,
+          label: updated.label,
+        },
+        message: updated.membership
+          ? `Boje su sačuvane; član porodice je sada ${updated.label}.`
+          : "Boje artikla su sačuvane.",
+      };
+    },
+  )(formData);
+}
+
 async function linkExistingFamilyColor(
   _state: AdminActionState,
   formData: FormData,
@@ -1688,6 +1745,7 @@ export default async function ProductDetail({
               familyCode={product.familyMembership?.family.code ?? null}
               members={familyManagerMembers}
               colorOptions={lookupOptions("COLOR")}
+              updateMemberAction={updateFamilyMemberColors}
               linkExistingAction={linkExistingFamilyColor}
               createDraftAction={createFamilyColor}
               moveAction={moveFamilyColor}
@@ -1816,16 +1874,9 @@ export default async function ProductDetail({
               <Field label="Veličina">
                 <Input name="sizeLabel" defaultValue={product.sizeLabel ?? ""} />
               </Field>
-              <Field label="Boja 1">
-                <Input name="colorPrimary" list="article-colors" defaultValue={product.colorPrimary ?? ""} />
-              </Field>
-              <Field label="Boja 2">
-                <Input name="colorSecondary" list="article-colors" defaultValue={product.colorSecondary ?? ""} />
-              </Field>
+              <input type="hidden" name="colorPrimary" value={product.colorPrimary ?? ""} />
+              <input type="hidden" name="colorSecondary" value={product.colorSecondary ?? ""} />
             </div>
-            <datalist id="article-colors">
-              {lookupOptions("COLOR").map((value) => <option key={value} value={value} />)}
-            </datalist>
             <div id="sifarnici" className="grid grid-cols-1 gap-3 md:grid-cols-4 scroll-mt-24">
               {(["attribute1", "attribute2", "attribute3", "attribute4"] as const).map(
                 (key, index) => (

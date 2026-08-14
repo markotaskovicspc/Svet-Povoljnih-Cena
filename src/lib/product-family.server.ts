@@ -203,6 +203,63 @@ export async function syncProductFamilyMembershipColor(
   });
 }
 
+export async function updateProductFamilyMemberColors(
+  tx: Prisma.TransactionClient,
+  input: {
+    productId: string;
+    colorPrimary: string;
+    colorSecondary?: string | null;
+  },
+) {
+  const colorPrimary = input.colorPrimary.trim();
+  const colorSecondary = input.colorSecondary?.trim() || null;
+  const product = await tx.product.findUniqueOrThrow({
+    where: { id: input.productId },
+    select: {
+      attribute1: true,
+      attribute2: true,
+      attribute3: true,
+      attribute4: true,
+      lookupAssignments: {
+        select: {
+          lookupValue: { select: { kind: true, value: true } },
+        },
+      },
+    },
+  });
+
+  await tx.product.update({
+    where: { id: input.productId },
+    data: { colorPrimary, colorSecondary },
+  });
+  await syncArticleLookupAssignments(tx, input.productId, {
+    attributes: [
+      product.attribute1,
+      product.attribute2,
+      product.attribute3,
+      product.attribute4,
+    ],
+    colors: [colorPrimary, colorSecondary],
+    benefits: product.lookupAssignments
+      .filter(({ lookupValue }) => lookupValue.kind === "BENEFIT")
+      .map(({ lookupValue }) => lookupValue.value),
+    certificates: product.lookupAssignments
+      .filter(({ lookupValue }) => lookupValue.kind === "CERTIFICATE")
+      .map(({ lookupValue }) => lookupValue.value),
+  });
+  const membership = await syncProductFamilyMembershipColor(tx, {
+    productId: input.productId,
+    colorPrimary,
+    colorSecondary,
+  });
+
+  return {
+    productId: input.productId,
+    label: defaultProductFamilyLabel({ colorPrimary, colorSecondary }),
+    membership,
+  };
+}
+
 export async function ensureProductColorFamily(
   tx: Prisma.TransactionClient,
   productId: string,
