@@ -59,40 +59,12 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
     : [];
 }
 
-function colorSwatchStyle(colors: string[]) {
-  const uniqueColors = Array.from(new Set(colors.filter(Boolean)));
-  if (uniqueColors.length < 2) {
-    return { backgroundColor: uniqueColors[0] ?? "#d8d4c8" };
-  }
-  return {
-    backgroundImage: `linear-gradient(90deg, ${uniqueColors[0]} 0 50%, ${uniqueColors[1]} 50% 100%)`,
-  };
-}
-
-function ColorSwatch({ colors, className }: { colors: string[]; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      data-color-count={Math.min(new Set(colors).size, 2)}
-      className={cn(
-        "shrink-0 rounded-full ring-1 ring-black/15",
-        className,
-      )}
-      style={colorSwatchStyle(colors)}
-    />
-  );
-}
-
 function ProductColorDisplay({
   colors,
   label,
-  showLabels,
-  showSwatch = true,
 }: {
   colors: ProductColorOption[];
   label: string;
-  showLabels: boolean;
-  showSwatch?: boolean;
 }) {
   if (!colors.length) return null;
 
@@ -103,27 +75,14 @@ function ProductColorDisplay({
       aria-label={label}
       data-product-colors
     >
-      {showLabels ? (
-        <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
-      ) : null}
+      <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
       <span
         title={color.label}
-        className={cn(
-          "inline-flex shrink-0 items-center rounded-full",
-          showLabels ? "gap-1.5 bg-muted-bg px-2 py-1" : "size-3.5",
-        )}
+        className="inline-flex shrink-0 items-center rounded-full bg-muted-bg px-2 py-1"
       >
-        {showSwatch ? (
-          <ColorSwatch
-            colors={color.colors}
-            className={showLabels ? "size-3.5" : "size-full"}
-          />
-        ) : null}
-        {showLabels ? (
-          <span className="text-xs font-semibold text-ink-800">
-            {color.label}
-          </span>
-        ) : null}
+        <span className="text-xs font-semibold text-ink-800">
+          {color.label}
+        </span>
       </span>
     </div>
   );
@@ -245,8 +204,6 @@ export function ProductColorOptions({
           <ProductColorDisplay
             colors={colors}
             label={label}
-            showLabels
-            showSwatch={false}
           />
         ) : null}
       </div>
@@ -257,12 +214,15 @@ export function ProductColorOptions({
     return <div className={cn("h-5", className)} aria-hidden />;
   }
 
+  if (!showLabels) {
+    return <div className={className} aria-hidden />;
+  }
+
   return (
     <div className={className}>
       <ProductColorDisplay
         colors={colors}
         label={label}
-        showLabels={showLabels}
       />
     </div>
   );

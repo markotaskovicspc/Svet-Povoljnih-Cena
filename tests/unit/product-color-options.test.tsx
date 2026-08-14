@@ -12,7 +12,7 @@ describe("PDP boje proizvoda", () => {
     colorSecondary: "Natur",
   } as Product;
 
-  it("čuva kompaktan prikaz kružića na karticama", () => {
+  it("ne prikazuje obojeni kružić na karticama", () => {
     const markup = renderToStaticMarkup(
       <ProductColorOptions product={product} />,
     );
@@ -24,8 +24,9 @@ describe("PDP boje proizvoda", () => {
         colors: ["#181716", "#c7a36f"],
       },
     ]);
-    expect(markup).toContain('data-color-count="2"');
-    expect(markup).toContain("linear-gradient(90deg");
+    expect(markup).not.toContain("data-color-count=");
+    expect(markup).not.toContain("linear-gradient(90deg");
+    expect(markup).not.toContain('title="CRNA / NATUR"');
   });
 
   it("na PDP-u prikazuje i tekstualne nazive boja bez lažnog izbora", () => {
@@ -40,6 +41,8 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("CRNA");
     expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("data-color-count=");
+    expect(markup).not.toContain("linear-gradient(90deg");
   });
 
   it("porodicu prikazuje kao pristupačne linkove ka konkretnom SKU-u", () => {
