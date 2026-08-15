@@ -23,6 +23,10 @@ const workers =
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Playwright imports server modules directly while discovering tests, so it
+  // needs the same no-op `server-only` shim as Vitest. Next.js keeps using the
+  // project tsconfig and therefore retains the production server-only guard.
+  tsconfig: "./tsconfig.playwright.json",
   fullyParallel: false,
   // All projects share one local Next dev server. Serial-by-default avoids
   // cold RSC requests exhausting the server's single constrained DB pool.
