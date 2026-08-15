@@ -631,6 +631,14 @@ const coreErpModules: ErpModule[] = [
         needsSelection: true,
         confirm: "Označiti izabrane porudžbenice kao poslate dobavljaču?",
       },
+      {
+        label: "Proknjiži porudžbenicu",
+        tone: "primary",
+        action: "po.post",
+        needsSelection: true,
+        confirm:
+          "Proknjižiti i zaključati izabrane porudžbenice? Posle toga redovno uređivanje nije moguće.",
+      },
     ],
     columns: purchaseOrderColumns,
     editableColumns: [],

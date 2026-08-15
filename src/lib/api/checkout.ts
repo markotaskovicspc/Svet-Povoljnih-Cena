@@ -70,6 +70,7 @@ const lineSchema = z.object({
 });
 
 const addressSchema = z.object({
+  liceType: z.enum(["fizicko", "pravno"]).optional(),
   firstName: z.string().min(2),
   lastName: z.string().min(2),
   phone: z.string().min(8).max(32),
@@ -161,6 +162,10 @@ export interface CreateOrderResult {
   id: string;
   accessToken: string;
   total: number;
+  subtotal: number;
+  savings: number;
+  shipping: number;
+  assemblyTotal: number;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
   voucherDiscount: number;
@@ -184,6 +189,10 @@ type CreatedOrder = {
   id: string;
   number: string;
   total: Prisma.Decimal;
+  subtotal: Prisma.Decimal;
+  savings: Prisma.Decimal;
+  shipping: Prisma.Decimal;
+  assemblyTotal: Prisma.Decimal;
   paymentMethod: PaymentMethod;
   shippingMethod: ShippingMethod;
   voucherDiscount: Prisma.Decimal | null;
@@ -344,6 +353,10 @@ async function findLockedCheckoutSessionOrder(
       id: true,
       number: true,
       total: true,
+      subtotal: true,
+      savings: true,
+      shipping: true,
+      assemblyTotal: true,
       paymentMethod: true,
       shippingMethod: true,
       voucherDiscount: true,
@@ -396,6 +409,10 @@ export async function createOrder(
             id: true,
             number: true,
             total: true,
+            subtotal: true,
+            savings: true,
+            shipping: true,
+            assemblyTotal: true,
             paymentMethod: true,
             shippingMethod: true,
             voucherDiscount: true,
@@ -437,6 +454,10 @@ export async function createOrder(
           number: existing.number,
           accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
           total: num(existing.total),
+          subtotal: num(existing.subtotal),
+          savings: num(existing.savings),
+          shipping: num(existing.shipping),
+          assemblyTotal: num(existing.assemblyTotal),
           paymentMethod: existing.paymentMethod,
           shippingMethod: existing.shippingMethod,
           voucherDiscount: num(existing.voucherDiscount),
@@ -690,6 +711,13 @@ export async function createOrder(
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : input.billing ?? null;
+  const shipIsBusiness =
+    ship.liceType === "pravno" ||
+    (!ship.liceType && Boolean(ship.companyName || ship.pib));
+  const billIsBusiness =
+    Boolean(bill) &&
+    (bill?.liceType === "pravno" ||
+      (!bill?.liceType && Boolean(bill?.companyName || bill?.pib)));
   const smallParcelProvider = await getSelectedSmallParcelProvider();
   const glsProviderActive = smallParcelProvider === "MYGLS";
   const xExpressProviderActive = smallParcelProvider === "X_EXPRESS";
@@ -828,8 +856,8 @@ export async function createOrder(
           shipXExpressTownId: xExpressTown?.id ?? null,
           shipXExpressStreetId: xExpressStreet?.id ?? null,
           shipCountry: ship.country,
-          shipCompanyName: ship.companyName ?? null,
-          shipPib: ship.pib ?? null,
+          shipCompanyName: shipIsBusiness ? ship.companyName ?? null : null,
+          shipPib: shipIsBusiness ? ship.pib ?? null : null,
           glsDeliveryPointId: glsDeliveryPoint?.code ?? null,
           glsDeliveryPointName: glsDeliveryPoint?.name ?? null,
           glsDeliveryPointAddress: glsDeliveryPoint?.street ?? null,
@@ -843,8 +871,8 @@ export async function createOrder(
           billPostalCode: bill?.postalCode ?? null,
           billXExpressTownId: bill?.xExpressTownId ?? null,
           billXExpressStreetId: bill?.xExpressStreetId ?? null,
-          billCompanyName: bill?.companyName ?? null,
-          billPib: bill?.pib ?? null,
+          billCompanyName: billIsBusiness ? bill?.companyName ?? null : null,
+          billPib: billIsBusiness ? bill?.pib ?? null : null,
           notes: input.notes ?? null,
           termsAcceptedAt: new Date(),
           expiresAt,
@@ -864,6 +892,10 @@ export async function createOrder(
           id: true,
           number: true,
           total: true,
+          subtotal: true,
+          savings: true,
+          shipping: true,
+          assemblyTotal: true,
           paymentMethod: true,
           shippingMethod: true,
           voucherDiscount: true,
@@ -1125,6 +1157,10 @@ export async function createOrder(
       number: created.number,
       accessToken,
       total: num(created.total),
+      subtotal: num(created.subtotal),
+      savings: num(created.savings),
+      shipping: num(created.shipping),
+      assemblyTotal: num(created.assemblyTotal),
       paymentMethod: created.paymentMethod,
       shippingMethod: created.shippingMethod,
       voucherDiscount: num(created.voucherDiscount ?? 0),

@@ -34,7 +34,7 @@ export async function GET(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Svet povoljnih cena ERP";
   workbook.created = new Date();
-  const sheet = workbook.addWorksheet("ORDER REQUEST", {
+  const sheet = workbook.addWorksheet("Porudžbenica", {
     views: [{ state: "frozen", ySplit: 16 }],
     pageSetup: {
       orientation: "landscape",
@@ -207,6 +207,51 @@ export async function GET(
   };
   sheet.pageSetup.printArea = `A1:N${lastRow}`;
   sheet.headerFooter.oddFooter = "Strana &P / &N";
+
+  const itemsSheet = workbook.addWorksheet("Artikli", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  itemsSheet.columns = [
+    { header: "SPC šifra", key: "sku", width: 22 },
+    { header: "Naziv artikla", key: "name", width: 38 },
+    { header: "Naziv kod dobavljača", key: "supplierName", width: 34 },
+    { header: "Boja / dezen", key: "pattern", width: 18 },
+    { header: "Pakovanje", key: "packQty", width: 14 },
+    { header: "Broj kutija", key: "cartons", width: 14 },
+    { header: "Količina", key: "qty", width: 12 },
+    { header: "Zapremina m³", key: "volume", width: 16 },
+    { header: "Bar-kod", key: "barcode", width: 20 },
+    { header: `Cena (${order.currency})`, key: "price", width: 18 },
+    { header: `Ukupno (${order.currency})`, key: "total", width: 20 },
+  ];
+  for (const item of order.items) {
+    itemsSheet.addRow({
+      sku: item.sku,
+      name: item.name,
+      supplierName: item.supplierProductName ?? item.sku,
+      pattern: item.pattern ?? "—",
+      packQty: item.packQty ?? 1,
+      cartons: Math.ceil(item.qty / Math.max(item.packQty ?? 1, 1)),
+      qty: item.qty,
+      volume: Number(item.totalVolume ?? 0),
+      barcode: item.barcode ?? "—",
+      price: Number(item.purchasePrice),
+      total: Number(item.purchasePrice) * item.qty,
+    });
+  }
+  itemsSheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4B342A" },
+    };
+    cell.alignment = { vertical: "middle", wrapText: true };
+  });
+  itemsSheet.getColumn("volume").numFmt = "#,##0.000";
+  itemsSheet.getColumn("price").numFmt = "#,##0.00";
+  itemsSheet.getColumn("total").numFmt = "#,##0.00";
+  itemsSheet.autoFilter = { from: "A1", to: `K${Math.max(2, order.items.length + 1)}` };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return new Response(new Uint8Array(buffer), {

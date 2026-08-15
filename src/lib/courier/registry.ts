@@ -313,6 +313,7 @@ export interface ApplyEventResult {
   shipmentId: string;
   orderId: string;
   status: ShipmentStatus;
+  orderStatus: OrderStatus | null;
   customerEmail: string | null;
   customerPhone: string | null;
   eventCreated: boolean;
@@ -473,6 +474,7 @@ export async function applyShipmentEvent(
     shipmentId: shipment.id,
     orderId: shipment.orderId,
     status: event.status,
+    orderStatus: newOrderStatus,
     customerEmail: shipment.order.user?.email ?? shipment.order.guestEmail ?? null,
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
     eventCreated,

@@ -607,6 +607,8 @@ function createDatabaseClient() {
   ].find((value) => value?.trim());
   if (!raw) throw new Error("Database URL is required for purchase-order acceptance.");
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
     url.searchParams.set(
       "sslmode",
@@ -619,6 +621,6 @@ function createDatabaseClient() {
       connectionString: url.toString(),
       max: 2,
       connectionTimeoutMillis: 15_000,
-    }),
+    }, { schema }),
   });
 }

@@ -35,7 +35,19 @@ const schemas = {
     source: z.enum(["AUTO_ADVANCE", "AUTO_PICKUP", "MANUAL"]).optional(),
     paymentMethod: z.enum(["IPS", "KARTICA", "APPLE_PAY", "GOOGLE_PAY", "POUZECE_GOTOVINA", "POUZECE_KARTICA", "UPLATA_NA_RACUN"]).optional(),
   }),
-  ORDER_STATUS_EMAIL: z.object({ orderId: z.string().min(1) }),
+  ORDER_STATUS_EMAIL: z.object({
+    orderId: z.string().min(1),
+    status: z.enum([
+      "KREIRANO",
+      "POTVRDJENO",
+      "U_PRIPREMI",
+      "SPREMNO_ZA_ISPORUKU",
+      "U_ISPORUCI",
+      "ISPORUCENO",
+      "OTKAZANO",
+      "VRACENO",
+    ]).optional(),
+  }),
   IPS_PAYMENT_EMAIL: z.object({ orderId: z.string().min(1) }),
   PAYMENT_REFUND: z.object({
     orderId: z.string().min(1),
@@ -334,12 +346,13 @@ async function dispatchJob(job: JobRow) {
       return;
     }
     case "ORDER_STATUS_EMAIL": {
-      const { loadOrderForEmail, sendOrderStatusChanged } = await import("@/lib/email");
-      const loaded = await loadOrderForEmail((payload as z.infer<typeof schemas.ORDER_STATUS_EMAIL>).orderId);
+      const { loadOrderForEmail, lowerOrderStatus, sendOrderStatusChanged } = await import("@/lib/email");
+      const args = payload as z.infer<typeof schemas.ORDER_STATUS_EMAIL>;
+      const loaded = await loadOrderForEmail(args.orderId);
       if (!loaded?.recipient) return;
       const result = await sendOrderStatusChanged({
         order: loaded.order,
-        status: loaded.order.status,
+        status: args.status ? lowerOrderStatus(args.status) : loaded.order.status,
         to: loaded.recipient,
       });
       if (!result.ok) throw new Error(result.error);

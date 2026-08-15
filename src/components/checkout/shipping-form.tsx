@@ -48,7 +48,7 @@ export function ShippingForm({
                   shouldTouch: true,
                   shouldValidate: true,
                 });
-                if (lt === "pravno" && liceType !== "pravno") {
+                if (lt === "fizicko" && liceType !== "fizicko") {
                   setValue("shipping.companyName", "", { shouldDirty: false });
                   setValue("shipping.pib", "", { shouldDirty: false });
                 }

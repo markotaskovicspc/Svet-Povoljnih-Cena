@@ -75,10 +75,10 @@ export async function POST(
   }
 
   // Phase 4D — let the customer know about the new shipment status.
-  if (result.eventCreated && result.customerEmail) {
+  if (result.eventCreated && result.customerEmail && result.orderStatus) {
     await enqueueBackgroundJob({
       kind: "ORDER_STATUS_EMAIL",
-      payload: { orderId: result.orderId },
+      payload: { orderId: result.orderId, status: result.orderStatus },
       idempotencyKey: `order-status-email:${result.orderId}:${result.status}`,
     });
   }

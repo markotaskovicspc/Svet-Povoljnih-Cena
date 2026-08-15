@@ -120,7 +120,7 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         );
         await enqueueBackgroundJob({
           kind: "ORDER_STATUS_EMAIL",
-          payload: { orderId: id },
+          payload: { orderId: id, status },
           idempotencyKey: `order-status-email:${id}:${status}`,
         });
         if (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -98,6 +98,10 @@ type CreateOrderApiResponse =
         number: string;
         accessToken: string;
         total: number;
+        subtotal: number;
+        savings: number;
+        shipping: number;
+        assemblyTotal: number;
         paymentMethod: string;
         shippingMethod: string;
         voucherDiscount: number;
@@ -105,7 +109,11 @@ type CreateOrderApiResponse =
         savedCardDiscount: number;
       };
     }
-  | { ok: false; error?: { code?: string; reason?: string; sku?: string } };
+  | {
+      ok: false;
+      error?: { code?: string; reason?: string; sku?: string } | string;
+      message?: string;
+    };
 
 const STEP_TITLES: Record<CheckoutStep, string> = {
   identity: "Kako želite da nastavite?",
@@ -136,9 +144,11 @@ export function CheckoutFlow({
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
-  const [deliveryQuote, setDeliveryQuote] = useState<CheckoutDeliveryQuote>(
-    checkoutConfig.deliveryQuote,
-  );
+  const [resolvedDeliveryQuote, setResolvedDeliveryQuote] = useState<{
+    key: string | null;
+    quote: CheckoutDeliveryQuote;
+  }>({ key: null, quote: checkoutConfig.deliveryQuote });
+  const [deliveryQuoteError, setDeliveryQuoteError] = useState<string | null>(null);
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const clearCart = useCart((s) => s.clear);
@@ -275,15 +285,19 @@ export function CheckoutFlow({
     [lines],
   );
 
-  useEffect(() => {
-    if (!hydrated) return;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
+  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}`;
+  const deliveryQuote = resolvedDeliveryQuote.quote;
+  const deliveryQuoteIsCurrent =
+    hydrated && lines.length > 0 && resolvedDeliveryQuote.key === deliveryQuoteKey;
+
+  const refreshDeliveryQuote = useCallback(
+    async (signal?: AbortSignal) => {
+      setDeliveryQuoteError(null);
       try {
         const response = await fetch("/api/checkout/delivery-quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
+          signal,
           body: JSON.stringify({
             city: shippingCity,
             lines: lines.map((line) => ({ sku: line.sku, qty: line.qty })),
@@ -292,24 +306,38 @@ export function CheckoutFlow({
         const result = (await response.json().catch(() => null)) as
           | { ok: true; data: CheckoutDeliveryQuote }
           | null;
-        if (response.ok && result?.ok) {
-          setDeliveryQuote(result.data);
-          if (!result.data.truckAvailable && getValues("shippingMethod") === "kamion") {
-            setValue("shippingMethod", "kurir", {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
-          }
+        if (!response.ok || !result?.ok) {
+          throw new Error("Dostava trenutno ne može da se obračuna.");
         }
+        setResolvedDeliveryQuote({ key: deliveryQuoteKey, quote: result.data });
+        if (!result.data.truckAvailable && getValues("shippingMethod") === "kamion") {
+          setValue("shippingMethod", "kurir", {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+        }
+        return true;
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
+        if (err instanceof Error && err.name === "AbortError") return false;
+        setDeliveryQuoteError(
+          "Dostava trenutno ne može da se obračuna. Pokušajte ponovo.",
+        );
+        return false;
       }
+    }, [deliveryQuoteKey, getValues, lines, setValue, shippingCity],
+  );
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      void refreshDeliveryQuote(controller.signal);
     }, 200);
     return () => {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [getValues, hydrated, lines, quoteLineKey, setValue, shippingCity]);
+  }, [hydrated, quoteLineKey, refreshDeliveryQuote]);
 
   // Keep identity in store + form synced.
   useEffect(() => {
@@ -406,6 +434,10 @@ export function CheckoutFlow({
         return;
       }
       if (step === "shipping") rememberCheckoutFields(getValues());
+      if (step === "payment" && !deliveryQuoteIsCurrent) {
+        const quoteReady = await refreshDeliveryQuote();
+        if (!quoteReady) return;
+      }
       const i = stepOrder.indexOf(step);
       if (i < stepOrder.length - 1) setStep(stepOrder[i + 1]!);
     } finally {
@@ -419,6 +451,10 @@ export function CheckoutFlow({
 
   const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
     setSubmitError(null);
+    if (!deliveryQuoteIsCurrent) {
+      setSubmitError("Sačekajte da se obračuna tačan iznos dostave.");
+      return;
+    }
     rememberCheckoutFields(data);
     const response = await fetch("/api/checkout/order", {
       method: "POST",
@@ -436,7 +472,9 @@ export function CheckoutFlow({
       | CreateOrderApiResponse
       | null;
     if (!response.ok || !result?.ok) {
-      setSubmitError(readCreateOrderError(result));
+      setSubmitError(
+        readCreateOrderError(result, response.status, response.headers.get("Retry-After")),
+      );
       return;
     }
 
@@ -444,7 +482,6 @@ export function CheckoutFlow({
       data,
       lines,
       deliveryQuote,
-      voucherDiscountRsd: voucher?.discountRsd ?? 0,
       voucherCode: voucher?.code,
       orderNumber: result.data.number,
       serverPricing: result.data,
@@ -525,13 +562,13 @@ export function CheckoutFlow({
         <button
           type="submit"
           form="checkout-order-form"
-          disabled={formState.isSubmitting}
+          disabled={formState.isSubmitting || !deliveryQuoteIsCurrent}
           className="bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5"
         >
-          {formState.isSubmitting ? (
+          {formState.isSubmitting || !deliveryQuoteIsCurrent ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : null}
-          Potvrdi porudžbinu
+          {deliveryQuoteIsCurrent ? "Potvrdi porudžbinu" : "Obračunavam dostavu…"}
         </button>
       )}
     </div>
@@ -657,9 +694,16 @@ export function CheckoutFlow({
           cta={
             <>
               {step === "review" ? (
-                <p className="text-[11px] text-ink-500">
-                  Klikom na „Potvrdi porudžbinu” prihvatate iznos i Uslove kupovine.
-                </p>
+                <>
+                  <p className="text-[11px] text-ink-500">
+                    Klikom na „Potvrdi porudžbinu” prihvatate iznos i Uslove kupovine.
+                  </p>
+                  {deliveryQuoteError ? (
+                    <p role="alert" className="mt-1 text-xs text-action">
+                      {deliveryQuoteError}
+                    </p>
+                  ) : null}
+                </>
               ) : null}
               {summaryNavigation}
             </>
@@ -874,8 +918,9 @@ function rememberCheckoutFields(data: CheckoutFormData) {
     xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
     xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
-    companyName: data.shipping.companyName,
-    pib: data.shipping.pib,
+    companyName:
+      data.shipping.liceType === "pravno" ? data.shipping.companyName : undefined,
+    pib: data.shipping.liceType === "pravno" ? data.shipping.pib : undefined,
   };
   try {
     window.localStorage.setItem(
@@ -1014,7 +1059,9 @@ async function trackCheckoutSession({
 }
 
 function addressForApi(address: CheckoutAddress) {
+  const isBusiness = address.liceType === "pravno";
   return {
+    liceType: address.liceType,
     firstName: address.firstName,
     lastName: address.lastName,
     phone: address.phone,
@@ -1024,8 +1071,8 @@ function addressForApi(address: CheckoutAddress) {
     xExpressTownId: positiveIntOrUndefined(address.xExpressTownId),
     xExpressStreetId: positiveIntOrUndefined(address.xExpressStreetId),
     country: address.country || "RS",
-    companyName: address.companyName || undefined,
-    pib: address.pib || undefined,
+    companyName: isBusiness ? address.companyName || undefined : undefined,
+    pib: isBusiness ? address.pib || undefined : undefined,
   };
 }
 
@@ -1033,8 +1080,21 @@ function positiveIntOrUndefined(value: number | null | undefined) {
   return Number.isInteger(value) && Number(value) > 0 ? Number(value) : undefined;
 }
 
-function readCreateOrderError(result: CreateOrderApiResponse | null): string {
-  const error = result && !result.ok ? result.error : null;
+function readCreateOrderError(
+  result: CreateOrderApiResponse | null,
+  status?: number,
+  retryAfter?: string | null,
+): string {
+  if (status === 429) {
+    const seconds = Number.parseInt(retryAfter ?? "", 10);
+    const wait = Number.isFinite(seconds)
+      ? ` Pokušajte ponovo za oko ${Math.max(1, Math.ceil(seconds / 60))} min.`
+      : " Pokušajte ponovo malo kasnije.";
+    const message = result && !result.ok ? result.message : null;
+    return `${message ?? "Previše pokušaja."}${wait}`;
+  }
+  const error =
+    result && !result.ok && typeof result.error !== "string" ? result.error : null;
   switch (error?.code) {
     case "OUT_OF_STOCK":
       return `Artikal ${error.sku ?? ""} trenutno nema dovoljno zaliha.`;
@@ -1071,7 +1131,6 @@ function buildOrder({
   data,
   lines,
   deliveryQuote,
-  voucherDiscountRsd,
   voucherCode,
   orderNumber,
   serverPricing,
@@ -1079,38 +1138,19 @@ function buildOrder({
   data: CheckoutFormData;
   lines: ReturnType<typeof useCart.getState>["lines"];
   deliveryQuote: CheckoutDeliveryQuote;
-  voucherDiscountRsd: number;
   voucherCode?: string;
   orderNumber: string;
   serverPricing: {
     total: number;
+    subtotal: number;
+    savings: number;
+    shipping: number;
+    assemblyTotal: number;
     voucherDiscount: number;
     firstPurchaseDiscount: number;
     savedCardDiscount: number;
   };
 }): Order {
-  const itemsFull = lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0);
-  const itemsSale = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
-  const assemblyTotal =
-    data.shippingMethod === "kamion"
-      ? lines.reduce(
-          (n, l) =>
-            n +
-            (data.perItemAssembly?.[l.sku]
-              ? lineAssemblyPrice(deliveryQuote, l.sku) * l.qty
-              : 0),
-          0,
-        )
-      : 0;
-  const totals = computeTotals({
-    itemsFull,
-    itemsSale,
-    shippingMethod: data.shippingMethod,
-    assemblyTotal,
-    voucherDiscountRsd,
-    shippingPrices: deliveryQuote.prices,
-  });
-
   const shippingAddress: Address = {
     id: "shipping",
     firstName: data.shipping.firstName,
@@ -1122,8 +1162,9 @@ function buildOrder({
     xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
     xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
-    companyName: data.shipping.companyName,
-    pib: data.shipping.pib,
+    companyName:
+      data.shipping.liceType === "pravno" ? data.shipping.companyName : undefined,
+    pib: data.shipping.liceType === "pravno" ? data.shipping.pib : undefined,
   };
 
   const billingAddress: Address | undefined =
@@ -1139,8 +1180,9 @@ function buildOrder({
           xExpressTownId: positiveIntOrUndefined(data.billing.xExpressTownId) ?? null,
           xExpressStreetId: positiveIntOrUndefined(data.billing.xExpressStreetId) ?? null,
           country: data.billing.country || "RS",
-          companyName: data.billing.companyName,
-          pib: data.billing.pib,
+          companyName:
+            data.billing.liceType === "pravno" ? data.billing.companyName : undefined,
+          pib: data.billing.liceType === "pravno" ? data.billing.pib : undefined,
         }
       : undefined;
 
@@ -1162,10 +1204,10 @@ function buildOrder({
         : undefined,
       thumbnailUrl: l.thumbnailUrl,
     })),
-    subtotal: totals.itemsSale,
-    savings: totals.savings,
-    shipping: totals.shipping,
-    assemblyTotal: totals.assembly,
+    subtotal: serverPricing.subtotal,
+    savings: serverPricing.savings,
+    shipping: serverPricing.shipping,
+    assemblyTotal: serverPricing.assemblyTotal,
     voucherCode,
     voucherDiscount: serverPricing.voucherDiscount || undefined,
     firstPurchaseDiscount: serverPricing.firstPurchaseDiscount || undefined,

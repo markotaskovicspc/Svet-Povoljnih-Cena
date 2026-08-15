@@ -3,7 +3,12 @@ import "server-only";
 import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { applyShipmentEvent } from "@/lib/courier/registry";
-import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
+import {
+  loadOrderForEmail,
+  lowerOrderStatus,
+  sendOrderStatusChanged,
+  type PrismaOrderStatus,
+} from "@/lib/email";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { MyGlsClient, decompressMyGlsJson } from "./client";
 import { MYGLS_PROVIDER, requireMyGlsEnabled } from "./config";
@@ -233,7 +238,12 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     if (result) {
       results.push(result);
       if (result.eventCreated) {
-        await notifyShipmentSideEffects(result.orderId, result.status, result.customerEmail);
+        await notifyShipmentSideEffects(
+          result.orderId,
+          result.status,
+          result.orderStatus,
+          result.customerEmail,
+        );
       }
     }
   }
@@ -369,6 +379,7 @@ async function markRunFailed(runId: string, err: unknown) {
 async function notifyShipmentSideEffects(
   orderId: string,
   status: ShipmentStatus,
+  orderStatus: PrismaOrderStatus | null,
   customerEmail: string | null,
 ) {
   if (customerEmail) {
@@ -377,7 +388,7 @@ async function notifyShipmentSideEffects(
       if (loaded?.recipient) {
         await sendOrderStatusChanged({
           order: loaded.order,
-          status: loaded.order.status,
+          status: orderStatus ? lowerOrderStatus(orderStatus) : loaded.order.status,
           to: loaded.recipient,
         });
       }
