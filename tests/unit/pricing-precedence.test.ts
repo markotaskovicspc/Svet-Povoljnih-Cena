@@ -90,7 +90,7 @@ describe("ERP pricing precedence", () => {
     expect(customer.payable.effective).toBe(8_000);
   });
 
-  it("stacks authenticated loyalty on top of an active action", () => {
+  it("uses the active action and suppresses authenticated loyalty", () => {
     const quote = resolveProductPriceQuote(
       {
         fullPrice: 10_000,
@@ -107,9 +107,9 @@ describe("ERP pricing precedence", () => {
       { now, loggedIn: true },
     );
     expect(quote.actionOffer?.effective).toBe(8_000);
-    expect(quote.loyaltyOffer?.effective).toBe(6_000);
-    expect(quote.payable.effective).toBe(6_000);
-    expect(quote.payable.kind).toBe("loyalty");
+    expect(quote.loyaltyOffer).toBeNull();
+    expect(quote.payable.effective).toBe(8_000);
+    expect(quote.payable.kind).toBe("sale");
   });
 
   it("restores loyalty after the product action expires", () => {
@@ -179,7 +179,8 @@ describe("ERP pricing precedence", () => {
     );
     expect(quote.full).toBe(9_000);
     expect(quote.actionOffer?.full).toBe(9_000);
-    expect(quote.loyaltyOffer?.effective).toBe(5_600);
+    expect(quote.loyaltyOffer).toBeNull();
+    expect(quote.payable.effective).toBe(8_000);
   });
 
   it("breaks equal action priorities by newer start and then lower price", () => {

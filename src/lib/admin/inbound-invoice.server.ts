@@ -157,6 +157,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       where: {
         purchaseOrderId: input.purchaseOrderId,
         id: { not: input.id },
+        status: { not: InboundInvoiceStatus.CANCELLED },
       },
       select: { number: true },
     }),
@@ -218,6 +219,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         where: {
           purchaseOrderId: input.purchaseOrderId,
           id: { not: input.id },
+          status: { not: InboundInvoiceStatus.CANCELLED },
         },
         select: { number: true },
       });
@@ -407,7 +409,9 @@ export async function rebuildInboundInvoiceAllocations(
           product: { select: { id: true, stock: true, cogs: true } },
         },
       },
-      inboundInvoice: {
+      inboundInvoices: {
+        where: { status: InboundInvoiceStatus.POSTED },
+        take: 1,
         select: {
           lockedAt: true,
           status: true,
@@ -419,6 +423,7 @@ export async function rebuildInboundInvoiceAllocations(
     },
   });
   if (!order) return;
+  const postedInvoice = order.inboundInvoices[0] ?? null;
   const defaults = calculatePurchaseOrderInvoiceDefaults({
     exchangeRate: Number(order.exchangeRate),
     freightCost: Number(order.freightCost),
@@ -435,16 +440,16 @@ export async function rebuildInboundInvoiceAllocations(
       defaults.customsValueRsd +
       defaults.transportValueRsd,
     invoices:
-      order.inboundInvoice?.lockedAt &&
-      order.inboundInvoice.status === InboundInvoiceStatus.POSTED
+      postedInvoice?.lockedAt &&
+      postedInvoice.status === InboundInvoiceStatus.POSTED
         ? [
             {
-              netValue: Number(order.inboundInvoice.netValue),
-              exchangeRate: Number(order.inboundInvoice.exchangeRate),
+              netValue: Number(postedInvoice.netValue),
+              exchangeRate: Number(postedInvoice.exchangeRate),
               invoiceValueRsd:
-                order.inboundInvoice.invoiceValueRsd == null
+                postedInvoice.invoiceValueRsd == null
                   ? null
-                  : Number(order.inboundInvoice.invoiceValueRsd),
+                  : Number(postedInvoice.invoiceValueRsd),
             },
           ]
         : [],
@@ -494,8 +499,8 @@ export async function rebuildInboundInvoiceAllocations(
   }
 
   const hasPostedInvoice = Boolean(
-    order.inboundInvoice?.lockedAt &&
-      order.inboundInvoice.status === InboundInvoiceStatus.POSTED,
+    postedInvoice?.lockedAt &&
+      postedInvoice.status === InboundInvoiceStatus.POSTED,
   );
   let snapshot = readCogsBookingSnapshot(order.cogsBookingSnapshot);
   if (order.cogsBookedAt && !snapshot) {

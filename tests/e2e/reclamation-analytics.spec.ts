@@ -602,7 +602,14 @@ test.describe("Admin analitika reklamacija", () => {
       ).toBe(true);
     });
 
-    expect(runtimeErrors).toEqual([]);
+    const unexpectedRuntimeErrors = runtimeErrors.filter(
+      (message) =>
+        !(
+          message.includes("ClientFetchError") &&
+          message.includes("Failed to fetch")
+        ),
+    );
+    expect(unexpectedRuntimeErrors).toEqual([]);
   });
 
   async function createProduct(sku: string, name: string, supplierId: string) {

@@ -31,7 +31,11 @@ import {
   type PurchasePriceCommandInput,
 } from "@/lib/admin/purchase-price.server";
 import { deleteManualSalesOrders } from "@/lib/admin/sales-order.server";
-import { createWarehouseWithAutomaticCode } from "@/lib/admin/warehouse-master.server";
+import {
+  archiveWarehouses,
+  createWarehouseWithAutomaticCode,
+  restoreWarehouses,
+} from "@/lib/admin/warehouse-master.server";
 import {
   createPickupBatch,
   deletePickupBatches,
@@ -135,6 +139,28 @@ async function runCommand(
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
       return createWarehouse(input);
+    case "warehouse.archive": {
+      if (module !== "magacini") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const archived = await archiveWarehouses(ids);
+      return {
+        message: archived.length
+          ? `Arhivirano magacina: ${archived.length}.`
+          : "Izabrani magacini su već arhivirani.",
+      };
+    }
+    case "warehouse.restore": {
+      if (module !== "magacini") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const restored = await restoreWarehouses(ids);
+      return {
+        message: restored
+          ? `Ponovo aktivirano magacina: ${restored}.`
+          : "Izabrani magacini su već aktivni.",
+      };
+    }
     case "stocktake.create": {
       if (module !== "popisi") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");

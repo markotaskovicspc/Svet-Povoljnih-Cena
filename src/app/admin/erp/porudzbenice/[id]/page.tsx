@@ -345,7 +345,8 @@ export default async function PurchaseOrderEditorPage({
           },
         },
         events: { orderBy: { createdAt: "desc" }, take: 20 },
-        inboundInvoice: {
+        inboundInvoices: {
+          orderBy: { createdAt: "desc" },
           select: { id: true, number: true, type: true, status: true },
         },
       },
@@ -781,16 +782,20 @@ export default async function PurchaseOrderEditorPage({
         <div className="grid gap-6 lg:grid-cols-2">
           <Card id="vezani-dokumenti">
             <CardTitle description="Prijemnica povezana sa ovom porudžbenicom.">Vezani dokumenti</CardTitle>
-            {order.inboundInvoice ? (
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{order.inboundInvoice.number} · {order.inboundInvoice.type} · {order.inboundInvoice.status}</span>
-                <Link
-                  href={`/admin/erp/ulazne-fakture/${order.inboundInvoice.id}`}
-                  className="text-walnut hover:underline"
-                >
-                  Otvori fakturu
-                </Link>
-              </div>
+            {order.inboundInvoices.length ? (
+              <ul className="space-y-2 text-sm">
+                {order.inboundInvoices.map((invoice) => (
+                  <li key={invoice.id} className="flex items-center justify-between gap-3">
+                    <span>{invoice.number} · {invoice.type} · {invoice.status}</span>
+                    <Link
+                      href={`/admin/erp/ulazne-fakture/${invoice.id}`}
+                      className="text-walnut hover:underline"
+                    >
+                      Otvori fakturu
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : <p className="text-sm text-ink-500">Nema vezanih dokumenata.</p>}
           </Card>
           <Card>

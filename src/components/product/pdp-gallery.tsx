@@ -204,6 +204,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           {badges ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
+              <PdpPictograms pictograms={product.pictograms} />
             </div>
           ) : null}
         </div>
@@ -283,13 +284,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           {badges ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
+              {slide.kind === "image" ? (
+                <PdpPictograms pictograms={product.pictograms} />
+              ) : null}
             </div>
-          ) : null}
-          {slide.kind === "image" ? (
-            <PdpPictograms
-              pictograms={product.pictograms}
-              className="absolute top-3 right-3 z-10"
-            />
           ) : null}
           {slides.length > 1 ? (
             <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
@@ -396,13 +394,10 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
           {badges ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
+              {slide.kind === "image" ? (
+                <PdpPictograms pictograms={product.pictograms} />
+              ) : null}
             </div>
-          ) : null}
-          {slide.kind === "image" ? (
-            <PdpPictograms
-              pictograms={product.pictograms}
-              className="absolute top-16 right-3 z-10"
-            />
           ) : null}
           {slides.length > 1 ? (
             <>
@@ -448,7 +443,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
       </div>
 
       {/* Thumb strip */}
-      <div className="relative hidden md:block">
+      <div className="relative hidden h-[min(65vh,620px)] min-h-[360px] md:block">
         {thumbOverflow.up ? (
           <button
             type="button"
@@ -462,7 +457,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
         <ul
           ref={thumbTrackRef}
           onScroll={updateThumbOverflow}
-          className="flex max-h-[448px] flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex h-full flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
           aria-label="Galerija proizvoda"
         >
@@ -485,7 +480,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   onFocus={() => goTo(i)}
                   onClick={() => goTo(i)}
                   className={cn(
-                    "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-14 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none",
+                    "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-20 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none lg:size-24",
                     isActive && "ring-walnut ring-2",
                   )}
                 >
@@ -494,7 +489,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                       src={getMediaVariantUrl(s.asset, "thumb")}
                       alt=""
                       fill
-                      sizes="56px"
+                      sizes="(min-width: 1024px) 96px, 80px"
                       onError={() => markImageFailed(s.asset.url)}
                       className="object-contain p-1"
                     />

@@ -2,12 +2,15 @@ import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function dateOnly(value: Date | null) {
-  return value?.toISOString().slice(0, 10) ?? "";
+  return value?.toLocaleDateString("sr-Latn-RS", {
+    timeZone: "Europe/Belgrade",
+  }) ?? "—";
 }
 
 export async function GET(
@@ -21,8 +24,6 @@ export async function GET(
     include: {
       supplier: true,
       loadingLocation: true,
-      receivingWarehouse: true,
-      transportDefinition: true,
       items: { orderBy: { createdAt: "asc" } },
     },
   });
@@ -33,105 +34,179 @@ export async function GET(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Svet povoljnih cena ERP";
   workbook.created = new Date();
-  const header = workbook.addWorksheet("Porudžbenica");
-  const headerRows: Array<[string, string | number]> = [
-    ["Broj porudžbenice", order.number],
-    ["Status", order.status],
-    ["Dobavljač", order.supplier?.name ?? ""],
-    ["Uslovi plaćanja", order.supplier?.paymentTerms ?? ""],
-    ["Mesto utovara", order.loadingLocation?.name ?? ""],
-    ["Magacin za prijem", order.receivingWarehouse?.name ?? ""],
-    ["Datum kreiranja", dateOnly(order.createdAt)],
-    ["Datum porudžbine", dateOnly(order.orderDate)],
-    ["Datum utovara", dateOnly(order.loadingDate)],
-    ["Datum isporuke", dateOnly(order.deliveryDate)],
-    ["Ukupna zapremina m3", Number(order.totalVolume ?? 0)],
-    ["Ukupna težina kg", Number(order.totalWeight ?? 0)],
-    ["Ukupna cena", Number(order.totalPrice)],
-    ["Valuta", order.currency],
-    ["Kurs", Number(order.exchangeRate)],
-    ["Kalkulativna cena prevoza", Number(order.freightCost)],
-    ["Valuta prevoza", order.freightCurrency],
-    ["Kurs valute prevoza", Number(order.freightExchangeRate)],
-    ["Tip transporta", order.transportDefinition?.name ?? order.transportType ?? ""],
-    ["Paritet", order.parity ?? ""],
-    ["Ukupna BM%", Number(order.bmPct ?? 0)],
-    ["Napomena", order.notes ?? ""],
-  ];
-  header.addRows(headerRows);
-  header.getColumn(1).width = 30;
-  header.getColumn(2).width = 50;
-  header.getColumn(1).font = { bold: true };
-
-  const items = workbook.addWorksheet("Artikli", {
-    views: [{ state: "frozen", ySplit: 1 }],
+  const sheet = workbook.addWorksheet("ORDER REQUEST", {
+    views: [{ state: "frozen", ySplit: 16 }],
+    pageSetup: {
+      orientation: "landscape",
+      paperSize: 9,
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: {
+        left: 0.2,
+        right: 0.2,
+        top: 0.35,
+        bottom: 0.35,
+        header: 0.1,
+        footer: 0.1,
+      },
+    },
   });
-  items.columns = [
-    { header: "Šifra artikla", key: "sku", width: 18 },
-    { header: "Naziv artikla", key: "name", width: 35 },
-    { header: "Atributi artikla", key: "attributes", width: 28 },
-    { header: "Dezen artikla", key: "pattern", width: 22 },
-    { header: "Nabavna cena", key: "purchasePrice", width: 16 },
-    { header: "Valuta", key: "currency", width: 10 },
-    { header: "Paritet", key: "parity", width: 12 },
-    { header: "Važenje cene od", key: "priceValidFrom", width: 18 },
-    { header: "MOQ", key: "moq", width: 10 },
-    { header: "Broj artikala u pakovanju", key: "packQty", width: 24 },
-    { header: "Količina za poručivanje", key: "qty", width: 22 },
-    { header: "Ukupna zapremina m3", key: "totalVolume", width: 22 },
-    { header: "Ukupna težina kg", key: "totalWeight", width: 20 },
-    { header: "Carinska stopa %", key: "customsRate", width: 18 },
-    { header: "Kalkulativna MPC", key: "calcRetailPrice", width: 18 },
-    { header: "BM%", key: "bmPct", width: 12 },
-    { header: "Dobavljačev naziv artikla", key: "supplierProductName", width: 30 },
-    { header: "Sertifikati", key: "certificates", width: 24 },
-    { header: "Bar kod", key: "barcode", width: 18 },
+
+  const widths = [
+    22, 14, 24, 22, 16, 21, 14, 14, 15, 16, 16, 20, 16, 18,
   ];
-  for (const item of order.items) {
-    items.addRow({
-      sku: item.sku,
-      name: item.name,
-      attributes: item.attributes ?? "",
-      pattern: item.pattern ?? "",
-      purchasePrice: Number(item.purchasePrice),
-      currency: item.currency,
-      parity: item.parity ?? "",
-      priceValidFrom: dateOnly(item.priceValidFrom),
-      moq: item.moq ?? "",
-      packQty: item.packQty ?? "",
-      qty: item.qty,
-      totalVolume: Number(item.totalVolume ?? 0),
-      totalWeight: Number(item.totalWeight ?? 0),
-      customsRate: Number(item.customsRate ?? 0),
-      calcRetailPrice: Number(item.calcRetailPrice ?? 0),
-      bmPct: Number(item.bmPct ?? 0),
-      supplierProductName: item.supplierProductName ?? "",
-      certificates: item.certificates ?? "",
-      barcode: item.barcode ?? "",
-    });
-  }
-  items.autoFilter = {
-    from: { row: 1, column: 1 },
-    to: { row: Math.max(items.rowCount, 1), column: items.columnCount },
-  };
-  items.getRow(1).eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  widths.forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
+
+  sheet.mergeCells("A1:J2");
+  sheet.getCell("A1").value = "PORUDŽBENICA / ORDER REQUEST";
+  sheet.getCell("A1").font = { bold: true, size: 24 };
+  sheet.getCell("A1").alignment = { vertical: "middle" };
+  sheet.mergeCells("N1:N2");
+  sheet.getCell("N1").value = order.number;
+  sheet.getCell("N1").font = { bold: true, size: 20 };
+  sheet.getCell("N1").alignment = { horizontal: "right", vertical: "middle" };
+  sheet.getRow(1).height = 27;
+  sheet.getRow(2).height = 27;
+
+  const supplierAddress = [
+    order.supplier?.address,
+    order.supplier?.city,
+    order.supplier?.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const loadingPort = [order.loadingLocation?.name, order.loadingLocation?.city]
+    .filter(Boolean)
+    .join(", ");
+  const metadata: Array<[string, string]> = [
+    ["Datum porudžbine / Order date", dateOnly(order.orderDate ?? order.createdAt)],
+    ["Kupac / Buyer", MERCHANT_LEGAL_INFO.name.toUpperCase()],
+    ["Adresa kupca / Buyer address", MERCHANT_LEGAL_INFO.shortAddress],
+    ["PIB kupca / Tax number", MERCHANT_LEGAL_INFO.pib],
+    ["Paritet / Incoterm", order.parity ?? "—"],
+    ["Prodavac / Seller", order.supplier?.name ?? "—"],
+    ["Adresa prodavca / Seller address", supplierAddress || "—"],
+    [
+      "1. Uslovi plaćanja / Terms of payment",
+      order.supplier?.paymentTerms ?? "—",
+    ],
+    ["2. Datum utovara / Loading date", dateOnly(order.loadingDate)],
+    ["3. Luka utovara / Port of loading", loadingPort || "—"],
+  ];
+  metadata.forEach(([label, value], index) => {
+    const row = index + 4;
+    sheet.mergeCells(row, 1, row, 4);
+    sheet.mergeCells(row, 5, row, 14);
+    sheet.getCell(row, 1).value = label;
+    sheet.getCell(row, 1).font = { bold: true, size: 11 };
+    sheet.getCell(row, 5).value = value;
+    sheet.getCell(row, 5).font = { size: 11 };
+  });
+
+  const tableRow = 16;
+  const headers = [
+    "Naziv artikla dobavljača / Item name of producer",
+    "SPC šifra artikla / SPC item code",
+    "Naziv artikla Svet povoljnih cena / SPC item name",
+    "Naziv artikla ili fotografija / Item name or photo",
+    "Boja / Color",
+    "Način pakovanja / Packaging",
+    "Broj kutija / CTN quantity",
+    "Količina / Quantity",
+    "Jedinica mere / Unit",
+    "Ukupna zapremina / Total CBM",
+    "Sertifikati / Certificates",
+    "Bar kod / Barcode",
+    `Cena po jedinici (${order.currency}) / Price per unit`,
+    `Ukupna cena (${order.currency}) / Total price`,
+  ];
+  const headerRow = sheet.getRow(tableRow);
+  headerRow.values = headers;
+  headerRow.height = 66;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, size: 9 };
     cell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FF2F2924" },
+      fgColor: { argb: "FFF2F2F2" },
+    };
+    cell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
     };
   });
-  for (const key of [
-    "purchasePrice",
-    "totalVolume",
-    "totalWeight",
-    "customsRate",
-    "calcRetailPrice",
-    "bmPct",
-  ]) {
-    items.getColumn(key).numFmt = "#,##0.00";
+
+  const totalRowNumber = tableRow + 1;
+  const totalCartons = order.items.reduce(
+    (sum, item) => sum + Math.ceil(item.qty / Math.max(item.packQty ?? 1, 1)),
+    0,
+  );
+  const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
+  sheet.mergeCells(totalRowNumber, 1, totalRowNumber, 6);
+  sheet.getCell(totalRowNumber, 1).value = "Ukupno / Total";
+  sheet.getCell(totalRowNumber, 1).alignment = { horizontal: "right" };
+  sheet.getCell(totalRowNumber, 7).value = totalCartons;
+  sheet.getCell(totalRowNumber, 8).value = totalQty;
+  sheet.getCell(totalRowNumber, 10).value = Number(order.totalVolume ?? 0);
+  sheet.mergeCells(totalRowNumber, 11, totalRowNumber, 12);
+  sheet.getCell(totalRowNumber, 11).value = "Ukupno za plaćanje / Total payment";
+  sheet.mergeCells(totalRowNumber, 13, totalRowNumber, 14);
+  sheet.getCell(totalRowNumber, 13).value = Number(order.totalPrice);
+  sheet.getCell(totalRowNumber, 13).numFmt = `#,##0.00 "${order.currency}"`;
+  sheet.getRow(totalRowNumber).font = { bold: true, size: 10 };
+
+  order.items.forEach((item, index) => {
+    const row = sheet.getRow(tableRow + 2 + index);
+    row.values = [
+      item.supplierProductName ?? item.sku,
+      item.sku,
+      item.name,
+      item.name,
+      item.pattern ?? "—",
+      `${item.packQty ?? 1} pcs/box`,
+      Math.ceil(item.qty / Math.max(item.packQty ?? 1, 1)),
+      item.qty,
+      "piece / kom",
+      Number(item.totalVolume ?? 0),
+      item.certificates ?? "—",
+      item.barcode ?? "—",
+      Number(item.purchasePrice),
+      Number(item.purchasePrice) * item.qty,
+    ];
+    row.height = 52;
+    row.eachCell((cell) => {
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true,
+      };
+    });
+    row.getCell(10).numFmt = "#,##0.000";
+    row.getCell(13).numFmt = "#,##0.00";
+    row.getCell(14).numFmt = "#,##0.00";
+  });
+
+  const lastRow = tableRow + 1 + order.items.length;
+  for (let row = tableRow; row <= lastRow; row += 1) {
+    for (let column = 1; column <= 14; column += 1) {
+      sheet.getCell(row, column).border = {
+        top: { style: "thin", color: { argb: "FF202020" } },
+        left: { style: "thin", color: { argb: "FF202020" } },
+        bottom: { style: "thin", color: { argb: "FF202020" } },
+        right: { style: "thin", color: { argb: "FF202020" } },
+      };
+    }
   }
+  sheet.autoFilter = {
+    from: { row: tableRow, column: 1 },
+    to: { row: lastRow, column: 14 },
+  };
+  sheet.pageSetup.printArea = `A1:N${lastRow}`;
+  sheet.headerFooter.oddFooter = "Strana &P / &N";
 
   const buffer = await workbook.xlsx.writeBuffer();
   return new Response(new Uint8Array(buffer), {

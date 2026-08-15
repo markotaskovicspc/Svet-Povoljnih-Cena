@@ -1,3 +1,5 @@
+import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
+
 type GoodsReceiptProduct = {
   sku: string;
   name: string;
@@ -14,6 +16,8 @@ type GoodsReceiptProduct = {
   packDepthCm: unknown;
   packHeightCm: unknown;
   packGrossWeightKg: unknown;
+  containerQty: number | null;
+  containerGrossWeightKg: unknown;
   categories: readonly unknown[];
   priceListEntries: readonly unknown[];
 };
@@ -35,13 +39,20 @@ export function goodsReceiptMasterIssues(product: GoodsReceiptProduct) {
     issues.push("dimenzije artikla");
   }
   if (!positive(product.grossWeightKg)) issues.push("bruto težina artikla");
-  if (!product.packQty || product.packQty < 1) issues.push("broj komada u paketu");
-  if (
-    ![product.packWidthCm, product.packDepthCm, product.packHeightCm].every(positive)
-  ) {
-    issues.push("transportne dimenzije paketa");
+  if (!hasProductVolumeSource({
+    containerQty: product.containerQty,
+    containerGrossWeightKg: Number(product.containerGrossWeightKg),
+    packQty: product.packQty,
+    packWidthCm: Number(product.packWidthCm),
+    packDepthCm: Number(product.packDepthCm),
+    packHeightCm: Number(product.packHeightCm),
+  })) {
+    issues.push("količina kontejnera ili transportne dimenzije paketa");
   }
-  if (!positive(product.packGrossWeightKg)) issues.push("bruto težina paketa");
+  if (!positive(product.containerQty)) {
+    if (!product.packQty || product.packQty < 1) issues.push("broj komada u paketu");
+    if (!positive(product.packGrossWeightKg)) issues.push("bruto težina paketa");
+  }
   if (!product.priceListEntries.length) issues.push("aktivna maloprodajna cena");
   return issues;
 }

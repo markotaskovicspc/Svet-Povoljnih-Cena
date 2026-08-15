@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProductBySku } from "@/lib/api/catalog";
 import { getMediaVariantUrl } from "@/lib/media";
-import { effectiveUnitPrice } from "@/lib/pricing";
+import { resolveProductPriceQuote } from "@/lib/pricing";
 import type { Product, WishlistProductSnapshot } from "@/types";
 import {
   checkRateLimitForRequest,
@@ -44,13 +44,17 @@ export async function POST(req: Request) {
       loyaltyEligible: currentUser?.userType === "customer",
     }));
   const items: WishlistProductSnapshot[] = products.map((product) => {
-    const price = effectiveUnitPrice(product);
+    const quote = resolveProductPriceQuote(product, {
+      loggedIn: product.loyaltyEligible,
+    });
     return {
       sku: product.sku,
       slug: product.slug,
       name: product.name,
-      fullPrice: price.full,
-      effectivePrice: price.effective,
+      fullPrice: quote.full,
+      effectivePrice: quote.payable.effective,
+      actionPrice: quote.actionOffer?.effective,
+      loyaltyPrice: quote.loyaltyOffer?.effective,
       discountPct: product.discountPct,
       inStock: product.stock > 0,
       incoming: product.incomingStock > 0,

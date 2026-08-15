@@ -261,18 +261,13 @@ export function resolveProductPriceQuote(
     actionExpired,
     actionName: canonicalAction?.actionName ?? product.action?.name,
   });
-  // Loyalty remains stackable with an active action. A configured loyalty
-  // percentage (or the percentage implied by an absolute loyalty price) is
-  // applied to the current action base, then linear promotions stack on top.
+  // Client rule: loyalty is offered only when there is no active product
+  // action. Linear promotions can still apply to whichever single base offer
+  // is active, but loyalty never appears or stacks on an action price.
   const configuredLoyalty = resolveLoyaltyPrice(product, full);
-  const loyaltyBase = configuredLoyalty
+  const loyaltyBase = configuredLoyalty && actionBase == null
     ? {
-        effective:
-          actionBase == null
-            ? configuredLoyalty.effective
-            : Math.round(
-                actionBase * (1 - configuredLoyalty.discountPct / 100),
-              ),
+        effective: configuredLoyalty.effective,
         discountPct: configuredLoyalty.discountPct,
       }
     : null;

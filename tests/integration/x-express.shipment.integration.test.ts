@@ -181,11 +181,11 @@ describe("X Express shipment persistence", () => {
         courier: "COURIER_SMALL",
         pickupDate: new Date("2026-07-27T00:00:00Z"),
         lines: {
-          create: {
+          create: [1, 2].map((packageNo) => ({
             orderId,
             orderItemId: item.id,
-            packageNo: 1,
-          },
+            packageNo,
+          })),
         },
       },
     });

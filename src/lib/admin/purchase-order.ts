@@ -22,7 +22,7 @@ export type PurchaseOrderLineCalculation = {
 export const STANDARD_CONTAINER_VOLUME_M3 = 69;
 
 export const PRODUCT_LOGISTICS_SOURCE_ERROR =
-  "Unesite ili količinu i bruto kg za ceo kontejner, ili kom/pak i sve tri dimenzije transportnog pakovanja (širinu, dubinu i visinu).";
+  "Unesite količinu za ceo kontejner ili kom/pak i sve tri dimenzije transportnog pakovanja (širinu, dubinu i visinu).";
 
 type ProductLogisticsSourceInput = {
   containerQty?: number | null;
@@ -41,16 +41,14 @@ function isPositiveNumber(value: number | null | undefined) {
 }
 
 /**
- * Client rule: a complete container pair wins over a complete transport-package
- * group when both are filled in.
+ * Client rule: container quantity is an alternative volume source and wins
+ * over transport-package dimensions. Container gross weight is optional; when
+ * absent, unit/product gross weight remains the weight source.
  */
 export function productLogisticsSource(
   input: ProductLogisticsSourceInput,
 ): "container" | "package" | null {
-  if (
-    isPositiveNumber(input.containerQty) &&
-    isPositiveNumber(input.containerGrossWeightKg)
-  ) {
+  if (isPositiveNumber(input.containerQty)) {
     return "container";
   }
 

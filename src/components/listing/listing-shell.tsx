@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { LayoutGrid, ListFilter, RotateCcw, Rows3 } from "lucide-react";
+import { ArrowUp, LayoutGrid, ListFilter, RotateCcw, Rows3 } from "lucide-react";
 import Image from "next/image";
 import type { Banner, MediaAsset, Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
@@ -62,6 +62,7 @@ import {
   matchesListingSubTab,
   resolveListingProducts,
 } from "@/lib/listing/filters";
+import { OPEN_MOBILE_FILTERS_EVENT } from "@/lib/listing/mobile-filter-header";
 
 export interface ListingPageQuery {
   categoryPath?: string;
@@ -178,6 +179,14 @@ function ListingShellInner({
   });
   const [activeSub, setActiveSub] = useState<string | undefined>(initialSubTab);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    const openMobileFilters = () => setMobileFiltersOpen(true);
+    window.addEventListener(OPEN_MOBILE_FILTERS_EVENT, openMobileFilters);
+    return () =>
+      window.removeEventListener(OPEN_MOBILE_FILTERS_EVENT, openMobileFilters);
+  }, []);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const listingQueryRef = useRef("");
@@ -227,6 +236,13 @@ function ListingShellInner({
   useEffect(() => {
     listingQueryRef.current = listingQueryString;
   }, [listingQueryString]);
+
+  useEffect(() => {
+    const update = () => setShowBackToTop(window.scrollY > 600);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
 
   useEffect(() => {
     if (sourceIsComplete) return;
@@ -423,14 +439,14 @@ function ListingShellInner({
                 </h1>
                 {period && periodPlacement === "title-line" ? (
                   <p className="inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
-                    {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
+                    {period.label ?? "Akcija"} važi{period.startsAt ? ` od ${formatDate(period.startsAt)}` : ""} do {formatDate(period.endsAt)}
                   </p>
                 ) : null}
               </div>
             </div>
             {period && periodPlacement === "below-title" ? (
               <p className="mt-2 inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
-                {period.label ?? "Akcija"} traje do {formatDate(period.endsAt)}
+                {period.label ?? "Akcija"} važi{period.startsAt ? ` od ${formatDate(period.startsAt)}` : ""} do {formatDate(period.endsAt)}
               </p>
             ) : null}
             {!period && subtitle ? (
@@ -659,6 +675,16 @@ function ListingShellInner({
           </div>
         </div>
       </div>
+      {showBackToTop ? (
+        <button
+          type="button"
+          aria-label="Povratak na vrh strane"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed right-4 bottom-4 z-40 inline-flex size-11 items-center justify-center rounded-full bg-ink-900 text-canvas shadow-soft-3 transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none md:right-6 md:bottom-6"
+        >
+          <ArrowUp className="size-5" aria-hidden />
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -63,6 +63,8 @@ const order: Order = {
       unitPriceSale: 1_000,
       withAssembly: true,
       assemblyPrice: 300,
+      categoryName: "Test kategorija",
+      supplierIntegrationKey: "SPC",
     },
   ],
   subtotal: 2_000,
@@ -118,7 +120,7 @@ describe("all transactional Resend send flows", () => {
     mocks.trackedDispatch.mockResolvedValue(success);
   });
 
-  it("renders order confirmation and both required PDF attachments", async () => {
+  it("renders order confirmation, purchase PDFs and a guarantee for non-Rabalux items", async () => {
     await expect(
       sendOrderConfirmation({ order, to: "delivered@resend.dev" }),
     ).resolves.toEqual(success);
@@ -135,8 +137,33 @@ describe("all transactional Resend send flows", () => {
     expect(input.attachments).toEqual([
       expect.objectContaining({ contentType: "application/pdf" }),
       expect.objectContaining({ contentType: "application/pdf" }),
+      expect.objectContaining({
+        filename: `garantni-list-${order.id}.pdf`,
+        contentType: "application/pdf",
+      }),
     ]);
     expect(input.attachments.every((item: { content: string }) => item.content.length > 100)).toBe(true);
+  });
+
+  it("does not attach a guarantee when every order item is Rabalux", async () => {
+    await sendOrderConfirmation({
+      order: {
+        ...order,
+        items: order.items.map((item) => ({
+          ...item,
+          supplierIntegrationKey: "RABALUX",
+        })),
+      },
+      to: "delivered@resend.dev",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.attachments).toHaveLength(2);
+    expect(
+      input.attachments.some((attachment: { filename: string }) =>
+        attachment.filename.startsWith("garantni-list-"),
+      ),
+    ).toBe(false);
   });
 
   it.each<OrderStatus>([

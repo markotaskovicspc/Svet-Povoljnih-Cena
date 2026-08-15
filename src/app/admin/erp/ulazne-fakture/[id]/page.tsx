@@ -253,7 +253,8 @@ export default async function InboundInvoicePage({
                 },
               },
             },
-            inboundInvoice: {
+            inboundInvoices: {
+              where: { status: { not: InboundInvoiceStatus.CANCELLED } },
               select: {
                 id: true,
                 number: true,
@@ -272,8 +273,12 @@ export default async function InboundInvoicePage({
       where: {
         status: { not: PurchaseOrderStatus.CANCELLED },
         OR: [
-          { inboundInvoice: { is: null } },
-          { inboundInvoice: { is: { id } } },
+          {
+            inboundInvoices: {
+              none: { status: { not: InboundInvoiceStatus.CANCELLED } },
+            },
+          },
+          { inboundInvoices: { some: { id } } },
         ],
       },
       orderBy: { createdAt: "desc" },
@@ -363,9 +368,7 @@ export default async function InboundInvoicePage({
       };
     },
   );
-  const relevantInvoices = invoice.purchaseOrder?.inboundInvoice
-    ? [invoice.purchaseOrder.inboundInvoice]
-    : [];
+  const relevantInvoices = invoice.purchaseOrder?.inboundInvoices ?? [];
   const purchaseOrderDefaults = invoice.purchaseOrder
     ? calculatePurchaseOrderInvoiceDefaults({
         exchangeRate: Number(invoice.purchaseOrder.exchangeRate),

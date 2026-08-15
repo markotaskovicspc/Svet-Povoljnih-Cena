@@ -67,7 +67,21 @@ export async function loadOrderForEmail(
   const row = await db.order.findUnique({
     where: { id: orderId },
     include: {
-      items: { orderBy: { id: "asc" } },
+      items: {
+        orderBy: { id: "asc" },
+        include: {
+          product: {
+            select: {
+              supplier: { select: { integrationKey: true } },
+              categories: {
+                orderBy: { category: { level: "desc" } },
+                take: 1,
+                select: { category: { select: { name: true } } },
+              },
+            },
+          },
+        },
+      },
       payments: { orderBy: { createdAt: "desc" }, take: 1 },
       user: { select: { email: true, phone: true } },
     },
@@ -89,6 +103,12 @@ export async function loadOrderForEmail(
       withAssembly: i.withAssembly,
       assemblyPrice: i.assemblyPrice ? num(i.assemblyPrice) : undefined,
       thumbnailUrl: i.thumbnailUrl ?? undefined,
+      categoryName:
+        i.categoryName ?? i.product?.categories[0]?.category.name ?? undefined,
+      supplierIntegrationKey:
+        i.supplierIntegrationKey ??
+        i.product?.supplier?.integrationKey ??
+        undefined,
     })),
     subtotal: num(row.subtotal),
     savings: num(row.savings),

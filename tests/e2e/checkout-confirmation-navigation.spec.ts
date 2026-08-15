@@ -1,9 +1,72 @@
+import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
+
+const runId = `${Date.now()}-${process.pid}`;
+const orderNumber = `SPC-QA-NAV-${runId}`;
+const accessToken = `qa-navigation-token-${runId}`;
+let db: PrismaClient;
 
 test.skip(
   process.env.E2E_CHECKOUT_NAVIGATION !== "1",
-  "Checkout confirmation navigation runs only in the isolated mocked acceptance flow.",
+  "Checkout confirmation navigation runs only in the isolated acceptance flow.",
 );
+
+test.beforeAll(async () => {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required for checkout navigation acceptance.");
+  }
+  db = new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString,
+      max: 2,
+      connectionTimeoutMillis: 15_000,
+    }),
+  });
+  await db.order.deleteMany({ where: { number: orderNumber } });
+  await db.order.create({
+    data: {
+      number: orderNumber,
+      publicAccessTokenHash: createHash("sha256")
+        .update(accessToken, "utf8")
+        .digest("base64url"),
+      publicAccessTokenCreatedAt: new Date(),
+      guestEmail: "delivered@resend.dev",
+      subtotal: 100,
+      shipping: 990,
+      total: 1_090,
+      shippingMethod: "KURIR",
+      paymentMethod: "POUZECE_GOTOVINA",
+      shipFirstName: "Codex",
+      shipLastName: "QA",
+      shipPhone: "0601234567",
+      shipStreet: "Kralja Petra I 1",
+      shipCity: "Kragujevac",
+      shipPostalCode: "34000",
+      termsAcceptedAt: new Date(),
+      items: {
+        create: {
+          sku: "QA-NAVIGATION",
+          name: "QA checkout navigation",
+          qty: 1,
+          unitPriceFull: 100,
+          unitPriceSale: 100,
+        },
+      },
+    },
+  });
+});
+
+test.afterAll(async () => {
+  if (!db) return;
+  try {
+    await db.order.deleteMany({ where: { number: orderNumber } });
+  } finally {
+    await db.$disconnect();
+  }
+});
 
 test("successful guest order lands on the confirmation route", async ({
   context,
@@ -108,8 +171,8 @@ test("successful guest order lands on the confirmation route", async ({
         ok: true,
         data: {
           id: "qa-navigation-order-id",
-          number: "SPC-QA-NAVIGATION",
-          accessToken: "qa-navigation-token",
+          number: orderNumber,
+          accessToken,
           total: 1090,
           paymentMethod: "POUZECE_GOTOVINA",
           shippingMethod: "KURIR",
@@ -138,7 +201,9 @@ test("successful guest order lands on the confirmation route", async ({
   await page.getByLabel(/Saglasan\/a sam/).check();
   await page.getByRole("button", { name: "Potvrdi porudžbinu" }).click();
 
-  await expect(page).toHaveURL(/\/checkout\/potvrda\?order=SPC-QA-NAVIGATION/);
+  await expect(page).toHaveURL(
+    new RegExp(`/checkout/potvrda\\?order=${orderNumber}`),
+  );
   await expect(
     page.getByRole("heading", { name: "Hvala vam na porudžbini!" }).first(),
   ).toBeVisible();

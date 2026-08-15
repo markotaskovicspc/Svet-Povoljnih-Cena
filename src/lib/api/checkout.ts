@@ -643,7 +643,7 @@ export async function createOrder(
   const itemsForCreate: Prisma.OrderItemCreateManyOrderInput[] = pricing.lines.map((r) => {
     const p = bySku.get(r.sku)!;
     const assemblyPrice = assemblyBySku.get(r.sku) ?? null;
-    const primaryCategory = p.categories[0]?.category ?? null;
+    const primaryCategory = p.categories.at(-1)?.category ?? null;
     return {
       productId: p.id,
       sku: p.sku,
@@ -657,6 +657,7 @@ export async function createOrder(
         resolveSupabaseStorageUrl(getMediaVariantUrl(p.media[0], "thumb")) ||
         null,
       supplierName: p.supplier?.name ?? null,
+      supplierIntegrationKey: p.supplier?.integrationKey ?? null,
       categoryName: primaryCategory?.name ?? null,
       categoryPath: primaryCategory?.path ?? null,
       groupName: p.group?.name ?? null,

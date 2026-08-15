@@ -97,6 +97,7 @@ test.describe("Modul 8 — Magacini", () => {
         "Mesto",
         "E-mail",
         "Telefon",
+        "Status",
       ]);
     });
 

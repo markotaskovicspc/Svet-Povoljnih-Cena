@@ -6,6 +6,7 @@ import { getErpModule } from "@/lib/admin/erp";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { formatBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
 import { storefrontMonth } from "@/lib/storefront/promotion-filters";
+import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -177,6 +178,10 @@ export default async function ActionsPage({
           Number(product.fullPrice),
         ),
         salePrice: Number(entry.salePrice),
+        bmPct: actionGrossMarginPct(
+          Number(entry.salePrice),
+          product.cogs == null ? null : Number(product.cogs),
+        ),
       };
     }),
   }));

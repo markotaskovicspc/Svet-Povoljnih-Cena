@@ -19,7 +19,13 @@ import {
   useSearchSuggestions,
 } from "./use-search-suggestions";
 
-export function MobileSearchSheet({ content }: { content: MobileSearchContent }) {
+export function MobileSearchSheet({
+  content,
+  compact = false,
+}: {
+  content: MobileSearchContent;
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -85,10 +91,19 @@ export function MobileSearchSheet({ content }: { content: MobileSearchContent })
     >
       <SheetTrigger
         aria-label="Pretraži"
-        className="flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-white px-4 text-left text-sm text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className={cn(
+          "flex w-full items-center justify-between rounded-lg border border-border bg-white text-left text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+          compact ? "h-10 gap-2 px-3 text-xs" : "h-11 gap-3 px-4 text-sm",
+        )}
       >
         <span>Pretraga proizvoda...</span>
-        <Search className="size-5 shrink-0 text-brand-blue" aria-hidden />
+        <Search
+          className={cn(
+            "shrink-0 text-brand-blue",
+            compact ? "size-4" : "size-5",
+          )}
+          aria-hidden
+        />
       </SheetTrigger>
       <SheetContent
         side="top"

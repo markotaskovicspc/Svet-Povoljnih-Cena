@@ -151,7 +151,6 @@ export function ShippingMethodStep({
  * its live quote is shown inside the address step.
  */
 export function AutomaticDeliverySection({
-  deliveryQuote,
   glsDeliveryPointsEnabled = false,
 }: {
   deliveryQuote: CheckoutDeliveryQuote;
@@ -168,38 +167,19 @@ export function AutomaticDeliverySection({
     }
   }, [glsDeliveryPointsEnabled, setValue]);
 
-  return (
-    <div className="bg-walnut/5 ring-walnut/20 rounded-2xl p-4 ring-1">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-xl">
-            <Truck className="size-4" aria-hidden />
-          </span>
-          <div>
-            <p className="text-sm font-medium text-ink-900">Automatski obračunata isporuka</p>
-            <p className="mt-0.5 text-xs text-ink-600">
-              Standardna kurirska dostava na unetu adresu.
-            </p>
-          </div>
-        </div>
-        <span className="text-walnut shrink-0 text-sm font-semibold tabular-nums">
-          {formatRsd(deliveryQuote.prices.kurir)}
-        </span>
-      </div>
+  if (!glsDeliveryPointsEnabled) return null;
 
-      {glsDeliveryPointsEnabled ? (
-        <div className="mt-4 border-t border-walnut/15 pt-4">
-          <GlsDeliveryPointPicker
-            selected={glsDeliveryPoint ?? null}
-            onSelect={(point) =>
-              setValue("glsDeliveryPoint", point, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          />
-        </div>
-      ) : null}
+  return (
+    <div className="rounded-2xl border border-border/60 p-4">
+      <GlsDeliveryPointPicker
+        selected={glsDeliveryPoint ?? null}
+        onSelect={(point) =>
+          setValue("glsDeliveryPoint", point, {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+        }
+      />
     </div>
   );
 }

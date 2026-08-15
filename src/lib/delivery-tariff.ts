@@ -14,7 +14,7 @@ export type DeliveryTariffProduct = {
 
 const RATES = {
   1: [[5, 299], [10, 399], [20, 599], [30, 899], [50, 999]],
-  2: [[5, 399], [10, 499], [20, 699], [30, 999], [50, 1_099]],
+  2: [[5, 699], [10, 799], [20, 999], [30, 1_299], [50, 1_399]],
 } as const;
 
 export function packageVolumetricDimension(dimensions: readonly number[]) {
@@ -29,7 +29,11 @@ export function deliveryCategory(dimensions: readonly number[]) {
   ) {
     return null;
   }
-  return dimensions.some((value) => value > 60) ? 2 : 1;
+  const volumetricDimension = packageVolumetricDimension(dimensions);
+  // The client explicitly deferred the exact 300 cm boundary. Do not invent
+  // which side owns it: returning null keeps the configured admin fallback.
+  if (volumetricDimension === 300) return null;
+  return volumetricDimension < 300 ? 1 : 2;
 }
 
 export function deliveryRate(category: 1 | 2, weightKg: number) {
@@ -46,8 +50,6 @@ export function calculatePublishedDeliveryTariff(
     1: { weightKg: 0, subtotal: 0 },
     2: { weightKg: 0, subtotal: 0 },
   };
-  let volumetricSurcharge = false;
-
   for (const product of products) {
     const dimensions = [
       product.packWidthCm ?? 0,
@@ -55,17 +57,17 @@ export function calculatePublishedDeliveryTariff(
       product.packHeightCm ?? 0,
     ];
     const category = deliveryCategory(dimensions);
-    const unitWeight = product.packGrossWeightKg ?? product.grossWeightKg ?? product.weightKg;
-    if (!category || !unitWeight || unitWeight <= 0) return null;
+    const packageWeight = product.packGrossWeightKg;
+    const unitWeight = product.grossWeightKg ?? product.weightKg;
+    if (!category || (!packageWeight && !unitWeight)) return null;
     const packageCount = Math.max(
       1,
       Math.ceil(product.qty / Math.max(product.packQty ?? 1, 1)),
     );
-    totals[category].weightKg += unitWeight * packageCount;
+    totals[category].weightKg += packageWeight
+      ? packageWeight * packageCount
+      : Math.max(unitWeight ?? 0, 0) * product.qty;
     totals[category].subtotal += product.unitPrice * product.qty;
-    if (category === 2 && packageVolumetricDimension(dimensions) > 300) {
-      volumetricSurcharge = true;
-    }
   }
 
   const categoryOneRate = totals[1].weightKg > 0 ? deliveryRate(1, totals[1].weightKg) : 0;
@@ -76,9 +78,8 @@ export function calculatePublishedDeliveryTariff(
       ? 0
       : categoryOneRate;
   return {
-    total: categoryOnePrice + categoryTwoRate + (volumetricSurcharge ? 300 : 0),
+    total: categoryOnePrice + categoryTwoRate,
     categoryOnePrice,
     categoryTwoPrice: categoryTwoRate,
-    volumetricSurcharge: volumetricSurcharge ? 300 : 0,
   };
 }

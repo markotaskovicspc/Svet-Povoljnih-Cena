@@ -84,8 +84,8 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toEqual({ volumeM3: 0.036316, weightKg: 0.4 });
   });
 
-  it("requires either the complete container pair or the complete package group", () => {
-    expect(hasProductVolumeSource({ containerQty: 2_500 })).toBe(false);
+  it("accepts container quantity alone or the complete package group", () => {
+    expect(hasProductVolumeSource({ containerQty: 2_500 })).toBe(true);
     expect(
       hasProductVolumeSource({
         containerQty: 2_500,

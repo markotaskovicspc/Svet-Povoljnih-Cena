@@ -33,7 +33,7 @@ export default async function NedeljnaAkcijaPage() {
       headerVariant="promo"
       subtitle="Selekcija sedam dana — najatraktivnije ponude nedelje."
       period={
-        period ? { endsAt: period.endsAt, label: "Nedeljna ponuda" } : undefined
+        period ? { startsAt: period.startsAt, endsAt: period.endsAt, label: "Nedeljna ponuda" } : undefined
       }
       trail={[{ label: "Nedeljna akcija" }]}
       source={products}

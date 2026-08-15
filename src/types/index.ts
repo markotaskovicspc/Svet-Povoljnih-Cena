@@ -338,6 +338,8 @@ export interface OrderItem {
   thumbnailUrl?: string;
   variant?: string;
   familyCode?: string;
+  categoryName?: string;
+  supplierIntegrationKey?: string;
 }
 
 export interface Order {
@@ -411,6 +413,8 @@ export interface WishlistProductSnapshot {
   name?: string;
   fullPrice?: number;
   effectivePrice?: number;
+  actionPrice?: number;
+  loyaltyPrice?: number;
   discountPct?: number;
   inStock?: boolean;
   incoming?: boolean;

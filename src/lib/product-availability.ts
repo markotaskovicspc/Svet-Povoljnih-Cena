@@ -12,6 +12,7 @@ type ProductAvailabilityInput = Pick<
   | "packageDimensionsCm"
   | "supplierNextArrivalAt"
   | "availabilitySource"
+  | "supplierIntegrationKey"
 >;
 
 export function getProductAvailability(product: ProductAvailabilityInput) {
@@ -62,7 +63,9 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     };
   }
 
-  if (incomingStock > 0) {
+  const isRabalux = product.supplierIntegrationKey?.toUpperCase() === "RABALUX";
+
+  if (!isRabalux && incomingStock > 0) {
     return {
       canAddToCart: false,
       label: "U dolasku",
@@ -74,7 +77,7 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
   }
 
   const nextArrival = product.supplierNextArrivalAt;
-  if (nextArrival) {
+  if (!isRabalux && nextArrival) {
     const date = new Date(nextArrival);
     if (!Number.isNaN(date.getTime()) && date.getTime() > Date.now()) {
       return {

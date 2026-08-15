@@ -236,13 +236,18 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       });
       await expect(overviewHeading).toHaveCount(1);
       await expect(overviewHeading).toBeVisible();
-      for (const command of ["Novi", "Uredi", "Obriši", "Proknjiži"]) {
+      for (const command of [
+        "Novi",
+        "Uredi",
+        "Obriši",
+        "Kreiraj adresnice",
+      ]) {
         await expect(
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
       }
       await expect(
-        page.getByRole("button", { name: "Proknjiži", exact: true }),
+        page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
       ).toBeDisabled();
       for (const header of ["Status", "Broj naloga", "Datum naloga"]) {
         await expect(
@@ -338,7 +343,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         .click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Učitano redova: 2 iz 1 porudžbina",
+          hasText: "Učitano redova: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
       const [batch, orders] = await Promise.all([
@@ -352,7 +357,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           select: { id: true, number: true, status: true },
         }),
       ]);
-      expect(batch.lines).toHaveLength(2);
+      expect(batch.lines).toHaveLength(5);
       expect(new Set(batch.lines.map((line) => line.orderId))).toEqual(
         new Set([eligibleOrderId]),
       );
@@ -401,9 +406,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         ).toBeVisible();
       }
       const rows = page.locator("tbody tr");
-      await expect(rows).toHaveCount(2);
+      await expect(rows).toHaveCount(5);
       await expect(rows.nth(0)).toContainText(fixture.skuA);
-      await expect(rows.nth(1)).toContainText(fixture.skuZ);
+      await expect(rows.nth(3)).toContainText(fixture.skuZ);
       await expect(rows.nth(0)).toContainText(fixture.collection);
       await expect(rows.nth(0)).toContainText(`Kratki A ${runId}`);
       await expect(rows.nth(0)).toContainText(`Opis A ${runId}`);
@@ -448,7 +453,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe(0);
       expect(
         await db.pickupBatchLine.count({ where: { batchId: firstBatchId } }),
-      ).toBe(2);
+      ).toBe(5);
       await db.order.update({
         where: { id: eligibleOrderId },
         data: { status: "U_PRIPREMI" },
@@ -498,7 +503,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toHaveCount(1);
     });
 
-    await test.step("Proknjiži je blokiran i direktni API ne može da ga zaobiđe", async () => {
+    await test.step("Kreiranje adresnica je blokirano i direktni API ne može da zaobiđe obavezni termin", async () => {
       await expect(
         page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
       ).toBeDisabled();
@@ -509,12 +514,19 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         },
       );
       expect(response.status()).toBe(400);
-      expect((await response.json()).error).toContain("MYGLS_PRODUCTION_ACCEPTED=false");
+      expect((await response.json()).error).toContain(
+        "Početak i kraj termina preuzimanja su obavezni",
+      );
       expect(
         (
           await db.pickupBatch.findUniqueOrThrow({ where: { id: secondBatchId } })
         ).status,
       ).toBe("DRAFT");
+      expect(
+        (
+          await db.pickupBatch.findUniqueOrThrow({ where: { id: secondBatchId } })
+        ).labelsCreationStartedAt,
+      ).toBeNull();
     });
 
     await test.step("Obriši u detalju briše prazan nalog", async () => {
@@ -569,7 +581,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         .click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Učitano redova: 2 iz 1 porudžbina",
+          hasText: "Učitano redova: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
       await page.goto("/admin/erp/preuzimanja", {

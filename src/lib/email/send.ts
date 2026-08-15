@@ -18,6 +18,10 @@ import { renderEmail } from "./render";
 import { type DispatchResult, type EmailAttachment } from "./transport";
 import { getEmailConfig } from "./config";
 import { buildInvoicePdf, buildWithdrawalFormPdf } from "./pdf";
+import {
+  buildGuaranteePdf,
+  guaranteeItemsForOrder,
+} from "./guarantee-pdf";
 import { trackedDispatch } from "./tracking";
 import { buildEmailUnsubscribeUrl } from "./unsubscribe";
 
@@ -55,6 +59,20 @@ export async function sendOrderConfirmation(args: {
     attachments.push({
       filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
       content: buildWithdrawalFormPdf(pdfOrder).toString("base64"),
+      contentType: "application/pdf",
+    });
+  }
+  const guaranteeItems = guaranteeItemsForOrder(args.order.items);
+  if (guaranteeItems.length) {
+    attachments.push({
+      filename: `garantni-list-${args.order.id}.pdf`,
+      content: (
+        await buildGuaranteePdf({
+          number: args.order.id,
+          createdAt: new Date(args.order.createdAt),
+          items: guaranteeItems,
+        })
+      ).toString("base64"),
       contentType: "application/pdf",
     });
   }

@@ -38,7 +38,7 @@ describe("ERP tačka 15", () => {
     });
   });
 
-  it("links purchasing documents from the ERP sidebar with the client-facing names", () => {
+  it("keeps purchasing documents out of the main ERP sidebar", () => {
     const erp = adminNav.find((group) => group.label === "ERP");
     expect(
       erp?.items
@@ -48,7 +48,7 @@ describe("ERP tačka 15", () => {
           ),
         )
         .map((item) => item.label),
-    ).toEqual(["Nabavne porudžbenice", "Prijemnice"]);
+    ).toEqual([]);
   });
 
   it("highlights the precise bookkeeping route instead of the generic ERP workspace", () => {

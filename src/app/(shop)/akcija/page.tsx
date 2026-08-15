@@ -32,7 +32,7 @@ export default async function AkcijaPage() {
       titleIcon={titleIcon ?? akcijaIcon}
       campaignSticker="action"
       headerVariant="promo"
-      period={period ? { endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}
+      period={period ? { startsAt: period.startsAt, endsAt: period.endsAt, label: "Akcijska ponuda" } : undefined}
       periodPlacement="title-line"
       trail={[{ label: "Akcija" }]}
       source={products}

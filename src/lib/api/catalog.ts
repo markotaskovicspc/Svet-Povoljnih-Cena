@@ -31,8 +31,10 @@ import {
 import {
   applyActivePricingRules,
   getActivePricingRules,
+  pricingRuleInputsForProduct,
   type ActivePricingRules,
 } from "@/lib/pricing/rules";
+import { resolveProductPriceQuote } from "@/lib/pricing/engine";
 import {
   isProductAvailableOnWeb,
   storefrontAvailabilityWhere,
@@ -216,7 +218,9 @@ const productListSelect = {
 type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
 
 const productFacetSelect = {
+  id: true,
   sku: true,
+  groupId: true,
   group: { select: { slug: true, name: true } },
   colorPrimary: true,
   colorSecondary: true,
@@ -237,12 +241,19 @@ const productFacetSelect = {
   supplier: { select: { integrationKey: true, enabled: true } },
   fullPrice: true,
   salePrice: true,
+  loyaltyPrice: true,
+  loyaltyDiscountPct: true,
+  action: true,
+  actionPrices: { include: { action: true } },
   priceListEntries: {
     where: { priceList: { active: true, kind: "RETAIL" } },
     include: { priceList: true },
     orderBy: { validFrom: "desc" },
   },
   materials: { include: { material: true } },
+  categories: {
+    select: { categoryId: true, category: { select: { path: true } } },
+  },
   familyMembership: { select: { label: true, colorHex: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -403,6 +414,7 @@ function mapProduct(
     pdpInfo: {
       deliveryTerms: p.pdpDeliveryTerms ?? undefined,
       declaration: buildProductDeclaration({
+        sku: p.sku,
         name: p.name,
         shortName: p.shortName,
         shortDescription: p.shortDescription,
@@ -1247,21 +1259,9 @@ function buildProductListingWhere(
   if (input.excludeSku) appendAnd(where, { sku: { not: input.excludeSku } });
   if (input.inStockOnly) appendAnd(where, storefrontInStockWhere(now));
 
-  const effectivePriceWhere = (range: [number, number]): Prisma.ProductWhereInput => ({
-    OR: [
-      { salePrice: { gte: range[0], lte: range[1] } },
-      {
-        AND: [
-          { salePrice: null },
-          { fullPrice: { gte: range[0], lte: range[1] } },
-        ],
-      },
-    ],
-  });
-  if (input.maxPrice != null) {
-    appendAnd(where, effectivePriceWhere([0, input.maxPrice]));
-  }
-  if (input.priceRange) appendAnd(where, effectivePriceWhere(input.priceRange));
+  // Price filters are applied after the shared pricing engine resolves the
+  // final public price. SQL fields alone cannot represent action priority,
+  // action validity and linear promotions without false positives.
   if (input.widthRange) {
     appendAnd(where, { widthCm: { gte: input.widthRange[0], lte: input.widthRange[1] } });
   }
@@ -1373,6 +1373,74 @@ async function loadProducts(
 
   const limit = Math.min(Math.max(input.limit ?? 24, 1), 300);
 
+  const usesResolvedPrice = Boolean(
+    input.maxPrice != null ||
+      input.priceRange ||
+      input.sort === "price-asc" ||
+      input.sort === "price-desc",
+  );
+  const monthlyHeroSkus = new Set(monthlyHeroes.map((hero) => hero.productSku));
+  const project = (product: ProductListRow) => {
+    const mapped = mapProductListRow(product, pricingRules, deliveryWindows);
+    return input.heroOnly && monthlyHeroSkus.has(mapped.sku)
+      ? { ...mapped, isHero: true }
+      : mapped;
+  };
+
+  if (usesResolvedPrice) {
+    const rows = await db.product.findMany({
+      where: listingWhere,
+      select: productListSelect,
+      orderBy,
+    });
+    const evaluatedAt = new Date(pricingRules.evaluatedAt);
+    const priced = rows
+      .map((row) => ({
+        rowId: row.id,
+        product: project(row),
+      }))
+      .map(({ rowId, product }) => ({
+        rowId,
+        product,
+        price: resolveProductPriceQuote(product, {
+          now: evaluatedAt,
+          loggedIn: false,
+        }).payable.effective,
+      }))
+      .filter(({ price }) => {
+        if (input.maxPrice != null && price > input.maxPrice) return false;
+        if (
+          input.priceRange &&
+          (price < input.priceRange[0] || price > input.priceRange[1])
+        ) {
+          return false;
+        }
+        return true;
+      });
+    if (input.sort === "price-asc" || input.sort === "price-desc") {
+      const direction = input.sort === "price-asc" ? 1 : -1;
+      priced.sort(
+        (left, right) =>
+          (left.price - right.price) * direction ||
+          left.product.sku.localeCompare(right.product.sku, "sr", {
+            numeric: true,
+          }),
+      );
+    }
+    const cursorIndex = input.cursor
+      ? priced.findIndex(({ rowId }) => rowId === input.cursor)
+      : -1;
+    const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    const page = priced.slice(start, start + limit + 1);
+    const hasMore = page.length > limit;
+    const slice = hasMore ? page.slice(0, limit) : page;
+    return {
+      items: slice.map(({ product }) => product),
+      nextCursor: hasMore ? slice[slice.length - 1]!.rowId : null,
+      total: input.includeTotal === false ? 0 : priced.length,
+    };
+  }
+
   const rowsQuery = db.product.findMany({
     where: listingWhere,
     select: productListSelect,
@@ -1390,9 +1458,7 @@ async function loadProducts(
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   return {
-    items: slice.map((product) =>
-      mapProductListRow(product, pricingRules, deliveryWindows),
-    ),
+    items: slice.map(project),
     nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
     total,
   };
@@ -1442,7 +1508,11 @@ function emptyProductFacets(): ListProductFacetsResult {
   };
 }
 
-function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult {
+function computeProductFacets(
+  rows: ProductFacetRow[],
+  pricingRules: ActivePricingRules,
+  input: Pick<ListProductsInput, "maxPrice" | "priceRange">,
+): ListProductFacetsResult {
   if (!rows.length) return emptyProductFacets();
 
   const result = emptyProductFacets();
@@ -1480,7 +1550,51 @@ function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult 
   );
   const dynamicFacets = dynamicFacetsForGroups(productGroups);
 
+  const evaluatedAt = new Date(pricingRules.evaluatedAt);
   for (const row of rows) {
+    const retailPrice = resolveRetailPrice(row.priceListEntries, row.fullPrice);
+    const ruleInputs = pricingRuleInputsForProduct(
+      {
+        id: row.id,
+        groupId: row.groupId,
+        categoryIds: row.categories.map((item) => item.categoryId),
+        categoryPaths: row.categories.map((item) => item.category.path),
+      },
+      pricingRules,
+    );
+    const finalPrice = resolveProductPriceQuote(
+      {
+        fullPrice: retailPrice.price,
+        salePrice: numOrNull(row.salePrice),
+        loyaltyPrice: numOrNull(row.loyaltyPrice),
+        loyaltyDiscountPct: row.loyaltyDiscountPct,
+        action: row.action
+          ? {
+              startsAt: row.action.startsAt,
+              endsAt: row.action.endsAt,
+              isPermanent: row.action.isPermanent,
+            }
+          : null,
+        actionPrices: row.actionPrices.map((entry) => ({
+          price: num(entry.salePrice),
+          priority: entry.action.priority,
+          startsAt: entry.action.startsAt,
+          endsAt: entry.action.endsAt,
+          isPermanent: entry.action.isPermanent,
+          actionId: entry.action.id,
+          actionName: entry.action.name,
+        })),
+        linearPromotions: ruleInputs.linearPromotions,
+      },
+      { now: evaluatedAt, loggedIn: false },
+    ).payable.effective;
+    if (input.maxPrice != null && finalPrice > input.maxPrice) continue;
+    if (
+      input.priceRange &&
+      (finalPrice < input.priceRange[0] || finalPrice > input.priceRange[1])
+    ) {
+      continue;
+    }
     if (row.group?.slug) {
       groups.add(row.group.slug);
       facets.groupLabels[row.group.slug] = row.group.name;
@@ -1532,8 +1646,7 @@ function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult 
       d: num(row.depthCm) || 0,
       h: num(row.heightCm) || 0,
     };
-    const retailPrice = resolveRetailPrice(row.priceListEntries, row.fullPrice);
-    prices.push(numOrNull(row.salePrice) ?? retailPrice.price);
+    prices.push(finalPrice);
     widths.push(dimensions.w);
     depths.push(dimensions.d);
     heights.push(dimensions.h);
@@ -1543,6 +1656,8 @@ function computeProductFacets(rows: ProductFacetRow[]): ListProductFacetsResult 
       if (value) (dynamic[facet.key] ??= new Set()).add(value);
     }
   }
+
+  if (!prices.length) return emptyProductFacets();
 
   const localeSort = (left: string, right: string) =>
     left.localeCompare(right, "sr-Latn-RS");
@@ -1602,7 +1717,7 @@ export async function listProductFacets(
       monthlyHeroes.map((hero) => hero.productSku),
     );
     const rows = await db.product.findMany({ where, select: productFacetSelect });
-    return computeProductFacets(rows);
+    return computeProductFacets(rows, pricingRules, input);
   } catch (error) {
     console.error("[catalog] Failed to list product facets.", error);
     throw error;

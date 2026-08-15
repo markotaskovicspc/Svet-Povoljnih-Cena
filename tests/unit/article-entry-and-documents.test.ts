@@ -140,6 +140,7 @@ describe("PDP dokumenti", () => {
   it("gradi deklaraciju iz matičnih podataka artikla", () => {
     expect(
       buildProductDeclaration({
+        sku: "100001",
         name: "Baštenska stolica RELAX",
         shortName: "RELAX",
         shortDescription: "Baštenska stolica",
@@ -156,6 +157,21 @@ describe("PDP dokumenti", () => {
         "Zemlja porekla: Kina",
       ].join("\n"),
     );
+  });
+
+  it("bira uvoznika po prefiksu interne SKU šifre", () => {
+    expect(
+      buildProductDeclaration({
+        sku: "200025",
+        name: "Friteza",
+      }),
+    ).toContain("Uvoznik: Evonek doo");
+    expect(
+      buildProductDeclaration({
+        sku: "100025",
+        name: "Stolica",
+      }),
+    ).toContain("Uvoznik: Svet povoljnih cena doo");
   });
 
   it("osvežava standardna polja i čuva samo dodatnu ručnu napomenu", () => {

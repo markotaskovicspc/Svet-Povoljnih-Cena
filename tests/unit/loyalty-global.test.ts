@@ -13,7 +13,7 @@ describe("global loyalty pricing", () => {
     expect(quote.payable.kind).toBe("loyalty");
   });
 
-  it("stacks loyalty on top of an active product action", () => {
+  it("hides loyalty while an active product action exists", () => {
     const quote = resolveProductPriceQuote(
       {
         fullPrice: 10_000,
@@ -29,9 +29,9 @@ describe("global loyalty pricing", () => {
       },
       { now, loggedIn: true },
     );
-    expect(quote.loyaltyOffer?.effective).toBe(7_200);
-    expect(quote.payable.effective).toBe(7_200);
-    expect(quote.payable.kind).toBe("loyalty");
+    expect(quote.loyaltyOffer).toBeNull();
+    expect(quote.payable.effective).toBe(9_000);
+    expect(quote.payable.kind).toBe("sale");
   });
 
   it("adds the linear discount on top of loyalty when there is no action", () => {

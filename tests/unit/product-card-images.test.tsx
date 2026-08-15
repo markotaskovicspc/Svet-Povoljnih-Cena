@@ -174,7 +174,7 @@ describe("ProductCard image regression", () => {
     );
 
     expect(html).toContain(
-      'sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 25vw, (min-width: 394px) 32vw, 126px"',
+      'sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 38vw, (min-width: 394px) 46vw, 164px"',
     );
     expect(html).toMatch(/object-contain p-3 transition/);
     expect(html).not.toMatch(/object-contain p-2\.5 transition/);

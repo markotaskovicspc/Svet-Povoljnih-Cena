@@ -1434,8 +1434,8 @@ export default async function ProductDetail({
               purchaseOrder: {
                 lockedAt: { not: null },
                 status: { notIn: ["RECEIVED", "CANCELLED"] },
-                inboundInvoice: {
-                  is: { status: { in: ["RECEIVED", "POSTED"] } },
+                inboundInvoices: {
+                  some: { status: { in: ["RECEIVED", "POSTED"] } },
                 },
               },
             },

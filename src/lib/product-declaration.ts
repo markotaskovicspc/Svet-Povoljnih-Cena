@@ -1,6 +1,7 @@
 import { richTextPlainText } from "@/lib/rich-text";
 
-const DECLARATION_IMPORTER = "Svet povoljnih cena doo";
+const SPC_DECLARATION_IMPORTER = "Svet povoljnih cena doo";
+const EVONEK_DECLARATION_IMPORTER = "Evonek doo";
 const GENERATED_LABELS = new Set([
   "vrsta robe",
   "naziv",
@@ -11,6 +12,7 @@ const GENERATED_LABELS = new Set([
 ]);
 
 type ProductDeclarationInput = {
+  sku?: string | null;
   name: string;
   shortName?: string | null;
   shortDescription?: string | null;
@@ -20,6 +22,12 @@ type ProductDeclarationInput = {
   countryOfOrigin?: string | null;
   manualDeclaration?: string | null;
 };
+
+export function declarationImporterForSku(sku: string | null | undefined) {
+  const prefix = clean(sku).charAt(0);
+  if (prefix === "2") return EVONEK_DECLARATION_IMPORTER;
+  return SPC_DECLARATION_IMPORTER;
+}
 
 function clean(value: string | null | undefined) {
   return value?.replace(/\s+/g, " ").trim() ?? "";
@@ -107,7 +115,7 @@ export function buildProductDeclaration(input: ProductDeclarationInput) {
     `Vrsta robe: ${kind}`,
     `Naziv: ${designation}`,
     "Jedinica mere: komad",
-    `Uvoznik: ${DECLARATION_IMPORTER}`,
+    `Uvoznik: ${declarationImporterForSku(input.sku)}`,
     ...(material ? [`Materijal: ${material}`] : []),
     ...(countryOfOrigin ? [`Zemlja porekla: ${countryOfOrigin}`] : []),
   ];

@@ -68,9 +68,9 @@ describe("homepage section rail", () => {
       />,
     );
 
-    expect(html).toContain("w-[32vw]");
-    expect(html).toContain("min-w-[126px]");
-    expect(html).toContain("sm:w-[25vw]");
+    expect(html).toContain("w-[46vw]");
+    expect(html).toContain("min-w-[164px]");
+    expect(html).toContain("sm:w-[38vw]");
     expect(html).toContain("md:w-[clamp(138px,calc(15.3%_-_12px),187px)]");
     expect(html).toContain("Kompaktna kartica");
     expect(html).toContain("10 × 10 × 10 cm");

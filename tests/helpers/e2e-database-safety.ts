@@ -1,5 +1,4 @@
 const READ_ONLY_E2E_FLAGS = new Set([
-  "E2E_CHECKOUT_NAVIGATION",
   "E2E_LIVE_CATALOG",
 ]);
 

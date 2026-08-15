@@ -179,7 +179,7 @@ export function FilterSidebar({
                 leading={(color) => (
                   <span
                     aria-hidden
-                    className="border-border/80 size-4 shrink-0 rounded-full border shadow-[inset_0_0_0_1px_rgb(255_255_255/0.35)]"
+                    className="border-border/80 size-6 shrink-0 rounded-full border-2 shadow-[0_0_0_2px_rgb(255_255_255),0_0_0_3px_rgb(203_213_225)]"
                     style={{ background: facets.colorSwatches[color] ?? swatchFor(color) }}
                   />
                 )}

@@ -225,7 +225,7 @@ export function SectionRail({
                   },
                 }}
                 className={cn(
-                  "w-[32vw] min-w-[126px] shrink-0 snap-start sm:w-[25vw]",
+                  "w-[46vw] min-w-[164px] shrink-0 snap-start sm:w-[38vw]",
                   compactCardsOnDesktop
                     ? "md:w-[clamp(138px,calc(15.3%_-_12px),187px)]"
                     : "md:w-[clamp(162px,calc(18%_-_14px),220px)]",

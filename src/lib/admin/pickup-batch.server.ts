@@ -504,6 +504,7 @@ async function createMyGlsLabelsForPickupBatch(
   batchId: string,
   actorId: string,
 ) {
+  let providerAttempted = false;
   const existing = await db.pickupBatch.findUnique({
     where: { id: batchId },
     select: {
@@ -523,7 +524,6 @@ async function createMyGlsLabelsForPickupBatch(
     where: { id: batchId, status: "DRAFT" },
     data: {
       status: "POSTING",
-      labelsCreationStartedAt: existing?.labelsCreationStartedAt ?? new Date(),
       configurationIssue: null,
     },
   });
@@ -570,6 +570,14 @@ async function createMyGlsLabelsForPickupBatch(
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
     }
 
+    await db.pickupBatch.update({
+      where: { id: batch.id },
+      data: {
+        labelsCreationStartedAt:
+          batch.labelsCreationStartedAt ?? new Date(),
+      },
+    });
+
     const shipmentIds: string[] = [];
     for (const orderId of orderIds) {
       const packageLines = batch.lines.filter((line) => line.orderId === orderId);
@@ -584,6 +592,7 @@ async function createMyGlsLabelsForPickupBatch(
           heightCm: Number(line.heightCm ?? 0),
         })),
       );
+      providerAttempted = true;
       const shipment = await createShipmentForOrder(orderId, {
         pickupDate: batch.pickupDate,
         packages,
@@ -626,7 +635,11 @@ async function createMyGlsLabelsForPickupBatch(
       error instanceof Error ? error.message : "MyGLS adresnice nisu kreirane.";
     await db.pickupBatch.updateMany({
       where: { id: batchId, status: "POSTING" },
-      data: { status: "DRAFT", configurationIssue: message },
+      data: {
+        status: "DRAFT",
+        configurationIssue: message,
+        ...(!providerAttempted ? { labelsCreationStartedAt: null } : {}),
+      },
     });
     throw error;
   }

@@ -949,7 +949,7 @@ export function ErpGrid({
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap">
               <select
                 value={searchColumn}
                 onChange={(event) => {
@@ -966,7 +966,7 @@ export function ErpGrid({
                   </option>
                 ))}
               </select>
-              <div className="relative max-w-xl flex-1">
+              <div className="relative min-w-64 max-w-xl flex-1">
                 <Input
                   value={query}
                   onChange={(e) => updateQuery(e.target.value)}
@@ -978,7 +978,7 @@ export function ErpGrid({
                   className="h-9"
                 />
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <select
                   value={newFilterColumn}
                   onChange={(e) => setNewFilterColumn(e.target.value)}
@@ -1336,7 +1336,7 @@ export function ErpGrid({
               {savedCellCount ? ` · ${savedCellCount} snimljenih izmena` : ""}
               {isEditMode ? " · uređivanje uključeno" : ""}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"

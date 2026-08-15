@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Product, SKU, WishlistProductSnapshot } from "@/types";
 import { getMediaVariantUrl } from "@/lib/media";
-import { effectiveUnitPrice } from "@/lib/pricing";
+import { resolveProductPriceQuote } from "@/lib/pricing";
 
 export interface WishlistEntry {
   sku: SKU;
@@ -39,14 +39,12 @@ export const useWishlist = create<WishlistState>()(
       hydrated: false,
       items: [],
       enrichMissing: async () => {
-        const missing = get().items
-          .filter((item) => !item.product?.name)
-          .map((item) => item.sku);
-        if (!missing.length) return;
+        const skus = get().items.map((item) => item.sku);
+        if (!skus.length) return;
         const response = await fetch("/api/products/lookup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ skus: missing }),
+          body: JSON.stringify({ skus }),
         }).catch(() => null);
         if (!response?.ok) return;
         const payload = (await response.json().catch(() => null)) as
@@ -106,13 +104,17 @@ export const useWishlist = create<WishlistState>()(
 );
 
 export function wishlistSnapshotFromProduct(product: Product): WishlistProductSnapshot {
-  const price = effectiveUnitPrice(product);
+  const quote = resolveProductPriceQuote(product, {
+    loggedIn: product.loyaltyEligible,
+  });
   return {
     sku: product.sku,
     slug: product.slug,
     name: product.name,
-    fullPrice: price.full,
-    effectivePrice: price.effective,
+    fullPrice: quote.full,
+    effectivePrice: quote.payable.effective,
+    actionPrice: quote.actionOffer?.effective,
+    loyaltyPrice: quote.loyaltyOffer?.effective,
     discountPct: product.discountPct,
     inStock: product.stock > 0,
     incoming: product.incomingStock > 0,

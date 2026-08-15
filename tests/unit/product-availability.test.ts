@@ -38,4 +38,24 @@ describe("product availability messaging", () => {
       }).message,
     ).toBe("Još 2 na stanju");
   });
+
+  it("shows incoming information only for non-Rabalux goods", () => {
+    const own = getProductAvailability({
+      ...readyProduct,
+      stock: 0,
+      incomingStock: 5,
+      availabilitySource: "NONE",
+      supplierIntegrationKey: "SPC",
+    });
+    const rabalux = getProductAvailability({
+      ...readyProduct,
+      stock: 0,
+      incomingStock: 5,
+      availabilitySource: "NONE",
+      supplierIntegrationKey: "RABALUX",
+    });
+
+    expect(own.label).toBe("U dolasku");
+    expect(rabalux.label).toBe("Nije dostupno");
+  });
 });

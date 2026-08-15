@@ -22,6 +22,8 @@ type RemoteWishlistItem = {
   name?: string;
   fullPrice?: number;
   salePrice?: number | null;
+  actionPrice?: number | null;
+  loyaltyPrice?: number | null;
   discountPct?: number;
   inStock?: boolean;
   incoming?: boolean;
@@ -42,6 +44,8 @@ function remoteWishlistEntries(items: unknown): WishlistEntry[] {
         name: item.name,
         fullPrice: item.fullPrice,
         effectivePrice: item.salePrice ?? item.fullPrice,
+        actionPrice: item.actionPrice ?? item.salePrice ?? undefined,
+        loyaltyPrice: item.loyaltyPrice ?? undefined,
         discountPct: item.discountPct,
         inStock: item.inStock,
         incoming: item.incoming,
@@ -102,6 +106,14 @@ export function CustomerCommerceSync() {
   const wishlistHydrated = useWishlist((state) => state.hydrated);
 
   useEffect(() => {
+    if (
+      status === "unauthenticated" &&
+      cartHydrated &&
+      wishlistHydrated
+    ) {
+      window.localStorage.setItem(OWNER_STORAGE_KEY, "guest");
+      return;
+    }
     if (
       status !== "authenticated" ||
       session.user.userType !== "customer" ||
@@ -187,7 +199,7 @@ export function CustomerCommerceSync() {
       if (disposed || !remote) return;
 
       const previousOwner = window.localStorage.getItem(OWNER_STORAGE_KEY);
-      const mergeGuestState = previousOwner === null;
+      const mergeGuestState = previousOwner === null || previousOwner === "guest";
       const next = mergeGuestState
         ? {
             cart: mergeGuestCart(useCart.getState().lines, remote.cart),

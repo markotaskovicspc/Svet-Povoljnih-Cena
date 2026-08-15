@@ -555,7 +555,20 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       supplier: true,
       loadingLocation: true,
       transportDefinition: true,
-      items: { orderBy: { createdAt: "asc" } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          product: {
+            select: {
+              media: {
+                take: 1,
+                orderBy: { order: "asc" },
+                select: { url: true },
+              },
+            },
+          },
+        },
+      },
     },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
@@ -585,23 +598,24 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       `Količina nije deljiva pakovanjem: ${invalidPacks.map((item) => item.sku).join(", ")}.`,
     );
   }
-  const pdf = buildPurchaseOrderPdf({
+  const pdf = await buildPurchaseOrderPdf({
     ...order,
-    freightCost: Number(order.freightCost),
     totalPrice: Number(order.totalPrice),
     totalVolume: Number(order.totalVolume ?? 0),
-    totalWeight: Number(order.totalWeight ?? 0),
-    exchangeRate: Number(order.exchangeRate),
-    freightExchangeRate: Number(order.freightExchangeRate),
     items: order.items.map((item) => ({
-      ...item,
+      sku: item.sku,
+      name: item.name,
+      supplierProductName: item.supplierProductName,
+      attributes: item.attributes,
+      pattern: item.pattern,
+      packQty: item.packQty,
+      qty: item.qty,
       purchasePrice: Number(item.purchasePrice),
+      currency: item.currency,
       totalVolume: Number(item.totalVolume ?? 0),
-      totalWeight: Number(item.totalWeight ?? 0),
-      customsRate: Number(item.customsRate ?? 0),
-      calcRetailPrice:
-        item.calcRetailPrice == null ? null : Number(item.calcRetailPrice),
-      bmPct: item.bmPct == null ? null : Number(item.bmPct),
+      certificates: item.certificates,
+      barcode: item.barcode,
+      imageUrl: item.product?.media[0]?.url ?? null,
     })),
   });
   const html = PURCHASE_ORDER_EMAIL_BODY.split("\n")
@@ -688,6 +702,8 @@ export async function assertPurchaseOrderGoodsReceiptMasterReady(id: string) {
               packDepthCm: true,
               packHeightCm: true,
               packGrossWeightKg: true,
+              containerQty: true,
+              containerGrossWeightKg: true,
               categories: { select: { categoryId: true } },
               priceListEntries: {
                 where: {
@@ -749,6 +765,8 @@ export async function receivePurchaseOrder(
               packDepthCm: true,
               packHeightCm: true,
               packGrossWeightKg: true,
+              containerQty: true,
+              containerGrossWeightKg: true,
               categories: { select: { categoryId: true } },
               priceListEntries: {
                 where: {

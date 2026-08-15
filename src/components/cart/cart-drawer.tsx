@@ -13,6 +13,8 @@ import { useCart } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
+import { CartLoginOffer } from "./cart-view";
+import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 
 /**
  * Mini-cart drawer (1F.2). Mounted globally; opens via `useCartUi`.
@@ -30,6 +32,11 @@ export function CartDrawer() {
     0,
   );
   const count = lines.reduce((n, l) => n + l.qty, 0);
+  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(
+    lines,
+    open,
+  );
+  const shipping = quote?.prices.kurir ?? null;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -68,10 +75,13 @@ export function CartDrawer() {
             </Link>
           </div>
         ) : (
-          <div className="divide-border/60 flex-1 divide-y overflow-y-auto px-4">
-            {lines.map((l) => (
-              <CartLineRow key={l.sku} line={l} onNavigate={close} />
-            ))}
+          <div className="flex-1 overflow-y-auto">
+            <CartLoginOffer />
+            <div className="divide-border/60 divide-y px-4">
+              {lines.map((l) => (
+                <CartLineRow key={l.sku} line={l} onNavigate={close} />
+              ))}
+            </div>
           </div>
         )}
 
@@ -89,9 +99,24 @@ export function CartDrawer() {
                 <span className="font-semibold">{formatRsd(savings)}</span>
               </div>
             ) : null}
-            <p className="text-[11px] text-ink-500">
-              Trošak isporuke se obračunava u sledećem koraku.
-            </p>
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="text-ink-700">Isporuka</span>
+              <span className="font-semibold text-ink-900">
+                {shipping == null
+                  ? deliveryLoading
+                    ? "Računam…"
+                    : "Nije dostupno"
+                  : formatRsd(shipping)}
+              </span>
+            </div>
+            {shipping != null ? (
+              <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
+                <span className="font-medium text-ink-900">Ukupno</span>
+                <span className="font-semibold text-ink-900">
+                  {formatRsd(subtotal + shipping)}
+                </span>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-2 sm:flex-row">
               <Link
                 href="/korpa"

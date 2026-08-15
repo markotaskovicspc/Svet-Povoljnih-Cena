@@ -43,6 +43,7 @@ export function ConfirmationView({
   const order = storedOrder ?? initialOrder ?? null;
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (!order) {
       router.replace("/korpa");
       return;

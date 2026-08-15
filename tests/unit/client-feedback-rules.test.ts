@@ -19,8 +19,9 @@ describe("confirmed client rules", () => {
 
   it("calculates the published category, volumetric measure and logged-in free tier", () => {
     expect(deliveryCategory([60, 40, 30])).toBe(1);
-    expect(deliveryCategory([60.01, 40, 30])).toBe(2);
+    expect(deliveryCategory([101, 60, 40])).toBe(2);
     expect(packageVolumetricDimension([100, 60, 40])).toBe(300);
+    expect(deliveryCategory([100, 60, 40])).toBeNull();
     const product = {
       qty: 2,
       unitPrice: 1_100,
@@ -32,6 +33,17 @@ describe("confirmed client rules", () => {
     };
     expect(calculatePublishedDeliveryTariff([product], { loggedIn: false })?.total).toBe(399);
     expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(0);
+  });
+
+  it("uses the published category-II rates without the retired surcharge", () => {
+    expect(calculatePublishedDeliveryTariff([{
+      qty: 1,
+      unitPrice: 5_000,
+      packWidthCm: 101,
+      packDepthCm: 60,
+      packHeightCm: 40,
+      packGrossWeightKg: 4,
+    }], { loggedIn: false })?.total).toBe(699);
   });
 
   it("returns no invented tariff above the published 50 kg ceiling", () => {
@@ -101,14 +113,42 @@ describe("confirmed client rules", () => {
       packDepthCm: null,
       packHeightCm: null,
       packGrossWeightKg: null,
+      containerQty: null,
+      containerGrossWeightKg: null,
       categories: [],
       priceListEntries: [],
     });
     expect(issues).toEqual(expect.arrayContaining([
       "dobavljač",
       "kategorija",
-      "transportne dimenzije paketa",
+      "količina kontejnera ili transportne dimenzije paketa",
       "aktivna maloprodajna cena",
     ]));
+  });
+
+  it("prihvata količinu za ceo kontejner kao alternativu transportnom pakovanju", () => {
+    const issues = goodsReceiptMasterIssues({
+      sku: "100001",
+      name: "Artikal",
+      description: "Opis",
+      supplierId: "supplier-1",
+      countryOfOrigin: "CN",
+      hsCode: "9401",
+      widthCm: 10,
+      depthCm: 20,
+      heightCm: 30,
+      grossWeightKg: 2,
+      packQty: 1,
+      packWidthCm: 1,
+      packDepthCm: 1,
+      packHeightCm: 1,
+      packGrossWeightKg: 0,
+      containerQty: 1_900,
+      containerGrossWeightKg: null,
+      categories: [{}],
+      priceListEntries: [{}],
+    });
+    expect(issues).not.toContain("količina kontejnera ili transportne dimenzije paketa");
+    expect(issues).not.toContain("bruto težina paketa");
   });
 });

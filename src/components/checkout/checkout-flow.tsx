@@ -493,14 +493,59 @@ export function CheckoutFlow({
     return <EmptyCartCard onReset={reset} />;
   }
 
+  const summaryNavigation = (
+    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+      <button
+        type="button"
+        onClick={prev}
+        disabled={stepIndex === 0}
+        className={cn(
+          "ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:px-4",
+          stepIndex === 0 && "pointer-events-none opacity-40",
+        )}
+      >
+        <ArrowLeft className="size-4" aria-hidden />
+        Nazad
+      </button>
+
+      {step !== "review" ? (
+        <button
+          type="button"
+          onClick={next}
+          disabled={isAdvancing}
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-5"
+        >
+          {isAdvancing ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : null}
+          Nastavi
+          {!isAdvancing ? <ArrowRight className="size-4" aria-hidden /> : null}
+        </button>
+      ) : (
+        <button
+          type="submit"
+          form="checkout-order-form"
+          disabled={formState.isSubmitting}
+          className="bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5"
+        >
+          {formState.isSubmitting ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : null}
+          Potvrdi porudžbinu
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <FormProvider {...methods}>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
         <form
+          id="checkout-order-form"
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           noValidate
           className={cn(
-            "bg-surface ring-border/60 rounded-2xl p-4 pb-24 ring-1 sm:p-5 md:pb-5",
+            "bg-surface ring-border/60 rounded-2xl p-4 ring-1 sm:p-5",
             isCompactDesktopStep && "lg:p-4",
             step === "review" && "lg:p-5",
           )}
@@ -601,55 +646,6 @@ export function CheckoutFlow({
             </div>
           </div>
 
-          <div
-            className={cn(
-              "border-border/60 fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 rounded-t-xl border border-x-0 border-b-0 bg-surface/95 px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] shadow-soft-3 backdrop-blur md:static md:inset-auto md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:shadow-none md:backdrop-blur-none",
-              step === "review"
-                ? "md:mt-3 md:pt-2"
-                : isCompactDesktopStep
-                  ? "md:mt-4 md:pt-3 lg:mt-3 lg:pt-2"
-                  : "md:mt-5 md:pt-4",
-            )}
-          >
-            <button
-              type="button"
-              onClick={prev}
-              disabled={stepIndex === 0}
-              className={cn(
-                "ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:px-4",
-                stepIndex === 0 && "pointer-events-none opacity-40",
-              )}
-            >
-              <ArrowLeft className="size-4" aria-hidden />
-              Nazad
-            </button>
-
-            {step !== "review" ? (
-              <button
-                type="button"
-                onClick={next}
-                disabled={isAdvancing}
-                className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-5"
-              >
-                {isAdvancing ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : null}
-                Nastavi
-                {!isAdvancing ? <ArrowRight className="size-4" aria-hidden /> : null}
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={formState.isSubmitting}
-                className="bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5"
-              >
-                {formState.isSubmitting ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : null}
-                Potvrdi porudžbinu
-              </button>
-            )}
-          </div>
         </form>
 
         <OrderSummary
@@ -659,11 +655,14 @@ export function CheckoutFlow({
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
           cta={
-            step === "review" ? (
-              <p className="text-[11px] text-ink-500">
-                Klikom na „Potvrdi porudžbinu” prihvatate iznos i Uslove kupovine.
-              </p>
-            ) : undefined
+            <>
+              {step === "review" ? (
+                <p className="text-[11px] text-ink-500">
+                  Klikom na „Potvrdi porudžbinu” prihvatate iznos i Uslove kupovine.
+                </p>
+              ) : null}
+              {summaryNavigation}
+            </>
           }
         />
       </div>

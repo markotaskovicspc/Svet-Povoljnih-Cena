@@ -302,7 +302,7 @@ export function ProductCard({
                     src={image.url}
                     alt={image.alt ?? product.name}
                     fill
-                    sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 25vw, (min-width: 394px) 32vw, 126px"
+                    sizes="(min-width: 1280px) 220px, (min-width: 768px) 210px, (min-width: 640px) 38vw, (min-width: 394px) 46vw, 164px"
                     preload={index === 0 ? preload : undefined}
                     draggable={false}
                     placeholder="blur"
@@ -635,7 +635,7 @@ function ProductCardPictograms({
     <ul
       data-product-card-pictograms
       aria-label="Karakteristike proizvoda"
-      className="grid grid-cols-2 gap-1"
+      className="flex flex-col gap-1"
     >
       {visible.map((pictogram) => (
         <li

@@ -15,7 +15,7 @@ export function PdpPictograms({
   return (
     <ul
       className={cn(
-        "pointer-events-none grid grid-cols-2 gap-1.5 md:grid-cols-3",
+        "pointer-events-none flex flex-col items-start gap-1.5",
         className,
       )}
       aria-label="Karakteristike proizvoda"
@@ -24,14 +24,14 @@ export function PdpPictograms({
         <li
           key={pictogram.code}
           title={pictogram.label}
-          className="relative size-11 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-12"
+          className="relative size-11 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80"
         >
           <Image
             src={pictogram.iconUrl}
             alt=""
             width={72}
             height={72}
-            sizes="(min-width: 768px) 48px, 44px"
+            sizes="44px"
             className="size-full object-contain p-0.5"
           />
           <span className="sr-only">{pictogram.label}</span>

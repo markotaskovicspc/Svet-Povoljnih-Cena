@@ -14,28 +14,46 @@ export async function GET(
   const { id } = await context.params;
   const order = await db.purchaseOrder.findUnique({
     where: { id },
-    include: { supplier: true, items: { orderBy: { createdAt: "asc" } } },
+    include: {
+      supplier: true,
+      loadingLocation: true,
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          product: {
+            select: {
+              media: {
+                take: 1,
+                orderBy: { order: "asc" },
+                select: { url: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!order) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
-  const pdf = buildPurchaseOrderPdf({
+  const pdf = await buildPurchaseOrderPdf({
     ...order,
-    freightCost: Number(order.freightCost),
     totalPrice: Number(order.totalPrice),
     totalVolume: Number(order.totalVolume ?? 0),
-    totalWeight: Number(order.totalWeight ?? 0),
-    exchangeRate: Number(order.exchangeRate),
-    freightExchangeRate: Number(order.freightExchangeRate),
     items: order.items.map((item) => ({
-      ...item,
+      sku: item.sku,
+      name: item.name,
+      supplierProductName: item.supplierProductName,
+      attributes: item.attributes,
+      pattern: item.pattern,
+      packQty: item.packQty,
+      qty: item.qty,
       purchasePrice: Number(item.purchasePrice),
+      currency: item.currency,
       totalVolume: Number(item.totalVolume ?? 0),
-      totalWeight: Number(item.totalWeight ?? 0),
-      customsRate: Number(item.customsRate ?? 0),
-      calcRetailPrice:
-        item.calcRetailPrice == null ? null : Number(item.calcRetailPrice),
-      bmPct: item.bmPct == null ? null : Number(item.bmPct),
+      certificates: item.certificates,
+      barcode: item.barcode,
+      imageUrl: item.product?.media[0]?.url ?? null,
     })),
   });
   return new NextResponse(new Uint8Array(pdf), {

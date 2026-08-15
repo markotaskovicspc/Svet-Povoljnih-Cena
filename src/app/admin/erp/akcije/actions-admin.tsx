@@ -55,6 +55,7 @@ type ActionProductRow = {
   isHero: boolean;
   validMpPrice: number;
   salePrice: number;
+  bmPct: number | null;
 };
 
 type ActionRow = {
@@ -95,7 +96,7 @@ type LinearPromotionRow = {
   groups: string[];
 };
 
-type LookupRow = Omit<ActionProductRow, "salePrice">;
+type LookupRow = Omit<ActionProductRow, "salePrice" | "bmPct">;
 type MutationState = AdminActionState<PricingMutationResult>;
 
 const emptyMutationState = (): MutationState => ({
@@ -737,7 +738,7 @@ function ActionProductsDialog({
           <table
             className={cn(
               "border-separate border-spacing-0 text-left text-xs",
-              action.isPermanent ? "min-w-[2350px]" : "min-w-[2700px]",
+              action.isPermanent ? "min-w-[2350px]" : "min-w-[2830px]",
             )}
           >
             <thead className="sticky top-0 z-20 bg-muted-bg text-[10px] uppercase tracking-[0.1em] text-ink-500">
@@ -759,15 +760,18 @@ function ActionProductsDialog({
                 <th
                   className={cn(
                     "sticky z-30 min-w-40 border-b border-l border-border bg-muted-bg px-3 py-2.5 text-right shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
-                    action.isPermanent ? "right-28" : "right-[27rem]",
+                    action.isPermanent ? "right-28" : "right-[35rem]",
                   )}
                 >
                   Važeća MP cena
                 </th>
                 {!action.isPermanent ? (
                   <>
-                    <th className="sticky right-64 z-30 min-w-44 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
+                    <th className="sticky right-96 z-30 min-w-44 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
                       Akcijska MP cena
+                    </th>
+                    <th className="sticky right-64 z-30 min-w-32 border-b border-border bg-muted-bg px-3 py-2.5 text-right">
+                      Akcijska BM%
                     </th>
                     <th className="sticky right-28 z-30 min-w-36 border-b border-border bg-muted-bg px-3 py-2.5 text-center">
                       Heroj meseca
@@ -828,14 +832,14 @@ function ActionProductsDialog({
                 <td
                   className={cn(
                     "sticky z-10 border-b border-l border-border bg-brand-blue-50 px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
-                    action.isPermanent ? "right-28" : "right-[27rem]",
+                    action.isPermanent ? "right-28" : "right-[35rem]",
                   )}
                 >
                   {preview ? money.format(preview.validMpPrice) : "—"}
                 </td>
                 {!action.isPermanent ? (
                   <>
-                    <td className="sticky right-64 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
+                    <td className="sticky right-96 z-10 border-b border-border bg-brand-blue-50 px-3 py-3">
                       <Input
                         form="add-action-product"
                         name="salePrice"
@@ -852,6 +856,9 @@ function ActionProductsDialog({
                         className="text-right tabular-nums"
                         placeholder="0,00"
                       />
+                    </td>
+                    <td className="sticky right-64 z-10 border-b border-border bg-brand-blue-50 px-3 py-3 text-right tabular-nums text-ink-500">
+                      —
                     </td>
                     <td className="sticky right-28 z-10 border-b border-border bg-brand-blue-50 px-3 py-3 text-center">
                       <input
@@ -900,14 +907,14 @@ function ActionProductsDialog({
                     <td
                       className={cn(
                         "sticky z-10 border-b border-l border-border bg-white px-3 py-3 text-right font-medium tabular-nums shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]",
-                        action.isPermanent ? "right-28" : "right-[27rem]",
+                        action.isPermanent ? "right-28" : "right-[35rem]",
                       )}
                     >
                       {money.format(product.validMpPrice)}
                     </td>
                     {!action.isPermanent ? (
                       <>
-                        <td className="sticky right-64 z-10 border-b border-border bg-white px-3 py-3">
+                        <td className="sticky right-96 z-10 border-b border-border bg-white px-3 py-3">
                           <Input
                             form={saveFormId}
                             name="salePrice"
@@ -919,6 +926,11 @@ function ActionProductsDialog({
                             defaultValue={product.salePrice}
                             className="text-right tabular-nums"
                           />
+                        </td>
+                        <td className="sticky right-64 z-10 border-b border-border bg-white px-3 py-3 text-right font-medium tabular-nums">
+                          {product.bmPct == null
+                            ? "—"
+                            : `${product.bmPct.toFixed(2)}%`}
                         </td>
                         <td className="sticky right-28 z-10 border-b border-border bg-white px-3 py-3 text-center">
                           <input
@@ -952,7 +964,7 @@ function ActionProductsDialog({
               {!filteredProducts.length ? (
                 <tr>
                   <td
-                    colSpan={action.isPermanent ? 16 : 18}
+                    colSpan={action.isPermanent ? 16 : 19}
                     className="px-4 py-10 text-center text-sm text-ink-500"
                   >
                     {action.products.length

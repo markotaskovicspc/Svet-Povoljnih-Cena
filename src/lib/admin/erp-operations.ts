@@ -26,6 +26,7 @@ import {
 } from "@/lib/admin/stocktake-dispatch";
 import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
+import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
 import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
@@ -151,6 +152,7 @@ export const operationalErpModules: ErpModule[] = [
       text("product", "Artikal"),
       money("fullPrice", "MP cena"),
       money("salePrice", "Akcijska cena"),
+      number("bmPct", "Akcijska BM%"),
       date("startsAt", "Početak"),
       date("endsAt", "Kraj"),
     ],
@@ -219,6 +221,22 @@ export const operationalErpModules: ErpModule[] = [
           { key: "phone", label: "Telefon", type: "tel" },
         ],
       },
+      {
+        label: "Arhiviraj",
+        pendingLabel: "Arhiviranje…",
+        tone: "danger",
+        action: "warehouse.archive",
+        needsSelection: true,
+        confirm:
+          "Arhivirani magacin se više neće nuditi u novim dokumentima. Nastaviti?",
+      },
+      {
+        label: "Ponovo aktiviraj",
+        pendingLabel: "Aktiviranje…",
+        tone: "neutral",
+        action: "warehouse.restore",
+        needsSelection: true,
+      },
     ],
     columns: [
       text("name", "Naziv"),
@@ -226,6 +244,7 @@ export const operationalErpModules: ErpModule[] = [
       text("city", "Mesto"),
       text("email", "E-mail"),
       text("phone", "Telefon"),
+      status("state", "Status", ["Aktivan", "Arhiviran"]),
     ],
     editableColumns: ["name", "address", "city", "email", "phone"],
     rows: emptyRows,
@@ -1031,6 +1050,10 @@ async function actionPriceRows(take: number): Promise<ErpRow[]> {
       product: row.product.name,
       fullPrice: decimal(row.product.fullPrice),
       salePrice: decimal(row.salePrice),
+      bmPct: actionGrossMarginPct(
+        decimal(row.salePrice),
+        row.product.cogs == null ? null : decimal(row.product.cogs),
+      ),
       startsAt: dateOnly(row.action.startsAt),
       endsAt: dateOnly(row.action.endsAt),
     },
@@ -1120,6 +1143,7 @@ async function warehouseRows(take: number): Promise<ErpRow[]> {
       city: row.city,
       email: row.email,
       phone: row.phone,
+      state: row.active ? "Aktivan" : "Arhiviran",
     },
   }));
 }

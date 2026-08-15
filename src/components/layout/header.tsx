@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { User2 } from "lucide-react";
+import { ListFilter, User2 } from "lucide-react";
 import type { Tab } from "@/types";
 import { cn } from "@/lib/utils";
 import { InstantSearch } from "./instant-search";
@@ -17,6 +17,10 @@ import { BRAND } from "@/lib/brand";
 import type { NavNode } from "@/data/site";
 import type { MobileSearchContent } from "@/types/mobile-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import {
+  mobileFilterHeaderEnabled,
+  OPEN_MOBILE_FILTERS_EVENT,
+} from "@/lib/listing/mobile-filter-header";
 
 const SCROLL_THRESHOLD = 16;
 
@@ -30,6 +34,7 @@ export function Header({
   mobileSearchContent: MobileSearchContent;
 }) {
   const pathname = usePathname();
+  const showMobileFilters = mobileFilterHeaderEnabled(pathname);
   const isCustomerLoggedIn = useLoyaltyEligibility();
   const [scrolled, setScrolled] = useState(false);
 
@@ -161,8 +166,26 @@ export function Header({
           <CartButton className="size-9 text-ink-700 hover:bg-muted-bg hover:text-ink-900 focus-visible:ring-walnut/40 [&_svg]:size-4" />
         </div>
       </div>
-      <div className="px-3 pb-3 md:hidden">
-        <MobileSearchSheet content={mobileSearchContent} />
+      <div className="flex items-center gap-2 px-3 pb-3 md:hidden">
+        {showMobileFilters ? (
+          <button
+            type="button"
+            aria-label="Otvori filtere"
+            onClick={() =>
+              window.dispatchEvent(new Event(OPEN_MOBILE_FILTERS_EVENT))
+            }
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-white px-3 text-xs font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/35 hover:bg-muted-bg/50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+          >
+            <ListFilter className="size-4" aria-hidden />
+            Filteri
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <MobileSearchSheet
+            content={mobileSearchContent}
+            compact={showMobileFilters}
+          />
+        </div>
       </div>
     </motion.header>
   );

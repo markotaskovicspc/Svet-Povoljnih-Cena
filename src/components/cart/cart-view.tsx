@@ -8,6 +8,7 @@ import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import { useCheckout } from "@/lib/checkout/store";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -105,8 +106,11 @@ function CartSummary({
   const [code, setCode] = useState("");
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
+  const lines = useCart((state) => state.lines);
+  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(lines);
+  const shipping = quote?.prices.kurir ?? null;
   const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
-  const total = Math.max(0, subtotal - voucherDiscount);
+  const total = Math.max(0, subtotal + (shipping ?? 0) - voucherDiscount);
 
   async function applyCartVoucher(e: React.FormEvent) {
     e.preventDefault();
@@ -168,7 +172,13 @@ function CartSummary({
               <Truck className="size-3.5" aria-hidden />
               Isporuka
             </dt>
-            <dd className="text-ink-500">obračun u sledećem koraku</dd>
+            <dd className="font-medium text-ink-900">
+              {shipping == null
+                ? deliveryLoading
+                  ? "Računam…"
+                  : "Nije dostupno"
+                : formatRsd(shipping)}
+            </dd>
           </div>
         </dl>
 
@@ -243,7 +253,7 @@ function CartSummary({
   );
 }
 
-function CartLoginOffer() {
+export function CartLoginOffer() {
   const loggedIn = useLoyaltyEligibility();
   const lines = useCart((state) => state.lines);
   if (loggedIn) return null;
@@ -264,14 +274,14 @@ function CartLoginOffer() {
   );
 
   return (
-    <div className="border-walnut/25 bg-walnut/5 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <div className="border-action/30 bg-action/5 flex flex-col gap-3 border-y px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="flex items-start gap-3">
         <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-full">
           <LogIn className="size-4" aria-hidden />
         </span>
         <div>
-          <p className="text-sm font-semibold text-ink-900">
-            Prijavite se i ostvarite {pct || 30}% loyalty popusta
+          <p className="text-action text-base font-extrabold uppercase sm:text-lg">
+            PRIJAVITE SE I OSTVARITE {pct || 30}% LOYALTY POPUSTA
           </p>
           <p className="mt-0.5 text-xs text-ink-600">
             Važi za artikle koji nisu na akciji. Moguća dodatna ušteda u ovoj korpi: {formatRsd(potentialSavings)}.

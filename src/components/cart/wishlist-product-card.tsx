@@ -32,10 +32,10 @@ export function WishlistProductCard({
   const name = product?.name ?? "Sačuvan proizvod";
   const href = product?.slug ? `/p/${product.slug}` : undefined;
   const effectivePrice = product?.effectivePrice ?? product?.fullPrice;
-  const hasReducedPrice =
-    product?.effectivePrice != null &&
-    product.fullPrice != null &&
-    product.effectivePrice < product.fullPrice;
+  const actionPrice = product?.actionPrice;
+  const loyaltyPrice = actionPrice == null ? product?.loyaltyPrice : undefined;
+  const hasReducedPrice = effectivePrice != null &&
+    product?.fullPrice != null && effectivePrice < product.fullPrice;
 
   function addToCart() {
     if (!product?.name || !product.effectivePrice || !product.fullPrice || !product.slug) {
@@ -48,6 +48,16 @@ export function WishlistProductCard({
       slug: product.slug,
       unitPriceFull: product.fullPrice,
       unitPriceSale: product.effectivePrice,
+      unitPriceLoyalty: loyaltyPrice,
+      loyaltyDiscountPct:
+        loyaltyPrice != null &&
+        loyaltyPrice > 0 &&
+        loyaltyPrice < product.fullPrice
+          ? Math.round(
+              ((product.fullPrice - loyaltyPrice) / product.fullPrice) *
+                100,
+            )
+          : undefined,
       thumbnailUrl: product.thumbnailUrl ?? undefined,
     });
     toast.success("Dodato u korpu");
@@ -106,9 +116,21 @@ export function WishlistProductCard({
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             {effectivePrice != null ? (
-              <p className="text-sm font-bold text-action tabular-nums">
-                {formatRsd(effectivePrice)}
-              </p>
+              <div className="space-y-0.5">
+                {actionPrice != null ? (
+                  <p className="text-sm font-bold text-action tabular-nums">
+                    Akcijska {formatRsd(actionPrice)}
+                  </p>
+                ) : loyaltyPrice != null ? (
+                  <p className="text-sm font-bold text-action tabular-nums">
+                    Loyalty {formatRsd(loyaltyPrice)}
+                  </p>
+                ) : (
+                  <p className="text-sm font-bold text-ink-900 tabular-nums">
+                    {formatRsd(effectivePrice)}
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="text-xs text-ink-500">Učitavanje cene</p>
             )}
