@@ -19,12 +19,20 @@ export default async function ArticleImportPage() {
           { label: "XLSX unos" },
         ]}
         actions={
-          <Link
-            href="/admin/erp/artikli"
-            className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-sm"
-          >
-            Nazad na artikle
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/api/admin/erp/articles/import/template"
+              className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-sm"
+            >
+              Preuzmi XLSX šablon
+            </Link>
+            <Link
+              href="/admin/erp/artikli"
+              className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-sm"
+            >
+              Nazad na artikle
+            </Link>
+          </div>
         }
       />
       <div className="px-8 py-6">

@@ -44,6 +44,11 @@ import {
   hasProductVolumeSource,
   PRODUCT_LOGISTICS_SOURCE_ERROR,
 } from "@/lib/admin/purchase-order";
+import {
+  findArticleImportWorksheet,
+  normalizeArticleImportHeader,
+  type ArticleImportColumn,
+} from "@/lib/admin/article-import-workbook";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -108,188 +113,6 @@ type ArticleImportRow = {
   familyStorefrontEnabled: boolean | null;
 };
 
-const HEADER_ALIASES: Record<string, keyof ArticleImportRow> = {
-  sku: "sku",
-  sifra: "sku",
-  sifraartikla: "sku",
-  photo: "photoUrl",
-  photourl: "photoUrl",
-  image: "photoUrl",
-  imageurl: "photoUrl",
-  foto: "photoUrl",
-  fotografija: "photoUrl",
-  fotografijazasajt: "photoUrl",
-  urlfotografije: "photoUrl",
-  status: "status",
-  statusartikla: "status",
-  supplier: "supplier",
-  dobavljac: "supplier",
-  suppliercode: "supplier",
-  category: "category",
-  kategorija: "category",
-  kategorijaartikala: "category",
-  subgroup: "subgroup",
-  podgrupa: "subgroup",
-  podgrupaartikla: "subgroup",
-  group: "group",
-  grupa: "group",
-  grupaartikla: "group",
-  collection: "collection",
-  kolekcija: "collection",
-  shortdescription: "shortDescription",
-  kratkiopis: "shortDescription",
-  kratkiopisartikla: "shortDescription",
-  shortname: "shortName",
-  name: "shortName",
-  naziv: "shortName",
-  kratkinaziv: "shortName",
-  kratkinazivartikla: "shortName",
-  attribute1: "attribute1",
-  atribut1: "attribute1",
-  attribute2: "attribute2",
-  atribut2: "attribute2",
-  attribute3: "attribute3",
-  atribut3: "attribute3",
-  attribute4: "attribute4",
-  atribut4: "attribute4",
-  color1: "color1",
-  boja1: "color1",
-  color2: "color2",
-  boja2: "color2",
-  benefits: "benefits",
-  benefiti: "benefits",
-  siteDescription: "description",
-  sitedescription: "description",
-  description: "description",
-  opis: "description",
-  opiszasajt: "description",
-  stock: "stock",
-  zalihe: "stock",
-  fizickostanje: "stock",
-  ukupnofizickostanje: "stock",
-  weightkg: "weightKg",
-  tezinakg: "weightKg",
-  tezinaartikla: "weightKg",
-  widthcm: "widthCm",
-  sirinacm: "widthCm",
-  sirinaartikla: "widthCm",
-  depthcm: "depthCm",
-  dubinacm: "depthCm",
-  dubinaartikla: "depthCm",
-  heightcm: "heightCm",
-  visinacm: "heightCm",
-  visinaartikla: "heightCm",
-  grossweightkg: "grossWeightKg",
-  brutotezinakg: "grossWeightKg",
-  brutotezina: "grossWeightKg",
-  brutotezinaartikla: "grossWeightKg",
-  unitpackwidthcm: "unitPackWidthCm",
-  sirinapakovanjajednogartikla: "unitPackWidthCm",
-  sirinapakovanjapojedinacnogartikla: "unitPackWidthCm",
-  sirinapojedinacnogpakovanja: "unitPackWidthCm",
-  unitpackdepthcm: "unitPackDepthCm",
-  dubinapakovanjajednogartikla: "unitPackDepthCm",
-  dubinapakovanjapojedinacnogartikla: "unitPackDepthCm",
-  dubinapojedinacnogpakovanja: "unitPackDepthCm",
-  unitpackheightcm: "unitPackHeightCm",
-  visinapakovanjajednogartikla: "unitPackHeightCm",
-  visinapakovanjapojedinacnogartikla: "unitPackHeightCm",
-  visinapojedinacnogpakovanja: "unitPackHeightCm",
-  packqty: "packQty",
-  kompak: "packQty",
-  brojartikalaupakovanju: "packQty",
-  palletqty: "palletQty",
-  kompaleta: "palletQty",
-  brojkomadanapaleti: "palletQty",
-  kolicinapaleta: "palletQty",
-  packwidthcm: "packWidthCm",
-  paksirinacm: "packWidthCm",
-  paksirina: "packWidthCm",
-  sirinatransportnogpakovanja: "packWidthCm",
-  packdepthcm: "packDepthCm",
-  pakdubinacm: "packDepthCm",
-  pakdubina: "packDepthCm",
-  dubinatransportnogpakovanja: "packDepthCm",
-  packheightcm: "packHeightCm",
-  pakvisinacm: "packHeightCm",
-  pakvisina: "packHeightCm",
-  visinatransportnogpakovanja: "packHeightCm",
-  packgrossweightkg: "packGrossWeightKg",
-  pakbrutokg: "packGrossWeightKg",
-  brutotezinatransportnogpakovanja: "packGrossWeightKg",
-  containerqty: "containerQty",
-  kolicinazaceokontejner: "containerQty",
-  kolicinapokontejneru: "containerQty",
-  containergrossweightkg: "containerGrossWeightKg",
-  brutokgzaceokontejner: "containerGrossWeightKg",
-  brutotezinakontejnera: "containerGrossWeightKg",
-  suppliername: "supplierProductName",
-  dobavljacevnaziv: "supplierProductName",
-  material: "materialText",
-  certificates: "certificates",
-  sertifikati: "certificates",
-  barcode: "barcode",
-  barkod: "barcode",
-  hscode: "hsCode",
-  hskod: "hsCode",
-  countryoforigin: "countryOfOrigin",
-  zemljaporekla: "countryOfOrigin",
-  poreklo: "countryOfOrigin",
-  retailprice: "retailPrice",
-  mpc: "retailPrice",
-  maloprodajnacena: "retailPrice",
-  customsrate: "customsRate",
-  carina: "customsRate",
-  ananasbrokerage: "ananasBrokeragePct",
-  ananasposred: "ananasBrokeragePct",
-  ananasprovizijazaposredovanje: "ananasBrokeragePct",
-  ananasstorage: "ananasStoragePct",
-  ananasskladis: "ananasStoragePct",
-  ananasprovizijazaskladistenje: "ananasStoragePct",
-  ananasdelivery: "ananasDeliveryPct",
-  ananasispor: "ananasDeliveryPct",
-  ananasprovizijazaisporuku: "ananasDeliveryPct",
-  webcheck: "webCheck",
-  wholesalecheck: "wholesaleCheck",
-  vpcheck: "wholesaleCheck",
-  exportcheck: "exportCheck",
-  inocheck: "exportCheck",
-  moq: "moq",
-  newuntil: "newUntil",
-  novodo: "newUntil",
-  sifraporodice: "familyCode",
-  familycode: "familyCode",
-  nazivboje: "familyColorLabel",
-  colorname: "familyColorLabel",
-  hexboje: "familyColorHex",
-  colorhex: "familyColorHex",
-  redosledboje: "familyPosition",
-  colorposition: "familyPosition",
-  glavnaboja: "familyPrimary",
-  primarycolor: "familyPrimary",
-  bojaspremljenazaweb: "familyStorefrontEnabled",
-  colorstorefrontenabled: "familyStorefrontEnabled",
-};
-
-const LEGACY_TNC_HEADERS = new Set([
-  "tncfrom",
-  "tncod",
-  "tcfrom",
-  "tcod",
-  "tncuntil",
-  "tncdo",
-  "tcuntil",
-  "tcdo",
-]);
-
-function normalizeHeader(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
 function cellText(cell: ExcelJS.Cell) {
   return cell.text.trim();
 }
@@ -345,7 +168,7 @@ function booleanCell(
   errors: ImportError[],
 ) {
   if (!column) return null;
-  const raw = normalizeHeader(cellText(row.getCell(column)));
+  const raw = normalizeArticleImportHeader(cellText(row.getCell(column)));
   if (!raw) return null;
   if (["da", "true", "1", "x", "yes"].includes(raw)) return true;
   if (["ne", "false", "0", "no"].includes(raw)) return false;
@@ -413,40 +236,38 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) {
+  const selection = findArticleImportWorksheet(workbook);
+  if (!selection) {
     return NextResponse.json({ ok: false, error: "XLSX nema radni list." }, { status: 400 });
   }
 
-  const headers = new Map<keyof ArticleImportRow, number>();
-  let hasLegacyTncColumns = false;
-  worksheet.getRow(1).eachCell((cell, column) => {
-    const normalizedHeader = normalizeHeader(cellText(cell));
-    if (LEGACY_TNC_HEADERS.has(normalizedHeader)) hasLegacyTncColumns = true;
-    const field = HEADER_ALIASES[normalizedHeader];
-    if (field) headers.set(field, column);
-  });
-  const warnings = hasLegacyTncColumns
+  const { worksheet, headerRow, headers, recognizedColumns } = selection;
+  const source = {
+    worksheet: worksheet.name,
+    headerRow,
+    columns: recognizedColumns,
+  };
+  const warnings = selection.hasLegacyTncColumns
     ? [
         "Kolone T&C od/do su ignorisane. Za ponudu bez vremenskog ograničenja koristite DTZ u koloni Status.",
       ]
     : [];
   const errors: ImportError[] = [];
   if (!headers.has("shortName")) {
-    errors.push({ row: 1, field: "shortName", message: "Nedostaje kolona Kratki naziv." });
+    errors.push({ row: headerRow, field: "shortName", message: "Nedostaje kolona Kratki naziv." });
   }
 
   const rows: ArticleImportRow[] = [];
   const seenSkus = new Set<string>();
   const seenBarcodes = new Set<string>();
   worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRow) return;
     let hasValue = false;
     row.eachCell({ includeEmpty: false }, (cell) => {
       if (cellText(cell)) hasValue = true;
     });
     if (!hasValue) return;
-    const textAt = (field: keyof ArticleImportRow) => {
+    const textAt = (field: ArticleImportColumn) => {
       const column = headers.get(field);
       return column ? cellText(row.getCell(column)) : "";
     };
@@ -560,7 +381,9 @@ export async function POST(request: Request) {
     };
     rows.push(parsedRow);
   });
-  if (!rows.length) errors.push({ row: 2, field: "file", message: "Datoteka nema artikle." });
+  if (!rows.length) {
+    errors.push({ row: headerRow + 1, field: "file", message: "Datoteka nema artikle." });
+  }
 
   if (headers.has("familyCode")) {
     const byFamily = new Map<string, ArticleImportRow[]>();
@@ -596,7 +419,7 @@ export async function POST(request: Request) {
       byFamily.set(row.familyCode, grouped);
     }
 
-    const sharedFields: Array<keyof ArticleImportRow> = [
+    const sharedFields: ArticleImportColumn[] = [
       "shortName", "shortDescription", "description", "category", "group",
       "subgroup", "collection", "attribute1", "attribute2", "attribute3",
       "attribute4", "widthCm", "depthCm", "heightCm", "weightKg",
@@ -790,6 +613,7 @@ export async function POST(request: Request) {
         error: "Cela datoteka je odbijena. Ispravite navedene redove i pokušajte ponovo.",
         errors,
         warnings,
+        source,
       },
       { status: 422 },
     );
@@ -815,6 +639,7 @@ export async function POST(request: Request) {
           : 0,
       },
       warnings,
+      source,
     });
   }
 
@@ -832,12 +657,12 @@ export async function POST(request: Request) {
     "packGrossWeightKg",
     "containerQty",
     "containerGrossWeightKg",
-  ].some((field) => headers.has(field as keyof ArticleImportRow));
+  ].some((field) => headers.has(field as ArticleImportColumn));
 
   try {
     await db.$transaction(async (tx) => {
       for (const row of rows) {
-        const hasColumn = (field: keyof ArticleImportRow) => headers.has(field);
+        const hasColumn = (field: ArticleImportColumn) => headers.has(field);
         const sku = row.sku ?? (await nextArticleSku(tx));
         const existing = row.sku
           ? await tx.product.findUnique({
@@ -1119,7 +944,7 @@ export async function POST(request: Request) {
           "color2",
           "benefits",
           "certificates",
-        ].some((field) => hasColumn(field as keyof ArticleImportRow));
+        ].some((field) => hasColumn(field as ArticleImportColumn));
         if (hasLookupColumns) {
           const existingBenefits =
             existing?.lookupAssignments
@@ -1223,7 +1048,10 @@ export async function POST(request: Request) {
         : error instanceof Error
           ? error.message
           : "Uvoz nije upisan; transakcija je vraćena.";
-    return NextResponse.json({ ok: false, error: message }, { status: 409 });
+    return NextResponse.json(
+      { ok: false, error: message, warnings, source },
+      { status: 409 },
+    );
   }
 
   if (importsPurchaseOrderLogistics) {
@@ -1239,6 +1067,8 @@ export async function POST(request: Request) {
     diff: {
       filename: file.name,
       rows: rows.length,
+      worksheet: source.worksheet,
+      headerRow: source.headerRow,
       familyCodes: Array.from(
         new Set(rows.map((row) => row.familyCode).filter((code): code is string => Boolean(code))),
       ),
@@ -1246,5 +1076,5 @@ export async function POST(request: Request) {
   });
   revalidateTag("catalog-products", "max");
   revalidatePath("/admin/erp/artikli");
-  return NextResponse.json({ ok: true, imported: rows.length, warnings });
+  return NextResponse.json({ ok: true, imported: rows.length, warnings, source });
 }
