@@ -380,7 +380,7 @@ const purchaseOrderItemColumns: ErpColumn[] = [
 
 
 const inboundInvoiceColumns: ErpColumn[] = [
-  { key: "number", label: "Broj fakture", defaultVisible: true },
+  { key: "number", label: "Broj prijemnice", defaultVisible: true },
   { key: "invoiceDate", label: "Datum prijema", type: "date", defaultVisible: true },
   { key: "supplier", label: "Naziv dobavljača", defaultVisible: true },
   { key: "invoiceValueRsd", label: "Vrednost fakture u RSD", type: "money", align: "right", defaultVisible: true },
@@ -678,9 +678,9 @@ const coreErpModules: ErpModule[] = [
   {
     slug: "ulazne-fakture",
     number: "5",
-    title: "Ulazne fakture",
+    title: "Prijemnice",
     description:
-      "Domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama, knjiženje prijema i raspodela troškova za COGS.",
+      "Prijem robe, domaće i ino fakture, poreske vrednosti, veze sa porudžbenicama i raspodela troškova za COGS.",
     status: "ready",
     commands: [
       { label: "Nova", tone: "primary", action: "invoice.create" },
@@ -696,14 +696,14 @@ const coreErpModules: ErpModule[] = [
         action: "invoice.lock",
         needsSelection: true,
         confirm:
-          "Proknjižiti izabrane ulazne fakture i porudžbenice i primiti robu u izabrane magacine?",
+          "Proknjižiti izabrane prijemnice i porudžbenice i primiti robu u izabrane magacine?",
       },
       {
         label: "Storniraj",
         tone: "danger",
         action: "invoice.cancel",
         needsSelection: true,
-        confirm: "Stornirati izabrane fakture i ponovo izračunati COGS i dolaz?",
+        confirm: "Stornirati izabrane prijemnice i ponovo izračunati COGS i dolaz?",
       },
     ],
     columns: inboundInvoiceColumns,
@@ -711,9 +711,9 @@ const coreErpModules: ErpModule[] = [
     rows: emptyRows,
     detailHrefBase: "/admin/erp/ulazne-fakture",
     notes: [
-      "Dvoklik na red otvara pojedinačnu fakturu.",
+      "Dvoklik na red otvara pojedinačnu prijemnicu.",
       "Trošak vezanih faktura raspoređuje se prema vrednosti svake šifre na porudžbenici.",
-      "Proknjižena faktura se ne može redovno menjati niti ponovo uključiti u COGS.",
+      "Proknjižena prijemnica se ne može redovno menjati niti ponovo uključiti u COGS.",
     ],
   },
   {
@@ -746,7 +746,7 @@ const primaryErpModulePresentation = [
   { slug: "dobavljaci", number: "2", title: "Matični podaci o dobavljačima" },
   { slug: "nabavne-cene", number: "3", title: "Cenovnik nabavnih cena" },
   { slug: "porudzbenice", number: "4", title: "Nabavne porudžbenice" },
-  { slug: "ulazne-fakture", number: "5", title: "Ulazne fakture" },
+  { slug: "ulazne-fakture", number: "5", title: "Prijemnice" },
   { slug: "cenovnici", number: "6", title: "Cenovnici" },
   {
     slug: "akcijske-cene",

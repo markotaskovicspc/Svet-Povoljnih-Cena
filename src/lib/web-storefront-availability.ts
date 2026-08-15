@@ -85,7 +85,7 @@ export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInp
   return {
     OR: [
       {
-        AND: [nonRabaluxSupplierWhere(), { stock: { gt: 0 } }],
+        AND: [nonRabaluxSupplierWhere(), { dcAvailableQty: { gt: 0 } }],
       },
       {
         AND: [
@@ -126,7 +126,7 @@ export function storefrontAvailabilityWhere(
 ): Prisma.ProductWhereInput {
   const buckets: Prisma.ProductWhereInput[] = [];
   const ordinaryOutOfStock: Prisma.ProductWhereInput = {
-    AND: [nonRabaluxSupplierWhere(), { stock: { lte: 0 } }],
+    AND: [nonRabaluxSupplierWhere(), { dcAvailableQty: { lte: 0 } }],
   };
 
   if (selected.includes("in-stock")) {
@@ -148,6 +148,7 @@ export function storefrontAvailabilityWhere(
 
 export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
   const now = new Date();
+  const enforceAutomaticAvailability = isWebAutoAvailabilityEnforced();
   return {
     isActive: true,
     deletedAt: null,
@@ -170,27 +171,38 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
       },
     },
     AND: [
-      ...(isWebAutoAvailabilityEnforced()
+      ...(enforceAutomaticAvailability
         ? [
             {
-              OR: [
-                { articleStatus: "SP" },
-                { availableWebAuto: true },
-              ],
+              availableWebAuto: true,
             } satisfies Prisma.ProductWhereInput,
           ]
         : []),
       {
         OR: [
-          // SP is the client's permanent storefront assortment. Stock still
-          // controls whether checkout is possible, but not publication.
-          { articleStatus: "SP" },
+          // While the DC rollout guard is off, keep legacy SP items whose
+          // aggregate balance is still empty. Once another warehouse has a
+          // known positive balance, only audited DC stock may publish them.
+          ...(!enforceAutomaticAvailability
+            ? [
+                {
+                  AND: [
+                    { articleStatus: "SP" },
+                    nonRabaluxSupplierWhere(),
+                    { stock: { lte: 0 } },
+                  ],
+                } satisfies Prisma.ProductWhereInput,
+              ]
+            : []),
           // PostgreSQL's three-valued NULL logic makes a relation-level
           // `NOT integrationKey = RABALUX` exclude ordinary suppliers whose
           // integration key is NULL. Spell out every non-Rabalux case so
           // those products remain eligible for the storefront.
           {
-            AND: [nonRabaluxSupplierWhere(), { stock: { gt: 0 } }],
+            AND: [
+              nonRabaluxSupplierWhere(),
+              { dcAvailableQty: { gt: 0 } },
+            ],
           },
           {
             AND: [
@@ -226,18 +238,21 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
 }
 
 export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
+  const enforceAutomaticAvailability = isWebAutoAvailabilityEnforced();
   const generallyAvailable =
     !product.deletedAt &&
     product.isActive &&
     product.availableWebManual &&
-    (!isWebAutoAvailabilityEnforced() ||
-      product.articleStatus === "SP" ||
-      product.availableWebAuto);
+    (!enforceAutomaticAvailability || product.availableWebAuto);
   if (!generallyAvailable) return false;
-  if (product.articleStatus === "SP") return true;
   const dcAvailable = product.dcAvailableQty ?? product.stock ?? 0;
   if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) {
-    return dcAvailable > 0;
+    if (dcAvailable > 0) return true;
+    return (
+      !enforceAutomaticAvailability &&
+      product.articleStatus === "SP" &&
+      (product.stock ?? 0) <= 0
+    );
   }
   if (product.articleStatus === "ARH") return false;
 
@@ -259,11 +274,7 @@ export function storefrontPublicationBlockers(
   if (product.deletedAt) reasons.push("Artikal je arhiviran");
   if (!product.isActive) reasons.push("Artikal nije aktivan");
   if (!product.availableWebManual) reasons.push("Web kanal je ručno isključen");
-  if (
-    isWebAutoAvailabilityEnforced() &&
-    product.articleStatus !== "SP" &&
-    !product.availableWebAuto
-  ) {
+  if (isWebAutoAvailabilityEnforced() && !product.availableWebAuto) {
     reasons.push("Automatska web dostupnost je isključena");
   }
   if (!product.hasActiveRetailPrice) {
@@ -274,15 +285,18 @@ export function storefrontPublicationBlockers(
   }
 
   if (
-    product.articleStatus !== "SP" &&
     product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY &&
-    (product.dcAvailableQty ?? product.stock ?? 0) <= 0
+    (product.dcAvailableQty ?? product.stock ?? 0) <= 0 &&
+    !(
+      !isWebAutoAvailabilityEnforced() &&
+      product.articleStatus === "SP" &&
+      (product.stock ?? 0) <= 0
+    )
   ) {
     reasons.push("Nema pozitivnu raspoloživu količinu");
   }
 
   if (
-    product.articleStatus !== "SP" &&
     product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY
   ) {
     if (product.articleStatus === "ARH") reasons.push("Rabalux artikal je arhiviran");

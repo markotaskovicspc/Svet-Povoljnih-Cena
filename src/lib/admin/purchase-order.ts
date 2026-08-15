@@ -21,6 +21,51 @@ export type PurchaseOrderLineCalculation = {
 
 export const STANDARD_CONTAINER_VOLUME_M3 = 69;
 
+export const PRODUCT_LOGISTICS_SOURCE_ERROR =
+  "Unesite ili količinu i bruto kg za ceo kontejner, ili kom/pak i sve tri dimenzije transportnog pakovanja (širinu, dubinu i visinu).";
+
+type ProductLogisticsSourceInput = {
+  containerQty?: number | null;
+  containerGrossWeightKg?: number | null;
+  unitPackWidthCm?: number | null;
+  unitPackDepthCm?: number | null;
+  unitPackHeightCm?: number | null;
+  packQty?: number | null;
+  packWidthCm?: number | null;
+  packDepthCm?: number | null;
+  packHeightCm?: number | null;
+};
+
+function isPositiveNumber(value: number | null | undefined) {
+  return value != null && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Client rule: a complete container pair wins over a complete transport-package
+ * group when both are filled in.
+ */
+export function productLogisticsSource(
+  input: ProductLogisticsSourceInput,
+): "container" | "package" | null {
+  if (
+    isPositiveNumber(input.containerQty) &&
+    isPositiveNumber(input.containerGrossWeightKg)
+  ) {
+    return "container";
+  }
+
+  if (
+    isPositiveNumber(input.packQty) &&
+    [input.packWidthCm, input.packDepthCm, input.packHeightCm].every(
+      isPositiveNumber,
+    )
+  ) {
+    return "package";
+  }
+
+  return null;
+}
+
 function finiteNonNegative(value: number, label: string) {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${label} mora biti nenegativan broj.`);
@@ -72,30 +117,30 @@ export function calculateUnitLogistics(input: {
   const containerQty =
     input.containerQty && input.containerQty > 0 ? input.containerQty : null;
   const packQty = input.packQty && input.packQty > 0 ? input.packQty : null;
-  const unitPackDimensions = [
-    input.unitPackWidthCm ?? 0,
-    input.unitPackDepthCm ?? 0,
-    input.unitPackHeightCm ?? 0,
+  const packDimensions = [
+    input.packWidthCm ?? 0,
+    input.packDepthCm ?? 0,
+    input.packHeightCm ?? 0,
   ];
-  const hasCompleteUnitPackage = unitPackDimensions.every(
-    (dimension) => Number.isFinite(dimension) && dimension > 0,
-  );
+  const source = productLogisticsSource(input);
   const volumeM3 =
-    containerQty
+    source === "container" && containerQty
       ? STANDARD_CONTAINER_VOLUME_M3 / containerQty
-      : hasCompleteUnitPackage
-        ? (unitPackDimensions[0] *
-            unitPackDimensions[1] *
-            unitPackDimensions[2]) /
-          1_000_000
+      : source === "package" && packQty
+        ? (packDimensions[0] * packDimensions[1] * packDimensions[2]) /
+          1_000_000 /
+          packQty
         : 0;
   const weightPackQty = packQty ?? 1;
   const weightKg =
+    source === "container" &&
     containerQty &&
     input.containerGrossWeightKg != null &&
     input.containerGrossWeightKg > 0
       ? input.containerGrossWeightKg / containerQty
-      : input.packGrossWeightKg != null && input.packGrossWeightKg > 0
+      : source === "package" &&
+          input.packGrossWeightKg != null &&
+          input.packGrossWeightKg > 0
       ? input.packGrossWeightKg / weightPackQty
       : Math.max(input.grossWeightKg ?? input.weightKg ?? 0, 0);
   return {
@@ -104,22 +149,8 @@ export function calculateUnitLogistics(input: {
   };
 }
 
-/** Client rule: either a full-container quantity or all unit-package dimensions. */
-export function hasProductVolumeSource(input: {
-  containerQty?: number | null;
-  unitPackWidthCm?: number | null;
-  unitPackDepthCm?: number | null;
-  unitPackHeightCm?: number | null;
-}) {
-  if (input.containerQty != null && input.containerQty > 0) return true;
-  return [
-    input.unitPackWidthCm,
-    input.unitPackDepthCm,
-    input.unitPackHeightCm,
-  ].every(
-    (dimension) =>
-      dimension != null && Number.isFinite(dimension) && dimension > 0,
-  );
+export function hasProductVolumeSource(input: ProductLogisticsSourceInput) {
+  return productLogisticsSource(input) !== null;
 }
 
 export function canReceivePurchaseOrder(input: {

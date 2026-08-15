@@ -6,7 +6,7 @@ const primaryModuleTitles = [
   "Matični podaci o dobavljačima",
   "Cenovnik nabavnih cena",
   "Nabavne porudžbenice",
-  "Ulazne fakture",
+  "Prijemnice",
   "Cenovnici",
   "Upravljanje akcijskim cenama i prioritetima",
   "Magacini",

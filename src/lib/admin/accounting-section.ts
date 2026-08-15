@@ -60,7 +60,7 @@ export const ACCOUNTING_SECTION_VIEWS = [
     number: "15.3",
     label: "Kalkulacije",
     description:
-      "Ulazne fakture, poreske vrednosti, raspodela zavisnih troškova i status COGS obračuna.",
+      "Prijemnice, poreske vrednosti, raspodela zavisnih troškova i status COGS obračuna.",
     moduleSlug: "ulazne-fakture",
     fixedFilters: [] satisfies AdminGridFilter[],
     visibleColumns: [

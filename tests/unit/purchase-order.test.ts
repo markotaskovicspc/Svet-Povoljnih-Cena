@@ -6,6 +6,7 @@ import {
   canReceivePurchaseOrder,
   hasProductVolumeSource,
   isPackQuantityValid,
+  productLogisticsSource,
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderCapacityWarnings,
   purchaseOrderEmailSubject,
@@ -34,7 +35,7 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toBe("2026-07-22T00:00:00.000Z");
   });
 
-  it("uses full-container quantity first, then individual article packaging", () => {
+  it("uses a complete container pair first, then a complete transport package", () => {
     expect(
       calculateUnitLogistics({
         containerQty: 230,
@@ -51,9 +52,6 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toEqual({ volumeM3: 0.3, weightKg: 50 });
     expect(
       calculateUnitLogistics({
-        unitPackWidthCm: 100,
-        unitPackDepthCm: 50,
-        unitPackHeightCm: 20,
         packQty: 2,
         packWidthCm: 100,
         packDepthCm: 50,
@@ -77,31 +75,60 @@ describe("ERP module 4 purchase-order rules", () => {
     expect(
       calculateUnitLogistics({
         containerQty: 1_900,
+        containerGrossWeightKg: 760,
         packQty: 0,
         packWidthCm: 0,
         packDepthCm: 0,
         packHeightCm: 0,
       }),
-    ).toEqual({ volumeM3: 0.036316, weightKg: 0 });
+    ).toEqual({ volumeM3: 0.036316, weightKg: 0.4 });
   });
 
-  it("requires either container quantity or all three individual-package dimensions", () => {
-    expect(hasProductVolumeSource({ containerQty: 2_500 })).toBe(true);
+  it("requires either the complete container pair or the complete package group", () => {
+    expect(hasProductVolumeSource({ containerQty: 2_500 })).toBe(false);
+    expect(
+      hasProductVolumeSource({
+        containerQty: 2_500,
+        containerGrossWeightKg: 12_000,
+      }),
+    ).toBe(true);
+    expect(
+      hasProductVolumeSource({
+        packQty: 2,
+        packWidthCm: 80,
+        packDepthCm: 40,
+        packHeightCm: 25,
+      }),
+    ).toBe(true);
+    expect(
+      hasProductVolumeSource({
+        packQty: 2,
+        packWidthCm: 80,
+        packDepthCm: 40,
+        packHeightCm: null,
+      }),
+    ).toBe(false);
     expect(
       hasProductVolumeSource({
         unitPackWidthCm: 80,
         unitPackDepthCm: 40,
         unitPackHeightCm: 25,
       }),
-    ).toBe(true);
-    expect(
-      hasProductVolumeSource({
-        unitPackWidthCm: 80,
-        unitPackDepthCm: 40,
-        unitPackHeightCm: null,
-      }),
     ).toBe(false);
     expect(hasProductVolumeSource({})).toBe(false);
+  });
+
+  it("selects container data when both logistics groups are complete", () => {
+    expect(
+      productLogisticsSource({
+        containerQty: 230,
+        containerGrossWeightKg: 11_500,
+        packQty: 2,
+        packWidthCm: 100,
+        packDepthCm: 50,
+        packHeightCm: 40,
+      }),
+    ).toBe("container");
   });
 
   it("marks quantities that are not divisible by package size", () => {

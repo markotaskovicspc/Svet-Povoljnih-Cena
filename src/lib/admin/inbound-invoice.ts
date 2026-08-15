@@ -32,14 +32,14 @@ export function resolveInboundReceiptWarehouse(input: {
       !input.invoiceWarehouse?.active ||
       input.invoiceWarehouse.id !== input.invoiceWarehouseId
     ) {
-      throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
+      throw new Error("Izaberite aktivan magacin prijema na prijemnici.");
     }
     return input.invoiceWarehouse;
   }
   if (input.purchaseOrderWarehouse?.active) {
     return input.purchaseOrderWarehouse;
   }
-  throw new Error("Izaberite aktivan magacin prijema na ulaznoj fakturi.");
+  throw new Error("Izaberite aktivan magacin prijema na prijemnici.");
 }
 
 export const INBOUND_INVOICE_VAT_RATE = 0.2;

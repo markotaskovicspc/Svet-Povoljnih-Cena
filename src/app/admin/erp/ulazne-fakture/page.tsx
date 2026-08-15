@@ -7,7 +7,7 @@ import { getErpModule } from "@/lib/admin/erp";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Ulazne fakture · ERP",
+  title: "Prijemnice · ERP",
   robots: { index: false, follow: false },
 };
 

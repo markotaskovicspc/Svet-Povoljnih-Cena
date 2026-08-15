@@ -821,7 +821,7 @@ function productStockAvailability(product: {
   supplier: { integrationKey: string | null; enabled: boolean } | null;
 }) {
   if (product.supplier?.integrationKey !== "RABALUX") {
-    const stock = Math.max(Math.trunc(product.stock), 0);
+    const stock = Math.max(Math.trunc(product.dcAvailableQty), 0);
     return {
       warehouseAvailable: stock,
       supplierAvailable: 0,

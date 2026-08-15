@@ -101,7 +101,10 @@ import {
 import { defaultProductFamilyLabel } from "@/lib/product-family";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
-import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
+import {
+  hasProductVolumeSource,
+  PRODUCT_LOGISTICS_SOURCE_ERROR,
+} from "@/lib/admin/purchase-order";
 import {
   ProductColorFamilyManager,
   type ProductColorFamilyManagerMember,
@@ -185,8 +188,7 @@ const overrideSchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["containerQty"],
-      message:
-        "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
+      message: PRODUCT_LOGISTICS_SOURCE_ERROR,
     });
   }
 });
@@ -2032,7 +2034,7 @@ export default async function ProductDetail({
                 </p>
               </Field>
               <div className="rounded-lg border border-warning/25 bg-warning/5 p-3 text-xs text-ink-600">
-                Promena stanja se knjiži kao auditovana korekcija. Za redovan prijem robe koristite ulaznu fakturu i prijem porudžbenice.
+                Promena stanja se knjiži kao auditovana korekcija. Za redovan prijem robe koristite prijemnicu i prijem porudžbenice.
               </div>
             </div>
 
@@ -2082,7 +2084,7 @@ export default async function ProductDetail({
                 <SourceSummary
                   label="U dolasku"
                   value={`${incomingStock} kom`}
-                  source="Ulazne fakture / porudžbenice"
+                  source="Prijemnice / porudžbenice"
                   href="/admin/erp/ulazne-fakture"
                 />
                 <SourceSummary
@@ -2126,25 +2128,25 @@ export default async function ProductDetail({
               }
               palletQty={product.palletQty}
             />
-            <p className="text-xs text-ink-500">
-              Obavezno je uneti količinu za ceo kontejner ili kompletne dimenzije pakovanja pojedinačnog artikla (širina, dubina i visina).
-            </p>
             <fieldset className="space-y-3 rounded-xl border border-border/60 p-4">
               <legend className="px-2 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
                 Transportno pakovanje
               </legend>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+              <p className="text-xs text-ink-500">
+                Popunite ili oba polja za ceo kontejner, ili kom/pak i sve tri dimenzije paketa. Ako su obe grupe kompletne, obračun koristi podatke za ceo kontejner.
+              </p>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                 <Field label="Kom/pak">
-                  <Input name="packQty" type="number" min={0} defaultValue={product.packQty ?? ""} />
+                  <Input name="packQty" type="number" min={1} step={1} defaultValue={product.packQty ?? ""} />
                 </Field>
                 <Field label="Širina (cm)">
-                  <Input name="packWidthCm" type="number" min={0} step="0.01" defaultValue={product.packWidthCm ? num(product.packWidthCm) : ""} />
+                  <Input name="packWidthCm" type="number" min={0.01} step="0.01" defaultValue={product.packWidthCm ? num(product.packWidthCm) : ""} />
                 </Field>
                 <Field label="Dubina (cm)">
-                  <Input name="packDepthCm" type="number" min={0} step="0.01" defaultValue={product.packDepthCm ? num(product.packDepthCm) : ""} />
+                  <Input name="packDepthCm" type="number" min={0.01} step="0.01" defaultValue={product.packDepthCm ? num(product.packDepthCm) : ""} />
                 </Field>
                 <Field label="Visina (cm)">
-                  <Input name="packHeightCm" type="number" min={0} step="0.01" defaultValue={product.packHeightCm ? num(product.packHeightCm) : ""} />
+                  <Input name="packHeightCm" type="number" min={0.01} step="0.01" defaultValue={product.packHeightCm ? num(product.packHeightCm) : ""} />
                 </Field>
                 <Field label="Bruto kg">
                   <Input name="packGrossWeightKg" type="number" min={0} step="0.001" defaultValue={product.packGrossWeightKg ? num(product.packGrossWeightKg) : ""} />
@@ -2174,7 +2176,7 @@ export default async function ProductDetail({
                     }
                   />
                   <Link href="/admin/erp/ulazne-fakture" className="mt-1 inline-block text-xs text-walnut hover:underline">
-                    Otvori ulazne fakture
+                    Otvori prijemnice
                   </Link>
                 </Field>
                 <Field label="Dobavljačev naziv">

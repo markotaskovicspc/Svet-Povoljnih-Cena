@@ -75,7 +75,7 @@ describe("web storefront availability rollout", () => {
     ).toBe(true);
   });
 
-  it("requires automatic DC availability when strict enforcement is enabled", () => {
+  it("requires automatic DC availability for every status when strict enforcement is enabled", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
 
     expect(isWebAutoAvailabilityEnforced()).toBe(true);
@@ -97,7 +97,28 @@ describe("web storefront availability rollout", () => {
         articleStatus: "SP",
         dcAvailableQty: 0,
       }),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("does not treat stock in another warehouse as SP web stock", () => {
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+
+    expect(
+      isProductAvailableOnWeb({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        articleStatus: "SP",
+        stock: 131,
+        dcAvailableQty: 0,
+        supplier: { integrationKey: null, enabled: true },
+      }),
+    ).toBe(false);
+
+    const serialized = JSON.stringify(webStorefrontProductWhere());
+    expect(serialized).toContain('"dcAvailableQty":{"gt":0}');
+    expect(serialized).toContain('"articleStatus":"SP"');
+    expect(serialized).toContain('"stock":{"lte":0}');
   });
 
   it("enforces the Rabalux minimum-10 rule even while global auto availability is off", () => {
@@ -145,7 +166,7 @@ describe("web storefront availability rollout", () => {
       storefrontAvailabilityWhere(["out-of-stock"]),
     );
 
-    expect(incoming).toContain('"stock":{"lte":0}');
+    expect(incoming).toContain('"dcAvailableQty":{"lte":0}');
     expect(incoming).toContain('"incomingStock":{"gt":0}');
     expect(incoming).not.toContain('"NOT"');
     expect(unavailable).toContain('"incomingStock":{"lte":0}');
@@ -194,5 +215,18 @@ describe("web storefront availability rollout", () => {
         familyStorefrontEnabled: null,
       }),
     ).toEqual([]);
+    expect(
+      storefrontPublicationBlockers({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        articleStatus: "SP",
+        stock: 131,
+        dcAvailableQty: 0,
+        supplier: { integrationKey: null, enabled: true },
+        hasActiveRetailPrice: true,
+        familyStorefrontEnabled: null,
+      }),
+    ).toEqual(["Nema pozitivnu raspoloživu količinu"]);
   });
 });

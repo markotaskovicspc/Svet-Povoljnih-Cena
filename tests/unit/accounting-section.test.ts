@@ -38,6 +38,19 @@ describe("ERP tačka 15", () => {
     });
   });
 
+  it("links purchasing documents from the ERP sidebar with the client-facing names", () => {
+    const erp = adminNav.find((group) => group.label === "ERP");
+    expect(
+      erp?.items
+        .filter((item) =>
+          ["/admin/erp/porudzbenice", "/admin/erp/ulazne-fakture"].includes(
+            item.href,
+          ),
+        )
+        .map((item) => item.label),
+    ).toEqual(["Nabavne porudžbenice", "Prijemnice"]);
+  });
+
   it("highlights the precise bookkeeping route instead of the generic ERP workspace", () => {
     expect(
       activeAdminNavHref(

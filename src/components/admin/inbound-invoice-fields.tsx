@@ -111,7 +111,7 @@ export function InboundInvoiceFields({
       </Field>
       <Field
         label="Veza sa dokumentom"
-        hint="Prikazane su samo porudžbenice koje nisu povezane sa drugom ulaznom fakturom. Izbor popunjava dobavljača i prve tri vrednosti."
+        hint="Prikazane su samo porudžbenice koje nisu povezane sa drugom prijemnicom. Izbor popunjava dobavljača i prve tri vrednosti."
       >
         <select
           name="purchaseOrderId"
@@ -128,7 +128,7 @@ export function InboundInvoiceFields({
           ))}
         </select>
       </Field>
-      <Field label="Tip fakture" hint="Sve ulazne fakture ovog toka su COGS.">
+      <Field label="Tip prijemnice" hint="Sve prijemnice ovog toka su COGS.">
         <Input name="type" value="COGS" readOnly aria-readonly="true" />
       </Field>
       <Field label="Valuta" hint="Sve vrednosti fakture vode se u dinarima.">

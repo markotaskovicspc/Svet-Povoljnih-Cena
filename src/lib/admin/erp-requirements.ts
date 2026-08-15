@@ -29,7 +29,7 @@ const ERP_REQUIREMENT_ROWS: readonly Omit<ErpRequirement, "evidence">[] = [
   { id: 7, section: "Štampa PDF i Excel", route: "/admin/erp/porudzbenice", status: "implemented", acceptance: "BUY-05", note: "PDF porudžbenice i pravi XLSX izvoz." },
   { id: 8, section: "Pošalji dobavljaču", route: "/admin/erp/porudzbenice", status: "deferred_user", acceptance: "BUY-06", note: "E-mail tok je izričito van ovog ERP rada; postojeći kod nije menjan niti se sama ruta računa kao završetak." },
   { id: 9, section: "Pregled nabavnih porudžbenica po redovima", route: "/admin/erp/porudzbenice-po-artiklima", status: "implemented", acceptance: "BUY-07", note: "Zbirni pregled svih stavki, pakovanja, BM%, težine i zapremine." },
-  { id: 10, section: "Ulazne fakture", route: "/admin/erp/ulazne-fakture", status: "implemented", acceptance: "COGS-01", note: "Neto, PDV, bruto, valuta, veza, raspodela, knjiženje i zaključavanje." },
+  { id: 10, section: "Prijemnice", route: "/admin/erp/ulazne-fakture", status: "implemented", acceptance: "COGS-01", note: "Neto, PDV, bruto, valuta, veza, raspodela, knjiženje i zaključavanje." },
   { id: 11, section: "COGS (trošak nabavke po jedinici) obračun", route: "/admin/erp/ulazne-fakture", status: "implemented", acceptance: "COGS-02", note: "Raspodela zavisnih troškova i ponderisani prosečni COGS." },
   { id: 12, section: "Cenovnici", route: "/admin/erp/cenovnici", status: "implemented", acceptance: "PRICE-01", note: "Datirani MP, nabavni, VP i INO cenovnici sa stavkama." },
   { id: 13, section: "Upravljanje akcijskim cenama i prioritetima", route: "/admin/erp/akcijske-cene", status: "implemented", acceptance: "PRICE-02", note: "Veza akcija–artikal i izbor najvećeg numeričkog prioriteta." },

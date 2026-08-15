@@ -453,7 +453,7 @@ export default async function PurchaseOrderEditorPage({
 
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(620px,0.9fr)_minmax(0,1.1fr)]">
           <Card>
-            <CardTitle description="Dobavljački podaci, rokovi, transport i valute. Magacin prijema bira se na ulaznoj fakturi.">
+            <CardTitle description="Dobavljački podaci, rokovi, transport i valute. Magacin prijema bira se na prijemnici.">
               Zaglavlje
             </CardTitle>
             {locked ? (
@@ -780,7 +780,7 @@ export default async function PurchaseOrderEditorPage({
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card id="vezani-dokumenti">
-            <CardTitle description="Ulazna faktura povezana sa ovom porudžbenicom.">Vezani dokumenti</CardTitle>
+            <CardTitle description="Prijemnica povezana sa ovom porudžbenicom.">Vezani dokumenti</CardTitle>
             {order.inboundInvoice ? (
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span>{order.inboundInvoice.number} · {order.inboundInvoice.type} · {order.inboundInvoice.status}</span>

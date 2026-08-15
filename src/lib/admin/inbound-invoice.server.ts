@@ -116,12 +116,12 @@ export async function createInboundInvoice(now = new Date()) {
       if (!isPrismaUniqueError(error) || attempt === 5) throw error;
     }
   }
-  throw new Error("Broj ulazne fakture nije mogao da bude dodeljen.");
+  throw new Error("Broj prijemnice nije mogao da bude dodeljen.");
 }
 
 export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   const number = input.number.trim();
-  if (!number) throw new Error("Broj fakture je obavezan.");
+  if (!number) throw new Error("Broj prijemnice je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
   if (!input.warehouseId) throw new Error("Magacin prijema je obavezan.");
   const amounts = calculateInboundInvoiceAmounts({
@@ -136,8 +136,8 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
     where: { id: input.id },
     select: { lockedAt: true, purchaseOrderId: true },
   });
-  if (!current) throw new Error("Ulazna faktura ne postoji.");
-  if (current.lockedAt) throw new Error("Proknjižena faktura se ne može menjati.");
+  if (!current) throw new Error("Prijemnica ne postoji.");
+  if (current.lockedAt) throw new Error("Proknjižena prijemnica se ne može menjati.");
 
   const [purchaseOrder, warehouse, linkedInvoice] = await Promise.all([
     db.purchaseOrder.findUnique({
@@ -171,7 +171,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   }
   if (linkedInvoice) {
     throw new Error(
-      `Porudžbenica je već povezana sa ulaznom fakturom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom ulaznom fakturom.`,
+      `Porudžbenica je već povezana sa prijemnicom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom prijemnicom.`,
     );
   }
 
@@ -202,7 +202,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       },
     });
     if (updated.count !== 1) {
-      throw new Error("Faktura je u međuvremenu proknjižena i nije izmenjena.");
+      throw new Error("Prijemnica je u međuvremenu proknjižena i nije izmenjena.");
     }
     await recomputeIncomingStockForPurchaseOrders(
       db,
@@ -222,10 +222,10 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       });
       if (linkedInvoice) {
         throw new Error(
-          `Porudžbenica je u međuvremenu povezana sa ulaznom fakturom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom ulaznom fakturom.`,
+          `Porudžbenica je u međuvremenu povezana sa prijemnicom ${linkedInvoice.number}. Jedna porudžbenica može biti povezana samo sa jednom prijemnicom.`,
         );
       }
-      throw new Error(`Faktura sa brojem ${number} već postoji.`);
+      throw new Error(`Prijemnica sa brojem ${number} već postoji.`);
     }
     throw error;
   }
@@ -255,7 +255,7 @@ export async function lockInboundInvoice(id: string) {
         },
       },
     });
-    if (!invoice) throw new Error("Ulazna faktura ne postoji.");
+    if (!invoice) throw new Error("Prijemnica ne postoji.");
     if (!invoice.invoiceDate) throw new Error("Datum prijema je obavezan.");
     if (!invoice.supplier) throw new Error("Naziv dobavljača je obavezan.");
     if (!invoice.purchaseOrder) {
@@ -323,9 +323,9 @@ export async function postInboundInvoice(id: string, actorId: string) {
       },
     },
   });
-  if (!invoice) throw new Error("Ulazna faktura ne postoji.");
+  if (!invoice) throw new Error("Prijemnica ne postoji.");
   if (invoice.status === InboundInvoiceStatus.CANCELLED) {
-    throw new Error("Stornirana faktura ne može da se proknjiži.");
+    throw new Error("Stornirana prijemnica ne može da se proknjiži.");
   }
   if (!invoice.purchaseOrderId) {
     throw new Error("Veza sa porudžbenicom je obavezna.");
@@ -374,11 +374,11 @@ export async function cancelInboundInvoice(id: string) {
       where: { id },
       select: { id: true, status: true, lockedAt: true, purchaseOrderId: true },
     });
-    if (!invoice) throw new Error("Ulazna faktura ne postoji.");
+    if (!invoice) throw new Error("Prijemnica ne postoji.");
     if (invoice.status === InboundInvoiceStatus.CANCELLED) return invoice;
     if (invoice.lockedAt || invoice.status === InboundInvoiceStatus.POSTED) {
       throw new Error(
-        "Proknjižena faktura se ne može stornirati bez kontrolisanog storna robnog prijema.",
+        "Proknjižena prijemnica se ne može stornirati bez kontrolisanog storna robnog prijema.",
       );
     }
 

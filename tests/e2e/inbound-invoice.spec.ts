@@ -227,7 +227,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        page.getByRole("heading", { name: "Ulazne fakture" }),
+        page.getByRole("heading", { name: "Prijemnice" }),
       ).toBeVisible();
       for (const command of ["Nova", "Uredi", "Proknjiži", "Storniraj", "Excel"]) {
         await expect(
@@ -235,7 +235,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         ).toBeVisible();
       }
       for (const header of [
-        "Broj fakture",
+        "Broj prijemnice",
         "Datum prijema",
         "Naziv dobavljača",
         "Vrednost fakture u RSD",
@@ -337,7 +337,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await form.locator('[name="notes"]').fill("QA trošak transporta");
       await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(form.getByRole("status")).toContainText(
-        "Ulazna faktura je sačuvana",
+        "Prijemnica je sačuvana",
       );
 
       const saved = await db.inboundInvoice.findUniqueOrThrow({
@@ -421,7 +421,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       }, supplierId);
       await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(form.getByRole("alert")).toContainText(
-        "već povezana sa ulaznom fakturom",
+        "već povezana sa prijemnicom",
       );
       await expect
         .poll(async () =>
@@ -520,7 +520,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
       await expect(
-        page.getByText(/faktura i porudžbenica su proknjižene.*roba je primljena/i),
+        page.getByText(/prijemnica i porudžbenica su proknjižene.*roba je primljena/i),
       ).toBeVisible();
       const [locked, item, product, order] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),

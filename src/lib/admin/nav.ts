@@ -47,6 +47,8 @@ export const adminNav: AdminNavGroup[] = [
       { href: "/admin/erp", label: "ERP radni prostor", allowed: ALL },
       { href: "/admin/erp/artikli", label: "Artikli", allowed: CO },
       { href: "/admin/erp/dobavljaci", label: "Dobavljači i nabavka", allowed: O },
+      { href: "/admin/erp/porudzbenice", label: "Nabavne porudžbenice", allowed: O },
+      { href: "/admin/erp/ulazne-fakture", label: "Prijemnice", allowed: O },
       { href: "/admin/erp/akcije", label: "Cene i promocije", allowed: C },
       { href: "/admin/erp/magacini", label: "Magacini", allowed: O },
       { href: "/admin/erp/stanje-po-magacinima", label: "DC lager", allowed: O },

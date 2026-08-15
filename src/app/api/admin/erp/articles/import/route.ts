@@ -40,7 +40,10 @@ import {
 import { validateNewArticleImportRequiredFields } from "@/lib/admin/article-import-required";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
-import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
+import {
+  hasProductVolumeSource,
+  PRODUCT_LOGISTICS_SOURCE_ERROR,
+} from "@/lib/admin/purchase-order";
 
 type ImportError = { row: number; field: string; message: string };
 
@@ -731,9 +734,11 @@ export async function POST(request: Request) {
         select: {
           sku: true,
           containerQty: true,
-          unitPackWidthCm: true,
-          unitPackDepthCm: true,
-          unitPackHeightCm: true,
+          containerGrossWeightKg: true,
+          packQty: true,
+          packWidthCm: true,
+          packDepthCm: true,
+          packHeightCm: true,
         },
       })
     : [];
@@ -754,22 +759,27 @@ export async function POST(request: Request) {
       containerQty: headers.has("containerQty")
         ? row.containerQty
         : existing?.containerQty ?? null,
-      unitPackWidthCm: headers.has("unitPackWidthCm")
-        ? row.unitPackWidthCm
-        : Number(existing?.unitPackWidthCm ?? 0),
-      unitPackDepthCm: headers.has("unitPackDepthCm")
-        ? row.unitPackDepthCm
-        : Number(existing?.unitPackDepthCm ?? 0),
-      unitPackHeightCm: headers.has("unitPackHeightCm")
-        ? row.unitPackHeightCm
-        : Number(existing?.unitPackHeightCm ?? 0),
+      containerGrossWeightKg: headers.has("containerGrossWeightKg")
+        ? row.containerGrossWeightKg
+        : Number(existing?.containerGrossWeightKg ?? 0),
+      packQty: headers.has("packQty")
+        ? row.packQty
+        : existing?.packQty ?? null,
+      packWidthCm: headers.has("packWidthCm")
+        ? row.packWidthCm
+        : Number(existing?.packWidthCm ?? 0),
+      packDepthCm: headers.has("packDepthCm")
+        ? row.packDepthCm
+        : Number(existing?.packDepthCm ?? 0),
+      packHeightCm: headers.has("packHeightCm")
+        ? row.packHeightCm
+        : Number(existing?.packHeightCm ?? 0),
     };
     if (!hasProductVolumeSource(prospectiveVolumeSource)) {
       errors.push({
         row: row.row,
         field: "containerQty",
-        message:
-          "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
+        message: PRODUCT_LOGISTICS_SOURCE_ERROR,
       });
     }
   }

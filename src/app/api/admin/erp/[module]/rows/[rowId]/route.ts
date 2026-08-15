@@ -53,7 +53,10 @@ import {
 } from "@/lib/admin/customer-master";
 import { propagateProductFamilySharedData } from "@/lib/product-family.server";
 import { recomputeOpenPurchaseOrderLogisticsForProducts } from "@/lib/admin/po";
-import { hasProductVolumeSource } from "@/lib/admin/purchase-order";
+import {
+  hasProductVolumeSource,
+  PRODUCT_LOGISTICS_SOURCE_ERROR,
+} from "@/lib/admin/purchase-order";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -318,7 +321,7 @@ async function persistProductCell(
       data.colorSecondary = optionalString(value);
       break;
     case "cogs":
-      throw new Error("COGS se računa iz prijema robe i ulaznih faktura i ne menja se ručno.");
+      throw new Error("COGS se računa iz prijema robe i prijemnica i ne menja se ručno.");
     case "customsRate":
       data.customsRate =
         value === null ? null : decimalValue(value, "Carinska stopa mora biti broj.");
@@ -333,7 +336,7 @@ async function persistProductCell(
       );
     case "incomingTotal":
     case "incomingAvailable":
-      throw new Error("Količina u dolasku se računa iz ulaznih faktura i porudžbenica.");
+      throw new Error("Količina u dolasku se računa iz prijemnica i porudžbenica.");
     case "widthCm":
       data.widthCm = decimalValue(value, "Širina mora biti broj.");
       break;
@@ -451,19 +454,23 @@ async function persistProductCell(
   await db.$transaction(async (tx) => {
     if (
       [
-        "unitPackWidthCm",
-        "unitPackDepthCm",
-        "unitPackHeightCm",
+        "packQty",
+        "packWidthCm",
+        "packDepthCm",
+        "packHeightCm",
         "containerQty",
+        "containerGrossWeightKg",
       ].includes(columnKey)
     ) {
       const current = await tx.product.findUniqueOrThrow({
         where: { id: rowId },
         select: {
           containerQty: true,
-          unitPackWidthCm: true,
-          unitPackDepthCm: true,
-          unitPackHeightCm: true,
+          containerGrossWeightKg: true,
+          packQty: true,
+          packWidthCm: true,
+          packDepthCm: true,
+          packHeightCm: true,
         },
       });
       const prospective = {
@@ -471,23 +478,29 @@ async function persistProductCell(
           "containerQty" in data
             ? (data.containerQty as number | null)
             : current.containerQty,
-        unitPackWidthCm:
-          "unitPackWidthCm" in data
-            ? Number(data.unitPackWidthCm ?? 0)
-            : Number(current.unitPackWidthCm ?? 0),
-        unitPackDepthCm:
-          "unitPackDepthCm" in data
-            ? Number(data.unitPackDepthCm ?? 0)
-            : Number(current.unitPackDepthCm ?? 0),
-        unitPackHeightCm:
-          "unitPackHeightCm" in data
-            ? Number(data.unitPackHeightCm ?? 0)
-            : Number(current.unitPackHeightCm ?? 0),
+        containerGrossWeightKg:
+          "containerGrossWeightKg" in data
+            ? Number(data.containerGrossWeightKg ?? 0)
+            : Number(current.containerGrossWeightKg ?? 0),
+        packQty:
+          "packQty" in data
+            ? (data.packQty as number | null)
+            : current.packQty,
+        packWidthCm:
+          "packWidthCm" in data
+            ? Number(data.packWidthCm ?? 0)
+            : Number(current.packWidthCm ?? 0),
+        packDepthCm:
+          "packDepthCm" in data
+            ? Number(data.packDepthCm ?? 0)
+            : Number(current.packDepthCm ?? 0),
+        packHeightCm:
+          "packHeightCm" in data
+            ? Number(data.packHeightCm ?? 0)
+            : Number(current.packHeightCm ?? 0),
       };
       if (!hasProductVolumeSource(prospective)) {
-        throw new Error(
-          "Unesite količinu za ceo kontejner ili sve tri dimenzije pakovanja pojedinačnog artikla.",
-        );
+        throw new Error(PRODUCT_LOGISTICS_SOURCE_ERROR);
       }
     }
     await tx.product.update({ where: { id: rowId }, data });
@@ -667,34 +680,34 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
     where: { id: rowId },
     select: { lockedAt: true },
   });
-  if (current?.lockedAt) throw new Error("Zaključana faktura se ne može menjati.");
+  if (current?.lockedAt) throw new Error("Proknjižena prijemnica se ne može menjati.");
   const data: Prisma.InboundInvoiceUncheckedUpdateInput = {};
   switch (columnKey) {
     case "number":
-      data.number = requiredString(value, "Broj fakture je obavezan.");
+      data.number = requiredString(value, "Broj prijemnice je obavezan.");
       break;
     case "type":
       if (value !== InboundInvoiceType.COGS) {
-        throw new Error("Tip ulazne fakture je uvek COGS.");
+        throw new Error("Tip prijemnice je uvek COGS.");
       }
       data.type = InboundInvoiceType.COGS;
       break;
     case "status":
       throw new Error(
-        "Status fakture se menja komandama Sačuvaj, Zaključaj ili Storniraj.",
+        "Status prijemnice se menja komandama Sačuvaj, Proknjiži ili Storniraj.",
       );
     case "invoiceDate":
-      data.invoiceDate = value === null ? null : dateValue(value, "Datum fakture je neispravan.");
+      data.invoiceDate = value === null ? null : dateValue(value, "Datum prijema je neispravan.");
       break;
     case "currency":
       if (value !== "RSD") {
-        throw new Error("Valuta ulazne fakture je uvek RSD.");
+        throw new Error("Valuta prijemnice je uvek RSD.");
       }
       data.currency = "RSD";
       break;
     case "exchangeRate":
       if (decimalValue(value, "Kurs mora biti broj.") !== 1) {
-        throw new Error("Kurs ulazne fakture u RSD je uvek 1.");
+        throw new Error("Kurs prijemnice u RSD je uvek 1.");
       }
       data.exchangeRate = 1;
       break;
@@ -718,7 +731,7 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
       );
       break;
     case "cogsStatus":
-      throw new Error("COGS status se menja isključivo knjiženjem ili stornom fakture.");
+      throw new Error("COGS status se menja isključivo knjiženjem ili stornom prijemnice.");
     default:
       return null;
   }

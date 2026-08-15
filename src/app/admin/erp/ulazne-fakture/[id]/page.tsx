@@ -40,13 +40,13 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Ulazna faktura · ERP",
+  title: "Prijemnica · ERP",
   robots: { index: false, follow: false },
 };
 
 const invoiceSchema = z.object({
   invoiceId: z.string().min(1),
-  number: z.string().trim().min(1, "Broj fakture je obavezan.").max(100),
+  number: z.string().trim().min(1, "Broj prijemnice je obavezan.").max(100),
   receiptDate: z.iso.date(),
   supplierId: z.string().min(1, "Naziv dobavljača je obavezan."),
   purchaseOrderId: z.string().min(1, "Veza sa dokumentom je obavezna."),
@@ -139,7 +139,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: data.invoiceId,
-        message: "Ulazna faktura je sačuvana.",
+        message: "Prijemnica je sačuvana.",
       };
     },
   )(formData);
@@ -155,7 +155,7 @@ async function postAction(_state: AdminActionState, formData: FormData) {
     },
     async (actorId, actionData: FormData) => {
       const id = String(actionData.get("invoiceId") ?? "");
-      if (!id) return { ok: false as const, error: "Faktura nije izabrana." };
+      if (!id) return { ok: false as const, error: "Prijemnica nije izabrana." };
       const backfillOnly = actionData.get("backfillOnly") === "true";
       const result = backfillOnly
         ? (await lockInboundInvoice(id), null)
@@ -170,8 +170,8 @@ async function postAction(_state: AdminActionState, formData: FormData) {
         ok: true as const,
         entityId: id,
         message: backfillOnly
-          ? "COGS ranije proknjižene fakture je usklađen."
-          : `Faktura i porudžbenica su proknjižene, a roba je primljena u magacin ${result?.warehouseName ?? ""}.`,
+          ? "COGS ranije proknjižene prijemnice je usklađen."
+          : `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result?.warehouseName ?? ""}.`,
       };
     },
   )(formData);
@@ -187,7 +187,7 @@ async function cancelAction(_state: AdminActionState, formData: FormData) {
     },
     async (_actorId, actionData: FormData) => {
       const id = String(actionData.get("invoiceId") ?? "");
-      if (!id) return { ok: false as const, error: "Faktura nije izabrana." };
+      if (!id) return { ok: false as const, error: "Prijemnica nije izabrana." };
       await cancelInboundInvoice(id);
       revalidatePath(`/admin/erp/ulazne-fakture/${id}`);
       revalidatePath("/admin/erp/ulazne-fakture");
@@ -195,7 +195,7 @@ async function cancelAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
-        message: "Faktura je stornirana; COGS i količina u dolasku su preračunati.",
+        message: "Prijemnica je stornirana; COGS i količina u dolasku su preračunati.",
       };
     },
   )(formData);
@@ -392,12 +392,12 @@ export default async function InboundInvoicePage({
   return (
     <>
       <PageHeader
-        title={`Ulazna faktura ${invoice.number}`}
+        title={`Prijemnica ${invoice.number}`}
         description={`${statusLabel[invoice.status]}${invoice.supplier ? ` · ${invoice.supplier.name}` : ""}${receiptWarehouse ? ` · ${receiptWarehouse.name}` : ""}${locked ? ` · proknjižena ${dateOnly(invoice.lockedAt)}` : ""}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
-          { href: "/admin/erp/ulazne-fakture", label: "Ulazne fakture" },
+          { href: "/admin/erp/ulazne-fakture", label: "Prijemnice" },
           { label: invoice.number },
         ]}
         actions={
@@ -446,10 +446,10 @@ export default async function InboundInvoicePage({
                 }
                 confirm={
                   cogsNeedsBackfill
-                    ? "Uskladiti COGS ove ranije proknjižene fakture?"
+                    ? "Uskladiti COGS ove ranije proknjižene prijemnice?"
                     : receiptNeedsCompletion
-                      ? "Knjiženje fakture i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
-                    : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti ulaznu fakturu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
+                      ? "Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
+                    : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti prijemnicu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
                 }
                 pendingLabel={
                   cogsNeedsBackfill
@@ -471,7 +471,7 @@ export default async function InboundInvoicePage({
               <SubmitButton
                 variant="destructive"
                 disabled={cancelled || locked}
-                confirm="Stornirati fakturu? COGS i količina u dolasku biće ponovo izračunati."
+                confirm="Stornirati prijemnicu? COGS i količina u dolasku biće ponovo izračunati."
                 pendingLabel="Storniranje…"
               >
                 Storniraj
@@ -502,15 +502,15 @@ export default async function InboundInvoicePage({
         ) : null}
         <Card id="podaci-fakture">
           <CardTitle description="Vrednosti fakture, veza sa porudžbenicom i magacin stvarnog prijema robe.">
-            Podaci fakture
+            Podaci prijemnice
           </CardTitle>
           {cancelled ? (
             <p className="mb-4 rounded-lg border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">
-              Faktura je stornirana i više ne učestvuje u COGS-u ni količini u dolasku.
+              Prijemnica je stornirana i više ne učestvuje u COGS-u ni količini u dolasku.
             </p>
           ) : receiptNeedsCompletion ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-              Faktura i porudžbenica su proknjižene, ali prijem robe nije završen.
+              Prijemnica i porudžbenica su proknjižene, ali prijem robe nije završen.
               {receiptWarehouse
                 ? ` Prijem će biti završen u magacin ${receiptWarehouse.name} (${receiptWarehouse.code}).`
                 : " Magacin prijema nije izabran."}{" "}
@@ -518,15 +518,15 @@ export default async function InboundInvoicePage({
             </p>
           ) : cogsNeedsBackfill ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-              Faktura je proknjižena pre uvođenja trenutnog COGS workflow-a. Izaberite „Uskladi COGS” da upišete obračunate vrednosti na artikle.
+              Prijemnica je proknjižena pre uvođenja trenutnog COGS workflow-a. Izaberite „Uskladi COGS” da upišete obračunate vrednosti na artikle.
             </p>
           ) : locked ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              Faktura je proknjižena. Troškovi i COGS su obračunati, porudžbenica je završena, a roba je primljena u izabrani magacin.
+              Prijemnica je proknjižena. Troškovi i COGS su obračunati, porudžbenica je završena, a roba je primljena u izabrani magacin.
             </p>
           ) : !editing ? (
             <p className="mb-4 rounded-lg border border-border/60 bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">
-              Izaberite „Uredi” da dopunite podatke, zatim „Proknjiži” da završite fakturu, porudžbenicu i prijem robe.
+              Izaberite „Uredi” da dopunite podatke, zatim „Proknjiži” da završite prijemnicu, porudžbenicu i prijem robe.
             </p>
           ) : null}
           <AdminActionForm action={saveAction}>
@@ -536,7 +536,7 @@ export default async function InboundInvoicePage({
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <Field label="Broj fakture">
+              <Field label="Broj prijemnice">
                 <Input name="number" required defaultValue={invoice.number} />
               </Field>
               <Field label="Datum prijema">
@@ -697,7 +697,7 @@ export default async function InboundInvoicePage({
           href="/admin/erp/ulazne-fakture"
           className="text-sm text-walnut hover:underline"
         >
-          ← Nazad na pregled ulaznih faktura
+          ← Nazad na pregled prijemnica
         </Link>
       </div>
     </>
