@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 
 type RowError = { row: number; field: string; message: string };
@@ -12,6 +12,11 @@ type ImportPreview = {
   newFamilies: number;
   detachments: number;
 };
+type ImportSource = {
+  worksheet: string;
+  headerRow: number;
+  columns: string[];
+};
 
 export function ArticleImportForm() {
   const [running, setRunning] = useState(false);
@@ -21,6 +26,7 @@ export function ArticleImportForm() {
     errors?: RowError[];
     warnings?: string[];
     preview?: ImportPreview;
+    source?: ImportSource;
   } | null>(null);
 
   async function submit(formData: FormData) {
@@ -39,6 +45,7 @@ export function ArticleImportForm() {
             errors?: RowError[];
             warnings?: string[];
             preview?: ImportPreview;
+            source?: ImportSource;
           }
         | null;
       if (!response.ok || !payload?.ok) {
@@ -47,6 +54,7 @@ export function ArticleImportForm() {
           message: payload?.error ?? "Uvoz nije uspeo.",
           errors: payload?.errors,
           warnings: payload?.warnings,
+          source: payload?.source,
         });
         return;
       }
@@ -57,15 +65,26 @@ export function ArticleImportForm() {
           : `Uvezeno artikala: ${payload.imported ?? 0}.`,
         warnings: payload.warnings,
         preview: payload.preview,
+        source: payload.source,
       });
     } finally {
       setRunning(false);
     }
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (submitter instanceof HTMLButtonElement && submitter.name) {
+      formData.set(submitter.name, submitter.value);
+    }
+    void submit(formData);
+  }
+
   return (
     <div className="max-w-4xl space-y-5">
-      <form action={submit} className="rounded-2xl border border-border/60 bg-surface p-5">
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-border/60 bg-surface p-5">
         <label className="block text-sm font-medium text-ink-900" htmlFor="article-xlsx">
           XLSX datoteka
         </label>
@@ -75,6 +94,7 @@ export function ArticleImportForm() {
           type="file"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           required
+          onChange={() => setResult(null)}
           className="mt-2 block w-full rounded-lg border border-input bg-surface px-3 py-2 text-sm"
         />
         <p className="mt-3 text-sm text-ink-500">
@@ -106,6 +126,10 @@ export function ArticleImportForm() {
         <p className="mt-1 text-sm text-ink-500">
           Kod izmene postojećeg SKU-a menjaju se samo kolone koje postoje u
           datoteci; ostali matični podaci ostaju nepromenjeni.
+        </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Sistem automatski pronalazi list sa artiklima i red zaglavlja. Preview
+          prikazuje koji list i koje kolone su prepoznati pre upisa.
         </p>
         <p className="mt-1 text-sm text-ink-500">
           Porodice boja koriste kolone: „Šifra porodice“, „Naziv boje“, „HEX boje“,
@@ -143,6 +167,16 @@ export function ArticleImportForm() {
           }
         >
           <p>{result.message}</p>
+          {result.source ? (
+            <div className="mt-3 rounded-lg border border-current/15 bg-surface/70 px-3 py-2 text-ink-700">
+              <p className="font-medium">
+                Prepoznat list „{result.source.worksheet}“, zaglavlje u redu {result.source.headerRow}.
+              </p>
+              <p className="mt-1 text-xs">
+                Prepoznate kolone: {result.source.columns.join(", ") || "nijedna"}.
+              </p>
+            </div>
+          ) : null}
           {result.preview ? (
             <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <div><dt>Redova</dt><dd className="font-bold">{result.preview.rows}</dd></div>

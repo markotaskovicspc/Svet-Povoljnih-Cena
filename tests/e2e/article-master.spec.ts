@@ -858,7 +858,12 @@ test.describe("article master acceptance", () => {
     );
 
     const importWorkbook = new ExcelJS.Workbook();
+    const importSummary = importWorkbook.addWorksheet("Export Summary");
+    importSummary.addRow(["Izveštaj", "Vrednost"]);
+    importSummary.addRow(["Kratki naziv", "Kontrolni sažetak"]);
     const sheet = importWorkbook.addWorksheet("Artikli");
+    sheet.addRow(["Izvoz artikala"]);
+    sheet.addRow([]);
     sheet.addRow([
       "Kratki naziv",
       "Status",
@@ -872,6 +877,17 @@ test.describe("article master acceptance", () => {
       "Boja 1",
       "Benefiti",
       "Opis za sajt",
+      "Zemlja porekla",
+      "Tarifni broj",
+      "Širina artikla",
+      "Dubina artikla",
+      "Visina artikla",
+      "Bruto težina artikla",
+      "Broj artikala u pakovanju",
+      "Širina transportnog pakovanja",
+      "Dubina transportnog pakovanja",
+      "Visina transportnog pakovanja",
+      "Bruto težina transportnog pakovanja",
       "Zalihe",
       "Web check",
       "VP check",
@@ -898,6 +914,17 @@ test.describe("article master acceptance", () => {
       "Crna",
       "Sklopivo",
       "<p>XLSX opis</p>",
+      "CN",
+      "94032080",
+      40,
+      30,
+      20,
+      7,
+      1,
+      44,
+      34,
+      24,
+      8,
       22,
       "Da",
       "Da",
@@ -921,6 +948,22 @@ test.describe("article master acceptance", () => {
     await expect(
       page.getByText(/Stare kolone „T&C od“ i „T&C do“ više se ne koriste/),
     ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Preuzmi XLSX šablon" }),
+    ).toBeVisible();
+    const templateResponse = await page.request.get(
+      "/api/admin/erp/articles/import/template",
+    );
+    expect(templateResponse.ok()).toBe(true);
+    const templateWorkbook = new ExcelJS.Workbook();
+    await templateWorkbook.xlsx.load((await templateResponse.body()) as never);
+    const templateHeaders = (templateWorkbook.getWorksheet("Artikli")?.getRow(1)
+      .values as unknown[])
+      .slice(1)
+      .map(String);
+    expect(templateHeaders).toEqual(
+      expect.arrayContaining(["Zemlja porekla", "Tarifni broj"]),
+    );
     await page.getByLabel("XLSX datoteka").setInputFiles({
       name: `article-master-qa-${runId}.xlsx`,
       mimeType:
@@ -936,9 +979,18 @@ test.describe("article master acceptance", () => {
     const initialPreviewResponse = await initialPreviewResponsePromise;
     const initialPreviewPayload = await initialPreviewResponse.json();
     expect(initialPreviewResponse.ok(), JSON.stringify(initialPreviewPayload)).toBe(true);
+    expect(initialPreviewPayload.source).toMatchObject({
+      worksheet: "Artikli",
+      headerRow: 3,
+    });
     await expect(page.getByRole("status")).toContainText("Provera je uspešna", {
       timeout: 120_000,
     });
+    await expect(page.getByRole("status")).toContainText(
+      "Prepoznat list „Artikli“, zaglavlje u redu 3",
+    );
+    await expect(page.getByRole("status")).toContainText("Zemlja porekla");
+    await expect(page.getByRole("status")).toContainText("Tarifni broj");
     const initialImportResponsePromise = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/admin/erp/articles/import") &&
@@ -984,6 +1036,8 @@ test.describe("article master acceptance", () => {
         availableWholesaleAuto: true,
         availableExportAuto: true,
         isNew: true,
+        countryOfOrigin: true,
+        hsCode: true,
         unitPackWidthCm: true,
         unitPackDepthCm: true,
         unitPackHeightCm: true,
@@ -1005,6 +1059,8 @@ test.describe("article master acceptance", () => {
       availableWholesaleAuto: true,
       availableExportAuto: true,
       isNew: true,
+      countryOfOrigin: "CN",
+      hsCode: "94032080",
       tncFrom: null,
       tncUntil: null,
     });
@@ -1765,6 +1821,8 @@ function createDatabaseClient() {
   ].find((value) => value?.trim());
   if (!raw) throw new Error("Database URL is required for article acceptance.");
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
     url.searchParams.set("sslmode", "no-verify");
     url.searchParams.delete("uselibpqcompat");
@@ -1774,6 +1832,6 @@ function createDatabaseClient() {
       connectionString: url.toString(),
       max: 1,
       connectionTimeoutMillis: 60_000,
-    }),
+    }, { schema }),
   });
 }
