@@ -44,6 +44,7 @@ test.describe("article XLSX import workflow", () => {
         data: {
           code: supplierCode,
           name: supplierName,
+          country: "CN",
           parity: "DAP",
           deliveryDays: 7,
         },
@@ -80,7 +81,7 @@ test.describe("article XLSX import workflow", () => {
     }
   });
 
-  test("downloads the current template and imports origin and tariff from a discovered sheet", async ({
+  test("uses the supplier country when the discovered sheet omits country of origin", async ({
     page,
   }) => {
     const runtimeErrors: string[] = [];
@@ -131,7 +132,6 @@ test.describe("article XLSX import workflow", () => {
       "Opis za sajt",
       "Dobavljač",
       "Kategorija",
-      "Zemlja porekla",
       "Tarifni broj",
       "Širina artikla",
       "Dubina artikla",
@@ -154,7 +154,6 @@ test.describe("article XLSX import workflow", () => {
       "<p>QA artikal za proveru automatskog uvoza.</p>",
       supplierName,
       `${tag} kategorija`,
-      "CN",
       "94032080",
       40,
       30,
@@ -193,11 +192,18 @@ test.describe("article XLSX import workflow", () => {
       worksheet: "Artikli",
       headerRow: 3,
     });
-    expect(previewPayload.source.columns).toEqual(
-      expect.arrayContaining(["Zemlja porekla", "Tarifni broj"]),
+    expect(previewPayload.source.columns).toContain("Tarifni broj");
+    expect(previewPayload.source.columns).not.toContain("Zemlja porekla");
+    expect(previewPayload.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("zemlju iz kartice dobavljača"),
+      ]),
     );
     await expect(page.getByRole("status")).toContainText(
       "Prepoznat list „Artikli“, zaglavlje u redu 3",
+    );
+    await expect(page.getByRole("status")).toContainText(
+      "zemlju iz kartice dobavljača",
     );
 
     const applyResponsePromise = page.waitForResponse(

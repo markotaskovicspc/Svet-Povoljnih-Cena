@@ -310,6 +310,19 @@ export function normalizeArticleImportHeader(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+export function resolveArticleImportCountryOfOrigin(input: {
+  columnPresent: boolean;
+  incoming: string | null | undefined;
+  current: string | null | undefined;
+  supplierCountry: string | null | undefined;
+}) {
+  const normalizeCountry = (value: string | null | undefined) =>
+    value?.trim() || null;
+
+  if (input.columnPresent) return normalizeCountry(input.incoming);
+  return normalizeCountry(input.current) ?? normalizeCountry(input.supplierCountry);
+}
+
 export function findArticleImportWorksheet(
   workbook: ExcelJS.Workbook,
 ): ArticleImportWorksheetSelection | null {

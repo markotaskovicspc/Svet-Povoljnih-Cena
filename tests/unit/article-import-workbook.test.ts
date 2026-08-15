@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ARTICLE_IMPORT_TEMPLATE_HEADERS,
   findArticleImportWorksheet,
+  resolveArticleImportCountryOfOrigin,
 } from "@/lib/admin/article-import-workbook";
 
 describe("article import workbook discovery", () => {
@@ -51,5 +52,51 @@ describe("article import workbook discovery", () => {
   it("ships origin and tariff columns in the downloadable template", () => {
     expect(ARTICLE_IMPORT_TEMPLATE_HEADERS).toContain("Zemlja porekla");
     expect(ARTICLE_IMPORT_TEMPLATE_HEADERS).toContain("Tarifni broj");
+  });
+});
+
+describe("article import country of origin", () => {
+  it("uses the value from the file when the column is present", () => {
+    expect(
+      resolveArticleImportCountryOfOrigin({
+        columnPresent: true,
+        incoming: "DE",
+        current: "IT",
+        supplierCountry: "CN",
+      }),
+    ).toBe("DE");
+  });
+
+  it("does not use a fallback for an explicitly blank file column", () => {
+    expect(
+      resolveArticleImportCountryOfOrigin({
+        columnPresent: true,
+        incoming: " ",
+        current: "IT",
+        supplierCountry: "CN",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps the current article value when the column is absent", () => {
+    expect(
+      resolveArticleImportCountryOfOrigin({
+        columnPresent: false,
+        incoming: null,
+        current: "IT",
+        supplierCountry: "CN",
+      }),
+    ).toBe("IT");
+  });
+
+  it("uses the supplier country when the column and current value are absent", () => {
+    expect(
+      resolveArticleImportCountryOfOrigin({
+        columnPresent: false,
+        incoming: null,
+        current: null,
+        supplierCountry: " CN ",
+      }),
+    ).toBe("CN");
   });
 });

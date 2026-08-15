@@ -99,7 +99,7 @@ export function ArticleImportForm() {
         />
         <p className="mt-3 text-sm text-ink-500">
           Za novi artikal obavezni su: Kratki naziv, Opis za sajt, Dobavljač,
-          Kategorija, Zemlja porekla, Tarifni broj, dimenzije i bruto težina
+          Kategorija, Tarifni broj, dimenzije i bruto težina
           artikla, broj komada, dimenzije i bruto težina transportnog paketa,
           kao i MPC veća od nule. Ako SKU/Šifra nije uneta, sistem je automatski
           dodeljuje. Uvoz podržava sva izvorna polja
@@ -108,6 +108,11 @@ export function ArticleImportForm() {
           kolekciju, atribute, boje, benefite, formatirani opis, zalihe, COGS,
           dimenzije i pakovanje, materijal, sertifikate, kanale prodaje, MOQ,
           kao i datum „Novo do“.
+        </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Zemlja porekla iz datoteke ima prednost. Ako ta kolona nije prisutna,
+          postojeća vrednost artikla ostaje sačuvana, a kada je nema sistem
+          automatski koristi zemlju iz kartice dobavljača.
         </p>
         <p className="mt-1 text-sm text-ink-500">
           Novi red bez kolone „Novo do“ automatski ostaje u sekciji „Novo“ četiri

@@ -66,7 +66,7 @@ export async function GET() {
     ],
     [
       "Zemlja i tarifa",
-      "Popunite kolone „Zemlja porekla“ i „Tarifni broj“. Sistem ih automatski prenosi u matični karton artikla.",
+      "Popunite kolonu „Tarifni broj“. Zemlja porekla iz datoteke ima prednost; ako kolona nije prisutna, sistem čuva postojeću vrednost, a kada je nema koristi zemlju iz kartice dobavljača.",
     ],
     [
       "List i zaglavlje",

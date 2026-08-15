@@ -47,6 +47,7 @@ import {
 import {
   findArticleImportWorksheet,
   normalizeArticleImportHeader,
+  resolveArticleImportCountryOfOrigin,
   type ArticleImportColumn,
 } from "@/lib/admin/article-import-workbook";
 
@@ -477,12 +478,22 @@ export async function POST(request: Request) {
   }
 
   const suppliers = await db.supplier.findMany({
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, name: true, country: true },
   });
   const supplierByKey = new Map<string, string>();
+  const supplierCountryByKey = new Map<string, string | null>();
+  const supplierCountryById = new Map<string, string | null>();
   for (const supplier of suppliers) {
-    supplierByKey.set(supplier.name.trim().toLocaleLowerCase("sr-Latn"), supplier.id);
-    if (supplier.code) supplierByKey.set(supplier.code.trim().toLocaleLowerCase("sr-Latn"), supplier.id);
+    const country = supplier.country?.trim() || null;
+    const nameKey = supplier.name.trim().toLocaleLowerCase("sr-Latn");
+    supplierByKey.set(nameKey, supplier.id);
+    supplierCountryByKey.set(nameKey, country);
+    supplierCountryById.set(supplier.id, country);
+    if (supplier.code) {
+      const codeKey = supplier.code.trim().toLocaleLowerCase("sr-Latn");
+      supplierByKey.set(codeKey, supplier.id);
+      supplierCountryByKey.set(codeKey, country);
+    }
   }
   for (const row of rows) {
     if (
@@ -493,6 +504,24 @@ export async function POST(request: Request) {
         row: row.row,
         field: "supplier",
         message: `Dobavljač ${row.supplier} ne postoji; unesite ga u šifarnik dobavljača.`,
+      });
+    }
+  }
+  if (!headers.has("countryOfOrigin")) {
+    warnings.push(
+      "Kolona „Zemlja porekla“ nije pronađena. Postojeća vrednost ostaje sačuvana, a ako je nema sistem će koristiti zemlju iz kartice dobavljača.",
+    );
+    for (const row of rows) {
+      const supplierCountry = row.supplier
+        ? supplierCountryByKey.get(
+            row.supplier.trim().toLocaleLowerCase("sr-Latn"),
+          )
+        : null;
+      row.countryOfOrigin = resolveArticleImportCountryOfOrigin({
+        columnPresent: false,
+        incoming: row.countryOfOrigin,
+        current: null,
+        supplierCountry,
       });
     }
   }
@@ -872,9 +901,14 @@ export async function POST(request: Request) {
             ? row.materialText
             : existing?.materialText ?? null,
           hsCode: hasColumn("hsCode") ? row.hsCode : existing?.hsCode ?? null,
-          countryOfOrigin: hasColumn("countryOfOrigin")
-            ? row.countryOfOrigin
-            : existing?.countryOfOrigin ?? null,
+          countryOfOrigin: resolveArticleImportCountryOfOrigin({
+            columnPresent: hasColumn("countryOfOrigin"),
+            incoming: row.countryOfOrigin,
+            current: existing?.countryOfOrigin,
+            supplierCountry: supplierId
+              ? supplierCountryById.get(supplierId)
+              : null,
+          }),
           customsRate: hasColumn("customsRate")
             ? row.customsRate
             : existing?.customsRate ?? null,
