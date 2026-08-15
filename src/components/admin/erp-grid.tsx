@@ -947,7 +947,7 @@ export function ErpGrid({
     >
       <fieldset className="contents" disabled={!clientReady}>
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-        <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+        <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <select
@@ -1125,7 +1125,7 @@ export function ErpGrid({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 2xl:justify-end">
             {module.commands.map((command) => {
               const isEditCommand = command.clientAction === "edit";
               const disabled =

@@ -328,12 +328,10 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(form.locator('[name="otherRelatedCostsRsd"]')).toHaveValue(
         "0",
       );
-      await expect(
-        form.locator('[name="otherRelatedCostsRsd"]'),
-      ).toHaveAttribute("readonly", "");
-      await expect(form.locator('[name="netValue"]')).toHaveValue("8500");
-      await expect(form.locator('[name="vatValue"]')).toHaveValue("1700");
-      await expect(form.locator('[name="grossValue"]')).toHaveValue("10200");
+      await form.locator('[name="otherRelatedCostsRsd"]').fill("321.25");
+      await expect(form.locator('[name="netValue"]')).toHaveValue("8821.25");
+      await expect(form.locator('[name="vatValue"]')).toHaveValue("1764.25");
+      await expect(form.locator('[name="grossValue"]')).toHaveValue("10585.5");
       await form.locator('[name="notes"]').fill("QA trošak transporta");
       await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
       await expect(form.getByRole("status")).toContainText(
@@ -364,14 +362,29 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         warehouseId,
         type: "COGS",
         status: "RECEIVED",
-        net: 8_500,
-        vat: 1_700,
-        gross: 10_200,
+        net: 8_821.25,
+        vat: 1_764.25,
+        gross: 10_585.5,
         invoiceValueRsd: 8_500,
         customsValueRsd: 0,
         transportValueRsd: 0,
-        otherRelatedCostsRsd: 0,
+        otherRelatedCostsRsd: 321.25,
       });
+
+      await form.locator('[name="otherRelatedCostsRsd"]').fill("0");
+      await form.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+      await expect
+        .poll(async () =>
+          Number(
+            (
+              await db.inboundInvoice.findUniqueOrThrow({
+                where: { id: invoiceId },
+                select: { otherRelatedCostsRsd: true },
+              })
+            ).otherRelatedCostsRsd,
+          ),
+        )
+        .toBe(0);
       await expect(
         page.locator("tbody tr").filter({ hasText: fixture.sku }),
       ).toContainText("170");
@@ -479,6 +492,12 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
 
     await test.step("a receipt blocker does not partially post the invoice or order", async () => {
       await db.productCategory.deleteMany({ where: { productId } });
+      const editForm = page.locator("form").filter({
+        has: page.getByRole("button", { name: "Sačuvaj", exact: true }),
+      });
+      await editForm
+        .locator('[name="notes"]')
+        .fill("QA unos sačuvan i kada je knjiženje blokirano");
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
       await expect(
@@ -486,6 +505,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
           hasText: "Prijem je blokiran dok se ne dopune obavezni podaci",
         }),
       ).toBeVisible();
+      await expect(editForm.locator('[name="notes"]')).toHaveValue(
+        "QA unos sačuvan i kada je knjiženje blokirano",
+      );
 
       const [invoice, order, product, movements] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({
@@ -502,6 +524,14 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         }),
         db.stockMovement.count({ where: { productId } }),
       ]);
+      expect(
+        (
+          await db.inboundInvoice.findUniqueOrThrow({
+            where: { id: invoiceId },
+            select: { notes: true },
+          })
+        ).notes,
+      ).toBe("QA unos sačuvan i kada je knjiženje blokirano");
       expect(invoice).toMatchObject({ status: "RECEIVED", lockedAt: null });
       expect(order).toMatchObject({
         status: "DRAFT",

@@ -30,6 +30,7 @@ export type SaveInboundInvoiceInput = {
   invoiceValueRsd: number;
   customsValueRsd: number;
   transportValueRsd: number;
+  otherRelatedCostsRsd: number;
   notes: string | null;
 };
 
@@ -128,7 +129,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
     invoiceValueRsd: input.invoiceValueRsd,
     customsValueRsd: input.customsValueRsd,
     transportValueRsd: input.transportValueRsd,
-    otherRelatedCostsRsd: 0,
+    otherRelatedCostsRsd: input.otherRelatedCostsRsd,
   });
   validateInboundInvoiceTotals(amounts);
 

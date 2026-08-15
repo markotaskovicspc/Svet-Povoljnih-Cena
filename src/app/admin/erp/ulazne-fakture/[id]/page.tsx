@@ -59,7 +59,8 @@ const invoiceSchema = z.object({
   transportValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   otherRelatedCostsRsd: z.coerce
     .number()
-    .refine((value) => value === 0, "Ostali vezani troškovi moraju biti 0."),
+    .nonnegative()
+    .max(1_000_000_000),
   netValue: z.coerce.number().nonnegative().max(1_000_000_000),
   vatValue: z.coerce.number().nonnegative().max(1_000_000_000),
   grossValue: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -108,13 +109,16 @@ async function createAction() {
 
 async function saveAction(_state: AdminActionState, formData: FormData) {
   "use server";
+  const shouldPost = formData.get("intent") === "post";
   return withAdminState(
     {
       allowed: ["OPS"],
-      action: "inbound-invoice.save",
+      action: shouldPost
+        ? "inbound-invoice.save-and-post"
+        : "inbound-invoice.save",
       entity: "InboundInvoice",
     },
-    async (_actorId, actionData: FormData) => {
+    async (actorId, actionData: FormData) => {
       const parsed = invoiceSchema.safeParse(Object.fromEntries(actionData.entries()));
       if (!parsed.success) {
         return {
@@ -132,10 +136,31 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         invoiceValueRsd: data.invoiceValueRsd,
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
+        otherRelatedCostsRsd: data.otherRelatedCostsRsd,
         notes: data.notes.trim() || null,
       });
       revalidatePath(`/admin/erp/ulazne-fakture/${data.invoiceId}`);
       revalidatePath("/admin/erp/ulazne-fakture");
+
+      if (shouldPost) {
+        try {
+          const result = await postInboundInvoice(data.invoiceId, actorId);
+          revalidatePath("/admin/erp/porudzbenice");
+          revalidatePath("/admin/erp/stanje-po-magacinima");
+          revalidatePath("/admin/erp/artikli");
+          updateTag("catalog-products");
+          return {
+            ok: true as const,
+            entityId: data.invoiceId,
+            message: `Faktura i porudžbenica su proknjižene, a roba je primljena u magacin ${result.warehouseName}.`,
+          };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Nepoznata greška.";
+          throw new Error(`${message} Uneti podaci fakture su sačuvani.`);
+        }
+      }
+
       return {
         ok: true as const,
         entityId: data.invoiceId,
@@ -432,14 +457,11 @@ export default async function InboundInvoicePage({
                 Uredi
               </button>
             )}
-            <AdminActionForm action={postAction}>
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <input
-                type="hidden"
-                name="backfillOnly"
-                value={cogsNeedsBackfill ? "true" : "false"}
-              />
+            {editing ? (
               <SubmitButton
+                form="inbound-invoice-form"
+                name="intent"
+                value="post"
                 disabled={
                   cancelled ||
                   (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
@@ -465,7 +487,42 @@ export default async function InboundInvoicePage({
                     ? "Dovrši prijem"
                     : "Proknjiži"}
               </SubmitButton>
-            </AdminActionForm>
+            ) : (
+              <AdminActionForm action={postAction}>
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <input
+                  type="hidden"
+                  name="backfillOnly"
+                  value={cogsNeedsBackfill ? "true" : "false"}
+                />
+                <SubmitButton
+                  disabled={
+                    cancelled ||
+                    (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
+                  }
+                  confirm={
+                    cogsNeedsBackfill
+                      ? "Uskladiti COGS ove ranije proknjižene fakture?"
+                      : receiptNeedsCompletion
+                        ? "Knjiženje fakture i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
+                        : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti ulaznu fakturu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
+                  }
+                  pendingLabel={
+                    cogsNeedsBackfill
+                      ? "Usklađivanje COGS-a…"
+                      : receiptNeedsCompletion
+                        ? "Dovršavanje prijema…"
+                        : "Knjiženje…"
+                  }
+                >
+                  {cogsNeedsBackfill
+                    ? "Uskladi COGS"
+                    : receiptNeedsCompletion
+                      ? "Dovrši prijem"
+                      : "Proknjiži"}
+                </SubmitButton>
+              </AdminActionForm>
+            )}
             <AdminActionForm action={cancelAction}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
@@ -529,7 +586,7 @@ export default async function InboundInvoicePage({
               Izaberite „Uredi” da dopunite podatke, zatim „Proknjiži” da završite prijemnicu, porudžbenicu i prijem robe.
             </p>
           ) : null}
-          <AdminActionForm action={saveAction}>
+          <AdminActionForm action={saveAction} id="inbound-invoice-form">
             <fieldset
               key={`${invoice.updatedAt.toISOString()}-${editing}`}
               disabled={!editing || immutable}
@@ -586,6 +643,10 @@ export default async function InboundInvoicePage({
                     invoice.transportValueRsd == null
                       ? null
                       : Number(invoice.transportValueRsd),
+                  otherRelatedCostsRsd:
+                    invoice.otherRelatedCostsRsd == null
+                      ? null
+                      : Number(invoice.otherRelatedCostsRsd),
                   legacyNetValue: Number(invoice.netValue),
                 }}
               />

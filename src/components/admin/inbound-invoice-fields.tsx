@@ -22,6 +22,7 @@ type InitialInvoiceValues = {
   invoiceValueRsd: number | null;
   customsValueRsd: number | null;
   transportValueRsd: number | null;
+  otherRelatedCostsRsd: number | null;
   legacyNetValue: number;
 };
 
@@ -79,15 +80,23 @@ export function InboundInvoiceFields({
         (shouldUseOrderDefaults ? initialOrder?.transportValueRsd ?? 0 : 0),
     ),
   );
+  const [otherRelatedCostsRsd, setOtherRelatedCostsRsd] = useState(
+    moneyInput(initial.otherRelatedCostsRsd ?? 0),
+  );
   const totals = useMemo(
     () =>
       calculateInboundInvoiceAmounts({
         invoiceValueRsd: parseMoney(invoiceValueRsd),
         customsValueRsd: parseMoney(customsValueRsd),
         transportValueRsd: parseMoney(transportValueRsd),
-        otherRelatedCostsRsd: 0,
+        otherRelatedCostsRsd: parseMoney(otherRelatedCostsRsd),
       }),
-    [customsValueRsd, invoiceValueRsd, transportValueRsd],
+    [
+      customsValueRsd,
+      invoiceValueRsd,
+      otherRelatedCostsRsd,
+      transportValueRsd,
+    ],
   );
 
   function selectPurchaseOrder(id: string) {
@@ -100,6 +109,7 @@ export function InboundInvoiceFields({
     setInvoiceValueRsd(moneyInput(order?.invoiceValueRsd ?? 0));
     setCustomsValueRsd(moneyInput(order?.customsValueRsd ?? 0));
     setTransportValueRsd(moneyInput(order?.transportValueRsd ?? 0));
+    setOtherRelatedCostsRsd("0");
   }
 
   return (
@@ -167,16 +177,15 @@ export function InboundInvoiceFields({
           onChange={(event) => setTransportValueRsd(event.target.value)}
         />
       </Field>
-      <Field
-        label="Vrednost ostalih vezanih troškova u RSD"
-        hint="Ova vrednost je uvek 0."
-      >
+      <Field label="Vrednost ostalih vezanih troškova u RSD">
         <Input
           name="otherRelatedCostsRsd"
           type="number"
-          value="0"
-          readOnly
-          aria-readonly="true"
+          min={0}
+          step="0.01"
+          required
+          value={otherRelatedCostsRsd}
+          onChange={(event) => setOtherRelatedCostsRsd(event.target.value)}
         />
       </Field>
       <Field
