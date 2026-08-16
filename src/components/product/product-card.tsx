@@ -188,6 +188,10 @@ export function ProductCard({
             : "Loyalty cena uz prijavljen nalog"
           : "";
   const availability = getProductAvailability(product);
+  const deliveryLine = `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`;
+  const footerLine = availability.canAddToCart
+    ? [promoLine, deliveryLine].filter(Boolean).join(" · ")
+    : availability.message;
 
   const hoverProps = reduced ? {} : { whileHover: { y: -6, rotate: -1 } };
 
@@ -518,11 +522,7 @@ export function ProductCard({
                 "md:mt-1 md:min-h-5 md:text-[9px] md:leading-tight",
             )}
           >
-            {availability.isSupplierSourced
-              ? availability.message
-              : availability.canAddToCart
-                ? promoLine
-                : availability.message}
+            {footerLine}
           </p>
         </div>
       </div>

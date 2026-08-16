@@ -183,6 +183,27 @@ describe("ProductCard image regression", () => {
     expect(html).not.toContain("min-h-3.5 truncate");
   });
 
+  it("prikazuje period akcije i rok isporuke u donjem redu", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          salePrice: 800,
+          action: {
+            id: "action-august",
+            name: "Avgustovska akcija",
+            startsAt: "2026-08-01T00:00:00.000Z",
+            endsAt: "2026-08-31T23:59:59.999Z",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain(
+      "Akcija do 31.08.2026. · Isporuka 3–5 radnih dana",
+    );
+  });
+
   it("keeps duplicate product cards independent on the same page", () => {
     const html = renderToStaticMarkup(
       createElement(
