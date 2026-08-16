@@ -31,6 +31,8 @@ test.describe("article master acceptance", () => {
   let supplierId = "";
   let rootCategoryId = "";
   let groupCategoryId = "";
+  let subgroupCategoryId = "";
+  let leafCategoryId = "";
   let generatedProductId = "";
   let copiedProductId = "";
   let automaticNewUntil = "";
@@ -93,6 +95,26 @@ test.describe("article master acceptance", () => {
       },
     });
     groupCategoryId = groupCategory.id;
+    const subgroupCategory = await db.category.create({
+      data: {
+        name: `${tag} podgrupa`,
+        slug: `qa-subgroup-${runId}`,
+        path: `/qa-root-${runId}/qa-group-${runId}/qa-subgroup-${runId}`,
+        level: 2,
+        parentId: groupCategory.id,
+      },
+    });
+    subgroupCategoryId = subgroupCategory.id;
+    const leafCategory = await db.category.create({
+      data: {
+        name: `${tag} četvrti nivo`,
+        slug: `qa-leaf-${runId}`,
+        path: `/qa-root-${runId}/qa-group-${runId}/qa-subgroup-${runId}/qa-leaf-${runId}`,
+        level: 3,
+        parentId: subgroupCategory.id,
+      },
+    });
+    leafCategoryId = leafCategory.id;
     const supplier = await db.supplier.create({
       data: {
         code: `DOB-${runId}`.slice(0, 40),
@@ -390,6 +412,14 @@ test.describe("article master acceptance", () => {
       page.locator(`select[name="siteGroupId"] option[value="${groupCategoryId}"]`),
     ).toHaveCount(1);
     await page.locator('select[name="siteGroupId"]').selectOption(groupCategoryId);
+    await expect(
+      page.locator(
+        `select[name="siteSubgroupId"] option[value="${leafCategoryId}"]`,
+      ),
+    ).toHaveCount(1);
+    await page
+      .locator('select[name="siteSubgroupId"]')
+      .selectOption(leafCategoryId);
     await page.getByLabel("Nova kolekcija").fill(`${tag} kolekcija`);
     await page
       .getByLabel("Kratki opis za kartice, naziv i dokumente")
@@ -461,6 +491,7 @@ test.describe("article master acceptance", () => {
             syncOverrides: true,
             categories: {
               select: {
+                categoryId: true,
                 category: {
                   select: {
                     name: true,
@@ -507,6 +538,7 @@ test.describe("article master acceptance", () => {
               ? product.syncOverrides.fields
               : [],
           category: product.categories[0]?.category.name,
+          categoryId: product.categories[0]?.categoryId,
           categoryParentId: product.categories[0]?.category.parent?.id,
           lookups: product.lookupAssignments
             .map((row) => `${row.lookupValue.kind}:${row.lookupValue.value}`)
@@ -539,8 +571,9 @@ test.describe("article master acceptance", () => {
           "identity",
           "name",
         ]),
-        category: `${tag} grupa`,
-        categoryParentId: rootCategoryId,
+        category: `${tag} četvrti nivo`,
+        categoryId: leafCategoryId,
+        categoryParentId: subgroupCategoryId,
         lookups: [
           "ATTRIBUTE:Hrast",
           "ATTRIBUTE:Metal",
@@ -551,7 +584,7 @@ test.describe("article master acceptance", () => {
         ],
       });
     const storefrontPage = await context.newPage();
-    const categoryPath = `/qa-root-${runId}/qa-group-${runId}`;
+    const categoryPath = `/qa-root-${runId}/qa-group-${runId}/qa-subgroup-${runId}/qa-leaf-${runId}`;
     const catalogResponse = await storefrontPage.request.get(
       `/api/products?categoryPath=${encodeURIComponent(categoryPath)}&limit=24`,
     );

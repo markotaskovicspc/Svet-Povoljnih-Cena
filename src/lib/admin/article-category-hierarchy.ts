@@ -16,6 +16,10 @@ export type ArticleCategorySelectionLevel =
   | "group"
   | "subgroup";
 
+export type ArticleCategoryDescendant = ArticleCategoryNode & {
+  indent: number;
+};
+
 export type ResolvedArticleCategorySelection = ArticleCategorySelection & {
   leafCategoryId: string | null;
 };
@@ -52,6 +56,26 @@ export function articleCategoryChildren(
   return categories
     .filter((category) => category.parentId === parentId)
     .sort(compareCategories);
+}
+
+export function articleCategoryDescendants(
+  categories: readonly ArticleCategoryNode[],
+  ancestorId: string,
+): ArticleCategoryDescendant[] {
+  const descendants: ArticleCategoryDescendant[] = [];
+  const visited = new Set([ancestorId]);
+
+  const visit = (parentId: string, indent: number) => {
+    for (const child of articleCategoryChildren(categories, parentId)) {
+      if (visited.has(child.id)) continue;
+      visited.add(child.id);
+      descendants.push({ ...child, indent });
+      visit(child.id, indent + 1);
+    }
+  };
+
+  visit(ancestorId, 0);
+  return descendants;
 }
 
 export function articleCategorySelectionAfterChange(
@@ -98,14 +122,14 @@ export function articleCategorySelectionFromLeaf(
     current = current.parentId ? byId.get(current.parentId) : undefined;
   }
 
-  if (!trail.length || trail.length > 3 || trail[0]?.parentId !== null) {
+  if (!trail.length || trail[0]?.parentId !== null) {
     return empty;
   }
 
   return {
     siteCategoryId: trail[0]?.id ?? "",
     siteGroupId: trail[1]?.id ?? "",
-    siteSubgroupId: trail[2]?.id ?? "",
+    siteSubgroupId: trail.length > 2 ? (trail.at(-1)?.id ?? "") : "",
   };
 }
 
@@ -162,7 +186,17 @@ export function resolveArticleCategorySelection(
   }
 
   const subgroup = byId.get(siteSubgroupId);
-  if (!subgroup || subgroup.parentId !== group.id) {
+  const visited = new Set<string>();
+  let ancestor = subgroup;
+  while (
+    ancestor?.parentId &&
+    ancestor.parentId !== group.id &&
+    !visited.has(ancestor.id)
+  ) {
+    visited.add(ancestor.id);
+    ancestor = byId.get(ancestor.parentId);
+  }
+  if (!subgroup || ancestor?.parentId !== group.id) {
     throw new Error("Izabrana podgrupa ne pripada izabranoj grupi.");
   }
 

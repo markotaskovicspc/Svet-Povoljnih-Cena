@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   articleCategoryChildren,
+  articleCategoryDescendants,
   articleCategorySelectionAfterChange,
   articleCategorySelectionFromLeaf,
   requiredArticleCategorySelectionError,
@@ -19,6 +20,8 @@ const categories: ArticleCategoryNode[] = [
   },
   { id: "chairs", name: "Stolice", parentId: "dining", order: 1 },
   { id: "lamps", name: "Lampe", parentId: "other-root", order: 1 },
+  { id: "indoor", name: "Unutrašnja rasveta", parentId: "lamps", order: 1 },
+  { id: "ceiling", name: "Plafonjere", parentId: "indoor", order: 1 },
 ];
 
 describe("article category hierarchy", () => {
@@ -28,11 +31,28 @@ describe("article category hierarchy", () => {
     ]);
   });
 
+  it("returns every lower level under a group in navigation order", () => {
+    expect(
+      articleCategoryDescendants(categories, "lamps").map(({ id, indent }) => [
+        id,
+        indent,
+      ]),
+    ).toEqual([
+      ["indoor", 0],
+      ["ceiling", 1],
+    ]);
+  });
+
   it("reconstructs all three selectors from the saved leaf", () => {
     expect(articleCategorySelectionFromLeaf(categories, "chairs")).toEqual({
       siteCategoryId: "root",
       siteGroupId: "dining",
       siteSubgroupId: "chairs",
+    });
+    expect(articleCategorySelectionFromLeaf(categories, "ceiling")).toEqual({
+      siteCategoryId: "other-root",
+      siteGroupId: "lamps",
+      siteSubgroupId: "ceiling",
     });
   });
 
@@ -74,6 +94,13 @@ describe("article category hierarchy", () => {
         siteSubgroupId: "",
       }).leafCategoryId,
     ).toBe("dining");
+    expect(
+      resolveArticleCategorySelection(categories, {
+        siteCategoryId: "other-root",
+        siteGroupId: "lamps",
+        siteSubgroupId: "ceiling",
+      }).leafCategoryId,
+    ).toBe("ceiling");
   });
 
   it("rejects a group or subgroup from another branch", () => {

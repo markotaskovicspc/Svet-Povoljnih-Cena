@@ -96,6 +96,20 @@ export function collectCategoryDescendantIds<T extends CategoryTreeItem>(
   return descendants;
 }
 
+export function availableCategoryParents<T extends CategoryTreeItem>(
+  categories: T[],
+  categoryId?: string,
+) {
+  const descendants = categoryId
+    ? collectCategoryDescendantIds(categories, categoryId)
+    : new Set<string>();
+
+  return flattenCategoryTree(categories).filter(
+    (category) =>
+      category.id !== categoryId && !descendants.has(category.id),
+  );
+}
+
 export function categoryTreeDepth<T extends CategoryTreeItem>(
   categories: T[],
   categoryId: string,

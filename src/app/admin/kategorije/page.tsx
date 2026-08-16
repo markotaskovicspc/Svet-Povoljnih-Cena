@@ -20,6 +20,7 @@ import {
   uploadStagedCategoryImage,
 } from "@/lib/categories/image-storage.server";
 import {
+  availableCategoryParents,
   categoryDescendantPathUpdates,
   categoryTreeDepth,
   collectCategoryDescendantIds,
@@ -100,10 +101,10 @@ async function upsert(_state: AdminActionState, formData: FormData) {
           return { ok: false as const, error: "Izabrani roditelj više ne postoji." };
         }
         const parentDepth = parent ? categoryTreeDepth(categories, parent.id) : null;
-        if (parent && (parentDepth === null || parentDepth >= 2)) {
+        if (parent && parentDepth === null) {
           return {
             ok: false as const,
-            error: "Navigacija podržava najviše tri nivoa: kategoriju, grupu i podgrupu.",
+            error: "Izabrani roditelj nema ispravnu vezu do početne kategorije.",
           };
         }
         const level = parent ? (parentDepth ?? 0) + 1 : 0;
@@ -256,15 +257,7 @@ export default async function CategoriesPage({
   const selected = params.new === "1"
     ? undefined
     : flat.find((category) => category.id === params.edit) ?? flat[0];
-  const selectedDescendants = selected
-    ? collectCategoryDescendantIds(cats, selected.id)
-    : new Set<string>();
-  const allowedParents = flat.filter(
-    (category) =>
-      category.id !== selected?.id &&
-      !selectedDescendants.has(category.id) &&
-      (categoryTreeDepth(cats, category.id) ?? 3) < 2,
-  );
+  const allowedParents = availableCategoryParents(cats, selected?.id);
 
   return (
     <>
@@ -332,7 +325,13 @@ function CategoryForm({
     state: AdminActionState,
     formData: FormData,
   ) => Promise<AdminActionState>;
-  parents: { id: string; name: string; path: string; level: number }[];
+  parents: {
+    id: string;
+    name: string;
+    path: string;
+    level: number;
+    indent: number;
+  }[];
   values?: {
     id?: string;
     name?: string;
@@ -363,7 +362,7 @@ function CategoryForm({
             .filter((p) => p.id !== values?.id)
             .map((p) => (
               <option key={p.id} value={p.id}>
-                {"— ".repeat(p.level)}
+                {"— ".repeat(p.indent)}
                 {p.name}
               </option>
             ))}

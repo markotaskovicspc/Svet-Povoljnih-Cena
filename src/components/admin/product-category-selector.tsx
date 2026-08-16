@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Field } from "@/components/admin/field";
 import {
   articleCategoryChildren,
+  articleCategoryDescendants,
   articleCategorySelectionAfterChange,
   type ArticleCategoryNode,
   type ArticleCategorySelection,
@@ -35,7 +36,7 @@ export function ProductCategorySelector({
   );
   const subgroups = useMemo(
     () =>
-      siteGroupId ? articleCategoryChildren(categories, siteGroupId) : [],
+      siteGroupId ? articleCategoryDescendants(categories, siteGroupId) : [],
     [categories, siteGroupId],
   );
 
@@ -94,7 +95,7 @@ export function ProductCategorySelector({
             ))}
           </select>
         </Field>
-        <Field label="Podgrupa">
+        <Field label="Podgrupa / niži nivo">
           <select
             name="siteSubgroupId"
             value={siteSubgroupId}
@@ -113,6 +114,7 @@ export function ProductCategorySelector({
             <option value="">Bez podgrupe</option>
             {subgroups.map((subgroup) => (
               <option key={subgroup.id} value={subgroup.id}>
+                {"— ".repeat(subgroup.indent)}
                 {subgroup.name}
               </option>
             ))}
@@ -121,7 +123,8 @@ export function ProductCategorySelector({
       </div>
       <p className="text-xs text-ink-500">
         Kategorija i grupa su obavezne. Najdublji izabrani nivo određuje gde se
-        artikal prikazuje u meniju i na kategorijskim stranicama.
+        artikal prikazuje u meniju i na kategorijskim stranicama. Polje za
+        podgrupu prikazuje i sve dublje nivoe unutar izabrane grupe.
       </p>
     </fieldset>
   );

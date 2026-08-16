@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  availableCategoryParents,
   categoryDescendantPathUpdates,
   categoryTreeDepth,
   collectCategoryDescendantIds,
@@ -75,5 +76,21 @@ describe("category tree", () => {
     expect(categoryTreeDepth(rows, "root")).toBe(0);
     expect(categoryTreeDepth(rows, "group")).toBe(1);
     expect(categoryTreeDepth(rows, "subgroup")).toBe(2);
+  });
+
+  it("offers third-level categories as parents while excluding the current subtree", () => {
+    const rows = [
+      category({ id: "root", name: "Root" }),
+      category({ id: "group", name: "Group", parentId: "root", level: 1 }),
+      category({ id: "subgroup", name: "Subgroup", parentId: "group", level: 2 }),
+      category({ id: "leaf", name: "Leaf", parentId: "subgroup", level: 3 }),
+    ];
+
+    expect(
+      availableCategoryParents(rows, "leaf").map(({ id, indent }) => [id, indent]),
+    ).toContainEqual(["subgroup", 2]);
+    expect(availableCategoryParents(rows, "group").map(({ id }) => id)).toEqual([
+      "root",
+    ]);
   });
 });
