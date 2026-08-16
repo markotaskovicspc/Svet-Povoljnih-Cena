@@ -4,6 +4,7 @@ export type NewArticleImportRequiredInput = {
   description: string | null;
   supplier: string | null;
   category: string | null;
+  group: string | null;
   countryOfOrigin: string | null;
   hsCode: string | null;
   widthCm: number | null;
@@ -39,6 +40,9 @@ export function validateNewArticleImportRequiredFields(
   }
   if (!input.category?.trim()) {
     issues.push({ field: "category", message: "Kategorija je obavezna za novi artikal." });
+  }
+  if (!input.group?.trim()) {
+    issues.push({ field: "group", message: "Grupa je obavezna za novi artikal." });
   }
   if (!input.countryOfOrigin?.trim()) {
     issues.push({

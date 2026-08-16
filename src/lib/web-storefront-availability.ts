@@ -153,6 +153,10 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
     isActive: true,
     deletedAt: null,
     availableWebManual: true,
+    groupId: { not: null },
+    categories: {
+      some: { category: { parentId: { not: null } } },
+    },
     priceListEntries: {
       some: {
         price: { gt: 0 },

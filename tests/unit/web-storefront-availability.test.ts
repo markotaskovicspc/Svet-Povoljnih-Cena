@@ -28,6 +28,10 @@ describe("web storefront availability rollout", () => {
     expect(webStorefrontProductWhere()).toMatchObject({
       isActive: true,
       availableWebManual: true,
+      groupId: { not: null },
+      categories: {
+        some: { category: { parentId: { not: null } } },
+      },
       priceListEntries: {
         some: {
           price: { gt: 0 },
