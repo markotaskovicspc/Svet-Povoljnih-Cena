@@ -6,7 +6,10 @@ import {
   StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { goodsReceiptMasterIssues } from "@/lib/admin/goods-receipt-readiness";
+import {
+  goodsReceiptCountryOriginFallbacks,
+  goodsReceiptMasterWarnings,
+} from "@/lib/admin/goods-receipt-readiness";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { rebuildInboundInvoiceAllocations } from "@/lib/admin/inbound-invoice.server";
@@ -668,14 +671,8 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-/**
- * Receive a purchase order into stock (spec §4 "Proknjiži" / prijemnica):
- * sets receivedQty, posts WarehouseStock + StockMovement, and flips status to
- * RECEIVED. COGS is normally already booked by the posted inbound invoice;
- * receipt calculates it only for legacy/orders without a posted invoice.
- * Idempotent — a PO already RECEIVED is skipped.
- */
-export async function assertPurchaseOrderGoodsReceiptMasterReady(id: string) {
+/** Returns advisory master-data gaps without blocking the stock receipt. */
+export async function purchaseOrderGoodsReceiptMasterWarnings(id: string) {
   const order = await db.purchaseOrder.findUnique({
     where: { id },
     select: {
@@ -691,6 +688,7 @@ export async function assertPurchaseOrderGoodsReceiptMasterReady(id: string) {
               name: true,
               description: true,
               supplierId: true,
+              supplier: { select: { country: true } },
               countryOfOrigin: true,
               hsCode: true,
               widthCm: true,
@@ -722,25 +720,33 @@ export async function assertPurchaseOrderGoodsReceiptMasterReady(id: string) {
     },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
-  if (order.status === PurchaseOrderStatus.RECEIVED) return;
-
-  const incomplete = order.items.flatMap((item) => {
-    if (item.qty <= 0) return [];
-    if (!item.product) return [`${item.sku}: artikal nije povezan sa masterom`];
-    const issues = goodsReceiptMasterIssues(item.product);
-    return issues.length ? [`${item.sku}: ${issues.join(", ")}`] : [];
-  });
-  if (incomplete.length) {
-    throw new Error(
-      `Prijem je blokiran dok se ne dopune obavezni podaci u masteru artikla: ${incomplete.join("; ")}.`,
-    );
-  }
+  if (order.status === PurchaseOrderStatus.RECEIVED) return [];
+  return goodsReceiptMasterWarnings(order.items);
 }
 
+/**
+ * Receive a purchase order into stock (spec §4 "Proknjiži" / prijemnica):
+ * sets receivedQty, posts WarehouseStock + StockMovement, and flips status to
+ * RECEIVED. COGS is normally already booked by the posted inbound invoice;
+ * receipt calculates it only for legacy/orders without a posted invoice.
+ * Idempotent — a PO already RECEIVED is skipped. Incomplete commercial or
+ * logistics master data is returned for audit and follow-up, not treated as a
+ * reason to leave physically received stock outside the warehouse ledger.
+ */
 export async function receivePurchaseOrder(
   id: string,
   actorId: string,
-): Promise<{ received: boolean; postedLines: number; warehouseName: string | null }> {
+): Promise<{
+  received: boolean;
+  postedLines: number;
+  warehouseName: string | null;
+  masterWarnings: ReturnType<typeof goodsReceiptMasterWarnings>;
+  countryOriginFallbacks: Array<{
+    productId: string;
+    sku: string;
+    country: string;
+  }>;
+}> {
   const order = await db.purchaseOrder.findUnique({
     where: { id },
     include: {
@@ -754,6 +760,7 @@ export async function receivePurchaseOrder(
               description: true,
               cogs: true,
               supplierId: true,
+              supplier: { select: { country: true } },
               countryOfOrigin: true,
               hsCode: true,
               widthCm: true,
@@ -786,26 +793,22 @@ export async function receivePurchaseOrder(
     },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
+  const masterWarnings = goodsReceiptMasterWarnings(order.items);
+  const countryOriginFallbacks = goodsReceiptCountryOriginFallbacks(order.items);
   if (order.status === PurchaseOrderStatus.RECEIVED) {
-    return { received: false, postedLines: 0, warehouseName: null };
+    return {
+      received: false,
+      postedLines: 0,
+      warehouseName: null,
+      masterWarnings,
+      countryOriginFallbacks: [],
+    };
   }
   if (!canReceivePurchaseOrder(order)) {
     throw new Error(
       "Prijem je dozvoljen samo za proknjiženu porudžbenicu koja nije otkazana ili već primljena.",
     );
   }
-  const incomplete = order.items.flatMap((item) => {
-    if (item.qty <= 0) return [];
-    if (!item.product) return [`${item.sku}: artikal nije povezan sa masterom`];
-    const issues = goodsReceiptMasterIssues(item.product);
-    return issues.length ? [`${item.sku}: ${issues.join(", ")}`] : [];
-  });
-  if (incomplete.length) {
-    throw new Error(
-      `Prijem je blokiran dok se ne dopune obavezni podaci u masteru artikla: ${incomplete.join("; ")}.`,
-    );
-  }
-
   let postedLines = 0;
   let warehouseName: string | null = null;
   const received = await db.$transaction(async (tx) => {
@@ -824,6 +827,15 @@ export async function receivePurchaseOrder(
       data: { status: PurchaseOrderStatus.RECEIVED },
     });
     if (locked.count !== 1) return false;
+    for (const fallback of countryOriginFallbacks) {
+      await tx.product.updateMany({
+        where: {
+          id: fallback.productId,
+          countryOfOrigin: fallback.previousCountryOfOrigin,
+        },
+        data: { countryOfOrigin: fallback.country },
+      });
+    }
     const bookingState = await tx.purchaseOrder.findUniqueOrThrow({
       where: { id },
       select: { cogsBookedAt: true },
@@ -927,7 +939,15 @@ export async function receivePurchaseOrder(
     return true;
   });
 
-  return { received, postedLines: received ? postedLines : 0, warehouseName };
+  return {
+    received,
+    postedLines: received ? postedLines : 0,
+    warehouseName,
+    masterWarnings,
+    countryOriginFallbacks: countryOriginFallbacks.map(
+      ({ productId, sku, country }) => ({ productId, sku, country }),
+    ),
+  };
 }
 
 /**

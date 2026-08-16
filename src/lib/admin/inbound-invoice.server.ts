@@ -341,13 +341,11 @@ export async function postInboundInvoice(id: string, actorId: string) {
   });
 
   const {
-    assertPurchaseOrderGoodsReceiptMasterReady,
     postPurchaseOrder,
     receivePurchaseOrder,
   } = await import(
     "@/lib/admin/po"
   );
-  await assertPurchaseOrderGoodsReceiptMasterReady(invoice.purchaseOrderId);
   await db.$transaction([
     db.inboundInvoice.update({
       where: { id },
@@ -368,6 +366,8 @@ export async function postInboundInvoice(id: string, actorId: string) {
     warehouseName: warehouse.name,
     received: receipt.received,
     postedLines: receipt.postedLines,
+    masterWarnings: receipt.masterWarnings,
+    countryOriginFallbacks: receipt.countryOriginFallbacks,
   };
 }
 

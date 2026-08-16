@@ -91,6 +91,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       data: {
         code: `QA-UF-${runId}`.slice(0, 80),
         name: fixture.supplierName,
+        country: "CN",
         currency: "RSD",
         parity: "DAP",
       },
@@ -139,7 +140,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         stock: 100,
         cogs: 200,
         supplierId,
-        countryOfOrigin: "Srbija",
+        countryOfOrigin: null,
         hsCode: "9403609000",
         widthCm: 100,
         depthCm: 50,
@@ -490,24 +491,34 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         .toBe("QA trošak transporta i špedicije");
     });
 
-    await test.step("a receipt blocker does not partially post the invoice or order", async () => {
+    await test.step("an incomplete master is warned and does not block the receipt", async () => {
       await db.productCategory.deleteMany({ where: { productId } });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      const warning = page.getByRole("status").filter({
+        hasText: "master artikala nije kompletan",
+      });
+      await expect(warning).toContainText(`${fixture.sku}: kategorija`);
+      await expect(warning.getByRole("link", { name: fixture.sku })).toHaveAttribute(
+        "href",
+        `/admin/erp/artikli/${productId}`,
+      );
+
       const editForm = page.locator("form").filter({
         has: page.getByRole("button", { name: "Sačuvaj", exact: true }),
       });
       await editForm
         .locator('[name="notes"]')
-        .fill("QA unos sačuvan i kada je knjiženje blokirano");
-      page.once("dialog", (dialog) => dialog.accept());
+        .fill("QA unos sačuvan uz upozorenje mastera");
+      page.once("dialog", (dialog) => {
+        expect(dialog.message()).toContain(
+          "Master artikala nije kompletan za 1 stavku",
+        );
+        dialog.accept();
+      });
       await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
       await expect(
-        page.getByRole("alert").filter({
-          hasText: "Prijem je blokiran dok se ne dopune obavezni podaci",
-        }),
+        page.getByText(/prijemnica i porudžbenica su proknjižene.*roba je primljena/i),
       ).toBeVisible();
-      await expect(editForm.locator('[name="notes"]')).toHaveValue(
-        "QA unos sačuvan i kada je knjiženje blokirano",
-      );
 
       const [invoice, order, product, movements] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({
@@ -520,7 +531,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         }),
         db.product.findUniqueOrThrow({
           where: { id: productId },
-          select: { stock: true, cogs: true },
+          select: { stock: true, cogs: true, countryOfOrigin: true },
         }),
         db.stockMovement.count({ where: { productId } }),
       ]);
@@ -531,27 +542,25 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
             select: { notes: true },
           })
         ).notes,
-      ).toBe("QA unos sačuvan i kada je knjiženje blokirano");
-      expect(invoice).toMatchObject({ status: "RECEIVED", lockedAt: null });
-      expect(order).toMatchObject({
-        status: "DRAFT",
-        lockedAt: null,
-        postedAt: null,
+      ).toBe("QA unos sačuvan uz upozorenje mastera");
+      expect(invoice).toMatchObject({
+        status: "POSTED",
+        lockedAt: expect.any(Date),
       });
-      expect(product.stock).toBe(100);
-      expect(Number(product.cogs)).toBe(200);
-      expect(movements).toBe(0);
+      expect(order).toMatchObject({
+        status: "RECEIVED",
+        lockedAt: expect.any(Date),
+        postedAt: expect.any(Date),
+      });
+      expect(product.stock).toBe(150);
+      expect(Number(product.cogs)).toBe(190);
+      expect(product.countryOfOrigin).toBe("CN");
+      expect(movements).toBe(1);
 
       await db.productCategory.create({ data: { productId, categoryId } });
-      await page.reload({ waitUntil: "domcontentloaded" });
     });
 
     await test.step("Proknjiži completes invoice, order and warehouse receipt idempotently", async () => {
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Proknjiži", exact: true }).click();
-      await expect(
-        page.getByText(/prijemnica i porudžbenica su proknjižene.*roba je primljena/i),
-      ).toBeVisible();
       const [locked, item, product, order] = await Promise.all([
         db.inboundInvoice.findUniqueOrThrow({ where: { id: invoiceId } }),
         db.purchaseOrderItem.findFirstOrThrow({

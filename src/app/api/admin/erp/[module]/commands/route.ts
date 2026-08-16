@@ -4,6 +4,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logAudit, requireAdminAction } from "@/lib/admin";
+import type {
+  GoodsReceiptCountryOriginFallback,
+  GoodsReceiptMasterWarning,
+} from "@/lib/admin/goods-receipt-readiness";
 import {
   createPurchaseOrder,
   postPurchaseOrder,
@@ -55,7 +59,16 @@ import {
   sendDispatchNoteToSef,
 } from "@/lib/admin/dispatch-note.server";
 
-type CommandResult = { message: string; createdId?: string; redirect?: string };
+type CommandResult = {
+  message: string;
+  createdId?: string;
+  redirect?: string;
+  masterWarnings?: GoodsReceiptMasterWarning[];
+  countryOriginFallbacks?: Omit<
+    GoodsReceiptCountryOriginFallback,
+    "previousCountryOfOrigin"
+  >[];
+};
 
 export async function POST(
   req: Request,
@@ -91,7 +104,13 @@ export async function POST(
       action: `erp.command.${action}`,
       entity: `erp:${module}`,
       entityId: result.createdId ?? (ids.join(",") || null),
-      diff: { action, ids, input },
+      diff: {
+        action,
+        ids,
+        input,
+        masterWarnings: result.masterWarnings ?? [],
+        countryOriginFallbacks: result.countryOriginFallbacks ?? [],
+      },
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
@@ -721,15 +740,23 @@ async function receivePurchaseOrders(ids: string[], actorId: string): Promise<Co
   let received = 0;
   let postedLines = 0;
   let warehouseName: string | null = null;
+  const masterWarnings: GoodsReceiptMasterWarning[] = [];
+  const countryOriginFallbacks: NonNullable<
+    CommandResult["countryOriginFallbacks"]
+  > = [];
   for (const id of ids) {
     const result = await receivePurchaseOrder(id, actorId);
     if (result.received) received += 1;
     postedLines += result.postedLines;
     warehouseName = result.warehouseName;
+    masterWarnings.push(...result.masterWarnings);
+    countryOriginFallbacks.push(...result.countryOriginFallbacks);
   }
   const warn = warehouseName ? "" : " Napomena: nije pronađen magacin, lager nije ažuriran.";
   return {
     message: `Primljeno porudžbenica: ${received}. Ažurirano lager stavki: ${postedLines}.${warn}`,
+    masterWarnings,
+    countryOriginFallbacks,
   };
 }
 
@@ -739,12 +766,20 @@ async function postInboundInvoices(
 ): Promise<CommandResult> {
   requireIds(ids);
   let postedLines = 0;
+  const masterWarnings: GoodsReceiptMasterWarning[] = [];
+  const countryOriginFallbacks: NonNullable<
+    CommandResult["countryOriginFallbacks"]
+  > = [];
   for (const id of ids) {
     const result = await postInboundInvoice(id, actorId);
     postedLines += result.postedLines;
+    masterWarnings.push(...result.masterWarnings);
+    countryOriginFallbacks.push(...result.countryOriginFallbacks);
   }
   return {
-    message: `Proknjiženo faktura: ${ids.length}. Primljeno lager stavki: ${postedLines}.`,
+    message: `Proknjiženo prijemnica: ${ids.length}. Primljeno lager stavki: ${postedLines}.`,
+    masterWarnings,
+    countryOriginFallbacks,
   };
 }
 

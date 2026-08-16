@@ -30,6 +30,7 @@ import {
   calculateCogsBySku,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
+import { goodsReceiptMasterWarnings } from "@/lib/admin/goods-receipt-readiness";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { purchaseOrderCapacityWarnings } from "@/lib/admin/purchase-order";
 import {
@@ -152,7 +153,11 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
           return {
             ok: true as const,
             entityId: data.invoiceId,
-            message: `Faktura i porudžbenica su proknjižene, a roba je primljena u magacin ${result.warehouseName}.`,
+            diff: {
+              masterWarnings: result.masterWarnings,
+              countryOriginFallbacks: result.countryOriginFallbacks,
+            },
+            message: `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result.warehouseName}.`,
           };
         } catch (error) {
           const message =
@@ -194,6 +199,12 @@ async function postAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
+        diff: backfillOnly
+          ? undefined
+          : {
+              masterWarnings: result?.masterWarnings ?? [],
+              countryOriginFallbacks: result?.countryOriginFallbacks ?? [],
+            },
         message: backfillOnly
           ? "COGS ranije proknjižene prijemnice je usklađen."
           : `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result?.warehouseName ?? ""}.`,
@@ -249,7 +260,43 @@ export default async function InboundInvoicePage({
               orderBy: { createdAt: "asc" },
               include: {
                 product: {
-                  select: { id: true, stock: true, cogs: true },
+                  select: {
+                    id: true,
+                    sku: true,
+                    name: true,
+                    description: true,
+                    stock: true,
+                    cogs: true,
+                    supplierId: true,
+                    supplier: { select: { country: true } },
+                    countryOfOrigin: true,
+                    hsCode: true,
+                    widthCm: true,
+                    depthCm: true,
+                    heightCm: true,
+                    grossWeightKg: true,
+                    packQty: true,
+                    packWidthCm: true,
+                    packDepthCm: true,
+                    packHeightCm: true,
+                    packGrossWeightKg: true,
+                    containerQty: true,
+                    containerGrossWeightKg: true,
+                    categories: { select: { categoryId: true } },
+                    priceListEntries: {
+                      where: {
+                        price: { gt: 0 },
+                        validFrom: { lte: new Date() },
+                        OR: [
+                          { validTo: null },
+                          { validTo: { gte: new Date() } },
+                        ],
+                        priceList: { kind: "RETAIL", active: true },
+                      },
+                      take: 1,
+                      select: { id: true },
+                    },
+                  },
                 },
               },
             },
@@ -347,6 +394,12 @@ export default async function InboundInvoicePage({
             : Number(invoice.purchaseOrder.transportDefinition.payloadKg),
       })
     : [];
+  const masterWarnings = invoice.purchaseOrder
+    ? goodsReceiptMasterWarnings(invoice.purchaseOrder.items)
+    : [];
+  const masterWarningConfirmation = masterWarnings.length
+    ? `Master artikala nije kompletan za ${masterWarnings.length} ${masterWarnings.length === 1 ? "stavku" : "stavki"}. Prijem će ipak biti proknjižen, a podatke treba dopuniti naknadno. Da li želite da nastavite? `
+    : "";
   const purchaseOrderOptions: InboundInvoicePurchaseOrderOption[] = purchaseOrders.map(
     (order) => {
       const defaults = calculatePurchaseOrderInvoiceDefaults({
@@ -473,8 +526,8 @@ export default async function InboundInvoicePage({
                   cogsNeedsBackfill
                     ? "Uskladiti COGS ove ranije proknjižene prijemnice?"
                     : receiptNeedsCompletion
-                      ? "Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
-                    : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti prijemnicu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
+                      ? `${masterWarningConfirmation}Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?`
+                    : `${masterWarningConfirmation}${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti prijemnicu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
                 }
                 pendingLabel={
                   cogsNeedsBackfill
@@ -505,10 +558,10 @@ export default async function InboundInvoicePage({
                   }
                   confirm={
                     cogsNeedsBackfill
-                      ? "Uskladiti COGS ove ranije proknjižene fakture?"
+                      ? "Uskladiti COGS ove ranije proknjižene prijemnice?"
                       : receiptNeedsCompletion
-                        ? "Knjiženje fakture i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?"
-                        : `${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti ulaznu fakturu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
+                        ? `${masterWarningConfirmation}Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?`
+                        : `${masterWarningConfirmation}${capacityWarnings.length ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da nastavite? ` : ""}Proknjižiti prijemnicu i povezanu porudžbenicu i odmah primiti robu u izabrani magacin? Posle ovoga redovno uređivanje nije moguće.`
                   }
                   pendingLabel={
                     cogsNeedsBackfill
@@ -542,6 +595,40 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        {masterWarnings.length && (!locked || receiptNeedsCompletion) ? (
+          <div
+            role="status"
+            className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"
+          >
+            <p className="font-semibold">
+              Upozorenje — master artikala nije kompletan:
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {masterWarnings.map((warning) => (
+                <li key={`${warning.sku}-${warning.issues.join("-")}`}>
+                  {warning.productId ? (
+                    <Link
+                      href={`/admin/erp/artikli/${warning.productId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      {warning.sku}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">{warning.sku}</span>
+                  )}
+                  : {warning.issues.join(", ")}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Zemlja dobavljača se koristi kao fallback kada zemlja porekla starog
+              artikla nije upisana. Ostale podatke dopunite preko linkova; knjiženje
+              nije blokirano i traži dodatnu potvrdu.
+            </p>
+          </div>
+        ) : null}
         {capacityWarnings.length && !locked ? (
           <div
             role="status"
@@ -574,7 +661,8 @@ export default async function InboundInvoicePage({
               {receiptWarehouse
                 ? ` Prijem će biti završen u magacin ${receiptWarehouse.name} (${receiptWarehouse.code}).`
                 : " Magacin prijema nije izabran."}{" "}
-              Izaberite „Dovrši prijem” posle dopune obaveznih podataka artikla.
+              Izaberite „Dovrši prijem”; nepotpuni master podaci biće zabeleženi
+              kao upozorenje.
             </p>
           ) : cogsNeedsBackfill ? (
             <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">

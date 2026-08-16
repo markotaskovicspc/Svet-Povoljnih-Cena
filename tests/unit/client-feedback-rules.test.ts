@@ -5,7 +5,11 @@ import {
   packageVolumetricDimension,
 } from "@/lib/delivery-tariff";
 import { formatProductCardDimensions } from "@/lib/product-dimensions";
-import { goodsReceiptMasterIssues } from "@/lib/admin/goods-receipt-readiness";
+import {
+  goodsReceiptCountryOriginFallbacks,
+  goodsReceiptMasterIssues,
+  goodsReceiptMasterWarnings,
+} from "@/lib/admin/goods-receipt-readiness";
 import { lowestPublicPriceLast30Days } from "@/lib/pricing/retail-price";
 
 describe("confirmed client rules", () => {
@@ -96,8 +100,9 @@ describe("confirmed client rules", () => {
     expect(reference).toBe(9_000);
   });
 
-  it("lists operational master fields that block a goods receipt", () => {
+  it("lists operational master fields that require follow-up after receipt", () => {
     const issues = goodsReceiptMasterIssues({
+      id: "product-1",
       sku: "100001",
       name: "Artikal",
       description: "Opis",
@@ -128,6 +133,7 @@ describe("confirmed client rules", () => {
 
   it("prihvata količinu za ceo kontejner kao alternativu transportnom pakovanju", () => {
     const issues = goodsReceiptMasterIssues({
+      id: "product-1",
       sku: "100001",
       name: "Artikal",
       description: "Opis",
@@ -150,5 +156,52 @@ describe("confirmed client rules", () => {
     });
     expect(issues).not.toContain("količina kontejnera ili transportne dimenzije paketa");
     expect(issues).not.toContain("bruto težina paketa");
+  });
+
+  it("uses the supplier country for legacy articles without a stored origin", () => {
+    const lines = [
+      {
+        qty: 10,
+        sku: "100001",
+        product: {
+          id: "product-1",
+          sku: "100001",
+          name: "Artikal",
+          description: "Opis",
+          supplierId: "supplier-1",
+          supplier: { country: "CN" },
+          countryOfOrigin: null,
+          hsCode: null,
+          widthCm: 10,
+          depthCm: 20,
+          heightCm: 30,
+          grossWeightKg: 2,
+          packQty: 1,
+          packWidthCm: 10,
+          packDepthCm: 20,
+          packHeightCm: 30,
+          packGrossWeightKg: 2,
+          containerQty: null,
+          containerGrossWeightKg: null,
+          categories: [{}],
+          priceListEntries: [{}],
+        },
+      },
+    ];
+    const [warning] = goodsReceiptMasterWarnings(lines);
+
+    expect(warning).toEqual({
+      productId: "product-1",
+      sku: "100001",
+      issues: ["tarifni broj"],
+    });
+    expect(goodsReceiptCountryOriginFallbacks(lines)).toEqual([
+      {
+        productId: "product-1",
+        sku: "100001",
+        country: "CN",
+        previousCountryOfOrigin: null,
+      },
+    ]);
   });
 });
