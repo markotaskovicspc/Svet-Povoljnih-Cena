@@ -34,6 +34,7 @@ test.beforeAll(async () => {
         .digest("base64url"),
       publicAccessTokenCreatedAt: new Date(),
       guestEmail: "delivered@resend.dev",
+      status: "ISPORUCENO",
       subtotal: 100,
       shipping: 990,
       total: 1_090,
@@ -207,4 +208,7 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("heading", { name: "Hvala vam na porudžbini!" }).first(),
   ).toBeVisible();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Isporučeno" }),
+  ).toHaveAttribute("aria-current", "step");
 });

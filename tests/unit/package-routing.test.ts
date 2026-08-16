@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { routePackages, routeService } from "@/lib/courier/routing";
+import {
+  packageCourierForProvider,
+  routePackages,
+  routeService,
+  singleProviderForOrder,
+} from "@/lib/courier/routing";
 
 describe("package routing", () => {
   it("routes a normal package to the small-parcel courier", () => {
@@ -66,5 +71,34 @@ describe("package routing", () => {
       ["X_EXPRESS", "1/2"],
       ["X_EXPRESS", "2/2"],
     ]);
+  });
+
+  it("maps provider batches to the documented package class", () => {
+    expect(packageCourierForProvider("X_EXPRESS")).toBe("X_EXPRESS");
+    expect(packageCourierForProvider("MYGLS")).toBe("GLS");
+  });
+
+  it("refuses to collapse a mixed order to one provider", () => {
+    expect(
+      singleProviderForOrder({
+        shippingMethod: "KURIR",
+        items: [
+          { withAssembly: false, packWidthCm: 40 },
+          { withAssembly: false, packWidthCm: 80 },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      singleProviderForOrder({
+        shippingMethod: "KURIR",
+        items: [{ withAssembly: false, packWidthCm: 40 }],
+      }),
+    ).toBe("X_EXPRESS");
+    expect(
+      singleProviderForOrder({
+        shippingMethod: "KURIR",
+        items: [{ withAssembly: false, packWidthCm: 80 }],
+      }),
+    ).toBe("MYGLS");
   });
 });

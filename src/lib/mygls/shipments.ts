@@ -23,6 +23,8 @@ export async function createMyGlsShipmentForOrder(
     reclamationId?: string;
     pickupDate?: Date;
     packages?: readonly PhysicalPackage[];
+    orderItemIds?: readonly string[];
+    collectCashOnDelivery?: boolean;
   } = {},
 ) {
   const cfg = requireMyGlsEnabled();
@@ -56,6 +58,7 @@ export async function createMyGlsShipmentForOrder(
         where: {
           purpose,
           reclamationId: reclamation?.id ?? null,
+          provider: MYGLS_PROVIDER,
         },
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -66,11 +69,13 @@ export async function createMyGlsShipmentForOrder(
   if (order.shippingMethod !== "KURIR") {
     throw new MyGlsConfigError("MyGLS se koristi samo za kurirsku isporuku.");
   }
-  const shipmentItems = reclamation
+  const requestedItemIds = new Set(options.orderItemIds ?? []);
+  const shipmentItems = (reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : order.items
+  ).filter((item) => requestedItemIds.size === 0 || requestedItemIds.has(item.id));
   if (!shipmentItems.length) {
     throw new MyGlsConfigError("Stavka reklamacije nije pronađena u porudžbini.");
   }
@@ -99,6 +104,7 @@ export async function createMyGlsShipmentForOrder(
     pickupDate: options.pickupDate,
     packages: options.packages ?? [],
     purpose,
+    collectCashOnDelivery: options.collectCashOnDelivery,
   });
 
   try {

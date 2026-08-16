@@ -61,6 +61,11 @@ beforeAll(async () => {
   // Tiny synthetic feeds must not inherit an unrelated seeded feed-volume
   // baseline. The dedicated circuit-breaker scenario below restores 90%.
   process.env.RABALUX_MIN_BASELINE_RATIO = "0.000001";
+  // Every scenario owns a deliberately tiny, partial stock fixture. Missing
+  // share protection is a production-feed invariant, not a cross-test one;
+  // without this override products retained by earlier scenarios make later
+  // one-row fixtures fail for unrelated state leakage.
+  process.env.RABALUX_MAX_MISSING_RATIO = "1";
   await db.analyticsEvent.deleteMany({
     where: { anonymousId: { startsWith: "rabalux-integration-" } },
   });

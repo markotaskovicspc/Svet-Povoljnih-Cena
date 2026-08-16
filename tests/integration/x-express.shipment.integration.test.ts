@@ -65,7 +65,7 @@ beforeAll(async () => {
     X_EXPRESS_API_USER: "integration-user",
     X_EXPRESS_API_KEY: "integration-key",
     X_EXPRESS_CONTRACT_CODE: "U000328",
-    X_EXPRESS_CODE_PREFIX: "AAA",
+    X_EXPRESS_CODE_PREFIX: "TST",
     X_EXPRESS_CODE_RANGE_START: "850300000",
     X_EXPRESS_CODE_RANGE_END: "850599999",
     X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
@@ -208,10 +208,10 @@ describe("X Express shipment persistence", () => {
     expect(shipment.providerShipmentId).toBe(requestGuid);
     expect(shipment.providerRouteCode).toBe("SA-1");
     expect(shipment.packageCount).toBe(2);
-    expect(shipment.trackingNo).toBe("AAA0850300000");
+    expect(shipment.trackingNo).toBe("TST0850300000");
     expect(shipment.providerParcelNumbers).toEqual([
-      "AAA0850300000",
-      "AAA0850300001",
+      "TST0850300000",
+      "TST0850300001",
     ]);
 
     const checkRequest = requests.find(
@@ -229,8 +229,8 @@ describe("X Express shipment persistence", () => {
     expect(addRequest?.headers["x-api-key"]).toBe("integration-key");
     expect(addRequest?.body.Reference).toBe(shipment.id);
     expect(addRequest?.body.Packages).toEqual([
-      { Code: "AAA0850300000", Mass: 3, Content: "Integracioni paket" },
-      { Code: "AAA0850300001", Mass: 3, Content: "Integracioni paket" },
+      { Code: "TST0850300000", Mass: 3, Content: "Integracioni paket" },
+      { Code: "TST0850300001", Mass: 3, Content: "Integracioni paket" },
     ]);
 
     const duplicate = await createXExpressShipmentForOrder(orderId, {

@@ -427,7 +427,16 @@ export function ErpGrid({
             new Set(Array.from(current).filter((id) => loadedIds.has(id))),
         );
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Browser engines do not consistently surface an aborted fetch as a
+        // DOMException. The controller is authoritative and prevents a stale
+        // reload from overwriting the success message of the command that
+        // intentionally triggered it.
+        if (
+          controller.signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
+          return;
+        }
         setCommandMessage({
           ok: false,
           text: error instanceof Error ? error.message : "Redovi nisu učitani.",

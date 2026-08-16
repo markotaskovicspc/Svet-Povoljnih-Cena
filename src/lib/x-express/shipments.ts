@@ -29,6 +29,8 @@ export async function createXExpressShipmentForOrder(
     packageCount?: number;
     purpose?: ShipmentPurpose;
     reclamationId?: string;
+    orderItemIds?: readonly string[];
+    collectCashOnDelivery?: boolean;
   } = {},
 ) {
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
@@ -82,6 +84,7 @@ export async function createXExpressShipmentForOrder(
         where: {
           purpose,
           reclamationId: reclamation?.id ?? null,
+          provider: X_EXPRESS_PROVIDER,
         },
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -92,11 +95,13 @@ export async function createXExpressShipmentForOrder(
   if (order.shippingMethod !== "KURIR") {
     throw new XExpressConfigError("X Express se koristi samo za kurirsku isporuku.");
   }
-  const shipmentItems = reclamation
+  const requestedItemIds = new Set(options.orderItemIds ?? []);
+  const shipmentItems = (reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : order.items
+  ).filter((item) => requestedItemIds.size === 0 || requestedItemIds.has(item.id));
   if (!shipmentItems.length) {
     throw new XExpressConfigError("Stavka reklamacije nije pronađena u porudžbini.");
   }
@@ -184,6 +189,7 @@ export async function createXExpressShipmentForOrder(
       order: { ...order, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
+      collectCashOnDelivery: options.collectCashOnDelivery,
     });
     const providerResult = await client.createOrder(payload);
     const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;

@@ -102,8 +102,9 @@ describe("admin system status", () => {
       X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
       X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
       X_EXPRESS_WEBHOOK_API_KEY: "webhook-secret",
-      X_EXPRESS_CODE_RANGE_START: "850300000",
-      X_EXPRESS_CODE_RANGE_END: "850599999",
+      X_EXPRESS_CODE_PREFIX: "PRV",
+      X_EXPRESS_CODE_RANGE_START: "100000001",
+      X_EXPRESS_CODE_RANGE_END: "100000999",
       X_EXPRESS_PICKUP_NAME: "DC",
       X_EXPRESS_PICKUP_TOWN_ID: "746606",
       X_EXPRESS_PICKUP_STREET_NAME: "Severna transferzala",
@@ -125,6 +126,34 @@ describe("admin system status", () => {
     }).find((item) => item.id === "x-express");
     expect(production?.ready).toBe(false);
     expect(production?.missing).toContain("X_EXPRESS_PRODUCTION_ACCEPTED");
+  });
+
+  it("rejects the historical X Express sample allocation as launch-ready", () => {
+    const xExpress = getIntegrationReadiness({
+      X_EXPRESS_ENABLED: "true",
+      X_EXPRESS_ENV: "test",
+      X_EXPRESS_BASE_URL: "https://portal.pm.xexpress.rs",
+      X_EXPRESS_API_USER: "user",
+      X_EXPRESS_API_KEY: "secret",
+      X_EXPRESS_CONTRACT_CODE: "U000328",
+      X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
+      X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
+      X_EXPRESS_WEBHOOK_API_KEY: "webhook-secret",
+      X_EXPRESS_CODE_PREFIX: "AAA",
+      X_EXPRESS_CODE_RANGE_START: "850300000",
+      X_EXPRESS_CODE_RANGE_END: "850599999",
+      X_EXPRESS_PICKUP_NAME: "DC",
+      X_EXPRESS_PICKUP_TOWN_ID: "746606",
+      X_EXPRESS_PICKUP_STREET_NAME: "Severna transferzala",
+      X_EXPRESS_PICKUP_STREET_NUMBER: "bb",
+      X_EXPRESS_PICKUP_LATITUDE: "44.77",
+      X_EXPRESS_PICKUP_LONGITUDE: "19.68",
+      X_EXPRESS_PICKUP_CONTACT_NAME: "DC",
+      X_EXPRESS_PICKUP_CONTACT_PHONE: "381641234567",
+    }).find((item) => item.id === "x-express");
+
+    expect(xExpress?.ready).toBe(false);
+    expect(xExpress?.missing).toContain("X_EXPRESS_CODE_PREFIX");
   });
 
   it("requires the complete certificate trio for badi VPFR readiness", () => {

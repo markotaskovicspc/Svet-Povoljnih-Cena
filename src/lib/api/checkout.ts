@@ -44,7 +44,10 @@ import {
   getActivePricingRules,
   pricingRuleInputsForProduct,
 } from "@/lib/pricing/rules";
-import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
+import {
+  isProductAvailableOnWeb,
+  isWebAutoAvailabilityEnforced,
+} from "@/lib/web-storefront-availability";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -542,11 +545,27 @@ export async function createOrder(
   // Pre-validate against fresh stock + activity.
   for (const line of input.lines) {
     const p = bySku.get(line.sku);
-    if (
-      !p ||
-      !isProductAvailableOnWeb(p)
-    ) {
+    if (!p) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
+    }
+    if (!isProductAvailableOnWeb(p)) {
+      const rabaluxKillSwitchBlockedSupplierStock =
+        p.supplier?.integrationKey === "RABALUX" &&
+        p.articleStatus !== "ARH" &&
+        p.isActive &&
+        p.availableWebManual &&
+        (!isWebAutoAvailabilityEnforced() || p.availableWebAuto) &&
+        p.dcAvailableQty < line.qty &&
+        !isRabaluxSupplierOperational(p.supplier);
+      return {
+        ok: false,
+        error: {
+          code: rabaluxKillSwitchBlockedSupplierStock
+            ? "OUT_OF_STOCK"
+            : "INACTIVE",
+          sku: line.sku,
+        },
+      };
     }
     const rabaluxAvailability = resolveRabaluxAvailability({
       warehouseStock: p.dcAvailableQty,

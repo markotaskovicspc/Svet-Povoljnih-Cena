@@ -104,6 +104,8 @@ type BadiReceiptResponse = {
   [key: string]: unknown;
 };
 
+type BadiReceiptPayload = BadiReceiptResponse | BadiReceiptResponse[];
+
 type BadiError = {
   ok: false;
   status: number;
@@ -219,7 +221,7 @@ export async function fiscalizeWithBadi(
         ...(badi.clientId ? { clientId: badi.clientId } : {}),
       };
 
-  let result: BadiResult<BadiReceiptResponse>;
+  let result: BadiResult<BadiReceiptPayload>;
   if (transactionType === "REFUND") {
     if (!input.originalReceiptNumber) {
       return {
@@ -237,7 +239,7 @@ export async function fiscalizeWithBadi(
     }
     // Register products first so refund items can carry the NUMERIC sku too.
     const providerSkus = await ensureBadiProducts(input.lines);
-    result = await badiRequest<BadiReceiptResponse>(
+    result = await badiRequest<BadiReceiptResponse[]>(
       `/fiscalization/receipts/${encodeURIComponent(input.originalReceiptNumber)}/refund`,
       {
         method: "POST",
@@ -292,8 +294,16 @@ export async function fiscalizeWithBadi(
     return { ok: false, provider: "badi", error: result.error };
   }
 
-  const receipt = result.data;
-  if (!receipt.invoiceNumber) {
+  const receipts = Array.isArray(result.data) ? result.data : [result.data];
+  if (receipts.length > 1) {
+    return {
+      ok: false,
+      provider: "badi",
+      error: "fiscal:badi odgovor sadrži više fiskalnih računa; potrebna je ručna provera.",
+    };
+  }
+  const receipt = receipts[0];
+  if (!receipt?.invoiceNumber) {
     return {
       ok: false,
       provider: "badi",

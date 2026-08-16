@@ -4,6 +4,13 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const X_EXPRESS_PROVIDER = "X_EXPRESS";
 
+// These values originated as repository examples in June 2026; X Express
+// never assigned them to this API user. Treating them as real made readiness
+// look green while order/add correctly rejected every package code.
+const SAMPLE_CODE_PREFIX = "AAA";
+const SAMPLE_CODE_RANGE_START = 850300000;
+const SAMPLE_CODE_RANGE_END = 850599999;
+
 export class XExpressConfigError extends Error {}
 export class XExpressProviderError extends Error {
   constructor(
@@ -59,6 +66,18 @@ export interface XExpressConfig {
   };
 }
 
+export function isKnownPlaceholderXExpressCodeAllocation(
+  prefix: string,
+  rangeStart: number | null,
+  rangeEnd: number | null,
+) {
+  return (
+    prefix === SAMPLE_CODE_PREFIX &&
+    rangeStart === SAMPLE_CODE_RANGE_START &&
+    rangeEnd === SAMPLE_CODE_RANGE_END
+  );
+}
+
 function trim(value: string | undefined) {
   const normalized = value?.trim() ?? "";
   return normalized && !normalized.startsWith("GET_FROM_") ? normalized : "";
@@ -100,7 +119,7 @@ export function getXExpressConfig(): XExpressConfig {
       trim(process.env.X_EXPRESS_WEBHOOK_API_KEY) ||
       trim(process.env.X_EXPRESS_WEBHOOK_SECRET),
     contractCode: trim(process.env.X_EXPRESS_CONTRACT_CODE),
-    codePrefix: trim(process.env.X_EXPRESS_CODE_PREFIX) || "AAA",
+    codePrefix: trim(process.env.X_EXPRESS_CODE_PREFIX),
     codeRangeStart: int(process.env.X_EXPRESS_CODE_RANGE_START),
     codeRangeEnd: int(process.env.X_EXPRESS_CODE_RANGE_END),
     statusCronSecret: trim(process.env.X_EXPRESS_STATUS_CRON_SECRET),
@@ -169,6 +188,17 @@ export function requireXExpressShipmentConfig(cashOnDelivery = false) {
     cfg.codeRangeStart > cfg.codeRangeEnd
   ) {
     throw new XExpressConfigError("X Express opseg kodova nije ispravno podešen.");
+  }
+  if (
+    isKnownPlaceholderXExpressCodeAllocation(
+      cfg.codePrefix,
+      cfg.codeRangeStart,
+      cfg.codeRangeEnd,
+    )
+  ) {
+    throw new XExpressConfigError(
+      "X Express code prefix/opseg su primeri iz repozitorijuma, a nisu dodeljeni ovom API korisniku. Unesite provider-dodeljeni prefix i range.",
+    );
   }
   if (!/^U\d{6}$/.test(cfg.contractCode)) {
     throw new XExpressConfigError("X Express contract code mora biti u formatu U + 6 cifara.");

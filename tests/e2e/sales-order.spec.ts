@@ -759,6 +759,54 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       expect(movements.some((movement) => movement.qty < 0)).toBe(true);
       expect(movements.some((movement) => movement.qty > 0)).toBe(true);
     });
+
+    await test.step("INO nalog postaje magacinska stavka za uvoz u otpremnicu", async () => {
+      const created = await page.request.post("/api/admin/erp/sales-orders", {
+        data: {
+          channel: "INO",
+          customerId,
+          priceListId,
+          status: "KREIRANO",
+          paid: false,
+          sefAccepted: false,
+          lines: [
+            {
+              sku: fixture.dcSku,
+              qty: 1,
+              unitPrice: 1_200,
+              allocation: dcWarehouseId,
+            },
+          ],
+        },
+      });
+      expect(created.status()).toBe(201);
+      const createdPayload = (await created.json()) as {
+        order: { id: string; number: string };
+      };
+      expect(createdPayload.order.number).toMatch(/^INO-\d{4}-\d{5}$/);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const imported = await page.request.get(
+        `/api/admin/erp/dispatch-notes/orders?receiverCustomerId=${encodeURIComponent(customerId)}&sourceWarehouseId=${encodeURIComponent(dcWarehouseId)}&from=${today}&to=${today}&priceListId=${encodeURIComponent(priceListId)}`,
+      );
+      expect(imported.status()).toBe(200);
+      expect(await imported.json()).toMatchObject({
+        ok: true,
+        lines: [
+          {
+            sourceOrderNumber: createdPayload.order.number,
+            sku: fixture.dcSku,
+            qty: 1,
+            maxQty: 1,
+          },
+        ],
+      });
+
+      const deleted = await page.request.delete(
+        `/api/admin/erp/sales-orders/${createdPayload.order.id}`,
+      );
+      expect(deleted.status()).toBe(200);
+    });
   });
 
   async function login(page: Page) {

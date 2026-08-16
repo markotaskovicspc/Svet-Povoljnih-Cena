@@ -79,7 +79,7 @@ export async function POST(
     await enqueueBackgroundJob({
       kind: "ORDER_STATUS_EMAIL",
       payload: { orderId: result.orderId, status: result.orderStatus },
-      idempotencyKey: `order-status-email:${result.orderId}:${result.status}`,
+      idempotencyKey: `order-status-email:${result.orderId}:${result.shipmentId}:${result.status}`,
     });
   }
 

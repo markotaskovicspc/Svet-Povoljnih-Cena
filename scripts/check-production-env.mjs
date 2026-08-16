@@ -156,11 +156,23 @@ if (enabled("X_EXPRESS_ENABLED") || enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
   requireNames("X Express", [
     "X_EXPRESS_BASE_URL", "X_EXPRESS_API_USER", "X_EXPRESS_API_KEY",
     "X_EXPRESS_CONTRACT_CODE", "X_EXPRESS_CHECK_ADDRESS_PATH", "X_EXPRESS_CREATE_ORDER_PATH",
-    "X_EXPRESS_WEBHOOK_API_KEY", "X_EXPRESS_CODE_RANGE_START", "X_EXPRESS_CODE_RANGE_END",
+    "X_EXPRESS_WEBHOOK_API_KEY", "X_EXPRESS_CODE_PREFIX", "X_EXPRESS_CODE_RANGE_START", "X_EXPRESS_CODE_RANGE_END",
     "X_EXPRESS_PICKUP_NAME", "X_EXPRESS_PICKUP_TOWN_ID", "X_EXPRESS_PICKUP_STREET_NAME",
     "X_EXPRESS_PICKUP_STREET_NUMBER", "X_EXPRESS_PICKUP_LATITUDE", "X_EXPRESS_PICKUP_LONGITUDE",
     "X_EXPRESS_PICKUP_CONTACT_NAME", "X_EXPRESS_PICKUP_CONTACT_PHONE",
   ]);
+  const xExpressCodePrefix = value("X_EXPRESS_CODE_PREFIX");
+  const xExpressRangeStart = Number(value("X_EXPRESS_CODE_RANGE_START"));
+  const xExpressRangeEnd = Number(value("X_EXPRESS_CODE_RANGE_END"));
+  if (
+    xExpressCodePrefix === "AAA" &&
+    xExpressRangeStart === 850300000 &&
+    xExpressRangeEnd === 850599999
+  ) {
+    errors.push(
+      "X Express code allocation still uses repository sample values; enter the prefix/range assigned to this API user",
+    );
+  }
   if (xExpressEnv === "production" && !enabled("X_EXPRESS_PRODUCTION_ACCEPTED")) {
     errors.push("X Express production is enabled without X_EXPRESS_PRODUCTION_ACCEPTED");
   } else if (xExpressEnv === "test") {
@@ -179,8 +191,24 @@ if ((value("FISCAL_PROVIDER") ?? "").toLowerCase() === "badi") {
     "FISCAL_TIN",
     "FISCAL_LOCATION_ID",
   ]);
-  if (badiEnv === "production" && !enabled("BADI_PRODUCTION_ACCEPTED")) {
+  const badiInvoiceType = (value("BADI_INVOICE_TYPE") ?? "normal").toLowerCase();
+  if (!["normal", "training"].includes(badiInvoiceType)) {
+    errors.push("BADI_INVOICE_TYPE must be normal or training");
+  }
+  if (
+    badiEnv === "production" &&
+    !enabled("BADI_PRODUCTION_ACCEPTED") &&
+    badiInvoiceType !== "training"
+  ) {
     errors.push("BADI production is selected without BADI_PRODUCTION_ACCEPTED");
+  } else if (
+    badiEnv === "production" &&
+    !enabled("BADI_PRODUCTION_ACCEPTED") &&
+    badiInvoiceType === "training"
+  ) {
+    warnings.push(
+      "BADI uses the production processor in training mode; real fiscal receipts remain locked",
+    );
   } else if (badiEnv === "sandbox") {
     warnings.push("BADI is using sandbox; no production fiscal document is created");
   }

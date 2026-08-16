@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import {
   Copy,
   Mail,
   PackageCheck,
+  RefreshCw,
   Truck,
   Receipt,
 } from "lucide-react";
@@ -20,6 +21,11 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
 import { PurchaseAnalytics } from "@/components/analytics/first-party-analytics";
+import {
+  isTerminalOrderException,
+  ORDER_STATUS_LABELS,
+  orderStatusTimeline,
+} from "@/lib/order-status-timeline";
 
 /**
  * `/checkout/potvrda` view. Reads the placed order from the checkout store
@@ -40,7 +46,10 @@ export function ConfirmationView({
   const router = useRouter();
   const storedOrder = useCheckout((s) => s.lastOrder);
   const resetProgress = useCheckout((s) => s.resetProgress);
-  const order = storedOrder ?? initialOrder ?? null;
+  // The server read is authoritative whenever a signed order URL is available.
+  // The in-memory snapshot only bridges the first client navigation if that read
+  // is not yet present.
+  const order = initialOrder ?? storedOrder ?? null;
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -65,7 +74,7 @@ export function ConfirmationView({
         <div className="flex flex-col gap-6">
           <PaymentBlock order={order} accessToken={accessToken} />
           <IpsPaymentReceipt order={order} paymentStatus={paymentStatus} />
-          <StatusTimeline />
+          <StatusTimeline order={order} />
           <NotesBlock order={order} />
         </div>
         <OrderRecap order={order} />
@@ -465,25 +474,69 @@ function Uplatnica({ order }: { order: Order }) {
   );
 }
 
-function StatusTimeline() {
-  const steps = [
-    { id: "created", label: "Kreirano", icon: Receipt, done: true },
-    { id: "prep", label: "Priprema", icon: PackageCheck, done: false },
-    { id: "ship", label: "U isporuci", icon: Truck, done: false },
-    { id: "delivered", label: "Isporučeno", icon: CheckCircle2, done: false },
-  ];
+const STATUS_ICONS = {
+  kreirano: Receipt,
+  potvrdjeno: ClipboardCheck,
+  u_pripremi: PackageCheck,
+  spremno_za_isporuku: PackageCheck,
+  u_isporuci: Truck,
+  isporuceno: CheckCircle2,
+} as const;
+
+function StatusTimeline({ order }: { order: Order }) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
+  const steps = orderStatusTimeline(order.status);
+  const exception = isTerminalOrderException(order.status);
+
   return (
     <section className="bg-surface ring-border/60 rounded-2xl p-5 ring-1">
-      <h2 className="font-display text-lg text-ink-900">Šta dalje</h2>
-      <ol className="mt-4 grid gap-3 sm:grid-cols-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg text-ink-900">Praćenje porudžbine</h2>
+          <p className="mt-1 text-sm text-ink-600">
+            Trenutni status: <strong>{ORDER_STATUS_LABELS[order.status]}</strong>
+          </p>
+          <p className="mt-1 text-xs text-ink-500">
+            Poslednja promena: {formatDateTime(order.updatedAt)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => startRefresh(() => router.refresh())}
+          disabled={refreshing}
+          className="border-border text-ink-700 hover:bg-muted-bg inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium transition disabled:opacity-60"
+        >
+          <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} aria-hidden />
+          {refreshing ? "Osvežavam…" : "Osveži status"}
+        </button>
+      </div>
+      {exception ? (
+        <div
+          role="status"
+          className={cn(
+            "mt-4 rounded-xl border px-4 py-3 text-sm",
+            order.status === "otkazano"
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "border-warning/30 bg-warning/10 text-ink-800",
+          )}
+        >
+          {order.status === "otkazano"
+            ? "Ova porudžbina je otkazana. Dalja priprema i isporuka su zaustavljene."
+            : "Ova porudžbina je evidentirana kao vraćena."}
+        </div>
+      ) : null}
+      <ol className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {steps.map((s, i) => {
-          const Icon = s.icon;
+          const Icon = STATUS_ICONS[s.status];
           return (
             <li
-              key={s.id}
+              key={s.status}
+              aria-current={s.current ? "step" : undefined}
               className={cn(
                 "ring-border/60 bg-canvas flex flex-col items-start gap-2 rounded-xl p-3 ring-1",
                 s.done && "ring-walnut/60 bg-walnut/5",
+                s.current && "ring-2 ring-walnut",
               )}
             >
               <span
@@ -497,6 +550,9 @@ function StatusTimeline() {
               </span>
               <p className="text-xs text-ink-500">Korak {i + 1}</p>
               <p className="text-sm font-medium text-ink-900">{s.label}</p>
+              {s.current ? (
+                <p className="text-xs font-medium text-walnut">Trenutno</p>
+              ) : null}
             </li>
           );
         })}

@@ -48,7 +48,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "tsx prisma/seed.ts",
+    seed: "node prisma/seed.mjs",
   },
   datasource: {
     // Use process.env directly so commands like `prisma validate` work

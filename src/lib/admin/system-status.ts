@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { isKnownPlaceholderXExpressCodeAllocation } from "@/lib/x-express/config";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -138,6 +139,8 @@ export function getIntegrationReadiness(
     badiInvoiceTraining;
   const xExpressProduction =
     normalized(env.X_EXPRESS_ENV)?.toLowerCase() === "production";
+  const xExpressRangeStart = Number(normalized(env.X_EXPRESS_CODE_RANGE_START));
+  const xExpressRangeEnd = Number(normalized(env.X_EXPRESS_CODE_RANGE_END));
   const myGlsProduction =
     normalized(env.MYGLS_ENV)?.toLowerCase() === "production";
   const eotpremnicaProduction =
@@ -217,6 +220,16 @@ export function getIntegrationReadiness(
         present("X_EXPRESS_CHECK_ADDRESS_PATH"),
         present("X_EXPRESS_CREATE_ORDER_PATH"),
         present("X_EXPRESS_WEBHOOK_API_KEY"),
+        {
+          name: "X_EXPRESS_CODE_PREFIX",
+          valid: (prefix) =>
+            /^[A-Z]{3}$/.test(prefix) &&
+            !isKnownPlaceholderXExpressCodeAllocation(
+              prefix,
+              Number.isInteger(xExpressRangeStart) ? xExpressRangeStart : null,
+              Number.isInteger(xExpressRangeEnd) ? xExpressRangeEnd : null,
+            ),
+        },
         present("X_EXPRESS_CODE_RANGE_START"),
         present("X_EXPRESS_CODE_RANGE_END"),
         present("X_EXPRESS_PICKUP_NAME"),

@@ -113,7 +113,7 @@ export default async function AccountReclamationsPage() {
                 Nemate porudžbina za reklamaciju
               </p>
               <p className="mt-1 text-sm text-ink-500">
-                Reklamaciju možete podneti tek nakon prve kupovine na sajtu.
+                Reklamaciju možete podneti za artikal iz isporučene porudžbine.
               </p>
             </div>
           )}

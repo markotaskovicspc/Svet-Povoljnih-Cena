@@ -138,4 +138,48 @@ describe("badi VPFR transport", () => {
     });
     if (!result.ok) expect(result.error).not.toContain("provider stack");
   });
+
+  it("accepts the documented array response from the refund endpoint", async () => {
+    process.env.BADI_API_KEY = "api-key";
+    process.env.BADI_API_SECRET = "api-secret";
+    process.env.BADI_BASE_URL = "https://badi.example.test/v2";
+    process.env.BADI_STORE_ID = "store-id";
+    process.env.BADI_CASHIER_ID = "cashier-id";
+    process.env.BADI_FISCAL_MODE = "vpfr";
+    process.env.BADI_VPFR_PFX = fakePfxBase64();
+    process.env.BADI_VPFR_PASSWORD = "certificate-password";
+    process.env.BADI_VPFR_PAC = "ABC123";
+    __resetFiscalConfig();
+
+    global.fetch = vi.fn(async () => new Response(
+      JSON.stringify([
+        {
+          invoiceNumber: "STORE-CASHIER-2",
+          verificationUrl: "https://suf.example.test/refund",
+          sdcDateTime: "2026-08-16T23:20:05.000+02:00",
+          base64pdf: Buffer.from("official refund pdf").toString("base64"),
+        },
+      ]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )) as typeof fetch;
+
+    const result = await fiscalizeWithBadi({
+      invoiceRef: "REFUND-1",
+      transactionType: "REFUND",
+      invoiceType: "REFUND",
+      originalReceiptNumber: "STORE-CASHIER-1",
+      buyerId: "10:123123123",
+      total: 100,
+      paymentMethod: "CASH",
+      lines: [{ sku: "1001", name: "Test", qty: 1, unitPrice: 100 }],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      receipt: {
+        receiptNumber: "STORE-CASHIER-2",
+        qrUrl: "https://suf.example.test/refund",
+      },
+    });
+  });
 });

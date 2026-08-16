@@ -137,7 +137,7 @@ async function updateSmallParcelProvider(
         ok: true as const,
         entityId: "courier.smallParcelProvider",
         diff: { provider: parsed.data },
-        message: `Aktivni kurir je ${parsed.data === "MYGLS" ? "MyGLS" : "X Express"}.`,
+        message: `Podrazumevani kurir za stare tokove je ${parsed.data === "MYGLS" ? "MyGLS" : "X Express"}.`,
       };
     },
   )(formData);
@@ -331,7 +331,7 @@ export default async function DeliveryPage() {
             action={updateSmallParcelProvider}
             className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
           >
-            <Field label="Kurirska služba">
+            <Field label="Fallback za stare naloge">
               <select
                 key={smallProvider}
                 name="provider"
@@ -345,8 +345,9 @@ export default async function DeliveryPage() {
             <SubmitButton pendingLabel="Čuvanje…">Sačuvaj izbor</SubmitButton>
           </AdminActionForm>
           <p className="mt-3 text-xs text-ink-500">
-            Automatska pravila izbora još nisu uključena. Već kreirane aktivne
-            pošiljke ostaju kod prvobitnog kurira da ne bi nastao dupli nalog.
+            Novi nalozi za preuzimanje biraju MyGLS ili X Express i učitavaju
+            samo pakete koji tom kuriru pripadaju po pravilu 60 cm. Ovaj izbor
+            se koristi samo kao fallback za stare zapise bez sačuvanog kurira.
           </p>
         </Card>
 

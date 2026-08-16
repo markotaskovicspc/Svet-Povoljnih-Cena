@@ -15,6 +15,7 @@ import {
   MYGLS_PROVIDER,
   createMyGlsShipmentForOrder,
   syncMyGlsShipmentById,
+  type SmallParcelProvider,
 } from "@/lib/mygls";
 import {
   assertSupplierPickupConfirmed,
@@ -27,8 +28,11 @@ import {
   type CourierAdapter,
   type CourierWebhookEvent,
 } from "./types";
-import { SHIPMENT_STATUS_LABEL } from "./status";
-import { routeService } from "./routing";
+import {
+  orderStatusForDeliveryShipments,
+  SHIPMENT_STATUS_LABEL,
+} from "./status";
+import { singleProviderForOrder } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
 import {
   derivePhysicalPackages,
@@ -38,7 +42,7 @@ import {
 /**
  * Phase 4C — Routing + side-effects.
  *
- *   - `routeService` decides COURIER_SMALL vs COURIER_BULKY for an order.
+ *   - the client-approved 60 cm launch rule decides X Express vs MyGLS per package;
  *   - `getAdapter` returns the registered adapter for a service.
  *   - `createShipmentForOrder` creates a waybill at the provider, persists
  *     the `Shipment` row, and emits the initial `ShipmentEvent`.
@@ -81,6 +85,9 @@ export async function createShipmentForOrder(
     pickupDate?: Date;
     purpose?: ShipmentPurpose;
     reclamationId?: string;
+    provider?: SmallParcelProvider;
+    orderItemIds?: readonly string[];
+    collectCashOnDelivery?: boolean;
   } = {},
 ) {
   const purpose = options.purpose ?? "ORDER_DELIVERY";
@@ -131,7 +138,6 @@ export async function createShipmentForOrder(
       pickupBatchLines: {
         where: { batch: { status: { in: ["DRAFT", "BOOKED"] } } },
         orderBy: { packageNo: "asc" },
-        take: 1,
         select: {
           batch: {
             select: { pickupDate: true, provider: true },
@@ -141,28 +147,23 @@ export async function createShipmentForOrder(
       shipments: {
         where: { purpose, reclamationId: reclamation?.id ?? null },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
 
-  const existing = order.shipments[0];
-  if (existing && existing.status !== "FAILED") return existing;
-  if (purpose === "ORDER_DELIVERY") {
-    await assertSupplierPickupConfirmed(order.id);
-  }
-
-  const shipmentItems = reclamation
+  const requestedItemIds = new Set(options.orderItemIds ?? []);
+  const shipmentItems = (reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : order.items
+  ).filter((item) => requestedItemIds.size === 0 || requestedItemIds.has(item.id));
   if (!shipmentItems.length) {
     throw new CourierConfigError("Stavka reklamacije nije pronađena u porudžbini.");
   }
 
-  const service = routeService({
+  const routeInput = {
     shippingMethod: order.shippingMethod,
     items: shipmentItems.map((item) => ({
       withAssembly: item.withAssembly,
@@ -188,125 +189,66 @@ export async function createShipmentForOrder(
       ),
       packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
     })),
-  });
-  if (service === "COURIER_SMALL") {
-    const selectedProvider = await getSelectedSmallParcelProvider();
-    const packages =
-      options.packages ??
-      derivePhysicalPackages(
-        shipmentItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          qty: item.qty,
-          product: item.product,
-        })),
-      );
-    const derivedPackageCount = shipmentItems.reduce(
-      (sum, item) =>
-        sum +
-        Math.max(
-          1,
-          Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1)),
-        ),
-      0,
-    );
-    return selectedProvider === "MYGLS"
-      ? createMyGlsShipmentForOrder(order.id, {
-          purpose,
-          reclamationId: reclamation?.id,
-          pickupDate:
-            options.pickupDate ??
-            (order.pickupBatchLines[0]?.batch.provider === MYGLS_PROVIDER ||
-            order.pickupBatchLines[0]?.batch.provider == null
-              ? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined
-              : undefined),
-          packages,
-        })
-      : createXExpressShipmentForOrder(order.id, {
-          packageCount: options.packageCount ?? derivedPackageCount,
-          purpose,
-          reclamationId: reclamation?.id,
-        });
-  }
-
-  if (purpose === "RECLAMATION_RETURN") {
+  } as const;
+  const selectedProvider =
+    options.provider ?? singleProviderForOrder(routeInput);
+  if (!selectedProvider) {
     throw new CourierConfigError(
-      "Povrat kabaste robe zahteva ručni kamionski nalog; automatski obrnuti smer nije podržan.",
+      "Porudžbina sadrži i pakete do 60 cm i pakete preko 60 cm. Učitajte je u odvojene X Express i MyGLS naloge za preuzimanje.",
     );
   }
-
-  const adapter = getAdapter(service);
-
-  const cashOnDelivery =
-    purpose === "ORDER_DELIVERY" &&
-    order.paymentMethod === "POUZECE_GOTOVINA" ||
-    (purpose === "ORDER_DELIVERY" && order.paymentMethod === "POUZECE_KARTICA");
-
-  const result = await adapter.createWaybill({
-    orderNumber:
-      purpose === "ORDER_DELIVERY"
-        ? order.number
-        : `${order.number}-ZAMENA-${reclamation?.id.slice(-6)}`,
-    total: purpose === "ORDER_DELIVERY" ? Number(order.total) : 0,
-    cashOnDelivery,
-    recipient: {
-      firstName: order.shipFirstName,
-      lastName: order.shipLastName,
-      phone: order.shipPhone,
-      street: order.shipStreet,
-      city: order.shipCity,
-      postalCode: order.shipPostalCode,
-      country: order.shipCountry,
-      companyName: order.shipCompanyName,
-    },
-    notes: order.notes,
-    packageCount: shipmentItems.reduce(
-      (sum, item) =>
-        sum + Math.max(1, Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1))),
-      0,
-    ),
-  });
-
-  return db.shipment.create({
-    data: {
-      orderId: order.id,
-      service,
-      purpose,
-      reclamationId: reclamation?.id ?? null,
-      reclamationQty: reclamation?.quantity ?? null,
-      warehouseId: reclamation?.warehouseId ?? null,
-      trackingNo: result.trackingNo,
-      labelUrl: result.labelUrl,
-      status: "CREATED",
-      events: {
-        create: {
-          status: "CREATED",
-          message: SHIPMENT_STATUS_LABEL.CREATED,
-        },
-      },
-    },
-  });
-}
-
-/**
- * Map a shipment status to the canonical `OrderStatus` we surface in the
- * customer timeline. Returning `null` means "no order-level transition".
- */
-function orderStatusFor(status: ShipmentStatus): OrderStatus | null {
-  switch (status) {
-    case "PICKED_UP":
-      return "SPREMNO_ZA_ISPORUKU";
-    case "IN_TRANSIT":
-    case "OUT_FOR_DELIVERY":
-      return "U_ISPORUCI";
-    case "DELIVERED":
-      return "ISPORUCENO";
-    case "RETURNED":
-      return "VRACENO";
-    case "FAILED":
-    case "CREATED":
-      return null;
+  const existing = order.shipments.find(
+    (shipment) =>
+      shipment.provider === selectedProvider && shipment.status !== "FAILED",
+  );
+  if (existing) return existing;
+  if (purpose === "ORDER_DELIVERY") {
+    await assertSupplierPickupConfirmed(order.id);
   }
+
+  const packages =
+    options.packages ??
+    derivePhysicalPackages(
+      shipmentItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        qty: item.qty,
+        product: item.product,
+      })),
+    );
+  const collectCashOnDelivery =
+    options.collectCashOnDelivery ??
+    !order.shipments.some(
+      (shipment) =>
+        shipment.provider != null &&
+        shipment.provider !== selectedProvider &&
+        shipment.status !== "FAILED",
+    );
+  const orderItemIds = shipmentItems.map((item) => item.id);
+
+  return selectedProvider === "MYGLS"
+    ? createMyGlsShipmentForOrder(order.id, {
+        purpose,
+        reclamationId: reclamation?.id,
+        pickupDate:
+          options.pickupDate ??
+          order.pickupBatchLines.find(
+            (line) =>
+              line.batch.provider === MYGLS_PROVIDER ||
+              line.batch.provider == null,
+          )?.batch.pickupDate ??
+          undefined,
+        packages,
+        orderItemIds,
+        collectCashOnDelivery,
+      })
+    : createXExpressShipmentForOrder(order.id, {
+        packageCount: options.packageCount ?? packages.length,
+        purpose,
+        reclamationId: reclamation?.id,
+        orderItemIds,
+        collectCashOnDelivery,
+      });
 }
 
 export interface ApplyEventResult {
@@ -340,6 +282,7 @@ export async function applyShipmentEvent(
           id: true,
           guestEmail: true,
           shipPhone: true,
+          status: true,
           user: { select: { email: true, phone: true } },
         },
       },
@@ -348,7 +291,7 @@ export async function applyShipmentEvent(
   if (!shipment) return null;
 
   const occurredAt = event.occurredAt ?? new Date();
-  const newOrderStatus = orderStatusFor(event.status);
+  let newOrderStatus: OrderStatus | null = null;
   const message = event.message ?? SHIPMENT_STATUS_LABEL[event.status];
   const selectedSmallProvider =
     service === "COURIER_SMALL"
@@ -408,6 +351,21 @@ export async function applyShipmentEvent(
           event.status === "DELIVERED" ? occurredAt : shipment.deliveredAt ?? undefined,
       },
     });
+
+    if (shipment.purpose === "ORDER_DELIVERY") {
+      const deliveryShipments = await tx.shipment.findMany({
+        where: {
+          orderId: shipment.orderId,
+          purpose: "ORDER_DELIVERY",
+        },
+        select: { status: true },
+      });
+      newOrderStatus = orderStatusForDeliveryShipments({
+        eventStatus: event.status,
+        currentOrderStatus: shipment.order.status,
+        deliveryShipmentStatuses: deliveryShipments.map((item) => item.status),
+      });
+    }
 
     if (shipment.purpose === "ORDER_DELIVERY" && newOrderStatus) {
       await tx.order.update({

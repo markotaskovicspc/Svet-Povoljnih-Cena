@@ -1,4 +1,4 @@
-import type { ShipmentStatus } from "@prisma/client";
+import type { OrderStatus, ShipmentStatus } from "@prisma/client";
 
 /**
  * Maps a provider status code (X Express-style alphanumeric, plus the bulky
@@ -66,3 +66,53 @@ export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   RETURNED: "Vraćeno",
   FAILED: "Neuspešna isporuka",
 };
+
+const ACTIVE_ORDER_STATUS_RANK: Partial<Record<OrderStatus, number>> = {
+  KREIRANO: 0,
+  POTVRDJENO: 1,
+  U_PRIPREMI: 2,
+  SPREMNO_ZA_ISPORUKU: 3,
+  U_ISPORUCI: 4,
+  ISPORUCENO: 5,
+};
+
+/**
+ * Resolve an order-level status from one shipment event without letting a
+ * split X Express/MyGLS order regress or become delivered too early.
+ */
+export function orderStatusForDeliveryShipments(input: {
+  eventStatus: ShipmentStatus;
+  currentOrderStatus: OrderStatus;
+  deliveryShipmentStatuses: readonly ShipmentStatus[];
+}): OrderStatus | null {
+  const { eventStatus, currentOrderStatus, deliveryShipmentStatuses } = input;
+
+  if (eventStatus === "RETURNED") return "VRACENO";
+  if (eventStatus === "FAILED" || eventStatus === "CREATED") return null;
+  if (currentOrderStatus === "OTKAZANO" || currentOrderStatus === "VRACENO") {
+    return null;
+  }
+
+  let candidate: OrderStatus;
+  if (eventStatus === "PICKED_UP") {
+    candidate = "SPREMNO_ZA_ISPORUKU";
+  } else if (eventStatus === "DELIVERED") {
+    const allDelivered =
+      deliveryShipmentStatuses.length > 0 &&
+      deliveryShipmentStatuses.every((status) => status === "DELIVERED");
+    candidate = allDelivered ? "ISPORUCENO" : "U_ISPORUCI";
+  } else {
+    candidate = "U_ISPORUCI";
+  }
+
+  const currentRank = ACTIVE_ORDER_STATUS_RANK[currentOrderStatus];
+  const candidateRank = ACTIVE_ORDER_STATUS_RANK[candidate];
+  if (
+    currentRank !== undefined &&
+    candidateRank !== undefined &&
+    currentRank >= candidateRank
+  ) {
+    return null;
+  }
+  return candidate;
+}

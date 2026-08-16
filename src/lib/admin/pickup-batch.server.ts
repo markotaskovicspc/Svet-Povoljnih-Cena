@@ -12,6 +12,10 @@ import {
   type PhysicalPackage,
 } from "@/lib/courier/packages";
 import {
+  packageCourierForProvider,
+  routePackages,
+} from "@/lib/courier/routing";
+import {
   getMyGlsConfig,
   MYGLS_PROVIDER,
   requireMyGlsEnabled,
@@ -88,8 +92,10 @@ export async function getPickupPostingAvailability(
   }
 }
 
-export async function createPickupBatch() {
-  const availability = await getPickupPostingAvailability();
+export async function createPickupBatch(
+  providerOverride?: SmallParcelProvider | null,
+) {
+  const availability = await getPickupPostingAvailability(providerOverride);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       return await db.$transaction(async (tx) => {
@@ -203,6 +209,7 @@ export async function loadEligibleOrders(
         id: true,
         status: true,
         number: true,
+        provider: true,
         labelsCreationStartedAt: true,
         labelsCreatedAt: true,
       },
@@ -219,7 +226,7 @@ export async function loadEligibleOrders(
     const candidates = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT orders."id"
       FROM "Order" AS orders
-      WHERE orders."status" = 'KREIRANO'
+      WHERE orders."status" IN ('KREIRANO', 'U_PRIPREMI')
         AND orders."shippingMethod" = 'KURIR'
         AND EXISTS (
           SELECT 1
@@ -235,11 +242,6 @@ export async function loadEligibleOrders(
               mixed_items."warehouseId" IS NULL
               OR mixed_items."warehouseId" <> ${dc.id}
             )
-        )
-        AND NOT EXISTS (
-          SELECT 1
-          FROM "PickupBatchLine" AS pickup_lines
-          WHERE pickup_lines."orderId" = orders."id"
         )
       ORDER BY orders."number" ASC
       FOR UPDATE OF orders SKIP LOCKED
@@ -279,11 +281,61 @@ export async function loadEligibleOrders(
       },
       orderBy: [{ orderId: "asc" }, { sku: "asc" }, { id: "asc" }],
     });
-    const packages = orderIds.flatMap((orderId) =>
-      derivePhysicalPackages(items.filter((item) => item.orderId === orderId)).map(
-        (pkg) => ({ ...pkg, orderId }),
-      ),
+    const provider = normalizeProvider(batch.provider) ??
+      (await getSelectedSmallParcelProvider());
+    const targetCourier = packageCourierForProvider(provider);
+    const existingLines = await tx.pickupBatchLine.findMany({
+      where: { orderId: { in: orderIds } },
+      select: { orderId: true, packageNo: true },
+    });
+    const assignedPackages = new Set(
+      existingLines.map((line) => `${line.orderId}:${line.packageNo}`),
     );
+    const packages = orderIds.flatMap((orderId) => {
+      const orderItems = items.filter((item) => item.orderId === orderId);
+      const physical = derivePhysicalPackages(orderItems);
+      const plan = routePackages({
+        shippingMethod: "KURIR",
+        items: orderItems.map((item) => ({
+          withAssembly: false,
+          qty: item.qty,
+          packQty: item.product?.packQty,
+          packWidthCm: Number(
+            item.product?.packWidthCm ??
+              item.product?.unitPackWidthCm ??
+              item.product?.widthCm ??
+              0,
+          ),
+          packDepthCm: Number(
+            item.product?.packDepthCm ??
+              item.product?.unitPackDepthCm ??
+              item.product?.depthCm ??
+              0,
+          ),
+          packHeightCm: Number(
+            item.product?.packHeightCm ??
+              item.product?.unitPackHeightCm ??
+              item.product?.heightCm ??
+              0,
+          ),
+          packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
+        })),
+      });
+      if (physical.length !== plan.length) {
+        throw new Error(`Plan pakovanja nije usklađen za porudžbinu ${orderId}.`);
+      }
+      return physical
+        .map((pkg, index) => ({ ...pkg, orderId, courier: plan[index]!.courier }))
+        .filter(
+          (pkg) =>
+            pkg.courier === targetCourier &&
+            !assignedPackages.has(`${pkg.orderId}:${pkg.packageNo}`),
+        );
+    });
+    const loadedOrderIds = Array.from(
+      new Set(packages.map((pkg) => pkg.orderId)),
+    );
+    if (!packages.length) return { orderCount: 0, lineCount: 0 };
     await tx.pickupBatchLine.createMany({
       data: packages.map((pkg) => ({
           batchId,
@@ -297,18 +349,18 @@ export async function loadEligibleOrders(
         })),
     });
     await tx.order.updateMany({
-      where: { id: { in: orderIds }, status: "KREIRANO" },
+      where: { id: { in: loadedOrderIds }, status: "KREIRANO" },
       data: { status: "U_PRIPREMI" },
     });
     await tx.orderStatusEvent.createMany({
-      data: orderIds.map((orderId) => ({
+      data: loadedOrderIds.map((orderId) => ({
         orderId,
         status: "U_PRIPREMI" as const,
-        note: `Porudžbina učitana u nalog za preuzimanje ${batch.number}.`,
+        note: `Paketi za ${provider === "MYGLS" ? "MyGLS" : "X Express"} učitani u nalog za preuzimanje ${batch.number}.`,
         actorId,
       })),
     });
-    return { orderCount: orderIds.length, lineCount: packages.length };
+    return { orderCount: loadedOrderIds.length, lineCount: packages.length };
   }, TRANSACTION_OPTIONS);
 }
 
@@ -437,7 +489,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
       where: { id: batchId },
       include: {
         lines: {
-          select: { orderId: true },
+          select: { orderId: true, orderItemId: true },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         },
       },
@@ -457,6 +509,11 @@ async function postPickupBatch(batchId: string, actorId: string) {
     for (const orderId of orderIds) {
       const shipment = await createShipmentForOrder(orderId, {
         packageCount: batch.lines.filter((line) => line.orderId === orderId).length,
+        provider: "X_EXPRESS",
+        orderItemIds: batch.lines
+          .filter((line) => line.orderId === orderId)
+          .map((line) => line.orderItemId)
+          .filter((id): id is string => Boolean(id)),
       });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
@@ -597,6 +654,10 @@ async function createMyGlsLabelsForPickupBatch(
         pickupDate: batch.pickupDate,
         packages,
         packageCount: packages.length,
+        provider: "MYGLS",
+        orderItemIds: packageLines
+          .map((line) => line.orderItemId)
+          .filter((id): id is string => Boolean(id)),
       });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(

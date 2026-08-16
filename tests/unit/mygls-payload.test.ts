@@ -114,6 +114,18 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.DeliveryAddress.City).toBe("Novi Sad");
   });
 
+  it("collects COD on only one courier shipment of a mixed order", () => {
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order,
+      packages,
+      collectCashOnDelivery: false,
+    });
+
+    expect(parcel.CODAmount).toBe(0);
+    expect(parcel.CODReference).toBeUndefined();
+  });
+
   it("maps every physical package to one real ParcelProperty and never invents dimensions", () => {
     const parcel = buildMyGlsParcelForOrder({ cfg: config, order, packages });
 

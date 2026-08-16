@@ -15,6 +15,8 @@ export interface PackageRouteInput {
 
 export type PackageCourier = "GLS" | "X_EXPRESS";
 
+export type RoutedSmallParcelProvider = "MYGLS" | "X_EXPRESS";
+
 export type RoutedPackage = {
   packageIndex: number;
   courier: PackageCourier;
@@ -39,7 +41,7 @@ function expandedPackages(order: PackageRouteInput) {
 }
 
 /**
- * Document routing:
+ * Client-approved launch routing:
  * - packages at or below 60 cm on every side go through X Express;
  * - packages with any side over 60 cm go through GLS;
  * The legacy shipping-method value does not override the package dimensions.
@@ -71,4 +73,28 @@ export function routeService(order: PackageRouteInput): ShipmentService {
   return routePackages(order).some((item) => item.courier === "GLS")
     ? "COURIER_BULKY"
     : "COURIER_SMALL";
+}
+
+export function packageCourierForProvider(
+  provider: RoutedSmallParcelProvider,
+): PackageCourier {
+  return provider === "MYGLS" ? "GLS" : "X_EXPRESS";
+}
+
+/**
+ * Resolve a single provider only when every physical package follows the same
+ * client-approved 60 cm rule. Mixed orders intentionally return null so callers cannot silently
+ * send every package to whichever global provider happened to be selected.
+ */
+export function singleProviderForOrder(
+  order: PackageRouteInput,
+): RoutedSmallParcelProvider | null {
+  const providers = new Set(
+    routePackages(order).map((item) =>
+      item.courier === "GLS" ? "MYGLS" : "X_EXPRESS",
+    ),
+  );
+  return providers.size === 1
+    ? (providers.values().next().value as RoutedSmallParcelProvider)
+    : null;
 }

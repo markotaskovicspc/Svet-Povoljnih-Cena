@@ -246,6 +246,10 @@ export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
           setFormError("Proverite označena polja.");
         } else if (data?.reason === "ORDER_NOT_FOUND") {
           setFormError("Porudžbina nije pronađena.");
+        } else if (data?.reason === "ORDER_NOT_DELIVERED") {
+          setFormError(
+            "Reklamaciju možete podneti tek kada je porudžbina isporučena.",
+          );
         } else if (data?.reason === "ITEM_NOT_FOUND") {
           setFormError("Izabrani artikal nije pronađen u porudžbini.");
         } else if (data?.reason === "QUANTITY_EXCEEDED") {

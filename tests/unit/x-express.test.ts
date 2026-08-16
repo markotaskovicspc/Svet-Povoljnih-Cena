@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { XExpressClient } from "@/lib/x-express/client";
 import {
   getXExpressConfig,
+  isKnownPlaceholderXExpressCodeAllocation,
+  requireXExpressShipmentConfig,
   type XExpressConfig,
 } from "@/lib/x-express/config";
 import { formatXExpressTrackingCode } from "@/lib/x-express/code";
@@ -115,6 +117,44 @@ describe("X Express official API contract", () => {
     expect(getXExpressConfig().apiKey).toBe("");
   });
 
+  it("recognizes the historical unassigned code-range example", () => {
+    expect(
+      isKnownPlaceholderXExpressCodeAllocation("AAA", 850300000, 850599999),
+    ).toBe(true);
+    expect(
+      isKnownPlaceholderXExpressCodeAllocation("PRV", 850300000, 850599999),
+    ).toBe(false);
+  });
+
+  it("blocks shipment creation when env still contains the sample allocation", () => {
+    const env = {
+      X_EXPRESS_ENABLED: "true",
+      X_EXPRESS_ENV: "test",
+      X_EXPRESS_BASE_URL: "https://portal.pm.xexpress.rs",
+      X_EXPRESS_API_USER: "test-user",
+      X_EXPRESS_API_KEY: "test-key",
+      X_EXPRESS_CONTRACT_CODE: "U000328",
+      X_EXPRESS_CODE_PREFIX: "AAA",
+      X_EXPRESS_CODE_RANGE_START: "850300000",
+      X_EXPRESS_CODE_RANGE_END: "850599999",
+      X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
+      X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
+      X_EXPRESS_PICKUP_NAME: "QA DC",
+      X_EXPRESS_PICKUP_TOWN_ID: "746606",
+      X_EXPRESS_PICKUP_STREET_NAME: "Severna transferzala",
+      X_EXPRESS_PICKUP_STREET_NUMBER: "bb",
+      X_EXPRESS_PICKUP_LATITUDE: "44.77",
+      X_EXPRESS_PICKUP_LONGITUDE: "19.68",
+      X_EXPRESS_PICKUP_CONTACT_NAME: "QA DC",
+      X_EXPRESS_PICKUP_CONTACT_PHONE: "381641234567",
+    };
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+
+    expect(() => requireXExpressShipmentConfig()).toThrow(
+      /primeri iz repozitorijuma/,
+    );
+  });
+
   it("builds the exact PascalCase address-check request", () => {
     expect(
       buildXExpressAddressCheckPayload({
@@ -199,6 +239,18 @@ describe("X Express official API contract", () => {
       trackingCodes: ["AAA0850300000"],
       order: { ...order, paymentMethod: "UPLATA_NA_RACUN" },
       townId: 791113,
+    });
+    expect(payload).not.toHaveProperty("Options");
+  });
+
+  it("omits COD when another courier shipment already collects the order", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "758bb513-499d-4ab1-8697-5e747602f222",
+      trackingCodes: ["AAA0850300000"],
+      order,
+      townId: 791113,
+      collectCashOnDelivery: false,
     });
     expect(payload).not.toHaveProperty("Options");
   });

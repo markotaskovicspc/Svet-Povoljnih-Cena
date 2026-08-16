@@ -112,6 +112,7 @@ export function buildXExpressCreateOrderPayload(args: {
   townId: number;
   officialStreetName?: string | null;
   purpose?: ShipmentPurpose;
+  collectCashOnDelivery?: boolean;
 }): XExpressCreateOrderPayload {
   const { cfg, order } = args;
   const purpose = args.purpose ?? "ORDER_DELIVERY";
@@ -121,7 +122,9 @@ export function buildXExpressCreateOrderPayload(args: {
     );
   }
   const cod =
-    purpose === "ORDER_DELIVERY" && isXExpressCashOnDelivery(order.paymentMethod);
+    purpose === "ORDER_DELIVERY" &&
+    args.collectCashOnDelivery !== false &&
+    isXExpressCashOnDelivery(order.paymentMethod);
   const codAccount = cod ? normalizeXExpressAccount(cfg.cod.account) : undefined;
   const recipientName = providerName(
     order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`,

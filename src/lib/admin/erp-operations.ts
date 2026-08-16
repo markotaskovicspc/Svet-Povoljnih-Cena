@@ -500,7 +500,22 @@ export const operationalErpModules: ErpModule[] = [
     status: "blocked_external",
     blockedReason: PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
     commands: [
-      { label: "Novi", tone: "primary", action: "pickup.create" },
+      {
+        label: "Novi nalog",
+        description:
+          "Izaberite kurira. U nalog se učitavaju samo paketi koji mu pripadaju po pravilu 60 cm.",
+        tone: "primary",
+        action: "pickup.create",
+        fields: [
+          {
+            key: "provider",
+            label: "Kurir",
+            type: "text",
+            required: true,
+            options: ["X Express", "MyGLS"],
+          },
+        ],
+      },
       {
         label: "Uredi",
         tone: "neutral",

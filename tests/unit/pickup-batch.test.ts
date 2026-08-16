@@ -17,7 +17,7 @@ describe("ERP module 13 pickup batches", () => {
     expect(definition).toBeDefined();
     expect(definition?.number).toBe("13");
     expect(definition?.commands.map((command) => command.label)).toEqual([
-      "Novi",
+      "Novi nalog",
       "Uredi",
       "Obriši",
       "Proknjiži",

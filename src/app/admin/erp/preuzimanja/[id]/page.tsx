@@ -45,6 +45,9 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
+const createBatchSchema = z.object({
+  provider: z.enum(["MYGLS", "X_EXPRESS"]),
+});
 const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
 const packageSchema = batchSchema.extend({
   lineId: z.string().min(1),
@@ -58,7 +61,7 @@ const bookingSchema = batchSchema.extend({
   reference: z.string().trim().min(1).max(120),
 });
 
-async function createAction() {
+async function createAction(formData: FormData) {
   "use server";
   const state = await withAdminState(
     {
@@ -66,8 +69,14 @@ async function createAction() {
       action: "pickup-batch.create",
       entity: "PickupBatch",
     },
-    async () => {
-      const batch = await createPickupBatch();
+    async (_actorId, actionData: FormData) => {
+      const parsed = createBatchSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "Izaberite MyGLS ili X Express." };
+      }
+      const batch = await createPickupBatch(parsed.data.provider);
       return {
         ok: true as const,
         entityId: batch.id,
@@ -75,7 +84,7 @@ async function createAction() {
         result: { id: batch.id },
       };
     },
-  )();
+  )(formData);
   if (state.ok && isIdResult(state.result)) {
     redirect(`/admin/erp/preuzimanja/${state.result.id}?mode=edit`);
   }
@@ -399,8 +408,15 @@ export default async function PickupBatchPage({
         actions={
           <div className="flex flex-wrap gap-2">
             <form action={createAction}>
+              <input type="hidden" name="provider" value="X_EXPRESS" />
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi
+                Novi X Express
+              </SubmitButton>
+            </form>
+            <form action={createAction}>
+              <input type="hidden" name="provider" value="MYGLS" />
+              <SubmitButton variant="outline" pendingLabel="Kreiranje…">
+                Novi MyGLS
               </SubmitButton>
             </form>
             {editable ? (

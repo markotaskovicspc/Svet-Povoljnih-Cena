@@ -3,7 +3,10 @@ import { config as loadEnv } from "dotenv";
 import { describe, expect, it } from "vitest";
 import { XExpressClient } from "@/lib/x-express/client";
 import { formatXExpressTrackingCode } from "@/lib/x-express/code";
-import { requireXExpressShipmentConfig } from "@/lib/x-express/config";
+import {
+  requireXExpressEnabled,
+  requireXExpressShipmentConfig,
+} from "@/lib/x-express/config";
 import { normalizeXExpressPhone } from "@/lib/x-express/payload";
 import type { XExpressCreateOrderPayload } from "@/lib/x-express/types";
 
@@ -14,13 +17,11 @@ const enabled = process.env.X_EXPRESS_LIVE_TEST === "1";
 
 describe.skipIf(!enabled)("X Express provider test account", () => {
   it("authenticates and downloads the official status dictionary", async () => {
-    const cfg = requireXExpressShipmentConfig();
+    const cfg = requireXExpressEnabled();
     expect(cfg.env).toBe("test");
     expect(cfg.apiUser).not.toBe("");
     expect(cfg.apiKey).not.toBe("");
     expect(cfg.contractCode).toMatch(/^U\d{6}$/);
-    expect(cfg.codeRangeStart).not.toBeNull();
-    expect(cfg.codeRangeEnd).not.toBeNull();
 
     const client = new XExpressClient({ ...cfg, enabled: true });
     const statuses = await client.fetchStatusCodes();
@@ -34,7 +35,7 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
   });
 
   it("accepts the configured pickup address", async () => {
-    const cfg = requireXExpressShipmentConfig();
+    const cfg = requireXExpressEnabled();
     const client = new XExpressClient({ ...cfg, enabled: true });
     const address = await client.checkAddress({
       Name: cfg.pickup.name,
@@ -49,8 +50,8 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
   it("accepts order/add with the first sequentially assigned package code", async () => {
     const cfg = requireXExpressShipmentConfig();
     const client = new XExpressClient({ ...cfg, enabled: true });
-    // X Express requires strict sequential allocation beginning with the first
-    // assigned value. The test account does not consume the code.
+    // X Express requires a provider allocation bound to this exact API user.
+    // Repository examples are rejected before any provider request is sent.
     const value = cfg.codeRangeStart!;
     const code = formatXExpressTrackingCode(cfg.codePrefix, value);
     const reference = randomUUID();
