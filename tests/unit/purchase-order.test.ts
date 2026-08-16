@@ -10,6 +10,7 @@ import {
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderCapacityWarnings,
   purchaseOrderEmailSubject,
+  resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
 
 describe("ERP module 4 purchase-order rules", () => {
@@ -144,6 +145,27 @@ describe("ERP module 4 purchase-order rules", () => {
     expect(
       canReceivePurchaseOrder({ status: "DRAFT", lockedAt: null }),
     ).toBe(false);
+  });
+
+  it("fills a missing open-order customs rate from the current article master", () => {
+    expect(
+      resolveOpenPurchaseOrderCustomsRate({
+        itemCustomsRate: 0,
+        productCustomsRate: 8,
+      }),
+    ).toBe(8);
+    expect(
+      resolveOpenPurchaseOrderCustomsRate({
+        itemCustomsRate: null,
+        productCustomsRate: 8,
+      }),
+    ).toBe(8);
+    expect(
+      resolveOpenPurchaseOrderCustomsRate({
+        itemCustomsRate: 12,
+        productCustomsRate: 8,
+      }),
+    ).toBe(12);
   });
 
   it("allocates freight, converts purchase price and calculates customs and BM", () => {

@@ -338,6 +338,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await expect(form.getByRole("status")).toContainText(
         "Prijemnica je sačuvana",
       );
+      await expect(form.locator('[name="purchaseOrderId"]')).toHaveValue(
+        purchaseOrderId,
+      );
 
       const saved = await db.inboundInvoice.findUniqueOrThrow({
         where: { id: invoiceId },

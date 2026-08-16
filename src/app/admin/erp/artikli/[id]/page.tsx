@@ -160,12 +160,12 @@ const overrideSchema = z.object({
   unitPackWidthCm: optionalNonnegativeNumber(),
   unitPackDepthCm: optionalNonnegativeNumber(),
   unitPackHeightCm: optionalNonnegativeNumber(),
-  packQty: optionalNonnegativeInteger(),
+  packQty: optionalPositiveInteger(),
   palletQty: optionalPositiveInteger(),
-  packWidthCm: optionalNonnegativeNumber(),
-  packDepthCm: optionalNonnegativeNumber(),
-  packHeightCm: optionalNonnegativeNumber(),
-  packGrossWeightKg: optionalNonnegativeNumber(),
+  packWidthCm: optionalPositiveNumber(),
+  packDepthCm: optionalPositiveNumber(),
+  packHeightCm: optionalPositiveNumber(),
+  packGrossWeightKg: optionalPositiveNumber(),
   containerQty: optionalPositiveInteger(),
   containerGrossWeightKg: optionalPositiveNumber(),
   customsRate: optionalNonnegativeNumber(),
@@ -200,8 +200,8 @@ const pictogramAssignmentSchema = z.object({
 function optionalNonnegativeNumber() {
   return z
     .union([
-      z.coerce.number().nonnegative(),
       z.literal("").transform(() => null),
+      z.coerce.number().nonnegative(),
     ])
     .nullable()
     .optional();
@@ -224,8 +224,8 @@ function optionalPositiveInteger() {
 function optionalNonnegativeInteger() {
   return z
     .union([
-      z.coerce.number().int().nonnegative(),
       z.literal("").transform(() => null),
+      z.coerce.number().int().nonnegative(),
     ])
     .nullable()
     .optional();
@@ -422,6 +422,11 @@ function changedManualGroups(
 function normalizeComparable(value: unknown) {
   if (value instanceof Prisma.Decimal) return Number(value);
   return value ?? null;
+}
+
+function positiveInputValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : "";
 }
 
 async function updateProduct(_state: AdminActionState, formData: FormData) {
@@ -2137,25 +2142,25 @@ export default async function ProductDetail({
               </p>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                 <Field label="Kom/pak">
-                  <Input name="packQty" type="number" min={1} step={1} defaultValue={product.packQty ?? ""} />
+                  <Input name="packQty" type="number" min={1} step={1} defaultValue={positiveInputValue(product.packQty)} />
                 </Field>
                 <Field label="Širina (cm)">
-                  <Input name="packWidthCm" type="number" min={0.01} step="0.01" defaultValue={product.packWidthCm ? num(product.packWidthCm) : ""} />
+                  <Input name="packWidthCm" type="number" min={0.01} step="0.01" defaultValue={positiveInputValue(product.packWidthCm)} />
                 </Field>
                 <Field label="Dubina (cm)">
-                  <Input name="packDepthCm" type="number" min={0.01} step="0.01" defaultValue={product.packDepthCm ? num(product.packDepthCm) : ""} />
+                  <Input name="packDepthCm" type="number" min={0.01} step="0.01" defaultValue={positiveInputValue(product.packDepthCm)} />
                 </Field>
                 <Field label="Visina (cm)">
-                  <Input name="packHeightCm" type="number" min={0.01} step="0.01" defaultValue={product.packHeightCm ? num(product.packHeightCm) : ""} />
+                  <Input name="packHeightCm" type="number" min={0.01} step="0.01" defaultValue={positiveInputValue(product.packHeightCm)} />
                 </Field>
                 <Field label="Bruto kg">
-                  <Input name="packGrossWeightKg" type="number" min={0} step="0.001" defaultValue={product.packGrossWeightKg ? num(product.packGrossWeightKg) : ""} />
+                  <Input name="packGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={positiveInputValue(product.packGrossWeightKg)} />
                 </Field>
                 <Field label="Količina za ceo kontejner">
-                  <Input name="containerQty" type="number" min={1} step={1} defaultValue={product.containerQty ?? ""} />
+                  <Input name="containerQty" type="number" min={1} step={1} defaultValue={positiveInputValue(product.containerQty)} />
                 </Field>
                 <Field label="Bruto kg za ceo kontejner">
-                  <Input name="containerGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={product.containerGrossWeightKg ? num(product.containerGrossWeightKg) : ""} />
+                  <Input name="containerGrossWeightKg" type="number" min={0.001} step="0.001" defaultValue={positiveInputValue(product.containerGrossWeightKg)} />
                 </Field>
               </div>
             </fieldset>

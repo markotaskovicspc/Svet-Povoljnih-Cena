@@ -23,6 +23,7 @@ import {
   isPackQuantityValid,
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderEmailSubject,
+  resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
 
 export { canReceivePurchaseOrder } from "@/lib/admin/purchase-order";
@@ -974,6 +975,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
               packGrossWeightKg: true,
               containerQty: true,
               containerGrossWeightKg: true,
+              customsRate: true,
             },
           },
         },
@@ -986,6 +988,8 @@ export async function recomputePurchaseOrderTotals(id: string) {
       return {
         item,
         packQty: item.packQty,
+        customsRate:
+          item.customsRate == null ? null : Number(item.customsRate),
         totalVolume: Number(item.totalVolume ?? 0),
         totalWeight: Number(item.totalWeight ?? 0),
       };
@@ -1009,6 +1013,14 @@ export async function recomputePurchaseOrderTotals(id: string) {
     return {
       item,
       packQty: item.product.packQty,
+      customsRate: resolveOpenPurchaseOrderCustomsRate({
+        itemCustomsRate:
+          item.customsRate == null ? null : Number(item.customsRate),
+        productCustomsRate:
+          item.product.customsRate == null
+            ? null
+            : Number(item.product.customsRate),
+      }),
       totalVolume: Number((logistics.volumeM3 * item.qty).toFixed(3)),
       totalWeight: Number((logistics.weightKg * item.qty).toFixed(3)),
     };
@@ -1033,8 +1045,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
         row.item.calcRetailPrice == null
           ? null
           : Number(row.item.calcRetailPrice),
-      customsRatePct:
-        row.item.customsRate == null ? null : Number(row.item.customsRate),
+      customsRatePct: row.customsRate,
       totalVolumeM3: row.totalVolume,
       totalWeightKg: row.totalWeight,
     })),
@@ -1052,6 +1063,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
         where: { id: row.item.id },
         data: {
           packQty: row.packQty,
+          customsRate: row.customsRate,
           totalVolume: row.totalVolume,
           totalWeight: row.totalWeight,
           freightAllocated: financial.freightAllocatedRsd,

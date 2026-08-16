@@ -41,6 +41,24 @@ function isPositiveNumber(value: number | null | undefined) {
 }
 
 /**
+ * An editable order may contain a zero/null customs snapshot when its article
+ * did not have customs master data yet. Fill only that missing snapshot from
+ * the current article; an explicit non-zero order correction keeps priority.
+ */
+export function resolveOpenPurchaseOrderCustomsRate(input: {
+  itemCustomsRate: number | null;
+  productCustomsRate: number | null;
+}) {
+  if (isPositiveNumber(input.itemCustomsRate)) {
+    return input.itemCustomsRate;
+  }
+  if (isPositiveNumber(input.productCustomsRate)) {
+    return input.productCustomsRate;
+  }
+  return input.itemCustomsRate ?? input.productCustomsRate;
+}
+
+/**
  * Client rule: container quantity is an alternative volume source and wins
  * over transport-package dimensions. Container gross weight is optional; when
  * absent, unit/product gross weight remains the weight source.

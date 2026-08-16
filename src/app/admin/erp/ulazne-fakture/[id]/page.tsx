@@ -32,7 +32,10 @@ import {
 } from "@/lib/admin/inbound-invoice";
 import { goodsReceiptMasterWarnings } from "@/lib/admin/goods-receipt-readiness";
 import type { AdminActionState } from "@/lib/admin/action-state";
-import { purchaseOrderCapacityWarnings } from "@/lib/admin/purchase-order";
+import {
+  purchaseOrderCapacityWarnings,
+  resolveOpenPurchaseOrderCustomsRate,
+} from "@/lib/admin/purchase-order";
 import {
   requireAdminAction,
   withAdminState,
@@ -84,6 +87,27 @@ function fmt(value: number, digits = 2) {
     minimumFractionDigits: value % 1 ? Math.min(digits, 2) : 0,
     maximumFractionDigits: digits,
   }).format(value);
+}
+
+function optionalNumber(value: unknown) {
+  if (value == null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function effectiveCustomsRate(
+  item: {
+    customsRate: unknown;
+    product?: { customsRate: unknown } | null;
+  },
+  orderLockedAt: Date | null,
+) {
+  const itemCustomsRate = optionalNumber(item.customsRate);
+  if (orderLockedAt) return itemCustomsRate;
+  return resolveOpenPurchaseOrderCustomsRate({
+    itemCustomsRate,
+    productCustomsRate: optionalNumber(item.product?.customsRate),
+  });
 }
 
 async function createAction() {
@@ -254,6 +278,7 @@ export default async function InboundInvoicePage({
         warehouse: true,
         purchaseOrder: {
           include: {
+            supplier: { select: { id: true, name: true } },
             receivingWarehouse: true,
             transportDefinition: true,
             items: {
@@ -267,6 +292,7 @@ export default async function InboundInvoicePage({
                     description: true,
                     stock: true,
                     cogs: true,
+                    customsRate: true,
                     supplierId: true,
                     supplier: { select: { country: true } },
                     countryOfOrigin: true,
@@ -334,6 +360,7 @@ export default async function InboundInvoicePage({
         id: true,
         number: true,
         status: true,
+        lockedAt: true,
         exchangeRate: true,
         freightCost: true,
         freightExchangeRate: true,
@@ -343,6 +370,7 @@ export default async function InboundInvoicePage({
             qty: true,
             purchasePrice: true,
             customsRate: true,
+            product: { select: { customsRate: true } },
           },
         },
       },
@@ -400,7 +428,12 @@ export default async function InboundInvoicePage({
   const masterWarningConfirmation = masterWarnings.length
     ? `Master artikala nije kompletan za ${masterWarnings.length} ${masterWarnings.length === 1 ? "stavku" : "stavki"}. Prijem će ipak biti proknjižen, a podatke treba dopuniti naknadno. Da li želite da nastavite? `
     : "";
-  const purchaseOrderOptions: InboundInvoicePurchaseOrderOption[] = purchaseOrders.map(
+  const selectablePurchaseOrders =
+    invoice.purchaseOrder &&
+    !purchaseOrders.some((order) => order.id === invoice.purchaseOrder?.id)
+      ? [invoice.purchaseOrder, ...purchaseOrders]
+      : purchaseOrders;
+  const purchaseOrderOptions: InboundInvoicePurchaseOrderOption[] = selectablePurchaseOrders.map(
     (order) => {
       const defaults = calculatePurchaseOrderInvoiceDefaults({
         exchangeRate: Number(order.exchangeRate),
@@ -409,7 +442,7 @@ export default async function InboundInvoicePage({
         lines: order.items.map((item) => ({
           qty: item.qty,
           purchasePrice: Number(item.purchasePrice),
-          customsRatePct: Number(item.customsRate ?? 0),
+          customsRatePct: effectiveCustomsRate(item, order.lockedAt),
         })),
       });
       return {
@@ -430,7 +463,10 @@ export default async function InboundInvoicePage({
         lines: invoice.purchaseOrder.items.map((item) => ({
           qty: item.qty,
           purchasePrice: Number(item.purchasePrice),
-          customsRatePct: Number(item.customsRate ?? 0),
+          customsRatePct: effectiveCustomsRate(
+            item,
+            invoice.purchaseOrder?.lockedAt ?? null,
+          ),
         })),
       })
     : null;
@@ -461,7 +497,10 @@ export default async function InboundInvoicePage({
           sku: item.sku,
           qty: item.qty,
           purchasePrice: Number(item.purchasePrice),
-          customsRatePct: Number(item.customsRate ?? 0),
+          customsRatePct: effectiveCustomsRate(
+            item,
+            invoice.purchaseOrder?.lockedAt ?? null,
+          ),
           otherAllocatedRsd: Number(item.freightAllocated ?? 0),
         })),
       })
@@ -679,7 +718,7 @@ export default async function InboundInvoicePage({
           ) : null}
           <AdminActionForm action={saveAction} id="inbound-invoice-form">
             <fieldset
-              key={`${invoice.updatedAt.toISOString()}-${editing}`}
+              key={`${invoice.id}-${editing}`}
               disabled={!editing || immutable}
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
