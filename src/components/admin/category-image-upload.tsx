@@ -321,9 +321,9 @@ export function CategoryImageUpload({
 
       <div className="flex items-start justify-between gap-3">
         <span id={`${inputId}-hint`} className="text-xs text-ink-500">
-          Najbolje izgleda vodoravna fotografija. Na izlogu se trenutno prikazuje
-          samo za glavne kategorije, kao pločica u mobilnom meniju; slike
-          podkategorija se čuvaju, ali još nisu prikazane.
+          Najbolje izgleda vodoravna fotografija. Prikazuje se u desktop i
+          mobilnom meniju, kao pločica glavne kategorije ili sličica grupe i
+          podkategorije.
         </span>
         {hasCurrentImage || selectedName ? (
           <button
