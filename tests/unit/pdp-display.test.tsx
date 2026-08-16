@@ -125,11 +125,12 @@ describe("PDP price and benefit display", () => {
     expect(markup.match(/<li/g)).toHaveLength(3);
     expect(markup).toContain("Isporuka 2–3 dana");
     expect(markup).toContain("Povrat bez stresa");
-    expect(markup).toContain("Sigurna kupovina");
-    expect(markup).not.toContain("Garancija");
+    expect(markup).toContain("2+1 garancija");
+    expect(markup).toContain("GARANCIJA");
+    expect(markup).not.toContain("Sigurna kupovina");
     expect(markup).not.toContain("Precizne dimenzije");
     expect(markup).toContain("md:w-[90%]");
-    expect(markup).toContain("text-[0.55rem]");
+    expect(markup).toContain("text-[0.6rem]");
   });
 
   it("renders no more than six product pictograms", () => {

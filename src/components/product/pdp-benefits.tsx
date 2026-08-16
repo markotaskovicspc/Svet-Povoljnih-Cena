@@ -16,8 +16,8 @@ export function PdpBenefits({
       Icon: RotateCcw,
     },
     {
-      label: "Sigurna kupovina",
-      lines: ["Sigurna", "kupovina"],
+      label: "2+1 garancija",
+      lines: ["2+1", "GARANCIJA"],
       Icon: ShieldCheck,
     },
   ];
@@ -38,7 +38,7 @@ export function PdpBenefits({
             strokeWidth={2.35}
             aria-hidden
           />
-          <span className="flex min-w-0 flex-1 flex-col items-center text-center text-[0.55rem] leading-[1.15] font-semibold tracking-[0.02em] uppercase md:text-[clamp(0.45rem,1vw,0.9rem)]">
+          <span className="flex min-w-0 flex-1 flex-col items-center text-center text-[0.6rem] leading-[1.15] font-semibold tracking-[0.02em] uppercase md:text-[clamp(0.5rem,1.1vw,1rem)]">
             <span>{lines[0]}</span>
             <span className="mt-[0.22em] whitespace-nowrap">{lines[1]}</span>
           </span>
