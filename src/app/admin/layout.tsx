@@ -5,7 +5,12 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { headers } from "next/headers";
 import { AdminSidebar, AdminMobileNav } from "@/components/admin/sidebar";
-import { allowedNavFor, ADMIN_ROLE_LABEL } from "@/lib/admin";
+import {
+  ADMIN_ROLE_LABEL,
+  adminNavPreferencesFromColumns,
+  allowedNavFor,
+  applyAdminNavPreferences,
+} from "@/lib/admin";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +58,20 @@ export default async function AdminLayout({
     role: admin.role,
   };
 
-  const nav = allowedNavFor(user.role);
+  const availableNav = allowedNavFor(user.role);
+  const navigationView = await db.adminSavedView.findFirst({
+    where: {
+      adminUserId: sessionUser.id,
+      module: "admin-navigation",
+      isDefault: true,
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { columns: true },
+  });
+  const nav = applyAdminNavPreferences(
+    availableNav,
+    adminNavPreferencesFromColumns(navigationView?.columns),
+  );
 
   async function doSignOut() {
     "use server";
@@ -64,13 +82,13 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-canvas">
       <div className="mx-auto grid min-h-screen w-full max-w-[1600px] md:grid-cols-[260px_1fr]">
         <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-border/60 bg-surface md:block">
-          <AdminSidebar nav={nav} />
+          <AdminSidebar nav={nav} availableNav={availableNav} />
         </aside>
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8">
             <div className="flex min-w-0 items-center gap-2">
               <div className="md:hidden">
-                <AdminMobileNav nav={nav} />
+                <AdminMobileNav nav={nav} availableNav={availableNav} />
               </div>
               <p className="min-w-0 truncate text-xs text-ink-500">
                 Prijavljen kao{" "}

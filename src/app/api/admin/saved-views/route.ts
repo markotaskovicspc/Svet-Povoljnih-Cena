@@ -7,9 +7,13 @@ import {
   DASHBOARD_CONTEXT_KEYS,
   isDashboardContextEntry,
 } from "@/lib/admin/dashboard-context";
+import { allowedNavFor } from "@/lib/admin/nav";
+
+const ADMIN_NAVIGATION_MODULE = "admin-navigation";
 
 const GRID_OPERATORS = new Set([
   "contains",
+  "not_contains",
   "equals",
   "not_equals",
   "gt",
@@ -79,7 +83,11 @@ export async function GET(request: Request) {
   const admin = await requireAdminAction();
   const moduleSlug =
     new URL(request.url).searchParams.get("module")?.trim() ?? "";
-  if (moduleSlug !== "dashboard" && !getErpModuleDefinition(moduleSlug)) {
+  if (
+    moduleSlug !== "dashboard" &&
+    moduleSlug !== ADMIN_NAVIGATION_MODULE &&
+    !getErpModuleDefinition(moduleSlug)
+  ) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 400 });
   }
   const rows = await db.adminSavedView.findMany({
@@ -106,7 +114,13 @@ export async function POST(request: Request) {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const query = typeof body?.query === "string" ? body.query.slice(0, 500) : "";
   const definition = getErpModuleDefinition(moduleSlug);
-  if ((moduleSlug !== "dashboard" && !definition) || !name || name.length > 80) {
+  if (
+    (moduleSlug !== "dashboard" &&
+      moduleSlug !== ADMIN_NAVIGATION_MODULE &&
+      !definition) ||
+    !name ||
+    name.length > 80
+  ) {
     return NextResponse.json(
       { error: "Modul i naziv pogleda su obavezni (najviše 80 znakova)." },
       { status: 400 },
@@ -114,11 +128,22 @@ export async function POST(request: Request) {
   }
 
   const knownColumns = new Set(
-    definition?.columns.map((column) => column.key) ?? [],
+    moduleSlug === ADMIN_NAVIGATION_MODULE
+      ? allowedNavFor(admin.role).flatMap((group) =>
+          group.items.map((item) => item.href),
+        )
+      : (definition?.columns.map((column) => column.key) ?? []),
   );
   const cleanColumns = (value: unknown) =>
     Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string" && knownColumns.has(item))
+      ? Array.from(
+          new Set(
+            value.filter(
+              (item): item is string =>
+                typeof item === "string" && knownColumns.has(item),
+            ),
+          ),
+        )
       : [];
   const visibleColumns = cleanColumns(body?.visibleColumns);
   const searchColumn =
@@ -184,6 +209,8 @@ export async function POST(request: Request) {
   const contextKeys = new Set(
     moduleSlug === "dashboard"
       ? DASHBOARD_CONTEXT_KEYS
+      : moduleSlug === ADMIN_NAVIGATION_MODULE
+        ? []
       : moduleSlug === "artikli"
       ? ["warehouseId"]
       : (definition?.contextFilters ?? []).map((filter) => filter.key),

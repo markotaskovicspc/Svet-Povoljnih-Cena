@@ -13,6 +13,11 @@ export type AdminNavGroup = {
   items: AdminNavItem[];
 };
 
+export type AdminNavPreferences = {
+  visibleHrefs: string[];
+  order: string[];
+};
+
 const C: AdminRoleName[] = ["CONTENT"];
 const O: AdminRoleName[] = ["OPS"];
 const A: AdminRoleName[] = ["ADS"];
@@ -119,4 +124,55 @@ export function activeAdminNavHref(nav: AdminNavGroup[], pathname: string) {
         : pathname === item.href || pathname.startsWith(`${item.href}/`),
     )
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
+}
+
+export function adminNavPreferencesFromColumns(
+  columns: unknown,
+): AdminNavPreferences | null {
+  if (!columns || typeof columns !== "object" || Array.isArray(columns)) {
+    return null;
+  }
+  const value = columns as Record<string, unknown>;
+  if (!Array.isArray(value.visibleColumns) || !Array.isArray(value.columnOrder)) {
+    return null;
+  }
+  const strings = (items: unknown[]) =>
+    Array.from(
+      new Set(items.filter((item): item is string => typeof item === "string")),
+    );
+  return {
+    visibleHrefs: strings(value.visibleColumns),
+    order: strings(value.columnOrder),
+  };
+}
+
+export function applyAdminNavPreferences(
+  nav: AdminNavGroup[],
+  preferences: AdminNavPreferences | null | undefined,
+): AdminNavGroup[] {
+  if (!preferences) return nav;
+
+  const allowedItems = nav.flatMap((group) => group.items);
+  const byHref = new Map(allowedItems.map((item) => [item.href, item]));
+  const visible = new Set(
+    preferences.visibleHrefs.filter((href) => byHref.has(href)),
+  );
+  if (byHref.has("/admin")) visible.add("/admin");
+
+  const orderedHrefs = Array.from(
+    new Set([
+      "/admin",
+      ...preferences.order,
+      ...allowedItems.map((item) => item.href),
+    ]),
+  ).filter((href) => visible.has(href) && byHref.has(href));
+
+  return orderedHrefs.length
+    ? [
+        {
+          label: "Moj meni",
+          items: orderedHrefs.map((href) => byHref.get(href)!),
+        },
+      ]
+    : nav;
 }

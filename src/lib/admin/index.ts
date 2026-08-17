@@ -7,5 +7,14 @@ export {
   ADMIN_ROLE_LABEL,
 } from "./guard";
 export type { AdminActionState, AdminActionFieldErrors } from "./action-state";
-export { adminNav, allowedNavFor } from "./nav";
-export type { AdminNavGroup, AdminNavItem } from "./nav";
+export {
+  adminNav,
+  allowedNavFor,
+  adminNavPreferencesFromColumns,
+  applyAdminNavPreferences,
+} from "./nav";
+export type {
+  AdminNavGroup,
+  AdminNavItem,
+  AdminNavPreferences,
+} from "./nav";
