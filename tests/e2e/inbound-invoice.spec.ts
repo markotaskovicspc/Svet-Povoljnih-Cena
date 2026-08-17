@@ -92,7 +92,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         code: `QA-UF-${runId}`.slice(0, 80),
         name: fixture.supplierName,
         country: "CN",
-        currency: "RSD",
+        currency: "EUR",
         parity: "DAP",
       },
       select: { id: true },
@@ -175,9 +175,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         loadingLocationId,
         transportTypeId,
         orderDate: new Date("2026-07-20T00:00:00.000Z"),
-        totalPrice: 8_500,
-        currency: "RSD",
-        exchangeRate: 1,
+        totalPrice: 85,
+        currency: "EUR",
+        exchangeRate: 100,
         freightCost: 0,
         freightCurrency: "RSD",
         freightExchangeRate: 1,
@@ -187,8 +187,8 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
             productId,
             sku: fixture.sku,
             name: fixture.productName,
-            purchasePrice: 170,
-            currency: "RSD",
+            purchasePrice: 1.7,
+            currency: "EUR",
             qty: 50,
             receivedQty: 0,
             customsRate: 0,
@@ -321,9 +321,13 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await form.locator('[name="warehouseId"]').selectOption(warehouseId);
       await expect(form.locator('[name="supplierId"]')).toHaveValue(supplierId);
       await expect(form.locator('[name="type"]')).toHaveValue("COGS");
-      await expect(form.locator('[name="currency"]')).toHaveValue("RSD");
-      await expect(form.locator('[name="exchangeRate"]')).toHaveValue("1");
+      await expect(form.locator('[name="currency"]')).toHaveValue("EUR");
+      await expect(form.locator('[name="invoiceValue"]')).toHaveValue("85");
+      await expect(form.locator('[name="exchangeRate"]')).toHaveValue("100");
       await expect(form.locator('[name="invoiceValueRsd"]')).toHaveValue("8500");
+      await expect(
+        form.locator('[name="otherCostsAllocationBasis"]'),
+      ).toHaveValue("VOLUME");
       await expect(form.locator('[name="customsValueRsd"]')).toHaveValue("0");
       await expect(form.locator('[name="transportValueRsd"]')).toHaveValue("0");
       await expect(form.locator('[name="otherRelatedCostsRsd"]')).toHaveValue(
@@ -355,10 +359,14 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         net: Number(saved.netValue),
         vat: Number(saved.vatValue),
         gross: Number(saved.grossValue),
+        currency: saved.currency,
+        exchangeRate: Number(saved.exchangeRate),
+        invoiceValue: Number(saved.value),
         invoiceValueRsd: Number(saved.invoiceValueRsd),
         customsValueRsd: Number(saved.customsValueRsd),
         transportValueRsd: Number(saved.transportValueRsd),
         otherRelatedCostsRsd: Number(saved.otherRelatedCostsRsd),
+        allocationBasis: saved.allocationBasis,
       }).toEqual({
         number: fixture.invoiceNumber,
         supplierId,
@@ -369,10 +377,14 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         net: 8_821.25,
         vat: 1_764.25,
         gross: 10_585.5,
+        currency: "EUR",
+        exchangeRate: 100,
+        invoiceValue: 85,
         invoiceValueRsd: 8_500,
         customsValueRsd: 0,
         transportValueRsd: 0,
         otherRelatedCostsRsd: 321.25,
+        allocationBasis: "VOLUME",
       });
 
       await form.locator('[name="otherRelatedCostsRsd"]').fill("0");

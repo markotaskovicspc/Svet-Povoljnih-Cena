@@ -3,13 +3,20 @@
 import { useMemo, useState } from "react";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
-import { calculateInboundInvoiceAmounts } from "@/lib/admin/inbound-invoice";
+import {
+  calculateInboundInvoiceAmounts,
+  calculateInboundInvoiceValueRsd,
+  type InboundInvoiceCurrency,
+} from "@/lib/admin/inbound-invoice";
 
 export type InboundInvoicePurchaseOrderOption = {
   id: string;
   number: string;
   supplierId: string | null;
   supplierName: string | null;
+  currency: InboundInvoiceCurrency;
+  exchangeRate: number;
+  invoiceValue: number;
   invoiceValueRsd: number;
   customsValueRsd: number;
   transportValueRsd: number;
@@ -19,15 +26,13 @@ type InitialInvoiceValues = {
   purchaseOrderId: string | null;
   supplierId: string | null;
   supplierName: string | null;
+  currency: InboundInvoiceCurrency;
+  exchangeRate: number;
+  invoiceValue: number;
   invoiceValueRsd: number | null;
   customsValueRsd: number | null;
   transportValueRsd: number | null;
   otherRelatedCostsRsd: number | null;
-  otherCostsAllocationBasis:
-    | "AUTO_UTILIZATION"
-    | "VALUE"
-    | "WEIGHT"
-    | "VOLUME";
   legacyNetValue: number;
 };
 
@@ -67,10 +72,23 @@ export function InboundInvoiceFields({
     id: initial.supplierId ?? initialOrder?.supplierId ?? "",
     name: initial.supplierName ?? initialOrder?.supplierName ?? "",
   });
-  const [invoiceValueRsd, setInvoiceValueRsd] = useState(
+  const [currency, setCurrency] = useState<InboundInvoiceCurrency>(
+    initial.currency ?? initialOrder?.currency ?? "RSD",
+  );
+  const [exchangeRate, setExchangeRate] = useState(
+    String(
+      (initial.currency ?? initialOrder?.currency) === "RSD"
+        ? 1
+        : initial.exchangeRate || initialOrder?.exchangeRate || 1,
+    ),
+  );
+  const [invoiceValue, setInvoiceValue] = useState(
     moneyInput(
-      initial.invoiceValueRsd ??
-        (shouldUseOrderDefaults ? initialOrder?.invoiceValueRsd ?? 0 : 0),
+      hasSavedBreakdown
+        ? initial.invoiceValue
+        : shouldUseOrderDefaults
+          ? initialOrder?.invoiceValue ?? 0
+          : 0,
     ),
   );
   const [customsValueRsd, setCustomsValueRsd] = useState(
@@ -88,10 +106,19 @@ export function InboundInvoiceFields({
   const [otherRelatedCostsRsd, setOtherRelatedCostsRsd] = useState(
     moneyInput(initial.otherRelatedCostsRsd ?? 0),
   );
+  const invoiceValueRsd = useMemo(() => {
+    const rate = currency === "RSD" ? 1 : parseMoney(exchangeRate);
+    if (rate <= 0) return 0;
+    return calculateInboundInvoiceValueRsd({
+      invoiceValue: parseMoney(invoiceValue),
+      currency,
+      exchangeRate: rate,
+    });
+  }, [currency, exchangeRate, invoiceValue]);
   const totals = useMemo(
     () =>
       calculateInboundInvoiceAmounts({
-        invoiceValueRsd: parseMoney(invoiceValueRsd),
+        invoiceValueRsd,
         customsValueRsd: parseMoney(customsValueRsd),
         transportValueRsd: parseMoney(transportValueRsd),
         otherRelatedCostsRsd: parseMoney(otherRelatedCostsRsd),
@@ -111,7 +138,11 @@ export function InboundInvoiceFields({
       id: order?.supplierId ?? "",
       name: order?.supplierName ?? "",
     });
-    setInvoiceValueRsd(moneyInput(order?.invoiceValueRsd ?? 0));
+    setCurrency(order?.currency ?? "RSD");
+    setExchangeRate(
+      String(order?.currency === "RSD" ? 1 : order?.exchangeRate ?? 1),
+    );
+    setInvoiceValue(moneyInput(order?.invoiceValue ?? 0));
     setCustomsValueRsd(moneyInput(order?.customsValueRsd ?? 0));
     setTransportValueRsd(moneyInput(order?.transportValueRsd ?? 0));
     setOtherRelatedCostsRsd("0");
@@ -120,7 +151,6 @@ export function InboundInvoiceFields({
   return (
     <>
       <input type="hidden" name="supplierId" value={supplier.id} />
-      <input type="hidden" name="exchangeRate" value="1" />
       <Field label="Naziv dobavljača" hint="Automatski se preuzima iz porudžbenice.">
         <Input value={supplier.name} readOnly aria-readonly="true" />
       </Field>
@@ -146,18 +176,63 @@ export function InboundInvoiceFields({
       <Field label="Tip prijemnice" hint="Sve prijemnice ovog toka su COGS.">
         <Input name="type" value="COGS" readOnly aria-readonly="true" />
       </Field>
-      <Field label="Valuta" hint="Sve vrednosti fakture vode se u dinarima.">
-        <Input name="currency" value="RSD" readOnly aria-readonly="true" />
+      <Field label="Valuta fakture" hint="Izaberite valutu sa konačne fakture.">
+        <select
+          name="currency"
+          value={currency}
+          onChange={(event) => {
+            const nextCurrency = event.target.value as InboundInvoiceCurrency;
+            setCurrency(nextCurrency);
+            if (nextCurrency === "RSD") setExchangeRate("1");
+          }}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+        >
+          <option value="RSD">RSD</option>
+          <option value="EUR">EUR</option>
+          <option value="USD">USD</option>
+        </select>
       </Field>
-      <Field label="Vrednost fakture u RSD">
+      <Field label={`Vrednost fakture u ${currency}`}>
         <Input
-          name="invoiceValueRsd"
+          name="invoiceValue"
           type="number"
           min={0}
           step="0.01"
           required
-          value={invoiceValueRsd}
-          onChange={(event) => setInvoiceValueRsd(event.target.value)}
+          value={invoiceValue}
+          onChange={(event) => setInvoiceValue(event.target.value)}
+        />
+      </Field>
+      <Field
+        label="Srednji kurs prema RSD"
+        hint={
+          currency === "RSD"
+            ? "Za dinarsku fakturu kurs je 1."
+            : "Unesite konačni srednji kurs sa prijemnice."
+        }
+      >
+        <Input
+          name="exchangeRate"
+          type="number"
+          min={currency === "RSD" ? 1 : 0.000001}
+          step="0.000001"
+          required
+          value={currency === "RSD" ? "1" : exchangeRate}
+          readOnly={currency === "RSD"}
+          aria-readonly={currency === "RSD"}
+          onChange={(event) => setExchangeRate(event.target.value)}
+        />
+      </Field>
+      <Field
+        label="Vrednost fakture u RSD"
+        hint="Automatski: vrednost fakture × srednji kurs."
+      >
+        <Input
+          name="invoiceValueRsd"
+          type="number"
+          value={moneyInput(invoiceValueRsd)}
+          readOnly
+          aria-readonly="true"
         />
       </Field>
       <Field label="Vrednost carine u RSD">
@@ -193,20 +268,12 @@ export function InboundInvoiceFields({
           onChange={(event) => setOtherRelatedCostsRsd(event.target.value)}
         />
       </Field>
+      <input type="hidden" name="otherCostsAllocationBasis" value="VOLUME" />
       <Field
-        label="Raspodela ostalih vezanih troškova"
-        hint="Transport se uvek raspoređuje po zapremini. Ovim izborom se raspoređuju samo ostali vezani troškovi."
+        label="Raspodela vezanih troškova"
+        hint="Transport i ostali vezani troškovi raspoređuju se po zapremini artikla."
       >
-        <select
-          name="otherCostsAllocationBasis"
-          defaultValue={initial.otherCostsAllocationBasis}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-        >
-          <option value="VALUE">Prema vrednosti robe</option>
-          <option value="VOLUME">Prema zapremini</option>
-          <option value="WEIGHT">Prema težini</option>
-          <option value="AUTO_UTILIZATION">Veće iskorišćenje zapremine/težine</option>
-        </select>
+        <Input value="Prema zapremini artikla" readOnly aria-readonly="true" />
       </Field>
       <Field
         label="Ukupno bez PDV-a"

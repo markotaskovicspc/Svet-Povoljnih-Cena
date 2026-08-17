@@ -11,6 +11,8 @@ export type InboundInvoiceCostBreakdown = {
   otherRelatedCostsRsd: number;
 };
 
+export type InboundInvoiceCurrency = "RSD" | "EUR" | "USD";
+
 export type InboundReceiptWarehouse = {
   id: string;
   name: string;
@@ -114,6 +116,42 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function calculateInboundInvoiceValueRsd(input: {
+  invoiceValue: number;
+  currency: InboundInvoiceCurrency;
+  exchangeRate: number;
+}) {
+  assertNonnegativeMoney(input.invoiceValue, "Vrednost fakture");
+  const exchangeRate = input.currency === "RSD" ? 1 : input.exchangeRate;
+  if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
+    throw new Error("Srednji kurs prema RSD mora biti veći od nule.");
+  }
+  return roundMoney(input.invoiceValue * exchangeRate);
+}
+
+export function assertInboundCostVolumeReady(
+  lines: Array<{ sku: string; qty: number; totalVolumeM3?: number | null }>,
+) {
+  const missingSkus = Array.from(
+    new Set(
+      lines
+        .filter((line) => {
+          const totalVolumeM3 = Number(line.totalVolumeM3 ?? 0);
+          return (
+            line.qty > 0 &&
+            (!Number.isFinite(totalVolumeM3) || totalVolumeM3 <= 0)
+          );
+        })
+        .map((line) => line.sku),
+    ),
+  );
+  if (missingSkus.length) {
+    throw new Error(
+      `Knjiženje je blokirano dok se ne unese zapremina za: ${missingSkus.join(", ")}. Dopunite količinu po kontejneru ili dimenzije transportnog pakovanja.`,
+    );
+  }
+}
+
 export function calculateInboundInvoiceAmounts(
   costs: InboundInvoiceCostBreakdown,
 ): InboundInvoiceCostBreakdown & InboundInvoiceTotals {
@@ -204,7 +242,10 @@ export function calculateLinkedInvoiceAdjustmentRsd(input: {
     if (!Number.isFinite(invoice.exchangeRate) || invoice.exchangeRate <= 0) {
       throw new Error("Kurs vezane fakture mora biti veći od nule.");
     }
-    const netValueRsd = invoice.netValue * invoice.exchangeRate;
+    const netValueRsd =
+      invoice.invoiceValueRsd == null
+        ? invoice.netValue * invoice.exchangeRate
+        : invoice.netValue;
     if (invoice.invoiceValueRsd == null) {
       legacyAdditionalCostsRsd += netValueRsd;
     } else {
@@ -284,7 +325,8 @@ function costBasisShares(
  * - transport po zapremini iz klijentovog pravila 69 m³ / kontejnerska
  *   količina, odnosno dimenzije transportnog pakovanja (fallback za legacy:
  *   vrednost),
- * - ostale vezane troškove po izabranoj osnovi.
+ * - ostale vezane troškove po zapremini za nove prijemnice (parametar ostaje
+ *   zbog bezbednog prikaza istorijskih zapisa).
  *
  * Svaka komponenta se usaglašava do poslednje pare. adjustmentRsd je jedina
  * vrednost koja se upisuje preko procene sa porudžbenice, pa se COGS ne duplira.

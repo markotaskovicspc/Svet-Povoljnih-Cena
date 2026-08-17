@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import {
-  AllocationBasis,
+  ErpCurrency,
   InboundInvoiceStatus,
   PurchaseOrderStatus,
 } from "@prisma/client";
@@ -36,6 +36,7 @@ import {
 import { goodsReceiptMasterWarnings } from "@/lib/admin/goods-receipt-readiness";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import {
+  hasProductVolumeSource,
   purchaseOrderCapacityWarnings,
   resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
@@ -59,21 +60,16 @@ const invoiceSchema = z.object({
   purchaseOrderId: z.string().min(1, "Veza sa dokumentom je obavezna."),
   warehouseId: z.string().min(1, "Magacin prijema je obavezan."),
   type: z.literal("COGS"),
-  currency: z.literal("RSD"),
-  exchangeRate: z.coerce.number().refine((value) => value === 1),
-  invoiceValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
+  currency: z.nativeEnum(ErpCurrency),
+  exchangeRate: z.coerce.number().positive().max(100_000),
+  invoiceValue: z.coerce.number().nonnegative().max(1_000_000_000),
   customsValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   transportValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   otherRelatedCostsRsd: z.coerce
     .number()
     .nonnegative()
     .max(1_000_000_000),
-  otherCostsAllocationBasis: z.enum([
-    "AUTO_UTILIZATION",
-    "VALUE",
-    "WEIGHT",
-    "VOLUME",
-  ]),
+  otherCostsAllocationBasis: z.literal("VOLUME"),
   netValue: z.coerce.number().nonnegative().max(1_000_000_000),
   vatValue: z.coerce.number().nonnegative().max(1_000_000_000),
   grossValue: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -141,14 +137,6 @@ function cogsSnapshotBySku(value: unknown) {
   return result;
 }
 
-const allocationBasisLabel: Record<AllocationBasis, string> = {
-  AUTO_UTILIZATION: "veće iskorišćenje zapremine/težine",
-  VALUE: "vrednost robe",
-  WEIGHT: "težina",
-  VOLUME: "zapremina",
-  MANUAL: "ručna raspodela",
-};
-
 async function createAction() {
   "use server";
   const state = await withAdminState(
@@ -197,11 +185,12 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         receiptDate: new Date(`${data.receiptDate}T00:00:00.000Z`),
         purchaseOrderId: data.purchaseOrderId,
         warehouseId: data.warehouseId,
-        invoiceValueRsd: data.invoiceValueRsd,
+        currency: data.currency,
+        exchangeRate: data.exchangeRate,
+        invoiceValue: data.invoiceValue,
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
         otherRelatedCostsRsd: data.otherRelatedCostsRsd,
-        otherCostsAllocationBasis: data.otherCostsAllocationBasis,
         notes: data.notes.trim() || null,
       });
       revalidatePath(`/admin/erp/ulazne-fakture/${data.invoiceId}`);
@@ -401,6 +390,7 @@ export default async function InboundInvoicePage({
         number: true,
         status: true,
         lockedAt: true,
+        currency: true,
         exchangeRate: true,
         freightCost: true,
         freightExchangeRate: true,
@@ -490,6 +480,12 @@ export default async function InboundInvoicePage({
         number: order.number,
         supplierId: order.supplier?.id ?? null,
         supplierName: order.supplier?.name ?? null,
+        currency: order.currency,
+        exchangeRate: Number(order.exchangeRate),
+        invoiceValue: order.items.reduce(
+          (sum, item) => sum + Number(item.purchasePrice) * item.qty,
+          0,
+        ),
         ...defaults,
       };
     },
@@ -516,7 +512,11 @@ export default async function InboundInvoicePage({
       purchaseOrderDefaults.transportValueRsd
     : 0;
   const linkedNetValueRsd = relevantInvoices.reduce(
-    (sum, linked) => sum + Number(linked.netValue) * Number(linked.exchangeRate),
+    (sum, linked) =>
+      sum +
+      (linked.invoiceValueRsd == null
+        ? Number(linked.netValue) * Number(linked.exchangeRate)
+        : Number(linked.netValue)),
     0,
   );
   const linkedCostAdjustmentRsd = calculateLinkedInvoiceAdjustmentRsd({
@@ -545,10 +545,7 @@ export default async function InboundInvoicePage({
               transportValueRsd: Number(invoice.transportValueRsd),
               otherRelatedCostsRsd: Number(invoice.otherRelatedCostsRsd),
             },
-            otherCostsBasis:
-              invoice.allocationBasis === "MANUAL"
-                ? "VALUE"
-                : invoice.allocationBasis,
+            otherCostsBasis: "VOLUME",
             lines: invoice.purchaseOrder.items.map((item) => ({
               id: item.id,
               sku: item.sku,
@@ -606,6 +603,27 @@ export default async function InboundInvoicePage({
   const cogsSnapshot = cogsSnapshotBySku(
     invoice.purchaseOrder?.cogsBookingSnapshot,
   );
+  const missingVolumeLines =
+    invoice.purchaseOrder?.items.filter(
+      (item) => {
+        if (item.qty <= 0 || Number(item.totalVolume ?? 0) > 0) return false;
+        if (invoice.purchaseOrder?.lockedAt) return true;
+        return (
+          !item.product ||
+          !hasProductVolumeSource({
+            containerQty: item.product.containerQty,
+            containerGrossWeightKg: Number(
+              item.product.containerGrossWeightKg ?? 0,
+            ),
+            packQty: item.product.packQty,
+            packWidthCm: Number(item.product.packWidthCm ?? 0),
+            packDepthCm: Number(item.product.packDepthCm ?? 0),
+            packHeightCm: Number(item.product.packHeightCm ?? 0),
+          })
+        );
+      },
+    ) ?? [];
+  const postingBlockedByVolume = missingVolumeLines.length > 0;
 
   return (
     <>
@@ -657,6 +675,7 @@ export default async function InboundInvoicePage({
                 value="post"
                 disabled={
                   cancelled ||
+                  postingBlockedByVolume ||
                   (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
                 }
                 confirm={
@@ -691,6 +710,7 @@ export default async function InboundInvoicePage({
                 <SubmitButton
                   disabled={
                     cancelled ||
+                    postingBlockedByVolume ||
                     (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
                   }
                   confirm={
@@ -732,6 +752,41 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        {postingBlockedByVolume &&
+        (!locked || cogsNeedsBackfill || receiptNeedsCompletion) ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger"
+          >
+            <p className="font-semibold">
+              Knjiženje je blokirano — nedostaje zapremina artikla:
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {missingVolumeLines.map((item) => (
+                <li key={item.id}>
+                  {item.product?.id ? (
+                    <Link
+                      href={`/admin/erp/artikli/${item.product.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      {item.sku}
+                    </Link>
+                  ) : (
+                    <span className="font-semibold">{item.sku}</span>
+                  )}
+                  : dopunite količinu po kontejneru ili dimenzije transportnog
+                  pakovanja.
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Transport i ostali vezani troškovi raspoređuju se isključivo po
+              zapremini, zato prijem ne može biti proknjižen bez ovog podatka.
+            </p>
+          </div>
+        ) : null}
         {masterWarnings.length && (!locked || receiptNeedsCompletion) ? (
           <div
             role="status"
@@ -814,7 +869,11 @@ export default async function InboundInvoicePage({
               Izaberite „Uredi” da dopunite podatke, zatim „Proknjiži” da završite prijemnicu, porudžbenicu i prijem robe.
             </p>
           ) : null}
-          <AdminActionForm action={saveAction} id="inbound-invoice-form">
+          <AdminActionForm
+            action={saveAction}
+            id="inbound-invoice-form"
+            preserveValues
+          >
             <fieldset
               key={`${invoice.id}-${editing}`}
               disabled={!editing || immutable}
@@ -859,6 +918,13 @@ export default async function InboundInvoicePage({
                   purchaseOrderId: invoice.purchaseOrderId,
                   supplierId: invoice.supplierId,
                   supplierName: invoice.supplier?.name ?? null,
+                  currency: invoice.currency,
+                  exchangeRate: Number(invoice.exchangeRate),
+                  invoiceValue:
+                    invoice.currency === ErpCurrency.RSD &&
+                    invoice.invoiceValueRsd != null
+                      ? Number(invoice.invoiceValueRsd)
+                      : Number(invoice.value),
                   invoiceValueRsd:
                     invoice.invoiceValueRsd == null
                       ? null
@@ -875,10 +941,6 @@ export default async function InboundInvoicePage({
                     invoice.otherRelatedCostsRsd == null
                       ? null
                       : Number(invoice.otherRelatedCostsRsd),
-                  otherCostsAllocationBasis:
-                    invoice.allocationBasis === "MANUAL"
-                      ? "VALUE"
-                      : invoice.allocationBasis,
                   legacyNetValue: Number(invoice.netValue),
                 }}
               />
@@ -895,7 +957,7 @@ export default async function InboundInvoicePage({
         </Card>
 
         <Card>
-          <CardTitle description="Vrednost robe se raspoređuje po nabavnoj vrednosti, carina po stopama stavki, a transport po zapremini artikla. Ostali vezani troškovi koriste izabranu osnovu.">
+          <CardTitle description="Vrednost robe se raspoređuje po nabavnoj vrednosti, stvarna carina proporcionalno po carinskim stopama stavki, a transport i ostali vezani troškovi po zapremini artikla.">
             COGS obračun po šifri
           </CardTitle>
           {invoice.purchaseOrder ? (
@@ -915,13 +977,13 @@ export default async function InboundInvoicePage({
                   <p className="font-semibold tabular-nums">{fmt(linkedNetValueRsd)} RSD</p>
                 </div>
                 <div className="rounded-lg bg-muted-bg/50 p-3">
-                  <p className="text-ink-500">COGS korekcija</p>
+                  <p className="text-ink-500">Informativna razlika procene</p>
                   <p className="font-semibold tabular-nums">{fmt(linkedCostAdjustmentRsd)} RSD</p>
                 </div>
                 <div className="rounded-lg bg-muted-bg/50 p-3">
                   <p className="text-ink-500">Način raspodele</p>
                   <p className="font-semibold">
-                    Transport: zapremina · ostalo: {allocationBasisLabel[invoice.allocationBasis]}
+                    Transport i ostalo: zapremina
                   </p>
                 </div>
               </div>

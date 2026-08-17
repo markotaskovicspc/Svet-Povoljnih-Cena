@@ -10,17 +10,18 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  assertInboundCostVolumeReady,
   assertInboundInvoicePurchaseOrderLocked,
   allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
   calculateInboundInvoiceAmounts,
+  calculateInboundInvoiceValueRsd,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   resolveInboundReceiptWarehouse,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
-import type { InboundCostAllocationBasis } from "@/lib/admin/inbound-invoice";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 
 export type SaveInboundInvoiceInput = {
@@ -29,11 +30,12 @@ export type SaveInboundInvoiceInput = {
   receiptDate: Date;
   purchaseOrderId: string;
   warehouseId: string;
-  invoiceValueRsd: number;
+  currency: ErpCurrency;
+  exchangeRate: number;
+  invoiceValue: number;
   customsValueRsd: number;
   transportValueRsd: number;
   otherRelatedCostsRsd: number;
-  otherCostsAllocationBasis: InboundCostAllocationBasis;
   notes: string | null;
 };
 
@@ -113,7 +115,7 @@ export async function createInboundInvoice(now = new Date()) {
           invoiceDate: utcDateOnly(now),
           currency: ErpCurrency.RSD,
           exchangeRate: 1,
-          allocationBasis: "VALUE",
+          allocationBasis: "VOLUME",
         },
       });
     } catch (error) {
@@ -128,8 +130,15 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   if (!number) throw new Error("Broj prijemnice je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
   if (!input.warehouseId) throw new Error("Magacin prijema je obavezan.");
+  const exchangeRate =
+    input.currency === ErpCurrency.RSD ? 1 : input.exchangeRate;
+  const invoiceValueRsd = calculateInboundInvoiceValueRsd({
+    invoiceValue: input.invoiceValue,
+    currency: input.currency,
+    exchangeRate,
+  });
   const amounts = calculateInboundInvoiceAmounts({
-    invoiceValueRsd: input.invoiceValueRsd,
+    invoiceValueRsd,
     customsValueRsd: input.customsValueRsd,
     transportValueRsd: input.transportValueRsd,
     otherRelatedCostsRsd: input.otherRelatedCostsRsd,
@@ -190,9 +199,9 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         purchaseOrderId: input.purchaseOrderId,
         warehouseId: warehouse.id,
         type: InboundInvoiceType.COGS,
-        currency: ErpCurrency.RSD,
-        exchangeRate: 1,
-        value: amounts.netValue,
+        currency: input.currency,
+        exchangeRate,
+        value: input.invoiceValue,
         invoiceValueRsd: amounts.invoiceValueRsd,
         customsValueRsd: amounts.customsValueRsd,
         transportValueRsd: amounts.transportValueRsd,
@@ -200,7 +209,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         netValue: amounts.netValue,
         vatValue: amounts.vatValue,
         grossValue: amounts.grossValue,
-        allocationBasis: input.otherCostsAllocationBasis,
+        allocationBasis: "VOLUME",
         status: InboundInvoiceStatus.RECEIVED,
         cogsStatus: CogsStatus.CALCULATED,
         notes: input.notes,
@@ -271,6 +280,13 @@ export async function lockInboundInvoice(id: string) {
     if (!invoice.purchaseOrder.items.length) {
       throw new Error("Povezana porudžbenica nema artikle za COGS obračun.");
     }
+    assertInboundCostVolumeReady(
+      invoice.purchaseOrder.items.map((item) => ({
+        sku: item.sku,
+        qty: item.qty,
+        totalVolumeM3: Number(item.totalVolume ?? 0),
+      })),
+    );
     if (invoice.lockedAt) {
       await rebuildInboundInvoiceAllocations(tx, invoice.purchaseOrder.id);
       await recomputeIncomingStockForPurchaseOrders(tx, [invoice.purchaseOrder.id]);
@@ -336,6 +352,23 @@ export async function postInboundInvoice(id: string, actorId: string) {
   if (!invoice.purchaseOrderId) {
     throw new Error("Veza sa porudžbenicom je obavezna.");
   }
+  const {
+    postPurchaseOrder,
+    receivePurchaseOrder,
+    recomputePurchaseOrderTotals,
+  } = await import("@/lib/admin/po");
+  await recomputePurchaseOrderTotals(invoice.purchaseOrderId);
+  const costLines = await db.purchaseOrderItem.findMany({
+    where: { purchaseOrderId: invoice.purchaseOrderId },
+    select: { sku: true, qty: true, totalVolume: true },
+  });
+  assertInboundCostVolumeReady(
+    costLines.map((item) => ({
+      sku: item.sku,
+      qty: item.qty,
+      totalVolumeM3: Number(item.totalVolume ?? 0),
+    })),
+  );
   const warehouse = resolveInboundReceiptWarehouse({
     invoiceWarehouseId: invoice.warehouseId,
     invoiceWarehouse: invoice.warehouse,
@@ -343,12 +376,6 @@ export async function postInboundInvoice(id: string, actorId: string) {
       invoice.purchaseOrder?.receivingWarehouse ?? null,
   });
 
-  const {
-    postPurchaseOrder,
-    receivePurchaseOrder,
-  } = await import(
-    "@/lib/admin/po"
-  );
   await db.$transaction([
     db.inboundInvoice.update({
       where: { id },
@@ -451,10 +478,7 @@ export async function rebuildInboundInvoiceAllocations(
         transportValueRsd: Number(postedInvoice.transportValueRsd),
         otherRelatedCostsRsd: Number(postedInvoice.otherRelatedCostsRsd),
       },
-      otherCostsBasis:
-        postedInvoice.allocationBasis === "MANUAL"
-          ? "VALUE"
-          : postedInvoice.allocationBasis,
+      otherCostsBasis: "VOLUME",
       lines: order.items.map((item) => ({
         id: item.id,
         sku: item.sku,

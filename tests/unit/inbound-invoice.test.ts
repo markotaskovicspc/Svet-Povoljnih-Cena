@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
+  assertInboundCostVolumeReady,
   assertInboundInvoicePurchaseOrderLocked,
   calculateInboundInvoiceAmounts,
+  calculateInboundInvoiceValueRsd,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
@@ -102,6 +104,23 @@ describe("ERP module 5 inbound invoices and COGS", () => {
     });
   });
 
+  it("converts the final invoice currency with the entered middle exchange rate", () => {
+    expect(
+      calculateInboundInvoiceValueRsd({
+        invoiceValue: 12_540,
+        currency: "EUR",
+        exchangeRate: 102.16,
+      }),
+    ).toBe(1_281_086.4);
+    expect(
+      calculateInboundInvoiceValueRsd({
+        invoiceValue: 12_540,
+        currency: "RSD",
+        exchangeRate: 999,
+      }),
+    ).toBe(12_540);
+  });
+
   it("turns a complete COGS invoice into only the adjustment over the PO baseline", () => {
     expect(
       calculateLinkedInvoiceAdjustmentRsd({
@@ -109,12 +128,27 @@ describe("ERP module 5 inbound invoices and COGS", () => {
         invoices: [
           {
             netValue: 9_000,
-            exchangeRate: 1,
+            exchangeRate: 120,
             invoiceValueRsd: 8_500,
           },
         ],
       }),
     ).toBe(500);
+  });
+
+  it("blocks posting when any received line has no volume", () => {
+    expect(() =>
+      assertInboundCostVolumeReady([
+        { sku: "A", qty: 10, totalVolumeM3: 2 },
+        { sku: "B", qty: 5, totalVolumeM3: 0 },
+      ]),
+    ).toThrow(/zapremina za: B/);
+    expect(() =>
+      assertInboundCostVolumeReady([
+        { sku: "A", qty: 10, totalVolumeM3: 2 },
+        { sku: "B", qty: 0, totalVolumeM3: 0 },
+      ]),
+    ).not.toThrow();
   });
 
   it("requires net plus VAT to reconcile with gross", () => {
@@ -163,7 +197,7 @@ describe("ERP module 5 inbound invoices and COGS", () => {
     );
   });
 
-  it("raspoređuje stvarni transport po klijentovoj zapremini i carinu po stopi stavke", () => {
+  it("raspoređuje transport i ostale troškove po zapremini, a carinu po stopi", () => {
     const allocations = allocateActualInboundCosts({
       costs: {
         invoiceValueRsd: 2_000,
@@ -171,7 +205,7 @@ describe("ERP module 5 inbound invoices and COGS", () => {
         transportValueRsd: 1_000,
         otherRelatedCostsRsd: 100,
       },
-      otherCostsBasis: "VALUE",
+      otherCostsBasis: "VOLUME",
       lines: [
         {
           id: "a",
@@ -202,20 +236,20 @@ describe("ERP module 5 inbound invoices and COGS", () => {
         invoiceValueRsd: 1_000,
         customsRsd: 100,
         transportRsd: 900,
-        otherRelatedCostsRsd: 50,
-        totalActualCostRsd: 2_050,
-        adjustmentRsd: 860,
-        incomingUnitCogsRsd: 205,
+        otherRelatedCostsRsd: 90,
+        totalActualCostRsd: 2_090,
+        adjustmentRsd: 900,
+        incomingUnitCogsRsd: 209,
       }),
       expect.objectContaining({
         id: "b",
         invoiceValueRsd: 1_000,
         customsRsd: 0,
         transportRsd: 100,
-        otherRelatedCostsRsd: 50,
-        totalActualCostRsd: 1_150,
-        adjustmentRsd: 140,
-        incomingUnitCogsRsd: 115,
+        otherRelatedCostsRsd: 10,
+        totalActualCostRsd: 1_110,
+        adjustmentRsd: 100,
+        incomingUnitCogsRsd: 111,
       }),
     ]);
     expect(

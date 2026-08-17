@@ -403,7 +403,7 @@ const inboundInvoiceColumns: ErpColumn[] = [
   { key: "status", label: "Status", type: "status", options: ["U pripremi", "Primljena", "Proknjižena", "Storno"], defaultVisible: true },
   { key: "locked", label: "Proknjiženo", type: "boolean", defaultVisible: true },
   { key: "type", label: "Tip", options: ["COGS"] },
-  { key: "currency", label: "Valuta", options: ["RSD"] },
+  { key: "currency", label: "Valuta", options: ["RSD", "€", "$"] },
   { key: "exchangeRate", label: "Kurs", type: "number", align: "right" },
   {
     key: "allocationBasis",
@@ -727,7 +727,8 @@ const coreErpModules: ErpModule[] = [
     detailHrefBase: "/admin/erp/ulazne-fakture",
     notes: [
       "Dvoklik na red otvara pojedinačnu prijemnicu.",
-      "Vrednost robe se raspoređuje po vrednosti stavke, carina po stopama, transport po zapremini, a ostali troškovi po izabranoj osnovi.",
+      "Vrednost fakture se vodi u izabranoj valuti i preračunava po konačnom srednjem kursu. Carina se raspoređuje proporcionalno po stopama, a transport i ostali troškovi po zapremini.",
+      "Knjiženje je blokirano ako bilo kojoj stavci nedostaje količina po kontejneru ili dimenzije transportnog pakovanja.",
       "Proknjižena prijemnica se ne može redovno menjati niti ponovo uključiti u COGS.",
     ],
   },

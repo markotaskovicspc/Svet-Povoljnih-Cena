@@ -59,6 +59,7 @@ export function AdminActionForm({
   children,
   className,
   id,
+  preserveValues = false,
   refreshOnSuccess = false,
   testId,
 }: {
@@ -66,6 +67,7 @@ export function AdminActionForm({
   children: React.ReactNode | ((state: AdminActionState) => React.ReactNode);
   className?: string;
   id?: string;
+  preserveValues?: boolean;
   refreshOnSuccess?: boolean;
   testId?: string;
 }) {
@@ -111,6 +113,13 @@ export function AdminActionForm({
       className={className}
       id={id}
       data-testid={testId}
+      onReset={
+        preserveValues
+          ? (event) => {
+              event.preventDefault();
+            }
+          : undefined
+      }
       onInvalid={(event) => {
         setClientValidationMessage(nativeValidationMessage(event.currentTarget));
         setValidationFocusRequest((current) => current + 1);
