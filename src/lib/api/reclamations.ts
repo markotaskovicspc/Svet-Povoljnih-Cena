@@ -1,4 +1,5 @@
 import "server-only";
+import type { ReclamationRequest, ReclamationType } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
@@ -45,6 +46,7 @@ export type CreateReclamationResult =
       ok: false;
       reason:
         | "ORDER_NOT_FOUND"
+        | "ORDER_NOT_DELIVERED"
         | "ITEM_NOT_FOUND"
         | "UNAUTHORIZED"
         | "INVALID_PHOTO"
@@ -74,22 +76,57 @@ export async function createReclamation(
   input: CreateReclamationInput,
   userId: string,
 ): Promise<CreateReclamationResult> {
+  return createReclamationRecord(input, { expectedUserId: userId });
+}
+
+export async function createAdminReclamation(
+  input: CreateReclamationInput & {
+    type?: ReclamationType | null;
+    request?: ReclamationRequest | null;
+  },
+  actorId: string,
+): Promise<CreateReclamationResult> {
+  return createReclamationRecord(input, {
+    actorId,
+    requireDelivered: true,
+    type: input.type,
+    request: input.request,
+  });
+}
+
+async function createReclamationRecord(
+  input: CreateReclamationInput,
+  options: {
+    expectedUserId?: string;
+    actorId?: string;
+    requireDelivered?: boolean;
+    type?: ReclamationType | null;
+    request?: ReclamationRequest | null;
+  },
+): Promise<CreateReclamationResult> {
   const order = await lookupOrderForReclamation(input.orderNumberOrFiscal);
   if (!order) return { ok: false, reason: "ORDER_NOT_FOUND" };
-  if (order.userId !== userId) return { ok: false, reason: "UNAUTHORIZED" };
+  if (options.expectedUserId && order.userId !== options.expectedUserId) {
+    return { ok: false, reason: "UNAUTHORIZED" };
+  }
+  if (options.requireDelivered && order.status !== "ISPORUCENO") {
+    return { ok: false, reason: "ORDER_NOT_DELIVERED" };
+  }
 
   const item = order.items.find((i) => i.sku === input.sku);
   if (!item) return { ok: false, reason: "ITEM_NOT_FOUND" };
-  const account = await db.user.findUnique({
-    where: { id: userId },
-    select: {
-      firstName: true,
-      lastName: true,
-      name: true,
-      email: true,
-      phone: true,
-    },
-  });
+  const account = order.userId
+    ? await db.user.findUnique({
+        where: { id: order.userId },
+        select: {
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      })
+    : null;
   const [nameFirst, ...nameLast] = (account?.name ?? "").trim().split(/\s+/);
   const customerFirst =
     account?.firstName?.trim() || nameFirst || order.shipFirstName;
@@ -105,74 +142,99 @@ export async function createReclamation(
     return { ok: false, reason: "INVALID_PHOTO" };
   }
 
-  const result = await db.$transaction(async (tx) => {
-    // The counter update serializes concurrent requests for the same purchased
-    // line. The following SUM therefore sees every earlier committed quantity
-    // before deciding whether this request still fits in the purchased amount.
-    const [updated] = await tx.$queryRaw<
-      Array<{ reclamationCount: number; productId: string | null; qty: number }>
-    >`
-      UPDATE "OrderItem"
-      SET "reclamationCount" = "reclamationCount" + 1
-      WHERE id = ${item.id}
-      RETURNING "reclamationCount", "productId", qty
-    `;
-    if (!updated) throw new Error("Stavka porudžbine više ne postoji.");
+  let result: { id: string; number: string };
+  try {
+    result = await db.$transaction(async (tx) => {
+      if (options.requireDelivered) {
+        const [lockedOrder] = await tx.$queryRaw<Array<{ status: string }>>`
+          SELECT status::text AS status
+          FROM "Order"
+          WHERE id = ${order.id}
+          FOR UPDATE
+        `;
+        if (lockedOrder?.status !== "ISPORUCENO") {
+          throw new ReclamationOrderStatusError();
+        }
+      }
 
-    const aggregate = await tx.reclamation.aggregate({
-      where: { orderItemId: item.id },
-      _sum: { quantity: true },
-    });
-    const alreadyReclaimed = aggregate._sum.quantity ?? 0;
-    if (alreadyReclaimed + input.quantity > updated.qty) {
-      throw new ReclamationQuantityError();
-    }
+      // The counter update serializes concurrent requests for the same purchased
+      // line. The following SUM therefore sees every earlier committed quantity
+      // before deciding whether this request still fits in the purchased amount.
+      const [updated] = await tx.$queryRaw<
+        Array<{ reclamationCount: number; productId: string | null; qty: number }>
+      >`
+        UPDATE "OrderItem"
+        SET "reclamationCount" = "reclamationCount" + 1
+        WHERE id = ${item.id}
+        RETURNING "reclamationCount", "productId", qty
+      `;
+      if (!updated) throw new Error("Stavka porudžbine više ne postoji.");
 
-    const number = `R-${updated.reclamationCount}-${order.number}`;
+      const aggregate = await tx.reclamation.aggregate({
+        where: { orderItemId: item.id },
+        _sum: { quantity: true },
+      });
+      const alreadyReclaimed = aggregate._sum.quantity ?? 0;
+      if (alreadyReclaimed + input.quantity > updated.qty) {
+        throw new ReclamationQuantityError();
+      }
 
-    const reclamation = await tx.reclamation.create({
-      data: {
-        number,
-        orderId: order.id,
-        orderItemId: item.id,
-        productId: updated.productId,
-        sku: input.sku,
-        quantity: input.quantity,
-        customerFirst,
-        customerLast,
-        customerEmail: account?.email ?? order.guestEmail ?? null,
-        customerPhone,
-        description: input.description,
-        // Legacy non-null column retained for historical reporting. Customer
-        // communication now happens in the authenticated portal, not by email.
-        notifyVia: "PHONE",
-        userId,
-        photos: input.photos.length
-          ? {
-              createMany: {
-                data: input.photos.map((p) => ({
-                  url: p.url,
-                  width: p.width ?? null,
-                  height: p.height ?? null,
-                  bytes: p.bytes ?? null,
-                })),
-              },
-            }
-          : undefined,
-        events: {
-          create: { status: "PRIMLJENO", note: "Reklamacija primljena" },
+      const number = `R-${updated.reclamationCount}-${order.number}`;
+
+      return tx.reclamation.create({
+        data: {
+          number,
+          orderId: order.id,
+          orderItemId: item.id,
+          productId: updated.productId,
+          sku: input.sku,
+          quantity: input.quantity,
+          customerFirst,
+          customerLast,
+          customerEmail: account?.email ?? order.guestEmail ?? null,
+          customerPhone,
+          description: input.description,
+          // Legacy non-null column retained for historical reporting. Customer
+          // communication now happens in the authenticated portal, not by email.
+          notifyVia: "PHONE",
+          purchaseDate: options.actorId ? order.createdAt : undefined,
+          type: options.type ?? undefined,
+          request: options.request ?? undefined,
+          userId: order.userId,
+          photos: input.photos.length
+            ? {
+                createMany: {
+                  data: input.photos.map((p) => ({
+                    url: p.url,
+                    width: p.width ?? null,
+                    height: p.height ?? null,
+                    bytes: p.bytes ?? null,
+                  })),
+                },
+              }
+            : undefined,
+          events: {
+            create: {
+              status: "PRIMLJENO",
+              note: options.actorId
+                ? "Reklamacija ručno uneta u administraciji"
+                : "Reklamacija primljena",
+              actorId: options.actorId ?? null,
+            },
+          },
         },
-      },
-      select: { id: true, number: true },
+        select: { id: true, number: true },
+      });
     });
-
-    return reclamation;
-  }).catch((error: unknown) => {
-    if (error instanceof ReclamationQuantityError) return null;
+  } catch (error) {
+    if (error instanceof ReclamationQuantityError) {
+      return { ok: false, reason: "QUANTITY_EXCEEDED" };
+    }
+    if (error instanceof ReclamationOrderStatusError) {
+      return { ok: false, reason: "ORDER_NOT_DELIVERED" };
+    }
     throw error;
-  });
-
-  if (!result) return { ok: false, reason: "QUANTITY_EXCEEDED" };
+  }
 
   if (item.supplierExternalSku) {
     await enqueueBackgroundJob({
@@ -234,3 +296,4 @@ export async function listOrdersForReclamation(userId: string) {
 }
 
 class ReclamationQuantityError extends Error {}
+class ReclamationOrderStatusError extends Error {}

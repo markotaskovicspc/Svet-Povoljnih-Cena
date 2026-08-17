@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import {
+  createAdminReclamation,
   createReclamation,
   listOrdersForReclamation,
 } from "@/lib/api/reclamations";
@@ -88,6 +89,83 @@ afterAll(async () => {
 });
 
 describe("quantity-aware reclamation fulfillment", () => {
+  it("allows an audited manual reclamation only after delivery", async () => {
+    const manualOrder = await db.order.create({
+      data: {
+        number: `${tag}-MANUAL`,
+        guestEmail: "manual-reclamation@example.invalid",
+        status: "U_ISPORUCI",
+        channel: "WEB",
+        subtotal: 1_000,
+        total: 1_000,
+        shippingMethod: "KURIR",
+        paymentMethod: "POUZECE_GOTOVINA",
+        shipFirstName: "Ručni",
+        shipLastName: "Kupac",
+        shipPhone: "+381641112225",
+        shipStreet: "Test 2",
+        shipCity: "Novi Sad",
+        shipPostalCode: "21000",
+        termsAcceptedAt: new Date(),
+        items: {
+          create: {
+            productId,
+            sku: `${tag}-SKU`,
+            name: `${tag} artikal`,
+            qty: 1,
+            unitPriceFull: 1_000,
+            unitPriceSale: 1_000,
+          },
+        },
+      },
+    });
+
+    const input = {
+      orderNumberOrFiscal: manualOrder.number,
+      sku: `${tag}-SKU`,
+      quantity: 1,
+      description: "Operater evidentira telefonsku prijavu kupca.",
+      photos: [],
+      type: "KVAR" as const,
+      request: "ZAMENA" as const,
+    };
+
+    try {
+      await expect(
+        createAdminReclamation(input, "integration-admin"),
+      ).resolves.toEqual({ ok: false, reason: "ORDER_NOT_DELIVERED" });
+
+      await db.order.update({
+        where: { id: manualOrder.id },
+        data: { status: "ISPORUCENO" },
+      });
+      const created = await createAdminReclamation(input, "integration-admin");
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const saved = await db.reclamation.findUniqueOrThrow({
+        where: { id: created.id },
+        include: { events: true },
+      });
+      expect(saved).toMatchObject({
+        userId: null,
+        type: "KVAR",
+        request: "ZAMENA",
+        purchaseDate: expect.any(Date),
+      });
+      expect(saved.events).toEqual([
+        expect.objectContaining({
+          status: "PRIMLJENO",
+          actorId: "integration-admin",
+          note: "Reklamacija ručno uneta u administraciji",
+        }),
+      ]);
+    } finally {
+      await db.reclamation.deleteMany({ where: { orderId: manualOrder.id } });
+      await db.order.delete({ where: { id: manualOrder.id } });
+    }
+  });
+
   it("serializes concurrent quantities and never exceeds the purchased amount", async () => {
     const input = {
       orderNumberOrFiscal: `${tag}-ORDER`,

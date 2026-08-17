@@ -580,6 +580,62 @@ test.describe("Admin analitika reklamacija", () => {
       ).toContainText("%");
     });
 
+    await test.step("operater ručno evidentira reklamaciju samo za isporučenu stavku", async () => {
+      await page.goto("/admin/erp/reklamacije-dnevnik", {
+        waitUntil: "domcontentloaded",
+      });
+
+      const form = page.getByTestId("manual-reclamation-form");
+      await expect(form).toBeVisible();
+      await form
+        .locator('input[name="orderNumberOrFiscal"]')
+        .fill(fixture.activeOrder);
+      await form.locator('input[name="sku"]').fill(fixture.skuA);
+      await form.locator('input[name="quantity"]').fill("1");
+      await form.locator('textarea[name="description"]').fill(
+        `${prefix} prerana ručna reklamacija`,
+      );
+      await form.getByRole("button", { name: "Evidentiraj reklamaciju" }).click();
+      await expect(form.getByRole("alert")).toContainText(
+        "samo za isporučenu porudžbinu",
+      );
+
+      const description = `${prefix} ručni unos reklamacije`;
+      await form
+        .locator('input[name="orderNumberOrFiscal"]')
+        .fill(fixture.deliveredOrder);
+      await form.locator('input[name="sku"]').fill(fixture.skuC);
+      await form.locator('select[name="type"]').selectOption("KVAR");
+      await form.locator('select[name="request"]').selectOption("ZAMENA");
+      await form.locator('textarea[name="description"]').fill(description);
+      await form.getByRole("button", { name: "Evidentiraj reklamaciju" }).click();
+
+      await expect(form.getByRole("status")).toContainText(
+        /Reklamacija .+ je ručno evidentirana\./,
+      );
+      await expect
+        .poll(() =>
+          db.reclamation.findFirst({
+            where: { description },
+            include: { events: true },
+          }),
+        )
+        .not.toBeNull();
+      const saved = await db.reclamation.findFirstOrThrow({
+        where: { description },
+        include: { events: true },
+      });
+      expect(saved).toMatchObject({ type: "KVAR", request: "ZAMENA" });
+      expect(
+        saved.events.some(
+          (event) =>
+            event.actorId &&
+            event.note === "Reklamacija ručno uneta u administraciji",
+        ),
+      ).toBe(true);
+      await db.reclamation.delete({ where: { id: saved.id } });
+    });
+
     await test.step("mobilni prikaz nema horizontalni overflow stranice", async () => {
       if (test.info().project.name !== "mobile") return;
       await page.goto("/admin/erp/reklamacije-dnevnik", {

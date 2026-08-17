@@ -2,13 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ReclamationDecision,
+  ReclamationRequest,
   ReclamationResolution,
   ReclamationStatus,
+  ReclamationType,
   ReclamationWarehouseStatus,
   ShipmentPurpose,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { withAdmin, requireAdminAction } from "@/lib/admin";
+import {
+  withAdmin,
+  withAdminState,
+  requireAdminAction,
+  type AdminActionState,
+} from "@/lib/admin";
 import {
   buildReclamationAnalytics,
   type DeliveredProductRow,
@@ -24,6 +31,7 @@ import { ErpGrid } from "@/components/admin/erp-grid";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { Textarea } from "@/components/ui/textarea";
 import {
   cancelReclamationShipment,
@@ -31,6 +39,10 @@ import {
   saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
 import { getErpModule } from "@/lib/admin/erp";
+import {
+  createAdminReclamation,
+  createReclamationSchema,
+} from "@/lib/api/reclamations";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -49,6 +61,13 @@ const TYPE_LABELS: Record<string, string> = {
   FIZICKO_OSTECENJE: "Fizičko oštećenje",
   KVAR: "Kvar",
   NIJE_UNETO: "Nije uneto",
+};
+
+const REQUEST_LABELS: Record<ReclamationRequest, string> = {
+  POPRAVKA: "Popravka",
+  ZAMENA: "Zamena",
+  POVRACAJ_NOVCA: "Povraćaj novca",
+  UMANJENJE_CENE: "Umanjenje cene",
 };
 
 const RESOLUTION_LABELS: Record<string, string> = {
@@ -79,6 +98,83 @@ const SHIPMENT_PURPOSE_LABELS: Record<ShipmentPurpose, string> = {
   RECLAMATION_RETURN: "Povrat od kupca",
   RECLAMATION_REPLACEMENT: "Isporuka zamene/dela",
 };
+
+async function createManualReclamation(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "reclamation.manualCreate",
+      entity: "Reclamation",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = createReclamationSchema.safeParse({
+        orderNumberOrFiscal: actionData.get("orderNumberOrFiscal"),
+        sku: actionData.get("sku"),
+        quantity: Number(actionData.get("quantity")),
+        description: actionData.get("description"),
+        photos: [],
+      });
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error:
+            parsed.error.issues[0]?.message ??
+            "Podaci za reklamaciju nisu ispravni.",
+        };
+      }
+
+      const typeRaw = String(actionData.get("type") ?? "").trim();
+      const requestRaw = String(actionData.get("request") ?? "").trim();
+      const type = typeRaw ? (typeRaw as ReclamationType) : null;
+      const request = requestRaw ? (requestRaw as ReclamationRequest) : null;
+      if (type && !Object.values(ReclamationType).includes(type)) {
+        return { ok: false as const, error: "Tip reklamacije nije ispravan." };
+      }
+      if (request && !Object.values(ReclamationRequest).includes(request)) {
+        return { ok: false as const, error: "Zahtev kupca nije ispravan." };
+      }
+
+      const result = await createAdminReclamation(
+        { ...parsed.data, type, request },
+        actorId,
+      );
+      if (!result.ok) {
+        const errors: Record<typeof result.reason, string> = {
+          ORDER_NOT_FOUND: "Porudžbina nije pronađena.",
+          ORDER_NOT_DELIVERED:
+            "Ručna reklamacija je dozvoljena samo za isporučenu porudžbinu.",
+          ITEM_NOT_FOUND: "Stavka nije pronađena u porudžbini.",
+          UNAUTHORIZED: "Nemate pravo da unesete ovu reklamaciju.",
+          INVALID_PHOTO: "Priložena fotografija nije ispravna.",
+          QUANTITY_EXCEEDED:
+            "Količina prelazi preostalu reklamabilnu količinu.",
+        };
+        return { ok: false as const, error: errors[result.reason] };
+      }
+
+      revalidatePath("/admin/erp/reklamacije-dnevnik");
+      revalidatePath("/nalog/reklamacije");
+      return {
+        ok: true as const,
+        entityId: result.id,
+        message: `Reklamacija ${result.number} je ručno evidentirana.`,
+        diff: {
+          number: result.number,
+          orderNumberOrFiscal: parsed.data.orderNumberOrFiscal,
+          sku: parsed.data.sku,
+          quantity: parsed.data.quantity,
+          type,
+          request,
+        },
+      };
+    },
+  )(formData);
+}
 
 async function updateStatus(formData: FormData) {
   "use server";
@@ -368,6 +464,92 @@ export default async function ReclamationsPage({
         }
       />
       <div className="space-y-10 px-8 py-6">
+        <Card>
+          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Dostupne su samo isporučene porudžbine i preostale količine.">
+            Ručni unos reklamacije
+          </CardTitle>
+          <AdminActionForm
+            action={createManualReclamation}
+            refreshOnSuccess
+            className="mt-4 grid gap-4 lg:grid-cols-2"
+            testId="manual-reclamation-form"
+          >
+            <Field label="Broj porudžbine ili fiskalnog računa">
+              <input
+                name="orderNumberOrFiscal"
+                required
+                autoComplete="off"
+                placeholder="npr. SPC-2026-000123"
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+              />
+            </Field>
+            <Field label="SKU artikla">
+              <input
+                name="sku"
+                required
+                autoComplete="off"
+                placeholder="Šifra artikla sa porudžbine"
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+              />
+            </Field>
+            <Field label="Količina">
+              <input
+                name="quantity"
+                type="number"
+                min={1}
+                max={999}
+                defaultValue={1}
+                required
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+              />
+            </Field>
+            <Field label="Tip reklamacije">
+              <select
+                name="type"
+                defaultValue=""
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">Nije uneto</option>
+                {Object.values(ReclamationType).map((type) => (
+                  <option key={type} value={type}>
+                    {TYPE_LABELS[type] ?? type}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Zahtev kupca">
+              <select
+                name="request"
+                defaultValue=""
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">Nije uneto</option>
+                {Object.values(ReclamationRequest).map((request) => (
+                  <option key={request} value={request}>
+                    {REQUEST_LABELS[request]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="lg:col-span-2">
+              <Field label="Opis prijave">
+                <Textarea
+                  name="description"
+                  minLength={5}
+                  maxLength={250}
+                  rows={3}
+                  required
+                  placeholder="Unesite opis problema tačno kako ga je kupac prijavio."
+                />
+              </Field>
+            </div>
+            <div className="flex justify-end lg:col-span-2">
+              <SubmitButton pendingLabel="Evidentiram…">
+                Evidentiraj reklamaciju
+              </SubmitButton>
+            </div>
+          </AdminActionForm>
+        </Card>
         {erpModule ? (
           <section aria-labelledby="reclamation-grid" className="space-y-3">
             <div>
