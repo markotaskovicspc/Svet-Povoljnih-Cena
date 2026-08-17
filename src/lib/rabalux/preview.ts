@@ -17,6 +17,7 @@ import {
   isRabaluxSerbiaStockPresent,
   isRabaluxSerbiaWebStockAvailable,
 } from "./serbia-stock";
+import { shouldReconcileMissingCatalogProducts } from "./weekly-stock-policy";
 
 export type RabaluxPreviewSummary = {
   source: "XML" | "CSV" | "DATABASE";
@@ -330,14 +331,18 @@ async function prepareCatalogPreview(supplier: Supplier, runId: string) {
   }
 
   const rawSeen = new Set(catalog.rawItems.map((item) => item.sourceSku));
-  const missing = products.filter((product) => {
-    if (!product.supplierExternalId) return false;
-    if (eligibleSeen.has(product.supplierExternalId)) return false;
-    if (rawSeen.has(product.supplierExternalId) && product.dcAvailableQty > 0) {
-      return false;
-    }
-    return true;
-  });
+  const missing = shouldReconcileMissingCatalogProducts(
+    catalog.weeklySnapshotActive,
+  )
+    ? products.filter((product) => {
+        if (!product.supplierExternalId) return false;
+        if (eligibleSeen.has(product.supplierExternalId)) return false;
+        if (rawSeen.has(product.supplierExternalId) && product.dcAvailableQty > 0) {
+          return false;
+        }
+        return true;
+      })
+    : [];
   for (const product of missing) {
     const outsideSerbiaStock = rawSeen.has(product.supplierExternalId!);
     diff.deactivations++;
