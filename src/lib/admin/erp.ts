@@ -38,6 +38,7 @@ export type ErpColumn = {
 
 export type AdminGridOperator =
   | "contains"
+  | "not_contains"
   | "equals"
   | "not_equals"
   | "gt"

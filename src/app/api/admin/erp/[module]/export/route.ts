@@ -48,6 +48,8 @@ function matches(value: ErpValue, filter: AdminGridFilter) {
   switch (filter.operator) {
     case "contains":
       return actualText.includes(expectedText);
+    case "not_contains":
+      return !actualText.includes(expectedText);
     case "equals":
       return actualText === expectedText;
     case "not_equals":

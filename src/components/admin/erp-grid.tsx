@@ -236,6 +236,7 @@ function inputType(column: ErpColumn) {
 
 const FILTER_OPERATOR_LABELS: Record<AdminGridFilter["operator"], string> = {
   contains: "sadrži",
+  not_contains: "ne sadrži",
   equals: "jednako",
   not_equals: "nije jednako",
   gt: "veće od",
@@ -256,7 +257,7 @@ function operatorsFor(column: ErpColumn): AdminGridFilter["operator"][] {
   if (column.type === "status" || column.type === "boolean" || column.options?.length) {
     return ["equals", "not_equals"];
   }
-  return ["contains", "equals", "not_equals"];
+  return ["contains", "not_contains", "equals", "not_equals"];
 }
 
 const EMPTY_FIXED_FILTERS: AdminGridFilter[] = [];

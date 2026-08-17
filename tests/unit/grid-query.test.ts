@@ -26,4 +26,29 @@ describe("ERP numeric filters", () => {
       ).map((row) => row.id),
     ).toEqual(["positive"]);
   });
+
+  it("applies case-insensitive not-contains filtering to text columns", () => {
+    const rows = [
+      { id: "alpha", values: { name: "Relaxo Fotelja" } },
+      { id: "beta", values: { name: "Cube sto" } },
+      { id: "empty", values: { name: null } },
+    ];
+
+    expect(
+      filterAndSortGridRows(
+        rows,
+        ["name"],
+        "",
+        [
+          {
+            id: "without-relaxo",
+            columnKey: "name",
+            operator: "not_contains",
+            value: "RELAXO",
+          },
+        ],
+        [],
+      ).map((row) => row.id),
+    ).toEqual(["beta", "empty"]);
+  });
 });
