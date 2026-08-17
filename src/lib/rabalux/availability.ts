@@ -1,8 +1,7 @@
-import { effectiveSellableStock } from "./allocation";
-
-export const RABALUX_STOCK_MAX_AGE_MS = 30 * 60 * 1_000;
+/** Weekly Serbia XLSX is accepted for seven days plus a one-day delivery grace. */
+export const RABALUX_STOCK_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1_000;
 export const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
-/** Minimum supplier feed quantity required for storefront publication. */
+/** Minimum Serbia XLSX quantity required for web purchasing. */
 export const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
 
 export type StockAvailabilitySource = "DC" | "SUPPLIER" | "MIXED" | "NONE";
@@ -93,21 +92,13 @@ export function resolveRabaluxAvailability(input: {
 }) {
   const warehouseStock = nonnegativeInt(input.warehouseStock);
   const supplier = resolveRabaluxSupplierStock(input);
-  const sellableStock = effectiveSellableStock({
-    warehouseStock,
-    supplierStock: supplier.eligible ? supplier.rawStock : 0,
-    supplierReservedStock: supplier.eligible ? supplier.reservedStock : 0,
-    supplierSafetyStock: supplier.eligible ? supplier.safetyStock : 0,
-  });
-  const supplierAvailable = Math.max(sellableStock - warehouseStock, 0);
+  // Rabalux web purchasing follows the weekly Serbia report exclusively.
+  // ERP/DC quantities remain observable for administration, but they cannot
+  // make a row with 0-9 supplier units purchasable.
+  const supplierAvailable = supplier.sellableStock;
+  const sellableStock = supplierAvailable;
   const source: StockAvailabilitySource =
-    warehouseStock > 0 && supplierAvailable > 0
-      ? "MIXED"
-      : warehouseStock > 0
-        ? "DC"
-        : supplierAvailable > 0
-          ? "SUPPLIER"
-          : "NONE";
+    supplierAvailable > 0 ? "SUPPLIER" : "NONE";
   return {
     warehouseAvailable: warehouseStock,
     supplierAvailable,

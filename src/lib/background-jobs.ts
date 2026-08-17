@@ -64,6 +64,9 @@ const schemas = {
     assetId: z.string().min(1).optional(),
     assetType: z.enum(["MEDIA", "ATTACHMENT"]).optional(),
   }),
+  RABALUX_MEDIA_DELETE: z.object({
+    keys: z.array(z.string().min(1).max(500)).min(1).max(100),
+  }),
   SUPPLIER_ORDER_EMAIL: z.object({
     fulfillmentId: z.string().min(1),
     dispatchKey: z.string().min(1).max(80).optional(),
@@ -405,6 +408,14 @@ async function dispatchJob(job: JobRow) {
           ? { assetId: args.assetId, assetType: args.assetType }
           : undefined,
       );
+      return;
+    }
+    case "RABALUX_MEDIA_DELETE": {
+      const { deleteManagedRabaluxMedia } = await import(
+        "@/lib/rabalux/media-deletion"
+      );
+      const args = payload as z.infer<typeof schemas.RABALUX_MEDIA_DELETE>;
+      await deleteManagedRabaluxMedia(args.keys);
       return;
     }
     case "SUPPLIER_ORDER_EMAIL": {

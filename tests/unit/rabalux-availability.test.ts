@@ -8,7 +8,7 @@ import {
 describe("Rabalux customer availability", () => {
   const now = new Date("2026-07-27T12:00:00.000Z");
 
-  it("combines DC and approved fresh supplier stock with a one-unit buffer", () => {
+  it("uses approved fresh Serbia stock with a one-unit buffer", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,
@@ -22,8 +22,8 @@ describe("Rabalux customer availability", () => {
     ).toMatchObject({
       warehouseAvailable: 2,
       supplierAvailable: 14,
-      sellableStock: 16,
-      source: "MIXED",
+      sellableStock: 14,
+      source: "SUPPLIER",
       supplierFresh: true,
     });
   });
@@ -49,7 +49,7 @@ describe("Rabalux customer availability", () => {
     });
   });
 
-  it("keeps DC stock available below the supplier threshold", () => {
+  it("does not let DC stock override the weekly 10-unit threshold", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,
@@ -60,23 +60,29 @@ describe("Rabalux customer availability", () => {
         supplierApproved: true,
         now,
       }),
-    ).toMatchObject({ sellableStock: 2, source: "DC", supplierEligible: false });
+    ).toMatchObject({
+      warehouseAvailable: 2,
+      sellableStock: 0,
+      source: "NONE",
+      supplierEligible: false,
+    });
   });
 
-  it("fails closed for stale, unapproved or disabled supplier stock while preserving DC", () => {
+  it("fails closed for stale, unapproved or disabled supplier stock", () => {
     const base = {
       warehouseStock: 3,
       supplierStock: 20,
       supplierReservedStock: 0,
-      lastSupplierStockSyncAt: new Date("2026-07-27T11:29:59.000Z"),
+      lastSupplierStockSyncAt: new Date("2026-07-19T11:59:59.000Z"),
       supplierOperational: true,
       supplierApproved: true,
       now,
     };
     expect(resolveRabaluxAvailability(base)).toMatchObject({
-      sellableStock: 3,
+      warehouseAvailable: 3,
+      sellableStock: 0,
       supplierAvailable: 0,
-      source: "DC",
+      source: "NONE",
       supplierFresh: false,
     });
     expect(
@@ -85,22 +91,22 @@ describe("Rabalux customer availability", () => {
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierApproved: false,
       }).sellableStock,
-    ).toBe(3);
+    ).toBe(0);
     expect(
       resolveRabaluxAvailability({
         ...base,
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierOperational: false,
       }).sellableStock,
-    ).toBe(3);
+    ).toBe(0);
   });
 
-  it("uses a strict thirty-minute freshness window", () => {
+  it("uses an eight-day freshness window for the weekly Serbia XLSX", () => {
     expect(
-      isRabaluxStockFresh(new Date("2026-07-27T11:30:00.000Z"), now),
+      isRabaluxStockFresh(new Date("2026-07-19T12:00:00.000Z"), now),
     ).toBe(true);
     expect(
-      isRabaluxStockFresh(new Date("2026-07-27T11:29:59.999Z"), now),
+      isRabaluxStockFresh(new Date("2026-07-19T11:59:59.999Z"), now),
     ).toBe(false);
   });
 
@@ -144,7 +150,7 @@ describe("Rabalux customer availability", () => {
       resolveRabaluxSupplierStock({
         supplierStock: 25,
         supplierReservedStock: 0,
-        lastSupplierStockSyncAt: new Date("2026-07-27T11:00:00.000Z"),
+        lastSupplierStockSyncAt: new Date("2026-07-19T11:00:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
         now,

@@ -9,7 +9,6 @@ import {
   retryRecoverableFailedRabaluxMediaJobs,
   syncPendingRabaluxMedia,
   syncRabaluxCatalog,
-  syncRabaluxStock,
 } from "@/lib/rabalux";
 import {
   consumeRabaluxSyncPreview,
@@ -25,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/admin/data-table";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { RabaluxControls } from "@/components/admin/rabalux-controls";
+import { RabaluxWeeklyStockImport } from "@/components/admin/rabalux-weekly-stock-import";
 import { AdminActionForm } from "@/components/admin/action-form";
 import {
   reviewRabaluxPriceProposal,
@@ -35,13 +35,18 @@ import {
 import { createSupplierWithAutomaticCode } from "@/lib/admin/supplier-master.server";
 import {
   isRabaluxSupplierOperational,
-  rabaluxStockAuthenticationStatus,
 } from "@/lib/rabalux/config";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
   RABALUX_SUPPLIER_SAFETY_STOCK,
   rabaluxStockFreshAfter,
 } from "@/lib/rabalux/availability";
+import {
+  applyRabaluxWeeklyStock,
+  createRabaluxWeeklyStockPreview,
+  type RabaluxWeeklyStockApplyResult,
+  type RabaluxWeeklyStockPreviewResult,
+} from "@/lib/rabalux/weekly-stock";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -226,15 +231,7 @@ async function executeRabalux(
               allowRiskyPrices: true,
               allowLargeRemoval: true,
             })
-          : target === "stock"
-            ? await syncRabaluxStock({
-                expectedSourceHash: confirmation.sourceHash ?? undefined,
-                previewRunId: confirmation.runId,
-                requestedById: actorId,
-                reason,
-                allowLargeRemoval: true,
-              })
-            : await syncPendingRabaluxMedia(100, {
+          : await syncPendingRabaluxMedia(100, {
                 expectedSourceHash: confirmation.sourceHash ?? undefined,
                 previewRunId: confirmation.runId,
                 requestedById: actorId,
@@ -252,6 +249,80 @@ async function executeRabalux(
           result,
         } as unknown as Record<string, unknown>,
         message: "Akcija je prihvaćena i rezultat je zabeležen.",
+      };
+    },
+  )(formData);
+}
+
+async function previewRabaluxWeeklyStock(
+  _state: AdminActionState<RabaluxWeeklyStockPreviewResult>,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "rabalux.weeklyStock.preview",
+      entity: "ImportRun",
+    },
+    async (actorId, formData: FormData) => {
+      const file = formData.get("file");
+      if (!(file instanceof File) || file.size <= 0) {
+        return { ok: false as const, error: "Izaberite Rabalux XLSX fajl." };
+      }
+      const result = await createRabaluxWeeklyStockPreview({
+        actorId,
+        fileName: file.name,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      });
+      return {
+        ok: true as const,
+        entityId: "supplier-rabalux",
+        diff: { fileName: file.name, summary: result.summary },
+        result,
+        message: "XLSX je proveren. Pregledajte promene i primenite isti fajl.",
+      };
+    },
+  )(formData);
+}
+
+async function applyRabaluxWeeklyStockAction(
+  _state: AdminActionState<RabaluxWeeklyStockApplyResult>,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "rabalux.weeklyStock.apply",
+      entity: "ImportRun",
+    },
+    async (actorId, formData: FormData) => {
+      const file = formData.get("file");
+      if (!(file instanceof File) || file.size <= 0) {
+        return { ok: false as const, error: "Ponovo izaberite pregledani XLSX fajl." };
+      }
+      const result = await applyRabaluxWeeklyStock({
+        actorId,
+        fileName: file.name,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        token: String(formData.get("token") ?? ""),
+        phrase: String(formData.get("phrase") ?? ""),
+        reason: String(formData.get("reason") ?? ""),
+      });
+      revalidatePath("/admin/xml-import");
+      revalidatePath("/admin/erp/artikli");
+      updateTag("catalog-products");
+      revalidatePath("/p/[slug]", "page");
+      revalidatePath("/k/[...slug]", "page");
+      return {
+        ok: true as const,
+        entityId: result.runId,
+        diff: result,
+        result,
+        message: `Rabalux XLSX je primenjen: ${result.summary.stockChanges} promena stanja, ${result.deletedProducts} proizvoda trajno obrisano i ${result.storageFilesQueuedForDeletion} fajlova poslato na brisanje.`,
       };
     },
   )(formData);
@@ -489,9 +560,6 @@ export default async function XmlImportPage({
     }),
   ]);
   const rabalux = suppliers.find((supplier) => supplier.integrationKey === "RABALUX");
-  const rabaluxStockAuth = rabalux
-    ? rabaluxStockAuthenticationStatus(rabalux)
-    : null;
   const rabaluxOperational = isRabaluxSupplierOperational(rabalux);
   const stockFreshAfter = rabaluxStockFreshAfter();
   const [
@@ -648,23 +716,23 @@ export default async function XmlImportPage({
         <div className="space-y-6">
           {rabalux ? (
             <Card>
-              <CardTitle description="Katalog dnevno · lager preko API ključa na 15 minuta · mediji resumable">
+              <CardTitle description="Katalog dnevno · lager iz nedeljnog XLSX-a za Srbiju · mediji resumable">
                 Rabalux
               </CardTitle>
+              <RabaluxWeeklyStockImport
+                previewAction={previewRabaluxWeeklyStock}
+                applyAction={applyRabaluxWeeklyStockAction}
+              />
+              <div className="mt-4">
               <RabaluxControls
                 previewAction={previewRabalux}
                 executeAction={executeRabalux}
               />
+              </div>
               <div className="mt-5 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5">
                 <DashboardStat
-                  label="Stock API pristup"
-                  value={
-                    rabaluxStockAuth?.configured
-                      ? rabaluxStockAuth.dedicatedApiKey
-                        ? "API ključ"
-                        : "Povezan (legacy ključ)"
-                      : "Nedostaje"
-                  }
+                  label="Izvor lagera"
+                  value="Nedeljni XLSX (RS)"
                 />
                 <DashboardStat label="Čeka odobrenje" value={pendingProducts.length} />
                 <DashboardStat label="Nemapirano" value={unmappedPairs.length} />
@@ -707,7 +775,7 @@ export default async function XmlImportPage({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium text-ink">
-                        Tačno Rabalux stanje iz API feeda
+                        Tačno Rabalux stanje iz nedeljnog XLSX-a
                       </p>
                       <p className="mt-1 text-xs text-ink-500">
                         Prijavljeno stanje je dobavljačev broj. Za prodaju se
@@ -773,10 +841,17 @@ export default async function XmlImportPage({
                   <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
                     Pravilo je: dobavljač mora imati najmanje{" "}
                     {RABALUX_PUBLIC_STOCK_THRESHOLD} kom, stanje ne sme biti
-                    starije od 30 minuta, a zatim se od količine oduzimaju
+                    starije od 8 dana, a zatim se od količine oduzimaju
                     aktivne rezervacije i {RABALUX_SUPPLIER_SAFETY_STOCK}
                     sigurnosni komad. Kupac i dalje ne vidi tačan broj.
                   </p>
+                  {rabaluxStockSummary.staleSkus > 0 ? (
+                    <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-ink-700">
+                      {rabaluxStockSummary.staleSkus} Rabalux SKU ima zastareo ili
+                      nepoznat datum XLSX stanja. Dobavljačko stanje tih artikala
+                      ne ulazi u online kupovinu; učitajte novi nedeljni izveštaj.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -924,9 +999,8 @@ export default async function XmlImportPage({
                 </div>
               </form>
               <p className="mt-3 text-xs text-ink-500">
-                Rabalux lager endpoint koristi API ključ uz korisnički
-                identifikator. Kredencijali su server-side env promenljive i
-                njihove vrednosti se ne prikazuju u administraciji.
+                XML/CSV feed ostaje izvor opisa, cena, slika i tehničkih podataka.
+                Stanje za Srbiju menja isključivo potvrđeni nedeljni XLSX.
               </p>
             </Card>
           ) : null}

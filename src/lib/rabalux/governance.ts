@@ -11,6 +11,7 @@ import {
   type RabaluxSyncScope,
 } from "./safety";
 import { RABALUX_INTEGRATION_KEY } from "./config";
+import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "./availability";
 import {
   activeRetailPriceEntryWhere,
   removeActiveRetailPrice,
@@ -117,6 +118,8 @@ export async function reviewRabaluxProduct(args: {
       supplierExternalId: true,
       supplierApprovalStatus: true,
       isActive: true,
+      availableWebAuto: true,
+      supplierStock: true,
       fullPrice: true,
       priceListEntries: {
         where: activeRetailPriceEntryWhere(),
@@ -149,6 +152,9 @@ export async function reviewRabaluxProduct(args: {
     product.priceListEntries.length > 0 &&
     product.categories.length > 0 &&
     product.media.length > 0;
+  const availableWebAuto =
+    isActive &&
+    (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD;
   const governanceRun = await createGovernanceRun({
     supplierId: product.supplierId,
     actorId: args.actorId,
@@ -163,6 +169,7 @@ export async function reviewRabaluxProduct(args: {
         supplierApprovedAt: approve ? new Date() : null,
         supplierApprovedById: approve ? args.actorId : null,
         isActive,
+        availableWebAuto,
       },
     });
     await tx.supplierSyncChange.create({
@@ -173,14 +180,16 @@ export async function reviewRabaluxProduct(args: {
         externalSku: product.supplierExternalId!,
         changeType: `PRODUCT_${args.decision}`,
         status: "APPLIED",
-        fieldNames: ["supplierApprovalStatus", "isActive"],
+        fieldNames: ["supplierApprovalStatus", "isActive", "availableWebAuto"],
         before: {
           supplierApprovalStatus: product.supplierApprovalStatus,
           isActive: product.isActive,
+          availableWebAuto: product.availableWebAuto,
         },
         after: {
           supplierApprovalStatus: approve ? "APPROVED" : "REJECTED",
           isActive,
+          availableWebAuto,
         },
         appliedAt: new Date(),
         reviewedById: args.actorId,
@@ -533,14 +542,21 @@ function rollbackScalarData(before: Record<string, unknown>, fields: string[]) {
     "supplierApprovalStatus",
     "supplierStock",
     "supplierNextArrivalAt",
+    "lastSupplierStockSyncAt",
     "isDtz",
+    "availableWebAuto",
+    "deletedAt",
   ]);
   const data: Record<string, unknown> = {};
   for (const field of fields) {
     if (!allowed.has(field) || !(field in before)) continue;
     if (field === "technicalSpecs" && before[field] == null) {
       data[field] = Prisma.JsonNull;
-    } else if (field === "supplierNextArrivalAt") {
+    } else if (
+      field === "supplierNextArrivalAt" ||
+      field === "lastSupplierStockSyncAt" ||
+      field === "deletedAt"
+    ) {
       data[field] =
         typeof before[field] === "string" ? new Date(before[field]) : before[field];
     } else {

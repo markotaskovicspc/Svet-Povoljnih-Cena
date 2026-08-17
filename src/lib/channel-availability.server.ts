@@ -143,7 +143,6 @@ export async function expireStaleRabaluxWebAvailability(now = new Date()) {
     where: {
       deletedAt: null,
       availableWebAuto: true,
-      dcAvailableQty: { lte: CHANNEL_SAFETY_STOCK.web },
       supplier: { is: { integrationKey: "RABALUX" } },
       ...staleWhere,
     },

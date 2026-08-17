@@ -26,7 +26,7 @@ const TARGET: Record<
 };
 
 export function parseRabaluxSyncTarget(value: unknown): RabaluxSyncTarget | null {
-  return value === "catalog" || value === "stock" || value === "media"
+  return value === "catalog" || value === "media"
     ? value
     : null;
 }
@@ -35,6 +35,11 @@ export async function createRabaluxSyncPreview(
   actorId: string,
   target: RabaluxSyncTarget,
 ): Promise<RabaluxPreviewResult> {
+  if (target === "stock") {
+    throw new Error(
+      "Rabalux lager se više ne preuzima iz zajedničkog feeda. Učitajte nedeljni XLSX za Srbiju.",
+    );
+  }
   const supplier = await db.supplier.findUniqueOrThrow({
     where: { integrationKey: RABALUX_INTEGRATION_KEY },
   });
@@ -62,9 +67,7 @@ export async function createRabaluxSyncPreview(
     const recordsRead =
       target === "catalog"
         ? summary.rawCatalogRows
-        : target === "stock"
-          ? summary.stockRows
-          : summary.diff.mediaPending;
+        : summary.diff.mediaPending;
     await db.importRun.update({
       where: { id },
       data: {
@@ -111,6 +114,11 @@ export async function consumeRabaluxSyncPreview(args: {
   phrase: string;
   reason: string;
 }) {
+  if (args.target === "stock") {
+    throw new Error(
+      "Rabalux lager se više ne preuzima iz zajedničkog feeda. Učitajte nedeljni XLSX za Srbiju.",
+    );
+  }
   const targetConfig = TARGET[args.target];
   const reason = args.reason.trim();
   if (reason.length < 5 || reason.length > 500) {

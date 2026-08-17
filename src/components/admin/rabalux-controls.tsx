@@ -45,7 +45,6 @@ export function RabaluxControls({
             className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
           >
             <option value="catalog">Katalog sync</option>
-            <option value="stock">Stock sync</option>
             <option value="media">Media sync</option>
           </select>
         </Field>
@@ -62,7 +61,7 @@ export function RabaluxControls({
         <div className="space-y-4 rounded-lg border border-border p-4">
           <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Sirovi RS katalog" value={preview.summary.rawCatalogRows} />
-            <Stat label="RS stock redovi" value={preview.summary.stockRows} />
+            <Stat label="XLSX stock redovi u bazi" value={preview.summary.stockRows} />
             <Stat
               label="Za uvoz (pozitivan RS lager)"
               value={preview.summary.serbiaStockEligibleRows}

@@ -28,6 +28,7 @@ import type { RabaluxSyncOptions } from "./sync";
 import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
 import { normalizeRabaluxImageForStorage } from "./image-normalization";
 import { isRecoverableRabaluxMediaFailure } from "./media-recovery-policy";
+import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "./availability";
 
 const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
@@ -238,6 +239,7 @@ async function refreshRabaluxProductActivity(productId: string) {
         select: { price: true },
       },
       articleStatus: true,
+      supplierStock: true,
       supplierApprovalStatus: true,
       categories: { select: { categoryId: true }, take: 1 },
       media: {
@@ -247,15 +249,19 @@ async function refreshRabaluxProductActivity(productId: string) {
       },
     },
   });
+  const isActive =
+    product.supplierApprovalStatus === "APPROVED" &&
+    product.priceListEntries.length > 0 &&
+    product.articleStatus !== "ARH" &&
+    product.categories.length > 0 &&
+    product.media.length > 0;
   await db.product.update({
     where: { id: productId },
     data: {
-      isActive:
-        product.supplierApprovalStatus === "APPROVED" &&
-        product.priceListEntries.length > 0 &&
-        product.articleStatus !== "ARH" &&
-        product.categories.length > 0 &&
-        product.media.length > 0,
+      isActive,
+      availableWebAuto:
+        isActive &&
+        (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD,
     },
   });
 }

@@ -1,12 +1,5 @@
 import { NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
-import {
-  isRabaluxEnabled,
-  RabaluxSyncBusyError,
-  syncRabaluxStock,
-} from "@/lib/rabalux";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
-import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,26 +9,10 @@ async function run(request: Request) {
   if (!isAuthorizedCronRequest(request, null)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!isRabaluxEnabled()) {
-    return NextResponse.json({ ok: true, skipped: "integration_disabled" });
-  }
-  try {
-    const summary = await syncRabaluxStock();
-    revalidateTag("catalog-products", "max");
-    return NextResponse.json({ ok: true, summary });
-  } catch (error) {
-    if (error instanceof RabaluxSyncBusyError) {
-      return NextResponse.json(
-        { ok: true, skipped: "already_running" },
-        { status: 202 },
-      );
-    }
-    logOperationalError("rabalux.stock.failed", error);
-    return NextResponse.json(
-      { ok: false, error: "Rabalux stock synchronization failed." },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json({
+    ok: true,
+    skipped: "weekly_serbia_xlsx_is_authoritative",
+  });
 }
 
 export const GET = run;

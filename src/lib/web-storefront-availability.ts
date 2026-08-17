@@ -48,11 +48,10 @@ function enabled(value: string | undefined) {
  * Production currently has legacy catalog data but no populated DC balances.
  * Until those balances are imported and verified, the storefront keeps honoring
  * the manual Web check without allowing an all-false auto backfill to hide the
- * complete catalog. The approved business default counts audited DC stock and
- * fresh, approved Rabalux stock (with its safety buffer), but this guard must
- * stay off until the DC import/audit is complete and the client confirms that
- * supplier stock should participate. Set ENFORCE_WEB_AUTO_AVAILABILITY=true
- * only when that combined automatic availability is trustworthy.
+ * complete ordinary catalog. Rabalux publication is intentionally independent
+ * of this guard: every approved XLSX row stays visible, while its weekly Serbia
+ * quantity still controls purchasing. Keep the guard off until the DC
+ * import/audit is complete.
  */
 export function isWebAutoAvailabilityEnforced() {
   return enabled(process.env.ENFORCE_WEB_AUTO_AVAILABILITY);
@@ -80,39 +79,51 @@ function rabaluxSupplierStockWhere(now: Date): Prisma.ProductWhereInput {
   };
 }
 
-/** Database predicate that mirrors the stock exposed by catalog DTOs. */
-export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInput {
+function rabaluxSupplierWhere(): Prisma.ProductWhereInput {
   return {
-    OR: [
+    supplier: {
+      is: { integrationKey: RABALUX_INTEGRATION_KEY },
+    },
+  };
+}
+
+function rabaluxUnavailableStockWhere(now: Date): Prisma.ProductWhereInput {
+  if (!isRabaluxEnabled()) return rabaluxSupplierWhere();
+  return {
+    AND: [
+      rabaluxSupplierWhere(),
       {
-        AND: [nonRabaluxSupplierWhere(), { dcAvailableQty: { gt: 0 } }],
-      },
-      {
-        AND: [
-          {
-            supplier: {
-              is: { integrationKey: RABALUX_INTEGRATION_KEY },
-            },
-          },
-          {
-            OR: [
-              { dcAvailableQty: { gt: 0 } },
-              ...(isRabaluxEnabled()
-                ? [
-                    {
-                      AND: [
-                        { supplier: { is: { enabled: true } } },
-                        rabaluxSupplierStockWhere(now),
-                      ],
-                    } satisfies Prisma.ProductWhereInput,
-                  ]
-                : []),
-            ],
-          },
+        OR: [
+          { supplier: { is: { enabled: false } } },
+          { supplierApprovalStatus: null },
+          { supplierApprovalStatus: { not: "APPROVED" } },
+          { supplierStock: null },
+          { supplierStock: { lt: RABALUX_PUBLIC_STOCK_THRESHOLD } },
+          { lastSupplierStockSyncAt: null },
+          { lastSupplierStockSyncAt: { lt: rabaluxStockFreshAfter(now) } },
         ],
       },
     ],
   };
+}
+
+/** Database predicate that mirrors the stock exposed by catalog DTOs. */
+export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInput {
+  const buckets: Prisma.ProductWhereInput[] = [
+    {
+      AND: [nonRabaluxSupplierWhere(), { dcAvailableQty: { gt: 0 } }],
+    },
+  ];
+  if (isRabaluxEnabled()) {
+    buckets.push({
+      AND: [
+        rabaluxSupplierWhere(),
+        { supplier: { is: { enabled: true } } },
+        rabaluxSupplierStockWhere(now),
+      ],
+    });
+  }
+  return { OR: buckets };
 }
 
 /**
@@ -138,9 +149,12 @@ export function storefrontAvailabilityWhere(
     });
   }
   if (selected.includes("out-of-stock")) {
-    buckets.push({
-      AND: [ordinaryOutOfStock, { incomingStock: { lte: 0 } }],
-    });
+    buckets.push(
+      {
+        AND: [ordinaryOutOfStock, { incomingStock: { lte: 0 } }],
+      },
+      rabaluxUnavailableStockWhere(now),
+    );
   }
 
   return { OR: buckets };
@@ -178,7 +192,12 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
       ...(enforceAutomaticAvailability
         ? [
             {
-              availableWebAuto: true,
+              OR: [
+                { availableWebAuto: true },
+                // Rabalux 0-9 rows remain catalog-visible; this flag controls
+                // purchasing for them, not publication.
+                rabaluxSupplierWhere(),
+              ],
             } satisfies Prisma.ProductWhereInput,
           ]
         : []),
@@ -210,29 +229,10 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
           },
           {
             AND: [
-              {
-                supplier: {
-                  is: {
-                    integrationKey: RABALUX_INTEGRATION_KEY,
-                  },
-                },
-              },
+              rabaluxSupplierWhere(),
               { articleStatus: { not: "ARH" } },
-              {
-                OR: [
-                  { dcAvailableQty: { gt: 0 } },
-                  ...(isRabaluxEnabled()
-                    ? [
-                        {
-                          AND: [
-                            { supplier: { is: { enabled: true } } },
-                            rabaluxSupplierStockWhere(now),
-                          ],
-                        } satisfies Prisma.ProductWhereInput,
-                      ]
-                    : []),
-                ],
-              },
+              { supplierApprovalStatus: "APPROVED" },
+              { supplier: { is: { enabled: true } } },
             ],
           },
         ],
@@ -260,7 +260,6 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
   }
   if (product.articleStatus === "ARH") return false;
 
-  if (dcAvailable > 0) return true;
   return Boolean(
     product.supplier.enabled &&
       isRabaluxEnabled() &&
@@ -278,7 +277,11 @@ export function storefrontPublicationBlockers(
   if (product.deletedAt) reasons.push("Artikal je arhiviran");
   if (!product.isActive) reasons.push("Artikal nije aktivan");
   if (!product.availableWebManual) reasons.push("Web kanal je ručno isključen");
-  if (isWebAutoAvailabilityEnforced() && !product.availableWebAuto) {
+  if (
+    isWebAutoAvailabilityEnforced() &&
+    product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY &&
+    !product.availableWebAuto
+  ) {
     reasons.push("Automatska web dostupnost je isključena");
   }
   if (!product.hasActiveRetailPrice) {
@@ -304,20 +307,10 @@ export function storefrontPublicationBlockers(
     product.supplier?.integrationKey === RABALUX_INTEGRATION_KEY
   ) {
     if (product.articleStatus === "ARH") reasons.push("Rabalux artikal je arhiviran");
-    if ((product.dcAvailableQty ?? 0) <= 0) {
-      if (!isRabaluxEnabled()) reasons.push("Rabalux integracija je isključena");
-      if (!product.supplier.enabled) reasons.push("Rabalux dobavljač je isključen");
-      if (product.supplierApprovalStatus !== "APPROVED") {
-        reasons.push("Rabalux artikal nije odobren");
-      }
-      if ((product.supplierStock ?? 0) < RABALUX_PUBLIC_STOCK_THRESHOLD) {
-        reasons.push(
-          `Rabalux stanje je manje od minimuma ${RABALUX_PUBLIC_STOCK_THRESHOLD}`,
-        );
-      }
-      if (!isRabaluxStockFresh(product.lastSupplierStockSyncAt)) {
-        reasons.push("Rabalux stanje je zastarelo");
-      }
+    if (!isRabaluxEnabled()) reasons.push("Rabalux integracija je isključena");
+    if (!product.supplier.enabled) reasons.push("Rabalux dobavljač je isključen");
+    if (product.supplierApprovalStatus !== "APPROVED") {
+      reasons.push("Rabalux artikal nije odobren");
     }
   }
 
