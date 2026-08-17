@@ -259,7 +259,10 @@ export default async function StocktakeDispatchPage({
   const warehouseQty = new Map(
     warehouseStocks.map((stock) => [stock.productId, stock.qty]),
   );
-  const editable = isStocktakeDispatchEditable(dispatch.status);
+  const editable = isStocktakeDispatchEditable(
+    dispatch.status,
+    dispatch.archivedAt,
+  );
   const totalQty = dispatch.items.reduce((sum, item) => sum + item.qty, 0);
 
   return (
@@ -300,7 +303,12 @@ export default async function StocktakeDispatchPage({
           <CardTitle description="Popis se vodi kao STOCKTAKE otpremnica; prijemni magacin je fiksno Popis.">
             Podaci otpremnice
           </CardTitle>
-          {!editable ? (
+          {dispatch.archivedAt ? (
+            <p className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-ink-700">
+              Dokument je arhiviran {formatDate(dispatch.archivedAt)}. Vratite ga
+              iz arhive pre izmene ili knjiženja.
+            </p>
+          ) : !editable ? (
             <p className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
               Dokument je proknjižen {formatDate(dispatch.postedAt)} i više ga nije moguće menjati.
             </p>

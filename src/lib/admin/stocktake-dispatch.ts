@@ -6,8 +6,11 @@ export const STOCKTAKE_STATUS_LABEL = {
   CANCELLED: "Storniran",
 } as const;
 
-export function isStocktakeDispatchEditable(status: string) {
-  return status === "DRAFT";
+export function isStocktakeDispatchEditable(
+  status: string,
+  archivedAt?: Date | string | null,
+) {
+  return status === "DRAFT" && !archivedAt;
 }
 
 export function nextStocktakeDispatchNumber(

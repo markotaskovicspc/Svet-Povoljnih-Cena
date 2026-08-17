@@ -38,7 +38,10 @@ export default async function ErpModulePage({
   if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
   const definition = getErpModuleDefinition(slug);
   if (definition?.redirectHref) redirect(definition.redirectHref);
-  const erpModule = await getErpModule(slug);
+  const isStocktakeArchive = slug === "popisi" && search.view === "archive";
+  const erpModule = await getErpModule(slug, {
+    stocktakeArchived: isStocktakeArchive,
+  });
   if (!erpModule) notFound();
   const isRabaluxStockView =
     slug === "artikli" && search.view === "rabalux-stock";
@@ -80,7 +83,7 @@ export default async function ErpModulePage({
       />
       <div className="px-8 py-6">
         <ErpGrid
-          key={`${erpModule.slug}:${isRabaluxStockView ? "rabalux-stock" : "default"}`}
+          key={`${erpModule.slug}:${isRabaluxStockView ? "rabalux-stock" : isStocktakeArchive ? "archive" : "default"}`}
           module={erpModule}
           initialVisibleColumns={
             isRabaluxStockView ? rabaluxStockColumns : undefined
@@ -89,6 +92,7 @@ export default async function ErpModulePage({
           initialSearchColumn={
             isRabaluxStockView ? "supplierIntegrationKey" : ""
           }
+          initialContext={isStocktakeArchive ? { archive: "1" } : undefined}
         />
       </div>
     </>

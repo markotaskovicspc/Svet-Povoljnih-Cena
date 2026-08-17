@@ -35,7 +35,7 @@ async function requireDraftStocktake(
 ) {
   const dispatch = await tx.dispatchNote.findUnique({
     where: { id: dispatchId },
-    select: { id: true, number: true, type: true, status: true },
+    select: { id: true, number: true, type: true, status: true, archivedAt: true },
   });
   if (!dispatch || dispatch.type !== DispatchNoteType.STOCKTAKE) {
     throw new Error("Popis nije pronađen.");
@@ -43,7 +43,38 @@ async function requireDraftStocktake(
   if (dispatch.status !== DocumentPostingStatus.DRAFT) {
     throw new Error(`Popis ${dispatch.number} više nije moguće menjati.`);
   }
+  if (dispatch.archivedAt) {
+    throw new Error(`Popis ${dispatch.number} je arhiviran. Prvo ga vratite iz arhive.`);
+  }
   return dispatch;
+}
+
+export async function archiveStocktakeDispatches(ids: string[]) {
+  if (ids.length === 0) throw new Error("Izaberite bar jedan popis.");
+  return (
+    await db.dispatchNote.updateMany({
+      where: {
+        id: { in: Array.from(new Set(ids)) },
+        type: DispatchNoteType.STOCKTAKE,
+        archivedAt: null,
+      },
+      data: { archivedAt: new Date() },
+    })
+  ).count;
+}
+
+export async function restoreStocktakeDispatches(ids: string[]) {
+  if (ids.length === 0) throw new Error("Izaberite bar jedan popis.");
+  return (
+    await db.dispatchNote.updateMany({
+      where: {
+        id: { in: Array.from(new Set(ids)) },
+        type: DispatchNoteType.STOCKTAKE,
+        archivedAt: { not: null },
+      },
+      data: { archivedAt: null },
+    })
+  ).count;
 }
 
 export async function createStocktakeDispatch() {
@@ -182,6 +213,9 @@ export async function postStocktakeDispatches(ids: string[], actorId: string) {
       if (!dispatch || dispatch.type !== DispatchNoteType.STOCKTAKE) {
         throw new Error(`Popis ${id} ne postoji.`);
       }
+      if (dispatch.archivedAt) {
+        throw new Error(`Popis ${dispatch.number} je arhiviran. Prvo ga vratite iz arhive.`);
+      }
       if (dispatch.status !== DocumentPostingStatus.DRAFT) return false;
       if (dispatch.items.length === 0) {
         throw new Error(`Popis ${dispatch.number} nema nijednu stavku.`);
@@ -192,6 +226,7 @@ export async function postStocktakeDispatches(ids: string[], actorId: string) {
           id,
           type: DispatchNoteType.STOCKTAKE,
           status: DocumentPostingStatus.DRAFT,
+          archivedAt: null,
         },
         data: {
           status: DocumentPostingStatus.POSTED,

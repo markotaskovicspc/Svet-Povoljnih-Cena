@@ -17,6 +17,10 @@ describe("ERP tačka 17 — Popisi", () => {
       "Novi popis",
       "Uredi",
       "Proknjiži popis",
+      "Arhiviraj",
+      "Arhiva",
+      "Vrati iz arhive",
+      "Aktivni popisi",
     ]);
     expect(definition?.commands[0]?.action).toBe("stocktake.create");
     expect(definition?.commands[2]?.action).toBe("stocktake.post");
@@ -28,6 +32,7 @@ describe("ERP tačka 17 — Popisi", () => {
       "Stavke",
       "Ukupna količina",
       "Proknjiženo",
+      "Arhivirano",
       "Kreirano",
     ]);
     expect(STOCKTAKE_DESTINATION_NAME).toBe("Popis");
@@ -45,6 +50,7 @@ describe("ERP tačka 17 — Popisi", () => {
 
   it("allows changes only while the popis is a draft", () => {
     expect(isStocktakeDispatchEditable("DRAFT")).toBe(true);
+    expect(isStocktakeDispatchEditable("DRAFT", new Date())).toBe(false);
     expect(isStocktakeDispatchEditable("POSTED")).toBe(false);
     expect(isStocktakeDispatchEditable("CANCELLED")).toBe(false);
   });

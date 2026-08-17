@@ -139,6 +139,7 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
         "Stavke",
         "Ukupna količina",
         "Proknjiženo",
+        "Arhivirano",
         "Kreirano",
       ]);
     });
@@ -266,6 +267,42 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       await expect(row).toContainText(fixture.warehouseName);
       await expect(row).toContainText("Popis");
       await expect(row).toContainText("Proknjižen");
+
+      await row.getByRole("checkbox").check();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Arhiviraj (1)" }).click();
+      await expect(page.getByRole("status")).toContainText(
+        "Arhivirano popisa: 1.",
+      );
+      await expect(page.getByText(dispatchNumber, { exact: true })).toHaveCount(0);
+
+      await page.getByRole("button", { name: "Arhiva" }).click();
+      await expect(page).toHaveURL(/\/admin\/erp\/popisi\?view=archive$/);
+      await page
+        .getByPlaceholder("Brza pretraga po vidljivim kolonama")
+        .fill(dispatchNumber);
+      const archivedRow = page.getByRole("row").filter({
+        has: page.getByText(dispatchNumber, { exact: true }),
+      });
+      await expect(archivedRow).toContainText("Proknjižen");
+      await archivedRow.getByRole("checkbox").check();
+      await page.getByRole("button", { name: "Vrati iz arhive (1)" }).click();
+      await expect(page.getByRole("status")).toContainText(
+        "Vraćeno iz arhive: 1.",
+      );
+      await expect(page.getByText(dispatchNumber, { exact: true })).toHaveCount(0);
+
+      const [restored, movementCount] = await Promise.all([
+        db.dispatchNote.findUniqueOrThrow({ where: { id: dispatchId } }),
+        db.stockMovement.count({
+          where: {
+            dispatchNoteId: dispatchId,
+            idempotencyKey: { startsWith: `stocktake-dispatch:${dispatchId}:` },
+          },
+        }),
+      ]);
+      expect(restored).toMatchObject({ status: "POSTED", archivedAt: null });
+      expect(movementCount).toBe(1);
 
       await page.goto("/admin/erp/otpremnice", { waitUntil: "domcontentloaded" });
       await page

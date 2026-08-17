@@ -79,6 +79,7 @@ export type SalesOrderExportFilters = {
   fiscalIssuedFrom?: Date;
   fiscalIssuedToExclusive?: Date;
   fiscalized?: boolean;
+  stocktakeArchived?: boolean;
 };
 
 export type ErpRow = {
@@ -888,6 +889,7 @@ export async function getErpModule(
     query?: string;
     searchColumn?: string;
     salesOrderFilters?: SalesOrderExportFilters;
+    stocktakeArchived?: boolean;
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
@@ -913,7 +915,10 @@ export async function getErpModule(
       options.warehouseId,
       options.query,
       options.searchColumn,
-      options.salesOrderFilters,
+      {
+        ...options.salesOrderFilters,
+        stocktakeArchived: options.stocktakeArchived,
+      },
       skip,
     ),
     includeLookupOptions && slug === "artikli"
@@ -948,7 +953,21 @@ export async function getErpModule(
           ? purchasePriceContext.skus
         : column.options,
   }));
-  const commands = runtimeDefinition.commands.map((command) => ({
+  const commands = runtimeDefinition.commands
+    .filter((command) => {
+      if (slug !== "popisi") return true;
+      if (options.stocktakeArchived) {
+        return (
+          command.action === "stocktake.restore" ||
+          command.href === "/admin/erp/popisi"
+        );
+      }
+      return (
+        command.action !== "stocktake.restore" &&
+        command.href !== "/admin/erp/popisi"
+      );
+    })
+    .map((command) => ({
     ...command,
     label:
       pickupAvailability?.provider === "MYGLS" && command.action === "pickup.post"
@@ -977,7 +996,7 @@ export async function getErpModule(
           ? "Artikal sa tom šifrom nije pronađen."
           : field.valueNotFoundText,
     })),
-  }));
+    }));
   return {
     ...runtimeDefinition,
     columns,

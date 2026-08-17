@@ -334,6 +334,30 @@ export const operationalErpModules: ErpModule[] = [
         confirm:
           "Proknjižiti izabrane popise kao otpremnice i skinuti stavke sa izvornog lagera?",
       },
+      {
+        label: "Arhiviraj",
+        tone: "neutral",
+        action: "stocktake.archive",
+        needsSelection: true,
+        confirm:
+          "Arhivirati izabrane popise? Dokumenti i proknjižena kretanja zaliha ostaju sačuvani.",
+      },
+      {
+        label: "Arhiva",
+        tone: "neutral",
+        href: "/admin/erp/popisi?view=archive",
+      },
+      {
+        label: "Vrati iz arhive",
+        tone: "neutral",
+        action: "stocktake.restore",
+        needsSelection: true,
+      },
+      {
+        label: "Aktivni popisi",
+        tone: "neutral",
+        href: "/admin/erp/popisi",
+      },
     ],
     detailHrefBase: "/admin/erp/popisi",
     columns: [
@@ -344,6 +368,7 @@ export const operationalErpModules: ErpModule[] = [
       number("items", "Stavke"),
       number("totalQty", "Ukupna količina"),
       date("postedAt", "Proknjiženo"),
+      date("archivedAt", "Arhivirano"),
       date("createdAt", "Kreirano"),
     ],
     rows: emptyRows,
@@ -930,7 +955,7 @@ export async function getOperationalErpRows(
     case "kretanja-zaliha":
       return stockMovementRows(take);
     case "popisi":
-      return stocktakeDispatchRows(take);
+      return stocktakeDispatchRows(take, salesOrderFilters?.stocktakeArchived);
     case "prodajni-nalozi":
       return salesOrderRows(take, salesOrderFilters);
     case "otpremnice":
@@ -1278,9 +1303,15 @@ async function stockMovementRows(take: number): Promise<ErpRow[]> {
   });
 }
 
-async function stocktakeDispatchRows(take: number): Promise<ErpRow[]> {
+async function stocktakeDispatchRows(
+  take: number,
+  archived = false,
+): Promise<ErpRow[]> {
   const rows = await db.dispatchNote.findMany({
-    where: { type: DispatchNoteType.STOCKTAKE },
+    where: {
+      type: DispatchNoteType.STOCKTAKE,
+      archivedAt: archived ? { not: null } : null,
+    },
     take,
     orderBy: { createdAt: "desc" },
     include: {
@@ -1298,6 +1329,7 @@ async function stocktakeDispatchRows(take: number): Promise<ErpRow[]> {
       items: row.items.length,
       totalQty: row.items.reduce((sum, item) => sum + item.qty, 0),
       postedAt: dateTime(row.postedAt),
+      archivedAt: dateTime(row.archivedAt),
       createdAt: dateTime(row.createdAt),
     },
   }));

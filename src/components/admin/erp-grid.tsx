@@ -268,12 +268,14 @@ export function ErpGrid({
   initialVisibleColumns,
   initialQuery = "",
   initialSearchColumn = "",
+  initialContext = {},
 }: {
   module: ErpModule;
   fixedFilters?: AdminGridFilter[];
   initialVisibleColumns?: string[];
   initialQuery?: string;
   initialSearchColumn?: string;
+  initialContext?: Record<string, string>;
 }) {
   const router = useRouter();
   const clientReady = useClientReady();
@@ -335,7 +337,12 @@ export function ErpGrid({
   const [loadingRows, setLoadingRows] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [context, setContext] = useState<Record<string, string>>(() =>
-    Object.fromEntries((module.contextFilters ?? []).map((filter) => [filter.key, ""])),
+    ({
+      ...Object.fromEntries(
+        (module.contextFilters ?? []).map((filter) => [filter.key, ""]),
+      ),
+      ...initialContext,
+    }),
   );
   const canEditColumn = (columnKey: string) =>
     Boolean(module.editableColumns?.includes(columnKey));

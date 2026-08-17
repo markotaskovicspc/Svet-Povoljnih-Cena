@@ -46,8 +46,10 @@ import {
   postPickupBatches,
 } from "@/lib/admin/pickup-batch.server";
 import {
+  archiveStocktakeDispatches,
   createStocktakeDispatch,
   postStocktakeDispatches,
+  restoreStocktakeDispatches,
 } from "@/lib/admin/stocktake-dispatch.server";
 import {
   customerGenderLabel,
@@ -193,6 +195,28 @@ async function runCommand(
       }
       const posted = await postStocktakeDispatches(ids, actorId);
       return { message: `Proknjiženo popisa: ${posted}.` };
+    }
+    case "stocktake.archive": {
+      if (module !== "popisi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const archived = await archiveStocktakeDispatches(ids);
+      return {
+        message: archived
+          ? `Arhivirano popisa: ${archived}.`
+          : "Izabrani popisi su već arhivirani.",
+      };
+    }
+    case "stocktake.restore": {
+      if (module !== "popisi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const restored = await restoreStocktakeDispatches(ids);
+      return {
+        message: restored
+          ? `Vraćeno iz arhive: ${restored}.`
+          : "Izabrani popisi su već aktivni.",
+      };
     }
     case "sales-order.delete": {
       if (module !== "prodajni-nalozi") {

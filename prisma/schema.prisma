@@ -2691,6 +2691,8 @@ model DispatchNote {
   sefError                   String?               @db.Text
   notes                      String?               @db.Text
   postedAt                   DateTime?
+  /// Hides completed or abandoned documents from active operational lists without deleting history.
+  archivedAt                 DateTime?
   actorId                    String?
   createdAt                  DateTime              @default(now())
   updatedAt                  DateTime              @updatedAt
@@ -2713,6 +2715,7 @@ model DispatchNote {
   @@index([status, createdAt])
   @@index([sourceWarehouseId, createdAt])
   @@index([sefSentAt])
+  @@index([type, archivedAt, createdAt])
 }
 
 model DispatchNoteItem {

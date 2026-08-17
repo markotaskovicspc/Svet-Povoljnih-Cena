@@ -126,6 +126,8 @@ export async function GET(
     includeLookupOptions: false,
     query: search.get("q") ?? undefined,
     searchColumn: requestedSearchColumn || undefined,
+    stocktakeArchived:
+      slug === "popisi" && search.get("archive") === "1",
     salesOrderFilters:
       slug === "prodajni-nalozi"
         ? {

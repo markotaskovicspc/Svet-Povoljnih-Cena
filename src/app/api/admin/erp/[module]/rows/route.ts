@@ -69,6 +69,8 @@ export async function GET(
       includeLookupOptions: false,
       query: query || undefined,
       searchColumn: requestedSearchColumn || undefined,
+      stocktakeArchived:
+        slug === "popisi" && search.get("archive") === "1",
     }),
     useDatabasePagination ? countArticleRows() : Promise.resolve(null),
   ]);
