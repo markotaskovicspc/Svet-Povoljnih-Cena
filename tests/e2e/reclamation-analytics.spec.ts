@@ -659,6 +659,19 @@ test.describe("Admin analitika reklamacija", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(page.getByRole("button", { name: "Otvori meni" })).toBeVisible();
+      await page.getByRole("button", { name: "Otvori meni" }).click();
+      const menuScroll = page.getByTestId("admin-mobile-nav-scroll");
+      await expect(menuScroll).toBeVisible();
+      expect(
+        await menuScroll.evaluate((element) => ({
+          overflowY: getComputedStyle(element).overflowY,
+          hasOverflow: element.scrollHeight > element.clientHeight,
+        })),
+      ).toEqual({ overflowY: "auto", hasOverflow: true });
+      const lastMenuLink = menuScroll.getByRole("link", { name: "Audit log" });
+      await lastMenuLink.scrollIntoViewIfNeeded();
+      await expect(lastMenuLink).toBeVisible();
+      await page.keyboard.press("Escape");
       const overflow = await page.evaluate(() => ({
         clientWidth: document.documentElement.clientWidth,
         scrollWidth: document.documentElement.scrollWidth,

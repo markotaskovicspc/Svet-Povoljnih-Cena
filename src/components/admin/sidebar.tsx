@@ -83,13 +83,21 @@ export function AdminMobileNav({ nav }: { nav: AdminNavGroup[] }) {
       >
         <MenuIcon />
       </SheetTrigger>
-      <SheetContent side="left" className="w-4/5 max-w-xs p-0">
+      <SheetContent
+        side="left"
+        className="flex h-[100dvh] w-4/5 max-w-xs flex-col overflow-hidden p-0"
+      >
         <SheetTitle className="sr-only">Admin navigacija</SheetTitle>
-        <AdminNavContent
-          nav={nav}
-          pathname={pathname}
-          onNavigate={() => setOpen(false)}
-        />
+        <div
+          data-testid="admin-mobile-nav-scroll"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)]"
+        >
+          <AdminNavContent
+            nav={nav}
+            pathname={pathname}
+            onNavigate={() => setOpen(false)}
+          />
+        </div>
       </SheetContent>
     </Sheet>
   );
