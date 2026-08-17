@@ -32,6 +32,7 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
         ? displayDimensions
         : packageDimensions,
   });
+  const isRabalux = product.supplierIntegrationKey?.toUpperCase() === "RABALUX";
 
   if (!readiness.ready) {
     return {
@@ -49,10 +50,14 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     const mixed = product.availabilitySource === "MIXED";
     return {
       canAddToCart: true,
-      label: supplierOnly ? "Dostupno" : "Na stanju",
+      label: supplierOnly
+        ? isRabalux
+          ? "Dostupno kod dobavljača"
+          : "Dostupno"
+        : "Na stanju",
       addLabel: "Dodaj u korpu",
       message: supplierOnly
-        ? `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
+        ? `${isRabalux ? "Dostupno kod dobavljača · " : ""}Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`
         : mixed
           ? "Spremno za poručivanje"
           : stock <= 2
@@ -62,8 +67,6 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
       readiness,
     };
   }
-
-  const isRabalux = product.supplierIntegrationKey?.toUpperCase() === "RABALUX";
 
   if (!isRabalux && incomingStock > 0) {
     return {

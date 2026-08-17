@@ -23,6 +23,7 @@ import {
   type SvetAkcijaProduct,
 } from "@/lib/svet-akcija/catalog";
 import {
+  RABALUX_DELIVERY_WINDOW,
   resolveRabaluxAvailability,
 } from "@/lib/rabalux/availability";
 import {
@@ -454,14 +455,16 @@ function mapProduct(
       mimeType: attachment.mimeType ?? undefined,
       sizeBytes: attachment.sizeBytes ?? undefined,
     })),
-    deliveryDays: resolveDeliveryWindowForQuantity(
-      {
-        quantity: 1,
-        dcAvailable: availability.warehouseAvailable,
-        supplierAvailable: availability.supplierAvailable,
-      },
-      deliveryWindows,
-    ),
+    deliveryDays: isRabalux
+      ? { ...RABALUX_DELIVERY_WINDOW }
+      : resolveDeliveryWindowForQuantity(
+          {
+            quantity: 1,
+            dcAvailable: availability.warehouseAvailable,
+            supplierAvailable: availability.supplierAvailable,
+          },
+          deliveryWindows,
+        ),
     allowsAssembly: p.allowsAssembly,
     assemblyCities: p.assemblyCities.map((a) => a.city.name),
     media: {
@@ -683,14 +686,16 @@ function mapProductListItem(
       actionName: entry.action.name,
       isHero: entry.action.isHero,
     })),
-    deliveryDays: resolveDeliveryWindowForQuantity(
-      {
-        quantity: 1,
-        dcAvailable: availability.warehouseAvailable,
-        supplierAvailable: availability.supplierAvailable,
-      },
-      deliveryWindows,
-    ),
+    deliveryDays: isRabalux
+      ? { ...RABALUX_DELIVERY_WINDOW }
+      : resolveDeliveryWindowForQuantity(
+          {
+            quantity: 1,
+            dcAvailable: availability.warehouseAvailable,
+            supplierAvailable: availability.supplierAvailable,
+          },
+          deliveryWindows,
+        ),
     allowsAssembly: p.allowsAssembly,
     assemblyCities: [],
     media: {

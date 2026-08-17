@@ -29,6 +29,20 @@ describe("product availability messaging", () => {
     expect(result.message).not.toContain("10 na stanju");
   });
 
+  it("uses the supplier label and delivery window for Rabalux stock", () => {
+    const result = getProductAvailability({
+      ...readyProduct,
+      supplierIntegrationKey: "RABALUX",
+      availabilitySource: "SUPPLIER",
+      deliveryDays: { min: 5, max: 8 },
+    });
+    expect(result).toMatchObject({
+      canAddToCart: true,
+      label: "Dostupno kod dobavljača",
+      message: "Dostupno kod dobavljača · Isporuka 5–8 radnih dana",
+    });
+  });
+
   it("keeps exact low-stock messaging for DC stock", () => {
     expect(
       getProductAvailability({

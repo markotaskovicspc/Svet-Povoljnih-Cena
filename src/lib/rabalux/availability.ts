@@ -3,6 +3,8 @@ export const RABALUX_STOCK_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1_000;
 export const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
 /** Minimum Serbia XLSX quantity required for web purchasing. */
 export const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
+/** Customer-facing delivery promise for supplier-stock Rabalux items. */
+export const RABALUX_DELIVERY_WINDOW = { min: 5, max: 8 } as const;
 
 export type StockAvailabilitySource = "DC" | "SUPPLIER" | "MIXED" | "NONE";
 

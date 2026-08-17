@@ -188,7 +188,11 @@ export function ProductCard({
             : "Loyalty cena uz prijavljen nalog"
           : "";
   const availability = getProductAvailability(product);
-  const deliveryLine = `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`;
+  const deliveryLine =
+    product.supplierIntegrationKey?.toUpperCase() === "RABALUX" &&
+    availability.canAddToCart
+      ? availability.message
+      : `Isporuka ${product.deliveryDays.min}–${product.deliveryDays.max} radnih dana`;
   const footerLine = availability.canAddToCart
     ? [promoLine, deliveryLine].filter(Boolean).join(" · ")
     : availability.message;
