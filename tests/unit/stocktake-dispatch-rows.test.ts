@@ -37,7 +37,7 @@ describe("stocktake dispatch ERP rows", () => {
 
     expect(dbMocks.dispatchNoteFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { type: "STOCKTAKE" },
+        where: { type: "STOCKTAKE", archivedAt: null },
         take: 25,
       }),
     );
@@ -52,6 +52,7 @@ describe("stocktake dispatch ERP rows", () => {
           items: 2,
           totalQty: 5,
           postedAt: null,
+          archivedAt: null,
           createdAt: "2030-05-06T07:08:09.000Z",
         },
       },
