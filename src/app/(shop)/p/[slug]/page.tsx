@@ -23,6 +23,7 @@ import { ProductViewAnalytics } from "@/components/analytics/first-party-analyti
 import { getPublishedContentPage } from "@/lib/cms/pages";
 import { getSystemContentPage } from "@/lib/cms/system-pages";
 import { resolveProductPdpLayout } from "@/lib/product-pdp-layout";
+import { deliveryCategory } from "@/lib/delivery-tariff";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -116,6 +117,13 @@ export default async function ProductPage({ params }: RouteProps) {
   const materials = product.materials;
   const pdpLayout = resolveProductPdpLayout(product);
   const dimensionsLabel = formatDimensions(product.dimensionsCm);
+  const publicDeliveryCategory = product.unitPackageDimensionsCm
+    ? deliveryCategory([
+        product.unitPackageDimensionsCm.w,
+        product.unitPackageDimensionsCm.d,
+        product.unitPackageDimensionsCm.h,
+      ])
+    : null;
 
   return (
     <article className="bg-canvas pb-32 md:pb-16">
@@ -164,8 +172,16 @@ export default async function ProductPage({ params }: RouteProps) {
                 {dimensionsLabel}
               </p>
             ) : null}
-            <p className="mt-1 text-xs text-ink-500">
-              Šifra artikla: <ProductSkuCopy sku={product.sku} />
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500">
+              <span>
+                Šifra artikla: <ProductSkuCopy sku={product.sku} />
+              </span>
+              {publicDeliveryCategory ? (
+                <span className="font-semibold text-ink-700">
+                  KATEGORIJA ZA ISPORUKU:{" "}
+                  {publicDeliveryCategory === 1 ? "I" : "II"}
+                </span>
+              ) : null}
             </p>
             <ProductColorOptions
               product={product}
@@ -184,7 +200,7 @@ export default async function ProductPage({ params }: RouteProps) {
                 {product.attributes.map((attribute) => (
                   <span
                     key={attribute}
-                    className="rounded-full bg-muted-bg px-2 py-1 text-xs font-semibold text-ink-800"
+                    className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-ink-800 ring-1 ring-border/60"
                   >
                     {attribute}
                   </span>

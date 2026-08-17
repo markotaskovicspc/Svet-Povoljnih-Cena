@@ -8,8 +8,10 @@ import type { Product } from "@/types";
 
 describe("PDP boje proizvoda", () => {
   const product = {
+    sku: "CHAIR-BLACK",
     colorPrimary: "Crna",
     colorSecondary: "Natur",
+    media: { images: [{ url: "/products/chair-black.webp" }] },
   } as Product;
 
   it("ne prikazuje obojeni kružić na karticama", () => {
@@ -41,6 +43,10 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("CRNA");
     expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
+    expect(markup).toContain("Varijanta:");
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
+    expect(markup.match(/<img/g)).toHaveLength(1);
+    expect(markup).toContain("bg-white");
     expect(markup).not.toContain("data-color-count=");
     expect(markup).not.toContain("linear-gradient(90deg");
   });

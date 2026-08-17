@@ -363,6 +363,7 @@ function mapProduct(
       h: num(p.heightCm) || 0,
     },
     packageDimensionsCm: packageDimensions(p),
+    unitPackageDimensionsCm: unitPackageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
     attributes: formatProductAttributes([
@@ -636,6 +637,7 @@ function mapProductListItem(
       h: num(p.heightCm) || 0,
     },
     packageDimensionsCm: packageDimensions(p),
+    unitPackageDimensionsCm: unitPackageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
     attributes: formatProductAttributes([
@@ -873,6 +875,21 @@ function packageDimensions(p: {
     h: num(p.packHeightCm ?? p.unitPackHeightCm ?? p.heightCm) || 0,
   };
   return Object.values(dimensions).some((value) => value > 0)
+    ? dimensions
+    : undefined;
+}
+
+function unitPackageDimensions(p: {
+  unitPackWidthCm: Prisma.Decimal | null;
+  unitPackDepthCm: Prisma.Decimal | null;
+  unitPackHeightCm: Prisma.Decimal | null;
+}) {
+  const dimensions = {
+    w: num(p.unitPackWidthCm) || 0,
+    d: num(p.unitPackDepthCm) || 0,
+    h: num(p.unitPackHeightCm) || 0,
+  };
+  return Object.values(dimensions).every((value) => value > 0)
     ? dimensions
     : undefined;
 }

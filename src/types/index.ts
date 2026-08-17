@@ -103,6 +103,8 @@ export interface Product {
 
   dimensionsCm: Dimensions;
   packageDimensionsCm?: Dimensions;
+  /** Individual sellable-unit package dimensions used for the public delivery category. */
+  unitPackageDimensionsCm?: Dimensions;
   colorPrimary?: string;
   colorSecondary?: string;
   attributes?: string[];

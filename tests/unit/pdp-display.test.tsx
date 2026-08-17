@@ -130,7 +130,8 @@ describe("PDP price and benefit display", () => {
     expect(markup).not.toContain("Sigurna kupovina");
     expect(markup).not.toContain("Precizne dimenzije");
     expect(markup).toContain("md:w-[90%]");
-    expect(markup).toContain("text-[0.6rem]");
+    expect(markup).toContain("text-xs");
+    expect(markup).not.toContain("text-[0.6rem]");
   });
 
   it("renders no more than six product pictograms", () => {

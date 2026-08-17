@@ -82,7 +82,7 @@ function ProductColorDisplay({
       <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
       <span
         title={color.label}
-        className="inline-flex shrink-0 items-center rounded-full bg-muted-bg px-2 py-1"
+        className="inline-flex shrink-0 items-center rounded-full bg-white px-2 py-1 ring-1 ring-border/60"
       >
         <span className="text-xs font-semibold text-ink-800">
           {color.label}
@@ -360,8 +360,44 @@ export function ProductColorOptions({
     return <div className={className} aria-hidden />;
   }
 
+  const color = colors[0]!;
+  const thumbnail = product.media?.images?.[0];
+
   return (
-    <div className={className}>
+    <div className={cn("grid gap-1.5", className)}>
+      <div className="grid gap-1.5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+        <span className="text-xs font-medium text-ink-500 md:mr-0.5">
+          Varijanta:
+        </span>
+        <span
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-white p-1.5 pr-2.5 ring-2 ring-brand-blue"
+          data-variant-option
+          data-variant-selected="true"
+        >
+          <span
+            className="relative block size-14 overflow-hidden rounded-md bg-[linear-gradient(135deg,#f6f5f1_0_50%,#ebe9e3_50%)]"
+            data-variant-thumbnail
+          >
+            {thumbnail ? (
+              <Image
+                src={getMediaVariantUrl(thumbnail, "thumb")}
+                alt=""
+                fill
+                sizes="56px"
+                className="object-contain p-0.5"
+              />
+            ) : (
+              <span
+                className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                style={{ backgroundColor: color.colors[0] }}
+              />
+            )}
+          </span>
+          <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
+            {color.label}
+          </span>
+        </span>
+      </div>
       <ProductColorDisplay
         colors={colors}
         label={label}
