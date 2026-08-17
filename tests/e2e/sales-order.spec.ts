@@ -319,6 +319,21 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       );
     });
 
+    await test.step("totali su na vrhu, a šifra, količina i naziv su prve kolone", async () => {
+      const formText = await page.locator("form").innerText();
+      expect(formText.indexOf("Vrednost bez PDV-a")).toBeGreaterThanOrEqual(0);
+      expect(formText.indexOf("Vrednost bez PDV-a")).toBeLessThan(
+        formText.indexOf("Uzglavlje otpremnice"),
+      );
+
+      const headers = await page.locator("table thead th").allTextContents();
+      expect(headers.slice(0, 3)).toEqual([
+        "Šifra artikla",
+        "Količina",
+        "Naziv",
+      ]);
+    });
+
     await test.step("otpremnica preuzima i prikazuje komade na paleti u UI, bazi, Excelu i PDF-u", async () => {
       await page.getByLabel("Firma koja izdaje", { exact: true }).selectOption(
         uiCompanyId,

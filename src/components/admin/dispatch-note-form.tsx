@@ -541,6 +541,118 @@ export function DispatchNoteForm({
       ) : null}
 
       <Card>
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
+                Vrednost bez PDV-a
+              </p>
+              <p className="mt-1 font-display text-xl text-ink-900">
+                {money(totals.net)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
+                PDV
+              </p>
+              <p className="mt-1 font-display text-xl text-ink-900">
+                {money(totals.vat)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
+                Vrednost sa PDV-om
+              </p>
+              <p className="mt-1 font-display text-xl text-ink-900">
+                {money(totals.gross)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/erp/otpremnice"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Nazad na pregled
+            </Link>
+            {detail ? (
+              <>
+                <Link
+                  href={`/api/admin/dispatch-notes/${encodeURIComponent(
+                    detail.id,
+                  )}/pdf`}
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <FileDown className="size-4" aria-hidden />
+                  Štampaj PDF
+                </Link>
+                <Link
+                  href={`/api/admin/dispatch-notes/${encodeURIComponent(
+                    detail.id,
+                  )}/excel`}
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <FileSpreadsheet className="size-4" aria-hidden />
+                  Štampaj Excel
+                </Link>
+              </>
+            ) : null}
+            {readOnly && detail?.canEdit ? (
+              <Link
+                href={`/admin/erp/otpremnice/${encodeURIComponent(
+                  detail.id,
+                )}?mode=edit`}
+                className={buttonVariants()}
+              >
+                Uredi
+              </Link>
+            ) : null}
+            {!readOnly ? (
+              <Button type="submit" disabled={saving || Boolean(runningAction)}>
+                {saving
+                  ? "Čuvanje…"
+                  : detail
+                    ? "Sačuvaj otpremnicu"
+                    : "Kreiraj otpremnicu"}
+              </Button>
+            ) : null}
+            {readOnly && detail?.canPost ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(runningAction)}
+                onClick={() => void executeDetailAction("post")}
+              >
+                {runningAction === "post" ? "Knjiženje…" : "Proknjiži"}
+              </Button>
+            ) : null}
+            {readOnly && detail?.canSendToSef ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(runningAction)}
+                onClick={() => void executeDetailAction("sef")}
+              >
+                <Send className="size-4" aria-hidden />
+                {runningAction === "sef" ? "Slanje…" : "Pošalji na SEF"}
+              </Button>
+            ) : null}
+            {readOnly && detail?.canDelete ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={Boolean(runningAction)}
+                onClick={() => void executeDetailAction("delete")}
+              >
+                {runningAction === "delete" ? "Brisanje…" : "Obriši"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <CardTitle description="Obe firme se biraju iz baze kupaca. Interna otpremnica nastaje kada su izdavalac i primalac ista firma.">
           Uzglavlje otpremnice
         </CardTitle>
@@ -814,10 +926,11 @@ export function DispatchNoteForm({
             <thead className="bg-muted-bg/70 text-xs uppercase tracking-[0.08em] text-ink-500">
               <tr>
                 <th className="w-64 px-3 py-3 text-left">Šifra artikla</th>
+                <th className="w-32 px-3 py-3 text-right">Količina</th>
+                <th className="w-52 px-3 py-3 text-left">Naziv</th>
                 <th className="w-40 px-3 py-3 text-left">Podgrupa</th>
                 <th className="w-40 px-3 py-3 text-left">Kolekcija</th>
                 <th className="w-64 px-3 py-3 text-left">Kratki opis</th>
-                <th className="w-52 px-3 py-3 text-left">Kratki naziv</th>
                 <th className="w-36 px-3 py-3 text-left">Atribut 1</th>
                 <th className="w-36 px-3 py-3 text-left">Atribut 2</th>
                 <th className="w-36 px-3 py-3 text-left">Atribut 3</th>
@@ -826,7 +939,6 @@ export function DispatchNoteForm({
                 <th className="w-32 px-3 py-3 text-left">Boja 2</th>
                 <th className="w-32 px-3 py-3 text-right">Kom/paleta</th>
                 <th className="w-48 px-3 py-3 text-right">Cena</th>
-                <th className="w-32 px-3 py-3 text-right">Količina</th>
                 <th className="w-44 px-3 py-3 text-left">Porudžbina</th>
                 {!readOnly ? <th className="w-16 px-3 py-3" /> : null}
               </tr>
@@ -875,11 +987,38 @@ export function DispatchNoteForm({
                       <p className="mt-1 text-xs text-danger">{line.error}</p>
                     ) : null}
                   </td>
+                  <td className="px-3 py-3">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={line.maxQty ?? undefined}
+                      step={1}
+                      value={line.qty}
+                      disabled={readOnly}
+                      required
+                      onChange={(event) =>
+                        patchLine(line.clientId, {
+                          qty: Number(event.target.value),
+                        })
+                      }
+                      aria-label={`Količina red ${index + 1}`}
+                    />
+                    {line.maxQty !== null ? (
+                      <span className="mt-1 block text-xs text-ink-500">
+                        Dostupno: {line.maxQty}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td
+                    className="max-w-52 px-3 py-3 text-ink-800"
+                    title={line.shortName || undefined}
+                  >
+                    <span className="line-clamp-3">{line.shortName || "—"}</span>
+                  </td>
                   {[
                     line.subgroup,
                     line.collection,
                     line.shortDescription,
-                    line.shortName,
                     line.attribute1,
                     line.attribute2,
                     line.attribute3,
@@ -909,28 +1048,6 @@ export function DispatchNoteForm({
                         ? "Interni prenos"
                         : line.priceSource || "Automatski"}
                     </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={line.maxQty ?? undefined}
-                      step={1}
-                      value={line.qty}
-                      disabled={readOnly}
-                      required
-                      onChange={(event) =>
-                        patchLine(line.clientId, {
-                          qty: Number(event.target.value),
-                        })
-                      }
-                      aria-label={`Količina red ${index + 1}`}
-                    />
-                    {line.maxQty !== null ? (
-                      <span className="mt-1 block text-xs text-ink-500">
-                        Dostupno: {line.maxQty}
-                      </span>
-                    ) : null}
                   </td>
                   <td className="px-3 py-3 text-ink-800">
                     {line.sourceOrderNumber || "Ručni unos"}
@@ -1100,117 +1217,6 @@ export function DispatchNoteForm({
         )}
       </Card>
 
-      <Card>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid grid-cols-2 gap-6 md:grid-cols-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
-                Vrednost bez PDV-a
-              </p>
-              <p className="mt-1 font-display text-xl text-ink-900">
-                {money(totals.net)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
-                PDV
-              </p>
-              <p className="mt-1 font-display text-xl text-ink-900">
-                {money(totals.vat)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.12em] text-ink-500">
-                Vrednost sa PDV-om
-              </p>
-              <p className="mt-1 font-display text-xl text-ink-900">
-                {money(totals.gross)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/admin/erp/otpremnice"
-              className={buttonVariants({ variant: "outline" })}
-            >
-              Nazad na pregled
-            </Link>
-            {detail ? (
-              <>
-                <Link
-                  href={`/api/admin/dispatch-notes/${encodeURIComponent(
-                    detail.id,
-                  )}/pdf`}
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  <FileDown className="size-4" aria-hidden />
-                  Štampaj PDF
-                </Link>
-                <Link
-                  href={`/api/admin/dispatch-notes/${encodeURIComponent(
-                    detail.id,
-                  )}/excel`}
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  <FileSpreadsheet className="size-4" aria-hidden />
-                  Štampaj Excel
-                </Link>
-              </>
-            ) : null}
-            {readOnly && detail?.canEdit ? (
-              <Link
-                href={`/admin/erp/otpremnice/${encodeURIComponent(
-                  detail.id,
-                )}?mode=edit`}
-                className={buttonVariants()}
-              >
-                Uredi
-              </Link>
-            ) : null}
-            {!readOnly ? (
-              <Button type="submit" disabled={saving || Boolean(runningAction)}>
-                {saving
-                  ? "Čuvanje…"
-                  : detail
-                    ? "Sačuvaj otpremnicu"
-                    : "Kreiraj otpremnicu"}
-              </Button>
-            ) : null}
-            {readOnly && detail?.canPost ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={Boolean(runningAction)}
-                onClick={() => void executeDetailAction("post")}
-              >
-                {runningAction === "post" ? "Knjiženje…" : "Proknjiži"}
-              </Button>
-            ) : null}
-            {readOnly && detail?.canSendToSef ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={Boolean(runningAction)}
-                onClick={() => void executeDetailAction("sef")}
-              >
-                <Send className="size-4" aria-hidden />
-                {runningAction === "sef" ? "Slanje…" : "Pošalji na SEF"}
-              </Button>
-            ) : null}
-            {readOnly && detail?.canDelete ? (
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={Boolean(runningAction)}
-                onClick={() => void executeDetailAction("delete")}
-              >
-                {runningAction === "delete" ? "Brisanje…" : "Obriši"}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </Card>
     </form>
   );
 }
