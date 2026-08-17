@@ -32,7 +32,13 @@ if (!connectionString) {
   process.exit(0);
 }
 
-const db = new PrismaClient({ adapter: new PrismaPg(withSslNoVerify(connectionString)) });
+const db = new PrismaClient({
+  adapter: new PrismaPg(withSslNoVerify(connectionString)),
+  transactionOptions: {
+    maxWait: 30_000,
+    timeout: 30_000,
+  },
+});
 
 try {
   for (const definition of SYSTEM_CONTENT_PAGES) {
