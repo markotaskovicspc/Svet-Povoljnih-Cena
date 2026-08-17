@@ -29,6 +29,10 @@ broj redova naglo padne ili je isti fajl već primenjen.
 - Svaka šifra iz XLSX-a koje još nema na sajtu povlači se iz kataloškog feeda,
   bez obzira na količinu. Nepoznata ili nemapirana šifra ostaje evidentirana za
   administrativnu obradu.
+- Ако шифре више нема у каталошком feed-у, она се ипак креира у бази са називом
+  и стањем из XLSX-а. Остаје необјављена док не добије цену, категорију и слике.
+- Дневни каталошки sync не сме да уклони шифру која постоји у последњем
+  недељном XLSX-у; само следећи комплетан XLSX мења allow-list.
 - DC stanje ostaje ERP podatak, ali ne može da zaobiđe Rabalux prag: za web
   kupovinu i dalje je potrebno najmanje 10 komada u nedeljnom XLSX-u.
 - Rabalux stanje važi osam dana. Posle toga dobavljačko stanje se smatra

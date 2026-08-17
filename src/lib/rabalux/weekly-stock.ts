@@ -15,7 +15,7 @@ import {
   stableSourceHash,
 } from "./safety";
 import { fetchRabaluxCatalog, syncRabaluxCatalogItemsForWeeklyStock } from "./sync";
-import { rabaluxSku } from "./parser";
+import { rabaluxSku, slugifyRabalux } from "./parser";
 import {
   parseRabaluxStockReportDate,
   parseRabaluxWeeklyStockXlsx,
@@ -82,6 +82,7 @@ export type RabaluxWeeklyStockApplyResult = {
   catalogUpdated: number;
   catalogFailed: number;
   catalogMissing: number;
+  placeholderCreated: number;
   updatedProducts: number;
   deletedProducts: number;
   storageFilesQueuedForDeletion: number;
@@ -224,6 +225,7 @@ export async function applyRabaluxWeeklyStock(args: {
   let catalogUpdated = 0;
   let catalogFailed = 0;
   let catalogMissing = 0;
+  let placeholderCreated = 0;
   let catalogErrors: Array<{ sourceSku: string; message: string }> = [];
   let stockCommitted = false;
   try {
@@ -262,7 +264,34 @@ export async function applyRabaluxWeeklyStock(args: {
       catalogErrors = catalogResult.errors;
     }
 
+    const productsAfterCatalog = await loadWeeklyProducts(supplier.id);
+    const matchedAfterCatalog = matchRowsToProducts(
+      prepared.parsed.rows,
+      productsAfterCatalog,
+    );
+    const placeholderRows = fileOnlyRows.filter(
+      (row) => !matchedAfterCatalog.matchedRowSkus.has(row.sourceSku),
+    );
+    if (placeholderRows.length) {
+      placeholderCreated = await createWeeklyStockPlaceholders({
+        supplierId: supplier.id,
+        rows: placeholderRows,
+        observedAt,
+        now,
+        runId: run.id,
+        reason,
+        actorId: args.actorId,
+      });
+    }
+
     const products = await loadWeeklyProducts(supplier.id);
+    const matchedAfterPlaceholders = matchRowsToProducts(
+      prepared.parsed.rows,
+      products,
+    );
+    catalogMissing = fileOnlyRows.filter(
+      (row) => !matchedAfterPlaceholders.matchedRowSkus.has(row.sourceSku),
+    ).length;
     const preview = buildPreview({
       supplierId: supplier.id,
       runId: run.id,
@@ -446,6 +475,7 @@ export async function applyRabaluxWeeklyStock(args: {
           catalogUpdated,
           catalogFailed,
           catalogMissing,
+          placeholderCreated,
           catalogMissingSkus: missingCatalogSkus.slice(0, 200),
           updatedProducts: plans.length,
           deletedProducts: productsToDelete.length,
@@ -460,6 +490,7 @@ export async function applyRabaluxWeeklyStock(args: {
       catalogUpdated,
       catalogFailed,
       catalogMissing,
+      placeholderCreated,
       updatedProducts: plans.length,
       deletedProducts: productsToDelete.length,
       storageFilesQueuedForDeletion: storageKeysToDelete.length,
@@ -483,6 +514,7 @@ export async function applyRabaluxWeeklyStock(args: {
             catalogCreated,
             catalogUpdated,
             catalogFailed,
+            placeholderCreated,
             failedAfterStockCommit: true,
           } as Prisma.InputJsonValue,
         },
@@ -505,6 +537,7 @@ export async function applyRabaluxWeeklyStock(args: {
             catalogCreated,
             catalogUpdated,
             catalogFailed,
+            placeholderCreated,
             failedBeforeStockCommit: true,
           } as Prisma.InputJsonValue,
         },
@@ -842,6 +875,85 @@ async function loadWeeklyProducts(supplierId: string) {
   });
 }
 
+async function createWeeklyStockPlaceholders(args: {
+  supplierId: string;
+  rows: RabaluxWeeklyStockRow[];
+  observedAt: Date;
+  now: Date;
+  runId: string;
+  reason: string;
+  actorId: string;
+}) {
+  let created = 0;
+  for (const rows of chunk(args.rows, 250)) {
+    const result = await db.product.createMany({
+      data: rows.map((row) => ({
+        sku: rabaluxSku(row.sourceSku),
+        slug: slugifyRabalux(row.name, row.sourceSku),
+        name: row.name || `Rabalux ${row.sourceSku}`,
+        description: row.name || `Rabalux artikal ${row.sourceSku}`,
+        fullPrice: new Prisma.Decimal(0),
+        supplierId: args.supplierId,
+        supplierExternalId: row.sourceSku,
+        supplierStock: row.closingStock,
+        isDtz: false,
+        isActive: false,
+        availableWebAuto: false,
+        supplierApprovalStatus: "PENDING_MAPPING",
+        supplierCatalogMissingCount: 0,
+        supplierCatalogMissingSince: null,
+        supplierStockMissingCount: 0,
+        supplierStockMissingSince: null,
+        lastSupplierStockSyncAt: args.observedAt,
+        lastSupplierSyncAt: args.now,
+        lastSupplierSourceHash: stableSourceHash({
+          source: SOURCE_TYPE,
+          placeholder: true,
+          sourceSku: row.sourceSku,
+          name: row.name,
+        }),
+      })),
+      skipDuplicates: true,
+    });
+    created += result.count;
+  }
+
+  if (!created) return 0;
+  const products = await db.product.findMany({
+    where: {
+      supplierId: args.supplierId,
+      supplierExternalId: { in: args.rows.map((row) => row.sourceSku) },
+    },
+    select: { id: true, supplierExternalId: true, name: true },
+  });
+  const rowBySku = new Map(args.rows.map((row) => [row.sourceSku, row] as const));
+  for (const productBatch of chunk(products, 500)) {
+    await db.supplierSyncChange.createMany({
+      data: productBatch.map((product) => ({
+        supplierId: args.supplierId,
+        importRunId: args.runId,
+        productId: product.id,
+        externalSku: product.supplierExternalId!,
+        changeType: "CATALOG_CREATE_FROM_WEEKLY_STOCK",
+        status: "APPLIED" as const,
+        fieldNames: ["product", "supplierStock"],
+        before: Prisma.JsonNull,
+        after: json({
+          name: product.name,
+          supplierStock: rowBySku.get(product.supplierExternalId!)?.closingStock ?? 0,
+          placeholder: true,
+          requiresCatalogEnrichment: true,
+        }),
+        reversible: true,
+        reason: args.reason,
+        appliedAt: args.now,
+        reviewedById: args.actorId,
+      })),
+    });
+  }
+  return created;
+}
+
 function weeklyStateHash(products: WeeklyProduct[]) {
   return stableSourceHash(
     products.map((product) => ({
@@ -939,21 +1051,27 @@ async function consumePreview(args: {
 }
 
 async function assertNotAlreadyApplied(supplierId: string, fileHash: string) {
-  const existing = await db.importRun.findFirst({
+  const candidates = await db.importRun.findMany({
     where: {
       supplierId,
       kind: "STOCK",
       dryRun: false,
       sourceHash: fileHash,
-      OR: [
-        { status: "SUCCESS" },
-        {
-          status: "PARTIAL",
-          NOT: { metadata: { path: ["failedBeforeStockCommit"], equals: true } },
-        },
-      ],
+      status: { in: ["SUCCESS", "PARTIAL"] },
     },
-    select: { id: true },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, status: true, metadata: true },
+  });
+  const existing = candidates.find((run) => {
+    if (run.status === "SUCCESS") return true;
+    const metadata =
+      run.metadata && typeof run.metadata === "object" && !Array.isArray(run.metadata)
+        ? (run.metadata as Record<string, Prisma.JsonValue>)
+        : null;
+    if (metadata?.failedBeforeStockCommit === true) return false;
+    const catalogMissing =
+      typeof metadata?.catalogMissing === "number" ? metadata.catalogMissing : 0;
+    return catalogMissing <= 0;
   });
   if (existing) {
     throw new Error(`Ovaj identičan Rabalux XLSX je već primenjen (run ${existing.id}).`);

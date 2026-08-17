@@ -32,6 +32,7 @@ import {
   isRabaluxStockFresh,
   resolveRabaluxAvailability,
 } from "./availability";
+import { shouldReconcileMissingCatalogProducts } from "./weekly-stock-policy";
 import {
   acquireSyncLease,
   assertFeedBaseline,
@@ -323,6 +324,7 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
     const selection = selectRabaluxSerbiaStockCatalog(catalog.items, stock);
     return {
       source: catalog.source,
+      weeklySnapshotActive: false,
       fallbackReason: catalog.fallbackReason,
       rawItems: catalog.items,
       stock,
@@ -369,6 +371,7 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
   const excludedWithoutStock = 0;
   return {
     source: catalog.source,
+    weeklySnapshotActive: true,
     fallbackReason: catalog.fallbackReason,
     rawItems: catalog.items,
     stock,
@@ -483,10 +486,17 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
     });
     const rawSeen = new Set(catalog.rawItems.map((item) => item.sourceSku));
     const eligibleSeen = new Set(catalog.items.map((item) => item.sourceSku));
-    const missing = existingProducts.filter(
+    const catalogMissingCandidates = existingProducts.filter(
       (product) =>
         product.supplierExternalId && !rawSeen.has(product.supplierExternalId),
     );
+    const missing = shouldReconcileMissingCatalogProducts(
+      catalog.weeklySnapshotActive,
+    )
+      ? catalogMissingCandidates
+      : [];
+    summary.metadata.preservedByWeeklyStockAllowList =
+      catalogMissingCandidates.length - missing.length;
     const outsideSerbiaStock = existingProducts.filter(
       (product) =>
         product.supplierExternalId &&

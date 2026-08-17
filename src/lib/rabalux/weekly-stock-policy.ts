@@ -27,3 +27,9 @@ export function resolveRabaluxWeeklyStockPolicy(input: {
     availableWebAuto: isActive && supplierPassesThreshold,
   };
 }
+
+export function shouldReconcileMissingCatalogProducts(
+  weeklySnapshotActive: boolean,
+) {
+  return !weeklySnapshotActive;
+}

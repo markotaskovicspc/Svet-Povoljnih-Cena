@@ -322,7 +322,7 @@ async function applyRabaluxWeeklyStockAction(
         entityId: result.runId,
         diff: result,
         result,
-        message: `Rabalux XLSX je primenjen: ${result.summary.stockChanges} promena stanja, ${result.deletedProducts} proizvoda trajno obrisano i ${result.storageFilesQueuedForDeletion} fajlova poslato na brisanje.`,
+        message: `Rabalux XLSX je primenjen: ${result.updatedProducts} proizvoda u bazi, ${result.placeholderCreated} artikala bez kataloškog feeda kreirano iz XLSX-a, ${result.deletedProducts} proizvoda trajno obrisano i ${result.storageFilesQueuedForDeletion} fajlova poslato na brisanje.`,
       };
     },
   )(formData);

@@ -95,6 +95,14 @@ export function RabaluxWeeklyStockImport({
             />
             <Stat label="Vraćanja" value={result.summary.restores} />
           </dl>
+          {result.summary.fileOnlySkus ? (
+            <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-ink-700">
+              Artikli koji postoje samo u XLSX-u prvo se dopunjavaju iz Rabalux
+              kataloga. Ako ih dobavljač više ne šalje u katalogu, biće sačuvani u
+              bazi sa nazivom i stanjem iz XLSX-a, ali ostaju na čekanju za cenu,
+              kategoriju i slike pre objave na sajtu.
+            </p>
+          ) : null}
           {result.summary.samples.length ? (
             <div className="max-h-80 overflow-auto rounded-md border border-border">
               <table className="w-full text-left text-xs">
