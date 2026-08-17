@@ -930,6 +930,7 @@ export default async function InboundInvoicePage({
                   <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                     <tr>
                       <th className="px-3 py-3">Šifra</th>
+                      <th className="px-3 py-3">Naziv</th>
                       <th className="px-3 py-3 text-right">Količina</th>
                       <th className="px-3 py-3 text-right">Vrednost robe</th>
                       <th className="px-3 py-3 text-right">Stvarna carina</th>
@@ -966,6 +967,7 @@ export default async function InboundInvoicePage({
                       return (
                         <tr key={row.sku}>
                           <td className="px-3 py-3 font-medium">{row.sku}</td>
+                          <td className="px-3 py-3">{product?.name ?? "—"}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{fmt(row.invoiceValueRsd)} RSD</td>
                           <td className="px-3 py-3 text-right tabular-nums">{fmt(row.customsRsd)} RSD</td>

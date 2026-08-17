@@ -389,9 +389,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
           ),
         )
         .toBe(0);
-      await expect(
-        page.locator("tbody tr").filter({ hasText: fixture.sku }),
-      ).toContainText("170");
+      const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
+      await expect(cogsRow).toContainText(fixture.productName);
+      await expect(cogsRow).toContainText("170");
     });
 
     await test.step("a linked purchase order cannot be selected or forced onto another invoice", async () => {
