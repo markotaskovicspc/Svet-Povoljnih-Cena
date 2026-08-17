@@ -33,6 +33,8 @@ type WarehouseStockRow = {
   sku_count: number;
   stock_value: number;
   total_volume: number;
+  occupied_pallet_places: number;
+  missing_pallet_sku_count: number;
 };
 
 type IncomingSummary = {
@@ -231,7 +233,18 @@ export default async function AdminDashboard({
         COALESCE(SUM(
           GREATEST(ws.qty, 0)
           * COALESCE(p."widthCm" * p."depthCm" * p."heightCm" / 1000000, 0)
-        ), 0)::double precision AS total_volume
+        ), 0)::double precision AS total_volume,
+        COALESCE(SUM(
+          CASE
+            WHEN ws.qty > 0 AND p."palletQty" > 0
+            THEN CEIL(ws.qty::numeric / p."palletQty")
+            ELSE 0
+          END
+        ), 0)::int AS occupied_pallet_places,
+        COUNT(DISTINCT CASE
+          WHEN ws.qty > 0 AND (p."palletQty" IS NULL OR p."palletQty" <= 0)
+          THEN ws."productId"
+        END)::int AS missing_pallet_sku_count
       FROM "Warehouse" w
       LEFT JOIN "WarehouseStock" ws ON ws."warehouseId" = w.id
       LEFT JOIN "Product" p ON p.id = ws."productId"
@@ -328,6 +341,13 @@ export default async function AdminDashboard({
   const visibleWarehouseStock = warehouseId
     ? warehouseStockRows.filter((row) => row.id === warehouseId)
     : warehouseStockRows;
+  const visiblePallets = visibleWarehouseStock.reduce(
+    (total, row) => ({
+      occupied: total.occupied + row.occupied_pallet_places,
+      missingSkuCount: total.missingSkuCount + row.missing_pallet_sku_count,
+    }),
+    { occupied: 0, missingSkuCount: 0 },
+  );
   const exportWarehouse = warehouseId
     ? `&warehouseId=${encodeURIComponent(warehouseId)}`
     : "";
@@ -370,9 +390,15 @@ export default async function AdminDashboard({
           <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Reklamacije u periodu" value={String(reclamationCount)} hint={`${reclamationsPeriod.label} · ${warehouseLabel}`} tone={reclamationCount > 0 ? "warning" : "default"} />
           <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
+          <StatCard
+            label="Zauzeta paletna mesta"
+            value={visiblePallets.occupied.toLocaleString("sr-Latn-RS")}
+            hint={`${visiblePallets.missingSkuCount} SKU bez podatka kom/paleta · ${warehouseLabel}`}
+            tone={visiblePallets.missingSkuCount > 0 ? "warning" : "default"}
+          />
           <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${formatVolume(incoming.total_volume)} · ${warehouseLabel}`} />
         </div>
 
@@ -387,6 +413,8 @@ export default async function AdminDashboard({
               { key: "qty", label: "Komada", align: "right" },
               { key: "value", label: "COGS vrednost", align: "right" },
               { key: "volume", label: "Zapremina", align: "right" },
+              { key: "pallets", label: "Paletna mesta", align: "right" },
+              { key: "missingPallets", label: "SKU bez kom/paleta", align: "right" },
             ]}
             rows={visibleWarehouseStock.map((row) => ({
               id: row.id,
@@ -396,6 +424,8 @@ export default async function AdminDashboard({
                 qty: row.total_qty,
                 value: formatRsd(row.stock_value),
                 volume: formatVolume(row.total_volume),
+                pallets: row.occupied_pallet_places.toLocaleString("sr-Latn-RS"),
+                missingPallets: row.missing_pallet_sku_count,
               },
             }))}
             empty="Nema aktivnih magacina."

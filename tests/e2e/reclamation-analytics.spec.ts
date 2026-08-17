@@ -83,6 +83,18 @@ test.describe("Admin analitika reklamacija", () => {
       select: { id: true },
     });
     createdWarehouseId = warehouse.id;
+    await Promise.all([
+      db.product.update({
+        where: { id: productA.id },
+        data: { palletQty: 40 },
+      }),
+      db.warehouseStock.createMany({
+        data: [
+          { warehouseId: warehouse.id, productId: productA.id, qty: 81 },
+          { warehouseId: warehouse.id, productId: productC.id, qty: 5 },
+        ],
+      }),
+    ]);
 
     const deliveredOrder = await db.order.create({
       data: {
@@ -493,6 +505,11 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(
         page.getByText("Promet danas (neto fiskalizovano)", { exact: true }).locator(".."),
       ).toContainText("3.000 RSD");
+      const palletCard = page
+        .getByText("Zauzeta paletna mesta", { exact: true })
+        .locator("..");
+      await expect(palletCard).toContainText("3");
+      await expect(palletCard).toContainText("1 SKU bez podatka kom/paleta");
       await page.getByRole("button", { name: "Sačuvaj pogled" }).click();
       await page.getByLabel("Naziv dashboard pogleda").fill(viewName);
       await page.getByRole("button", { name: "Sačuvaj", exact: true }).click();
