@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import {
+  AllocationBasis,
   InboundInvoiceStatus,
   PurchaseOrderStatus,
 } from "@prisma/client";
@@ -25,9 +26,11 @@ import {
   saveInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import {
+  allocateActualInboundCosts,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
+  groupActualInboundCostsBySku,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 import { goodsReceiptMasterWarnings } from "@/lib/admin/goods-receipt-readiness";
@@ -65,6 +68,12 @@ const invoiceSchema = z.object({
     .number()
     .nonnegative()
     .max(1_000_000_000),
+  otherCostsAllocationBasis: z.enum([
+    "AUTO_UTILIZATION",
+    "VALUE",
+    "WEIGHT",
+    "VOLUME",
+  ]),
   netValue: z.coerce.number().nonnegative().max(1_000_000_000),
   vatValue: z.coerce.number().nonnegative().max(1_000_000_000),
   grossValue: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -109,6 +118,36 @@ function effectiveCustomsRate(
     productCustomsRate: optionalNumber(item.product?.customsRate),
   });
 }
+
+function cogsSnapshotBySku(value: unknown) {
+  const result = new Map<string, { stock: number; cogs: number | null }>();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  const candidate = value as { version?: unknown; products?: unknown };
+  if (candidate.version !== 1 || !Array.isArray(candidate.products)) return result;
+  for (const raw of candidate.products) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const product = raw as Record<string, unknown>;
+    if (
+      typeof product.sku === "string" &&
+      typeof product.stock === "number" &&
+      (product.cogs === null || typeof product.cogs === "number")
+    ) {
+      result.set(product.sku, {
+        stock: product.stock,
+        cogs: product.cogs as number | null,
+      });
+    }
+  }
+  return result;
+}
+
+const allocationBasisLabel: Record<AllocationBasis, string> = {
+  AUTO_UTILIZATION: "veće iskorišćenje zapremine/težine",
+  VALUE: "vrednost robe",
+  WEIGHT: "težina",
+  VOLUME: "zapremina",
+  MANUAL: "ručna raspodela",
+};
 
 async function createAction() {
   "use server";
@@ -162,6 +201,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
         otherRelatedCostsRsd: data.otherRelatedCostsRsd,
+        otherCostsAllocationBasis: data.otherCostsAllocationBasis,
         notes: data.notes.trim() || null,
       });
       revalidatePath(`/admin/erp/ulazne-fakture/${data.invoiceId}`);
@@ -488,7 +528,47 @@ export default async function InboundInvoicePage({
         linked.invoiceValueRsd == null ? null : Number(linked.invoiceValueRsd),
     })),
   });
-  const cogsRows = invoice.purchaseOrder
+  const hasActualCostBreakdown = Boolean(
+    invoice.purchaseOrder &&
+      invoice.invoiceValueRsd != null &&
+      invoice.customsValueRsd != null &&
+      invoice.transportValueRsd != null &&
+      invoice.otherRelatedCostsRsd != null,
+  );
+  const actualCogsRows =
+    invoice.purchaseOrder && hasActualCostBreakdown
+      ? groupActualInboundCostsBySku(
+          allocateActualInboundCosts({
+            costs: {
+              invoiceValueRsd: Number(invoice.invoiceValueRsd),
+              customsValueRsd: Number(invoice.customsValueRsd),
+              transportValueRsd: Number(invoice.transportValueRsd),
+              otherRelatedCostsRsd: Number(invoice.otherRelatedCostsRsd),
+            },
+            otherCostsBasis:
+              invoice.allocationBasis === "MANUAL"
+                ? "VALUE"
+                : invoice.allocationBasis,
+            lines: invoice.purchaseOrder.items.map((item) => ({
+              id: item.id,
+              sku: item.sku,
+              qty: item.qty,
+              purchaseValueRsd:
+                Number(item.purchasePrice) *
+                Number(invoice.purchaseOrder?.exchangeRate ?? 1) *
+                item.qty,
+              customsRatePct: effectiveCustomsRate(
+                item,
+                invoice.purchaseOrder?.lockedAt ?? null,
+              ),
+              transportBaselineRsd: Number(item.freightAllocated ?? 0),
+              totalVolumeM3: Number(item.totalVolume ?? 0),
+              totalWeightKg: Number(item.totalWeight ?? 0),
+            })),
+          }),
+        )
+      : null;
+  const legacyCogsRows = invoice.purchaseOrder
     ? calculateCogsBySku({
         orderExchangeRate: Number(invoice.purchaseOrder.exchangeRate),
         linkedInvoiceCostRsd: linkedCostAdjustmentRsd,
@@ -503,10 +583,28 @@ export default async function InboundInvoicePage({
           ),
           otherAllocatedRsd: Number(item.freightAllocated ?? 0),
         })),
-      })
+      }).map((row) => ({
+        id: row.sku,
+        sku: row.sku,
+        qty: row.qty,
+        invoiceValueRsd: row.orderValueRsd,
+        customsRsd: row.customsRsd,
+        transportRsd: row.otherAllocatedRsd,
+        otherRelatedCostsRsd: row.linkedInvoiceCostRsd,
+        totalActualCostRsd:
+          row.incomingUnitCogsRsd * row.qty,
+        baselineCostRsd:
+          row.orderValueRsd + row.customsRsd + row.otherAllocatedRsd,
+        adjustmentRsd: row.linkedInvoiceCostRsd,
+        incomingUnitCogsRsd: row.incomingUnitCogsRsd,
+      }))
     : [];
+  const cogsRows = actualCogsRows ?? legacyCogsRows;
   const productBySku = new Map(
     invoice.purchaseOrder?.items.map((item) => [item.sku, item.product]) ?? [],
+  );
+  const cogsSnapshot = cogsSnapshotBySku(
+    invoice.purchaseOrder?.cogsBookingSnapshot,
   );
 
   return (
@@ -777,6 +875,10 @@ export default async function InboundInvoicePage({
                     invoice.otherRelatedCostsRsd == null
                       ? null
                       : Number(invoice.otherRelatedCostsRsd),
+                  otherCostsAllocationBasis:
+                    invoice.allocationBasis === "MANUAL"
+                      ? "VALUE"
+                      : invoice.allocationBasis,
                   legacyNetValue: Number(invoice.netValue),
                 }}
               />
@@ -793,7 +895,7 @@ export default async function InboundInvoicePage({
         </Card>
 
         <Card>
-          <CardTitle description="Neto vrednosti proknjiženih vezanih faktura raspoređuju se srazmerno nabavnoj vrednosti svake šifre.">
+          <CardTitle description="Vrednost robe se raspoređuje po nabavnoj vrednosti, carina po stopama stavki, a transport po zapremini artikla. Ostali vezani troškovi koriste izabranu osnovu.">
             COGS obračun po šifri
           </CardTitle>
           {invoice.purchaseOrder ? (
@@ -818,7 +920,9 @@ export default async function InboundInvoicePage({
                 </div>
                 <div className="rounded-lg bg-muted-bg/50 p-3">
                   <p className="text-ink-500">Način raspodele</p>
-                  <p className="font-semibold">Prema vrednosti šifre</p>
+                  <p className="font-semibold">
+                    Transport: zapremina · ostalo: {allocationBasisLabel[invoice.allocationBasis]}
+                  </p>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -827,10 +931,10 @@ export default async function InboundInvoicePage({
                     <tr>
                       <th className="px-3 py-3">Šifra</th>
                       <th className="px-3 py-3 text-right">Količina</th>
-                      <th className="px-3 py-3 text-right">Vrednost porudžbenice</th>
-                      <th className="px-3 py-3 text-right">Carina</th>
-                      <th className="px-3 py-3 text-right">Transport</th>
-                      <th className="px-3 py-3 text-right">Korekcija iz fakture</th>
+                      <th className="px-3 py-3 text-right">Vrednost robe</th>
+                      <th className="px-3 py-3 text-right">Stvarna carina</th>
+                      <th className="px-3 py-3 text-right">Transport po zapremini</th>
+                      <th className="px-3 py-3 text-right">Ostali vezani troškovi</th>
                       <th className="px-3 py-3 text-right">COGS novog prijema / kom</th>
                       <th className="px-3 py-3 text-right">Postojeće stanje / COGS</th>
                       <th className="px-3 py-3 text-right">Finalni COGS / kom</th>
@@ -839,11 +943,14 @@ export default async function InboundInvoicePage({
                   <tbody className="divide-y divide-border/60">
                     {cogsRows.map((row) => {
                       const product = productBySku.get(row.sku);
-                      const existingQty = product?.stock ?? 0;
+                      const snapshot = cogsSnapshot.get(row.sku);
+                      const existingQty = snapshot?.stock ?? product?.stock ?? 0;
                       const existingCogs =
-                        product?.cogs == null
-                          ? row.incomingUnitCogsRsd
-                          : Number(product.cogs);
+                        snapshot
+                          ? snapshot.cogs ?? row.incomingUnitCogsRsd
+                          : product?.cogs == null
+                            ? row.incomingUnitCogsRsd
+                            : Number(product.cogs);
                       const finalCogs =
                         (locked ||
                           invoice.purchaseOrder?.status ===
@@ -860,10 +967,10 @@ export default async function InboundInvoicePage({
                         <tr key={row.sku}>
                           <td className="px-3 py-3 font-medium">{row.sku}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.orderValueRsd)} RSD</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.invoiceValueRsd)} RSD</td>
                           <td className="px-3 py-3 text-right tabular-nums">{fmt(row.customsRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.otherAllocatedRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.linkedInvoiceCostRsd)} RSD</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.transportRsd)} RSD</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.otherRelatedCostsRsd)} RSD</td>
                           <td className="px-3 py-3 text-right font-medium tabular-nums">{fmt(row.incomingUnitCogsRsd)} RSD</td>
                           <td className="px-3 py-3 text-right tabular-nums">{existingQty} × {fmt(existingCogs)} RSD</td>
                           <td className="px-3 py-3 text-right font-semibold tabular-nums">{fmt(finalCogs)} RSD</td>

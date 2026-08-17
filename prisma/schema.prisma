@@ -2125,7 +2125,7 @@ model PurchaseOrder {
   exchangeRate         Decimal             @default(1) @db.Decimal(14, 6)
   freightCurrency      ErpCurrency         @default(RSD)
   freightExchangeRate  Decimal             @default(1) @db.Decimal(14, 6)
-  allocationBasis      AllocationBasis     @default(AUTO_UTILIZATION)
+  allocationBasis      AllocationBasis     @default(VOLUME)
   transportType        String?
   parity               String?
   bmPct                Decimal?            @db.Decimal(8, 2)
@@ -2219,7 +2219,7 @@ model InboundInvoice {
   netValue        Decimal              @default(0) @db.Decimal(12, 2)
   vatValue        Decimal              @default(0) @db.Decimal(12, 2)
   grossValue      Decimal              @default(0) @db.Decimal(12, 2)
-  allocationBasis AllocationBasis      @default(AUTO_UTILIZATION)
+  allocationBasis AllocationBasis      @default(VALUE)
   cogsStatus      CogsStatus           @default(PENDING)
   notes           String?              @db.Text
   lockedAt        DateTime?

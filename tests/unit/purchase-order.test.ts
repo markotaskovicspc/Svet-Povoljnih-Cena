@@ -196,17 +196,24 @@ describe("ERP module 4 purchase-order rules", () => {
     });
 
     expect(result.totalFreightRsd).toBe(12_000);
-    expect(result.lines[0].freightAllocatedRsd).toBe(6_000);
-    expect(result.lines[1].freightAllocatedRsd).toBe(6_000);
+    expect(result.lines[0].freightAllocatedRsd).toBe(10_800);
+    expect(result.lines[1].freightAllocatedRsd).toBe(1_200);
     expect(result.lines[0]).toEqual(
       expect.objectContaining({
         purchasePriceRsd: 1_200,
-        freightPerUnitRsd: 600,
-        customsPerUnitRsd: 180,
-        bmPct: 34,
+        freightPerUnitRsd: 1_080,
+        customsPerUnitRsd: 120,
+        bmPct: 20,
       }),
     );
-    expect(result.totalBmPct).toBe(34);
+    expect(result.lines[1]).toEqual(
+      expect.objectContaining({
+        freightPerUnitRsd: 120,
+        customsPerUnitRsd: 120,
+        bmPct: 52,
+      }),
+    );
+    expect(result.totalBmPct).toBe(36);
   });
 
   it("returns capacity warnings for both dimensions", () => {

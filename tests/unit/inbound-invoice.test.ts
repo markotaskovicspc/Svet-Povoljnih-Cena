@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
   assertInboundInvoicePurchaseOrderLocked,
   calculateInboundInvoiceAmounts,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
+  groupActualInboundCostsBySku,
   resolveInboundReceiptWarehouse,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
@@ -158,6 +160,93 @@ describe("ERP module 5 inbound invoices and COGS", () => {
         ["a", -50],
         ["b", -50],
       ]),
+    );
+  });
+
+  it("raspoređuje stvarni transport po klijentovoj zapremini i carinu po stopi stavke", () => {
+    const allocations = allocateActualInboundCosts({
+      costs: {
+        invoiceValueRsd: 2_000,
+        customsValueRsd: 100,
+        transportValueRsd: 1_000,
+        otherRelatedCostsRsd: 100,
+      },
+      otherCostsBasis: "VALUE",
+      lines: [
+        {
+          id: "a",
+          sku: "A",
+          qty: 10,
+          purchaseValueRsd: 1_000,
+          customsRatePct: 10,
+          transportBaselineRsd: 90,
+          totalVolumeM3: 9,
+          totalWeightKg: 1,
+        },
+        {
+          id: "b",
+          sku: "B",
+          qty: 10,
+          purchaseValueRsd: 1_000,
+          customsRatePct: 0,
+          transportBaselineRsd: 10,
+          totalVolumeM3: 1,
+          totalWeightKg: 9,
+        },
+      ],
+    });
+
+    expect(allocations).toEqual([
+      expect.objectContaining({
+        id: "a",
+        invoiceValueRsd: 1_000,
+        customsRsd: 100,
+        transportRsd: 900,
+        otherRelatedCostsRsd: 50,
+        totalActualCostRsd: 2_050,
+        adjustmentRsd: 860,
+        incomingUnitCogsRsd: 205,
+      }),
+      expect.objectContaining({
+        id: "b",
+        invoiceValueRsd: 1_000,
+        customsRsd: 0,
+        transportRsd: 100,
+        otherRelatedCostsRsd: 50,
+        totalActualCostRsd: 1_150,
+        adjustmentRsd: 140,
+        incomingUnitCogsRsd: 115,
+      }),
+    ]);
+    expect(
+      allocations.reduce((sum, line) => sum + line.totalActualCostRsd, 0),
+    ).toBe(3_200);
+  });
+
+  it("grupiše duple SKU stavke i zadržava usaglašenje do pare", () => {
+    const grouped = groupActualInboundCostsBySku(
+      allocateActualInboundCosts({
+        costs: {
+          invoiceValueRsd: 100.01,
+          customsValueRsd: 0,
+          transportValueRsd: 0,
+          otherRelatedCostsRsd: 0,
+        },
+        otherCostsBasis: "VALUE",
+        lines: [
+          { id: "a", sku: "A", qty: 1, purchaseValueRsd: 50 },
+          { id: "b", sku: "A", qty: 1, purchaseValueRsd: 50 },
+        ],
+      }),
+    );
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toEqual(
+      expect.objectContaining({
+        sku: "A",
+        qty: 2,
+        totalActualCostRsd: 100.01,
+        incomingUnitCogsRsd: 50.01,
+      }),
     );
   });
 

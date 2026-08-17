@@ -63,6 +63,37 @@ export type CogsPreviewLine = {
   incomingUnitCogsRsd: number;
 };
 
+export type InboundCostAllocationBasis =
+  | "AUTO_UTILIZATION"
+  | "VALUE"
+  | "WEIGHT"
+  | "VOLUME";
+
+export type ActualInboundCostLine = {
+  id: string;
+  sku: string;
+  qty: number;
+  purchaseValueRsd: number;
+  customsRatePct?: number | null;
+  transportBaselineRsd?: number | null;
+  totalVolumeM3?: number | null;
+  totalWeightKg?: number | null;
+};
+
+export type ActualInboundCostAllocationLine = {
+  id: string;
+  sku: string;
+  qty: number;
+  invoiceValueRsd: number;
+  customsRsd: number;
+  transportRsd: number;
+  otherRelatedCostsRsd: number;
+  totalActualCostRsd: number;
+  baselineCostRsd: number;
+  adjustmentRsd: number;
+  incomingUnitCogsRsd: number;
+};
+
 export function assertInboundInvoicePurchaseOrderLocked(input: {
   lockedAt: Date | null;
 }) {
@@ -188,6 +219,184 @@ export function calculateLinkedInvoiceAdjustmentRsd(input: {
         ? breakdownTotalRsd - input.purchaseOrderBaselineRsd
         : 0),
   );
+}
+
+function normalisedShares(
+  values: number[],
+  fallback: number[],
+) {
+  const total = values.reduce((sum, value) => sum + Math.max(value, 0), 0);
+  if (total > 0) return values.map((value) => Math.max(value, 0) / total);
+  const fallbackTotal = fallback.reduce(
+    (sum, value) => sum + Math.max(value, 0),
+    0,
+  );
+  if (fallbackTotal > 0) {
+    return fallback.map((value) => Math.max(value, 0) / fallbackTotal);
+  }
+  return values.map(() => (values.length ? 1 / values.length : 0));
+}
+
+function allocateMoneyByShares(totalRsd: number, shares: number[]) {
+  assertNonnegativeMoney(totalRsd, "Trošak za raspodelu");
+  if (!shares.length) return [];
+  const shareTotal = shares.reduce((sum, share) => sum + Math.max(share, 0), 0);
+  const cents = Math.round(totalRsd * 100);
+  let assignedCents = 0;
+  return shares.map((share, index) => {
+    const lineCents =
+      index === shares.length - 1
+        ? cents - assignedCents
+        : Math.round(
+            cents *
+              (shareTotal > 0
+                ? Math.max(share, 0) / shareTotal
+                : 1 / shares.length),
+          );
+    assignedCents += lineCents;
+    return lineCents / 100;
+  });
+}
+
+function costBasisShares(
+  basis: InboundCostAllocationBasis,
+  values: number[],
+  volumes: number[],
+  weights: number[],
+) {
+  const valueShares = normalisedShares(values, values);
+  if (basis === "VALUE") return valueShares;
+  if (basis === "VOLUME") return normalisedShares(volumes, values);
+  if (basis === "WEIGHT") return normalisedShares(weights, values);
+  const volumeShares = normalisedShares(volumes, values);
+  const weightShares = normalisedShares(weights, values);
+  return values.map(
+    (_value, index) =>
+      Math.max(volumeShares[index] ?? 0, weightShares[index] ?? 0) ||
+      (valueShares[index] ?? 0),
+  );
+}
+
+/**
+ * Raspodeljuje stvarne neto komponente prijemnice po stavkama:
+ * - vrednost robe po vrednosti stavke,
+ * - carinu po procenjenoj carini stavke (fallback: vrednost),
+ * - transport po zapremini iz klijentovog pravila 69 m³ / kontejnerska
+ *   količina, odnosno dimenzije transportnog pakovanja (fallback za legacy:
+ *   vrednost),
+ * - ostale vezane troškove po izabranoj osnovi.
+ *
+ * Svaka komponenta se usaglašava do poslednje pare. adjustmentRsd je jedina
+ * vrednost koja se upisuje preko procene sa porudžbenice, pa se COGS ne duplira.
+ */
+export function allocateActualInboundCosts(input: {
+  costs: InboundInvoiceCostBreakdown;
+  otherCostsBasis: InboundCostAllocationBasis;
+  lines: ActualInboundCostLine[];
+}): ActualInboundCostAllocationLine[] {
+  calculateInboundInvoiceAmounts(input.costs);
+  if (!input.lines.length) return [];
+
+  const values = input.lines.map((line) => {
+    if (!Number.isInteger(line.qty) || line.qty <= 0) {
+      throw new Error(`Količina za ${line.sku} mora biti ceo broj veći od nule.`);
+    }
+    assertNonnegativeMoney(
+      line.purchaseValueRsd,
+      `Vrednost porudžbenice za ${line.sku}`,
+    );
+    return line.purchaseValueRsd;
+  });
+  const estimatedCustoms = input.lines.map(
+    (line) =>
+      line.purchaseValueRsd *
+      (Math.max(line.customsRatePct ?? 0, 0) / 100),
+  );
+  const volumes = input.lines.map((line) =>
+    Math.max(line.totalVolumeM3 ?? 0, 0),
+  );
+  const weights = input.lines.map((line) =>
+    Math.max(line.totalWeightKg ?? 0, 0),
+  );
+
+  const invoiceAllocations = allocateMoneyByShares(
+    input.costs.invoiceValueRsd,
+    normalisedShares(values, values),
+  );
+  const customsAllocations = allocateMoneyByShares(
+    input.costs.customsValueRsd,
+    normalisedShares(estimatedCustoms, values),
+  );
+  const transportAllocations = allocateMoneyByShares(
+    input.costs.transportValueRsd,
+    normalisedShares(volumes, values),
+  );
+  const otherAllocations = allocateMoneyByShares(
+    input.costs.otherRelatedCostsRsd,
+    costBasisShares(input.otherCostsBasis, values, volumes, weights),
+  );
+
+  return input.lines.map((line, index) => {
+    const invoiceValueRsd = invoiceAllocations[index] ?? 0;
+    const customsRsd = customsAllocations[index] ?? 0;
+    const transportRsd = transportAllocations[index] ?? 0;
+    const otherRelatedCostsRsd = otherAllocations[index] ?? 0;
+    const totalActualCostRsd = roundMoney(
+      invoiceValueRsd + customsRsd + transportRsd + otherRelatedCostsRsd,
+    );
+    const baselineCostRsd = roundMoney(
+      line.purchaseValueRsd +
+        estimatedCustoms[index] +
+        Math.max(line.transportBaselineRsd ?? 0, 0),
+    );
+    return {
+      id: line.id,
+      sku: line.sku,
+      qty: line.qty,
+      invoiceValueRsd,
+      customsRsd,
+      transportRsd,
+      otherRelatedCostsRsd,
+      totalActualCostRsd,
+      baselineCostRsd,
+      adjustmentRsd: roundMoney(totalActualCostRsd - baselineCostRsd),
+      incomingUnitCogsRsd: roundMoney(totalActualCostRsd / line.qty),
+    };
+  });
+}
+
+export function groupActualInboundCostsBySku(
+  lines: ActualInboundCostAllocationLine[],
+) {
+  const grouped = new Map<string, ActualInboundCostAllocationLine>();
+  for (const line of lines) {
+    const current = grouped.get(line.sku);
+    if (!current) {
+      grouped.set(line.sku, { ...line });
+      continue;
+    }
+    current.qty += line.qty;
+    current.invoiceValueRsd += line.invoiceValueRsd;
+    current.customsRsd += line.customsRsd;
+    current.transportRsd += line.transportRsd;
+    current.otherRelatedCostsRsd += line.otherRelatedCostsRsd;
+    current.totalActualCostRsd += line.totalActualCostRsd;
+    current.baselineCostRsd += line.baselineCostRsd;
+    current.adjustmentRsd += line.adjustmentRsd;
+    current.incomingUnitCogsRsd = roundMoney(
+      current.totalActualCostRsd / current.qty,
+    );
+  }
+  return Array.from(grouped.values()).map((line) => ({
+    ...line,
+    invoiceValueRsd: roundMoney(line.invoiceValueRsd),
+    customsRsd: roundMoney(line.customsRsd),
+    transportRsd: roundMoney(line.transportRsd),
+    otherRelatedCostsRsd: roundMoney(line.otherRelatedCostsRsd),
+    totalActualCostRsd: roundMoney(line.totalActualCostRsd),
+    baselineCostRsd: roundMoney(line.baselineCostRsd),
+    adjustmentRsd: roundMoney(line.adjustmentRsd),
+  }));
 }
 
 /**

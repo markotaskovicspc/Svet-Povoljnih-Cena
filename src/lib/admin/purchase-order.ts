@@ -1,4 +1,5 @@
 import type { PurchaseOrderStatus } from "@prisma/client";
+import { grossMarginPct } from "@/lib/pricing/gross-margin";
 
 export type PurchaseOrderLineCalculationInput = {
   id: string;
@@ -182,8 +183,9 @@ export function canReceivePurchaseOrder(input: {
 }
 
 /**
- * Allocates order freight by the larger normalised volume/weight utilisation,
- * then calculates customs and BM% from the formula in ERP module 4.
+ * Client rule: transport is allocated by volume. The customs amount shown on
+ * an open purchase order is an estimate from the article rate; the posted
+ * inbound invoice remains the source of truth for actual customs and COGS.
  */
 export function calculatePurchaseOrderFinancials(input: {
   lines: PurchaseOrderLineCalculationInput[];
@@ -202,10 +204,6 @@ export function calculatePurchaseOrderFinancials(input: {
     (sum, line) => sum + Math.max(line.totalVolumeM3, 0),
     0,
   );
-  const totalWeight = input.lines.reduce(
-    (sum, line) => sum + Math.max(line.totalWeightKg, 0),
-    0,
-  );
   const totalValue = input.lines.reduce(
     (sum, line) => sum + Math.max(line.purchasePrice * line.qty, 0),
     0,
@@ -213,13 +211,11 @@ export function calculatePurchaseOrderFinancials(input: {
   const weights = input.lines.map((line) => {
     const volumeShare =
       totalVolume > 0 ? Math.max(line.totalVolumeM3, 0) / totalVolume : 0;
-    const weightShare =
-      totalWeight > 0 ? Math.max(line.totalWeightKg, 0) / totalWeight : 0;
     const valueShare =
       totalValue > 0
         ? Math.max(line.purchasePrice * line.qty, 0) / totalValue
         : 0;
-    return Math.max(volumeShare, weightShare) || valueShare;
+    return volumeShare || valueShare;
   });
   const weightTotal = weights.reduce((sum, value) => sum + value, 0);
   const freightCents = Math.round(totalFreightRsd * 100);
@@ -240,14 +236,12 @@ export function calculatePurchaseOrderFinancials(input: {
     const freightPerUnitRsd = line.qty > 0 ? freightAllocatedRsd / line.qty : 0;
     const purchasePriceRsd = line.purchasePrice * exchangeRate;
     const customsPerUnitRsd =
-      (purchasePriceRsd + freightPerUnitRsd) *
-      (Math.max(line.customsRatePct ?? 0, 0) / 100);
-    const netRetail =
-      line.calcRetailPrice != null ? line.calcRetailPrice / 1.2 : 0;
-    const bm =
-      netRetail - purchasePriceRsd - freightPerUnitRsd - customsPerUnitRsd;
-    const bmPct = netRetail > 0 ? round((bm / netRetail) * 100, 2) : null;
+      purchasePriceRsd * (Math.max(line.customsRatePct ?? 0, 0) / 100);
+    const projectedUnitCogs =
+      purchasePriceRsd + freightPerUnitRsd + customsPerUnitRsd;
+    const bmPct = grossMarginPct(line.calcRetailPrice, projectedUnitCogs);
     if (bmPct != null) {
+      const netRetail = (line.calcRetailPrice ?? 0) / 1.2;
       weightedBm += bmPct * netRetail * line.qty;
       weightedBmBase += netRetail * line.qty;
     }

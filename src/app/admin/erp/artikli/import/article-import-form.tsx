@@ -105,7 +105,9 @@ export function ArticleImportForm() {
           dodeljuje. Uvoz podržava sva izvorna polja
           matičnog kartona: fotografiju kao URL, status, dobavljača,
           kategoriju/podgrupu, grupu,
-          kolekciju, atribute, boje, benefite, formatirani opis, zalihe, COGS,
+          kolekciju, atribute, boje, benefite, formatirani opis i zalihe.
+          Postojeći COGS se pri uvozu ne menja, jer se vodi isključivo iz
+          proknjiženih prijemnica. Uvoz dodatno podržava
           dimenzije i pakovanje, materijal, sertifikate, kanale prodaje, MOQ,
           kao i datum „Novo do“.
         </p>

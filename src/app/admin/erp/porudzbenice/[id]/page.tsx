@@ -612,7 +612,7 @@ export default async function PurchaseOrderEditorPage({
               <dd className="text-right tabular-nums">{fmt(num(order.totalPrice))} {order.currency}</dd>
               <dt className="text-ink-500">Transport</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.freightCost))} {order.freightCurrency}</dd>
-              <dt className="text-ink-500">Ukupna BM%</dt>
+              <dt className="text-ink-500">Ukupna BM% (procena)</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.bmPct))}%</dd>
             </dl>
 
@@ -644,14 +644,14 @@ export default async function PurchaseOrderEditorPage({
             <div className="border-b border-border/60 px-5 py-4">
               <h2 className="text-base font-semibold text-ink-900">Artikli porudžbenice</h2>
               <p className="text-sm text-ink-500">
-                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, carina i kalkulativna MPC mogu da se koriguju do knjiženja.
+                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, procenjena carina i kalkulativna MPC mogu da se koriguju do knjiženja. Stvarne troškove i COGS potvrđuje prijemnica.
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-[1900px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
-                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Zapremina / težina", "Carina %", "Kalk. MPC", "BM%", "Dobavljačev naziv / sertifikati / bar-kod", ""].map((label) => (
+                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", ""].map((label) => (
                       <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>
                     ))}
                   </tr>

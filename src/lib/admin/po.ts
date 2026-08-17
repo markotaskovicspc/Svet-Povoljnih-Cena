@@ -857,7 +857,7 @@ export async function receivePurchaseOrder(
         totalVolume: Number(item.totalVolume ?? 0),
         manualAmount: Number(item.freightAllocated ?? 0),
       })),
-      order.allocationBasis,
+      "VOLUME",
     );
     for (const item of order.items) {
       const freightAllocated = allocations.get(item.id) ?? 0;

@@ -20,6 +20,8 @@ import {
   resolveRabaluxSupplierStock,
 } from "@/lib/rabalux/availability";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { grossMarginPct } from "@/lib/pricing/gross-margin";
+import { resolveRetailPrice } from "@/lib/pricing/retail-price";
 
 export type ErpValue = string | number | boolean | null;
 
@@ -182,8 +184,8 @@ function inboundInvoiceStatusLabel(status: string) {
 
 function cogsStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    PENDING: "Čeka razradu",
-    CALCULATED: "Razrađen",
+    PENDING: "Čeka obračun",
+    CALCULATED: "Obračunat",
     LOCKED: "Proknjižen",
   };
   return labels[status] ?? status;
@@ -340,7 +342,7 @@ const purchaseOrderColumns: ErpColumn[] = [
   { key: "currency", label: "Valuta", options: ["RSD", "€", "$"], defaultVisible: true },
   { key: "transportType", label: "Tip transporta", options: ["Šleper 90m3 / 24t", "Solo kamion 45m3 / 12t", "Kombi", "Kontejner 40HC"], defaultVisible: true },
   { key: "parity", label: "Paritet", options: ["EXW", "FCA", "FOB", "CIF", "DAP", "DDP"], defaultVisible: true },
-  { key: "bmPct", label: "Ukupna BM%", type: "number", align: "right", defaultVisible: true },
+  { key: "bmPct", label: "Ukupna BM% (procena)", type: "number", align: "right", defaultVisible: true },
 ];
 
 
@@ -370,9 +372,9 @@ const purchaseOrderItemColumns: ErpColumn[] = [
   { key: "qty", label: "Količina za poručivanje", type: "number", align: "right", defaultVisible: true },
   { key: "totalVolume", label: "Ukupna zapremina", type: "number", align: "right", defaultVisible: true },
   { key: "totalWeight", label: "Ukupna težina", type: "number", align: "right", defaultVisible: true },
-  { key: "customsRate", label: "Carinska stopa", type: "number", align: "right", defaultVisible: true },
+  { key: "customsRate", label: "Carinska stopa (procena)", type: "number", align: "right", defaultVisible: true },
   { key: "calcRetailPrice", label: "Kalkulativna MPC", type: "money", align: "right", defaultVisible: true },
-  { key: "bmPct", label: "BM%", type: "number", align: "right", defaultVisible: true },
+  { key: "bmPct", label: "BM% (procena)", type: "number", align: "right", defaultVisible: true },
   { key: "supplierProductName", label: "Dobavljačev naziv artikla", defaultVisible: true },
   { key: "certificates", label: "Sertifikati", defaultVisible: true },
   { key: "barcode", label: "Bar kod", defaultVisible: true },
@@ -403,7 +405,7 @@ const inboundInvoiceColumns: ErpColumn[] = [
     type: "status",
     options: ["AUTO_UTILIZATION", "VALUE", "WEIGHT", "VOLUME", "MANUAL"],
   },
-  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka razradu", "Razrađen", "Proknjižen"] },
+  { key: "cogsStatus", label: "COGS", type: "status", options: ["Čeka obračun", "Obračunat", "Proknjižen"] },
 ];
 
 
@@ -680,7 +682,7 @@ const coreErpModules: ErpModule[] = [
     rows: emptyRows,
     notes: [
       "Količina treba da se zacrveni kada nije deljiva brojem artikala u pakovanju.",
-      "BM% se računa iz nabavne cene u RSD, transporta po jedinici i carine.",
+      "BM% je procena iz kalkulativne MPC bez PDV-a i procenjenog jediničnog COGS-a. Stvarni COGS potvrđuje prijemnica.",
     ],
   },
   {
@@ -720,7 +722,7 @@ const coreErpModules: ErpModule[] = [
     detailHrefBase: "/admin/erp/ulazne-fakture",
     notes: [
       "Dvoklik na red otvara pojedinačnu prijemnicu.",
-      "Trošak vezanih faktura raspoređuje se prema vrednosti svake šifre na porudžbenici.",
+      "Vrednost robe se raspoređuje po vrednosti stavke, carina po stopama, transport po zapremini, a ostali troškovi po izabranoj osnovi.",
       "Proknjižena prijemnica se ne može redovno menjati niti ponovo uključiti u COGS.",
     ],
   },
@@ -1657,6 +1659,7 @@ async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
 }
 
 async function getRetailPriceRows(take: number): Promise<ErpRow[]> {
+  const now = new Date();
   const products = await db.product.findMany({
     orderBy: { updatedAt: "desc" },
     take,
@@ -1665,23 +1668,39 @@ async function getRetailPriceRows(take: number): Promise<ErpRow[]> {
       sku: true,
       name: true,
       fullPrice: true,
-      salePrice: true,
-      discountPct: true,
+      cogs: true,
+      priceListEntries: {
+        where: {
+          priceList: { kind: "RETAIL", active: true },
+          validFrom: { lte: now },
+          OR: [{ validTo: null }, { validTo: { gte: now } }],
+        },
+        include: { priceList: true },
+        orderBy: { validFrom: "desc" },
+      },
       updatedAt: true,
       isActive: true,
     },
   });
 
-  return products.map((product) => ({
-    id: product.id,
-    values: {
-      sku: product.sku,
-      name: product.name,
-      currentMpc: asNumber(product.salePrice ?? product.fullPrice),
-      calcMpc: asNumber(product.fullPrice),
-      bmPct: product.discountPct ?? null,
-      validFrom: dateOnly(product.updatedAt),
-      status: product.isActive ? "Objavljeno" : "Arhiva",
-    },
-  }));
+  return products.map((product) => {
+    const retailPrice = resolveRetailPrice(
+      product.priceListEntries,
+      product.fullPrice,
+      now,
+    );
+    const cogs = asNumber(product.cogs);
+    return {
+      id: product.id,
+      values: {
+        sku: product.sku,
+        name: product.name,
+        currentMpc: retailPrice.price,
+        calcMpc: asNumber(product.fullPrice),
+        bmPct: grossMarginPct(retailPrice.price, cogs),
+        validFrom: dateOnly(product.updatedAt),
+        status: product.isActive ? "Objavljeno" : "Arhiva",
+      },
+    };
+  });
 }

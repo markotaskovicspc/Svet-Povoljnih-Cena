@@ -23,6 +23,11 @@ type InitialInvoiceValues = {
   customsValueRsd: number | null;
   transportValueRsd: number | null;
   otherRelatedCostsRsd: number | null;
+  otherCostsAllocationBasis:
+    | "AUTO_UTILIZATION"
+    | "VALUE"
+    | "WEIGHT"
+    | "VOLUME";
   legacyNetValue: number;
 };
 
@@ -187,6 +192,21 @@ export function InboundInvoiceFields({
           value={otherRelatedCostsRsd}
           onChange={(event) => setOtherRelatedCostsRsd(event.target.value)}
         />
+      </Field>
+      <Field
+        label="Raspodela ostalih vezanih troškova"
+        hint="Transport se uvek raspoređuje po zapremini. Ovim izborom se raspoređuju samo ostali vezani troškovi."
+      >
+        <select
+          name="otherCostsAllocationBasis"
+          defaultValue={initial.otherCostsAllocationBasis}
+          className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+        >
+          <option value="VALUE">Prema vrednosti robe</option>
+          <option value="VOLUME">Prema zapremini</option>
+          <option value="WEIGHT">Prema težini</option>
+          <option value="AUTO_UTILIZATION">Veće iskorišćenje zapremine/težine</option>
+        </select>
       </Field>
       <Field
         label="Ukupno bez PDV-a"

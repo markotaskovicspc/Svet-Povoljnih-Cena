@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { formatRsd } from "@/lib/format";
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
+import { grossMarginPct } from "@/lib/pricing/gross-margin";
 
 export const dynamic = "force-dynamic";
 
@@ -175,7 +176,9 @@ export default async function PriceListDetail({
         where: search.sku
           ? { product: { sku: { contains: search.sku, mode: "insensitive" } } }
           : undefined,
-        include: { product: { select: { id: true, sku: true, name: true } } },
+        include: {
+          product: { select: { id: true, sku: true, name: true, cogs: true } },
+        },
         orderBy: [{ validFrom: "desc" }, { product: { sku: "asc" } }],
         take: 500,
       },
@@ -208,6 +211,9 @@ export default async function PriceListDetail({
                 <th className="py-2">SKU</th>
                 <th>Naziv</th>
                 <th className="text-right">Cena</th>
+                {priceList.kind === "RETAIL" ? (
+                  <th className="text-right">BM%</th>
+                ) : null}
                 <th>Važi od</th>
                 <th>Važi do</th>
                 <th />
@@ -223,6 +229,16 @@ export default async function PriceListDetail({
                   </td>
                   <td>{entry.product.name}</td>
                   <td className="text-right font-semibold">{formatRsd(Number(entry.price))}</td>
+                  {priceList.kind === "RETAIL" ? (
+                    <td className="text-right tabular-nums">
+                      {grossMarginPct(
+                        Number(entry.price),
+                        entry.product.cogs == null
+                          ? null
+                          : Number(entry.product.cogs),
+                      ) ?? "—"}
+                    </td>
+                  ) : null}
                   <td>{entry.validFrom.toLocaleDateString("sr-Latn-RS")}</td>
                   <td>{entry.validTo?.toLocaleDateString("sr-Latn-RS") ?? "—"}</td>
                   <td className="text-right">

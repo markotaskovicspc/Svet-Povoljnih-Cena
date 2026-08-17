@@ -43,6 +43,7 @@
     "import:book12": "node scripts/import-book12-products.mjs",
     "catalog:backfill-dimensions": "node scripts/backfill-product-dimensions.mjs",
     "catalog:article-master-audit": "node scripts/article-master-audit.mjs",
+    "audit:cogs-bm": "node scripts/audit-cogs-bm.mjs",
     "catalog:repair-group-categories": "node scripts/category-group-category-repair.mjs",
     "rabalux:inspect": "node scripts/rabalux-sync.mjs inspect",
     "rabalux:sync-catalog": "node scripts/rabalux-sync.mjs catalog",

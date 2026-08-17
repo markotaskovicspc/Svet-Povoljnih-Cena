@@ -11,6 +11,7 @@ import {
 import { db } from "@/lib/db";
 import {
   assertInboundInvoicePurchaseOrderLocked,
+  allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
   calculateInboundInvoiceAmounts,
   calculateLinkedInvoiceAdjustmentRsd,
@@ -19,6 +20,7 @@ import {
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
+import type { InboundCostAllocationBasis } from "@/lib/admin/inbound-invoice";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 
 export type SaveInboundInvoiceInput = {
@@ -31,6 +33,7 @@ export type SaveInboundInvoiceInput = {
   customsValueRsd: number;
   transportValueRsd: number;
   otherRelatedCostsRsd: number;
+  otherCostsAllocationBasis: InboundCostAllocationBasis;
   notes: string | null;
 };
 
@@ -197,9 +200,9 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         netValue: amounts.netValue,
         vatValue: amounts.vatValue,
         grossValue: amounts.grossValue,
-        allocationBasis: "VALUE",
+        allocationBasis: input.otherCostsAllocationBasis,
         status: InboundInvoiceStatus.RECEIVED,
-        cogsStatus: CogsStatus.PENDING,
+        cogsStatus: CogsStatus.CALCULATED,
         notes: input.notes,
       },
     });
@@ -418,51 +421,95 @@ export async function rebuildInboundInvoiceAllocations(
           netValue: true,
           exchangeRate: true,
           invoiceValueRsd: true,
+          customsValueRsd: true,
+          transportValueRsd: true,
+          otherRelatedCostsRsd: true,
+          allocationBasis: true,
         },
       },
     },
   });
   if (!order) return;
   const postedInvoice = order.inboundInvoices[0] ?? null;
-  const defaults = calculatePurchaseOrderInvoiceDefaults({
-    exchangeRate: Number(order.exchangeRate),
-    freightCost: Number(order.freightCost),
-    freightExchangeRate: Number(order.freightExchangeRate),
-    lines: order.items.map((item) => ({
-      qty: item.qty,
-      purchasePrice: Number(item.purchasePrice),
-      customsRatePct: Number(item.customsRate ?? 0),
-    })),
-  });
-  const linkedCostRsd = calculateLinkedInvoiceAdjustmentRsd({
-    purchaseOrderBaselineRsd:
-      defaults.invoiceValueRsd +
-      defaults.customsValueRsd +
-      defaults.transportValueRsd,
-    invoices:
-      postedInvoice?.lockedAt &&
-      postedInvoice.status === InboundInvoiceStatus.POSTED
-        ? [
-            {
-              netValue: Number(postedInvoice.netValue),
-              exchangeRate: Number(postedInvoice.exchangeRate),
-              invoiceValueRsd:
-                postedInvoice.invoiceValueRsd == null
-                  ? null
-                  : Number(postedInvoice.invoiceValueRsd),
-            },
-          ]
-        : [],
-  });
-  const allocations = allocateInvoiceCostsByOrderValue(
-    linkedCostRsd,
-    order.items.map((item) => ({
-      id: item.id,
-      sku: item.sku,
-      qty: item.qty,
-      purchasePrice: Number(item.purchasePrice) * Number(order.exchangeRate),
-    })),
+  const hasPostedInvoice = Boolean(
+    postedInvoice?.lockedAt &&
+      postedInvoice.status === InboundInvoiceStatus.POSTED,
   );
+  let allocations = new Map<string, number>();
+  const hasActualBreakdown = Boolean(
+    hasPostedInvoice &&
+      postedInvoice?.invoiceValueRsd != null &&
+      postedInvoice.customsValueRsd != null &&
+      postedInvoice.transportValueRsd != null &&
+      postedInvoice.otherRelatedCostsRsd != null,
+  );
+  if (hasActualBreakdown && postedInvoice) {
+    const actualLines = allocateActualInboundCosts({
+      costs: {
+        invoiceValueRsd: Number(postedInvoice.invoiceValueRsd),
+        customsValueRsd: Number(postedInvoice.customsValueRsd),
+        transportValueRsd: Number(postedInvoice.transportValueRsd),
+        otherRelatedCostsRsd: Number(postedInvoice.otherRelatedCostsRsd),
+      },
+      otherCostsBasis:
+        postedInvoice.allocationBasis === "MANUAL"
+          ? "VALUE"
+          : postedInvoice.allocationBasis,
+      lines: order.items.map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        qty: item.qty,
+        purchaseValueRsd:
+          Number(item.purchasePrice) * Number(order.exchangeRate) * item.qty,
+        customsRatePct: Number(item.customsRate ?? 0),
+        transportBaselineRsd: Number(item.freightAllocated ?? 0),
+        totalVolumeM3: Number(item.totalVolume ?? 0),
+        totalWeightKg: Number(item.totalWeight ?? 0),
+      })),
+    });
+    allocations = new Map(
+      actualLines.map((line) => [line.id, line.adjustmentRsd]),
+    );
+  } else {
+    const defaults = calculatePurchaseOrderInvoiceDefaults({
+      exchangeRate: Number(order.exchangeRate),
+      freightCost: Number(order.freightCost),
+      freightExchangeRate: Number(order.freightExchangeRate),
+      lines: order.items.map((item) => ({
+        qty: item.qty,
+        purchasePrice: Number(item.purchasePrice),
+        customsRatePct: Number(item.customsRate ?? 0),
+      })),
+    });
+    const linkedCostRsd = calculateLinkedInvoiceAdjustmentRsd({
+      purchaseOrderBaselineRsd:
+        defaults.invoiceValueRsd +
+        defaults.customsValueRsd +
+        defaults.transportValueRsd,
+      invoices:
+        hasPostedInvoice && postedInvoice
+          ? [
+              {
+                netValue: Number(postedInvoice.netValue),
+                exchangeRate: Number(postedInvoice.exchangeRate),
+                invoiceValueRsd:
+                  postedInvoice.invoiceValueRsd == null
+                    ? null
+                    : Number(postedInvoice.invoiceValueRsd),
+              },
+            ]
+          : [],
+    });
+    allocations = allocateInvoiceCostsByOrderValue(
+      linkedCostRsd,
+      order.items.map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        qty: item.qty,
+        purchasePrice: Number(item.purchasePrice) * Number(order.exchangeRate),
+      })),
+    );
+  }
   const lateCostByProduct = new Map<
     string,
     { delta: number; stock: number; currentCogs: number }
@@ -498,10 +545,6 @@ export async function rebuildInboundInvoiceAllocations(
     return;
   }
 
-  const hasPostedInvoice = Boolean(
-    postedInvoice?.lockedAt &&
-      postedInvoice.status === InboundInvoiceStatus.POSTED,
-  );
   let snapshot = readCogsBookingSnapshot(order.cogsBookingSnapshot);
   if (order.cogsBookedAt && !snapshot) {
     throw new Error(

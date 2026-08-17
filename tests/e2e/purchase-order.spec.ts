@@ -201,7 +201,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         "Valuta",
         "Tip transporta",
         "Paritet",
-        "Ukupna BM%",
+        "Ukupna BM% (procena)",
       ]) {
         await expect(
           page.getByRole("columnheader").filter({
