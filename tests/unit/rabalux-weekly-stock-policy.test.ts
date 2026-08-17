@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCommittedRabaluxWeeklyStockMetadata,
   resolveRabaluxWeeklyStockPolicy,
   shouldReconcileMissingCatalogProducts,
 } from "@/lib/rabalux/weekly-stock-policy";
@@ -44,6 +45,20 @@ describe("Rabalux weekly stock publication policy", () => {
 });
 
 describe("Rabalux weekly catalog allow-list", () => {
+  it("accepts a successful snapshot when the failure flag is absent", () => {
+    expect(
+      isCommittedRabaluxWeeklyStockMetadata({
+        sourceType: "RABALUX_WEEKLY_XLSX",
+      }),
+    ).toBe(true);
+    expect(
+      isCommittedRabaluxWeeklyStockMetadata({
+        sourceType: "RABALUX_WEEKLY_XLSX",
+        failedBeforeStockCommit: true,
+      }),
+    ).toBe(false);
+  });
+
   it("preserves XLSX products that are absent from the catalog feed", () => {
     expect(shouldReconcileMissingCatalogProducts(true)).toBe(false);
   });

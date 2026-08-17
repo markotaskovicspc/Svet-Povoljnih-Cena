@@ -1,5 +1,18 @@
 import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "./availability";
 
+export const RABALUX_WEEKLY_STOCK_SOURCE_TYPE = "RABALUX_WEEKLY_XLSX";
+
+export function isCommittedRabaluxWeeklyStockMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+  const values = metadata as Record<string, unknown>;
+  return (
+    values.sourceType === RABALUX_WEEKLY_STOCK_SOURCE_TYPE &&
+    values.failedBeforeStockCommit !== true
+  );
+}
+
 export function resolveRabaluxWeeklyStockPolicy(input: {
   closingStock: number;
   supplierApprovalStatus: string | null;

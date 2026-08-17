@@ -32,7 +32,11 @@ import {
   isRabaluxStockFresh,
   resolveRabaluxAvailability,
 } from "./availability";
-import { shouldReconcileMissingCatalogProducts } from "./weekly-stock-policy";
+import {
+  isCommittedRabaluxWeeklyStockMetadata,
+  RABALUX_WEEKLY_STOCK_SOURCE_TYPE,
+  shouldReconcileMissingCatalogProducts,
+} from "./weekly-stock-policy";
 import {
   acquireSyncLease,
   assertFeedBaseline,
@@ -296,7 +300,7 @@ export async function fetchRabaluxStock(supplier: Supplier) {
 }
 
 export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
-  const [catalog, current, weeklySnapshot] = await Promise.all([
+  const [catalog, current, weeklySnapshotCandidates] = await Promise.all([
     fetchRabaluxCatalog(supplier),
     db.product.findMany({
       where: { supplierId: supplier.id, supplierExternalId: { not: null } },
@@ -306,19 +310,26 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
         dcAvailableQty: true,
       },
     }),
-    db.importRun.findFirst({
+    db.importRun.findMany({
       where: {
         supplierId: supplier.id,
         kind: "STOCK",
         dryRun: false,
         status: { in: ["SUCCESS", "PARTIAL"] },
-        metadata: { path: ["sourceType"], equals: "RABALUX_WEEKLY_XLSX" },
-        NOT: { metadata: { path: ["failedBeforeStockCommit"], equals: true } },
+        metadata: {
+          path: ["sourceType"],
+          equals: RABALUX_WEEKLY_STOCK_SOURCE_TYPE,
+        },
       },
       orderBy: { finishedAt: "desc" },
-      select: { id: true },
+      select: { id: true, metadata: true },
     }),
   ]);
+  // PostgreSQL JSON comparisons return UNKNOWN for a missing key, so Prisma's
+  // `NOT path = true` also rejects normal successful runs that omit the flag.
+  const weeklySnapshot = weeklySnapshotCandidates.find((run) =>
+    isCommittedRabaluxWeeklyStockMetadata(run.metadata),
+  );
   if (!weeklySnapshot && process.env.NODE_ENV === "test") {
     const stock = await fetchRabaluxStock(supplier);
     const selection = selectRabaluxSerbiaStockCatalog(catalog.items, stock);

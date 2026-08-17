@@ -22,9 +22,13 @@ import {
   type RabaluxWeeklyStockParseResult,
   type RabaluxWeeklyStockRow,
 } from "./weekly-stock-file";
-import { resolveRabaluxWeeklyStockPolicy } from "./weekly-stock-policy";
+import {
+  isCommittedRabaluxWeeklyStockMetadata,
+  RABALUX_WEEKLY_STOCK_SOURCE_TYPE,
+  resolveRabaluxWeeklyStockPolicy,
+} from "./weekly-stock-policy";
 
-const SOURCE_TYPE = "RABALUX_WEEKLY_XLSX";
+const SOURCE_TYPE = RABALUX_WEEKLY_STOCK_SOURCE_TYPE;
 const CONFIRMATION_PHRASE = "RABALUX STANJE";
 const PREVIEW_TTL_MS = 10 * 60_000;
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
@@ -1079,18 +1083,20 @@ async function assertNotAlreadyApplied(supplierId: string, fileHash: string) {
 }
 
 async function assertWeeklyBaseline(supplierId: string, rows: number) {
-  const previous = await db.importRun.findFirst({
+  const candidates = await db.importRun.findMany({
     where: {
       supplierId,
       kind: "STOCK",
       dryRun: false,
       status: { in: ["SUCCESS", "PARTIAL"] },
       metadata: { path: ["sourceType"], equals: SOURCE_TYPE },
-      NOT: { metadata: { path: ["failedBeforeStockCommit"], equals: true } },
     },
     orderBy: { finishedAt: "desc" },
-    select: { recordsRead: true },
+    select: { recordsRead: true, metadata: true },
   });
+  const previous = candidates.find((run) =>
+    isCommittedRabaluxWeeklyStockMetadata(run.metadata),
+  );
   if (!previous?.recordsRead) return;
   const ratio = configuredRatio("RABALUX_WEEKLY_STOCK_MIN_BASELINE_RATIO", 0.7);
   const minimum = Math.ceil(previous.recordsRead * ratio);
@@ -1102,18 +1108,20 @@ async function assertWeeklyBaseline(supplierId: string, rows: number) {
 }
 
 async function assertReportDateNotOlder(supplierId: string, reportDate: string) {
-  const previous = await db.importRun.findFirst({
+  const candidates = await db.importRun.findMany({
     where: {
       supplierId,
       kind: "STOCK",
       dryRun: false,
       status: { in: ["SUCCESS", "PARTIAL"] },
       metadata: { path: ["sourceType"], equals: SOURCE_TYPE },
-      NOT: { metadata: { path: ["failedBeforeStockCommit"], equals: true } },
     },
     orderBy: { finishedAt: "desc" },
     select: { metadata: true },
   });
+  const previous = candidates.find((run) =>
+    isCommittedRabaluxWeeklyStockMetadata(run.metadata),
+  );
   const metadata =
     previous?.metadata &&
     typeof previous.metadata === "object" &&
