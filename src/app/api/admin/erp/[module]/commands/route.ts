@@ -95,10 +95,6 @@ export async function POST(
       revalidateTag("storefront-landing-pages", { expire: 0 });
       revalidateTag("storefront-home", { expire: 0 });
     }
-    if (module === "heroji-meseca") {
-      revalidateTag("storefront-home", { expire: 0 });
-      revalidatePath("/");
-    }
     await logAudit({
       actorId: admin.id,
       action: `erp.command.${action}`,
@@ -355,10 +351,6 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
       break;
     case "landing-sekcije":
       count = (await db.landingPageSection.deleteMany({ where })).count;
-      break;
-    case "heroji-meseca":
-      count = (await db.heroOfMonth.deleteMany({ where })).count;
-      revalidatePath("/heroji-meseca");
       break;
     case "newsletter-kampanje":
       count = (

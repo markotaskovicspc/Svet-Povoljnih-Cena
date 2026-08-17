@@ -716,30 +716,6 @@ export const operationalErpModules: ErpModule[] = [
     rows: emptyRows,
   },
   {
-    slug: "heroji-meseca",
-    number: "23b",
-    title: "Heroji meseca",
-    description: "Mesečni izbor hero artikala povezan sa akcijom i redosledom prikaza.",
-    status: "ready",
-    commands: [
-      {
-        label: "Obriši",
-        tone: "danger",
-        action: "row.delete",
-        needsSelection: true,
-        confirm: "Obrisati izabrane hero artikle meseca?",
-      },
-    ],
-    columns: [
-      number("year", "Godina"),
-      number("month", "Mesec"),
-      number("order", "Redosled"),
-      text("productSku", "SKU"),
-      text("action", "Akcija"),
-    ],
-    rows: emptyRows,
-  },
-  {
     slug: "landing-strane",
     number: "24",
     title: "Landing strane",
@@ -973,8 +949,6 @@ export async function getOperationalErpRows(
       return accountingRows(take);
     case "neobjavljeni-artikli":
       return unpublishedRows(take);
-    case "heroji-meseca":
-      return heroOfMonthRows(take);
     case "landing-strane":
       return landingPageRows(take);
     case "landing-sekcije":
@@ -1811,24 +1785,6 @@ async function unpublishedRows(take: number): Promise<ErpRow[]> {
       };
     })
     .filter((row) => Boolean(row.values.blockingReason));
-}
-
-async function heroOfMonthRows(take: number): Promise<ErpRow[]> {
-  const rows = await db.heroOfMonth.findMany({
-    take,
-    orderBy: [{ year: "desc" }, { month: "desc" }, { order: "asc" }],
-    include: { action: { select: { name: true } } },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    values: {
-      year: row.year,
-      month: row.month,
-      order: row.order,
-      productSku: row.productSku,
-      action: row.action?.name ?? null,
-    },
-  }));
 }
 
 async function landingPageRows(take: number): Promise<ErpRow[]> {

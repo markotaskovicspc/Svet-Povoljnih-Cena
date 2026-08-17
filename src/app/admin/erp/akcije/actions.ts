@@ -154,7 +154,6 @@ function refreshPricing() {
   updateTag("catalog-products");
   updateTag("storefront-home");
   revalidatePath("/admin/erp/akcije");
-  revalidatePath("/admin/erp/heroji-meseca");
   revalidatePath("/akcija");
   revalidatePath("/heroji-meseca");
   revalidatePath("/nedeljna-akcija");

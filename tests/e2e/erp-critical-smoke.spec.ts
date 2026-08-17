@@ -74,7 +74,6 @@ test.describe("ERP critical cross-browser smoke", () => {
       "/admin/erp/prodajni-nalozi",
       "/admin/erp/reklamacije-dnevnik",
       "/admin/tabovi",
-      "/admin/erp/heroji-meseca",
       "/admin/pocetna",
     ]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
@@ -94,6 +93,7 @@ test.describe("ERP critical cross-browser smoke", () => {
       "/admin/proizvodi",
       "/admin/akcije",
       "/admin/heroji",
+      "/admin/erp/heroji-meseca",
       "/admin/narudzbine",
       "/admin/lager",
       "/admin/reklamacije",

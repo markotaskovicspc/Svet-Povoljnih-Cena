@@ -2188,7 +2188,7 @@ export default async function ProductDetail({
             </fieldset>
 
             <div className="grid gap-3 rounded-xl border border-border/60 bg-muted-bg/30 p-4 text-sm md:grid-cols-3">
-              <ReadOnlyFlag label="Hero meseca" enabled={product.isHero} href="/admin/erp/heroji-meseca" />
+              <ReadOnlyFlag label="Hero meseca" enabled={product.isHero} href="/admin/erp/akcije" />
               <ReadOnlyFlag label="Google Merchant" enabled={product.inGoogleMerchant} href="/admin/oglasi" />
               <ReadOnlyFlag label="Meta katalog" enabled={product.inMetaCatalog} href="/admin/oglasi" />
             </div>

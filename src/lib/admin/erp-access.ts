@@ -9,7 +9,6 @@ const CONTENT_MODULES = new Set([
   "loyalty",
   "linearne-promocije",
   "neobjavljeni-artikli",
-  "heroji-meseca",
   "landing-strane",
   "landing-sekcije",
   "mobilni-tabovi",

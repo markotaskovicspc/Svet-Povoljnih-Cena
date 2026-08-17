@@ -64,7 +64,7 @@ const ERP_REQUIREMENT_ROWS: readonly Omit<ErpRequirement, "evidence">[] = [
   { id: 42, section: "Piktogrami", route: "/admin/erp/pozicije-piktograma", status: "deferred_user", acceptance: "CONTENT-05", note: "Obavezna četiri piktograma po akciji ostaju nepromenjena do posebne Lukine potvrde." },
   { id: 43, section: "Proizvodi", route: "/admin/erp/artikli", status: "implemented", acceptance: "REDIRECT-01", note: "Kanonska lista i detalj su u ERP-u; /admin/proizvodi i stari duboki linkovi vraćaju 404." },
   { id: 44, section: "Akcije", route: "/admin/erp/akcije", status: "implemented", acceptance: "PRICE-05", note: "Selektovana akcija, modal artikala, MP/akcijska cena, loyalty i linearni popusti." },
-  { id: 45, section: "Heroji meseca", route: "/admin/erp/heroji-meseca", status: "implemented", acceptance: "CONTENT-06", note: "Mesečni izbor proizvoda, redosled i veza sa akcijom." },
+  { id: 45, section: "Heroji meseca", route: "/admin/erp/akcije", status: "implemented", acceptance: "CONTENT-06", note: "Hero proizvodi i njihov redosled vode se unutar kanonskog modula Akcije; dupli ERP ekran je uklonjen." },
   { id: 46, section: "Preporuke kupovine", route: "/admin/preporuke", status: "deferred_user", acceptance: "CONTENT-07", note: "Tri konačna režima preporuka čekaju posebnu Lukinu odluku i ne blokiraju osnovni ERP release." },
   { id: 47, section: "Pravila dostave", route: "/admin/dostava", status: "partial", acceptance: "LOG-03", note: "Rutiranje, paketi i mock ugovori postoje; X Express cancel ugovor nije dostavljen pa se ta komanda ne nagađa." },
   { id: 48, section: "Vaučeri", route: "/admin/vauceri", status: "implemented", acceptance: "EXISTING-01", note: "Postojeći funkcionalni tok je sačuvan." },
