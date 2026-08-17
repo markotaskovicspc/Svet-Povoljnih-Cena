@@ -232,7 +232,13 @@ export default async function AdminDashboard({
         COALESCE(SUM(GREATEST(ws.qty, 0) * COALESCE(p.cogs, 0)), 0)::double precision AS stock_value,
         COALESCE(SUM(
           GREATEST(ws.qty, 0)
-          * COALESCE(p."widthCm" * p."depthCm" * p."heightCm" / 1000000, 0)
+          * COALESCE(
+            p."unitPackWidthCm"
+            * p."unitPackDepthCm"
+            * p."unitPackHeightCm"
+            / 1000000,
+            0
+          )
         ), 0)::double precision AS total_volume,
         COALESCE(SUM(
           CASE
@@ -403,7 +409,9 @@ export default async function AdminDashboard({
         </div>
 
         <Card>
-          <CardTitle description={warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."}>
+          <CardTitle
+            description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina se računa iz Š × D × V pakovanja pojedinačnog artikla.`}
+          >
             Zalihe za magacin
           </CardTitle>
           <DataTable
