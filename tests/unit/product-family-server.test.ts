@@ -18,6 +18,91 @@ import {
 } from "@/lib/product-family.server";
 
 describe("upravljanje članovima porodice boja", () => {
+  it("ručno čuva šifru, naziv, HEX, redosled, web status i glavnog člana", async () => {
+    const upsertMember = vi.fn().mockResolvedValue({
+      id: "member-white",
+      familyId: "family-1",
+      productId: "white",
+    });
+    const updateFamily = vi.fn().mockResolvedValue({});
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      productFamilyMember: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
+        upsert: upsertMember,
+      },
+      productFamily: {
+        upsert: vi.fn().mockResolvedValue({
+          id: "family-1",
+          primaryProductId: null,
+        }),
+        findUnique: vi.fn().mockResolvedValue({
+          primaryProductId: null,
+          members: [{ productId: "white" }],
+        }),
+        update: updateFamily,
+      },
+    };
+
+    await setProductFamilyMembership(tx as never, {
+      productId: "white",
+      familyCode: " smak ugaona ",
+      label: " Bela ",
+      colorHex: "#F8F7F2",
+      position: 7,
+      storefrontEnabled: true,
+      makePrimary: true,
+    });
+
+    expect(upsertMember).toHaveBeenCalledWith({
+      where: { productId: "white" },
+      create: {
+        productId: "white",
+        familyId: "family-1",
+        label: "Bela",
+        labelKey: "bela",
+        colorHex: "#F8F7F2",
+        position: 7,
+        storefrontEnabled: true,
+      },
+      update: {
+        familyId: "family-1",
+        label: "Bela",
+        labelKey: "bela",
+        colorHex: "#F8F7F2",
+        position: 7,
+        storefrontEnabled: true,
+      },
+    });
+    expect(updateFamily).toHaveBeenCalledWith({
+      where: { id: "family-1" },
+      data: { primaryProductId: "white" },
+    });
+  });
+
+  it("odbija ručni unos bez naziva boje i sa neispravnim HEX-om", async () => {
+    const tx = {
+      productFamilyMember: { findUnique: vi.fn().mockResolvedValue(null) },
+    };
+    await expect(
+      setProductFamilyMembership(tx as never, {
+        productId: "white",
+        familyCode: "CHAIRS",
+        label: "",
+      }),
+    ).rejects.toThrow("Naziv boje je obavezan");
+
+    await expect(
+      setProductFamilyMembership(tx as never, {
+        productId: "white",
+        familyCode: "CHAIRS",
+        label: "Bela",
+        colorHex: "#fff",
+      }),
+    ).rejects.toThrow("#RRGGBB");
+  });
+
   it("odbija duplikat automatski izvedenog naziva boje", async () => {
     const upsertMember = vi.fn();
     const tx = {
