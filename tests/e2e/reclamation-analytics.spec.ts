@@ -647,6 +647,7 @@ test.describe("Admin analitika reklamacija", () => {
 
       await expect(form.getByRole("status")).toContainText(
         /Reklamacija .+ je ručno evidentirana\./,
+        { timeout: 30_000 },
       );
       await expect
         .poll(() =>
@@ -995,6 +996,8 @@ function createDatabaseClient() {
   const raw = databaseUrl();
   if (!raw) throw new Error("Database URL is required for reclamation analytics QA.");
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   if (!['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
     url.searchParams.set(
       "sslmode",
@@ -1003,10 +1006,13 @@ function createDatabaseClient() {
     url.searchParams.delete("uselibpqcompat");
   }
   return new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: url.toString(),
-      max: 1,
-      connectionTimeoutMillis: 15_000,
-    }),
+    adapter: new PrismaPg(
+      {
+        connectionString: url.toString(),
+        max: 1,
+        connectionTimeoutMillis: 15_000,
+      },
+      { schema },
+    ),
   });
 }

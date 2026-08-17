@@ -38,7 +38,9 @@
     ".next-erp-e2e/types/**/*.ts",
     ".next-erp-e2e/dev/types/**/*.ts",
     ".next-erp-e2e-webpack/types/**/*.ts",
-    ".next-erp-e2e-webpack/dev/types/**/*.ts"
+    ".next-erp-e2e-webpack/dev/types/**/*.ts",
+    ".next-client-feedback-e2e/types/**/*.ts",
+    ".next-client-feedback-e2e/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

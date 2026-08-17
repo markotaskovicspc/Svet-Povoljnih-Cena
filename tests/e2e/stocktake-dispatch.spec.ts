@@ -248,6 +248,7 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       expect(stock.qty).toBe(7);
       expect(product.stock).toBe(7);
       expect(movement).toMatchObject({
+        dispatchNoteId: dispatchId,
         kind: "STOCK_COUNT",
         qty: -3,
         actorId: adminId,
@@ -362,6 +363,8 @@ function createDatabaseClient() {
   const raw = databaseUrl();
   if (!raw) throw new Error("Database URL is required for Popisi acceptance.");
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
   if (!isLocal && process.env.E2E_ALLOW_REMOTE_DATABASE !== "1") {
     throw new Error(
@@ -373,7 +376,10 @@ function createDatabaseClient() {
     url.searchParams.set("uselibpqcompat", "true");
   }
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url.toString(), max: 1 }),
+    adapter: new PrismaPg(
+      { connectionString: url.toString(), max: 1 },
+      { schema },
+    ),
   });
 }
 

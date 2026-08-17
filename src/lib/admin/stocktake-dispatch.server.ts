@@ -243,6 +243,7 @@ export async function postStocktakeDispatches(ids: string[], actorId: string) {
         const qty = positiveQty(item.qty);
         await adjustInventory(tx, {
           idempotencyKey: `stocktake-dispatch:${dispatch.id}:${item.id}`,
+          dispatchNoteId: dispatch.id,
           warehouseId: dispatch.sourceWarehouseId,
           productId: item.productId,
           sku: item.sku,

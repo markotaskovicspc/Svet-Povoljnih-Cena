@@ -65,6 +65,7 @@ describe("stocktake dispatch posting", () => {
     expect(mocks.adjustInventory).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
+        dispatchNoteId: "dispatch-1",
         warehouseId: "warehouse-1",
         productId: "product-1",
         qtyDelta: -3,

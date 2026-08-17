@@ -398,9 +398,19 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
 async function postPickupBatch(batchId: string, actorId: string) {
   const summary = await db.pickupBatch.findUnique({
     where: { id: batchId },
-    select: { provider: true },
+    select: {
+      provider: true,
+      pickupDate: true,
+      pickupWindowEnd: true,
+    },
   });
   if (!summary) throw new Error("Nalog za preuzimanje ne postoji.");
+  if (
+    normalizeProvider(summary.provider) === "MYGLS" &&
+    (!summary.pickupDate || !summary.pickupWindowEnd)
+  ) {
+    throw new Error("Početak i kraj termina preuzimanja su obavezni.");
+  }
   const availability = await getPickupPostingAvailability(summary.provider);
   if (!availability.available) throw new Error(availability.reason);
   if (!summary.provider) {

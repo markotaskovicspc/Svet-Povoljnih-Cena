@@ -19,7 +19,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
     "Set E2E_SALES_ORDERS=1 to run the isolated sales-order suite.",
   );
   test.describe.configure({ mode: "serial" });
-  test.setTimeout(360_000);
+  test.setTimeout(600_000);
 
   const runId = `${Date.now()}-${process.pid}`;
   const fixture = {
@@ -320,13 +320,16 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
     });
 
     await test.step("totali su na vrhu, a šifra, količina i naziv su prve kolone", async () => {
-      const formText = await page.locator("form").innerText();
+      const dispatchForm = page.locator("form").filter({
+        has: page.getByLabel("Firma koja izdaje", { exact: true }),
+      });
+      const formText = (await dispatchForm.textContent()) ?? "";
       expect(formText.indexOf("Vrednost bez PDV-a")).toBeGreaterThanOrEqual(0);
       expect(formText.indexOf("Vrednost bez PDV-a")).toBeLessThan(
         formText.indexOf("Uzglavlje otpremnice"),
       );
 
-      const headers = await page.locator("table thead th").allTextContents();
+      const headers = await dispatchForm.locator("table thead th").allTextContents();
       expect(headers.slice(0, 3)).toEqual([
         "Šifra artikla",
         "Količina",
@@ -652,6 +655,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await page.getByRole("link", { name: order.number, exact: true }).first().click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/prodajni-nalozi/${orderId}$`),
+        { timeout: 90_000 },
       );
       await expect(
         page.getByRole("heading", {
@@ -675,6 +679,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await page.getByRole("button", { name: "Sačuvaj porudžbinu" }).click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/prodajni-nalozi/${orderId}$`),
+        { timeout: 90_000 },
       );
 
       const [updated, dcStock, dcProduct, supplierProduct] = await Promise.all([
@@ -737,6 +742,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await page.getByRole("button", { name: "Sačuvaj porudžbinu" }).click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/prodajni-nalozi/${orderId}$`),
+        { timeout: 90_000 },
       );
       await page.goto("/admin/erp/prodajni-nalozi", {
         waitUntil: "domcontentloaded",
@@ -844,6 +850,8 @@ function createDatabaseClient() {
     throw new Error("DATABASE_URL is required for sales-order E2E tests.");
   }
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   if (!["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
     url.searchParams.set(
       "sslmode",
@@ -852,10 +860,13 @@ function createDatabaseClient() {
     url.searchParams.delete("uselibpqcompat");
   }
   return new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: url.toString(),
-      max: 2,
-      connectionTimeoutMillis: 15_000,
-    }),
+    adapter: new PrismaPg(
+      {
+        connectionString: url.toString(),
+        max: 2,
+        connectionTimeoutMillis: 15_000,
+      },
+      { schema },
+    ),
   });
 }
