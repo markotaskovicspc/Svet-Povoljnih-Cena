@@ -29,9 +29,11 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
     adminPassword: `QaPurchaseOrder!${runId}x`,
     supplierName: `QA PO dobavljač ${runId}`,
     supplierEmail: `qa.po.supplier.${runId}@example.invalid`,
+    secondarySupplierName: `QA PO drugi dobavljač ${runId}`,
     sku: `QA-PO-${runId}`.slice(0, 90),
     productName: `QA PO artikal ${runId}`,
     loadingName: `QA utovar ${runId}`,
+    secondaryLoadingName: `QA drugi utovar ${runId}`,
     warehouseCode: `QA-PO-${runId}`.slice(0, 30),
     transportCode: `QA-PO-T-${runId}`.slice(0, 30),
   };
@@ -39,10 +41,12 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
   let db: PrismaClient;
   let adminId = "";
   let supplierId = "";
+  let secondarySupplierId = "";
   let productId = "";
   let warehouseId = "";
   let transportId = "";
   let loadingLocationId = "";
+  let secondaryLoadingLocationId = "";
   let purchaseOrderId: string | null = null;
   const pageErrors: string[] = [];
 
@@ -87,6 +91,32 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       select: { id: true },
     });
     loadingLocationId = loadingLocation.id;
+    const secondarySupplier = await db.supplier.create({
+      data: {
+        code: `QA-PO-2-${runId}`.slice(0, 80),
+        name: fixture.secondarySupplierName,
+        email: `qa.po.supplier.secondary.${runId}@example.invalid`,
+        currency: "EUR",
+        parity: "DAP",
+        paymentTerms: "Plaćanje drugog dobavljača",
+        deliveryDays: 14,
+        transitDays: 2,
+      },
+      select: { id: true },
+    });
+    secondarySupplierId = secondarySupplier.id;
+    const secondaryLoadingLocation = await db.supplierLoadingLocation.create({
+      data: {
+        supplierId: secondarySupplierId,
+        name: fixture.secondaryLoadingName,
+        address: "Industrijska 2",
+        city: "Novi Sad",
+        country: "RS",
+        position: 1,
+      },
+      select: { id: true },
+    });
+    secondaryLoadingLocationId = secondaryLoadingLocation.id;
     const warehouse = await db.warehouse.create({
       data: {
         code: fixture.warehouseCode,
@@ -249,14 +279,44 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       expect(created.number).toMatch(/^\d+\/\d{2}$/);
       expect(created.status).toBe("DRAFT");
       expect(created.orderDate).not.toBeNull();
+      const backLink = page.getByRole("link", {
+        name: "Nazad na pregled porudžbenica",
+      });
+      const headerTitle = page.getByRole("heading", { name: "Zaglavlje" });
+      const [backBox, headerBox] = await Promise.all([
+        backLink.boundingBox(),
+        headerTitle.boundingBox(),
+      ]);
+      expect(backBox?.y).toBeLessThan(headerBox?.y ?? 0);
     });
 
     await test.step("header saves controlled supplier, loading, transport, currency and dates", async () => {
       const header = page.locator("form").filter({
         has: page.getByRole("button", { name: "Sačuvaj zaglavlje" }),
       });
-      await header.locator('[name="supplierId"]').selectOption(supplierId);
-      await header.locator('[name="loadingLocationId"]').selectOption(loadingLocationId);
+      const supplierSelect = header.locator('[name="supplierId"]');
+      const loadingLocationSelect = header.locator('[name="loadingLocationId"]');
+      await supplierSelect.selectOption(supplierId);
+      await expect(
+        loadingLocationSelect.locator(`option[value="${loadingLocationId}"]`),
+      ).toHaveCount(1);
+      await expect(
+        loadingLocationSelect.locator(
+          `option[value="${secondaryLoadingLocationId}"]`,
+        ),
+      ).toHaveCount(0);
+      await supplierSelect.selectOption(secondarySupplierId);
+      await expect(loadingLocationSelect).toHaveValue("");
+      await expect(
+        loadingLocationSelect.locator(`option[value="${loadingLocationId}"]`),
+      ).toHaveCount(0);
+      await expect(
+        loadingLocationSelect.locator(
+          `option[value="${secondaryLoadingLocationId}"]`,
+        ),
+      ).toHaveCount(1);
+      await supplierSelect.selectOption(supplierId);
+      await loadingLocationSelect.selectOption(loadingLocationId);
       await header.locator('[name="transportTypeId"]').selectOption(transportId);
       await header.locator('[name="orderDate"]').fill("2026-07-01");
       await header.locator('[name="loadingDate"]').fill("2026-07-10");
@@ -280,6 +340,8 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       const saved = await db.purchaseOrder.findUniqueOrThrow({
         where: { id: purchaseOrderId! },
       });
+      expect(saved.supplierId).toBe(supplierId);
+      expect(saved.loadingLocationId).toBe(loadingLocationId);
       expect(saved.currency).toBe("EUR");
       expect(Number(saved.exchangeRate)).toBe(120);
       expect(saved.parity).toBe("DAP");
@@ -585,7 +647,15 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         where: { id: loadingLocationId },
       });
     }
+    if (secondaryLoadingLocationId) {
+      await db.supplierLoadingLocation.deleteMany({
+        where: { id: secondaryLoadingLocationId },
+      });
+    }
     if (supplierId) await db.supplier.deleteMany({ where: { id: supplierId } });
+    if (secondarySupplierId) {
+      await db.supplier.deleteMany({ where: { id: secondarySupplierId } });
+    }
     if (transportId) {
       await db.transportType.deleteMany({ where: { id: transportId } });
     }

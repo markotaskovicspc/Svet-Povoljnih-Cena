@@ -230,6 +230,7 @@ export function calculatePurchaseOrderFinancials(input: {
   exchangeRate: number;
   freightCost: number;
   freightExchangeRate: number;
+  loyaltyDiscountPct?: number | null;
 }) {
   const exchangeRate = finiteNonNegative(input.exchangeRate, "Kurs nabavne valute");
   const freightCost = finiteNonNegative(input.freightCost, "Cena prevoza");
@@ -238,6 +239,10 @@ export function calculatePurchaseOrderFinancials(input: {
     "Kurs valute prevoza",
   );
   const totalFreightRsd = round(freightCost * freightExchangeRate, 2);
+  const requestedLoyaltyDiscountPct = input.loyaltyDiscountPct ?? 0;
+  const loyaltyDiscountPct = Number.isFinite(requestedLoyaltyDiscountPct)
+    ? Math.min(Math.max(requestedLoyaltyDiscountPct, 0), 100)
+    : 0;
   const totalVolume = input.lines.reduce(
     (sum, line) => sum + Math.max(line.totalVolumeM3, 0),
     0,
@@ -277,9 +282,13 @@ export function calculatePurchaseOrderFinancials(input: {
       purchasePriceRsd * (Math.max(line.customsRatePct ?? 0, 0) / 100);
     const projectedUnitCogs =
       purchasePriceRsd + freightPerUnitRsd + customsPerUnitRsd;
-    const bmPct = grossMarginPct(line.calcRetailPrice, projectedUnitCogs);
+    const effectiveRetailPrice =
+      line.calcRetailPrice == null
+        ? null
+        : line.calcRetailPrice * (1 - loyaltyDiscountPct / 100);
+    const bmPct = grossMarginPct(effectiveRetailPrice, projectedUnitCogs);
     if (bmPct != null) {
-      const netRetail = (line.calcRetailPrice ?? 0) / 1.2;
+      const netRetail = (effectiveRetailPrice ?? 0) / 1.2;
       weightedBm += bmPct * netRetail * line.qty;
       weightedBmBase += netRetail * line.qty;
     }

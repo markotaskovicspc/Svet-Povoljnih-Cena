@@ -15,6 +15,7 @@ import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-st
 import { rebuildInboundInvoiceAllocations } from "@/lib/admin/inbound-invoice.server";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
 import { trackedDispatch } from "@/lib/email";
+import { getActivePricingRules } from "@/lib/pricing/rules";
 import {
   calculateDeliveryDate,
   calculatePurchaseOrderFinancials,
@@ -967,32 +968,35 @@ export async function receivePurchaseOrder(
  * inbound receipt can continue after the master data is completed.
  */
 export async function recomputePurchaseOrderTotals(id: string) {
-  const order = await db.purchaseOrder.findUnique({
-    where: { id },
-    include: {
-      items: {
-        include: {
-          product: {
-            select: {
-              packQty: true,
-              weightKg: true,
-              grossWeightKg: true,
-              unitPackWidthCm: true,
-              unitPackDepthCm: true,
-              unitPackHeightCm: true,
-              packWidthCm: true,
-              packDepthCm: true,
-              packHeightCm: true,
-              packGrossWeightKg: true,
-              containerQty: true,
-              containerGrossWeightKg: true,
-              customsRate: true,
+  const [order, pricingRules] = await Promise.all([
+    db.purchaseOrder.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                packQty: true,
+                weightKg: true,
+                grossWeightKg: true,
+                unitPackWidthCm: true,
+                unitPackDepthCm: true,
+                unitPackHeightCm: true,
+                packWidthCm: true,
+                packDepthCm: true,
+                packHeightCm: true,
+                packGrossWeightKg: true,
+                containerQty: true,
+                containerGrossWeightKg: true,
+                customsRate: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    getActivePricingRules(),
+  ]);
   if (!order) throw new Error("Porudžbenica ne postoji.");
   const items = order.items.map((item) => {
     const logistics = resolvePurchaseOrderLineLogistics({
@@ -1051,6 +1055,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
     exchangeRate: Number(order.exchangeRate),
     freightCost: Number(order.freightCost),
     freightExchangeRate: Number(order.freightExchangeRate),
+    loyaltyDiscountPct: pricingRules.loyaltyRules[0]?.discountPct ?? null,
     lines: items.map((row) => ({
       id: row.item.id,
       qty: row.item.qty,

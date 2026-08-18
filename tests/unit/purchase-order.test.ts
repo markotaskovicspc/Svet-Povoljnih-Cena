@@ -290,6 +290,29 @@ describe("ERP module 4 purchase-order rules", () => {
     expect(result.totalBmPct).toBe(36);
   });
 
+  it("calculates BM from the retail price reduced by the active loyalty discount", () => {
+    const result = calculatePurchaseOrderFinancials({
+      exchangeRate: 1,
+      freightCost: 0,
+      freightExchangeRate: 1,
+      loyaltyDiscountPct: 10,
+      lines: [
+        {
+          id: "loyalty",
+          qty: 1,
+          purchasePrice: 600,
+          calcRetailPrice: 1_200,
+          customsRatePct: 0,
+          totalVolumeM3: 1,
+          totalWeightKg: 1,
+        },
+      ],
+    });
+
+    expect(result.lines[0].bmPct).toBe(33.33);
+    expect(result.totalBmPct).toBe(33.33);
+  });
+
   it("returns capacity warnings for both dimensions", () => {
     expect(
       purchaseOrderCapacityWarnings({

@@ -380,54 +380,6 @@ export function MobileNav({
                   </ul>
                 ) : null}
 
-                {stack.length !== 1 ? (
-                  <ul className="mt-3 border-t border-border">
-                    {tabs.map((t) => {
-                      const isActive = pathname === t.href;
-                      return (
-                        <li key={t.id} className="border-b border-border">
-                          <Link
-                            href={t.href}
-                            onClick={close}
-                            className={cn(
-                              "flex min-h-12 items-center justify-between gap-4 px-4 py-3 text-sm font-medium text-ink-700 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                              isActive && "font-semibold text-brand-blue",
-                            )}
-                          >
-                            <span className="min-w-0 break-words">
-                              {t.label}
-                            </span>
-                            <ChevronRight
-                              className="size-4 shrink-0 text-ink-300"
-                              aria-hidden
-                            />
-                          </Link>
-                        </li>
-                      );
-                    })}
-                    <li className="border-b border-border">
-                      <Link
-                        href="/nalog"
-                        onClick={close}
-                        className={cn(
-                          "flex min-h-12 items-center justify-between gap-4 px-4 py-3 text-sm font-medium transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                          isCustomerLoggedIn
-                            ? "text-action hover:text-action"
-                            : "text-ink-700 hover:text-brand-blue",
-                        )}
-                      >
-                        <span className="inline-flex min-w-0 items-center gap-2 break-words">
-                          <User2 className="size-4 shrink-0" aria-hidden />
-                          Moj nalog
-                        </span>
-                        <ChevronRight
-                          className="size-4 shrink-0 text-ink-300"
-                          aria-hidden
-                        />
-                      </Link>
-                    </li>
-                  </ul>
-                ) : null}
               </motion.div>
             </AnimatePresence>
           </div>

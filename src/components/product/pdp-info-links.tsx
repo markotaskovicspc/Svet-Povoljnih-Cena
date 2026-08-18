@@ -25,7 +25,7 @@ const LABELS: Record<PdpInfoKey, string> = {
   deliveryTerms: "Uslovi isporuke",
   declaration: "Deklaracija",
   assemblyInstructions: "Uputstvo za sastavljanje",
-  maintenance: "Kako održavati",
+  maintenance: "Uputstvo za korišćenje i održavanje",
 };
 
 export function PdpInfoLinks({

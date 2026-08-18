@@ -4,7 +4,7 @@ export const PRODUCT_ATTACHMENT_SECTION_OPTIONS = [
   { value: "DELIVERY_TERMS", label: "Uslovi isporuke" },
   { value: "DECLARATION", label: "Deklaracija" },
   { value: "ASSEMBLY_INSTRUCTIONS", label: "Uputstvo za sastavljanje" },
-  { value: "MAINTENANCE", label: "Kako održavati" },
+  { value: "MAINTENANCE", label: "Uputstvo za korišćenje i održavanje" },
 ] as const;
 
 export type ProductAttachmentSectionValue =

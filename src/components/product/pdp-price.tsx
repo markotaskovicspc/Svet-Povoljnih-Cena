@@ -44,9 +44,6 @@ export function PdpPriceContent({
 
   return (
     <>
-      <p className="mb-0.5 text-xs font-semibold text-ink-500 md:mb-1">
-        Cena
-      </p>
       <div className="space-y-1.5">
         {!actionOffer && !loyaltyOffer ? (
           <span className="text-[28px] leading-none font-black text-ink-900 md:text-[30px]">

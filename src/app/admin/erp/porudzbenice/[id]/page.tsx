@@ -9,6 +9,7 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
+import { PurchaseOrderSupplierFields } from "@/components/admin/purchase-order-supplier-fields";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,11 +24,13 @@ import type { AdminActionState } from "@/lib/admin/action-state";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import {
   calculateDeliveryDate,
+  calculatePurchaseOrderFinancials,
   isPackQuantityValid,
   purchaseOrderCapacityWarnings,
 } from "@/lib/admin/purchase-order";
 import { db } from "@/lib/db";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
+import { getActivePricingRules } from "@/lib/pricing/rules";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 export const dynamic = "force-dynamic";
@@ -322,7 +325,7 @@ export default async function PurchaseOrderEditorPage({
 }) {
   await requireAdminAction(["OPS"]);
   const { id } = await params;
-  const [order, suppliers, transports, products] = await Promise.all([
+  const [order, suppliers, transports, products, pricingRules] = await Promise.all([
     db.purchaseOrder.findUnique({
       where: { id },
       include: {
@@ -366,6 +369,7 @@ export default async function PurchaseOrderEditorPage({
       take: 5000,
       select: { sku: true, name: true, supplierId: true },
     }),
+    getActivePricingRules(),
   ]);
   if (!order) notFound();
 
@@ -384,6 +388,30 @@ export default async function PurchaseOrderEditorPage({
   });
   const relevantProducts = products.filter(
     (product) => !order.supplierId || product.supplierId === order.supplierId,
+  );
+  const currentLoyaltyDiscountPct =
+    pricingRules.loyaltyRules[0]?.discountPct ?? null;
+  const currentFinancials = locked
+    ? null
+    : calculatePurchaseOrderFinancials({
+        exchangeRate: Number(order.exchangeRate),
+        freightCost: Number(order.freightCost),
+        freightExchangeRate: Number(order.freightExchangeRate),
+        loyaltyDiscountPct: currentLoyaltyDiscountPct,
+        lines: order.items.map((item) => ({
+          id: item.id,
+          qty: item.qty,
+          purchasePrice: Number(item.purchasePrice),
+          calcRetailPrice:
+            item.calcRetailPrice == null ? null : Number(item.calcRetailPrice),
+          customsRatePct:
+            item.customsRate == null ? null : Number(item.customsRate),
+          totalVolumeM3: Number(item.totalVolume ?? 0),
+          totalWeightKg: Number(item.totalWeight ?? 0),
+        })),
+      });
+  const currentFinancialsByItemId = new Map(
+    currentFinancials?.lines.map((line) => [line.id, line]) ?? [],
   );
 
   return (
@@ -440,6 +468,12 @@ export default async function PurchaseOrderEditorPage({
         }
       />
 
+      <div className="px-4 pt-4 md:px-8">
+        <Link href="/admin/erp/porudzbenice" className="text-sm text-walnut hover:underline">
+          ← Nazad na pregled porudžbenica
+        </Link>
+      </div>
+
       <div className="space-y-6 px-4 py-6 md:px-8">
         {capacityWarnings.length ? (
           <div role="status" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
@@ -462,7 +496,7 @@ export default async function PurchaseOrderEditorPage({
                 Dokument je proknjižen {order.lockedAt ? dtLocal(order.lockedAt) : ""} i poslovni podaci su zaključani.
               </p>
             ) : null}
-            <AdminActionForm action={saveHeader}>
+            <AdminActionForm action={saveHeader} preserveValues>
               <fieldset
                 key={order.updatedAt.toISOString()}
                 disabled={locked}
@@ -472,44 +506,20 @@ export default async function PurchaseOrderEditorPage({
                 <Field label="Broj porudžbenice">
                   <Input value={order.number} readOnly />
                 </Field>
-                <Field label="Dobavljač">
-                  <select
-                    name="supplierId"
-                    required
-                    defaultValue={order.supplierId ?? ""}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                  >
-                    <option value="">— izaberite —</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Uslovi plaćanja">
-                  <Input value={order.supplier?.paymentTerms ?? ""} readOnly placeholder="Iz baze dobavljača" />
-                </Field>
-                <Field label="Mesto utovara">
-                  <select
-                    name="loadingLocationId"
-                    required
-                    defaultValue={order.loadingLocationId ?? ""}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                  >
-                    <option value="">— izaberite —</option>
-                    {suppliers.flatMap((supplier) =>
-                      supplier.loadingLocations.map((location) => (
-                        <option
-                          key={location.id}
-                          value={location.id}
-                        >
-                          {supplier.name} · {location.position}. {location.name}
-                        </option>
-                      )),
-                    )}
-                  </select>
-                </Field>
+                <PurchaseOrderSupplierFields
+                  suppliers={suppliers.map((supplier) => ({
+                    id: supplier.id,
+                    name: supplier.name,
+                    paymentTerms: supplier.paymentTerms,
+                    loadingLocations: supplier.loadingLocations.map((location) => ({
+                      id: location.id,
+                      name: location.name,
+                      position: location.position,
+                    })),
+                  }))}
+                  initialSupplierId={order.supplierId ?? ""}
+                  initialLoadingLocationId={order.loadingLocationId ?? ""}
+                />
                 <Field label="Datum porudžbenice" hint="Ponovno slanje dobavljaču postavlja datum na današnji.">
                   <Input
                     name="orderDate"
@@ -612,8 +622,14 @@ export default async function PurchaseOrderEditorPage({
               <dd className="text-right tabular-nums">{fmt(num(order.totalPrice))} {order.currency}</dd>
               <dt className="text-ink-500">Transport</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.freightCost))} {order.freightCurrency}</dd>
-              <dt className="text-ink-500">Ukupna BM% (procena)</dt>
-              <dd className="text-right tabular-nums">{fmt(num(order.bmPct))}%</dd>
+              <dt className="text-ink-500">
+                Ukupna BM% (procena{currentLoyaltyDiscountPct != null && !locked
+                  ? ` uz loyalty −${fmt(currentLoyaltyDiscountPct)}%`
+                  : ""})
+              </dt>
+              <dd className="text-right tabular-nums">
+                {fmt(currentFinancials?.totalBmPct ?? num(order.bmPct))}%
+              </dd>
             </dl>
 
             <AdminActionForm action={statusAction} className="mt-5 border-t border-border/60 pt-4">
@@ -723,7 +739,7 @@ export default async function PurchaseOrderEditorPage({
                                 <div className="px-2 py-2"><Input aria-label={`Carinska stopa ${item.sku}`} name="customsRate" type="number" min={0} max={100} step="0.01" defaultValue={num(item.customsRate) ?? ""} /></div>
                                 <div className="px-2 py-2"><Input aria-label={`Kalkulativna MPC ${item.sku}`} name="calcRetailPrice" type="number" min={0} step="0.01" defaultValue={num(item.calcRetailPrice) ?? ""} /></div>
                                 <div className="flex items-center justify-end gap-2 px-2 py-2">
-                                  <span>{fmt(num(item.bmPct))}%</span>
+                                  <span>{fmt(currentFinancialsByItemId.get(item.id)?.bmPct ?? num(item.bmPct))}%</span>
                                   <SubmitButton size="xs" variant="outline" pendingLabel="…">Snimi</SubmitButton>
                                 </div>
                               </div>
@@ -815,11 +831,6 @@ export default async function PurchaseOrderEditorPage({
           </Card>
         </div>
 
-        <div>
-          <Link href="/admin/erp/porudzbenice" className="text-sm text-walnut hover:underline">
-            ← Nazad na pregled porudžbenica
-          </Link>
-        </div>
       </div>
     </>
   );

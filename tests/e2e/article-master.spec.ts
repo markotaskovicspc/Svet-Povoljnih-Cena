@@ -1334,11 +1334,33 @@ test.describe("article master acceptance", () => {
     await expect(depthInput).toBeFocused();
     await heightInput.fill("1");
     await expect(heightInput).toBeFocused();
+    const categoryInput = form.locator('[name="siteCategoryId"]');
+    const groupInput = form.locator('[name="siteGroupId"]');
+    await categoryInput.selectOption(rootCategoryId);
+    await groupInput.selectOption(groupCategoryId);
+    const packQtyInput = form.locator('input[name="packQty"]');
+    const packWidthInput = form.locator('input[name="packWidthCm"]');
+    const packDepthInput = form.locator('input[name="packDepthCm"]');
+    const packHeightInput = form.locator('input[name="packHeightCm"]');
+    await packQtyInput.fill("1");
+    await packWidthInput.fill("1");
+    await packDepthInput.fill("1");
+    await packHeightInput.fill("1");
     await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
     await expect(form.getByRole("alert")).toContainText("već postoji", {
       timeout: 180_000,
     });
     await expect(form.getByRole("alert")).toBeFocused();
+    await expect(skuInput).toHaveValue(productSku);
+    await expect(widthInput).toHaveValue("1");
+    await expect(depthInput).toHaveValue("1");
+    await expect(heightInput).toHaveValue("1");
+    await expect(categoryInput).toHaveValue(rootCategoryId);
+    await expect(groupInput).toHaveValue(groupCategoryId);
+    await expect(packQtyInput).toHaveValue("1");
+    await expect(packWidthInput).toHaveValue("1");
+    await expect(packDepthInput).toHaveValue("1");
+    await expect(packHeightInput).toHaveValue("1");
     await expect(
       db.product.findUniqueOrThrow({
         where: { id: generatedProductId },

@@ -1615,6 +1615,7 @@ export default async function ProductDetail({
           <AdminActionForm
             action={updateProduct}
             className="space-y-4 pb-24"
+            preserveValues
             refreshOnSuccess
           >
             <Fragment key={product.updatedAt.toISOString()}>
@@ -1927,7 +1928,7 @@ export default async function ProductDetail({
                 />
               </div>
               <div className="space-y-2">
-                <Field label="Kako održavati">
+                <Field label="Uputstvo za korišćenje i održavanje">
                   <Textarea
                     name="maintenance"
                     rows={3}
