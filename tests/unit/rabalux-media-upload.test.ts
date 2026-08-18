@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   directStorageOrigin,
+  rabaluxImageVariantKey,
   rabaluxMediaJobIdempotencyKey,
   toRabaluxMediaUploadBody,
 } from "@/lib/rabalux/media-upload";
@@ -29,10 +30,20 @@ describe("Rabalux resumable media upload", () => {
 
   it("versions media jobs so corrupted legacy uploads can be rebuilt", () => {
     expect(rabaluxMediaJobIdempotencyKey("asset-1", "MEDIA")).toBe(
-      "rabalux-binary-v2-asset:MEDIA:asset-1",
+      "rabalux-binary-v3-asset:MEDIA:asset-1",
     );
     expect(rabaluxMediaJobIdempotencyKey("attachment-1", "ATTACHMENT")).toBe(
-      "rabalux-binary-v2-asset:ATTACHMENT:attachment-1",
+      "rabalux-binary-v3-asset:ATTACHMENT:attachment-1",
     );
+  });
+
+  it("versions generated image paths to bypass cached corrupted objects", () => {
+    expect(
+      rabaluxImageVariantKey(
+        "rabalux/3938/original/3938.jpg",
+        "card",
+        640,
+      ),
+    ).toBe("rabalux/3938/original/3938-card-640-binary-v3.webp");
   });
 });

@@ -1,4 +1,4 @@
-export const RABALUX_BINARY_UPLOAD_REVISION = "binary-v2";
+export const RABALUX_BINARY_UPLOAD_REVISION = "binary-v3";
 export const RABALUX_MEDIA_JOB_PREFIX =
   `rabalux-${RABALUX_BINARY_UPLOAD_REVISION}-asset:`;
 
@@ -31,4 +31,17 @@ export function rabaluxMediaJobIdempotencyKey(
   assetType: "MEDIA" | "ATTACHMENT",
 ) {
   return `${RABALUX_MEDIA_JOB_PREFIX}${assetType}:${assetId}`;
+}
+
+export function rabaluxImageVariantKey(
+  originalKey: string,
+  name: string,
+  width: number,
+) {
+  const dot = originalKey.lastIndexOf(".");
+  const stem =
+    dot > originalKey.lastIndexOf("/")
+      ? originalKey.slice(0, dot)
+      : originalKey;
+  return `${stem}-${name}-${width}-${RABALUX_BINARY_UPLOAD_REVISION}.webp`;
 }

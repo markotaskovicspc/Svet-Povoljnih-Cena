@@ -17,6 +17,7 @@ import {
   directStorageOrigin,
   RABALUX_BINARY_UPLOAD_REVISION,
   RABALUX_MEDIA_JOB_PREFIX,
+  rabaluxImageVariantKey,
   rabaluxMediaJobIdempotencyKey,
   toRabaluxMediaUploadBody,
 } from "./media-upload";
@@ -188,7 +189,11 @@ async function mirrorMediaAsset(asset: {
     pdp: "",
   };
   for (const variant of VARIANTS) {
-    const key = variantKey(asset.url, variant.name, variant.width);
+    const key = rabaluxImageVariantKey(
+      asset.url,
+      variant.name,
+      variant.width,
+    );
     const buffer = await sharp(downloaded.buffer, { failOn: "error" })
       .rotate()
       .resize({
@@ -964,12 +969,6 @@ async function upload(
     upsert: true,
   });
   if (error) throw new Error(`Product media upload failed: ${error.message}`);
-}
-
-function variantKey(originalKey: string, name: string, width: number) {
-  const dot = originalKey.lastIndexOf(".");
-  const stem = dot > originalKey.lastIndexOf("/") ? originalKey.slice(0, dot) : originalKey;
-  return `${stem}-${name}-${width}.webp`;
 }
 
 function looksLikePdf(buffer: Buffer) {
