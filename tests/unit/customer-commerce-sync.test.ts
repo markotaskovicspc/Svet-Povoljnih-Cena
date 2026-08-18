@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   mergeGuestCart,
   mergeGuestWishlist,
+  persistedCartLines,
+  persistedWishlistItems,
   persistGuestCommerce,
 } from "@/components/cart/customer-commerce-sync";
 
@@ -66,6 +68,45 @@ describe("customer commerce sync", () => {
       notifyOnSale: true,
       notifyOnRestock: true,
     });
+  });
+
+  it("reads the latest cross-tab guest snapshot from persisted stores", () => {
+    const cart = persistedCartLines(
+      JSON.stringify({
+        state: {
+          lines: [
+            {
+              sku: "GUEST-CART",
+              name: "Guest cart item",
+              slug: "guest-cart-item",
+              qty: 1,
+              unitPriceFull: 100,
+              unitPriceSale: 90,
+            },
+          ],
+        },
+      }),
+    );
+    const wishlist = persistedWishlistItems(
+      JSON.stringify({
+        state: {
+          items: [
+            {
+              sku: "GUEST-WISH",
+              addedAt: "2026-08-18T01:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(cart?.map((line) => line.sku)).toEqual(["GUEST-CART"]);
+    expect(wishlist?.map((item) => item.sku)).toEqual(["GUEST-WISH"]);
+  });
+
+  it("ignores malformed persisted guest stores", () => {
+    expect(persistedCartLines("not-json")).toBeNull();
+    expect(persistedWishlistItems(JSON.stringify({ state: {} }))).toBeNull();
   });
 
   it("promotes a guest snapshot only after cart and wishlist are durable", async () => {

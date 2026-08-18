@@ -14,6 +14,8 @@ import {
 } from "@/lib/hooks/use-wishlist";
 
 const OWNER_STORAGE_KEY = "spc-commerce-owner";
+const CART_STORAGE_KEY = "spc-cart";
+const WISHLIST_STORAGE_KEY = "spc-wishlist";
 const WRITE_DELAY_MS = 350;
 
 type RemoteWishlistItem = {
@@ -56,6 +58,28 @@ function remoteWishlistEntries(items: unknown): WishlistEntry[] {
       addedAt: item.addedAt,
     })),
   );
+}
+
+function persistedStateField(raw: string | null, field: string): unknown {
+  if (!raw) return null;
+  try {
+    const payload = JSON.parse(raw) as { state?: Record<string, unknown> };
+    return payload?.state?.[field] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function persistedCartLines(raw: string | null): CartLine[] | null {
+  const lines = persistedStateField(raw, "lines");
+  return Array.isArray(lines) ? normalizeCartLines(lines) : null;
+}
+
+export function persistedWishlistItems(
+  raw: string | null,
+): WishlistEntry[] | null {
+  const items = persistedStateField(raw, "items");
+  return Array.isArray(items) ? normalizeWishlistItems(items) : null;
 }
 
 export function mergeGuestCart(
@@ -236,19 +260,34 @@ export function CustomerCommerceSync() {
     const initialize = async () => {
       if (disposed || initialized || initializing) return;
       initializing = true;
+      const previousOwner = window.localStorage.getItem(OWNER_STORAGE_KEY);
+      const mergeGuestState = previousOwner === null || previousOwner === "guest";
+      // localStorage is shared across tabs while each Zustand instance is not.
+      // Capture the persisted guest snapshot before any auth-driven repricing
+      // in a stale tab can write its older in-memory copy back to storage.
+      const guestSnapshot = mergeGuestState
+        ? {
+            cart:
+              persistedCartLines(
+                window.localStorage.getItem(CART_STORAGE_KEY),
+              ) ?? normalizeCartLines(useCart.getState().lines),
+            wishlist:
+              persistedWishlistItems(
+                window.localStorage.getItem(WISHLIST_STORAGE_KEY),
+              ) ?? normalizeWishlistItems(useWishlist.getState().items),
+          }
+        : null;
       const remote = await loadRemote();
       if (disposed || !remote) {
         initializing = false;
         return;
       }
 
-      const previousOwner = window.localStorage.getItem(OWNER_STORAGE_KEY);
-      const mergeGuestState = previousOwner === null || previousOwner === "guest";
       const next = mergeGuestState
         ? {
-            cart: mergeGuestCart(useCart.getState().lines, remote.cart),
+            cart: mergeGuestCart(guestSnapshot?.cart ?? [], remote.cart),
             wishlist: mergeGuestWishlist(
-              useWishlist.getState().items,
+              guestSnapshot?.wishlist ?? [],
               remote.wishlist,
             ),
           }
