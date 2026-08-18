@@ -6,6 +6,7 @@ import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { importSupplier } from "@/lib/xml";
 import {
+  queueRabaluxBinaryMediaRepair,
   retryRecoverableFailedRabaluxMediaJobs,
   syncPendingRabaluxMedia,
   syncRabaluxCatalog,
@@ -497,6 +498,41 @@ async function retryRabaluxMediaQueue(
   )(formData);
 }
 
+async function repairRabaluxBinaryMedia(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "rabalux.mediaQueue.repairBinaryV2",
+      entity: "ImportRun",
+    },
+    async (actorId, formData: FormData) => {
+      const reason = String(formData.get("reason") ?? "").trim();
+      if (reason.length < 5) {
+        return { ok: false as const, error: "Razlog mora imati najmanje 5 znakova." };
+      }
+      const result = await queueRabaluxBinaryMediaRepair({
+        reason,
+        requestedById: actorId,
+      });
+      revalidatePath("/admin/xml-import");
+      updateTag("catalog-products");
+      return {
+        ok: true as const,
+        entityId: result.runId ?? "rabalux-media-binary-v2",
+        diff: { reason, ...result },
+        message: result.alreadyQueued
+          ? `Popravka je već pokrenuta; postoji ${result.productsQueued} repair job-ova.`
+          : `Resetovano je ${result.assetsReset} binarnih fajlova i pokrenuta popravka za ${result.productsQueued} proizvoda.`,
+      };
+    },
+  )(formData);
+}
+
 function formatRunErrors(value: Prisma.JsonValue | null) {
   if (!Array.isArray(value) || value.length === 0) return null;
   return value
@@ -742,6 +778,31 @@ export default async function XmlImportPage({
               <p className="mt-2 text-xs text-ink-500">
                 Media queue: {rabaluxQueue.map((row) => `${row.status} ${row._count._all}`).join(" · ") || "prazan"}
               </p>
+              <AdminActionForm
+                action={repairRabaluxBinaryMedia}
+                className="mt-4 space-y-3 rounded-lg border border-border p-3"
+              >
+                <Field label="Razlog ponovnog generisanja Rabalux slika i PDF-ova">
+                  <Textarea
+                    name="reason"
+                    rows={2}
+                    minLength={5}
+                    maxLength={500}
+                    required
+                  />
+                </Field>
+                <p className="text-xs text-ink-500">
+                  Jednokratno ponovo preuzima izvorne Rabalux fajlove i bezbedno menja oštećene kopije u storage-u. Ponovni klik ne pravi dupli red.
+                </p>
+                <SubmitButton
+                  size="sm"
+                  variant="secondary"
+                  pendingLabel="Pokrećem popravku…"
+                  confirm="Pokrenuti jednokratnu popravku svih postojećih Rabalux slika i PDF-ova?"
+                >
+                  Popravi Rabalux slike i PDF-ove
+                </SubmitButton>
+              </AdminActionForm>
               {rabaluxQueue.some((row) => row.status === "FAILED") ? (
                 <AdminActionForm
                   action={retryRabaluxMediaQueue}

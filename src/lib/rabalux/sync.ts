@@ -17,6 +17,7 @@ import {
   rabaluxMediaStorageKey,
   summarizeRabaluxDryRun,
 } from "./parser";
+import { rabaluxMediaJobIdempotencyKey } from "./media-upload";
 import type {
   RabaluxCatalogItem,
   RabaluxStockItem,
@@ -1420,7 +1421,10 @@ async function upsertCatalogItem(
     await enqueueBackgroundJob({
       kind: "RABALUX_MEDIA_PRODUCT",
       payload: { productId: result.productId, ...result.mediaTarget },
-      idempotencyKey: `rabalux-media-asset:${result.mediaTarget.assetType}:${result.mediaTarget.assetId}`,
+      idempotencyKey: rabaluxMediaJobIdempotencyKey(
+        result.mediaTarget.assetId,
+        result.mediaTarget.assetType,
+      ),
       maxAttempts: 12,
     });
   }

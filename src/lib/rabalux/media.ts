@@ -13,7 +13,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { envValue } from "@/lib/env";
 import { normalizeRabaluxMediaUrl } from "./parser";
-import { directStorageOrigin } from "./media-upload";
+import {
+  directStorageOrigin,
+  RABALUX_BINARY_UPLOAD_REVISION,
+  RABALUX_MEDIA_JOB_PREFIX,
+  rabaluxMediaJobIdempotencyKey,
+  toRabaluxMediaUploadBody,
+} from "./media-upload";
 import {
   isRabaluxSupplierOperational,
   RABALUX_INTEGRATION_KEY,
@@ -502,6 +508,216 @@ export async function retryRecoverableFailedRabaluxMediaJobs(limit = 100) {
   };
 }
 
+/**
+ * One-time recovery for images and PDFs that were marked READY after a Node
+ * Buffer was corrupted at the storage transport boundary. The revisioned
+ * idempotency key makes every repaired asset independent of its already-
+ * completed legacy job.
+ */
+export async function queueRabaluxBinaryMediaRepair(options: {
+  reason: string;
+  requestedById?: string;
+}) {
+  const reason = options.reason.trim();
+  if (reason.length < 5) {
+    throw new Error("Rabalux media repair reason must have at least 5 characters.");
+  }
+
+  const supplier = await db.supplier.findUniqueOrThrow({
+    where: { integrationKey: RABALUX_INTEGRATION_KEY },
+    select: { id: true },
+  });
+  const existingRepairRun = await db.importRun.findFirst({
+    where: {
+      supplierId: supplier.id,
+      kind: "MEDIA",
+      status: { in: ["RUNNING", "SUCCESS"] },
+      metadata: {
+        path: ["repairRevision"],
+        equals: RABALUX_BINARY_UPLOAD_REVISION,
+      },
+    },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
+  if (existingRepairRun) {
+    const repairJobs = await db.backgroundJob.count({
+      where: {
+        kind: "RABALUX_MEDIA_PRODUCT",
+        idempotencyKey: { startsWith: RABALUX_MEDIA_JOB_PREFIX },
+      },
+    });
+    return {
+      alreadyQueued: true as const,
+      productsQueued: repairJobs,
+      assetsReset: 0,
+      runId: existingRepairRun.id,
+    };
+  }
+
+  const products = await db.product.findMany({
+    where: {
+      supplierId: supplier.id,
+      OR: [
+        { media: { some: { kind: "IMAGE", sourceUrl: { not: null } } } },
+        { attachments: { some: { sourceUrl: { not: null } } } },
+      ],
+    },
+    select: {
+      id: true,
+      media: {
+        where: { kind: "IMAGE", sourceUrl: { not: null } },
+        orderBy: [{ order: "asc" }, { id: "asc" }],
+        select: { id: true },
+      },
+      attachments: {
+        where: { sourceUrl: { not: null } },
+        orderBy: [{ order: "asc" }, { id: "asc" }],
+        select: { id: true },
+      },
+    },
+    // Restore public, in-stock products first while the queue drains.
+    orderBy: [
+      { supplierStock: { sort: "desc", nulls: "last" } },
+      { isActive: "desc" },
+      { id: "asc" },
+    ],
+  });
+  const mediaAssetIds = products.flatMap((product) =>
+    product.media.map((asset) => asset.id),
+  );
+  const attachmentIds = products.flatMap((product) =>
+    product.attachments.map((asset) => asset.id),
+  );
+  const assetIds = [...mediaAssetIds, ...attachmentIds];
+  const targets: Array<{ productId: string } & MediaTarget> = [];
+  for (const product of products) {
+    const media = product.media[0];
+    if (media) {
+      targets.push({
+        productId: product.id,
+        assetId: media.id,
+        assetType: "MEDIA",
+      });
+      continue;
+    }
+    const attachment = product.attachments[0];
+    if (attachment) {
+      targets.push({
+        productId: product.id,
+        assetId: attachment.id,
+        assetType: "ATTACHMENT",
+      });
+    }
+  }
+  const run = await db.importRun.create({
+    data: {
+      supplierId: supplier.id,
+      kind: "MEDIA",
+      status: "RUNNING",
+      requestedById: options.requestedById,
+      sourceHash: stableSourceHash(assetIds),
+      metadata: {
+        reason,
+        repairRevision: RABALUX_BINARY_UPLOAD_REVISION,
+      },
+    },
+    select: { id: true },
+  });
+
+  try {
+    // The existing queue contains unfinished gallery work. Put one repair job
+    // per product ahead of it so customer-facing primary images recover first;
+    // chained gallery jobs use the normal current timestamp and wait their turn.
+    const repairPriorityAt = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+    const queued = await db.$transaction(
+      async (tx) => {
+        let assetsReset = 0;
+        for (let start = 0; start < mediaAssetIds.length; start += 5_000) {
+          const mediaIds = mediaAssetIds.slice(start, start + 5_000);
+          const reset = await tx.productMedia.updateMany({
+            where: {
+              id: { in: mediaIds },
+              syncStatus: "READY",
+            },
+            data: { syncStatus: "PENDING" },
+          });
+          assetsReset += reset.count;
+        }
+        for (let start = 0; start < attachmentIds.length; start += 5_000) {
+          const reset = await tx.productAttachment.updateMany({
+            where: {
+              id: { in: attachmentIds.slice(start, start + 5_000) },
+              syncStatus: "READY",
+            },
+            data: { syncStatus: "PENDING" },
+          });
+          assetsReset += reset.count;
+        }
+
+        let productsQueued = 0;
+        for (let start = 0; start < targets.length; start += 500) {
+          const jobs = await tx.backgroundJob.createMany({
+            data: targets
+              .slice(start, start + 500)
+              .map((target, index) => ({
+                kind: "RABALUX_MEDIA_PRODUCT",
+                payload: {
+                  productId: target.productId,
+                  assetId: target.assetId,
+                  assetType: target.assetType,
+                },
+                idempotencyKey: rabaluxMediaJobIdempotencyKey(
+                  target.assetId,
+                  target.assetType,
+                ),
+                // Preserve the public/in-stock-first product order even though
+                // PostgreSQL gives every row in this transaction one createdAt.
+                availableAt: new Date(
+                  repairPriorityAt.getTime() + start + index,
+                ),
+                maxAttempts: 12,
+              })),
+            skipDuplicates: true,
+          });
+          productsQueued += jobs.count;
+        }
+        return { assetsReset, productsQueued };
+      },
+      { timeout: 120_000 },
+    );
+
+    await db.importRun.update({
+      where: { id: run.id },
+      data: {
+        status: "SUCCESS",
+        finishedAt: new Date(),
+        recordsRead: assetIds.length,
+        recordsOk: queued.assetsReset,
+        metadata: {
+          reason,
+          repairRevision: RABALUX_BINARY_UPLOAD_REVISION,
+          productsQueued: queued.productsQueued,
+          assetsReset: queued.assetsReset,
+        },
+      },
+    });
+    return { alreadyQueued: false as const, runId: run.id, ...queued };
+  } catch (error) {
+    await db.importRun.update({
+      where: { id: run.id },
+      data: {
+        status: "FAILED",
+        finishedAt: new Date(),
+        recordsFail: 1,
+        errorMessage:
+          error instanceof Error ? error.message.slice(0, 1000) : String(error),
+      },
+    });
+    throw error;
+  }
+}
+
 async function enqueueNextRabaluxMediaAsset(
   productId: string,
   excludeAssetId?: string,
@@ -549,7 +765,8 @@ async function enqueueRabaluxMediaAsset(
   const job = await enqueueBackgroundJob({
     kind: "RABALUX_MEDIA_PRODUCT",
     payload: { productId, ...target },
-    idempotencyKey: `rabalux-media-asset:${target.assetType}:${target.assetId}`,
+    idempotencyKey:
+      rabaluxMediaJobIdempotencyKey(target.assetId, target.assetType),
     maxAttempts: 12,
   });
   if (job.status === "FAILED") {
@@ -741,7 +958,7 @@ async function upload(
   body: Buffer,
   contentType: string,
 ) {
-  const { error } = await storage.upload(key, body, {
+  const { error } = await storage.upload(key, toRabaluxMediaUploadBody(body), {
     contentType,
     cacheControl: "31536000",
     upsert: true,
