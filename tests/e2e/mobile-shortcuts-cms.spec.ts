@@ -187,8 +187,8 @@ test.describe("mobile shortcut CMS acceptance", () => {
         };
       }),
     );
-    expect(new Set(shortcutBoxes.map((box) => box.height))).toEqual(new Set([64]));
-    expect(new Set(shortcutBoxes.map((box) => box.width))).toEqual(new Set([164]));
+    expect(new Set(shortcutBoxes.map((box) => box.height))).toEqual(new Set([56]));
+    expect(new Set(shortcutBoxes.map((box) => box.width))).toEqual(new Set([165]));
     expect(shortcutBoxes.every((box) => box.bottom <= 640)).toBe(true);
     expect(shortcutBoxes.every((box) => box.contentFits)).toBe(true);
     const mobileTile = page.getByRole("link", { name: new RegExp(fixture.label) });

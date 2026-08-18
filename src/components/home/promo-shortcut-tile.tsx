@@ -78,7 +78,7 @@ export function PromoShortcutTile({
       className={cn(
         "group flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
         compact && "min-h-10 gap-1.5 px-2 py-1 text-[11px]",
-        homepage && "min-h-28 gap-2 px-2.5 py-2 text-2xl",
+        homepage && "h-14 min-h-14 gap-1.5 px-2 py-1.5 text-sm",
         active && "ring-2 ring-white/80",
         className,
       )}
@@ -87,7 +87,7 @@ export function PromoShortcutTile({
         className={cn(
           "flex h-12 w-16 shrink-0 items-center justify-center text-brand-blue",
           compact && "h-7 w-8",
-          homepage && "h-8 w-10",
+          homepage && "h-7 w-9",
         )}
       >
         {iconAsset ? (
@@ -101,7 +101,7 @@ export function PromoShortcutTile({
               "h-9 w-9 object-contain",
               iconImageClass,
               compact && "max-h-7 max-w-8",
-              homepage && "h-8 w-10",
+              homepage && "h-7 w-9",
             )}
           />
         ) : (

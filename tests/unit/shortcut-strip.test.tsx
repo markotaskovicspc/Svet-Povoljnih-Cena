@@ -48,9 +48,10 @@ describe("ShortcutStrip", () => {
     expect(html).toContain('aria-label="Brze ponude"');
     expect(html.match(/data-shortcut-variant="homepage"/g)).toHaveLength(4);
     expect(html).toContain("Niske cene pod trajnom zaštitom");
-    expect(html).toContain("min-h-28");
-    expect(html).toContain("text-2xl");
-    expect(html).not.toContain("h-16 min-h-16");
+    expect(html).toContain("h-14 min-h-14");
+    expect(html).toContain("text-sm");
+    expect(html).not.toContain("min-h-28");
+    expect(html).not.toContain("text-2xl");
     expect(html).not.toContain("Peti prečac");
   });
 });
