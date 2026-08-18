@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Loader2, LogIn, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
+import type { CartLine } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import { useCheckout } from "@/lib/checkout/store";
@@ -253,25 +254,31 @@ function CartSummary({
   );
 }
 
-export function CartLoginOffer() {
-  const loggedIn = useLoyaltyEligibility();
-  const lines = useCart((state) => state.lines);
-  if (loggedIn) return null;
-
+export function getCartLoginOfferDetails(lines: CartLine[]) {
   const eligible = lines.filter(
     (line) =>
       line.unitPriceLoyalty != null &&
       line.unitPriceLoyalty > 0 &&
       line.unitPriceLoyalty < line.unitPriceSale,
   );
-  if (!eligible.length) return null;
-
-  const pct = Math.max(...eligible.map((line) => line.loyaltyDiscountPct ?? 0));
+  const discountPct = eligible.length
+    ? Math.max(...eligible.map((line) => line.loyaltyDiscountPct ?? 0)) || 30
+    : 30;
   const potentialSavings = eligible.reduce(
     (total, line) =>
       total + (line.unitPriceSale - (line.unitPriceLoyalty ?? line.unitPriceSale)) * line.qty,
     0,
   );
+
+  return { discountPct, potentialSavings };
+}
+
+export function CartLoginOffer() {
+  const loggedIn = useLoyaltyEligibility();
+  const lines = useCart((state) => state.lines);
+  if (loggedIn || !lines.length) return null;
+
+  const { discountPct, potentialSavings } = getCartLoginOfferDetails(lines);
 
   return (
     <div className="border-action/30 bg-action/5 flex flex-col gap-3 border-y px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -281,10 +288,13 @@ export function CartLoginOffer() {
         </span>
         <div>
           <p className="text-action text-base font-extrabold uppercase sm:text-lg">
-            PRIJAVITE SE I OSTVARITE {pct || 30}% LOYALTY POPUSTA
+            PRIJAVITE SE I OSTVARITE {discountPct}% LOYALTY POPUSTA
           </p>
           <p className="mt-0.5 text-xs text-ink-600">
-            Važi za artikle koji nisu na akciji. Moguća dodatna ušteda u ovoj korpi: {formatRsd(potentialSavings)}.
+            Važi za artikle koji nisu na akciji.
+            {potentialSavings > 0
+              ? ` Moguća dodatna ušteda u ovoj korpi: ${formatRsd(potentialSavings)}.`
+              : null}
           </p>
         </div>
       </div>

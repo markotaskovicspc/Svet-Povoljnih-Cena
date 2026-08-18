@@ -94,6 +94,20 @@ export function mergeGuestWishlist(
   return normalizeWishlistItems([...merged, ...localBySku.values()]);
 }
 
+export async function persistGuestCommerce(
+  snapshot: { cart: CartLine[]; wishlist: WishlistEntry[] },
+  persist: {
+    cart: (lines: CartLine[]) => Promise<boolean>;
+    wishlist: (items: WishlistEntry[]) => Promise<boolean>;
+  },
+) {
+  const [cartSaved, wishlistSaved] = await Promise.all([
+    persist.cart(snapshot.cart),
+    persist.wishlist(snapshot.wishlist),
+  ]);
+  return cartSaved && wishlistSaved;
+}
+
 /**
  * Keeps local, durable browser state in sync with the authenticated customer's
  * database copy. Guest items are merged once on first login; an existing
@@ -104,6 +118,10 @@ export function CustomerCommerceSync() {
   const { data: session, status } = useSession();
   const cartHydrated = useCart((state) => state.hydrated);
   const wishlistHydrated = useWishlist((state) => state.hydrated);
+  const customerId =
+    status === "authenticated" && session?.user.userType === "customer"
+      ? session.user.id
+      : null;
 
   useEffect(() => {
     if (
@@ -115,16 +133,18 @@ export function CustomerCommerceSync() {
       return;
     }
     if (
-      status !== "authenticated" ||
-      session.user.userType !== "customer" ||
+      !customerId ||
       !cartHydrated ||
       !wishlistHydrated
     ) {
       return;
     }
 
-    const userId = session.user.id;
+    const userId = customerId;
     let disposed = false;
+    let initialized = false;
+    let initializing = false;
+    let refreshing = false;
     let applyingRemote = false;
     let cartTimer: ReturnType<typeof setTimeout> | null = null;
     let wishlistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -135,18 +155,24 @@ export function CustomerCommerceSync() {
         ? null
         : new BroadcastChannel(`spc-commerce:${userId}`);
 
-    const saveCart = async (announce = true) => {
+    const saveCart = async (
+      lines = normalizeCartLines(useCart.getState().lines),
+      announce = true,
+    ) => {
       const response = await fetch("/api/cart", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: normalizeCartLines(useCart.getState().lines) }),
+        body: JSON.stringify({ lines: normalizeCartLines(lines) }),
       }).catch(() => null);
       if (announce && response?.ok) channel?.postMessage("cart");
       return Boolean(response?.ok);
     };
 
-    const saveWishlist = async (announce = true) => {
-      const items = normalizeWishlistItems(useWishlist.getState().items).map(
+    const saveWishlist = async (
+      wishlist = normalizeWishlistItems(useWishlist.getState().items),
+      announce = true,
+    ) => {
+      const items = normalizeWishlistItems(wishlist).map(
         (item) => ({
           sku: item.sku,
           notifyOnSale: Boolean(item.notifyOnSale),
@@ -189,14 +215,32 @@ export function CustomerCommerceSync() {
     };
 
     const refreshFromServer = async () => {
-      if (cartTimer || wishlistTimer) return;
+      if (!initialized || refreshing || cartTimer || wishlistTimer) return;
+      refreshing = true;
+      const cartBeforeRefresh = useCart.getState().lines;
+      const wishlistBeforeRefresh = useWishlist.getState().items;
       const remote = await loadRemote();
-      if (!disposed && remote) applyRemote(remote);
+      refreshing = false;
+      if (
+        !disposed &&
+        remote &&
+        !cartTimer &&
+        !wishlistTimer &&
+        useCart.getState().lines === cartBeforeRefresh &&
+        useWishlist.getState().items === wishlistBeforeRefresh
+      ) {
+        applyRemote(remote);
+      }
     };
 
     const initialize = async () => {
+      if (disposed || initialized || initializing) return;
+      initializing = true;
       const remote = await loadRemote();
-      if (disposed || !remote) return;
+      if (disposed || !remote) {
+        initializing = false;
+        return;
+      }
 
       const previousOwner = window.localStorage.getItem(OWNER_STORAGE_KEY);
       const mergeGuestState = previousOwner === null || previousOwner === "guest";
@@ -210,10 +254,52 @@ export function CustomerCommerceSync() {
           }
         : remote;
       applyRemote(next);
-      window.localStorage.setItem(OWNER_STORAGE_KEY, userId);
 
       if (mergeGuestState) {
-        await Promise.all([saveCart(false), saveWishlist(false)]);
+        let cartSnapshot = useCart.getState().lines;
+        let wishlistSnapshot = useWishlist.getState().items;
+        let guestStateSaved = false;
+
+        // Keep the browser in guest mode until the exact current snapshot is
+        // durable. A session refresh before that point must merge and retry,
+        // never replace these items with an older server copy.
+        while (!disposed) {
+          const snapshotSaved = await persistGuestCommerce(
+            { cart: cartSnapshot, wishlist: wishlistSnapshot },
+            {
+              cart: (lines) => saveCart(lines, false),
+              wishlist: (items) => saveWishlist(items, false),
+            },
+          );
+          if (!snapshotSaved || disposed) break;
+
+          const currentCart = useCart.getState().lines;
+          const currentWishlist = useWishlist.getState().items;
+          if (
+            currentCart === cartSnapshot &&
+            currentWishlist === wishlistSnapshot
+          ) {
+            guestStateSaved = true;
+            break;
+          }
+          cartSnapshot = currentCart;
+          wishlistSnapshot = currentWishlist;
+        }
+
+        if (disposed) {
+          initializing = false;
+          return;
+        }
+        window.localStorage.setItem(
+          OWNER_STORAGE_KEY,
+          guestStateSaved ? userId : "guest",
+        );
+        if (!guestStateSaved) {
+          initializing = false;
+          return;
+        }
+      } else {
+        window.localStorage.setItem(OWNER_STORAGE_KEY, userId);
       }
       if (disposed) return;
 
@@ -222,7 +308,7 @@ export function CustomerCommerceSync() {
         if (cartTimer) clearTimeout(cartTimer);
         cartTimer = setTimeout(() => {
           cartTimer = null;
-          void saveCart();
+          void saveCart(undefined, true);
         }, WRITE_DELAY_MS);
       });
       unsubscribeWishlist = useWishlist.subscribe((state, previous) => {
@@ -230,19 +316,32 @@ export function CustomerCommerceSync() {
         if (wishlistTimer) clearTimeout(wishlistTimer);
         wishlistTimer = setTimeout(() => {
           wishlistTimer = null;
-          void saveWishlist();
+          void saveWishlist(undefined, true);
         }, WRITE_DELAY_MS);
       });
+      initialized = true;
+      initializing = false;
     };
 
-    const onFocus = () => void refreshFromServer();
+    const synchronize = () => {
+      if (initialized) void refreshFromServer();
+      else void initialize();
+    };
+    const onFocus = () => synchronize();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refreshFromServer();
+      if (document.visibilityState === "visible") synchronize();
     };
     const onOnline = () => {
-      void Promise.all([saveCart(), saveWishlist()]);
+      if (!initialized) {
+        void initialize();
+        return;
+      }
+      void Promise.all([
+        saveCart(undefined, true),
+        saveWishlist(undefined, true),
+      ]);
     };
-    const onChannelMessage = () => void refreshFromServer();
+    const onChannelMessage = () => synchronize();
 
     window.addEventListener("focus", onFocus);
     window.addEventListener("online", onOnline);
@@ -262,7 +361,7 @@ export function CustomerCommerceSync() {
       channel?.removeEventListener("message", onChannelMessage);
       channel?.close();
     };
-  }, [cartHydrated, session, status, wishlistHydrated]);
+  }, [cartHydrated, customerId, status, wishlistHydrated]);
 
   return null;
 }

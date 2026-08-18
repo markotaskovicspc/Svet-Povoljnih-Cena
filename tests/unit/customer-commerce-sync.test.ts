@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   mergeGuestCart,
   mergeGuestWishlist,
+  persistGuestCommerce,
 } from "@/components/cart/customer-commerce-sync";
 
 describe("customer commerce sync", () => {
@@ -65,5 +66,45 @@ describe("customer commerce sync", () => {
       notifyOnSale: true,
       notifyOnRestock: true,
     });
+  });
+
+  it("promotes a guest snapshot only after cart and wishlist are durable", async () => {
+    let finishWishlist: ((saved: boolean) => void) | undefined;
+    const cart = vi.fn(async () => true);
+    const wishlist = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishWishlist = resolve;
+        }),
+    );
+
+    const saved = persistGuestCommerce(
+      { cart: [], wishlist: [] },
+      { cart, wishlist },
+    );
+    let settled = false;
+    void saved.then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(cart).toHaveBeenCalledOnce();
+    expect(wishlist).toHaveBeenCalledOnce();
+    expect(settled).toBe(false);
+
+    finishWishlist?.(true);
+    await expect(saved).resolves.toBe(true);
+  });
+
+  it("keeps the snapshot in guest mode when either server write fails", async () => {
+    await expect(
+      persistGuestCommerce(
+        { cart: [], wishlist: [] },
+        {
+          cart: async () => true,
+          wishlist: async () => false,
+        },
+      ),
+    ).resolves.toBe(false);
   });
 });
