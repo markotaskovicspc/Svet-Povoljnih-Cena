@@ -85,6 +85,10 @@ const oauthProviders = (() => {
       Apple({
         clientId: apple.clientId,
         clientSecret: apple.clientSecret,
+        // Apple only returns email addresses it has verified. Trust that
+        // assertion so an existing customer can add Apple as another sign-in
+        // method instead of failing with OAuthAccountNotLinked.
+        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
