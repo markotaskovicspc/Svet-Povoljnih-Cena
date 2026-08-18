@@ -289,8 +289,10 @@ export function resolveProductPriceQuote(
     product.referencePrice > 0
       ? product.referencePrice
       : full;
-  const hasReducedOffer = Boolean(rawActionOffer || loyaltyOffer);
-  const displayFull = hasReducedOffer ? reference : full;
+  // The statutory 30-day comparison belongs to a public action/promotion.
+  // Loyalty is a member benefit, so its comparison remains the current full
+  // price while loyalty history stays excluded from the public reference.
+  const displayFull = rawActionOffer ? reference : full;
   const withReference = (offer: EffectivePrice | null) =>
     offer
       ? {

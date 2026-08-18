@@ -183,6 +183,22 @@ describe("ERP pricing precedence", () => {
     expect(quote.payable.effective).toBe(8_000);
   });
 
+  it("uses the current full price, not the 30-day action reference, for loyalty", () => {
+    const quote = resolveProductPriceQuote(
+      {
+        fullPrice: 10_000,
+        referencePrice: 9_000,
+        loyaltyPrice: 8_000,
+      },
+      { now, loggedIn: true },
+    );
+
+    expect(quote.full).toBe(10_000);
+    expect(quote.loyaltyOffer?.full).toBe(10_000);
+    expect(quote.loyaltyOffer?.effective).toBe(8_000);
+    expect(quote.actionOffer).toBeNull();
+  });
+
   it("breaks equal action priorities by newer start and then lower price", () => {
     const newer = resolvePromotionPrice(
       {

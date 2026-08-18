@@ -10,6 +10,7 @@ import {
   RATE_LIMITS,
 } from "@/lib/security/rate-limit";
 import { getCurrentUser } from "@/lib/auth/session";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
       loyaltyPrice: quote.loyaltyOffer?.effective,
       discountPct: product.discountPct,
       inStock: product.stock > 0,
-      incoming: product.incomingStock > 0,
+      incoming: hasStorefrontIncomingStock(product),
       thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || null,
     };
   });

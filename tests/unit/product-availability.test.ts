@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getProductAvailability } from "@/lib/product-availability";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 
 const readyProduct = {
   stock: 10,
@@ -71,5 +72,20 @@ describe("product availability messaging", () => {
 
     expect(own.label).toBe("U dolasku");
     expect(rabalux.label).toBe("Nije dostupno");
+  });
+
+  it("keeps the non-Rabalux rule consistent for every storefront surface", () => {
+    expect(
+      hasStorefrontIncomingStock({
+        incomingStock: 5,
+        supplierIntegrationKey: "SPC",
+      }),
+    ).toBe(true);
+    expect(
+      hasStorefrontIncomingStock({
+        incomingStock: 5,
+        supplierIntegrationKey: " rabalux ",
+      }),
+    ).toBe(false);
   });
 });

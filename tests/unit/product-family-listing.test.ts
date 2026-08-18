@@ -119,6 +119,30 @@ describe("SKU-level filter boje", () => {
   });
 });
 
+describe("filter dostupnosti", () => {
+  it("nikad ne svrstava Rabalux u robu u dolasku", () => {
+    const ownIncoming = {
+      ...product,
+      sku: "OWN-INCOMING",
+      stock: 0,
+      incomingStock: 4,
+      supplierIntegrationKey: "SPC",
+      variantFamily: undefined,
+    } as Product;
+    const rabaluxIncoming = {
+      ...ownIncoming,
+      sku: "RABALUX-INCOMING",
+      supplierIntegrationKey: "RABALUX",
+    } as Product;
+    const state = { ...emptyFilterState(), availability: ["incoming" as const] };
+
+    expect(computeFacetValues([ownIncoming, rabaluxIncoming]).counts.availability)
+      .toEqual({ "in-stock": 0, incoming: 1, "out-of-stock": 1 });
+    expect(applyFilters([ownIncoming, rabaluxIncoming], state).map((item) => item.sku))
+      .toEqual(["OWN-INCOMING"]);
+  });
+});
+
 describe("dinamički filteri listinga", () => {
   it("podtab prepoznaje proizvod po nazivu kada je kategorija šira", () => {
     expect(

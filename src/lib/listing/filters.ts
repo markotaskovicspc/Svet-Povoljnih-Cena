@@ -6,6 +6,7 @@
  */
 import type { Product } from "@/types";
 import { isProductColorLabel } from "@/lib/product-colors";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 
 export const LISTING_PAGE_SIZE = 36;
 
@@ -313,7 +314,7 @@ export function computeFacetValues(products: Product[]): FacetValues {
 
 function availabilityOf(p: Product): Availability {
   if (p.stock > 0) return "in-stock";
-  if (p.incomingStock > 0) return "incoming";
+  if (hasStorefrontIncomingStock(p)) return "incoming";
   return "out-of-stock";
 }
 

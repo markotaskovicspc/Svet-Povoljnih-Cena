@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Product, SKU, WishlistProductSnapshot } from "@/types";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveProductPriceQuote } from "@/lib/pricing";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 
 export interface WishlistEntry {
   sku: SKU;
@@ -117,7 +118,7 @@ export function wishlistSnapshotFromProduct(product: Product): WishlistProductSn
     loyaltyPrice: quote.loyaltyOffer?.effective,
     discountPct: product.discountPct,
     inStock: product.stock > 0,
-    incoming: product.incomingStock > 0,
+    incoming: hasStorefrontIncomingStock(product),
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || null,
   };
 }

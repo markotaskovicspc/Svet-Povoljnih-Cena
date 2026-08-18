@@ -204,6 +204,34 @@ describe("ProductCard image regression", () => {
     );
   });
 
+  it("na aktivnoj akciji ne prikazuje niti koristi loyalty cenu", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          fullPrice: 1_000,
+          referencePrice: 900,
+          salePrice: 800,
+          loyaltyPrice: 700,
+          loyaltyDiscountPct: 30,
+          loyaltyEligible: true,
+          action: {
+            id: "active-action",
+            name: "Aktivna akcija",
+            startsAt: "2026-01-01T00:00:00.000Z",
+            endsAt: "2100-12-31T23:59:59.999Z",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("900 RSD");
+    expect(html).toContain("Akcija");
+    expect(html).toContain("800 RSD");
+    expect(html).not.toContain("Loyalty");
+    expect(html).not.toContain("700 RSD");
+  });
+
   it("keeps duplicate product cards independent on the same page", () => {
     const html = renderToStaticMarkup(
       createElement(

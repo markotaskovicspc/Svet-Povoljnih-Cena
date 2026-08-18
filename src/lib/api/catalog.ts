@@ -69,6 +69,7 @@ import { formatProductAttributes } from "@/lib/product-attributes";
 import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
 import { formatProductDisplayName } from "@/lib/product-name";
 import { isProductColorLabel } from "@/lib/product-colors";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 import {
   dynamicFacetsForGroups,
   type Availability,
@@ -1655,10 +1656,14 @@ function computeProductFacets(
     }
 
     const availability = productStockAvailability(row);
+    const hasIncomingStock = hasStorefrontIncomingStock({
+      incomingStock: row.incomingStock,
+      supplierIntegrationKey: row.supplier?.integrationKey,
+    });
     const availabilityKey: Availability =
       availability.sellableStock > 0
         ? "in-stock"
-        : row.incomingStock > 0
+        : hasIncomingStock
           ? "incoming"
           : "out-of-stock";
     facets.counts.availability[availabilityKey] += 1;

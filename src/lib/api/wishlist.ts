@@ -5,6 +5,7 @@ import { num } from "@/lib/api/_helpers";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 
 /**
  * Wishlist + per-product alert toggles (Phase 3C — items 4 & 6).
@@ -53,6 +54,7 @@ export async function listWishlist(userId: string) {
           discountPct: true,
           stock: true,
           incomingStock: true,
+          supplier: { select: { integrationKey: true } },
           isActive: true,
           media: { where: { kind: "IMAGE" }, orderBy: { order: "asc" }, take: 1 },
         },
@@ -67,7 +69,10 @@ export async function listWishlist(userId: string) {
     salePrice: w.product.salePrice ? num(w.product.salePrice) : null,
     discountPct: w.product.discountPct ?? 0,
     inStock: w.product.stock > 0,
-    incoming: w.product.incomingStock > 0,
+    incoming: hasStorefrontIncomingStock({
+      incomingStock: w.product.incomingStock,
+      supplierIntegrationKey: w.product.supplier?.integrationKey,
+    }),
     isActive: w.product.isActive,
     thumbnailUrl:
       resolveSupabaseStorageUrl(getMediaVariantUrl(w.product.media[0], "thumb")) ||

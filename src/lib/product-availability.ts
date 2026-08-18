@@ -1,5 +1,9 @@
 import type { Product } from "@/types";
 import { getCatalogReadiness } from "@/lib/catalog-readiness";
+import {
+  hasStorefrontIncomingStock,
+  isRabaluxStorefrontProduct,
+} from "@/lib/storefront-incoming";
 
 type ProductAvailabilityInput = Pick<
   Product,
@@ -32,7 +36,9 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
         ? displayDimensions
         : packageDimensions,
   });
-  const isRabalux = product.supplierIntegrationKey?.toUpperCase() === "RABALUX";
+  const isRabalux = isRabaluxStorefrontProduct(
+    product.supplierIntegrationKey,
+  );
 
   if (!readiness.ready) {
     return {
@@ -68,7 +74,10 @@ export function getProductAvailability(product: ProductAvailabilityInput) {
     };
   }
 
-  if (!isRabalux && incomingStock > 0) {
+  if (hasStorefrontIncomingStock({
+    incomingStock,
+    supplierIntegrationKey: product.supplierIntegrationKey,
+  })) {
     return {
       canAddToCart: false,
       label: "U dolasku",
