@@ -634,7 +634,7 @@ export async function queueRabaluxBinaryMediaRepair(options: {
     // The existing queue contains unfinished gallery work. Put one repair job
     // per product ahead of it so customer-facing primary images recover first;
     // chained gallery jobs use the normal current timestamp and wait their turn.
-    const repairPriorityAt = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+    const repairPriorityAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000);
     const queued = await db.$transaction(
       async (tx) => {
         let assetsReset = 0;
