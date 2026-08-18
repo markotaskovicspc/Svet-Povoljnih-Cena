@@ -214,7 +214,11 @@ export default async function ProductPage({ params }: RouteProps) {
             <div className="hidden md:block">
               <PdpPrice product={product} />
             </div>
-            <PdpAddToCart product={product} variant="desktop" />
+            <PdpAddToCart
+              product={product}
+              deliveryCategory={publicDeliveryCategory}
+              variant="desktop"
+            />
           </div>
 
           <PdpBenefits deliveryDays={product.deliveryDays} />
@@ -367,7 +371,11 @@ export default async function ProductPage({ params }: RouteProps) {
       <RecentlyViewedProducts product={product} />
 
       {/* Sticky add-to-cart (mobile) */}
-      <PdpAddToCart product={product} variant="mobile" />
+      <PdpAddToCart
+        product={product}
+        deliveryCategory={publicDeliveryCategory}
+        variant="mobile"
+      />
     </article>
   );
 }

@@ -24,6 +24,7 @@ describe("cart repricing", () => {
           unitPriceFull: 1_000,
           unitPriceSale: 700,
           thumbnailUrl: "/new.webp",
+          deliveryCategory: 1,
         },
       ],
     );
@@ -38,6 +39,7 @@ describe("cart repricing", () => {
       withAssembly: true,
       assemblyPrice: 250,
       thumbnailUrl: "/new.webp",
+      deliveryCategory: 1,
     });
   });
 });

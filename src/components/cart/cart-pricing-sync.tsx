@@ -8,6 +8,7 @@ import { resolveProductPriceQuote } from "@/lib/pricing";
 import { getMediaVariantUrl } from "@/lib/media";
 import type { Product } from "@/types";
 import { useCheckout } from "@/lib/checkout/store";
+import { deliveryCategory } from "@/lib/delivery-tariff";
 
 /** Keeps persisted cart snapshots aligned with current rules and auth state. */
 export function CartPricingSync() {
@@ -59,6 +60,13 @@ export function CartPricingSync() {
               loyaltyDiscountPct: quote.loyaltyOffer?.discountPct,
               thumbnailUrl:
                 getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
+              deliveryCategory: product.unitPackageDimensionsCm
+                ? deliveryCategory([
+                    product.unitPackageDimensionsCm.w,
+                    product.unitPackageDimensionsCm.d,
+                    product.unitPackageDimensionsCm.h,
+                  ]) ?? undefined
+                : undefined,
             };
           }),
         );

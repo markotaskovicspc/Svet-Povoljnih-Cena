@@ -32,6 +32,7 @@ export type CartPriceUpdate = Pick<
   | "unitPriceLoyalty"
   | "loyaltyDiscountPct"
   | "thumbnailUrl"
+  | "deliveryCategory"
 >;
 
 interface CartState {
@@ -128,7 +129,8 @@ export function repriceCartLines(
       line.unitPriceSale === update.unitPriceSale &&
       line.unitPriceLoyalty === update.unitPriceLoyalty &&
       line.loyaltyDiscountPct === update.loyaltyDiscountPct &&
-      line.thumbnailUrl === update.thumbnailUrl
+      line.thumbnailUrl === update.thumbnailUrl &&
+      line.deliveryCategory === update.deliveryCategory
     ) {
       return line;
     }

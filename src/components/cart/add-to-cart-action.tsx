@@ -33,7 +33,10 @@ import { deliveryCategory } from "@/lib/delivery-tariff";
 export function commitAddToCart(
   product: Product,
   qty = 1,
-  options?: { availability?: ProductAvailability },
+  options?: {
+    availability?: ProductAvailability;
+    deliveryCategory?: 1 | 2 | null;
+  },
 ): number {
   const price = effectiveUnitPrice(product);
   const sale = price.effective;
@@ -53,13 +56,15 @@ export function commitAddToCart(
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
     variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
     familyCode: product.variantFamily?.code,
-    deliveryCategory: product.unitPackageDimensionsCm
-      ? deliveryCategory([
-          product.unitPackageDimensionsCm.w,
-          product.unitPackageDimensionsCm.d,
-          product.unitPackageDimensionsCm.h,
-        ]) ?? undefined
-      : undefined,
+    deliveryCategory:
+      options?.deliveryCategory ??
+      (product.unitPackageDimensionsCm
+        ? deliveryCategory([
+            product.unitPackageDimensionsCm.w,
+            product.unitPackageDimensionsCm.d,
+            product.unitPackageDimensionsCm.h,
+          ]) ?? undefined
+        : undefined),
   };
   useCart.getState().add(line, qty);
   recordFirstPartyEvent({

@@ -29,6 +29,7 @@ import { formatRsd } from "@/lib/format";
 
 interface PdpAddToCartProps {
   product: Product;
+  deliveryCategory?: 1 | 2 | null;
   /** When true, render only the desktop card (used inside the right column). */
   variant: "desktop" | "mobile";
 }
@@ -83,7 +84,11 @@ export function PdpMobilePriceContent({
   );
 }
 
-export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
+export function PdpAddToCart({
+  product,
+  deliveryCategory,
+  variant,
+}: PdpAddToCartProps) {
   const loyaltyEligible = useLoyaltyEligibility();
   const [isActiveVariant, setIsActiveVariant] = useState(false);
   const [liveAvailability, setLiveAvailability] =
@@ -153,7 +158,10 @@ export function PdpAddToCart({ product, variant }: PdpAddToCartProps) {
 
   function handleAdd() {
     if (!availability.canAddToCart) return;
-    commitAddToCart(pricingProduct, 1, { availability });
+    commitAddToCart(pricingProduct, 1, {
+      availability,
+      deliveryCategory,
+    });
   }
 
   const ctas = (
