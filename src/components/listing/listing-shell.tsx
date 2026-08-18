@@ -494,7 +494,9 @@ function ListingShellInner({
 
         <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
           <div className="hidden lg:block">
-            <div className="sticky top-28">{sidebar}</div>
+            <div className="sticky top-[calc(var(--storefront-sticky-header-height,9rem)+1rem)] max-h-[calc(100dvh-var(--storefront-sticky-header-height,9rem)-2rem)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+              {sidebar}
+            </div>
           </div>
 
           <div className="min-w-0">

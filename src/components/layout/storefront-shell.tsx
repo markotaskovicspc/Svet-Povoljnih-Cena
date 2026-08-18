@@ -12,6 +12,7 @@ import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
 import { getCmsFooterState } from "@/lib/cms/pages";
 import { primaryNav, type NavNode } from "@/data/site";
 import { getMobileSearchContent } from "@/lib/mobile-search/server";
+import { StorefrontStickyHeader } from "@/components/layout/storefront-sticky-header";
 
 const gaId = getGa4MeasurementId();
 
@@ -53,14 +54,14 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="sticky top-0 z-50 bg-white">
+      <StorefrontStickyHeader>
         <div
           aria-hidden
           className="h-[max(env(safe-area-inset-top),1.5rem)] bg-white md:hidden"
         />
         {activePromoBar ? <PromoBar bar={activePromoBar} /> : null}
         <Header tabs={activeTabs} categories={categories} mobileSearchContent={mobileSearchContent} />
-      </div>
+      </StorefrontStickyHeader>
       <main className="flex-1">{children}</main>
       <FirstPurchaseCta />
       <NewsletterBand />
