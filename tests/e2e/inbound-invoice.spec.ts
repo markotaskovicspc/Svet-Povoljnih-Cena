@@ -46,6 +46,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
   let duplicateInvoiceId = "";
   let legacyPurchaseOrderId = "";
   let legacyInvoiceId = "";
+  let repairedPurchaseOrderId = "";
+  let repairedInvoiceId = "";
+  const repairedProductIds: string[] = [];
   const pageErrors: string[] = [];
 
   test.beforeAll(async () => {
@@ -835,6 +838,299 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test("repairs a locked zero-volume snapshot and posts exact multi-SKU COGS", async ({
+    page,
+  }) => {
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await login(page);
+
+    const skuA = `QA-UF-VA-${runId}`.slice(0, 90);
+    const skuB = `QA-UF-VB-${runId}`.slice(0, 90);
+    const [productA, productB] = await Promise.all([
+      db.product.create({
+        data: {
+          sku: skuA,
+          slug: `qa-uf-va-${runId}`,
+          name: `QA zapremina paket ${runId}`,
+          description: "QA artikal sa zapreminom iz transportnog pakovanja",
+          fullPrice: 2_000,
+          stock: 100,
+          cogs: 200,
+          supplierId,
+          countryOfOrigin: "CN",
+          hsCode: "9403609000",
+          widthCm: 100,
+          depthCm: 100,
+          heightCm: 90,
+          grossWeightKg: 2,
+          packQty: 1,
+          packWidthCm: 100,
+          packDepthCm: 100,
+          packHeightCm: 90,
+          packGrossWeightKg: 2,
+          customsRate: 10,
+          categories: { create: { categoryId } },
+          priceListEntries: {
+            create: {
+              priceListId,
+              price: 2_000,
+              validFrom: new Date("2026-01-01T00:00:00.000Z"),
+            },
+          },
+        },
+        select: { id: true, name: true },
+      }),
+      db.product.create({
+        data: {
+          sku: skuB,
+          slug: `qa-uf-vb-${runId}`,
+          name: `QA zapremina kontejner ${runId}`,
+          description: "QA artikal kome se naknadno dopunjava zapremina",
+          fullPrice: 2_000,
+          stock: 20,
+          cogs: 300,
+          supplierId,
+          countryOfOrigin: "CN",
+          hsCode: "9403609000",
+          widthCm: 100,
+          depthCm: 50,
+          heightCm: 40,
+          grossWeightKg: 2,
+          customsRate: 0,
+          categories: { create: { categoryId } },
+          priceListEntries: {
+            create: {
+              priceListId,
+              price: 2_000,
+              validFrom: new Date("2026-01-01T00:00:00.000Z"),
+            },
+          },
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
+    repairedProductIds.push(productA.id, productB.id);
+    await db.warehouseStock.createMany({
+      data: [
+        { warehouseId, productId: productA.id, qty: 100 },
+        { warehouseId, productId: productB.id, qty: 20 },
+      ],
+    });
+
+    const lockedAt = new Date();
+    const order = await db.purchaseOrder.create({
+      data: {
+        number: `QA-UF-VOL-PO-${runId}`,
+        status: "DRAFT",
+        supplierId,
+        loadingLocationId,
+        receivingWarehouseId: warehouseId,
+        transportTypeId,
+        orderDate: new Date("2026-08-17T00:00:00.000Z"),
+        totalPrice: 200,
+        totalVolume: 9,
+        totalWeight: 20,
+        currency: "EUR",
+        exchangeRate: 100,
+        freightCost: 1_000,
+        freightCurrency: "RSD",
+        freightExchangeRate: 1,
+        allocationBasis: "VOLUME",
+        lockedAt,
+        postedAt: lockedAt,
+        items: {
+          create: [
+            {
+              productId: productA.id,
+              sku: skuA,
+              name: productA.name,
+              purchasePrice: 10,
+              currency: "EUR",
+              qty: 10,
+              receivedQty: 0,
+              customsRate: 10,
+              packQty: 1,
+              totalVolume: 9,
+              totalWeight: 20,
+              freightAllocated: 1_000,
+            },
+            {
+              productId: productB.id,
+              sku: skuB,
+              name: productB.name,
+              purchasePrice: 10,
+              currency: "EUR",
+              qty: 10,
+              receivedQty: 0,
+              customsRate: 0,
+              packQty: null,
+              totalVolume: 0,
+              totalWeight: 0,
+              freightAllocated: 0,
+            },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    repairedPurchaseOrderId = order.id;
+    const invoice = await db.inboundInvoice.create({
+      data: {
+        number: `QA-UF-VOL-INV-${runId}`,
+        type: "COGS",
+        status: "RECEIVED",
+        cogsStatus: "PENDING",
+        supplierId,
+        purchaseOrderId: order.id,
+        warehouseId,
+        invoiceDate: new Date("2026-08-18T00:00:00.000Z"),
+        currency: "EUR",
+        exchangeRate: 100,
+        value: 200,
+        invoiceValueRsd: 20_000,
+        customsValueRsd: 100,
+        transportValueRsd: 1_000,
+        otherRelatedCostsRsd: 100,
+        netValue: 21_200,
+        vatValue: 4_240,
+        grossValue: 25_440,
+        allocationBasis: "VOLUME",
+      },
+      select: { id: true },
+    });
+    repairedInvoiceId = invoice.id;
+
+    await test.step("browser and server both block the missing-volume line", async () => {
+      await page.goto(`/admin/erp/ulazne-fakture/${invoice.id}`, {
+        waitUntil: "domcontentloaded",
+      });
+      const alert = page
+        .locator('[role="alert"]')
+        .filter({ hasText: "Knjiženje je blokirano" });
+      await expect(alert).toContainText("Knjiženje je blokirano");
+      await expect(alert).toContainText(skuB);
+      await expect(
+        page.getByRole("button", { name: "Proknjiži", exact: true }),
+      ).toBeDisabled();
+
+      const blocked = await page.request.post(
+        "/api/admin/erp/ulazne-fakture/commands",
+        { data: { action: "invoice.post", ids: [invoice.id] } },
+      );
+      expect(blocked.status()).toBe(400);
+      expect(await blocked.json()).toMatchObject({
+        ok: false,
+        error: expect.stringContaining(skuB),
+      });
+    });
+
+    await test.step("completed master data enables the locked-order repair", async () => {
+      await db.product.update({
+        where: { id: productB.id },
+        data: {
+          containerQty: 690,
+          containerGrossWeightKg: null,
+          packQty: 1,
+          packWidthCm: 200,
+          packDepthCm: 100,
+          packHeightCm: 50,
+          packGrossWeightKg: 2,
+        },
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(
+        page
+          .locator('[role="alert"]')
+          .filter({ hasText: "Knjiženje je blokirano" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Proknjiži", exact: true }),
+      ).toBeEnabled();
+    });
+
+    await test.step("browser posts exact goods, customs and volume allocations", async () => {
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: "Proknjiži", exact: true })
+        .click();
+      await expect(
+        page.getByText(/prijemnica i porudžbenica su proknjižene.*roba je primljena/i),
+      ).toBeVisible({ timeout: 120_000 });
+
+      const rowA = page.locator("tbody tr").filter({ hasText: skuA });
+      const rowB = page.locator("tbody tr").filter({ hasText: skuB });
+      await expect(rowA.locator("td").nth(3)).toHaveText("10.000 RSD");
+      await expect(rowA.locator("td").nth(4)).toHaveText("100 RSD");
+      await expect(rowA.locator("td").nth(5)).toHaveText("900 RSD");
+      await expect(rowA.locator("td").nth(6)).toHaveText("90 RSD");
+      await expect(rowA.locator("td").nth(7)).toHaveText("1.109 RSD");
+      await expect(rowA.locator("td").nth(9)).toHaveText("282,64 RSD");
+      await expect(rowB.locator("td").nth(3)).toHaveText("10.000 RSD");
+      await expect(rowB.locator("td").nth(4)).toHaveText("0 RSD");
+      await expect(rowB.locator("td").nth(5)).toHaveText("100 RSD");
+      await expect(rowB.locator("td").nth(6)).toHaveText("10 RSD");
+      await expect(rowB.locator("td").nth(7)).toHaveText("1.011 RSD");
+      await expect(rowB.locator("td").nth(9)).toHaveText("537 RSD");
+    });
+
+    await test.step("database totals reconcile and a retry is idempotent", async () => {
+      const [storedInvoice, storedOrder, items, storedA, storedB] =
+        await Promise.all([
+          db.inboundInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+          db.purchaseOrder.findUniqueOrThrow({ where: { id: order.id } }),
+          db.purchaseOrderItem.findMany({
+            where: { purchaseOrderId: order.id },
+            orderBy: { sku: "asc" },
+          }),
+          db.product.findUniqueOrThrow({ where: { id: productA.id } }),
+          db.product.findUniqueOrThrow({ where: { id: productB.id } }),
+        ]);
+      expect(storedInvoice.status).toBe("POSTED");
+      expect(storedInvoice.cogsStatus).toBe("LOCKED");
+      expect(storedOrder.status).toBe("RECEIVED");
+      expect(Number(storedOrder.totalVolume)).toBe(10);
+      expect(
+        items.map((item) => ({
+          sku: item.sku,
+          volume: Number(item.totalVolume),
+          freight: Number(item.freightAllocated),
+          adjustment: Number(item.additionalCostAllocated),
+        })),
+      ).toEqual([
+        { sku: skuA, volume: 9, freight: 900, adjustment: -810 },
+        { sku: skuB, volume: 1, freight: 100, adjustment: 10 },
+      ]);
+      expect(storedA.stock).toBe(110);
+      expect(Number(storedA.cogs)).toBe(282.64);
+      expect(storedB.stock).toBe(30);
+      expect(Number(storedB.cogs)).toBe(537);
+
+      const retry = await page.request.post(
+        "/api/admin/erp/ulazne-fakture/commands",
+        { data: { action: "invoice.post", ids: [invoice.id] } },
+      );
+      expect(retry.status()).toBe(200);
+      const [retriedA, retriedB, movementCount] = await Promise.all([
+        db.product.findUniqueOrThrow({ where: { id: productA.id } }),
+        db.product.findUniqueOrThrow({ where: { id: productB.id } }),
+        db.stockMovement.count({
+          where: { productId: { in: [productA.id, productB.id] } },
+        }),
+      ]);
+      expect({ stock: retriedA.stock, cogs: Number(retriedA.cogs) }).toEqual({
+        stock: 110,
+        cogs: 282.64,
+      });
+      expect({ stock: retriedB.stock, cogs: Number(retriedB.cogs) }).toEqual({
+        stock: 30,
+        cogs: 537,
+      });
+      expect(movementCount).toBe(2);
+    });
+
+    expect(pageErrors).toEqual([]);
+  });
+
   async function login(page: Page) {
     await page.goto("/admin/prijava?callbackUrl=%2Fadmin", {
       waitUntil: "domcontentloaded",
@@ -851,22 +1147,30 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       invoiceId,
       duplicateInvoiceId,
       legacyInvoiceId,
+      repairedInvoiceId,
     ].filter(Boolean);
     if (invoiceIds.length) {
       await db.inboundInvoice.deleteMany({ where: { id: { in: invoiceIds } } });
     }
-    const purchaseOrderIds = [purchaseOrderId, legacyPurchaseOrderId].filter(
-      Boolean,
-    );
+    const purchaseOrderIds = [
+      purchaseOrderId,
+      legacyPurchaseOrderId,
+      repairedPurchaseOrderId,
+    ].filter(Boolean);
     if (purchaseOrderIds.length) {
       await db.purchaseOrder.deleteMany({
         where: { id: { in: purchaseOrderIds } },
       });
     }
-    if (productId) {
-      await db.stockMovement.deleteMany({ where: { productId } });
-      await db.warehouseStock.deleteMany({ where: { productId } });
-      await db.product.deleteMany({ where: { id: productId } });
+    const productIds = [productId, ...repairedProductIds].filter(Boolean);
+    if (productIds.length) {
+      await db.stockMovement.deleteMany({
+        where: { productId: { in: productIds } },
+      });
+      await db.warehouseStock.deleteMany({
+        where: { productId: { in: productIds } },
+      });
+      await db.product.deleteMany({ where: { id: { in: productIds } } });
     }
     if (priceListId) {
       await db.priceList.deleteMany({ where: { id: priceListId } });
@@ -917,7 +1221,7 @@ function createDatabaseClient() {
     adapter: new PrismaPg(
       {
         connectionString: url.toString(),
-        max: 2,
+        max: 1,
         connectionTimeoutMillis: 15_000,
       },
       { schema },

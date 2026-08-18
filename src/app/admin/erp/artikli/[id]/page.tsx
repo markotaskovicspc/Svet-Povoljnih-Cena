@@ -2071,7 +2071,7 @@ export default async function ProductDetail({
                 Transportno pakovanje
               </legend>
               <p className="text-xs text-ink-500">
-                Popunite ili oba polja za ceo kontejner, ili kom/pak i sve tri dimenzije paketa. Ako su obe grupe kompletne, obračun koristi podatke za ceo kontejner.
+                Za zapreminu se prvo koristi količina za ceo kontejner; bruto kg kontejnera je opciono polje za težinu. Ako količina kontejnera nije uneta, popunite kom/pak i sve tri dimenzije paketa. Kada postoje oba izvora, kontejner ima prioritet.
               </p>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                 <Field label="Kom/pak">

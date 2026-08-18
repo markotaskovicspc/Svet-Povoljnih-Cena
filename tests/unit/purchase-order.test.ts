@@ -10,6 +10,7 @@ import {
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderCapacityWarnings,
   purchaseOrderEmailSubject,
+  resolvePurchaseOrderLineLogistics,
   resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
 
@@ -130,6 +131,79 @@ describe("ERP module 4 purchase-order rules", () => {
         packHeightCm: 40,
       }),
     ).toBe("container");
+  });
+
+  it("repairs only a missing locked volume snapshot from container-priority master data", () => {
+    expect(
+      resolvePurchaseOrderLineLogistics({
+        locked: true,
+        qty: 10,
+        snapshottedPackQty: null,
+        snapshottedTotalVolumeM3: 0,
+        snapshottedTotalWeightKg: 0,
+        product: {
+          containerQty: 690,
+          containerGrossWeightKg: null,
+          packQty: 1,
+          packWidthCm: 200,
+          packDepthCm: 100,
+          packHeightCm: 50,
+          grossWeightKg: 2,
+        },
+      }),
+    ).toEqual({
+      packQty: 1,
+      totalVolumeM3: 1,
+      totalWeightKg: 20,
+      repairedLockedSnapshot: true,
+    });
+  });
+
+  it("keeps a valid locked logistics snapshot even when the article master changes", () => {
+    expect(
+      resolvePurchaseOrderLineLogistics({
+        locked: true,
+        qty: 10,
+        snapshottedPackQty: 4,
+        snapshottedTotalVolumeM3: 7.5,
+        snapshottedTotalWeightKg: 80,
+        product: {
+          containerQty: 690,
+          packQty: 1,
+          packWidthCm: 10,
+          packDepthCm: 10,
+          packHeightCm: 10,
+        },
+      }),
+    ).toEqual({
+      packQty: 4,
+      totalVolumeM3: 7.5,
+      totalWeightKg: 80,
+      repairedLockedSnapshot: false,
+    });
+  });
+
+  it("leaves a locked zero-volume snapshot blocked until a complete source exists", () => {
+    expect(
+      resolvePurchaseOrderLineLogistics({
+        locked: true,
+        qty: 10,
+        snapshottedPackQty: null,
+        snapshottedTotalVolumeM3: 0,
+        snapshottedTotalWeightKg: 0,
+        product: {
+          packQty: 2,
+          packWidthCm: 80,
+          packDepthCm: 40,
+          packHeightCm: null,
+        },
+      }),
+    ).toEqual({
+      packQty: 2,
+      totalVolumeM3: 0,
+      totalWeightKg: 0,
+      repairedLockedSnapshot: false,
+    });
   });
 
   it("marks quantities that are not divisible by package size", () => {

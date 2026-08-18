@@ -25,7 +25,7 @@ export const STANDARD_CONTAINER_VOLUME_M3 = 69;
 export const PRODUCT_LOGISTICS_SOURCE_ERROR =
   "Unesite količinu za ceo kontejner ili kom/pak i sve tri dimenzije transportnog pakovanja (širinu, dubinu i visinu).";
 
-type ProductLogisticsSourceInput = {
+export type ProductLogisticsSourceInput = {
   containerQty?: number | null;
   containerGrossWeightKg?: number | null;
   unitPackWidthCm?: number | null;
@@ -35,6 +35,12 @@ type ProductLogisticsSourceInput = {
   packWidthCm?: number | null;
   packDepthCm?: number | null;
   packHeightCm?: number | null;
+};
+
+export type ProductUnitLogisticsInput = ProductLogisticsSourceInput & {
+  grossWeightKg?: number | null;
+  weightKg?: number | null;
+  packGrossWeightKg?: number | null;
 };
 
 function isPositiveNumber(value: number | null | undefined) {
@@ -117,20 +123,7 @@ export function calculateDeliveryDate(input: {
   return result;
 }
 
-export function calculateUnitLogistics(input: {
-  containerQty?: number | null;
-  containerGrossWeightKg?: number | null;
-  unitPackWidthCm?: number | null;
-  unitPackDepthCm?: number | null;
-  unitPackHeightCm?: number | null;
-  packQty?: number | null;
-  grossWeightKg?: number | null;
-  weightKg?: number | null;
-  packWidthCm?: number | null;
-  packDepthCm?: number | null;
-  packHeightCm?: number | null;
-  packGrossWeightKg?: number | null;
-}) {
+export function calculateUnitLogistics(input: ProductUnitLogisticsInput) {
   const containerQty =
     input.containerQty && input.containerQty > 0 ? input.containerQty : null;
   const packQty = input.packQty && input.packQty > 0 ? input.packQty : null;
@@ -163,6 +156,51 @@ export function calculateUnitLogistics(input: {
   return {
     volumeM3: round(volumeM3, 6),
     weightKg: round(weightKg, 6),
+  };
+}
+
+/**
+ * Editable orders always follow the current article master. A posted order
+ * keeps every valid logistics snapshot, but a legacy zero-volume snapshot may
+ * be repaired from the current master so a later receipt is not permanently
+ * blocked after the article data is completed.
+ */
+export function resolvePurchaseOrderLineLogistics(input: {
+  locked: boolean;
+  qty: number;
+  snapshottedPackQty?: number | null;
+  snapshottedTotalVolumeM3?: number | null;
+  snapshottedTotalWeightKg?: number | null;
+  product: ProductUnitLogisticsInput | null;
+}) {
+  const snapshottedTotalVolumeM3 = Math.max(
+    input.snapshottedTotalVolumeM3 ?? 0,
+    0,
+  );
+  const snapshottedTotalWeightKg = Math.max(
+    input.snapshottedTotalWeightKg ?? 0,
+    0,
+  );
+  if (!input.product || (input.locked && snapshottedTotalVolumeM3 > 0)) {
+    return {
+      packQty: input.snapshottedPackQty ?? null,
+      totalVolumeM3: round(snapshottedTotalVolumeM3, 3),
+      totalWeightKg: round(snapshottedTotalWeightKg, 3),
+      repairedLockedSnapshot: false,
+    };
+  }
+
+  const logistics = calculateUnitLogistics(input.product);
+  const totalVolumeM3 = round(logistics.volumeM3 * Math.max(input.qty, 0), 3);
+  const totalWeightKg = round(logistics.weightKg * Math.max(input.qty, 0), 3);
+  return {
+    packQty:
+      input.locked
+        ? input.snapshottedPackQty ?? input.product.packQty ?? null
+        : input.product.packQty ?? null,
+    totalVolumeM3,
+    totalWeightKg,
+    repairedLockedSnapshot: input.locked && totalVolumeM3 > 0,
   };
 }
 

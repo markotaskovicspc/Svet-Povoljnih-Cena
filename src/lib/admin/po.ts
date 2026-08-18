@@ -23,8 +23,10 @@ import {
   isPackQuantityValid,
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderEmailSubject,
+  resolvePurchaseOrderLineLogistics,
   resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
+import { assertInboundCostVolumeReady } from "@/lib/admin/inbound-invoice";
 
 export { canReceivePurchaseOrder } from "@/lib/admin/purchase-order";
 
@@ -364,6 +366,13 @@ export async function postPurchaseOrder(id: string, actorId: string) {
     },
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
+  assertInboundCostVolumeReady(
+    order.items.map((item) => ({
+      sku: item.sku,
+      qty: item.qty,
+      totalVolumeM3: Number(item.totalVolume ?? 0),
+    })),
+  );
   if (order.lockedAt) return order;
   if (!order.supplier) throw new Error("Izaberite dobavljača pre knjiženja.");
   if (!order.items.length) throw new Error("Porudžbenica mora imati bar jednu stavku.");
@@ -953,7 +962,9 @@ export async function receivePurchaseOrder(
 
 /**
  * Recompute an editable purchase order from the current product logistics.
- * Posted orders keep their snapshotted logistics values.
+ * Posted orders keep their valid snapshotted logistics values. A missing
+ * legacy volume snapshot is repaired from the current article master so the
+ * inbound receipt can continue after the master data is completed.
  */
 export async function recomputePurchaseOrderTotals(id: string) {
   const order = await db.purchaseOrder.findUnique({
@@ -984,45 +995,48 @@ export async function recomputePurchaseOrderTotals(id: string) {
   });
   if (!order) throw new Error("Porudžbenica ne postoji.");
   const items = order.items.map((item) => {
-    if (order.lockedAt || !item.product) {
-      return {
-        item,
-        packQty: item.packQty,
-        customsRate:
-          item.customsRate == null ? null : Number(item.customsRate),
-        totalVolume: Number(item.totalVolume ?? 0),
-        totalWeight: Number(item.totalWeight ?? 0),
-      };
-    }
-    const logistics = calculateUnitLogistics({
-      containerQty: item.product.containerQty,
-      containerGrossWeightKg: Number(
-        item.product.containerGrossWeightKg ?? 0,
-      ),
-      unitPackWidthCm: Number(item.product.unitPackWidthCm ?? 0),
-      unitPackDepthCm: Number(item.product.unitPackDepthCm ?? 0),
-      unitPackHeightCm: Number(item.product.unitPackHeightCm ?? 0),
-      packQty: item.product.packQty,
-      weightKg: Number(item.product.weightKg ?? 0),
-      grossWeightKg: Number(item.product.grossWeightKg ?? 0),
-      packWidthCm: Number(item.product.packWidthCm ?? 0),
-      packDepthCm: Number(item.product.packDepthCm ?? 0),
-      packHeightCm: Number(item.product.packHeightCm ?? 0),
-      packGrossWeightKg: Number(item.product.packGrossWeightKg ?? 0),
+    const logistics = resolvePurchaseOrderLineLogistics({
+      locked: Boolean(order.lockedAt),
+      qty: item.qty,
+      snapshottedPackQty: item.packQty,
+      snapshottedTotalVolumeM3: Number(item.totalVolume ?? 0),
+      snapshottedTotalWeightKg: Number(item.totalWeight ?? 0),
+      product: item.product
+        ? {
+            containerQty: item.product.containerQty,
+            containerGrossWeightKg: Number(
+              item.product.containerGrossWeightKg ?? 0,
+            ),
+            unitPackWidthCm: Number(item.product.unitPackWidthCm ?? 0),
+            unitPackDepthCm: Number(item.product.unitPackDepthCm ?? 0),
+            unitPackHeightCm: Number(item.product.unitPackHeightCm ?? 0),
+            packQty: item.product.packQty,
+            weightKg: Number(item.product.weightKg ?? 0),
+            grossWeightKg: Number(item.product.grossWeightKg ?? 0),
+            packWidthCm: Number(item.product.packWidthCm ?? 0),
+            packDepthCm: Number(item.product.packDepthCm ?? 0),
+            packHeightCm: Number(item.product.packHeightCm ?? 0),
+            packGrossWeightKg: Number(item.product.packGrossWeightKg ?? 0),
+          }
+        : null,
     });
     return {
       item,
-      packQty: item.product.packQty,
-      customsRate: resolveOpenPurchaseOrderCustomsRate({
-        itemCustomsRate:
-          item.customsRate == null ? null : Number(item.customsRate),
-        productCustomsRate:
-          item.product.customsRate == null
-            ? null
-            : Number(item.product.customsRate),
-      }),
-      totalVolume: Number((logistics.volumeM3 * item.qty).toFixed(3)),
-      totalWeight: Number((logistics.weightKg * item.qty).toFixed(3)),
+      packQty: logistics.packQty,
+      customsRate: order.lockedAt
+        ? item.customsRate == null
+          ? null
+          : Number(item.customsRate)
+        : resolveOpenPurchaseOrderCustomsRate({
+            itemCustomsRate:
+              item.customsRate == null ? null : Number(item.customsRate),
+            productCustomsRate:
+              item.product?.customsRate == null
+                ? null
+                : Number(item.product.customsRate),
+          }),
+      totalVolume: logistics.totalVolumeM3,
+      totalWeight: logistics.totalWeightKg,
     };
   });
   let totalVolume = 0;

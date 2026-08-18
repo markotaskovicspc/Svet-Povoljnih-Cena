@@ -607,7 +607,6 @@ export default async function InboundInvoicePage({
     invoice.purchaseOrder?.items.filter(
       (item) => {
         if (item.qty <= 0 || Number(item.totalVolume ?? 0) > 0) return false;
-        if (invoice.purchaseOrder?.lockedAt) return true;
         return (
           !item.product ||
           !hasProductVolumeSource({

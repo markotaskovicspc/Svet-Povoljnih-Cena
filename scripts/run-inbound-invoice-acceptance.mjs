@@ -38,6 +38,11 @@ const childEnv = {
   EMAIL_PROVIDER: "none",
   E2E_INBOUND_INVOICES: "1",
   NEXT_DIST_DIR: e2eDistDir,
+  // Next dev may use several route workers. Keep each worker and the test
+  // client to one session so Supabase's 5432 session-mode pool is not
+  // exhausted during the long browser workflow.
+  DATABASE_POOL_MAX: "1",
+  DATABASE_IDLE_TIMEOUT_MS: "1000",
 };
 
 let exitCode = 1;
