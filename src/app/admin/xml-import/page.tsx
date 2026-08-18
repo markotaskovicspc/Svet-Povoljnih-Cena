@@ -798,7 +798,6 @@ export default async function XmlImportPage({
                   size="sm"
                   variant="secondary"
                   pendingLabel="Pokrećem popravku…"
-                  confirm="Pokrenuti jednokratnu popravku svih postojećih Rabalux slika i PDF-ova?"
                 >
                   Popravi Rabalux slike i PDF-ove
                 </SubmitButton>
