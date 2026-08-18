@@ -30,7 +30,7 @@ export function resolveRabaluxWeeklyStockPolicy(input: {
   const supplierPassesThreshold =
     input.closingStock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
   // A row in the complete weekly XLSX is the publication allow-list. Stock
-  // controls purchasing only: 0-9 stays visible, while 10+ may be purchased.
+  // controls purchasing only: 0-2 stays visible, while 3+ may be purchased.
   const isActive = hasPublicationData;
 
   return {

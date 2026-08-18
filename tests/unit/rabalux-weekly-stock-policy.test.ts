@@ -14,15 +14,15 @@ const ready = {
 };
 
 describe("Rabalux weekly stock publication policy", () => {
-  it("keeps 0–9 visible but unavailable and allows purchasing at 10", () => {
+  it("keeps 0–2 visible but unavailable and allows purchasing at 3", () => {
     expect(
       resolveRabaluxWeeklyStockPolicy({ ...ready, closingStock: 0 }),
     ).toMatchObject({ isActive: true, availableWebAuto: false });
     expect(
-      resolveRabaluxWeeklyStockPolicy({ ...ready, closingStock: 9 }),
+      resolveRabaluxWeeklyStockPolicy({ ...ready, closingStock: 2 }),
     ).toMatchObject({ isActive: true, availableWebAuto: false });
     expect(
-      resolveRabaluxWeeklyStockPolicy({ ...ready, closingStock: 10 }),
+      resolveRabaluxWeeklyStockPolicy({ ...ready, closingStock: 3 }),
     ).toMatchObject({ isActive: true, availableWebAuto: true });
   });
 

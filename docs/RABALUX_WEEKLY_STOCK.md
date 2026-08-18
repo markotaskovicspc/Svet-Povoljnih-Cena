@@ -8,7 +8,7 @@ prepiše stanje iz Srbije.
 ## Uvoz
 
 1. Otvoriti `/admin/xml-import` i u Rabalux kartici izabrati XLSX.
-2. Kliknuti **Proveri XLSX** i pregledati 0, 1–9, 10+, aktivacije,
+2. Kliknuti **Proveri XLSX** i pregledati 0, 1–2, 3+, aktivacije,
    deaktivacije, trajna brisanja i šifre koje postoje samo u fajlu ili samo na sajtu.
 3. Ponovo izabrati isti fajl, uneti razlog i potvrdu `RABALUX STANJE`.
 4. Kliknuti **Primeni pregledani lager**.
@@ -20,8 +20,8 @@ broj redova naglo padne ili je isti fajl već primenjen.
 
 - Svaka šifra koja postoji u XLSX-u ostaje vidljiva kada je odobrena i ima
   kategoriju, aktivnu maloprodajnu cenu i spremnu sliku.
-- `10+`: proizvod je dostupan za kupovinu.
-- `0–9`: proizvod je vidljiv u katalogu, ali nije dostupan za kupovinu.
+- `3+`: proizvod je dostupan za kupovinu.
+- `0–2`: proizvod je vidljiv u katalogu, ali nije dostupan za kupovinu.
 - Šifra koja uopšte ne postoji u kompletnom XLSX-u trajno se briše iz `Product`
   tabele. Povezani kataloški redovi brišu se kaskadno, istorijski dokumenti
   zadržavaju svoje SKU/naziv snapshot-e, a upravljani storage fajlovi odlaze u
@@ -34,7 +34,7 @@ broj redova naglo padne ili je isti fajl već primenjen.
 - Дневни каталошки sync не сме да уклони шифру која постоји у последњем
   недељном XLSX-у; само следећи комплетан XLSX мења allow-list.
 - DC stanje ostaje ERP podatak, ali ne može da zaobiđe Rabalux prag: za web
-  kupovinu i dalje je potrebno najmanje 10 komada u nedeljnom XLSX-u.
+  kupovinu i dalje su potrebna najmanje 3 komada u nedeljnom XLSX-u.
 - Rabalux stanje važi osam dana. Posle toga dobavljačko stanje se smatra
   zastarelim i ne ulazi u kupovinu.
 

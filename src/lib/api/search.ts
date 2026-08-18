@@ -241,7 +241,7 @@ async function searchProductHits(
   return rows.flatMap((r) => {
     const product = productsBySlug.get(r.slug);
     // The batch loader is the authoritative storefront-availability gate.
-    // Raw SQL candidates that fail it (including Rabalux <=10/stale stock)
+    // Raw SQL candidates that fail it (including below-threshold/stale Rabalux stock)
     // must not leak through the suggestion fallback.
     if (!product) return [];
     const quote = resolveProductPriceQuote(product, { loggedIn: false });

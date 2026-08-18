@@ -194,7 +194,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
             {
               OR: [
                 { availableWebAuto: true },
-                // Rabalux 0-9 rows remain catalog-visible; this flag controls
+                // Rabalux 0-2 rows remain catalog-visible; this flag controls
                 // purchasing for them, not publication.
                 rabaluxSupplierWhere(),
               ],

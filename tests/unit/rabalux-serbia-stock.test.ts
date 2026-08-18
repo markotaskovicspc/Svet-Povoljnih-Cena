@@ -80,8 +80,8 @@ describe("Rabalux Serbia stock-only catalog policy", () => {
     expect(isRabaluxSerbiaStockPresent(stockItem("A", 1))).toBe(true);
     expect(isRabaluxSerbiaStockPresent(stockItem("A", 0))).toBe(false);
     expect(isRabaluxSerbiaStockPresent(stockItem("A", 20, true))).toBe(false);
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 9))).toBe(false);
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 10))).toBe(true);
+    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 2))).toBe(false);
+    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 3))).toBe(true);
   });
 
   it("fails closed instead of combining duplicate warehouse rows", () => {

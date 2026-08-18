@@ -7,6 +7,7 @@ import type {
   RabaluxWeeklyStockApplyResult,
   RabaluxWeeklyStockPreviewResult,
 } from "@/lib/rabalux/weekly-stock";
+import { RABALUX_PUBLIC_STOCK_THRESHOLD } from "@/lib/rabalux/availability";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +47,9 @@ export function RabaluxWeeklyStockImport({
         <p className="text-sm font-medium text-ink">Nedeljni lager za Srbiju</p>
         <p className="mt-1 text-xs text-ink-500">
           XLSX je potpuna lista Rabalux proizvoda za Srbiju. Šifra koje nema u
-          fajlu briše se iz baze; 0–9 ostaje vidljivo bez kupovine, a 10+ je
-          dostupno za kupovinu kada su kataloški podaci spremni.
+          fajlu briše se iz baze; 0–{RABALUX_PUBLIC_STOCK_THRESHOLD - 1} ostaje
+          vidljivo bez kupovine, a {RABALUX_PUBLIC_STOCK_THRESHOLD}+ je dostupno
+          za kupovinu kada su kataloški podaci spremni.
         </p>
       </div>
       <form action={preview} className="flex flex-wrap items-end gap-3">
@@ -72,8 +74,14 @@ export function RabaluxWeeklyStockImport({
             <Stat label="Jedinstvenih SKU" value={result.summary.uniqueSkus} />
             <Stat label="Ukupno komada" value={result.summary.totalUnits} />
             <Stat label="Pozitivno stanje" value={result.summary.positiveSkus} />
-            <Stat label="1–9 komada" value={result.summary.lowStockSkus} />
-            <Stat label="10+ komada" value={result.summary.activeThresholdSkus} />
+            <Stat
+              label={`1–${RABALUX_PUBLIC_STOCK_THRESHOLD - 1} komada`}
+              value={result.summary.lowStockSkus}
+            />
+            <Stat
+              label={`${RABALUX_PUBLIC_STOCK_THRESHOLD}+ komada`}
+              value={result.summary.activeThresholdSkus}
+            />
             <Stat label="Stanje 0" value={result.summary.zeroStockSkus} />
             <Stat label="Poklapanje sa sajtom" value={result.summary.matchedSkus} />
             <Stat label="Samo u fajlu" value={result.summary.fileOnlySkus} />
