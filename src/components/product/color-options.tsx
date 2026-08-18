@@ -63,35 +63,6 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
     : [];
 }
 
-function ProductColorDisplay({
-  colors,
-  label,
-}: {
-  colors: ProductColorOption[];
-  label: string;
-}) {
-  if (!colors.length) return null;
-
-  const color = colors[0]!;
-  return (
-    <div
-      className="flex flex-wrap items-center gap-1.5"
-      aria-label={label}
-      data-product-colors
-    >
-      <span className="mr-0.5 text-xs font-medium text-ink-500">Boja:</span>
-      <span
-        title={color.label}
-        className="inline-flex shrink-0 items-center rounded-full bg-white px-2 py-1 ring-1 ring-border/60"
-      >
-        <span className="text-xs font-semibold text-ink-800">
-          {color.label}
-        </span>
-      </span>
-    </div>
-  );
-}
-
 export function ProductColorOptions({
   product,
   className,
@@ -342,12 +313,6 @@ export function ProductColorOptions({
             ) : null}
           </div>
         </div>
-        {showLabels ? (
-          <ProductColorDisplay
-            colors={colors}
-            label={label}
-          />
-        ) : null}
       </div>
     );
   }
@@ -357,7 +322,26 @@ export function ProductColorOptions({
   }
 
   if (!showLabels) {
-    return <div className={className} aria-hidden />;
+    const color = colors[0]!;
+    return (
+      <div
+        className={cn("flex min-h-5 items-center gap-1.5", className)}
+        aria-label={`${label}: ${color.label}`}
+        data-product-colors
+      >
+        {color.colors.map((hex, index) => (
+          <span
+            key={`${hex}-${index}`}
+            className="size-3.5 rounded-full ring-1 ring-black/15"
+            style={{ backgroundColor: hex }}
+            aria-hidden
+          />
+        ))}
+        <span className="truncate text-[11px] font-medium text-ink-500">
+          {color.label}
+        </span>
+      </div>
+    );
   }
 
   const color = colors[0]!;
@@ -398,10 +382,6 @@ export function ProductColorOptions({
           </span>
         </span>
       </div>
-      <ProductColorDisplay
-        colors={colors}
-        label={label}
-      />
     </div>
   );
 }

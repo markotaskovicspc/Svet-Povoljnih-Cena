@@ -125,6 +125,7 @@ export function LandingPageEditor({
   const [endsAt, setEndsAt] = useState(toLocalDateTime(values.endsAt));
   const [blockType, setBlockType] = useState<LandingBlockType>("RICH_TEXT");
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const publishIssues = useMemo(() => validateLandingBlocksForPublish(blocks), [blocks]);
 
   const updateBlock = (id: string, next: LandingBlock) => {
@@ -267,8 +268,19 @@ export function LandingPageEditor({
             </div>
           </div>
           <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface shadow-sm">
-            <div className="relative aspect-[16/10] bg-brand-blue">
-              {heroImageUrl ? <Image src={heroImageUrl} alt="" fill unoptimized className="object-cover opacity-45" /> : null}
+            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-xs">
+              <span className="text-ink-500">Brzi pregled</span>
+              <div className="flex rounded-full bg-muted-bg p-0.5">
+                {(["desktop", "mobile"] as const).map((device) => (
+                  <button key={device} type="button" onClick={() => setPreviewDevice(device)} className={cn("rounded-full px-2 py-1", previewDevice === device && "bg-white shadow-sm")}>
+                    {device === "desktop" ? "Desktop" : "Mobilni"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[16/10]")}>
+              {(previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl) ? <Image src={previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl} alt="" fill unoptimized className="object-contain" /> : null}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
               <div className="relative z-10 p-5 text-white"><h2 className="font-display text-2xl font-bold">{title || "Naslov landing strane"}</h2>{lead ? <p className="mt-2 line-clamp-3 text-sm text-white/85">{lead}</p> : null}</div>
             </div>
             <div className="p-4 text-xs text-ink-500">Brzi nacrt hero sekcije · {blocks.filter((block) => block.visible).length} vidljivih blokova</div>
@@ -327,20 +339,130 @@ export function MediaUrlField({ pageId, label, name, value, onChange }: { pageId
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Greška."); }
     finally { setBusy(false); }
   };
-  return <div>
-    <p className="mb-1.5 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">{label}</p>
-    <div className="flex gap-2">
-      <Input name={name} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder="https://… ili izaberite iz biblioteke" />
-      <Button type="button" variant="outline" disabled={!pageId || busy} onClick={load}><ImagePlus className="size-4" /> Biblioteka</Button>
-      <label className={cn(buttonVariants({ variant: "outline" }), (!pageId || busy) && "pointer-events-none opacity-50")}>
-        <Plus className="size-4" /> Upload
-        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.currentTarget.value = ""; }} />
-      </label>
+  const remove = async (item: { name: string; url: string }) => {
+    if (!pageId || !window.confirm(`Obrisati medij „${item.name}”?`)) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/admin/landing-media", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, url: item.url }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error || "Brisanje nije uspelo.");
+      }
+      setMedia((current) => current.filter((entry) => entry.url !== item.url));
+      if (value === item.url) onChange("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Greška.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-[0.12em] text-ink-500">
+        {label}
+      </p>
+      <div className="flex gap-2">
+        <Input
+          name={name}
+          aria-label={label}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="https://… ili izaberite iz biblioteke"
+        />
+        {value ? (
+          <Button type="button" variant="ghost" onClick={() => onChange("")}>
+            <Trash2 className="size-4" /> Ukloni
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!pageId || busy}
+          onClick={load}
+        >
+          <ImagePlus className="size-4" /> Biblioteka
+        </Button>
+        <label
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            (!pageId || busy) && "pointer-events-none opacity-50",
+          )}
+        >
+          <Plus className="size-4" /> Upload
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/svg+xml,.svg"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void upload(file);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+      </div>
+      {!pageId ? (
+        <p className="mt-1 text-xs text-ink-500">
+          Prvo sačuvajte nacrt da biste otpremali slike.
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
+      {open ? (
+        <div className="mt-2 grid max-h-56 grid-cols-3 gap-2 overflow-y-auto rounded-lg border p-2">
+          {media.length ? (
+            media.map((item) => (
+              <div
+                key={item.url}
+                className="relative aspect-video overflow-hidden rounded-md border bg-white"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(item.url);
+                    setOpen(false);
+                  }}
+                  className="absolute inset-0"
+                >
+                  <span className="sr-only">Izaberi {item.name}</span>
+                  <Image
+                    src={item.url}
+                    alt=""
+                    fill
+                    unoptimized
+                    sizes="180px"
+                    className="object-contain"
+                  />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Obriši ${item.name}`}
+                  disabled={busy}
+                  onClick={() => void remove(item)}
+                  className="absolute top-1 right-1 z-10 grid size-7 place-items-center rounded-full bg-white/95 text-danger shadow ring-1 ring-border"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="col-span-3 p-3 text-center text-xs text-ink-500">
+              Biblioteka je prazna.
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
-    {!pageId ? <p className="mt-1 text-xs text-ink-500">Prvo sačuvajte nacrt da biste otpremali slike.</p> : null}
-    {error ? <p role="alert" className="mt-1 text-xs text-danger">{error}</p> : null}
-    {open ? <div className="mt-2 grid max-h-56 grid-cols-3 gap-2 overflow-y-auto rounded-lg border p-2">{media.length ? media.map((item) => <button type="button" key={item.url} onClick={() => { onChange(item.url); setOpen(false); }} className="relative aspect-video overflow-hidden rounded-md border bg-muted-bg"><Image src={item.url} alt={item.name} fill unoptimized className="object-cover" /></button>) : <p className="col-span-3 p-3 text-center text-xs text-ink-500">Biblioteka je prazna.</p>}</div> : null}
-  </div>;
+  );
 }
 
 function ProductPicker({ skus, onChange }: { skus: string[]; onChange: (skus: string[]) => void }) {

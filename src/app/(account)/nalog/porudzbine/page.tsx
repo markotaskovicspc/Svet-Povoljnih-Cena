@@ -45,6 +45,7 @@ export default async function AccountOrdersPage() {
             <Link
               key={order.id}
               href={`/nalog/porudzbine/${encodeURIComponent(order.number)}`}
+              prefetch={false}
               className="group rounded-lg border border-border/70 bg-surface p-4 transition hover:border-walnut/50 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
             >
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

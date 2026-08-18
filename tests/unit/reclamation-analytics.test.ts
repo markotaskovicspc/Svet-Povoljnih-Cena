@@ -103,7 +103,10 @@ describe("reclamation analytics", () => {
         { supplier: "Rabalux", deliveredItems: 100 },
         { supplier: "Eglo", deliveredItems: 50 },
       ],
-      [{ sku: "SKU-05", deliveredItems: 10 }],
+      [
+        { sku: "SKU-05", deliveredItems: 10 },
+        { sku: "SKU-00", deliveredItems: 1 },
+      ],
       NOW,
     );
 
@@ -119,6 +122,13 @@ describe("reclamation analytics", () => {
       reclamations: 2,
       deliveredItems: 10,
       reclamationRate: 20,
+    });
+    expect(analytics.topProductsByRate).toHaveLength(20);
+    expect(analytics.topProductsByRate[0]).toMatchObject({
+      sku: "SKU-00",
+      reclamations: 1,
+      deliveredItems: 1,
+      reclamationRate: 100,
     });
   });
 

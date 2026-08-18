@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_IMAGES =
-  "image/png,image/jpeg,image/webp,image/avif,.png,.jpg,.jpeg,.webp,.avif";
+  "image/png,image/jpeg,image/webp,image/avif,image/svg+xml,.png,.jpg,.jpeg,.webp,.avif,.svg";
 
 export function BannerImageUpload({
   name,
@@ -105,6 +105,35 @@ export function BannerImageUpload({
   async function stageFile(file: File, selection: number) {
     let stagedKey = "";
     try {
+      if (file.type === "image/svg+xml") {
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("placement", placement);
+        formData.set("variant", variant);
+        const response = await fetch("/api/admin/banner-uploads", {
+          method: "POST",
+          body: formData,
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.key) {
+          throw new Error(payload?.error ?? "Slanje SVG slike nije uspelo.");
+        }
+        stagedKey = String(payload.key);
+        if (selectionRef.current !== selection) {
+          cleanupStagedUpload(stagedKey);
+          return;
+        }
+        uploadedKeyRef.current = stagedKey;
+        setUploadedKey(stagedKey);
+        setUploading(false);
+        setError("");
+        if (inputRef.current) {
+          inputRef.current.value = "";
+          inputRef.current.setCustomValidity("");
+        }
+        return;
+      }
+
       const presignResponse = await fetch("/api/admin/banner-uploads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -227,7 +256,7 @@ export function BannerImageUpload({
           {label}
         </span>
         <span className="text-[11px] text-ink-400">
-          PNG, JPG, WebP ili AVIF · do {BANNER_IMAGE_MAX_BYTES / 1024 / 1024} MB
+          PNG, JPG, WebP, AVIF ili SVG · do {BANNER_IMAGE_MAX_BYTES / 1024 / 1024} MB
         </span>
       </div>
 

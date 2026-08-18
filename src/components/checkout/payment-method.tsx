@@ -124,7 +124,7 @@ export function PaymentMethodStep({
   }
 
   return (
-    <fieldset className="grid gap-3 md:grid-cols-2 lg:gap-2.5">
+    <fieldset className="flex snap-x gap-3 overflow-x-auto pb-1 lg:gap-2.5">
       {methods.map((method) => {
         const meta = METHOD_META[method.id];
         const Icon = meta.icon;
@@ -134,7 +134,7 @@ export function PaymentMethodStep({
             key={method.id}
             htmlFor={`pay-${method.id}`}
             className={cn(
-              "bg-surface ring-border/60 group flex cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
+              "bg-surface ring-border/60 group flex min-w-[180px] flex-1 snap-start cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
               "hover:ring-walnut/40",
               checked && "ring-walnut shadow-soft-2 ring-2",
             )}

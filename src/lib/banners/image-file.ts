@@ -11,6 +11,7 @@ const ALLOWED_IMAGE_EXTENSIONS = {
   "image/png": ["png"],
   "image/webp": ["webp"],
   "image/avif": ["avif"],
+  "image/svg+xml": ["svg"],
 } as const;
 
 type BannerImageFileMetadata = Pick<File, "name" | "size" | "type">;
@@ -27,7 +28,7 @@ export function validateBannerImageFile(file: BannerImageFileMetadata) {
     file.type as keyof typeof ALLOWED_IMAGE_EXTENSIONS
   ] as readonly string[] | undefined;
   if (!allowedExtensions) {
-    throw new Error("Podržani formati slike su PNG, JPG, WebP i AVIF.");
+    throw new Error("Podržani formati slike su PNG, JPG, WebP, AVIF i SVG.");
   }
 
   const extension = file.name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
@@ -72,7 +73,7 @@ export function getBannerStagingImageKey(
   }
 
   const match = filename?.match(
-    /^(\d{10,})-([a-f0-9]{16})-(desktop|mobile)\.(jpg|jpeg|png|webp|avif)$/,
+    /^(\d{10,})-([a-f0-9]{16})-(desktop|mobile)\.(jpg|jpeg|png|webp|avif|svg)$/,
   );
   return match?.[3] === expected.variant ? key : null;
 }

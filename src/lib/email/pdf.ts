@@ -1,5 +1,7 @@
 import "server-only";
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 /**
@@ -22,6 +24,19 @@ const PAGE_WIDTH = 595; // A4 in points
 const PAGE_HEIGHT = 842;
 const MARGIN_X = 50;
 const MARGIN_Y = 60;
+const HEADER_HEIGHT = 62;
+const LOGO_WIDTH = 240;
+const LOGO_HEIGHT = 39.8;
+
+const LOGO_JPEG = (() => {
+  try {
+    return readFileSync(
+      join(process.cwd(), "public", "documents", "garantni-list-logo.jpeg"),
+    );
+  } catch {
+    return null;
+  }
+})();
 
 interface Line {
   text: string;
@@ -31,20 +46,32 @@ interface Line {
 }
 
 export function buildPdf(title: string, lines: Line[]): Buffer {
-  const sanitized: Line[] = [{ text: title, bold: true, size: TITLE_SIZE }, { text: "", spaceAbove: 8 }, ...lines].map(
-    (l) => ({ ...l, text: transliterate(l.text) }),
-  );
+  const sanitized = [
+    { text: title, bold: true, size: TITLE_SIZE },
+    { text: "", spaceAbove: 8 },
+    ...lines,
+  ]
+    .map((line) => ({ ...line, text: transliterate(line.text) }))
+    .flatMap((line) =>
+      wrapPdfText(line.text, line.size ?? FONT_SIZE, Boolean(line.bold)).map(
+        (text, index) => ({
+          ...line,
+          text,
+          spaceAbove: index === 0 ? line.spaceAbove : 0,
+        }),
+      ),
+    );
 
   // Paginate before creating the PDF objects so no line is silently dropped.
   const pages: string[][] = [[]];
-  let cursorY = PAGE_HEIGHT - MARGIN_Y;
+  let cursorY = PAGE_HEIGHT - MARGIN_Y - HEADER_HEIGHT;
   for (const line of sanitized) {
     const size = line.size ?? FONT_SIZE;
     const font = line.bold ? "/F2" : "/F1";
     const advance = (line.spaceAbove ?? 0) + (line.size ? line.size + 4 : LINE_HEIGHT);
     if (cursorY - advance < MARGIN_Y && pages.at(-1)!.length) {
       pages.push([]);
-      cursorY = PAGE_HEIGHT - MARGIN_Y;
+      cursorY = PAGE_HEIGHT - MARGIN_Y - HEADER_HEIGHT;
     }
     cursorY -= advance;
     pages.at(-1)!.push(
@@ -63,13 +90,31 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
   const fontHelveticaBold = push(
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   );
+  const logoObject = LOGO_JPEG
+    ? push(
+        `<< /Type /XObject /Subtype /Image /Width 1200 /Height 199 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${LOGO_JPEG.length * 2 + 1} >>\nstream\n${LOGO_JPEG.toString("hex").toUpperCase()}>\nendstream`,
+      )
+    : null;
   const pageObjects = pages.map((page) => {
-    const stream = `BT\n${page.join("\n")}\nET`;
+    const brandedHeader = [
+      logoObject
+        ? `q\n${LOGO_WIDTH} 0 0 ${LOGO_HEIGHT} ${MARGIN_X} ${PAGE_HEIGHT - 50} cm\n/Logo Do\nQ`
+        : "",
+      "0 0.207 0.475 rg",
+      `${MARGIN_X} ${PAGE_HEIGHT - 63} ${PAGE_WIDTH - MARGIN_X * 2} 3 re f`,
+      "0 g",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const stream = `${brandedHeader}\nBT\n${page.join("\n")}\nET`;
     const contentObj = push(
       `<< /Length ${Buffer.byteLength(stream, "binary")} >>\nstream\n${stream}\nendstream`,
     );
+    const logoResource = logoObject
+      ? ` /XObject << /Logo ${logoObject} 0 R >>`
+      : "";
     return push(
-      `<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontHelvetica} 0 R /F2 ${fontHelveticaBold} 0 R >> >> >>`,
+      `<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Contents ${contentObj} 0 R /Resources << /Font << /F1 ${fontHelvetica} 0 R /F2 ${fontHelveticaBold} 0 R >>${logoResource} >> >>`,
     );
   });
   const pagesObj = push(
@@ -107,6 +152,34 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
 
 function pdfEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function wrapPdfText(text: string, size: number, bold: boolean) {
+  if (!text) return [""];
+  const usableWidth = PAGE_WIDTH - MARGIN_X * 2;
+  const averageGlyphWidth = size * (bold ? 0.57 : 0.52);
+  const maxCharacters = Math.max(16, Math.floor(usableWidth / averageGlyphWidth));
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const chunks = Array.from(
+      { length: Math.ceil(word.length / maxCharacters) },
+      (_, index) => word.slice(index * maxCharacters, (index + 1) * maxCharacters),
+    );
+    for (const chunk of chunks) {
+      const next = current ? `${current} ${chunk}` : chunk;
+      if (next.length <= maxCharacters) {
+        current = next;
+      } else {
+        if (current) lines.push(current);
+        current = chunk;
+      }
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
 const TRANSLIT: Record<string, string> = {
@@ -154,7 +227,6 @@ const fmt = (n: number) => `${n.toLocaleString("sr-Latn-RS").replace(/\u00A0/g, 
 
 export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
   const lines: Line[] = [
-    { text: `Predračun / račun za kupca ${order.number}`, bold: true, size: 13 },
     { text: `Datum: ${order.createdAt.toLocaleDateString("sr-Latn-RS")}` },
     { text: "" },
     { text: "Prodavac:", bold: true },
@@ -205,12 +277,11 @@ export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
   lines.push({ text: "Ovaj dokument je interna potvrda kupovine za kupca." });
   lines.push({ text: MERCHANT_LEGAL_INFO.pdvNote });
 
-  return buildPdf("Predračun / račun", lines);
+  return buildPdf(`Predračun / račun ${order.number}`, lines);
 }
 
 export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
   const lines: Line[] = [
-    { text: "Obrazac za odustanak od ugovora na daljinu" },
     { text: "(Zakon o zaštiti potrošača, član 28)", spaceAbove: 2 },
     { text: "" },
     {
@@ -226,9 +297,17 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
     {
       text: "Ovim obaveštavam da odustajem od kupovine sledećih artikala:",
     },
+    {
+      text: "Zaokružite artikal koji vraćate i upišite količinu.",
+      bold: true,
+      spaceAbove: 4,
+    },
   ];
   for (const it of order.items) {
-    lines.push({ text: `- ${it.qty} x ${it.name} (${it.sku})` });
+    lines.push({
+      text: `(   ) ${it.name} (${it.sku}) | Količina: __________`,
+      spaceAbove: 3,
+    });
   }
   lines.push({ text: "" });
   lines.push({ text: "Datum: __________________________" });

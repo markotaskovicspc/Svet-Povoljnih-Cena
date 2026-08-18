@@ -10,6 +10,7 @@ import {
 } from "@/lib/banners/image-file";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
+import { validateSafeSvgBytes } from "@/lib/media/safe-svg";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,51 @@ function noStoreJson(body: unknown, init?: ResponseInit) {
 
 export async function POST(request: Request) {
   const admin = await requireAdminAction(["CONTENT"]);
+  if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const formData = await request.formData();
+    const file = formData.get("file");
+    const placement = formData.get("placement");
+    const variant = formData.get("variant");
+    const parsed = uploadSchema.safeParse({
+      filename: file instanceof File ? file.name : "",
+      contentType: file instanceof File ? file.type : "",
+      bytes: file instanceof File ? file.size : 0,
+      placement,
+      variant,
+    });
+    if (!parsed.success || !(file instanceof File)) {
+      return noStoreJson({ error: "SVG upload nije ispravan." }, { status: 400 });
+    }
+    let extension: string;
+    let bytes: Buffer;
+    try {
+      extension = validateBannerImageFile(file);
+      if (extension !== "svg") throw new Error("Direktan upload je namenjen SVG fajlu.");
+      bytes = Buffer.from(await file.arrayBuffer());
+      validateSafeSvgBytes(bytes);
+    } catch (error) {
+      return noStoreJson(
+        { error: error instanceof Error ? error.message : "SVG nije ispravan." },
+        { status: 400 },
+      );
+    }
+    const key = [
+      BANNER_IMAGE_STAGING_PREFIX.replace(/\/$/, ""),
+      parsed.data.placement.toLowerCase(),
+      admin.id,
+      `${Date.now()}-${randomBytes(8).toString("hex")}-${parsed.data.variant}.${extension}`,
+    ].join("/");
+    const { error } = await createAdminClient()
+      .storage.from(getProductMediaBucket())
+      .upload(key, bytes, {
+        cacheControl: "3600",
+        contentType: "image/svg+xml",
+        upsert: false,
+      });
+    if (error) return noStoreJson({ error: error.message }, { status: 502 });
+    return noStoreJson({ key, direct: true });
+  }
+
   const input = uploadSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return noStoreJson(
@@ -51,6 +97,9 @@ export async function POST(request: Request) {
       type: input.data.contentType,
       size: input.data.bytes,
     });
+    if (extension === "svg") {
+      throw new Error("SVG se šalje kroz bezbednu direktnu proveru.");
+    }
   } catch (error) {
     return noStoreJson(
       {

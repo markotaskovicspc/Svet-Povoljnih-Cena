@@ -248,6 +248,12 @@ export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
           setFormError("Porudžbina nije pronađena.");
         } else if (data?.reason === "ITEM_NOT_FOUND") {
           setFormError("Izabrani artikal nije pronađen u porudžbini.");
+        } else if (data?.reason === "UNAUTHORIZED") {
+          setFormError("Ova porudžbina nije povezana sa vašim nalogom.");
+        } else if (data?.reason === "INVALID_PHOTO") {
+          setFormError(
+            "Fotografija nije ispravno otpremljena. Uklonite je, dodajte ponovo i pokušajte još jednom.",
+          );
         } else if (data?.reason === "QUANTITY_EXCEEDED") {
           setFormError(
             "Izabrana količina prelazi preostalu kupljenu količinu. Osvežite stranicu i pokušajte ponovo.",

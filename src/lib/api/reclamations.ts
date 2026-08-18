@@ -7,6 +7,7 @@ import {
   verifyReclamationUploads,
 } from "@/lib/api/uploads";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { logOperationalError } from "@/lib/monitoring";
 import { formatProductDisplayName } from "@/lib/product-name";
 
 /**
@@ -237,11 +238,20 @@ async function createReclamationRecord(
   }
 
   if (item.supplierExternalSku) {
-    await enqueueBackgroundJob({
-      kind: "SUPPLIER_RECLAMATION_EMAIL",
-      payload: { reclamationId: result.id },
-      idempotencyKey: `supplier-reclamation:${result.id}`,
-    });
+    try {
+      await enqueueBackgroundJob({
+        kind: "SUPPLIER_RECLAMATION_EMAIL",
+        payload: { reclamationId: result.id },
+        idempotencyKey: `supplier-reclamation:${result.id}`,
+      });
+    } catch (error) {
+      // The reclamation is already committed. A transient background-queue
+      // failure must not turn a successful customer submission into a 500.
+      logOperationalError("reclamation.supplier_notification_enqueue_failed", error, {
+        reclamationId: result.id,
+        sku: item.sku,
+      });
+    }
   }
 
   return { ok: true, id: result.id, number: result.number };

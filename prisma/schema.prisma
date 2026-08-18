@@ -2116,6 +2116,7 @@ model PurchaseOrder {
   transportTypeId      String?
   orderDate            DateTime?
   loadingDate          DateTime?
+  portDeliveryDate     DateTime?
   deliveryDate         DateTime?
   totalVolume          Decimal?            @db.Decimal(12, 3)
   totalWeight          Decimal?            @db.Decimal(12, 3)

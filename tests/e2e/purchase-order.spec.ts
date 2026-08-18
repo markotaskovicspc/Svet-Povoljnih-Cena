@@ -239,6 +239,9 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
           }),
         ).toBeAttached();
       }
+      await expect(
+        page.getByRole("columnheader", { name: "Datum isporuke u luku" }),
+      ).toHaveCount(0);
     });
 
     await test.step("automatic sequence creates a dated draft and opens its detail", async () => {
@@ -320,15 +323,20 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await header.locator('[name="transportTypeId"]').selectOption(transportId);
       await header.locator('[name="orderDate"]').fill("2026-07-01");
       await header.locator('[name="loadingDate"]').fill("2026-07-10");
+      await header.locator('[name="portDeliveryDate"]').fill("2026-07-20");
+      await expect(header.locator('[name="deliveryDate"]')).toHaveValue(
+        "2026-08-04",
+      );
+      await header.locator('[name="deliveryDate"]').fill("2026-08-05");
       await header.locator('[name="exchangeRate"]').fill("120");
       await header.locator('[name="freightCost"]').fill("100");
       await header.locator('[name="freightCurrency"]').selectOption("EUR");
       await header.locator('[name="freightExchangeRate"]').fill("120");
       await header.getByRole("button", { name: "Sačuvaj zaglavlje" }).click();
       await expect(header.getByRole("status")).toBeVisible();
-      await expect(
-        page.getByRole("textbox", { name: /^Datum isporuke/ }),
-      ).toHaveValue("2026-07-14");
+      await expect(header.locator('[name="deliveryDate"]')).toHaveValue(
+        "2026-08-05",
+      );
       await expect(header.locator('[name="supplierId"]')).toHaveValue(supplierId);
       await expect(header.locator('[name="loadingLocationId"]')).toHaveValue(
         loadingLocationId,
@@ -345,7 +353,10 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       expect(saved.currency).toBe("EUR");
       expect(Number(saved.exchangeRate)).toBe(120);
       expect(saved.parity).toBe("DAP");
-      expect(saved.deliveryDate?.toISOString().slice(0, 10)).toBe("2026-07-14");
+      expect(saved.portDeliveryDate?.toISOString().slice(0, 10)).toBe(
+        "2026-07-20",
+      );
+      expect(saved.deliveryDate?.toISOString().slice(0, 10)).toBe("2026-08-05");
     });
 
     await test.step("SKU lookup snapshots all article data and highlights an invalid package", async () => {

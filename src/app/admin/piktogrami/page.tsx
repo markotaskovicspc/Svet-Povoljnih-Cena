@@ -14,6 +14,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { resolveMobileTabHref } from "@/lib/mobile-shortcuts/server";
+import { validateSafeSvgBytes } from "@/lib/media/safe-svg";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -46,9 +47,11 @@ function formatMobileShortcutCount(count: number) {
 
 async function uploadPictogramIcon(code: string, file: File) {
   const extension = validatePictogramIconFile(file);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (extension === "svg") validateSafeSvgBytes(bytes);
   const key = `${PICTOGRAM_ICON_PREFIX}${code.toLowerCase()}-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
-  const { error } = await storage.upload(key, Buffer.from(await file.arrayBuffer()), {
+  const { error } = await storage.upload(key, bytes, {
     cacheControl: "31536000",
     contentType: file.type,
     upsert: false,
@@ -360,12 +363,12 @@ function PictogramForm({
       </Field>
       <Field
         label={values?.iconUrl ? "Zameni ikonu" : "Ikona"}
-        hint="PNG, JPG ili WebP, najviše 750 KB. Kvadratna slika sa providnom pozadinom daje najbolji rezultat."
+        hint="PNG, JPG, WebP ili bezbedan SVG, najviše 750 KB. Kvadratna slika sa providnom pozadinom daje najbolji rezultat."
       >
         <Input
           name="iconFile"
           type="file"
-          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg"
           required={!values?.iconUrl}
         />
       </Field>

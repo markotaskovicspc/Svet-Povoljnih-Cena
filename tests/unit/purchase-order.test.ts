@@ -37,6 +37,18 @@ describe("ERP module 4 purchase-order rules", () => {
     ).toBe("2026-07-22T00:00:00.000Z");
   });
 
+  it("predlaže isporuku 15 dana posle isporuke u luku", () => {
+    expect(
+      calculateDeliveryDate({
+        orderDate: new Date("2026-07-01T00:00:00.000Z"),
+        loadingDate: new Date("2026-07-10T00:00:00.000Z"),
+        portDeliveryDate: new Date("2026-07-20T00:00:00.000Z"),
+        deliveryDays: 30,
+        transitDays: 4,
+      })?.toISOString(),
+    ).toBe("2026-08-04T00:00:00.000Z");
+  });
+
   it("uses a complete container pair first, then a complete transport package", () => {
     expect(
       calculateUnitLogistics({

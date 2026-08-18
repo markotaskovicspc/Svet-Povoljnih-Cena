@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dbMocks = vi.hoisted(() => ({
   productFindFirst: vi.fn(),
   purchasePriceCreate: vi.fn(),
+  purchasePriceFindFirst: vi.fn(),
   purchasePriceUpdate: vi.fn(),
   purchasePriceFindUnique: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -14,9 +16,11 @@ vi.mock("@/lib/db", () => ({
     },
     purchasePrice: {
       create: dbMocks.purchasePriceCreate,
+      findFirst: dbMocks.purchasePriceFindFirst,
       update: dbMocks.purchasePriceUpdate,
       findUnique: dbMocks.purchasePriceFindUnique,
     },
+    $transaction: dbMocks.transaction,
   },
 }));
 
@@ -48,10 +52,20 @@ describe("purchase-price server persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbMocks.productFindFirst.mockResolvedValue(article);
+    dbMocks.purchasePriceFindFirst.mockResolvedValue(null);
     dbMocks.purchasePriceCreate.mockImplementation(async ({ data }) => ({
       id: "price-1",
       ...data,
     }));
+    dbMocks.transaction.mockImplementation(async (callback) =>
+      callback({
+        purchasePrice: {
+          create: dbMocks.purchasePriceCreate,
+          findFirst: dbMocks.purchasePriceFindFirst,
+          update: dbMocks.purchasePriceUpdate,
+        },
+      }),
+    );
     dbMocks.purchasePriceUpdate.mockResolvedValue({ id: "price-1" });
     dbMocks.purchasePriceFindUnique.mockResolvedValue({
       validFrom: new Date("2030-01-01T00:00:00.000Z"),
@@ -102,6 +116,47 @@ describe("purchase-price server persistence", () => {
 
     expect(dbMocks.purchasePriceCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ price: "0", validTo: null }),
+    });
+  });
+
+  it("closes the previous overlapping period one day before the new price", async () => {
+    dbMocks.purchasePriceFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "previous", validTo: null })
+      .mockResolvedValueOnce(null);
+
+    await createPurchasePrice({
+      sku: "SKU-001",
+      purchasePrice: 10,
+      validFrom: "2030-02-01",
+      validTo: "",
+    });
+
+    expect(dbMocks.purchasePriceUpdate).toHaveBeenCalledWith({
+      where: { id: "previous" },
+      data: { validTo: new Date("2030-01-31T00:00:00.000Z") },
+    });
+  });
+
+  it("bounds a historical insertion before the following period", async () => {
+    dbMocks.purchasePriceFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        validFrom: new Date("2030-03-01T00:00:00.000Z"),
+      });
+
+    await createPurchasePrice({
+      sku: "SKU-001",
+      purchasePrice: 10,
+      validFrom: "2030-02-01",
+      validTo: "",
+    });
+
+    expect(dbMocks.purchasePriceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        validTo: new Date("2030-02-28T00:00:00.000Z"),
+      }),
     });
   });
 

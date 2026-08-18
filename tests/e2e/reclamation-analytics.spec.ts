@@ -297,6 +297,11 @@ test.describe("Admin analitika reklamacija", () => {
       });
       await expect(pageHeading).toHaveCount(1);
       await expect(pageHeading).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Obrada reklamacija" }),
+      ).toBeVisible();
+      await page.getByRole("link", { name: "Reklamacije – izveštaji" }).click();
+      await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-izvestaji$/);
     });
 
     await test.step("sve sekcije zahteva su prikazane", async () => {
@@ -306,7 +311,6 @@ test.describe("Admin analitika reklamacija", () => {
         "Reklamacije po načinu rešavanja",
         "Isti pokazatelji po dobavljaču",
         "Top 20 artikala sa najviše reklamacija",
-        "Obrada reklamacija",
       ]) {
         await expect(page.getByRole("heading", { name: heading })).toBeVisible();
       }
@@ -370,8 +374,8 @@ test.describe("Admin analitika reklamacija", () => {
     });
 
     await test.step("top artikli koriste samo isporučene količine", async () => {
-      const topSection = page.locator('section[aria-labelledby="top-products"]');
-      const productRow = topSection.locator("tbody tr").filter({
+      const countRanking = page.locator('[data-reclamation-ranking="count"]');
+      const productRow = countRanking.locator("tbody tr").filter({
         hasText: fixture.skuA,
       });
       await expect(productRow).toHaveCount(1);
@@ -384,9 +388,17 @@ test.describe("Admin analitika reklamacija", () => {
         "100",
         "3,0%",
       ]);
+      await expect(
+        page.getByRole("heading", {
+          name: "Top 20 artikala po procentu reklamacija",
+        }),
+      ).toBeVisible();
     });
 
     await test.step("status filter utiče samo na operativni spisak", async () => {
+      await page.goto("/admin/erp/reklamacije-dnevnik", {
+        waitUntil: "domcontentloaded",
+      });
       await page.locator('a[href="/admin/erp/reklamacije-dnevnik?status=RESENO"]').click();
       await expect(page).toHaveURL(/status=RESENO/);
       const operations = page.locator(
@@ -397,7 +409,9 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(
         operations.getByText(`${prefix}-A-OPEN-31`, { exact: true }),
       ).toHaveCount(0);
-      await expect(page.getByRole("heading", { name: "Ukupni pokazatelji" })).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Reklamacije – izveštaji" }),
+      ).toBeVisible();
     });
 
     await test.step("postojeća promena statusa i istorija nisu pokvarene", async () => {

@@ -18,6 +18,7 @@ import {
   toBannerImageUploadBody,
   validateBannerImageFile,
 } from "@/lib/banners/image-file";
+import { validateSafeSvgBytes } from "@/lib/media/safe-svg";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -149,10 +150,18 @@ async function persistBannerImage(
   input: Buffer,
   placement: BannerPlacement,
   variant: "desktop" | "mobile",
+  sourceExtension: string,
 ) {
   let output: Buffer;
+  let outputExtension = "webp";
+  let contentType = "image/webp";
 
-  try {
+  if (sourceExtension === "svg") {
+    validateSafeSvgBytes(input);
+    output = input;
+    outputExtension = "svg";
+    contentType = "image/svg+xml";
+  } else try {
     const metadata = await sharp(input, {
       failOn: "warning",
       limitInputPixels: 80_000_000,
@@ -179,11 +188,11 @@ async function persistBannerImage(
     );
   }
 
-  const key = `${BANNER_IMAGE_PREFIX}${placement.toLowerCase()}/${Date.now()}-${randomBytes(8).toString("hex")}-${variant}.webp`;
+  const key = `${BANNER_IMAGE_PREFIX}${placement.toLowerCase()}/${Date.now()}-${randomBytes(8).toString("hex")}-${variant}.${outputExtension}`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
   const { error } = await storage.upload(key, toBannerImageUploadBody(output), {
     cacheControl: "31536000",
-    contentType: "image/webp",
+    contentType,
     upsert: false,
   });
   if (error) throw new Error(`Upload slike nije uspeo: ${error.message}`);
@@ -219,11 +228,12 @@ async function uploadBannerImage(
   placement: BannerPlacement,
   variant: "desktop" | "mobile",
 ) {
-  validateBannerImageFile(file);
+  const extension = validateBannerImageFile(file);
   return persistBannerImage(
     Buffer.from(await file.arrayBuffer()),
     placement,
     variant,
+    extension,
   );
 }
 
@@ -246,11 +256,16 @@ async function uploadStagedBannerImage(
     if (error || !data) {
       throw new Error(error?.message ?? "Otpremljena slika nije pronađena.");
     }
-    validateBannerImageFile({ name: key, size: data.size, type: data.type });
+    const extension = validateBannerImageFile({
+      name: key,
+      size: data.size,
+      type: key.endsWith(".svg") ? "image/svg+xml" : data.type,
+    });
     return await persistBannerImage(
       Buffer.from(await data.arrayBuffer()),
       placement,
       variant,
+      extension,
     );
   } finally {
     const { error } = await storage.remove([key]);

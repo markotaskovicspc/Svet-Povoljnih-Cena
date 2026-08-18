@@ -109,14 +109,14 @@ export function OrderSummary({
       className="lg:sticky lg:top-28 lg:self-start"
     >
       <div className="bg-surface ring-border/60 flex flex-col gap-4 rounded-2xl p-5 shadow-soft-2 ring-1">
-        <h2 className="font-display text-lg text-ink-900">Sažetak porudžbine</h2>
+        <h2 className="order-1 font-display text-lg text-ink-900">Sažetak porudžbine</h2>
 
         {!hydrated ? (
-          <div className="flex h-24 items-center justify-center text-ink-500">
+          <div className="order-7 flex h-24 items-center justify-center text-ink-500">
             <Loader2 className="size-4 animate-spin" aria-hidden />
           </div>
         ) : !collapseLines ? (
-          <ul className="divide-border/60 max-h-72 divide-y overflow-y-auto pr-1">
+          <ul className="order-7 max-h-72 divide-y divide-border/60 overflow-y-auto border-t border-border/60 pt-2 pr-1">
             {lines.map((l) => (
               <li
                 key={l.sku}
@@ -150,7 +150,7 @@ export function OrderSummary({
           </ul>
         ) : null}
 
-        <dl className="border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
+        <dl className="order-2 border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
           <Row label="Vrednost artikala" value={formatRsd(totals.itemsFull)} />
           {totals.savings > 0 ? (
             <Row
@@ -188,7 +188,7 @@ export function OrderSummary({
           ) : null}
         </dl>
 
-        <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
+        <div className="order-3 border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">
             Ukupno za plaćanje
           </span>
@@ -198,17 +198,17 @@ export function OrderSummary({
         </div>
 
         {paymentMethod ? (
-          <p className="text-[11px] text-ink-500">
+          <p className="order-4 text-[11px] text-ink-500">
             Način plaćanja: {getPaymentLabel(paymentMethod, paymentMethods)}
           </p>
         ) : null}
-        <p className="text-[11px] text-ink-500">
+        <p className="order-5 text-[11px] text-ink-500">
           Sve cene su iskazane u RSD sa dve decimale. PDV je uključen u cenu.
         </p>
 
-        {cta}
+        {cta ? <div className="order-6">{cta}</div> : null}
 
-        <p className="border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">
+        <p className="order-8 border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">
           <ShieldCheck className="size-3.5" aria-hidden />
           Sigurna naplata · 256-bit TLS · IPS / 3-D Secure
         </p>

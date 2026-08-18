@@ -10,6 +10,7 @@ import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
 import { PurchaseOrderSupplierFields } from "@/components/admin/purchase-order-supplier-fields";
+import { PurchaseOrderDeliveryFields } from "@/components/admin/purchase-order-delivery-fields";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,6 +81,8 @@ const headerSchema = z.object({
   transportTypeId: z.string().min(1, "Izaberite tip transporta."),
   orderDate: z.iso.date(),
   loadingDate: z.union([z.iso.date(), z.literal("")]),
+  portDeliveryDate: z.union([z.iso.date(), z.literal("")]),
+  deliveryDate: z.union([z.iso.date(), z.literal("")]),
   exchangeRate: z.coerce.number().positive().max(1_000_000),
   freightCost: z.coerce.number().nonnegative().max(100_000_000),
   freightCurrency: z.nativeEnum(ErpCurrency),
@@ -160,6 +163,18 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
       const loadingDate = data.loadingDate
         ? new Date(`${data.loadingDate}T00:00:00.000Z`)
         : null;
+      const portDeliveryDate = data.portDeliveryDate
+        ? new Date(`${data.portDeliveryDate}T00:00:00.000Z`)
+        : null;
+      const deliveryDate = data.deliveryDate
+        ? new Date(`${data.deliveryDate}T00:00:00.000Z`)
+        : calculateDeliveryDate({
+            orderDate,
+            loadingDate,
+            portDeliveryDate,
+            deliveryDays: supplier.deliveryDays,
+            transitDays: supplier.transitDays,
+          });
       const exchangeRate =
         supplier.currency === ErpCurrency.RSD ? 1 : data.exchangeRate;
       const freightExchangeRate =
@@ -173,12 +188,8 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           transportType: transport.name,
           orderDate,
           loadingDate,
-          deliveryDate: calculateDeliveryDate({
-            orderDate,
-            loadingDate,
-            deliveryDays: supplier.deliveryDays,
-            transitDays: supplier.transitDays,
-          }),
+          portDeliveryDate,
+          deliveryDate,
           currency: supplier.currency,
           exchangeRate,
           parity: supplier.parity,
@@ -532,9 +543,10 @@ export default async function PurchaseOrderEditorPage({
                 <Field label="Datum utovara">
                   <Input name="loadingDate" type="date" defaultValue={dtLocal(order.loadingDate)} />
                 </Field>
-                <Field label="Datum isporuke" hint="Automatski: datum utovara + tranzit, odnosno datum porudžbine + rok isporuke.">
-                  <Input value={dtLocal(order.deliveryDate)} readOnly />
-                </Field>
+                <PurchaseOrderDeliveryFields
+                  initialPortDeliveryDate={dtLocal(order.portDeliveryDate)}
+                  initialDeliveryDate={dtLocal(order.deliveryDate)}
+                />
                 <Field label="Tip transporta">
                   <select
                     name="transportTypeId"

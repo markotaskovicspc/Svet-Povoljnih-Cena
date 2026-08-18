@@ -108,11 +108,14 @@ export function isPackQuantityValid(qty: number, packQty: number | null | undefi
 export function calculateDeliveryDate(input: {
   orderDate: Date | null;
   loadingDate: Date | null;
+  portDeliveryDate?: Date | null;
   deliveryDays: number | null;
   transitDays: number | null;
 }) {
   const base =
-    input.loadingDate && input.transitDays != null
+    input.portDeliveryDate
+      ? { date: input.portDeliveryDate, days: 15 }
+      : input.loadingDate && input.transitDays != null
       ? { date: input.loadingDate, days: input.transitDays }
       : input.orderDate && input.deliveryDays != null
         ? { date: input.orderDate, days: input.deliveryDays }

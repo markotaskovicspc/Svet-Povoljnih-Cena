@@ -334,6 +334,41 @@ async function recordCheckoutCompleted(
   });
 }
 
+async function saveLatestCheckoutAddress(
+  tx: Prisma.TransactionClient,
+  userId: string | null,
+  address: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    street: string;
+    city: string;
+    postalCode: string;
+    xExpressTownId?: number | null;
+    xExpressStreetId?: number | null;
+    country: string;
+    companyName?: string | null;
+    pib?: string | null;
+  },
+) {
+  if (!userId) return;
+  const current = await tx.address.findFirst({
+    where: { userId },
+    orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+    select: { id: true },
+  });
+  await tx.address.updateMany({
+    where: { userId, isDefault: true },
+    data: { isDefault: false },
+  });
+  const data = { ...address, isDefault: true };
+  if (current) {
+    await tx.address.update({ where: { id: current.id }, data });
+  } else {
+    await tx.address.create({ data: { ...data, userId } });
+  }
+}
+
 async function findLockedCheckoutSessionOrder(
   tx: Prisma.TransactionClient,
   checkoutSessionId: string,
@@ -794,6 +829,19 @@ export async function createOrder(
           input.checkoutSessionId,
         );
         if (existingOrder) {
+          await saveLatestCheckoutAddress(tx, userId, {
+            firstName: ship.firstName,
+            lastName: ship.lastName,
+            phone: ship.phone,
+            street: ship.street,
+            city: xExpressTown?.name ?? ship.city,
+            postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+            xExpressTownId: xExpressTown?.id ?? null,
+            xExpressStreetId: xExpressStreet?.id ?? null,
+            country: ship.country,
+            companyName: shipIsBusiness ? ship.companyName ?? null : null,
+            pib: shipIsBusiness ? ship.pib ?? null : null,
+          });
           await tx.order.update({
             where: { id: existingOrder.id },
             data: {
@@ -902,6 +950,19 @@ export async function createOrder(
           firstPurchaseDiscount: true,
           savedCardDiscount: true,
         },
+      });
+      await saveLatestCheckoutAddress(tx, userId, {
+        firstName: ship.firstName,
+        lastName: ship.lastName,
+        phone: ship.phone,
+        street: ship.street,
+        city: xExpressTown?.name ?? ship.city,
+        postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+        xExpressTownId: xExpressTown?.id ?? null,
+        xExpressStreetId: xExpressStreet?.id ?? null,
+        country: ship.country,
+        companyName: shipIsBusiness ? ship.companyName ?? null : null,
+        pib: shipIsBusiness ? ship.pib ?? null : null,
       });
       await recordCheckoutCompleted(tx, input, order);
 

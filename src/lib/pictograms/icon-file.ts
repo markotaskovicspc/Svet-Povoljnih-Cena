@@ -7,6 +7,7 @@ const ALLOWED_ICON_EXTENSIONS = {
   "image/jpeg": ["jpg", "jpeg"],
   "image/png": ["png"],
   "image/webp": ["webp"],
+  "image/svg+xml": ["svg"],
 } as const;
 
 type PictogramIconFileMetadata = Pick<File, "name" | "size" | "type">;
@@ -23,7 +24,7 @@ export function validatePictogramIconFile(file: PictogramIconFileMetadata) {
     file.type as keyof typeof ALLOWED_ICON_EXTENSIONS
   ] as readonly string[] | undefined;
   if (!allowedExtensions) {
-    throw new Error("Podržani formati ikone su PNG, JPG i WebP.");
+    throw new Error("Podržani formati ikone su PNG, JPG, WebP i SVG.");
   }
 
   const extension = file.name.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();

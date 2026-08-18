@@ -60,6 +60,11 @@ export function CartLineRow({
         <p className="font-mono text-[11px] tracking-tight text-ink-500">
           {line.sku}
         </p>
+        {line.deliveryCategory ? (
+          <p className="text-[11px] text-ink-500">
+            Kategorija isporuke: {line.deliveryCategory === 1 ? "I" : "II"}
+          </p>
+        ) : null}
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
           <CartQuantityControl sku={line.sku} quantity={line.qty} />
           <div className="text-right">

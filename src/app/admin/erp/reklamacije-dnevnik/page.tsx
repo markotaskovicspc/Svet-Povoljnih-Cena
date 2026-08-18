@@ -17,16 +17,12 @@ import {
   type AdminActionState,
 } from "@/lib/admin";
 import {
-  buildReclamationAnalytics,
-  type DeliveredProductRow,
-  type DeliveredSupplierRow,
-  type ReclamationAnalyticsRow,
-  type ReclamationBreakdown,
-} from "@/lib/admin/reclamation-analytics";
-import { signReclamationPhotoUrls } from "@/lib/api/uploads";
+  removeReclamationUploads,
+  signReclamationPhotoUrls,
+  uploadAdminReclamationPhoto,
+} from "@/lib/api/uploads";
 import { db } from "@/lib/db";
-import { Card, CardTitle, StatCard } from "@/components/admin/card";
-import { DataTable } from "@/components/admin/data-table";
+import { Card, CardTitle } from "@/components/admin/card";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
@@ -42,6 +38,7 @@ import { getErpModule } from "@/lib/admin/erp";
 import {
   createAdminReclamation,
   createReclamationSchema,
+  lookupOrderForReclamation,
 } from "@/lib/api/reclamations";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +109,12 @@ async function createManualReclamation(
       entity: "Reclamation",
     },
     async (actorId, actionData: FormData) => {
+      const photoFiles = actionData
+        .getAll("photos")
+        .filter((value): value is File => value instanceof File && value.size > 0);
+      if (photoFiles.length > 5) {
+        return { ok: false as const, error: "Možete dodati najviše 5 fotografija." };
+      }
       const parsed = createReclamationSchema.safeParse({
         orderNumberOrFiscal: actionData.get("orderNumberOrFiscal"),
         sku: actionData.get("sku"),
@@ -139,11 +142,52 @@ async function createManualReclamation(
         return { ok: false as const, error: "Zahtev kupca nije ispravan." };
       }
 
-      const result = await createAdminReclamation(
-        { ...parsed.data, type, request },
-        actorId,
-      );
+      const order = await lookupOrderForReclamation(parsed.data.orderNumberOrFiscal);
+      if (!order) return { ok: false as const, error: "Porudžbina nije pronađena." };
+      if (order.status !== "ISPORUCENO") {
+        return {
+          ok: false as const,
+          error: "Ručna reklamacija je dozvoljena samo za isporučenu porudžbinu.",
+        };
+      }
+      const orderItem = order.items.find((item) => item.sku === parsed.data.sku);
+      if (!orderItem) {
+        return {
+          ok: false as const,
+          error: "SKU mora biti stavka iz izabrane porudžbine.",
+        };
+      }
+
+      const uploaded: Array<{ url: string; bytes: number }> = [];
+      try {
+        for (const file of photoFiles) {
+          uploaded.push(
+            await uploadAdminReclamationPhoto(file, {
+              orderNumber: order.number,
+              sku: orderItem.sku,
+            }),
+          );
+        }
+      } catch (error) {
+        await removeReclamationUploads(uploaded.map((photo) => photo.url));
+        return {
+          ok: false as const,
+          error: error instanceof Error ? error.message : "Upload fotografije nije uspeo.",
+        };
+      }
+
+      let result: Awaited<ReturnType<typeof createAdminReclamation>>;
+      try {
+        result = await createAdminReclamation(
+          { ...parsed.data, photos: uploaded, type, request },
+          actorId,
+        );
+      } catch (error) {
+        await removeReclamationUploads(uploaded.map((photo) => photo.url));
+        throw error;
+      }
       if (!result.ok) {
+        await removeReclamationUploads(uploaded.map((photo) => photo.url));
         const errors: Record<typeof result.reason, string> = {
           ORDER_NOT_FOUND: "Porudžbina nije pronađena.",
           ORDER_NOT_DELIVERED:
@@ -349,15 +393,17 @@ async function cancelShipment(formData: FormData) {
 export default async function ReclamationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; reclamation?: string }>;
 }) {
   await requireAdminAction(["OPS"]);
   const sp = await searchParams;
   const status = sp.status as ReclamationStatus | undefined;
-  const where =
-    status && Object.values(ReclamationStatus).includes(status) ? { status } : {};
+  const where = {
+    ...(status && Object.values(ReclamationStatus).includes(status) ? { status } : {}),
+    ...(sp.reclamation ? { id: sp.reclamation } : {}),
+  };
 
-  const [items, analyticsRows, deliveredBySupplier, deliveredByProduct, warehouses, erpModule] =
+  const [items, warehouses, erpModule] =
     await Promise.all([
       db.reclamation.findMany({
         where,
@@ -377,54 +423,6 @@ export default async function ReclamationsPage({
           },
         },
       }),
-      db.$queryRaw<ReclamationAnalyticsRow[]>`
-        SELECT
-          r.id,
-          r.sku,
-          r.status::text AS status,
-          r.type::text AS type,
-          r.resolution::text AS resolution,
-          r."createdAt" AS "createdAt",
-          r."resolvedAt" AS "resolvedAt",
-          COALESCE(
-            NULLIF(BTRIM(oi.name), ''),
-            NULLIF(BTRIM(p.name), ''),
-            r.sku
-          ) AS "productName",
-          COALESCE(
-            NULLIF(BTRIM(oi."supplierName"), ''),
-            NULLIF(BTRIM(s.name), ''),
-            'Bez dobavljača'
-          ) AS supplier
-        FROM "Reclamation" r
-        LEFT JOIN "OrderItem" oi ON oi.id = r."orderItemId"
-        LEFT JOIN "Product" p ON p.id = COALESCE(r."productId", oi."productId")
-        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
-      `,
-      db.$queryRaw<DeliveredSupplierRow[]>`
-        SELECT
-          COALESCE(
-            NULLIF(BTRIM(oi."supplierName"), ''),
-            NULLIF(BTRIM(s.name), ''),
-            'Bez dobavljača'
-          ) AS supplier,
-          COALESCE(SUM(oi.qty), 0)::int AS "deliveredItems"
-        FROM "OrderItem" oi
-        JOIN "Order" o ON o.id = oi."orderId"
-        LEFT JOIN "Product" p ON p.id = oi."productId"
-        LEFT JOIN "Supplier" s ON s.id = p."supplierId"
-        WHERE o.status = 'ISPORUCENO'
-        GROUP BY 1
-      `,
-      db.$queryRaw<DeliveredProductRow[]>`
-        SELECT
-          oi.sku,
-          COALESCE(SUM(oi.qty), 0)::int AS "deliveredItems"
-        FROM "OrderItem" oi
-        JOIN "Order" o ON o.id = oi."orderId"
-        WHERE o.status = 'ISPORUCENO'
-        GROUP BY oi.sku
-      `,
       db.warehouse.findMany({
         where: { active: true },
         orderBy: [{ isDefault: "desc" }, { code: "asc" }],
@@ -432,12 +430,6 @@ export default async function ReclamationsPage({
       }),
       getErpModule("reklamacije-dnevnik", { take: 10_000 }),
     ]);
-
-  const analytics = buildReclamationAnalytics(
-    analyticsRows,
-    deliveredBySupplier,
-    deliveredByProduct,
-  );
 
   // Photo bucket is private — swap stored canonical URLs for signed ones.
   const signedPhotoUrls = await signReclamationPhotoUrls(
@@ -448,20 +440,13 @@ export default async function ReclamationsPage({
     <>
       <PageHeader
         title="Reklamacije"
-        description="Poslovni pokazatelji i operativna obrada reklamacija"
+        description="Ručni unos, dnevnik i operativna obrada reklamacija"
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
           { label: "Dnevnik reklamacija" },
         ]}
-        actions={
-          <Link
-            href="/api/admin/erp/reklamacije-dnevnik/export"
-            className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
-          >
-            Preuzmi XLSX
-          </Link>
-        }
+        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><Link href="/api/admin/erp/reklamacije-dnevnik/export" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</Link></div>}
       />
       <div className="space-y-10 px-8 py-6">
         <Card>
@@ -543,6 +528,17 @@ export default async function ReclamationsPage({
                 />
               </Field>
             </div>
+            <div className="lg:col-span-2">
+              <Field label="Fotografije" hint="Do 5 JPG, PNG ili WebP fotografija, najviše 2 MB po fajlu.">
+                <input
+                  name="photos"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                  multiple
+                  className="block w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
+                />
+              </Field>
+            </div>
             <div className="flex justify-end lg:col-span-2">
               <SubmitButton pendingLabel="Evidentiram…">
                 Evidentiraj reklamaciju
@@ -563,184 +559,6 @@ export default async function ReclamationsPage({
             <ErpGrid module={erpModule} />
           </section>
         ) : null}
-        <section aria-labelledby="reclamation-overview" className="space-y-4">
-          <SectionHeading
-            id="reclamation-overview"
-            eyebrow="Pregled poslovanja"
-            title="Ukupni pokazatelji"
-            description="Podaci za sve vreme. Procenat je broj reklamacija u odnosu na broj artikala iz isporučenih porudžbina."
-          />
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Ukupno reklamacija"
-              value={formatInteger(analytics.totals.total)}
-              hint={`${formatInteger(analytics.totals.deliveredItems)} isporučenih artikala`}
-            />
-            <StatCard
-              label="% reklamacija"
-              value={formatPercent(analytics.totals.reclamationRate)}
-              hint="Reklamacije / isporučeni artikli"
-            />
-            <StatCard
-              label="Rešene"
-              value={formatInteger(analytics.totals.resolved)}
-              tone="success"
-              hint="Uključuje rešene i odbijene"
-            />
-            <StatCard
-              label="Nerešene"
-              value={formatInteger(analytics.totals.unresolved)}
-              tone={analytics.totals.unresolved > 0 ? "warning" : "default"}
-              hint="Primljene i u obradi"
-            />
-            <StatCard
-              label="Nerešene > 5 dana"
-              value={formatInteger(analytics.totals.unresolvedOver5Days)}
-              tone={analytics.totals.unresolvedOver5Days > 0 ? "warning" : "default"}
-              hint="Kumulativno, još otvorene"
-            />
-            <StatCard
-              label="Nerešene > 10 dana"
-              value={formatInteger(analytics.totals.unresolvedOver10Days)}
-              tone={analytics.totals.unresolvedOver10Days > 0 ? "warning" : "default"}
-              hint="Kumulativno, još otvorene"
-            />
-            <StatCard
-              label="Nerešene > 20 dana"
-              value={formatInteger(analytics.totals.unresolvedOver20Days)}
-              tone={analytics.totals.unresolvedOver20Days > 0 ? "danger" : "default"}
-              hint="Kumulativno, još otvorene"
-            />
-            <StatCard
-              label="Nerešene > 30 dana"
-              value={formatInteger(analytics.totals.unresolvedOver30Days)}
-              tone={analytics.totals.unresolvedOver30Days > 0 ? "danger" : "default"}
-              hint="Kumulativno, još otvorene"
-            />
-            <StatCard
-              label="Prosečno rešavanje"
-              value={formatDays(analytics.totals.averageResolutionDays)}
-              hint="Od prijema do zatvaranja reklamacije"
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
-              <CardTitle description="Uključene su i reklamacije kojima tip još nije unet.">
-                Reklamacije po tipu
-              </CardTitle>
-              <BreakdownTable
-                rows={analytics.totals.byType}
-                total={analytics.totals.total}
-                labels={TYPE_LABELS}
-                empty="Nema reklamacija."
-              />
-            </Card>
-            <Card>
-              <CardTitle description="Kod otvorenih reklamacija način rešavanja može biti neodređen.">
-                Reklamacije po načinu rešavanja
-              </CardTitle>
-              <BreakdownTable
-                rows={analytics.totals.byResolution}
-                total={analytics.totals.total}
-                labels={RESOLUTION_LABELS}
-                empty="Nema reklamacija."
-              />
-            </Card>
-          </div>
-        </section>
-
-        <section aria-labelledby="supplier-overview" className="space-y-4">
-          <SectionHeading
-            id="supplier-overview"
-            eyebrow="Dobavljači"
-            title="Isti pokazatelji po dobavljaču"
-            description="Dobavljač se prvenstveno čita iz stavke porudžbine, kako istorijski podaci ne bi zavisili od kasnijih izmena kataloga."
-          />
-          <DataTable
-            columns={[
-              { key: "supplier", label: "Dobavljač" },
-              { key: "total", label: "Reklamacije", align: "right" },
-              { key: "rate", label: "%", align: "right" },
-              { key: "types", label: "Po tipu" },
-              { key: "resolutions", label: "Način rešavanja" },
-              { key: "resolved", label: "Rešene", align: "right" },
-              { key: "unresolved", label: "Nerešene", align: "right" },
-              { key: "over5", label: "> 5 d", align: "right" },
-              { key: "over10", label: "> 10 d", align: "right" },
-              { key: "over20", label: "> 20 d", align: "right" },
-              { key: "over30", label: "> 30 d", align: "right" },
-              { key: "average", label: "Prosek", align: "right" },
-            ]}
-            rows={analytics.suppliers.map((supplier) => ({
-              id: supplier.supplier,
-              cells: {
-                supplier: (
-                  <div className="min-w-40">
-                    <p className="font-medium text-ink-900">{supplier.supplier}</p>
-                    <p className="text-xs text-ink-500">
-                      {formatInteger(supplier.deliveredItems)} isporučenih artikala
-                    </p>
-                  </div>
-                ),
-                total: formatInteger(supplier.total),
-                rate: formatPercent(supplier.reclamationRate),
-                types: (
-                  <BreakdownCell rows={supplier.byType} labels={TYPE_LABELS} />
-                ),
-                resolutions: (
-                  <BreakdownCell
-                    rows={supplier.byResolution}
-                    labels={RESOLUTION_LABELS}
-                  />
-                ),
-                resolved: formatInteger(supplier.resolved),
-                unresolved: formatInteger(supplier.unresolved),
-                over5: formatInteger(supplier.unresolvedOver5Days),
-                over10: formatInteger(supplier.unresolvedOver10Days),
-                over20: formatInteger(supplier.unresolvedOver20Days),
-                over30: formatInteger(supplier.unresolvedOver30Days),
-                average: formatDays(supplier.averageResolutionDays),
-              },
-            }))}
-            empty="Nema reklamacija po dobavljaču."
-          />
-        </section>
-
-        <section aria-labelledby="top-products" className="space-y-4">
-          <SectionHeading
-            id="top-products"
-            eyebrow="Artikli"
-            title="Top 20 artikala sa najviše reklamacija"
-            description="Rangirano po broju reklamacija, uz isporučenu količinu i stopu reklamacija za svaki SKU."
-          />
-          <DataTable
-            columns={[
-              { key: "rank", label: "#", align: "right" },
-              { key: "product", label: "Artikal" },
-              { key: "sku", label: "SKU" },
-              { key: "supplier", label: "Dobavljač" },
-              { key: "reclamations", label: "Reklamacije", align: "right" },
-              { key: "delivered", label: "Isporučeno", align: "right" },
-              { key: "rate", label: "% reklamacija", align: "right" },
-            ]}
-            rows={analytics.topProducts.map((product, index) => ({
-              id: product.sku,
-              cells: {
-                rank: index + 1,
-                product: <span className="font-medium text-ink-900">{product.productName}</span>,
-                sku: <span className="font-mono text-xs">{product.sku}</span>,
-                supplier: product.supplier,
-                reclamations: formatInteger(product.reclamations),
-                delivered: formatInteger(product.deliveredItems),
-                rate: formatPercent(product.reclamationRate),
-              },
-            }))}
-            empty="Nema reklamiranih artikala."
-          />
-        </section>
-
         <section aria-labelledby="reclamation-operations" className="space-y-4">
           <SectionHeading
             id="reclamation-operations"
@@ -768,6 +586,7 @@ export default async function ReclamationsPage({
             ) : (
               items.map((reclamation) => (
                 <Card key={reclamation.id}>
+                  <span id={`reclamation-${reclamation.id}`} className="scroll-mt-24" />
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-sm">{reclamation.number}</p>
@@ -1072,55 +891,6 @@ function SectionHeading({
   );
 }
 
-function BreakdownTable({
-  rows,
-  total,
-  labels,
-  empty,
-}: {
-  rows: ReclamationBreakdown[];
-  total: number;
-  labels: Record<string, string>;
-  empty: string;
-}) {
-  return (
-    <DataTable
-      columns={[
-        { key: "label", label: "Kategorija" },
-        { key: "count", label: "Broj", align: "right" },
-        { key: "share", label: "Udeo", align: "right" },
-      ]}
-      rows={rows.map((row) => ({
-        id: row.key,
-        cells: {
-          label: labels[row.key] ?? row.key,
-          count: formatInteger(row.count),
-          share: formatPercent(total > 0 ? (row.count / total) * 100 : 0),
-        },
-      }))}
-      empty={empty}
-    />
-  );
-}
-
-function BreakdownCell({
-  rows,
-  labels,
-}: {
-  rows: ReclamationBreakdown[];
-  labels: Record<string, string>;
-}) {
-  return (
-    <div className="min-w-36 space-y-0.5 text-xs">
-      {rows.map((row) => (
-        <p key={row.key} className="whitespace-nowrap">
-          {labels[row.key] ?? row.key}: {formatInteger(row.count)}
-        </p>
-      ))}
-    </div>
-  );
-}
-
 function FilterLink({
   href,
   label,
@@ -1147,21 +917,6 @@ function FilterLink({
 
 function formatInteger(value: number) {
   return value.toLocaleString("sr-Latn-RS");
-}
-
-function formatPercent(value: number) {
-  return `${value.toLocaleString("sr-Latn-RS", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 2,
-  })}%`;
-}
-
-function formatDays(value: number | null) {
-  if (value === null) return "—";
-  return `${value.toLocaleString("sr-Latn-RS", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })} dana`;
 }
 
 function dateOnly(value: Date | null) {

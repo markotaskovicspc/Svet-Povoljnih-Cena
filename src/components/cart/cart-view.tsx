@@ -10,6 +10,7 @@ import { CartLineRow } from "./cart-line-row";
 import { useCheckout } from "@/lib/checkout/store";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
+import { useSession } from "next-auth/react";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -274,9 +275,13 @@ export function getCartLoginOfferDetails(lines: CartLine[]) {
 }
 
 export function CartLoginOffer() {
-  const loggedIn = useLoyaltyEligibility();
+  const loyaltyEligible = useLoyaltyEligibility();
+  const { data: session, status } = useSession();
+  const loggedIn =
+    loyaltyEligible ||
+    (status === "authenticated" && session?.user?.userType === "customer");
   const lines = useCart((state) => state.lines);
-  if (loggedIn || !lines.length) return null;
+  if (status === "loading" || loggedIn || !lines.length) return null;
 
   const { discountPct, potentialSavings } = getCartLoginOfferDetails(lines);
 

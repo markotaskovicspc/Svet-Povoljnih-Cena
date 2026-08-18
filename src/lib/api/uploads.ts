@@ -83,6 +83,53 @@ export async function presignUpload(
   };
 }
 
+export async function uploadAdminReclamationPhoto(
+  file: File,
+  scope: { orderNumber: string; sku: string },
+) {
+  if (file.size <= 0 || file.size > MAX_RECLAMATION_PHOTO_BYTES) {
+    throw new Error("Fotografija mora biti manja od 2 MB.");
+  }
+  const contentType = file.type as keyof typeof ALLOWED_IMAGE_TYPES;
+  const extension = fileExtension(file.name);
+  if (
+    !ALLOWED_IMAGE_TYPES[contentType] ||
+    !extension ||
+    !ALLOWED_IMAGE_TYPES[contentType].includes(extension as never)
+  ) {
+    throw new Error("Dozvoljeni formati fotografije su JPG, PNG i WebP.");
+  }
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (detectImageType(bytes.subarray(0, 16)) !== contentType) {
+    throw new Error("Sadržaj fotografije se ne poklapa sa formatom fajla.");
+  }
+  const key = [
+    "reclamation",
+    safeSegment(scope.orderNumber),
+    safeSegment(scope.sku),
+    new Date().toISOString().slice(0, 10),
+    `${randomBytes(12).toString("hex")}.${extension}`,
+  ].join("/");
+  const { error } = await createAdminClient()
+    .storage.from(reclamationUploadBucket())
+    .upload(key, bytes, {
+      cacheControl: "31536000",
+      contentType,
+      upsert: false,
+    });
+  if (error) throw new Error(`Upload fotografije nije uspeo: ${error.message}`);
+  return { url: key, bytes: bytes.length };
+}
+
+export async function removeReclamationUploads(urls: string[]) {
+  const keys = urls.flatMap((url) => {
+    const key = reclamationObjectKeyFromUrl(url);
+    return key ? [key] : [];
+  });
+  if (!keys.length) return;
+  await createAdminClient().storage.from(reclamationUploadBucket()).remove(keys);
+}
+
 export function isAllowedReclamationPhotoUrl(value: string) {
   const key = reclamationObjectKeyFromUrl(value);
   return key !== null && isAllowedReclamationObjectKey(key);

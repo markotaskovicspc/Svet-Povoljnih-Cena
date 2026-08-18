@@ -14,7 +14,7 @@ describe("PDP boje proizvoda", () => {
     media: { images: [{ url: "/products/chair-black.webp" }] },
   } as Product;
 
-  it("ne prikazuje obojeni kružić na karticama", () => {
+  it("prikazuje boje i naziv na karticama", () => {
     const markup = renderToStaticMarkup(
       <ProductColorOptions product={product} />,
     );
@@ -26,8 +26,9 @@ describe("PDP boje proizvoda", () => {
         colors: ["#181716", "#c7a36f"],
       },
     ]);
-    expect(markup).not.toContain("data-color-count=");
-    expect(markup).not.toContain("linear-gradient(90deg");
+    expect(markup).toContain("data-product-colors");
+    expect(markup).toContain("CRNA / NATUR");
+    expect(markup.match(/rounded-full/g)).toHaveLength(2);
     expect(markup).not.toContain('title="CRNA / NATUR"');
   });
 
@@ -39,7 +40,7 @@ describe("PDP boje proizvoda", () => {
         showLabels
       />,
     );
-    expect(markup).toContain("Boja:");
+    expect(markup).not.toContain("Boja:");
     expect(markup).toContain("CRNA");
     expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
@@ -104,7 +105,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain("Varijanta:");
-    expect(markup).toContain("Boja:");
+    expect(markup).not.toContain("Boja:");
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(2);
     expect(markup.match(/<img/g)).toHaveLength(2);
     expect(markup).not.toContain("data-color-count=");

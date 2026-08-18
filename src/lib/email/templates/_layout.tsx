@@ -44,16 +44,20 @@ export function EmailLayout({
         <tbody>
           <tr>
             <td style={{ padding: "0 0 24px" }}>
-              <span
+              {/* Email clients require a plain img element with inline dimensions. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`${BRAND.url}/logo.jpeg`}
+                alt={BRAND.name}
+                width="240"
+                height="57"
                 style={{
-                  fontFamily: "Playfair Display, Georgia, serif",
-                  fontSize: 22,
-                  letterSpacing: "-0.01em",
-                  color: "#1A1714",
+                  display: "block",
+                  width: 240,
+                  maxWidth: "72%",
+                  height: "auto",
                 }}
-              >
-                {BRAND.name}
-              </span>
+              />
             </td>
           </tr>
           <tr>

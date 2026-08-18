@@ -89,6 +89,7 @@ export function SimpleLandingPageEditor({
   const [robotsIndex, setRobotsIndex] = useState(values.robotsIndex);
   const [startsAt, setStartsAt] = useState(toLocalDateTime(values.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalDateTime(values.endsAt));
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const publishIssues = useMemo(() => {
     const issues: string[] = [];
     if (!heroImageUrl) issues.push("Dodajte desktop sliku banera.");
@@ -248,8 +249,18 @@ export function SimpleLandingPageEditor({
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface shadow-sm">
-            <div className="relative aspect-square bg-ink-900 md:aspect-[24/7]">
-              {heroImageUrl ? <Image src={heroImageUrl} alt="" fill unoptimized loading="eager" className="object-cover" /> : null}
+            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-xs">
+              <span className="text-ink-500">Brzi pregled</span>
+              <div className="flex rounded-full bg-muted-bg p-0.5">
+                {(["desktop", "mobile"] as const).map((device) => (
+                  <button key={device} type="button" onClick={() => setPreviewDevice(device)} className={cn("rounded-full px-2 py-1", previewDevice === device && "bg-white shadow-sm")}>
+                    {device === "desktop" ? "Desktop" : "Mobilni"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[24/7]")}>
+              {(previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl) ? <Image src={previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl} alt="" fill unoptimized loading="eager" className="object-contain" /> : null}
               {heroCtaLabel ? (
                 <span className="absolute bottom-4 left-4 rounded-full bg-canvas px-4 py-2 text-xs text-ink-900 shadow-soft-2">
                   {heroCtaLabel}

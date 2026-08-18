@@ -17,6 +17,7 @@ export interface CartLine {
   thumbnailUrl?: string;
   variant?: string;
   familyCode?: string;
+  deliveryCategory?: 1 | 2;
   withAssembly?: boolean;
   assemblyPrice?: number;
 }
@@ -93,6 +94,10 @@ export function normalizeCartLines(lines: unknown): CartLine[] {
         typeof row.thumbnailUrl === "string" ? row.thumbnailUrl : undefined,
       variant: typeof row.variant === "string" ? row.variant : undefined,
       familyCode: typeof row.familyCode === "string" ? row.familyCode : undefined,
+      deliveryCategory:
+        row.deliveryCategory === 1 || row.deliveryCategory === 2
+          ? row.deliveryCategory
+          : undefined,
       withAssembly: Boolean(row.withAssembly),
       assemblyPrice:
         row.assemblyPrice == null ? undefined : normalizeMoney(row.assemblyPrice),

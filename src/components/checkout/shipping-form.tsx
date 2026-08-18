@@ -152,13 +152,13 @@ function AddressFieldset({
     showSubmitErrors ? errAt(`${prefix}.${path}`) : undefined;
 
   return (
-    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3 lg:gap-2.5">
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
       {liceType === "pravno" ? (
         <>
           <Field
             label="Naziv"
             required
-            className="sm:col-span-2"
+            className="sm:col-span-2 lg:col-span-6"
             error={showError("companyName")}
             {...register(`${prefix}.companyName` as const, {
               required: "Obavezno za pravno lice",
@@ -182,6 +182,7 @@ function AddressFieldset({
       <Field
         label="Ime"
         required
+        className="lg:col-span-3"
         error={showError("firstName")}
         {...register(`${prefix}.firstName` as const, {
           required: "Obavezno polje",
@@ -191,6 +192,7 @@ function AddressFieldset({
       <Field
         label="Prezime"
         required
+        className="lg:col-span-3"
         error={showError("lastName")}
         {...register(`${prefix}.lastName` as const, {
           required: "Obavezno polje",
@@ -201,6 +203,7 @@ function AddressFieldset({
         label="E-pošta"
         type="email"
         required
+        className="lg:col-span-3"
         error={showError("email")}
         {...register(`${prefix}.email` as const, {
           required: "Obavezno polje",
@@ -214,6 +217,7 @@ function AddressFieldset({
         label="Telefon"
         type="tel"
         required
+        className="lg:col-span-3"
         placeholder="060123456"
         inputMode="numeric"
         maxLength={12}
@@ -230,7 +234,7 @@ function AddressFieldset({
       {xExpressAddressEnabled ? (
         <>
           <XExpressStreetAutocomplete
-            className="order-2 sm:col-span-2"
+            className="order-2 sm:col-span-2 lg:col-span-2"
             townId={watch(`${prefix}.xExpressTownId` as const) ?? null}
             value={watch(`${prefix}.street` as const) ?? ""}
             error={showError("street")}
@@ -267,7 +271,7 @@ function AddressFieldset({
         <Field
           label="Adresa"
           required
-          className="sm:col-span-2"
+          className="sm:col-span-2 lg:col-span-2"
           error={showError("street")}
           {...register(`${prefix}.street` as const, {
             required: "Obavezno polje",
@@ -284,7 +288,7 @@ function AddressFieldset({
        * just override the input via `setValue` on selection.
        */}
       <CityAutocomplete
-        className={xExpressAddressEnabled ? "order-1" : undefined}
+        className={cn(xExpressAddressEnabled && "order-1", "lg:col-span-2")}
         required
         value={watch(`${prefix}.city` as const) ?? ""}
         error={showError("city")}
@@ -354,7 +358,7 @@ function AddressFieldset({
       <Field
         label="Poštanski broj"
         required
-        className={xExpressAddressEnabled ? "order-3" : undefined}
+        className={cn(xExpressAddressEnabled && "order-3", "lg:col-span-2")}
         placeholder="11000"
         inputMode="numeric"
         error={showError("postalCode")}

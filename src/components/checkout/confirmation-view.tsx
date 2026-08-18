@@ -104,9 +104,17 @@ function SuccessHero({
         </h1>
         <p className="max-w-prose text-sm text-ink-700">
           Porudžbina je uspešno kreirana. Detalji su poslati i na e-poštu.
-          {paymentStatus === "paid"
-            ? " Krećemo sa pripremom nakon potvrde operatera."
-            : " Status plaćanja možete proveriti na ovoj strani."}
+          {paymentStatus === "paid" ? (
+            " Krećemo sa pripremom nakon potvrde operatera."
+          ) : (
+            <>
+              {" "}Status plaćanja možete proveriti u odeljku{" "}
+              <a href="#placanje" className="font-medium underline">
+                Plaćanje
+              </a>
+              .
+            </>
+          )}
         </p>
         <div className="bg-canvas ring-border/60 mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1">
           <span className="text-xs text-ink-500">Broj porudžbine</span>
@@ -167,7 +175,10 @@ function PaymentBlock({
   accessToken?: string;
 }) {
   return (
-    <section className="bg-surface ring-border/60 rounded-2xl p-5 ring-1">
+    <section
+      id="placanje"
+      className="bg-surface ring-border/60 scroll-mt-28 rounded-2xl p-5 ring-1"
+    >
       <h2 className="font-display text-lg text-ink-900">Plaćanje</h2>
       <div className="mt-4">
         <PaymentMethodView
@@ -245,7 +256,7 @@ function PaymentMethodView({
             sačekajte našu potvrdu prijema. Kada potvrdimo uplatu, kreće
             priprema porudžbine.
           </p>
-          <DetailRow label="IBAN" value="RS35 2651 0000 0000 0000 00" mono />
+          <DetailRow label="Broj računa" value="RS35 2651 0000 0000 0000 00" mono />
           <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
           <DetailRow label="Poziv na broj" value={order.id} mono />
         </div>

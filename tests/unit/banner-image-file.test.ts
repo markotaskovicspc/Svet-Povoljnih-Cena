@@ -30,6 +30,13 @@ describe("banner image files", () => {
         type: "image/avif",
       }),
     ).toBe("avif");
+    expect(
+      validateBannerImageFile({
+        name: "hero.svg",
+        size: 1024,
+        type: "image/svg+xml",
+      }),
+    ).toBe("svg");
   });
 
   it("rejects oversized, unsupported and mismatched files", () => {
@@ -42,11 +49,11 @@ describe("banner image files", () => {
     ).toThrow("8 MB");
     expect(() =>
       validateBannerImageFile({
-        name: "banner.svg",
+        name: "banner.gif",
         size: 1024,
-        type: "image/svg+xml",
+        type: "image/gif",
       }),
-    ).toThrow("PNG, JPG, WebP i AVIF");
+    ).toThrow("PNG, JPG, WebP, AVIF i SVG");
     expect(() =>
       validateBannerImageFile({
         name: "banner.png",

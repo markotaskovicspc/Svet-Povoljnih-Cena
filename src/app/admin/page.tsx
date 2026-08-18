@@ -151,8 +151,8 @@ export default async function AdminDashboard({
     : Prisma.empty;
 
   const [
-    ordersToday,
-    ordersInPeriod,
+    ordersTodaySummary,
+    ordersInPeriodSummary,
     fiscalRows,
     reclamationCount,
     topProducts,
@@ -161,17 +161,21 @@ export default async function AdminDashboard({
     visitRows,
     lowStock,
   ] = await Promise.all([
-    db.order.count({
+    db.order.aggregate({
       where: {
         createdAt: periodFilter(todayPeriod),
         ...orderWarehouseWhere,
       },
+      _count: { _all: true },
+      _sum: { total: true },
     }),
-    db.order.count({
+    db.order.aggregate({
       where: {
         createdAt: periodFilter(ordersPeriod),
         ...orderWarehouseWhere,
       },
+      _count: { _all: true },
+      _sum: { total: true },
     }),
     db.$queryRaw<FiscalTurnoverSummary[]>(Prisma.sql`
       SELECT
@@ -325,6 +329,10 @@ export default async function AdminDashboard({
   ]);
 
   const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
+  const ordersToday = ordersTodaySummary._count._all;
+  const ordersTodayAmount = Number(ordersTodaySummary._sum.total ?? 0);
+  const ordersInPeriod = ordersInPeriodSummary._count._all;
+  const ordersInPeriodAmount = Number(ordersInPeriodSummary._sum.total ?? 0);
   const incoming = incomingRows[0] ?? {
     order_count: 0,
     remaining_qty: 0,
@@ -390,8 +398,8 @@ export default async function AdminDashboard({
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={warehouseLabel} />
-          <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${ordersPeriod.label} · ${warehouseLabel}`} />
+          <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · ${warehouseLabel}`} />
+          <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
           <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
           <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
         </div>

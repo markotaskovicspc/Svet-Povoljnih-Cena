@@ -18,6 +18,7 @@ import {
   recordFirstPartyEvent,
   recordGa4AddToCart,
 } from "@/components/analytics/first-party-analytics";
+import { deliveryCategory } from "@/lib/delivery-tariff";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -52,6 +53,13 @@ export function commitAddToCart(
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
     variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
     familyCode: product.variantFamily?.code,
+    deliveryCategory: product.unitPackageDimensionsCm
+      ? deliveryCategory([
+          product.unitPackageDimensionsCm.w,
+          product.unitPackageDimensionsCm.d,
+          product.unitPackageDimensionsCm.h,
+        ]) ?? undefined
+      : undefined,
   };
   useCart.getState().add(line, qty);
   recordFirstPartyEvent({

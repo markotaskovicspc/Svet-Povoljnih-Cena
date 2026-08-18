@@ -61,6 +61,7 @@ export type ReclamationAnalytics = {
   totals: ReclamationMetrics;
   suppliers: SupplierReclamationMetrics[];
   topProducts: TopReclamationProduct[];
+  topProductsByRate: TopReclamationProduct[];
 };
 
 export function buildReclamationAnalytics(
@@ -90,7 +91,7 @@ export function buildReclamationAnalytics(
   );
 
   const reclamationsBySku = groupBy(reclamations, (row) => row.sku);
-  const topProducts = Array.from(reclamationsBySku, ([sku, rows]) => {
+  const productMetrics = Array.from(reclamationsBySku, ([sku, rows]) => {
     const delivered = productDelivered.get(sku) ?? 0;
     return {
       sku,
@@ -100,10 +101,19 @@ export function buildReclamationAnalytics(
       deliveredItems: delivered,
       reclamationRate: percentage(rows.length, delivered),
     };
-  })
+  });
+  const topProducts = [...productMetrics]
     .sort(
       (left, right) =>
         right.reclamations - left.reclamations || left.sku.localeCompare(right.sku),
+    )
+    .slice(0, 20);
+  const topProductsByRate = [...productMetrics]
+    .sort(
+      (left, right) =>
+        right.reclamationRate - left.reclamationRate ||
+        right.reclamations - left.reclamations ||
+        left.sku.localeCompare(right.sku),
     )
     .slice(0, 20);
 
@@ -111,6 +121,7 @@ export function buildReclamationAnalytics(
     totals: summarize(reclamations, deliveredItems, now),
     suppliers,
     topProducts,
+    topProductsByRate,
   };
 }
 

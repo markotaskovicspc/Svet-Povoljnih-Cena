@@ -10,6 +10,7 @@ describe("pictogram icon files", () => {
     expect(validatePictogramIconFile({ name: "delivery.png", size: 1024, type: "image/png" })).toBe("png");
     expect(validatePictogramIconFile({ name: "quality.webp", size: 1024, type: "image/webp" })).toBe("webp");
     expect(validatePictogramIconFile({ name: "sale.jpeg", size: 1024, type: "image/jpeg" })).toBe("jpeg");
+    expect(validatePictogramIconFile({ name: "delivery.svg", size: 1024, type: "image/svg+xml" })).toBe("svg");
   });
 
   it("rejects oversized and unsupported files", () => {
@@ -21,8 +22,8 @@ describe("pictogram icon files", () => {
       }),
     ).toThrow("750 KB");
     expect(() =>
-      validatePictogramIconFile({ name: "icon.svg", size: 1024, type: "image/svg+xml" }),
-    ).toThrow("PNG, JPG i WebP");
+      validatePictogramIconFile({ name: "icon.gif", size: 1024, type: "image/gif" }),
+    ).toThrow("PNG, JPG, WebP i SVG");
   });
 
   it("only treats the pictograms prefix as managed pictogram storage", () => {

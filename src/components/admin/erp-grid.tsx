@@ -1392,7 +1392,7 @@ export function ErpGrid({
                   <Settings2 className="size-4" aria-hidden />
                   Prikaz tabele
                 </summary>
-                <div className="absolute right-0 top-11 z-50 w-[min(92vw,420px)] max-h-[70vh] overflow-y-auto rounded-2xl border border-border/70 bg-surface p-4 shadow-xl">
+                <div className="fixed inset-x-4 top-20 z-[70] max-h-[70vh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border/70 bg-surface p-4 shadow-xl md:absolute md:inset-x-auto md:right-0 md:top-11 md:z-50 md:w-[min(92vw,420px)]">
                   <section>
                     <div className="mb-3 flex items-center gap-2">
                       <Settings2 className="size-4 text-ink-500" aria-hidden />
@@ -1671,7 +1671,7 @@ export function ErpGrid({
                             maxWidth: columnWidths[column.key],
                           }}
                           className={cn(
-                            "whitespace-nowrap px-3 py-2 text-ink-700",
+                            "overflow-hidden whitespace-nowrap px-3 py-2 text-ink-700",
                             isSaving && "bg-warning/5",
                             module.slug === "porudzbenice-po-artiklima" &&
                               column.key === "qty" &&
