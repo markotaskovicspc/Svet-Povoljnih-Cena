@@ -185,7 +185,10 @@ export function CustomerCommerceSync() {
     ) => {
       const response = await fetch("/api/cart", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-SPC-Cart-Sync": announce ? "replace" : "merge",
+        },
         body: JSON.stringify({ lines: normalizeCartLines(lines) }),
       }).catch(() => null);
       if (announce && response?.ok) channel?.postMessage("cart");
@@ -205,7 +208,10 @@ export function CustomerCommerceSync() {
       );
       const response = await fetch("/api/wishlist", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-SPC-Wishlist-Sync": announce ? "replace" : "merge",
+        },
         body: JSON.stringify({ items }),
       }).catch(() => null);
       if (announce && response?.ok) channel?.postMessage("wishlist");

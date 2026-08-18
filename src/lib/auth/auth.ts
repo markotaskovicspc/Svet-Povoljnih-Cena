@@ -282,6 +282,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (dbUser?.deletedAt) return false;
       }
+      if (user?.id && user.userType !== "admin") {
+        // This timestamp also gives legacy storefront tabs a brief server-side
+        // merge window while their pre-deploy bundles observe the new session.
+        await db.user.updateMany({
+          where: { id: user.id, deletedAt: null },
+          data: { lastLoginAt: new Date() },
+        });
+      }
       return true;
     },
     async jwt({ token, user, trigger, session }) {

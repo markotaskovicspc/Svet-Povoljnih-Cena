@@ -4,11 +4,13 @@ import { getCurrentUser, requireUser } from "@/lib/auth/session";
 import {
   alertChannelSchema,
   listWishlist,
+  mergeWishlist,
   replaceWishlist,
   setWishlistAlerts,
   toggleWishlist,
   wishlistSyncPayloadSchema,
 } from "@/lib/api/wishlist";
+import { shouldMergeLegacyCommerceAfterLogin } from "@/lib/api/commerce-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +51,16 @@ export async function PUT(req: Request) {
       { status: 400 },
     );
   }
-  await replaceWishlist(user.id, parsed.data.items);
+  const syncMode = req.headers.get("x-spc-wishlist-sync");
+  const merge =
+    syncMode === "merge" ||
+    (syncMode === null &&
+      (await shouldMergeLegacyCommerceAfterLogin(user.id)));
+  if (merge) {
+    await mergeWishlist(user.id, parsed.data.items);
+  } else {
+    await replaceWishlist(user.id, parsed.data.items);
+  }
   return NextResponse.json({ items: await listWishlist(user.id) });
 }
 

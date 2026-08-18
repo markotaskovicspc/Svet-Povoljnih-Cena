@@ -205,6 +205,79 @@ export async function replaceWishlist(
   });
 }
 
+/**
+ * Adds a login snapshot without deleting anything already saved by another
+ * tab. Alert preferences are monotonic during promotion: an enabled alert in
+ * either snapshot remains enabled.
+ */
+export async function mergeWishlist(
+  userId: string,
+  items: WishlistSyncItem[],
+) {
+  const requestedBySku = new Map(items.map((item) => [item.sku, item]));
+
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-wishlist'), hashtext(${userId}))`;
+    const products = requestedBySku.size
+      ? await tx.product.findMany({
+          where: { sku: { in: [...requestedBySku.keys()] }, deletedAt: null },
+          select: { id: true, sku: true },
+        })
+      : [];
+
+    for (const product of products) {
+      const requested = requestedBySku.get(product.sku)!;
+      const current = await tx.wishlistItem.findUnique({
+        where: { userId_productId: { userId, productId: product.id } },
+        select: { notifyOnSale: true, notifyOnRestock: true },
+      });
+      const notifyOnSale = Boolean(
+        requested.notifyOnSale || current?.notifyOnSale,
+      );
+      const notifyOnRestock = Boolean(
+        requested.notifyOnRestock || current?.notifyOnRestock,
+      );
+
+      await tx.wishlistItem.upsert({
+        where: { userId_productId: { userId, productId: product.id } },
+        create: {
+          userId,
+          productId: product.id,
+          notifyOnSale,
+          notifyOnRestock,
+        },
+        update: { notifyOnSale, notifyOnRestock },
+      });
+      if (notifyOnSale) {
+        await tx.onSaleAlert.upsert({
+          where: {
+            userId_productId_channel: {
+              userId,
+              productId: product.id,
+              channel: "EMAIL",
+            },
+          },
+          create: { userId, productId: product.id, channel: "EMAIL" },
+          update: {},
+        });
+      }
+      if (notifyOnRestock) {
+        await tx.backInStockAlert.upsert({
+          where: {
+            userId_productId_channel: {
+              userId,
+              productId: product.id,
+              channel: "EMAIL",
+            },
+          },
+          create: { userId, productId: product.id, channel: "EMAIL" },
+          update: {},
+        });
+      }
+    }
+  });
+}
+
 export async function setWishlistAlerts(
   userId: string,
   sku: string,

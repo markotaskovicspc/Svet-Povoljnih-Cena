@@ -33,7 +33,9 @@ export const cartPayloadSchema = z.object({
 
 export type ServerCartLine = z.infer<typeof cartLineSchema>;
 
-function normalizeServerCartLines(lines: ServerCartLine[]): ServerCartLine[] {
+export function normalizeServerCartLines(
+  lines: ServerCartLine[],
+): ServerCartLine[] {
   const bySku = new Map<string, ServerCartLine>();
 
   for (const line of lines) {
@@ -48,6 +50,19 @@ function normalizeServerCartLines(lines: ServerCartLine[]): ServerCartLine[] {
   }
 
   return Array.from(bySku.values());
+}
+
+export function mergeServerCartLines(
+  currentLines: ServerCartLine[],
+  incomingLines: ServerCartLine[],
+): ServerCartLine[] {
+  const current = normalizeServerCartLines(currentLines);
+  const incoming = normalizeServerCartLines(incomingLines);
+  const incomingSkus = new Set(incoming.map((line) => line.sku));
+  return normalizeServerCartLines([
+    ...current.filter((line) => !incomingSkus.has(line.sku)),
+    ...incoming,
+  ]);
 }
 
 export async function getServerCart(userId: string): Promise<ServerCartLine[]> {
@@ -67,6 +82,27 @@ export async function saveServerCart(
     where: { userId },
     create: { userId, lines: clean },
     update: { lines: clean },
+  });
+}
+
+export async function mergeServerCart(
+  userId: string,
+  lines: ServerCartLine[],
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    // Login sync can arrive concurrently from several browser tabs. Serialize
+    // promotion writes per customer so an older tab can only add to, never
+    // replace, the newest guest snapshot.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-cart'), hashtext(${userId}))`;
+    const row = await tx.cart.findUnique({ where: { userId } });
+    const parsed = z.array(cartLineSchema).safeParse(row?.lines);
+    const current = parsed.success ? parsed.data : [];
+    const merged = mergeServerCartLines(current, lines);
+    await tx.cart.upsert({
+      where: { userId },
+      create: { userId, lines: merged },
+      update: { lines: merged },
+    });
   });
 }
 
