@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   appendFilterQueryParams,
   applyFilters,
+  applySort,
+  computeExtents,
   computeFacetValues,
   emptyFilterState,
   matchesListingSubTab,
@@ -144,6 +146,49 @@ describe("filter dostupnosti", () => {
 });
 
 describe("dinamički filteri listinga", () => {
+  it("lokalni filter i sortiranje koriste krajnju važeću cenu", () => {
+    const fullPriceOnly = {
+      ...product,
+      sku: "FULL-PRICE",
+      fullPrice: 1_500,
+      variantFamily: undefined,
+    } as Product;
+    const activeAction = {
+      ...product,
+      sku: "ACTIVE-ACTION",
+      fullPrice: 2_000,
+      salePrice: 1_400,
+      action: {
+        id: "action",
+        name: "Aktivna akcija",
+        startsAt: "2026-01-01T00:00:00.000Z",
+        endsAt: "2100-01-01T00:00:00.000Z",
+      },
+      variantFamily: undefined,
+    } as Product;
+    const expiredAction = {
+      ...activeAction,
+      sku: "EXPIRED-ACTION",
+      fullPrice: 3_000,
+      salePrice: 900,
+      action: {
+        ...activeAction.action!,
+        endsAt: "2020-01-01T00:00:00.000Z",
+      },
+    } as Product;
+    const products = [expiredAction, fullPriceOnly, activeAction];
+
+    expect(computeExtents(products).price).toEqual([1_000, 3_000]);
+    expect(
+      applyFilters(products, {
+        ...emptyFilterState(),
+        price: [1_000, 1_499],
+      }).map((item) => item.sku),
+    ).toEqual(["ACTIVE-ACTION"]);
+    expect(applySort(products, "price-asc", "kategorija").map((item) => item.sku))
+      .toEqual(["ACTIVE-ACTION", "FULL-PRICE", "EXPIRED-ACTION"]);
+  });
+
   it("podtab prepoznaje proizvod po nazivu kada je kategorija šira", () => {
     expect(
       matchesListingSubTab(

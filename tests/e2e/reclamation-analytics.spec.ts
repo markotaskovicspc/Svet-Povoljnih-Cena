@@ -524,7 +524,13 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(warehouseStockRow).toContainText("81 m³");
       await expect(
         page.getByText(
-          "Zapremina se računa iz Š × D × V pakovanja pojedinačnog artikla.",
+          "Zapremina = stanje × Š × D × V pakovanja pojedinačnog artikla ÷ 1.000.000.",
+          { exact: false },
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "Paletna mesta = zbir zaokruženog naviše odnosa stanje ÷ komada na paleti, zasebno po SKU-u.",
           { exact: false },
         ),
       ).toBeVisible();

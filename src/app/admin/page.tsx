@@ -410,7 +410,7 @@ export default async function AdminDashboard({
 
         <Card>
           <CardTitle
-            description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina se računa iz Š × D × V pakovanja pojedinačnog artikla.`}
+            description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina = stanje × Š × D × V pakovanja pojedinačnog artikla ÷ 1.000.000. Paletna mesta = zbir zaokruženog naviše odnosa stanje ÷ komada na paleti, zasebno po SKU-u.`}
           >
             Zalihe za magacin
           </CardTitle>

@@ -7,6 +7,7 @@
 import type { Product } from "@/types";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
+import { resolveProductPriceQuote } from "@/lib/pricing";
 
 export const LISTING_PAGE_SIZE = 36;
 
@@ -64,6 +65,11 @@ export const emptyFilterState = (): FilterState => ({
   availability: [],
   dynamic: {},
 });
+
+/** Mirrors the anonymous public price used by the catalog API. */
+function finalListingPrice(product: Product) {
+  return resolveProductPriceQuote(product, { loggedIn: false }).payable.effective;
+}
 
 /**
  * Adds the interactive listing state to the catalog API query. Repeated
@@ -134,7 +140,7 @@ export function computeExtents(products: Product[]): FacetExtents {
     height: [Infinity, -Infinity],
   };
   for (const p of products) {
-    const price = p.salePrice ?? p.fullPrice;
+    const price = finalListingPrice(p);
     initial.price = [Math.min(initial.price[0], price), Math.max(initial.price[1], price)];
     initial.width = [
       Math.min(initial.width[0], p.dimensionsCm.w),
@@ -325,7 +331,7 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
 
   return products.filter((p) => {
     if (state.price) {
-      const price = p.salePrice ?? p.fullPrice;
+      const price = finalListingPrice(p);
       if (price < state.price[0] || price > state.price[1]) return false;
     }
     if (state.dimensions) {
@@ -394,11 +400,11 @@ export function applySort(products: Product[], sort: SortKey, kind: ListingKind)
   switch (sort) {
     case "price-asc":
       return list.sort(
-        (a, b) => (a.salePrice ?? a.fullPrice) - (b.salePrice ?? b.fullPrice),
+        (a, b) => finalListingPrice(a) - finalListingPrice(b),
       );
     case "price-desc":
       return list.sort(
-        (a, b) => (b.salePrice ?? b.fullPrice) - (a.salePrice ?? a.fullPrice),
+        (a, b) => finalListingPrice(b) - finalListingPrice(a),
       );
     case "discount-desc":
       return list.sort((a, b) => (b.discountPct ?? 0) - (a.discountPct ?? 0));
@@ -432,7 +438,7 @@ function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
   const cmpDiscount = (a: Product, b: Product) =>
     (b.discountPct ?? 0) - (a.discountPct ?? 0);
   const cmpPriceAsc = (a: Product, b: Product) =>
-    (a.salePrice ?? a.fullPrice) - (b.salePrice ?? b.fullPrice);
+    finalListingPrice(a) - finalListingPrice(b);
 
   switch (kind) {
     case "akcija":
