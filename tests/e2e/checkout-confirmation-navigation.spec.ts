@@ -183,7 +183,9 @@ test("successful guest order lands on the confirmation route", async ({
 
   await page.goto("/checkout/podaci", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Nastavi kao gost" }).click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
   await page.getByRole("textbox", { name: "Ime*", exact: true }).fill("Codex");
   await page.getByRole("textbox", { name: "Prezime*", exact: true }).fill("QA");
@@ -195,9 +197,13 @@ test("successful guest order lands on the confirmation route", async ({
   const streetOption = page.getByRole("option", { name: /Kralja Petra I 1/ });
   if (await streetOption.isVisible().catch(() => false)) await streetOption.click();
   await page.getByRole("textbox", { name: "Poštanski broj*", exact: true }).fill("34000");
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await page.getByLabel(/Saglasan\/a sam/).check();
   await page.getByRole("button", { name: "Potvrdi porudžbinu" }).click();
 

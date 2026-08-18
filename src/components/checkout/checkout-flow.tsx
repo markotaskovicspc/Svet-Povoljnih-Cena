@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -411,11 +418,22 @@ export function CheckoutFlow({
     return () => window.removeEventListener("popstate", onPopState);
   }, [setStep, stepOrder]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof window === "undefined") return;
-    window.requestAnimationFrame(() => {
+
+    // The navigation button survives between steps and keeps browser focus.
+    // Blur it before the layout changes so focus/scroll anchoring cannot pull
+    // the viewport back toward the checkout card after we reset the page.
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
+
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    const frame = window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [step]);
 
   const next = async () => {
@@ -576,7 +594,7 @@ export function CheckoutFlow({
 
   return (
     <FormProvider {...methods}>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
+      <div className="grid gap-5 [overflow-anchor:none] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
         <form
           id="checkout-order-form"
           onSubmit={handleSubmit(onSubmit, onInvalid)}
