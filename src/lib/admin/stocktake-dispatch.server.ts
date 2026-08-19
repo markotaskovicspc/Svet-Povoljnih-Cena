@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
 import {
   nextStocktakeDispatchNumber,
+  stocktakeDeleteBlocker,
   STOCKTAKE_DESTINATION_NAME,
 } from "@/lib/admin/stocktake-dispatch";
 
@@ -75,6 +76,37 @@ export async function restoreStocktakeDispatches(ids: string[]) {
       data: { archivedAt: null },
     })
   ).count;
+}
+
+export async function deleteStocktakeDispatches(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) throw new Error("Izaberite bar jedan popis.");
+
+  return db.$transaction(async (tx) => {
+    const dispatches = await tx.dispatchNote.findMany({
+      where: { id: { in: uniqueIds }, type: DispatchNoteType.STOCKTAKE },
+      select: { id: true, number: true, status: true },
+    });
+    if (dispatches.length !== uniqueIds.length) {
+      throw new Error("Jedan od izabranih popisa više ne postoji.");
+    }
+    for (const dispatch of dispatches) {
+      const blocker = stocktakeDeleteBlocker(dispatch.number, dispatch.status);
+      if (blocker) throw new Error(blocker);
+    }
+
+    const deleted = await tx.dispatchNote.deleteMany({
+      where: {
+        id: { in: dispatches.map((dispatch) => dispatch.id) },
+        type: DispatchNoteType.STOCKTAKE,
+        status: DocumentPostingStatus.DRAFT,
+      },
+    });
+    if (deleted.count !== dispatches.length) {
+      throw new Error("Popis je u međuvremenu promenjen i nije obrisan.");
+    }
+    return deleted.count;
+  });
 }
 
 export async function createStocktakeDispatch() {

@@ -3,6 +3,7 @@ import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
   isStocktakeDispatchEditable,
   nextStocktakeDispatchNumber,
+  stocktakeDeleteBlocker,
   STOCKTAKE_DESTINATION_NAME,
 } from "@/lib/admin/stocktake-dispatch";
 
@@ -18,6 +19,7 @@ describe("ERP tačka 17 — Popisi", () => {
       "Uredi",
       "Proknjiži popis",
       "Arhiviraj",
+      "Obriši nacrt",
       "Arhiva",
       "Vrati iz arhive",
       "Aktivni popisi",
@@ -53,5 +55,15 @@ describe("ERP tačka 17 — Popisi", () => {
     expect(isStocktakeDispatchEditable("DRAFT", new Date())).toBe(false);
     expect(isStocktakeDispatchEditable("POSTED")).toBe(false);
     expect(isStocktakeDispatchEditable("CANCELLED")).toBe(false);
+  });
+
+  it("deletes only drafts and keeps posted history in the archive", () => {
+    expect(stocktakeDeleteBlocker("POP-2026-0001", "DRAFT")).toBeNull();
+    expect(stocktakeDeleteBlocker("POP-2026-0001", "POSTED")).toContain(
+      "mora ostati u evidenciji",
+    );
+    expect(stocktakeDeleteBlocker("POP-2026-0001", "CANCELLED")).toContain(
+      "ne i obrisati",
+    );
   });
 });

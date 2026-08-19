@@ -48,6 +48,7 @@ import {
 import {
   archiveStocktakeDispatches,
   createStocktakeDispatch,
+  deleteStocktakeDispatches,
   postStocktakeDispatches,
   restoreStocktakeDispatches,
 } from "@/lib/admin/stocktake-dispatch.server";
@@ -217,6 +218,13 @@ async function runCommand(
           ? `Vraćeno iz arhive: ${restored}.`
           : "Izabrani popisi su već aktivni.",
       };
+    }
+    case "stocktake.delete": {
+      if (module !== "popisi") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const deleted = await deleteStocktakeDispatches(ids);
+      return { message: `Obrisano nacrta popisa: ${deleted}.` };
     }
     case "sales-order.delete": {
       if (module !== "prodajni-nalozi") {

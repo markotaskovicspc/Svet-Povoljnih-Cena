@@ -125,6 +125,15 @@ const nextConfig: NextConfig = {
     // contains both the application and the resolved Next.js package.
     root: turbopackRoot,
   },
+  outputFileTracingIncludes: {
+    // Sharp is externalized by Next.js. Include its Linux runtime explicitly so
+    // Vercel functions receive both the native addon and the libvips shared lib.
+    "/*": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/sharp-linux-x64/**/*",
+      "node_modules/@img/sharp-libvips-linux-x64/**/*",
+    ],
+  },
   experimental: {
     // Production builds query the session-mode Supabase database while
     // prerendering. Keep one worker so the 15-client session pool cannot be

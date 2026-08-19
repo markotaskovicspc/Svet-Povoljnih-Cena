@@ -343,6 +343,15 @@ export const operationalErpModules: ErpModule[] = [
           "Arhivirati izabrane popise? Dokumenti i proknjižena kretanja zaliha ostaju sačuvani.",
       },
       {
+        label: "Obriši nacrt",
+        pendingLabel: "Brisanje…",
+        tone: "danger",
+        action: "stocktake.delete",
+        needsSelection: true,
+        confirm:
+          "Trajno obrisati izabrane nacrte popisa? Proknjiženi i stornirani popisi ne mogu da se obrišu.",
+      },
+      {
         label: "Arhiva",
         tone: "neutral",
         href: "/admin/erp/popisi?view=archive",

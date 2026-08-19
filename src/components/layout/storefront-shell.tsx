@@ -10,6 +10,7 @@ import { getGa4MeasurementId } from "@/lib/analytics/config";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
 import { getCmsFooterState } from "@/lib/cms/pages";
+import { hasDatabaseConnection } from "@/lib/db";
 import { primaryNav, type NavNode } from "@/data/site";
 import { getMobileSearchContent } from "@/lib/mobile-search/server";
 import { StorefrontStickyHeader } from "@/components/layout/storefront-sticky-header";
@@ -50,7 +51,9 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
   ]);
   const categories = categoryTree.length
     ? categoryNav(categoryTree)
-    : primaryNav;
+    : hasDatabaseConnection()
+      ? []
+      : primaryNav;
 
   return (
     <>

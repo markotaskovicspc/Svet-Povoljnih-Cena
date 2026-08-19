@@ -172,6 +172,12 @@ describe("PDP dokumenti", () => {
         name: "Stolica",
       }),
     ).toContain("Uvoznik: Svet povoljnih cena doo");
+    expect(
+      buildProductDeclaration({
+        sku: "rab-12345",
+        name: "Rasveta",
+      }),
+    ).toContain("Uvoznik: Rabalux");
   });
 
   it("osvežava standardna polja i čuva samo dodatnu ručnu napomenu", () => {

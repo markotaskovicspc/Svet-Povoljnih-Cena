@@ -960,6 +960,7 @@ export async function getErpModule(
       if (options.stocktakeArchived) {
         return (
           command.action === "stocktake.restore" ||
+          command.action === "stocktake.delete" ||
           command.href === "/admin/erp/popisi"
         );
       }

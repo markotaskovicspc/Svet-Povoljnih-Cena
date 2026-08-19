@@ -2,6 +2,7 @@ import { richTextPlainText } from "@/lib/rich-text";
 
 const SPC_DECLARATION_IMPORTER = "Svet povoljnih cena doo";
 const EVONEK_DECLARATION_IMPORTER = "Evonek doo";
+const RABALUX_DECLARATION_IMPORTER = "Rabalux";
 const GENERATED_LABELS = new Set([
   "vrsta robe",
   "naziv",
@@ -24,8 +25,9 @@ type ProductDeclarationInput = {
 };
 
 export function declarationImporterForSku(sku: string | null | undefined) {
-  const prefix = clean(sku).charAt(0);
-  if (prefix === "2") return EVONEK_DECLARATION_IMPORTER;
+  const normalizedSku = clean(sku).toLocaleUpperCase("sr-Latn-RS");
+  if (normalizedSku.startsWith("RAB")) return RABALUX_DECLARATION_IMPORTER;
+  if (normalizedSku.startsWith("2")) return EVONEK_DECLARATION_IMPORTER;
   return SPC_DECLARATION_IMPORTER;
 }
 

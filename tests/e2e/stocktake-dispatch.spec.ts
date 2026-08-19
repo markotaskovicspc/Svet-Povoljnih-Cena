@@ -144,6 +144,37 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       ]);
     });
 
+    await test.step("nacrt Popisa može trajno da se obriše", async () => {
+      await page
+        .getByRole("button", { name: "Novi popis", exact: true })
+        .first()
+        .click();
+      await expect(page).toHaveURL(/\/admin\/erp\/popisi\/[^/?]+\?mode=edit$/);
+      const draftId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+      const draft = await db.dispatchNote.findUniqueOrThrow({
+        where: { id: draftId },
+        select: { number: true, status: true },
+      });
+      expect(draft.status).toBe("DRAFT");
+
+      await page.goto("/admin/erp/popisi", { waitUntil: "domcontentloaded" });
+      await page
+        .getByPlaceholder("Brza pretraga po vidljivim kolonama")
+        .fill(draft.number);
+      const draftRow = page.getByRole("row").filter({
+        has: page.getByText(draft.number, { exact: true }),
+      });
+      await draftRow.getByRole("checkbox").check();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Obriši nacrt (1)" }).click();
+      await expect(page.getByRole("status")).toContainText(
+        "Obrisano nacrta popisa: 1.",
+      );
+      await expect
+        .poll(() => db.dispatchNote.count({ where: { id: draftId } }))
+        .toBe(0);
+    });
+
     await test.step("novi Popis je STOCKTAKE otpremnica sa fiksnim odredištem Popis", async () => {
       await page
         .getByRole("button", { name: "Novi popis", exact: true })

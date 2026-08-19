@@ -13,6 +13,12 @@ export function isStocktakeDispatchEditable(
   return status === "DRAFT" && !archivedAt;
 }
 
+export function stocktakeDeleteBlocker(number: string, status: string) {
+  return status === "DRAFT"
+    ? null
+    : `Popis ${number} je proknjižen ili storniran i mora ostati u evidenciji. Možete ga arhivirati, ali ne i obrisati.`;
+}
+
 export function nextStocktakeDispatchNumber(
   existingNumbers: string[],
   year = new Date().getFullYear(),

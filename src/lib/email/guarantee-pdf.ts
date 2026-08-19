@@ -2,7 +2,6 @@ import "server-only";
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import sharp from "sharp";
 import type { OrderItem } from "@/types";
 
 const PAGE_WIDTH = 1240;
@@ -43,6 +42,9 @@ export async function buildGuaranteePdf(input: GuaranteePdfInput) {
     throw new Error("Garantni list zahteva bar jednu stavku.");
   }
 
+  // Avoid loading Sharp's native runtime in checkout and email routes which
+  // only import the guarantee helpers but do not generate the document.
+  const { default: sharp } = await import("sharp");
   const logoDataUri = await loadLogoDataUri();
   const pages = paginateItems(input.items.map(renderItem));
   const renderedPages = await Promise.all(
