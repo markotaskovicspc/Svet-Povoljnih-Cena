@@ -28,6 +28,7 @@ export function MobileSearchSheet({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const {
@@ -61,6 +62,11 @@ export function MobileSearchSheet({
   }, [content.defaultViewAllHref, navigate, queryTrimmed]);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setInteractive(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => inputRef.current?.focus(), 100);
     return () => window.clearTimeout(id);
@@ -91,8 +97,10 @@ export function MobileSearchSheet({
     >
       <SheetTrigger
         aria-label="Pretraži"
+        aria-busy={!interactive}
+        disabled={!interactive}
         className={cn(
-          "flex w-full items-center justify-between rounded-lg border border-border bg-white text-left text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+          "flex w-full items-center justify-between rounded-lg border border-border bg-white text-left text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70",
           compact ? "h-10 gap-2 px-3 text-xs" : "h-11 gap-3 px-4 text-sm",
         )}
       >

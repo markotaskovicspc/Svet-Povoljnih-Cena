@@ -190,16 +190,9 @@ async function openMobileSearch(page: Page) {
 async function triggerMobileSearch(page: Page) {
   const trigger = page.getByRole("button", { name: "Pretraži" });
   const sheet = page.locator('[data-slot="sheet-content"]');
+  await expect(trigger).toBeEnabled({ timeout: 60_000 });
   await trigger.click();
-  try {
-    await sheet.waitFor({ state: "visible", timeout: 5_000 });
-  } catch {
-    // A cold dev-server render can expose HTML before React hydration has
-    // attached the trigger handler. Retry once after hydration settles.
-    await page.waitForTimeout(750);
-    await trigger.click();
-    await sheet.waitFor({ state: "visible", timeout: 10_000 });
-  }
+  await sheet.waitFor({ state: "visible", timeout: 10_000 });
 }
 
 function mobileSearchInput(page: Page) {
