@@ -76,7 +76,7 @@ export function CartDrawer() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            <CartLoginOffer />
+            <CartLoginOffer onNavigate={close} />
             <div className="divide-border/60 divide-y px-4">
               {lines.map((l) => (
                 <CartLineRow key={l.sku} line={l} onNavigate={close} />

@@ -31,6 +31,7 @@ import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
+import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
 
 interface Crumb {
@@ -223,7 +224,7 @@ export function MobileNav({
                           };
                           return (
                             <li key={tile.href}>
-                              {tile.children?.length ? (
+                              {getCategoryMenuAction(tile) === "submenu" ? (
                                 <button
                                   type="button"
                                   onClick={() => enter(tile)}
@@ -310,14 +311,15 @@ export function MobileNav({
                   <ul className="divide-y divide-border">
                     {current.nodes.map((node) => {
                       const isActive = pathname === node.href;
-                      const hasChildren = !!node.children?.length;
+                      const opensSubmenu =
+                        getCategoryMenuAction(node) === "submenu";
                       const categoryImageUrl = getCategoryMenuImage(node);
                       return (
                         <li
                           key={node.href}
                           className="min-h-18 transition hover:bg-muted-bg"
                         >
-                          {hasChildren ? (
+                          {opensSubmenu ? (
                             <button
                               type="button"
                               onClick={() => enter(node)}

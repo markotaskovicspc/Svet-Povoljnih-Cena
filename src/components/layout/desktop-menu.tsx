@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
+import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
 
 interface Crumb {
@@ -146,7 +147,7 @@ export function DesktopMenu({
 
                 return (
                   <li key={node.href}>
-                    {node.children?.length ? (
+                    {getCategoryMenuAction(node) === "submenu" ? (
                       <button
                         type="button"
                         onClick={() => enter(node)}
@@ -171,48 +172,69 @@ export function DesktopMenu({
             <ul className="divide-y divide-border">
               {current.nodes.map((node) => {
                 const isActive = pathname === node.href;
-                const hasChildren = !!node.children?.length;
+                const opensSubmenu = getCategoryMenuAction(node) === "submenu";
                 const categoryImageUrl = getCategoryMenuImage(node);
                 return (
                   <li
                     key={node.href}
-                    className="flex min-h-18 items-stretch transition hover:bg-muted-bg"
+                    className="min-h-18 transition hover:bg-muted-bg"
                   >
-                    <Link
-                      href={node.href}
-                      onClick={close}
-                      className={cn(
-                        "flex min-w-0 flex-1 items-center gap-3 px-5 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
-                        isActive && "font-semibold text-brand-blue",
-                      )}
-                    >
-                      <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
-                        <Image
-                          src={categoryImageUrl}
-                          alt=""
-                          fill
-                          sizes="70px"
-                          className="object-cover"
-                        />
-                      </span>
-                      <span className="min-w-0 break-words">{node.label}</span>
-                    </Link>
-                    {hasChildren ? (
+                    {opensSubmenu ? (
                       <button
                         type="button"
                         onClick={() => enter(node)}
-                        aria-label={`Otvori ${node.label}`}
-                        className="flex w-14 shrink-0 items-center justify-center text-ink-500 transition hover:bg-brand-blue/5 hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                        className={cn(
+                          "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-5 py-2.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
+                          isActive && "font-semibold text-brand-blue",
+                        )}
                       >
-                        <ChevronRight className="size-4" aria-hidden />
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                            <Image
+                              src={categoryImageUrl}
+                              alt=""
+                              fill
+                              sizes="70px"
+                              className="object-cover"
+                            />
+                          </span>
+                          <span className="min-w-0 break-words">
+                            {node.label}
+                          </span>
+                        </span>
+                        <ChevronRight
+                          className="size-4 shrink-0 text-ink-500"
+                          aria-hidden
+                        />
                       </button>
                     ) : (
-                      <span
-                        className="flex w-14 shrink-0 items-center justify-center text-ink-300"
-                        aria-hidden
+                      <Link
+                        href={node.href}
+                        onClick={close}
+                        className={cn(
+                          "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-5 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6",
+                          isActive && "font-semibold text-brand-blue",
+                        )}
                       >
-                        <ChevronRight className="size-4" />
-                      </span>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
+                            <Image
+                              src={categoryImageUrl}
+                              alt=""
+                              fill
+                              sizes="70px"
+                              className="object-cover"
+                            />
+                          </span>
+                          <span className="min-w-0 break-words">
+                            {node.label}
+                          </span>
+                        </span>
+                        <ChevronRight
+                          className="size-4 shrink-0 text-ink-300"
+                          aria-hidden
+                        />
+                      </Link>
                     )}
                   </li>
                 );

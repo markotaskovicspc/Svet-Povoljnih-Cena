@@ -274,7 +274,7 @@ export function getCartLoginOfferDetails(lines: CartLine[]) {
   return { discountPct, potentialSavings };
 }
 
-export function CartLoginOffer() {
+export function CartLoginOffer({ onNavigate }: { onNavigate?: () => void } = {}) {
   const loyaltyEligible = useLoyaltyEligibility();
   const { data: session, status } = useSession();
   const loggedIn =
@@ -303,12 +303,19 @@ export function CartLoginOffer() {
           </p>
         </div>
       </div>
-      <Link
-        href={`/nalog/prijava?callbackUrl=${encodeURIComponent("/korpa")}`}
-        className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
-      >
-        Prijavite se
-      </Link>
+      <CartLoginOfferLink onNavigate={onNavigate} />
     </div>
+  );
+}
+
+export function CartLoginOfferLink({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link
+      href={`/nalog/prijava?callbackUrl=${encodeURIComponent("/korpa")}`}
+      onClick={onNavigate}
+      className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
+    >
+      Prijavite se
+    </Link>
   );
 }

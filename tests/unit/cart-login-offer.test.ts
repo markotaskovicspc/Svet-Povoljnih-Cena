@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getCartLoginOfferDetails } from "@/components/cart/cart-view";
+import {
+  CartLoginOfferLink,
+  getCartLoginOfferDetails,
+} from "@/components/cart/cart-view";
 import type { CartLine } from "@/lib/hooks/use-cart";
 
 function cartLine(overrides: Partial<CartLine> = {}): CartLine {
@@ -15,6 +18,15 @@ function cartLine(overrides: Partial<CartLine> = {}): CartLine {
 }
 
 describe("cart login offer", () => {
+  it("passes the drawer close callback to the login link", () => {
+    const onNavigate = () => undefined;
+    const link = CartLoginOfferLink({ onNavigate });
+    const props = link.props as { href: string; onClick?: () => void };
+
+    expect(props.href).toBe("/nalog/prijava?callbackUrl=%2Fkorpa");
+    expect(props.onClick).toBe(onNavigate);
+  });
+
   it("keeps the 30% login message available before loyalty prices load", () => {
     expect(getCartLoginOfferDetails([cartLine()])).toEqual({
       discountPct: 30,
