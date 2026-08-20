@@ -32,7 +32,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup).not.toContain('title="CRNA / NATUR"');
   });
 
-  it("na PDP-u prikazuje i tekstualne nazive boja bez lažnog izbora", () => {
+  it("na PDP-u prikazuje samo thumbnail varijante bez vidljivog naziva boje", () => {
     const markup = renderToStaticMarkup(
       <ProductColorOptions
         product={product}
@@ -41,9 +41,8 @@ describe("PDP boje proizvoda", () => {
       />,
     );
     expect(markup).not.toContain("Boja:");
-    expect(markup).toContain('aria-label="Boja proizvoda"');
-    expect(markup).toContain("CRNA");
-    expect(markup).toContain("NATUR");
+    expect(markup).toContain('aria-label="Boja proizvoda: CRNA / NATUR"');
+    expect(markup).not.toContain(">CRNA / NATUR<");
     expect(markup).not.toContain("<button");
     expect(markup).toContain("Varijanta:");
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
@@ -108,6 +107,8 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain('href="/p/sofa-black"');
     expect(markup).toContain('href="/p/sofa-green"');
     expect(markup).toContain("Crna");
+    expect(markup).not.toContain(">Crna</span>");
+    expect(markup).not.toContain(">Zelena</span>");
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain("Varijanta:");

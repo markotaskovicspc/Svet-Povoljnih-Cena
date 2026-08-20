@@ -217,44 +217,37 @@ export function ProductColorOptions({
               {familyOptions.map((option) => {
                 const selected = option.sku === activeSku;
                 const content = (
-                  <>
-                    <span
-                      className={cn(
-                        "relative block overflow-hidden rounded-md bg-[linear-gradient(135deg,#f6f5f1_0_50%,#ebe9e3_50%)]",
-                        showLabels ? "size-14" : "size-9",
-                      )}
-                      data-variant-thumbnail
-                    >
-                      {option.thumbnail ? (
-                        <Image
-                          src={getMediaVariantUrl(option.thumbnail, "thumb")}
-                          alt=""
-                          fill
-                          sizes={showLabels ? "56px" : "36px"}
-                          className="object-contain p-0.5"
-                        />
-                      ) : (
-                        <span
-                          className="absolute inset-1 rounded-sm ring-1 ring-black/10"
-                          style={{
-                            backgroundColor:
-                              option.colorHex ??
-                              COLOR_HEX[option.label.toLowerCase()] ??
-                              "#d8d4c8",
-                          }}
-                        />
-                      )}
-                    </span>
-                    {showLabels ? (
-                      <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
-                        {option.label}
-                      </span>
-                    ) : null}
-                  </>
+                  <span
+                    className={cn(
+                      "relative block overflow-hidden rounded-md bg-[linear-gradient(135deg,#f6f5f1_0_50%,#ebe9e3_50%)]",
+                      showLabels ? "size-14" : "size-9",
+                    )}
+                    data-variant-thumbnail
+                  >
+                    {option.thumbnail ? (
+                      <Image
+                        src={getMediaVariantUrl(option.thumbnail, "thumb")}
+                        alt=""
+                        fill
+                        sizes={showLabels ? "56px" : "36px"}
+                        className="object-contain p-0.5"
+                      />
+                    ) : (
+                      <span
+                        className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                        style={{
+                          backgroundColor:
+                            option.colorHex ??
+                            COLOR_HEX[option.label.toLowerCase()] ??
+                            "#d8d4c8",
+                        }}
+                      />
+                    )}
+                  </span>
                 );
                 const classes = cn(
                   "inline-flex shrink-0 snap-start items-center rounded-lg bg-white transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
-                  showLabels ? "gap-2 p-1.5 pr-2.5" : "p-0.5",
+                  showLabels ? "p-1.5" : "p-0.5",
                   selected
                     ? "ring-2 ring-brand-blue"
                     : "ring-1 ring-border hover:ring-ink-500",
@@ -353,14 +346,14 @@ export function ProductColorOptions({
   return (
     <div
       className={cn("grid gap-1.5", className)}
-      aria-label={label}
+      aria-label={`${label}: ${color.label}`}
     >
       <div className="grid gap-1.5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
         <span className="text-xs font-medium text-ink-500 md:mr-0.5">
           Varijanta:
         </span>
         <span
-          className="inline-flex w-fit items-center gap-2 rounded-lg bg-white p-1.5 pr-2.5 ring-2 ring-brand-blue"
+          className="inline-flex w-fit items-center rounded-lg bg-white p-1.5 ring-2 ring-brand-blue"
           data-variant-option
           data-variant-selected="true"
         >
@@ -382,9 +375,6 @@ export function ProductColorOptions({
                 style={{ backgroundColor: color.colors[0] }}
               />
             )}
-          </span>
-          <span className="max-w-28 text-left text-xs font-semibold text-ink-800">
-            {color.label}
           </span>
         </span>
       </div>
