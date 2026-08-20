@@ -12,12 +12,18 @@ const fontSans = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: `${BRAND.name} — povoljne cene za dom`,
+    default:
+      "Svet povoljnih cena – mesto gde su dobre ponude dostupne svima!",
     template: `%s · ${BRAND.name}`,
   },
   description:
-    "Povoljni proizvodi za dom, tehniku, putovanja i svakodnevnu kupovinu. Brza isporuka, sigurno plaćanje i akcijske cene.",
+    "Dobrodošli na platformu koja iskustvo kupovine čini jednostavnim, sigurnim i bez stresa, uz produženu garanciju i kratke rokove isporuke.",
   metadataBase: new URL(BRAND.url),
+  openGraph: {
+    siteName: BRAND.name,
+    type: "website",
+    locale: "sr_RS",
+  },
 };
 
 export const viewport: Viewport = {

@@ -9,8 +9,17 @@ import {
 } from "@/lib/storefront/content";
 import { getHomeLayout } from "@/lib/storefront/homepage";
 import { HomeSectionSlotKey } from "@prisma/client";
+import { BRAND } from "@/lib/brand";
 
 export const revalidate = 60;
+
+const websiteStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: BRAND.name,
+  alternateName: ["Svet povoljnih cena", "svetpovoljnihcena.rs"],
+  url: `${BRAND.url}/`,
+};
 
 export default async function Home() {
   const [banners, mobileTabs, homeLayout] = await Promise.all([
@@ -22,6 +31,12 @@ export default async function Home() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(websiteStructuredData).replace(/</g, "\\u003c"),
+        }}
+      />
       <h1 className="sr-only">
         Svet povoljnih cena — online prodavnica
       </h1>

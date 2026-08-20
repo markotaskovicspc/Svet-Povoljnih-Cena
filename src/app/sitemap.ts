@@ -7,7 +7,9 @@ import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import { getPublishedLandingPagesForSitemap } from "@/lib/storefront/landing-pages";
 
 const STATIC_PATHS = [
-  "", "/novo", "/outlet", "/sve-do-999", "/svet-akcija", "/o-nama",
+  "", "/akcija", "/heroji-meseca", "/niske-cene-pod-zastitom",
+  "/ogranicena-ponuda", "/novo", "/outlet", "/sve-do-999",
+  "/specijalne-ponude", "/nedeljna-akcija", "/svet-akcija", "/o-nama",
   "/kontakt", "/pomoc", "/servis", "/reklamacije", "/komentari",
   "/uslovi-koriscenja", "/uslovi-isporuke", "/uslovi-kupovine",
   "/politika-privatnosti", "/brisanje-podataka", "/podesavanja-kolacica",
