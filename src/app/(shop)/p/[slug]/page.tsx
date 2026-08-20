@@ -17,7 +17,12 @@ import { Reveal } from "@/components/motion/reveal";
 import { getProductBySlug, listProductRail } from "@/lib/api/catalog";
 import { formatDimensions, formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { deriveImageBadges, effectiveUnitPrice, type Badge } from "@/lib/pricing";
+import {
+  deriveImageBadges,
+  effectiveUnitPrice,
+  lowestPublicDisplayedUnitPrice,
+  type Badge,
+} from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
 import { ProductViewAnalytics } from "@/components/analytics/first-party-analytics";
 import { getPublishedContentPage } from "@/lib/cms/pages";
@@ -55,11 +60,13 @@ export function generateStaticParams() {
   return [];
 }
 
-export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Proizvod nije pronađen" };
-  const price = effectiveUnitPrice(product);
+  const price = lowestPublicDisplayedUnitPrice(product);
   return {
     title: `${product.name} — ${formatRsd(price.effective)}`,
     description: product.shortDescription ?? product.description.slice(0, 160),
@@ -85,7 +92,10 @@ export default async function ProductPage({ params }: RouteProps) {
       label,
       href:
         i < arr.length
-          ? `/k/${arr.slice(0, i + 1).map(slugify).join("/")}`
+          ? `/k/${arr
+              .slice(0, i + 1)
+              .map(slugify)
+              .join("/")}`
           : undefined,
     })),
     { label: product.sku },
@@ -98,7 +108,9 @@ export default async function ProductPage({ params }: RouteProps) {
           collectionSlug: product.collection,
           excludeSku: product.sku,
           limit: 8,
-        }).then((r) => r.items).catch(() => [])
+        })
+          .then((r) => r.items)
+          .catch(() => [])
       : Promise.resolve([]),
     product.group
       ? listProductRail({
@@ -135,7 +147,9 @@ export default async function ProductPage({ params }: RouteProps) {
           unitPrice: publicPrice.effective,
           fullUnitPrice: publicPrice.full,
           categories: product.categoryPath,
-          variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
+          variant: product.variantFamily?.options.find(
+            (option) => option.sku === product.sku,
+          )?.label,
           familyCode: product.variantFamily?.code,
         }}
       />
@@ -291,59 +305,62 @@ export default async function ProductPage({ params }: RouteProps) {
           </section>
         </Reveal>
       ) : null}
-      {pdpLayout.showStandaloneTechnicalAndDocuments && (product.technicalSpecs?.length ||
-      product.attachments?.some((attachment) => attachment.section === "general") ? (
-        <Reveal>
-          <section className="mx-auto mt-8 grid w-full max-w-[var(--container-page)] gap-6 px-4 md:grid-cols-2 md:px-6">
-            {product.technicalSpecs?.length ? (
-              <div>
-                <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-                  Tehničke karakteristike
-                </h2>
-                <dl className="mt-5 divide-y divide-border/70 rounded-2xl border border-border/70 bg-surface px-4">
-                  {product.technicalSpecs.map((spec) => (
-                    <div
-                      key={spec.key}
-                      className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 py-3 text-sm"
-                    >
-                      <dt className="text-ink-500">{spec.label}</dt>
-                      <dd className="text-right font-medium text-ink-900">
-                        {spec.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ) : null}
-            {product.attachments?.some(
-              (attachment) => attachment.section === "general",
-            ) ? (
-              <div>
-                <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
-                  Dokumenti
-                </h2>
-                <ul className="mt-5 space-y-3">
-                  {product.attachments
-                    .filter((attachment) => attachment.section === "general")
-                    .map((attachment) => (
-                    <li key={`${attachment.kind}-${attachment.url}`}>
-                      <a
-                        href={attachment.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/40"
+      {pdpLayout.showStandaloneTechnicalAndDocuments &&
+        (product.technicalSpecs?.length ||
+        product.attachments?.some(
+          (attachment) => attachment.section === "general",
+        ) ? (
+          <Reveal>
+            <section className="mx-auto mt-8 grid w-full max-w-[var(--container-page)] gap-6 px-4 md:grid-cols-2 md:px-6">
+              {product.technicalSpecs?.length ? (
+                <div>
+                  <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
+                    Tehničke karakteristike
+                  </h2>
+                  <dl className="mt-5 divide-y divide-border/70 rounded-2xl border border-border/70 bg-surface px-4">
+                    {product.technicalSpecs.map((spec) => (
+                      <div
+                        key={spec.key}
+                        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 py-3 text-sm"
                       >
-                        {attachment.label}
-                        <span aria-hidden>↗</span>
-                      </a>
-                    </li>
+                        <dt className="text-ink-500">{spec.label}</dt>
+                        <dd className="text-right font-medium text-ink-900">
+                          {spec.value}
+                        </dd>
+                      </div>
                     ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-        </Reveal>
-      ) : null)}
+                  </dl>
+                </div>
+              ) : null}
+              {product.attachments?.some(
+                (attachment) => attachment.section === "general",
+              ) ? (
+                <div>
+                  <h2 className="font-display text-2xl text-ink-900 md:text-3xl">
+                    Dokumenti
+                  </h2>
+                  <ul className="mt-5 space-y-3">
+                    {product.attachments
+                      .filter((attachment) => attachment.section === "general")
+                      .map((attachment) => (
+                        <li key={`${attachment.kind}-${attachment.url}`}>
+                          <a
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-between rounded-xl border border-border/70 bg-surface px-4 py-3 text-sm font-semibold text-brand-blue transition hover:border-brand-blue/40"
+                          >
+                            {attachment.label}
+                            <span aria-hidden>↗</span>
+                          </a>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          </Reveal>
+        ) : null)}
       {/* Row X — Frequently bought together (same collection) */}
       {frequentlyBought.length ? (
         <SectionRail
@@ -414,7 +431,12 @@ function PdpBadge({ badge }: { badge: Badge }) {
   if (badge.key === "new") {
     return (
       <PdpStickerBadge
-        sticker={{ url: "/brand/promo-stickers/novo.svg", alt: "Novo", width: 600, height: 600 }}
+        sticker={{
+          url: "/brand/promo-stickers/novo.svg",
+          alt: "Novo",
+          width: 600,
+          height: 600,
+        }}
         label={badge.label}
         className="size-11"
       />
@@ -423,7 +445,12 @@ function PdpBadge({ badge }: { badge: Badge }) {
   if (badge.key === "limited" || badge.key === "dtz") {
     return (
       <PdpStickerBadge
-        sticker={{ url: "/brand/promo-stickers/dtz2.svg", alt: "Dok traju zalihe", width: 1536, height: 1024 }}
+        sticker={{
+          url: "/brand/promo-stickers/dtz2.svg",
+          alt: "Dok traju zalihe",
+          width: 1536,
+          height: 1024,
+        }}
         label={badge.label}
         className="h-10 w-16"
       />
@@ -451,7 +478,10 @@ function PdpStickerBadge({
   className?: string;
 }) {
   return (
-    <span aria-label={label ?? sticker.alt} className={cn("flex items-center justify-center", className)}>
+    <span
+      aria-label={label ?? sticker.alt}
+      className={cn("flex items-center justify-center", className)}
+    >
       <Image
         src={sticker.url}
         alt={label ?? sticker.alt ?? ""}
@@ -465,5 +495,8 @@ function PdpStickerBadge({
 }
 
 function stripHtml(value: string) {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

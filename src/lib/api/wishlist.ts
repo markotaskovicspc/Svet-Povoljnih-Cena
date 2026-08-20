@@ -217,7 +217,7 @@ export async function mergeWishlist(
   const requestedBySku = new Map(items.map((item) => [item.sku, item]));
 
   await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-wishlist'), hashtext(${userId}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-wishlist'), hashtext(${userId}))::text AS "lock"`;
     const products = requestedBySku.size
       ? await tx.product.findMany({
           where: { sku: { in: [...requestedBySku.keys()] }, deletedAt: null },

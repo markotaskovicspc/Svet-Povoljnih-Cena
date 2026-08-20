@@ -66,12 +66,6 @@ export function MobileSearchSheet({
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const id = window.setTimeout(() => inputRef.current?.focus(), 100);
-    return () => window.clearTimeout(id);
-  }, [open]);
-
   const goHit = (hit: SearchSuggestion) => navigate(hit.href);
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" && results.length) {
@@ -115,6 +109,7 @@ export function MobileSearchSheet({
       </SheetTrigger>
       <SheetContent
         side="top"
+        initialFocus={inputRef}
         showCloseButton={false}
         aria-describedby={undefined}
         className="!inset-0 !h-[100dvh] !w-screen !max-w-none gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-none"

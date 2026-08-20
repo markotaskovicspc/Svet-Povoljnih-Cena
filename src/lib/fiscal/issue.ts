@@ -178,27 +178,110 @@ export async function issueFiscalSale(input: {
     })),
   });
 
-  const document = existingDocument ?? (await db.fiscalDocument.create({
-    data: {
-      orderId: order.id,
-      kind: "SALE",
-      status: "PENDING",
-      source,
-      paymentMethod,
-      buyerId,
-      idempotencyKey,
-      totalGross: decimal(totals.totalGross),
-      totalNet: decimal(totals.totalNet),
-      totalVat: decimal(totals.totalVat),
-      rawRequest: rawRequest as Prisma.InputJsonValue,
-      lines: {
-        create: drafts.map((line) => saleLineCreate(line, order, warehouse.name)),
-      },
-    },
-    include: { lines: true },
-  }));
+  const claim = await db.$transaction(async (tx) => {
+    // Serialize fiscal-document creation with admin WEB-order edits. Without
+    // this short lock, fiscalization could snapshot the old quantities,
+    // pause, and create its PENDING document just after an admin committed a
+    // quantity reduction.
+    await tx.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`,
+    );
+    const currentOrder = await tx.order.findUnique({
+      where: { id: order.id },
+      select: { updatedAt: true },
+    });
+    if (
+      !currentOrder ||
+      currentOrder.updatedAt.getTime() !== order.updatedAt.getTime()
+    ) {
+      return { state: "changed" as const };
+    }
 
-  await markDocumentDispatched(document.id);
+    await tx.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "FiscalDocument" WHERE "idempotencyKey" = ${idempotencyKey} FOR UPDATE`,
+    );
+    const concurrentDocument = await tx.fiscalDocument.findUnique({
+      where: { idempotencyKey },
+      include: { lines: true },
+    });
+    if (
+      concurrentDocument?.status === "ISSUED" &&
+      concurrentDocument.receiptNumber &&
+      concurrentDocument.issuedAt
+    ) {
+      return { state: "issued" as const, document: concurrentDocument };
+    }
+    if (concurrentDocument && isUnsafeFiscalRedispatch(concurrentDocument)) {
+      return { state: "busy" as const };
+    }
+
+    const dispatchedAt = new Date();
+    if (concurrentDocument) {
+      const document = await tx.fiscalDocument.update({
+        where: { id: concurrentDocument.id },
+        data: {
+          status: "PENDING",
+          error: null,
+          dispatchedAt,
+          lastAttemptAt: dispatchedAt,
+          attemptCount: { increment: 1 },
+        },
+        include: { lines: true },
+      });
+      return { state: "claimed" as const, document };
+    }
+
+    const document = await tx.fiscalDocument.create({
+      data: {
+        orderId: order.id,
+        kind: "SALE",
+        status: "PENDING",
+        source,
+        paymentMethod,
+        buyerId,
+        idempotencyKey,
+        totalGross: decimal(totals.totalGross),
+        totalNet: decimal(totals.totalNet),
+        totalVat: decimal(totals.totalVat),
+        rawRequest: rawRequest as Prisma.InputJsonValue,
+        dispatchedAt,
+        lastAttemptAt: dispatchedAt,
+        attemptCount: 1,
+        lines: {
+          create: drafts.map((line) =>
+            saleLineCreate(line, order, warehouse.name),
+          ),
+        },
+      },
+      include: { lines: true },
+    });
+    return { state: "claimed" as const, document };
+  });
+  if (claim.state === "changed") {
+    return {
+      ok: false,
+      reason: "gateway_failure",
+      error:
+        "Porudžbina je promenjena tokom pripreme fiskalnog dokumenta. Osvežite podatke i pokrenite fiskalizaciju ponovo.",
+    };
+  }
+  if (claim.state === "busy") {
+    return {
+      ok: false,
+      reason: "gateway_failure",
+      error:
+        "Fiskalni zahtev je već poslat ili se upravo obrađuje. Proverite badi portal; ponovno slanje je blokirano da ne bi nastao dupli račun.",
+    };
+  }
+  if (claim.state === "issued") {
+    await ensureIssuedFiscalSaleInventoryPosted(claim.document.id);
+    const posted = await db.fiscalDocument.findUniqueOrThrow({
+      where: { id: claim.document.id },
+      include: { lines: true },
+    });
+    return saleOutcome(posted, order, false);
+  }
+  const document = claim.document;
   const dispatch = await fiscalize({
     invoiceRef: idempotencyKey,
     idempotencyKey,

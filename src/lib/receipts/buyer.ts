@@ -28,6 +28,8 @@ export async function issueBuyerReceiptForOrder(
     sendEmail?: boolean;
     forceEmail?: boolean;
     accessToken?: string;
+    /** Clear an older stored PDF when this regeneration cannot replace it. */
+    invalidateExistingPdfOnUploadFailure?: boolean;
   } = {},
 ): Promise<BuyerReceiptResult> {
   const row = await db.order.findUnique({
@@ -71,7 +73,11 @@ export async function issueBuyerReceiptForOrder(
     },
     update: {
       pdfUrl: null,
-      pdfObjectKey: uploaded?.objectKey ?? row.invoices[0]?.pdfObjectKey ?? null,
+      pdfObjectKey:
+        uploaded?.objectKey ??
+        (opts.invalidateExistingPdfOnUploadFailure
+          ? null
+          : row.invoices[0]?.pdfObjectKey ?? null),
       recipientEmail: recipient,
       snapshot: snapshot as Prisma.InputJsonValue,
       total: row.total,

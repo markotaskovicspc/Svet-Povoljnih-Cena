@@ -95,14 +95,20 @@ export async function createReclamation(
   input: CreateReclamationInput,
   userId: string,
 ): Promise<CreateReclamationResult> {
-  return createReclamationRecord(input, { expectedUserId: userId });
+  return createReclamationRecord(input, {
+    expectedUserId: userId,
+    requireDelivered: true,
+  });
 }
 
 export async function createGuestReclamation(
   input: CreateReclamationInput,
   accessToken: string | null | undefined,
 ): Promise<CreateReclamationResult> {
-  return createReclamationRecord(input, { guestAccessToken: accessToken ?? null });
+  return createReclamationRecord(input, {
+    guestAccessToken: accessToken ?? null,
+    requireDelivered: true,
+  });
 }
 
 export async function createAdminReclamation(
@@ -313,6 +319,7 @@ export async function getGuestOrderForReclamation(
   if (
     !order ||
     order.userId !== null ||
+    order.status !== "ISPORUCENO" ||
     !verifyOrderAccessToken({
       token: accessToken,
       tokenHash: order.publicAccessTokenHash,
@@ -354,7 +361,7 @@ export async function listReclamationsForUser(userId: string) {
 
 export async function listOrdersForReclamation(userId: string) {
   const orders = await db.order.findMany({
-    where: { userId },
+    where: { userId, status: "ISPORUCENO" },
     orderBy: { createdAt: "desc" },
     select: {
       number: true,

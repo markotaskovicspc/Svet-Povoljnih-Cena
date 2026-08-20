@@ -1,11 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  rmSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -55,9 +50,12 @@ const schema = `client_feedback_e2e_${Date.now()}_${randomBytes(3).toString("hex
 const testUrl = new URL(baseUrl);
 testUrl.searchParams.set("schema", schema);
 testUrl.searchParams.set("options", `-c search_path=${schema}`);
+if (!["localhost", "127.0.0.1", "::1"].includes(testUrl.hostname)) {
+  testUrl.searchParams.set("sslmode", "no-verify");
+  testUrl.searchParams.delete("uselibpqcompat");
+}
 const databaseUrl = testUrl.toString();
-const playwrightPort =
-  process.env.CLIENT_FEEDBACK_E2E_PORT?.trim() || "3025";
+const playwrightPort = process.env.CLIENT_FEEDBACK_E2E_PORT?.trim() || "3025";
 if (!/^\d+$/.test(playwrightPort) || Number(playwrightPort) > 65_535) {
   throw new Error("CLIENT_FEEDBACK_E2E_PORT must be a valid TCP port.");
 }
@@ -70,9 +68,7 @@ const defaultAcceptanceSpecs = [
   "tests/e2e/reclamation-analytics.spec.ts",
   "tests/e2e/module-8-warehouses.spec.ts",
 ];
-const requestedAcceptanceSpecs = (
-  process.env.CLIENT_FEEDBACK_E2E_SPECS ?? ""
-)
+const requestedAcceptanceSpecs = (process.env.CLIENT_FEEDBACK_E2E_SPECS ?? "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
@@ -164,7 +160,9 @@ try {
       throw new Error("Unsafe temporary schema name.");
     }
     await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    console.log(`client-feedback acceptance: removed temporary schema ${schema}`);
+    console.log(
+      `client-feedback acceptance: removed temporary schema ${schema}`,
+    );
   } finally {
     await client.end().catch(() => undefined);
     if (existsSync(resolve(process.cwd(), e2eDistDir))) {

@@ -3,7 +3,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import {
   createAdminReclamation,
+  createGuestReclamation,
   createReclamation,
+  getGuestOrderForReclamation,
   listOrdersForReclamation,
 } from "@/lib/api/reclamations";
 import { applyShipmentEvent } from "@/lib/courier/registry";
@@ -89,6 +91,89 @@ afterAll(async () => {
 });
 
 describe("quantity-aware reclamation fulfillment", () => {
+  it("does not expose or accept customer and guest claims before delivery", async () => {
+    const input = {
+      orderNumberOrFiscal: `${tag}-ORDER`,
+      sku: `${tag}-SKU`,
+      quantity: 1,
+      description: "Prerana reklamacija pre potvrđene isporuke.",
+      photos: [],
+    };
+    await db.order.update({
+      where: { id: orderId },
+      data: { status: "U_ISPORUCI" },
+    });
+    try {
+      await expect(createReclamation(input, userId)).resolves.toEqual({
+        ok: false,
+        reason: "ORDER_NOT_DELIVERED",
+      });
+      await expect(listOrdersForReclamation(userId)).resolves.toEqual([]);
+    } finally {
+      await db.order.update({
+        where: { id: orderId },
+        data: { status: "ISPORUCENO" },
+      });
+    }
+
+    const guestToken = `${accessToken}-guest`;
+    const guestOrder = await db.order.create({
+      data: {
+        number: `${tag}-GUEST`,
+        guestEmail: `${tag.toLowerCase()}.guest@example.invalid`,
+        publicAccessTokenHash: createHash("sha256")
+          .update(guestToken, "utf8")
+          .digest("base64url"),
+        status: "U_ISPORUCI",
+        channel: "WEB",
+        subtotal: 1_000,
+        total: 1_000,
+        shippingMethod: "KURIR",
+        paymentMethod: "POUZECE_GOTOVINA",
+        shipFirstName: "Gost",
+        shipLastName: "Kupac",
+        shipPhone: "+381641112224",
+        shipStreet: "Test 1",
+        shipCity: "Novi Sad",
+        shipPostalCode: "21000",
+        termsAcceptedAt: new Date(),
+        items: {
+          create: {
+            productId,
+            sku: `${tag}-SKU`,
+            name: `${tag} artikal`,
+            qty: 1,
+            unitPriceFull: 1_000,
+            unitPriceSale: 1_000,
+          },
+        },
+      },
+    });
+    const guestInput = {
+      ...input,
+      orderNumberOrFiscal: guestOrder.number,
+    };
+    try {
+      await expect(
+        getGuestOrderForReclamation(guestOrder.number, guestToken),
+      ).resolves.toBeNull();
+      await expect(
+        createGuestReclamation(guestInput, guestToken),
+      ).resolves.toEqual({ ok: false, reason: "ORDER_NOT_DELIVERED" });
+
+      await db.order.update({
+        where: { id: guestOrder.id },
+        data: { status: "ISPORUCENO" },
+      });
+      await expect(
+        getGuestOrderForReclamation(guestOrder.number, guestToken),
+      ).resolves.toMatchObject({ number: guestOrder.number });
+    } finally {
+      await db.reclamation.deleteMany({ where: { orderId: guestOrder.id } });
+      await db.order.delete({ where: { id: guestOrder.id } });
+    }
+  });
+
   it("allows an audited manual reclamation only after delivery", async () => {
     const manualOrder = await db.order.create({
       data: {

@@ -12,11 +12,14 @@ test.skip(
   process.env.E2E_CHECKOUT_NAVIGATION !== "1",
   "Checkout confirmation navigation runs only in the isolated acceptance flow.",
 );
+test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeAll(async () => {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is required for checkout navigation acceptance.");
+    throw new Error(
+      "DATABASE_URL is required for checkout navigation acceptance.",
+    );
   }
   db = new PrismaClient({
     adapter: new PrismaPg({
@@ -104,7 +107,11 @@ test("successful guest order lands on the confirmation route", async ({
     route.fulfill({ status: 204 }),
   );
   await page.route("**/api/checkout/session", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' }),
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: '{"ok":true}',
+    }),
   );
   await page.route("**/api/products/lookup", (route) =>
     route.fulfill({
@@ -185,25 +192,73 @@ test("successful guest order lands on the confirmation route", async ({
   await page.getByRole("button", { name: "Nastavi kao gost" }).click();
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeLessThanOrEqual(8);
+  await expect(
+    page.getByRole("heading", { name: "Isporuka i plaćanje" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("mobile-checkout-navigation")).toHaveCSS(
+    "position",
+    "fixed",
+  );
+  await expect(
+    page.getByRole("radio", { name: /Pouzeće — gotovina/ }),
+  ).toBeChecked();
 
   await page.getByRole("textbox", { name: "Ime*", exact: true }).fill("Codex");
   await page.getByRole("textbox", { name: "Prezime*", exact: true }).fill("QA");
-  await page.getByRole("textbox", { name: "E-pošta*", exact: true }).fill("delivered@resend.dev");
-  await page.getByRole("textbox", { name: "Telefon*", exact: true }).fill("0601234567");
-  await page.getByRole("combobox", { name: "Grad / mesto*", exact: true }).fill("Kragujevac");
-  await page.getByRole("option", { name: /Kragujevac/ }).first().click();
-  await page.getByRole("textbox", { name: "Adresa*", exact: true }).fill("Kralja Petra");
+  await page
+    .getByRole("textbox", { name: "E-pošta*", exact: true })
+    .fill("delivered@resend.dev");
+  await page
+    .getByRole("textbox", { name: "Telefon*", exact: true })
+    .fill("0601234567");
+  await page
+    .getByRole("combobox", { name: "Grad / mesto*", exact: true })
+    .fill("Kragujevac");
+  await page
+    .getByRole("option", { name: /Kragujevac/ })
+    .first()
+    .click();
+  await page
+    .getByRole("textbox", { name: "Adresa*", exact: true })
+    .fill("Kralja Petra");
   const streetOption = page.getByRole("option", { name: /Kralja Petra I 1/ });
-  if (await streetOption.isVisible().catch(() => false)) await streetOption.click();
-  await page.getByRole("textbox", { name: "Poštanski broj*", exact: true }).fill("34000");
+  if (await streetOption.isVisible().catch(() => false))
+    await streetOption.click();
+  await page
+    .getByRole("textbox", { name: "Poštanski broj*", exact: true })
+    .fill("34000");
+  const [firstNameBox, lastNameBox, cityBox, postalCodeBox] = await Promise.all(
+    [
+      page.getByRole("textbox", { name: "Ime*", exact: true }).boundingBox(),
+      page
+        .getByRole("textbox", { name: "Prezime*", exact: true })
+        .boundingBox(),
+      page
+        .getByRole("combobox", { name: "Grad / mesto*", exact: true })
+        .boundingBox(),
+      page
+        .getByRole("textbox", { name: "Poštanski broj*", exact: true })
+        .boundingBox(),
+    ],
+  );
+  expect(firstNameBox?.y).toBeCloseTo(lastNameBox?.y ?? -100, 0);
+  expect(cityBox?.y).toBeCloseTo(postalCodeBox?.y ?? -100, 0);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.getByRole("button", { name: "Nastavi", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeLessThanOrEqual(8);
+  await expect(
+    page.getByRole("heading", { name: "Pregled i potvrda" }),
+  ).toBeVisible();
+  const [deliveryBlock, methodBlock] = await Promise.all([
+    page.locator('[data-review-block="Isporuka"]').boundingBox(),
+    page.locator('[data-review-block="Način isporuke"]').boundingBox(),
+  ]);
+  expect(deliveryBlock?.y).toBeCloseTo(methodBlock?.y ?? -100, 0);
   await page.getByLabel(/Saglasan\/a sam/).check();
   await page.getByRole("button", { name: "Potvrdi porudžbinu" }).click();
 

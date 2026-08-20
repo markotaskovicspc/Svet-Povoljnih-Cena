@@ -124,7 +124,7 @@ type CreateOrderApiResponse =
 
 const STEP_TITLES: Record<CheckoutStep, string> = {
   identity: "Kako želite da nastavite?",
-  shipping: "Podaci za isporuku",
+  shipping: "Isporuka i plaćanje",
   method: "Način isporuke",
   payment: "Način plaćanja",
   review: "Pregled i potvrda",
@@ -150,12 +150,16 @@ export function CheckoutFlow({
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(
+    null,
+  );
   const [resolvedDeliveryQuote, setResolvedDeliveryQuote] = useState<{
     key: string | null;
     quote: CheckoutDeliveryQuote;
   }>({ key: null, quote: checkoutConfig.deliveryQuote });
-  const [deliveryQuoteError, setDeliveryQuoteError] = useState<string | null>(null);
+  const [deliveryQuoteError, setDeliveryQuoteError] = useState<string | null>(
+    null,
+  );
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const clearCart = useCart((s) => s.clear);
@@ -167,6 +171,11 @@ export function CheckoutFlow({
   const voucher = useCheckout((s) => s.voucher);
   const setLastOrder = useCheckout((s) => s.setLastOrder);
   const reset = useCheckout((s) => s.reset);
+  const preferredPaymentMethod = checkoutConfig.paymentMethods.some(
+    (method) => method.id === "pouzece_gotovina",
+  )
+    ? "pouzece_gotovina"
+    : checkoutConfig.defaultPaymentMethod;
 
   const methods = useForm<CheckoutFormData>({
     mode: "onBlur",
@@ -189,7 +198,7 @@ export function CheckoutFlow({
       shippingMethod: "kurir",
       glsDeliveryPoint: null,
       perItemAssembly: {},
-      paymentMethod: checkoutConfig.defaultPaymentMethod,
+      paymentMethod: preferredPaymentMethod,
       voucherCode: "",
       notes: "",
       consent: false,
@@ -221,8 +230,8 @@ export function CheckoutFlow({
   const stepOrder = useMemo<CheckoutStep[]>(
     () =>
       isAuthenticatedCustomer
-        ? ["shipping", "payment", "review"]
-        : ["identity", "shipping", "payment", "review"],
+        ? ["shipping", "review"]
+        : ["identity", "shipping", "review"],
     [isAuthenticatedCustomer],
   );
 
@@ -273,15 +282,27 @@ export function CheckoutFlow({
   }, [getValues, lines, setValue]);
 
   useEffect(() => {
-    const enabled = new Set(checkoutConfig.paymentMethods.map((method) => method.id));
+    const enabled = new Set(
+      checkoutConfig.paymentMethods.map((method) => method.id),
+    );
     if (enabled.has(getValues("paymentMethod"))) return;
-    const nextMethod =
-      checkoutConfig.paymentMethods[0]?.id ?? checkoutConfig.defaultPaymentMethod;
+    const nextMethod = checkoutConfig.paymentMethods.some(
+      (method) => method.id === preferredPaymentMethod,
+    )
+      ? preferredPaymentMethod
+      : (checkoutConfig.paymentMethods[0]?.id ??
+        checkoutConfig.defaultPaymentMethod);
     setValue("paymentMethod", nextMethod, {
       shouldDirty: true,
       shouldValidate: true,
     });
-  }, [checkoutConfig.defaultPaymentMethod, checkoutConfig.paymentMethods, getValues, setValue]);
+  }, [
+    checkoutConfig.defaultPaymentMethod,
+    checkoutConfig.paymentMethods,
+    getValues,
+    preferredPaymentMethod,
+    setValue,
+  ]);
 
   const quoteLineKey = useMemo(
     () =>
@@ -295,7 +316,9 @@ export function CheckoutFlow({
   const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}`;
   const deliveryQuote = resolvedDeliveryQuote.quote;
   const deliveryQuoteIsCurrent =
-    hydrated && lines.length > 0 && resolvedDeliveryQuote.key === deliveryQuoteKey;
+    hydrated &&
+    lines.length > 0 &&
+    resolvedDeliveryQuote.key === deliveryQuoteKey;
 
   const refreshDeliveryQuote = useCallback(
     async (signal?: AbortSignal) => {
@@ -310,14 +333,18 @@ export function CheckoutFlow({
             lines: lines.map((line) => ({ sku: line.sku, qty: line.qty })),
           }),
         });
-        const result = (await response.json().catch(() => null)) as
-          | { ok: true; data: CheckoutDeliveryQuote }
-          | null;
+        const result = (await response.json().catch(() => null)) as {
+          ok: true;
+          data: CheckoutDeliveryQuote;
+        } | null;
         if (!response.ok || !result?.ok) {
           throw new Error("Dostava trenutno ne može da se obračuna.");
         }
         setResolvedDeliveryQuote({ key: deliveryQuoteKey, quote: result.data });
-        if (!result.data.truckAvailable && getValues("shippingMethod") === "kamion") {
+        if (
+          !result.data.truckAvailable &&
+          getValues("shippingMethod") === "kamion"
+        ) {
           setValue("shippingMethod", "kurir", {
             shouldDirty: true,
             shouldValidate: true,
@@ -331,7 +358,8 @@ export function CheckoutFlow({
         );
         return false;
       }
-    }, [deliveryQuoteKey, getValues, lines, setValue, shippingCity],
+    },
+    [deliveryQuoteKey, getValues, lines, setValue, shippingCity],
   );
 
   useEffect(() => {
@@ -348,7 +376,8 @@ export function CheckoutFlow({
 
   // Keep identity in store + form synced.
   useEffect(() => {
-    if (identity) methods.setValue("identity", identity, { shouldDirty: false });
+    if (identity)
+      methods.setValue("identity", identity, { shouldDirty: false });
   }, [identity, methods]);
 
   useEffect(() => {
@@ -359,7 +388,7 @@ export function CheckoutFlow({
   }, [isAuthenticatedCustomer, methods, setIdentity, setStep, step]);
 
   useEffect(() => {
-    if (step === "method") setStep("payment");
+    if (step === "method" || step === "payment") setStep("shipping");
   }, [setStep, step]);
 
   useEffect(() => {
@@ -368,7 +397,10 @@ export function CheckoutFlow({
     const source: Partial<CheckoutAddress> = {
       ...remembered?.shipping,
       ...initialCustomer?.address,
-      email: initialCustomer?.email ?? initialCustomer?.address?.email ?? remembered?.shipping?.email,
+      email:
+        initialCustomer?.email ??
+        initialCustomer?.address?.email ??
+        remembered?.shipping?.email,
       firstName:
         initialCustomer?.address?.firstName ??
         remembered?.shipping?.firstName ??
@@ -386,21 +418,28 @@ export function CheckoutFlow({
         const current = getValues(field);
         const dirty = formState.dirtyFields.shipping?.[key];
         if (!dirty && !current) {
-          setValue(field, value as never, { shouldDirty: false, shouldTouch: false });
+          setValue(field, value as never, {
+            shouldDirty: false,
+            shouldTouch: false,
+          });
         }
       },
     );
   }, [formState.dirtyFields.shipping, getValues, initialCustomer, setValue]);
 
   const stepIndex = stepOrder.indexOf(step);
-  const isCompactDesktopStep = step === "shipping" || step === "payment";
+  const isCompactDesktopStep = step === "shipping";
   const lastHistoryStep = useRef<CheckoutStep>(step);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (lastHistoryStep.current === step) return;
     lastHistoryStep.current = step;
-    window.history.pushState({ spcCheckoutStep: step }, "", window.location.href);
+    window.history.pushState(
+      { spcCheckoutStep: step },
+      "",
+      window.location.href,
+    );
   }, [step]);
 
   useEffect(() => {
@@ -421,19 +460,26 @@ export function CheckoutFlow({
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
 
-    // The navigation button survives between steps and keeps browser focus.
-    // Blur it before the layout changes so focus/scroll anchoring cannot pull
-    // the viewport back toward the checkout card after we reset the page.
-    const activeElement = document.activeElement;
-    if (activeElement instanceof HTMLElement) activeElement.blur();
-
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-
-    const frame = window.requestAnimationFrame(() => {
+    const resetStepScroll = () => {
+      // The sticky navigation survives between steps and keeps browser focus.
+      // Blur it before resetting so focus anchoring cannot pull the viewport
+      // back toward the button after the step's height changes.
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement) activeElement.blur();
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    });
+    };
 
-    return () => window.cancelAnimationFrame(frame);
+    resetStepScroll();
+    const frame = window.requestAnimationFrame(resetStepScroll);
+    // AnimatePresence changes the document height for 400 ms. Re-apply the
+    // reset once that transition settles so the browser cannot clamp the old
+    // bottom scroll position onto the shorter review step.
+    const transitionEnd = window.setTimeout(resetStepScroll, 450);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(transitionEnd);
+    };
   }, [step]);
 
   const next = async () => {
@@ -451,10 +497,12 @@ export function CheckoutFlow({
         focusFirstInvalidField();
         return;
       }
-      if (step === "shipping") rememberCheckoutFields(getValues());
-      if (step === "payment" && !deliveryQuoteIsCurrent) {
-        const quoteReady = await refreshDeliveryQuote();
-        if (!quoteReady) return;
+      if (step === "shipping") {
+        rememberCheckoutFields(getValues());
+        if (!deliveryQuoteIsCurrent) {
+          const quoteReady = await refreshDeliveryQuote();
+          if (!quoteReady) return;
+        }
       }
       const i = stepOrder.indexOf(step);
       if (i < stepOrder.length - 1) setStep(stepOrder[i + 1]!);
@@ -486,12 +534,16 @@ export function CheckoutFlow({
         ),
       ),
     });
-    const result = (await response.json().catch(() => null)) as
-      | CreateOrderApiResponse
-      | null;
+    const result = (await response
+      .json()
+      .catch(() => null)) as CreateOrderApiResponse | null;
     if (!response.ok || !result?.ok) {
       setSubmitError(
-        readCreateOrderError(result, response.status, response.headers.get("Retry-After")),
+        readCreateOrderError(
+          result,
+          response.status,
+          response.headers.get("Retry-After"),
+        ),
       );
       return;
     }
@@ -509,7 +561,9 @@ export function CheckoutFlow({
     clearCheckoutSessionId();
     const accessQuery = `?token=${encodeURIComponent(result.data.accessToken)}`;
     if (data.paymentMethod === "ips") {
-      router.push(`/api/payment/ips/start/${encodeURIComponent(result.data.number)}${accessQuery}`);
+      router.push(
+        `/api/payment/ips/start/${encodeURIComponent(result.data.number)}${accessQuery}`,
+      );
       return;
     }
     if (
@@ -534,7 +588,8 @@ export function CheckoutFlow({
   };
 
   function focusFirstInvalidField() {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
+    if (typeof window === "undefined" || typeof document === "undefined")
+      return;
     window.requestAnimationFrame(() => {
       const el = document.querySelector<HTMLElement>('[aria-invalid="true"]');
       if (!el) return;
@@ -548,47 +603,72 @@ export function CheckoutFlow({
     return <EmptyCartCard onReset={reset} />;
   }
 
-  const summaryNavigation = (
-    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">
-      <button
-        type="button"
-        onClick={prev}
-        disabled={stepIndex === 0}
+  const renderNavigation = (mobile: boolean) => (
+    <div
+      data-testid={mobile ? "mobile-checkout-navigation" : undefined}
+      className={cn(
+        mobile
+          ? "fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(36,30,25,0.10)] backdrop-blur lg:hidden"
+          : "hidden items-center justify-between gap-3 border-t border-border/60 pt-4 lg:flex",
+      )}
+    >
+      <div
         className={cn(
-          "ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-3 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:px-4",
-          stepIndex === 0 && "pointer-events-none opacity-40",
+          "flex w-full items-center justify-between gap-3",
+          mobile && "mx-auto max-w-[var(--container-page)]",
         )}
       >
-        <ArrowLeft className="size-4" aria-hidden />
-        Nazad
-      </button>
-
-      {step !== "review" ? (
         <button
           type="button"
-          onClick={next}
-          disabled={isAdvancing}
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-5"
+          onClick={prev}
+          disabled={stepIndex === 0}
+          className={cn(
+            "ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:px-4",
+            mobile && "min-w-24",
+            stepIndex === 0 && "pointer-events-none opacity-40",
+          )}
         >
-          {isAdvancing ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : null}
-          Nastavi
-          {!isAdvancing ? <ArrowRight className="size-4" aria-hidden /> : null}
+          <ArrowLeft className="size-4" aria-hidden />
+          Nazad
         </button>
-      ) : (
-        <button
-          type="submit"
-          form="checkout-order-form"
-          disabled={formState.isSubmitting || !deliveryQuoteIsCurrent}
-          className="bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5"
-        >
-          {formState.isSubmitting || !deliveryQuoteIsCurrent ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : null}
-          {deliveryQuoteIsCurrent ? "Potvrdi porudžbinu" : "Obračunavam dostavu…"}
-        </button>
-      )}
+
+        {step !== "review" ? (
+          <button
+            type="button"
+            onClick={next}
+            disabled={isAdvancing}
+            className={cn(
+              "bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-5",
+              mobile && "flex-1",
+            )}
+          >
+            {isAdvancing ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : null}
+            Nastavi
+            {!isAdvancing ? (
+              <ArrowRight className="size-4" aria-hidden />
+            ) : null}
+          </button>
+        ) : (
+          <button
+            type="submit"
+            form="checkout-order-form"
+            disabled={formState.isSubmitting || !deliveryQuoteIsCurrent}
+            className={cn(
+              "bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5",
+              mobile && "flex-1",
+            )}
+          >
+            {formState.isSubmitting || !deliveryQuoteIsCurrent ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : null}
+            {deliveryQuoteIsCurrent
+              ? "Potvrdi porudžbinu"
+              : "Obračunavam dostavu…"}
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -654,17 +734,28 @@ export function CheckoutFlow({
                   ) : null}
                   {step === "shipping" ? (
                     <div className="flex flex-col gap-5">
-                      <ShippingForm xExpressAddressEnabled={xExpressAddressEnabled} />
+                      <ShippingForm
+                        xExpressAddressEnabled={xExpressAddressEnabled}
+                      />
                       <AutomaticDeliverySection
                         deliveryQuote={deliveryQuote}
                         glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
                       />
-                    </div>
-                  ) : null}
-                  {step === "payment" ? (
-                    <div className="flex flex-col gap-5">
-                      <PaymentMethodStep methods={checkoutConfig.paymentMethods} />
-                      <VoucherSection />
+                      <section
+                        aria-labelledby="checkout-payment-heading"
+                        className="border-border/60 flex flex-col gap-4 border-t pt-5"
+                      >
+                        <h3
+                          id="checkout-payment-heading"
+                          className="font-display text-lg text-ink-900"
+                        >
+                          Način plaćanja
+                        </h3>
+                        <PaymentMethodStep
+                          methods={checkoutConfig.paymentMethods}
+                        />
+                        <VoucherSection />
+                      </section>
                     </div>
                   ) : null}
                   {step === "review" ? (
@@ -698,10 +789,21 @@ export function CheckoutFlow({
                   </div>
                 </div>
               ) : null}
+              {step === "review" ? (
+                <div className="mt-5 border-t border-border/60 pt-5">
+                  <CheckoutConsent />
+                  {deliveryQuoteError ? (
+                    <p role="alert" className="mt-2 text-xs text-action">
+                      {deliveryQuoteError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
-
         </form>
+
+        {renderNavigation(true)}
 
         <OrderSummary
           deliveryQuote={deliveryQuote}
@@ -709,21 +811,7 @@ export function CheckoutFlow({
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
-          cta={
-            <>
-              {step === "review" ? (
-                <>
-                  <CheckoutConsent />
-                  {deliveryQuoteError ? (
-                    <p role="alert" className="mt-1 text-xs text-action">
-                      {deliveryQuoteError}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-              {summaryNavigation}
-            </>
-          }
+          cta={renderNavigation(false)}
         />
       </div>
 
@@ -771,12 +859,13 @@ function ReviewStep({
 
   return (
     <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
-      <div className="grid gap-4 lg:grid-cols-2 lg:gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <ReviewBlock title="Isporuka">
-          <p className="text-sm text-ink-700">
+          <p className="break-words text-sm text-ink-700">
             {data.shipping.firstName} {data.shipping.lastName}
             <br />
-            {data.shipping.street}, {data.shipping.postalCode} {data.shipping.city}
+            {data.shipping.street}, {data.shipping.postalCode}{" "}
+            {data.shipping.city}
             <br />
             {data.shipping.email} · {data.shipping.phone}
           </p>
@@ -795,7 +884,8 @@ function ReviewStep({
           </p>
           {data.shippingMethod === "kurir" && data.glsDeliveryPoint ? (
             <p className="mt-1 text-xs text-ink-500">
-              MyGLS paket tačka: {data.glsDeliveryPoint.label ?? data.glsDeliveryPoint.name}
+              MyGLS paket tačka:{" "}
+              {data.glsDeliveryPoint.label ?? data.glsDeliveryPoint.name}
             </p>
           ) : null}
         </ReviewBlock>
@@ -807,7 +897,9 @@ function ReviewStep({
         <ReviewBlock title="Iznos">
           <p className="text-sm text-ink-700 tabular-nums">
             Ukupno za plaćanje:{" "}
-            <span className="font-medium text-ink-900">{formatRsd(totals.total)}</span>
+            <span className="font-medium text-ink-900">
+              {formatRsd(totals.total)}
+            </span>
           </p>
         </ReviewBlock>
       </div>
@@ -827,7 +919,10 @@ function ReviewBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-canvas ring-border/60 rounded-xl p-4 ring-1 lg:p-3">
+    <div
+      data-review-block={title}
+      className="bg-canvas ring-border/60 min-w-0 rounded-xl p-3 ring-1 sm:p-4 lg:p-3"
+    >
       <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">
         {title}
       </p>
@@ -842,9 +937,7 @@ function EmptyCartCard({ onReset }: { onReset: () => void }) {
       <span className="bg-muted-bg text-ink-500 inline-flex size-14 items-center justify-center rounded-full">
         <ShoppingBag className="size-6" aria-hidden />
       </span>
-      <h2 className="font-display text-lg text-ink-900">
-        Korpa je prazna
-      </h2>
+      <h2 className="font-display text-lg text-ink-900">Korpa je prazna</h2>
       <p className="text-sm text-ink-500">
         Dodajte artikle u korpu pre nego što nastavite na naplatu.
       </p>
@@ -882,6 +975,8 @@ async function validateStep(
           ...(getValues("shipToDifferent")
             ? addressFieldNames("billing", getValues("billing.liceType"), false)
             : []),
+          "shippingMethod",
+          "paymentMethod",
         ],
         { shouldFocus: true },
       );
@@ -909,12 +1004,14 @@ function splitFullName(value: string | null | undefined) {
   };
 }
 
-function readRememberedCheckout():
-  | { shipping?: Partial<CheckoutAddress> }
-  | null {
+function readRememberedCheckout(): {
+  shipping?: Partial<CheckoutAddress>;
+} | null {
   if (typeof window === "undefined") return null;
   try {
-    return JSON.parse(window.localStorage.getItem(REMEMBERED_CHECKOUT_KEY) ?? "null");
+    return JSON.parse(
+      window.localStorage.getItem(REMEMBERED_CHECKOUT_KEY) ?? "null",
+    );
   } catch {
     return null;
   }
@@ -931,11 +1028,15 @@ function rememberCheckoutFields(data: CheckoutFormData) {
     street: data.shipping.street,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
-    xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
-    xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
+    xExpressTownId:
+      positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
+    xExpressStreetId:
+      positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
     companyName:
-      data.shipping.liceType === "pravno" ? data.shipping.companyName : undefined,
+      data.shipping.liceType === "pravno"
+        ? data.shipping.companyName
+        : undefined,
     pib: data.shipping.liceType === "pravno" ? data.shipping.pib : undefined,
   };
   try {
@@ -953,7 +1054,9 @@ function addressFieldNames(
   liceType: CheckoutAddress["liceType"] | undefined,
   requireXExpressTown = false,
 ) {
-  const fields: Array<`shipping.${keyof CheckoutAddress}` | `billing.${keyof CheckoutAddress}`> = [
+  const fields: Array<
+    `shipping.${keyof CheckoutAddress}` | `billing.${keyof CheckoutAddress}`
+  > = [
     `${prefix}.firstName`,
     `${prefix}.lastName`,
     `${prefix}.email`,
@@ -992,7 +1095,9 @@ function buildCreateOrderPayload(
 ) {
   const shipping = addressForApi(data.shipping);
   const billing =
-    data.shipToDifferent && data.billing ? addressForApi(data.billing) : undefined;
+    data.shipToDifferent && data.billing
+      ? addressForApi(data.billing)
+      : undefined;
 
   return {
     guestEmail: data.identity === "guest" ? data.shipping.email : undefined,
@@ -1003,7 +1108,9 @@ function buildCreateOrderPayload(
     })),
     shipping,
     glsDeliveryPoint:
-      data.shippingMethod === "kurir" ? data.glsDeliveryPoint ?? undefined : undefined,
+      data.shippingMethod === "kurir"
+        ? (data.glsDeliveryPoint ?? undefined)
+        : undefined,
     billingSameAsShipping: !data.shipToDifferent,
     billing,
     shippingMethod: SHIPPING_METHOD_UPPER[data.shippingMethod],
@@ -1055,7 +1162,10 @@ async function trackCheckoutSession({
   lines: ReturnType<typeof useCart.getState>["lines"];
 }) {
   if (!lines.length) return;
-  const cartTotal = lines.reduce((n, line) => n + line.unitPriceSale * line.qty, 0);
+  const cartTotal = lines.reduce(
+    (n, line) => n + line.unitPriceSale * line.qty,
+    0,
+  );
   await fetch("/api/checkout/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1093,7 +1203,9 @@ function addressForApi(address: CheckoutAddress) {
 }
 
 function positiveIntOrUndefined(value: number | null | undefined) {
-  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : undefined;
+  return Number.isInteger(value) && Number(value) > 0
+    ? Number(value)
+    : undefined;
 }
 
 function readCreateOrderError(
@@ -1110,7 +1222,9 @@ function readCreateOrderError(
     return `${message ?? "Previše pokušaja."}${wait}`;
   }
   const error =
-    result && !result.ok && typeof result.error !== "string" ? result.error : null;
+    result && !result.ok && typeof result.error !== "string"
+      ? result.error
+      : null;
   switch (error?.code) {
     case "OUT_OF_STOCK":
       return `Artikal ${error.sku ?? ""} trenutno nema dovoljno zaliha.`;
@@ -1175,11 +1289,15 @@ function buildOrder({
     street: data.shipping.street,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
-    xExpressTownId: positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
-    xExpressStreetId: positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
+    xExpressTownId:
+      positiveIntOrUndefined(data.shipping.xExpressTownId) ?? null,
+    xExpressStreetId:
+      positiveIntOrUndefined(data.shipping.xExpressStreetId) ?? null,
     country: data.shipping.country || "RS",
     companyName:
-      data.shipping.liceType === "pravno" ? data.shipping.companyName : undefined,
+      data.shipping.liceType === "pravno"
+        ? data.shipping.companyName
+        : undefined,
     pib: data.shipping.liceType === "pravno" ? data.shipping.pib : undefined,
   };
 
@@ -1193,12 +1311,17 @@ function buildOrder({
           street: data.billing.street,
           city: data.billing.city,
           postalCode: data.billing.postalCode,
-          xExpressTownId: positiveIntOrUndefined(data.billing.xExpressTownId) ?? null,
-          xExpressStreetId: positiveIntOrUndefined(data.billing.xExpressStreetId) ?? null,
+          xExpressTownId:
+            positiveIntOrUndefined(data.billing.xExpressTownId) ?? null,
+          xExpressStreetId:
+            positiveIntOrUndefined(data.billing.xExpressStreetId) ?? null,
           country: data.billing.country || "RS",
           companyName:
-            data.billing.liceType === "pravno" ? data.billing.companyName : undefined,
-          pib: data.billing.liceType === "pravno" ? data.billing.pib : undefined,
+            data.billing.liceType === "pravno"
+              ? data.billing.companyName
+              : undefined,
+          pib:
+            data.billing.liceType === "pravno" ? data.billing.pib : undefined,
         }
       : undefined;
 

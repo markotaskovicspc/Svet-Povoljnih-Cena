@@ -104,19 +104,7 @@ export default async function AccountReclamationsPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section className="rounded-lg border border-border/70 bg-surface p-5 lg:order-2">
           <h2 className="font-display text-2xl text-ink-900">Nova reklamacija</h2>
-          {orderOptions.length ? (
-            <ReclamationForm orders={orderOptions} />
-          ) : (
-            <div className="mt-5 rounded-lg border border-dashed border-border bg-muted-bg/40 px-5 py-10 text-center">
-              <ClipboardList className="mx-auto size-8 text-ink-300" aria-hidden />
-              <p className="mt-3 font-medium text-ink-900">
-                Nemate porudžbina za reklamaciju
-              </p>
-              <p className="mt-1 text-sm text-ink-500">
-                Reklamaciju možete podneti tek nakon prve kupovine na sajtu.
-              </p>
-            </div>
-          )}
+          <ReclamationForm orders={orderOptions} />
         </section>
 
         <section className="rounded-lg border border-border/70 bg-surface p-5 lg:order-1">

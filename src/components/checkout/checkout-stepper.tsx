@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 
 const STEP_LABELS: Partial<Record<CheckoutStep, string>> = {
   identity: "Identifikacija",
-  shipping: "Podaci za isporuku",
+  shipping: "Isporuka i plaćanje",
   payment: "Plaćanje",
   review: "Potvrda",
 };

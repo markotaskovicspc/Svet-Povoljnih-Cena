@@ -48,7 +48,7 @@ export async function createReclamationShipment(args: {
   const lockKey = `reclamation-shipment:${args.reclamationId}:${args.purpose}`;
   return db.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))::text AS "lock"`;
       const reclamation = await tx.reclamation.findUnique({
         where: { id: args.reclamationId },
         select: {

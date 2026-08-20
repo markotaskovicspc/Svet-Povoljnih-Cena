@@ -59,7 +59,9 @@ export interface PricingProduct {
   maxCombinedDiscountPct?: number;
 }
 
-type PricingActionCandidate = NonNullable<PricingProduct["actionPrices"]>[number];
+type PricingActionCandidate = NonNullable<
+  PricingProduct["actionPrices"]
+>[number];
 
 export interface EffectivePrice {
   /** Unit price the customer actually pays. */
@@ -91,7 +93,10 @@ function toDate(d: string | Date): Date {
   return d instanceof Date ? d : new Date(d);
 }
 
-function isActionLive(action: PricingAction | null | undefined, now: Date): boolean {
+function isActionLive(
+  action: PricingAction | null | undefined,
+  now: Date,
+): boolean {
   if (!action) return true; // legacy products without action window stay on sale
   const start = toDate(action.startsAt).getTime();
   const end = toDate(action.endsAt).getTime();
@@ -237,10 +242,10 @@ export function resolveProductPriceQuote(
   const actionBase = canonicalAction?.price ?? legacySale;
   const actionExpired = Boolean(
     (discountActionPrices.length && !canonicalAction) ||
-      (!product.action?.isPermanent &&
-        product.salePrice != null &&
-        product.salePrice < full &&
-        !legacySale),
+    (!product.action?.isPermanent &&
+      product.salePrice != null &&
+      product.salePrice < full &&
+      !legacySale),
   );
   const linear = [...(product.linearPromotions ?? [])]
     .filter(
@@ -265,12 +270,13 @@ export function resolveProductPriceQuote(
   // action. Linear promotions can still apply to whichever single base offer
   // is active, but loyalty never appears or stacks on an action price.
   const configuredLoyalty = resolveLoyaltyPrice(product, full);
-  const loyaltyBase = configuredLoyalty && actionBase == null
-    ? {
-        effective: configuredLoyalty.effective,
-        discountPct: configuredLoyalty.discountPct,
-      }
-    : null;
+  const loyaltyBase =
+    configuredLoyalty && actionBase == null
+      ? {
+          effective: configuredLoyalty.effective,
+          discountPct: configuredLoyalty.discountPct,
+        }
+      : null;
   const loyaltyOffer = loyaltyBase
     ? pricedOffer({
         full,
@@ -300,7 +306,9 @@ export function resolveProductPriceQuote(
           full: displayFull,
           discountPct:
             displayFull > offer.effective
-              ? Math.round(((displayFull - offer.effective) / displayFull) * 100)
+              ? Math.round(
+                  ((displayFull - offer.effective) / displayFull) * 100,
+                )
               : 0,
         }
       : null;
@@ -309,7 +317,7 @@ export function resolveProductPriceQuote(
   const payable =
     eligible && referencedLoyaltyOffer
       ? referencedLoyaltyOffer
-      : actionOffer ?? { ...publicPrice, full: displayFull };
+      : (actionOffer ?? { ...publicPrice, full: displayFull });
   return {
     full: displayFull,
     actionOffer,
@@ -339,6 +347,27 @@ export function effectiveUnitPrice(
     loggedIn: product.loyaltyEligible,
     maxDiscountPct: product.maxCombinedDiscountPct,
   }).payable;
+}
+
+/**
+ * Lowest price that is publicly rendered for a catalog product, including a
+ * visible loyalty offer even when an anonymous visitor cannot yet redeem it.
+ * Useful for public SEO copy that must agree with the lowest price on the PDP.
+ */
+export function lowestPublicDisplayedUnitPrice(
+  product: PricingProduct,
+  now: Date = new Date(),
+): EffectivePrice {
+  const quote = resolveProductPriceQuote(product, {
+    now,
+    loggedIn: false,
+    maxDiscountPct: product.maxCombinedDiscountPct,
+  });
+  return [quote.payable, quote.actionOffer, quote.loyaltyOffer]
+    .filter((offer): offer is EffectivePrice => offer !== null)
+    .reduce((lowest, offer) =>
+      offer.effective < lowest.effective ? offer : lowest,
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -410,7 +439,8 @@ export function capDiscountComponents(
 ) {
   const keys = ["voucher", "first", "card"] as const;
   const requestedTotal = keys.reduce((sum, key) => sum + requested[key], 0);
-  if (requestedTotal <= maxAllowed || requestedTotal <= 0) return { ...requested };
+  if (requestedTotal <= maxAllowed || requestedTotal <= 0)
+    return { ...requested };
 
   const scale = maxAllowed / requestedTotal;
   const exact = keys.map((key, index) => ({
@@ -481,8 +511,12 @@ export function computeOrderPricing({
 
   const requested = {
     voucher: voucher?.discountRsd ?? 0,
-    first: eligibility?.firstPurchase ? Math.round((eligibleForStack * FIRST_PURCHASE_PCT) / 100) : 0,
-    card: eligibility?.savedCard ? Math.round((eligibleForStack * SAVED_CARD_PCT) / 100) : 0,
+    first: eligibility?.firstPurchase
+      ? Math.round((eligibleForStack * FIRST_PURCHASE_PCT) / 100)
+      : 0,
+    card: eligibility?.savedCard
+      ? Math.round((eligibleForStack * SAVED_CARD_PCT) / 100)
+      : 0,
   };
 
   const requestedTotal = requested.voucher + requested.first + requested.card;

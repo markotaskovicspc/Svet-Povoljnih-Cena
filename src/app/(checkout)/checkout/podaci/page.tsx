@@ -10,9 +10,9 @@ import { getCheckoutConfig } from "@/lib/checkout/config";
 import { CheckoutStartedAnalytics } from "@/components/analytics/first-party-analytics";
 
 export const metadata: Metadata = {
-  title: "Naplata — podaci za isporuku",
+  title: "Završetak porudžbine",
   description:
-    "Bezbedna naplata u nekoliko koraka: identifikacija, podaci za isporuku, način isporuke, vaučer, plaćanje i potvrda.",
+    "Podaci za isporuku, način dostave, vaučer, plaćanje i potvrda porudžbine u jednom toku.",
   robots: { index: false, follow: false },
 };
 
@@ -22,7 +22,13 @@ export default async function CheckoutPodaciPage() {
     user?.userType === "customer"
       ? await db.user.findUnique({
           where: { id: user.id },
-          select: { email: true, emailVerified: true, name: true, firstName: true, lastName: true },
+          select: {
+            email: true,
+            emailVerified: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+          },
         })
       : null;
   const addresses =
@@ -47,11 +53,11 @@ export default async function CheckoutPodaciPage() {
       <Breadcrumbs
         trail={[
           { label: "Korpa", href: "/korpa" },
-          { label: "Naplata" },
+          { label: "Završetak porudžbine" },
         ]}
       />
       <h1 className="font-display mt-2 text-2xl text-ink-900 md:text-4xl">
-        Naplata
+        Završetak porudžbine
       </h1>
       <p className="mt-1 max-w-prose text-xs text-ink-500 md:text-sm">
         Sve što vam treba za bezbednu kupovinu — u jednom toku, bez odlaska sa
@@ -81,8 +87,10 @@ export default async function CheckoutPodaciPage() {
                         street: defaultAddress.street,
                         city: defaultAddress.city,
                         postalCode: defaultAddress.postalCode,
-                        xExpressTownId: defaultAddress.xExpressTownId ?? undefined,
-                        xExpressStreetId: defaultAddress.xExpressStreetId ?? undefined,
+                        xExpressTownId:
+                          defaultAddress.xExpressTownId ?? undefined,
+                        xExpressStreetId:
+                          defaultAddress.xExpressStreetId ?? undefined,
                         country: defaultAddress.country,
                         companyName: defaultAddress.companyName ?? undefined,
                         pib: defaultAddress.pib ?? undefined,

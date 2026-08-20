@@ -34,9 +34,7 @@ export function ShippingForm({
   return (
     <div className="flex flex-col gap-4 md:gap-5 lg:gap-3">
       <fieldset className="flex flex-col gap-2.5 lg:gap-2">
-        <legend className="text-sm font-medium text-ink-900">
-          Tip kupca
-        </legend>
+        <legend className="text-sm font-medium text-ink-900">Tip kupca</legend>
         <div className="bg-muted-bg ring-border/60 inline-flex w-fit rounded-full p-1 ring-1">
           {(["fizicko", "pravno"] as const).map((lt) => (
             <button
@@ -127,7 +125,9 @@ interface AddressFieldsetProps {
   register: ReturnType<typeof useFormContext<CheckoutFormData>>["register"];
   setValue: ReturnType<typeof useFormContext<CheckoutFormData>>["setValue"];
   watch: ReturnType<typeof useFormContext<CheckoutFormData>>["watch"];
-  errors: ReturnType<typeof useFormContext<CheckoutFormData>>["formState"]["errors"];
+  errors: ReturnType<
+    typeof useFormContext<CheckoutFormData>
+  >["formState"]["errors"];
   xExpressAddressEnabled: boolean;
 }
 
@@ -152,13 +152,13 @@ function AddressFieldset({
     showSubmitErrors ? errAt(`${prefix}.${path}`) : undefined;
 
   return (
-    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
+    <div className="grid grid-cols-2 gap-2.5 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
       {liceType === "pravno" ? (
         <>
           <Field
             label="Naziv"
             required
-            className="sm:col-span-2 lg:col-span-6"
+            className="col-span-2 lg:col-span-6"
             error={showError("companyName")}
             {...register(`${prefix}.companyName` as const, {
               required: "Obavezno za pravno lice",
@@ -234,7 +234,7 @@ function AddressFieldset({
       {xExpressAddressEnabled ? (
         <>
           <XExpressStreetAutocomplete
-            className="order-2 sm:col-span-2 lg:col-span-2"
+            className="order-2 col-span-2 lg:col-span-2"
             townId={watch(`${prefix}.xExpressTownId` as const) ?? null}
             value={watch(`${prefix}.street` as const) ?? ""}
             error={showError("street")}
@@ -271,7 +271,7 @@ function AddressFieldset({
         <Field
           label="Adresa"
           required
-          className="sm:col-span-2 lg:col-span-2"
+          className="col-span-2 lg:col-span-2"
           error={showError("street")}
           {...register(`${prefix}.street` as const, {
             required: "Obavezno polje",
@@ -320,10 +320,14 @@ function AddressFieldset({
             shouldValidate: true,
           });
           if (xExpressAddressEnabled) {
-            setValue(`${prefix}.xExpressTownId` as const, place.townId ?? null, {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
+            setValue(
+              `${prefix}.xExpressTownId` as const,
+              place.townId ?? null,
+              {
+                shouldDirty: true,
+                shouldValidate: true,
+              },
+            );
             setValue(`${prefix}.xExpressStreetId` as const, null, {
               shouldDirty: true,
               shouldValidate: false,
@@ -358,7 +362,7 @@ function AddressFieldset({
       <Field
         label="Poštanski broj"
         required
-        className={cn(xExpressAddressEnabled && "order-3", "lg:col-span-2")}
+        className={cn(xExpressAddressEnabled && "order-1", "lg:col-span-2")}
         placeholder="11000"
         inputMode="numeric"
         error={showError("postalCode")}
@@ -418,7 +422,9 @@ function XExpressStreetAutocomplete({
           { signal: controller.signal },
         );
         if (!res.ok) return;
-        const json = (await res.json()) as { items?: XExpressStreetSuggestion[] };
+        const json = (await res.json()) as {
+          items?: XExpressStreetSuggestion[];
+        };
         setResult({ key, items: json.items ?? [] });
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -435,7 +441,10 @@ function XExpressStreetAutocomplete({
   const showPanel = open && items.length > 0 && Boolean(resultKey);
 
   return (
-    <label className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)} htmlFor={inputId}>
+    <label
+      className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)}
+      htmlFor={inputId}
+    >
       <span className="text-xs font-medium text-ink-700">
         Adresa<span className="text-action ml-0.5">*</span>
       </span>
@@ -481,7 +490,9 @@ function XExpressStreetAutocomplete({
               >
                 <span className="truncate">{street.name}</span>
                 {street.official ? (
-                  <span className="text-[11px] font-medium text-ink-500">službena</span>
+                  <span className="text-[11px] font-medium text-ink-500">
+                    službena
+                  </span>
                 ) : null}
               </button>
             </li>
@@ -511,7 +522,10 @@ const Field = ({
 } & React.ComponentProps<"input">) => {
   const id = `f-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${props.name ?? ""}`;
   return (
-    <label className={cn("flex flex-col gap-1.5 lg:gap-1", className)} htmlFor={id}>
+    <label
+      className={cn("flex flex-col gap-1.5 lg:gap-1", className)}
+      htmlFor={id}
+    >
       <span className="text-xs font-medium text-ink-700">
         {label}
         {required ? <span className="text-action ml-0.5">*</span> : null}

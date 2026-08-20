@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ImagePlus, Loader2, X } from "lucide-react";
+import { CheckCircle2, ClipboardList, ImagePlus, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -262,6 +262,10 @@ export function ReclamationForm({
           setFormError("Porudžbina nije pronađena.");
         } else if (data?.reason === "ITEM_NOT_FOUND") {
           setFormError("Izabrani artikal nije pronađen u porudžbini.");
+        } else if (data?.reason === "ORDER_NOT_DELIVERED") {
+          setFormError(
+            "Reklamaciju možete prijaviti tek kada porudžbina bude isporučena.",
+          );
         } else if (data?.reason === "UNAUTHORIZED") {
           setFormError("Ova porudžbina nije povezana sa vašim nalogom.");
         } else if (data?.reason === "INVALID_PHOTO") {
@@ -314,6 +318,20 @@ export function ReclamationForm({
         >
           Prijavi još jednu reklamaciju
         </Button>
+      </div>
+    );
+  }
+
+  if (!orders.length) {
+    return (
+      <div className="mt-5 rounded-lg border border-dashed border-border bg-muted-bg/40 px-5 py-10 text-center">
+        <ClipboardList className="mx-auto size-8 text-ink-300" aria-hidden />
+        <p className="mt-3 font-medium text-ink-900">
+          Nemate porudžbina za reklamaciju
+        </p>
+        <p className="mt-1 text-sm text-ink-500">
+          Reklamaciju možete podneti za isporučenu porudžbinu.
+        </p>
       </div>
     );
   }

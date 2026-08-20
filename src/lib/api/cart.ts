@@ -93,7 +93,7 @@ export async function mergeServerCart(
     // Login sync can arrive concurrently from several browser tabs. Serialize
     // promotion writes per customer so an older tab can only add to, never
     // replace, the newest guest snapshot.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-cart'), hashtext(${userId}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc-cart'), hashtext(${userId}))::text AS "lock"`;
     const row = await tx.cart.findUnique({ where: { userId } });
     const parsed = z.array(cartLineSchema).safeParse(row?.lines);
     const current = parsed.success ? parsed.data : [];

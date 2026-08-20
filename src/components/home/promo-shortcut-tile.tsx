@@ -61,7 +61,9 @@ export function PromoShortcutTile({
       ? { url: configuredIcon, alt: "" }
       : promoTab.iconAsset;
   const iconImageClass = promoTab.iconKey
-    ? promoIconImageClassByKey[promoTab.iconKey as keyof typeof promoIconImageClassByKey]
+    ? promoIconImageClassByKey[
+        promoTab.iconKey as keyof typeof promoIconImageClassByKey
+      ]
     : undefined;
 
   return (
@@ -71,14 +73,16 @@ export function PromoShortcutTile({
         isExternalMobileShortcutHref(presentation.href) ? "_blank" : undefined
       }
       rel={
-        isExternalMobileShortcutHref(presentation.href) ? "noreferrer" : undefined
+        isExternalMobileShortcutHref(presentation.href)
+          ? "noreferrer"
+          : undefined
       }
       onClick={onClick}
       data-shortcut-variant={variant}
       className={cn(
         "group flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
         compact && "min-h-10 gap-1.5 px-2 py-1 text-[11px]",
-        homepage && "h-14 min-h-14 gap-1.5 px-2 py-1.5 text-sm",
+        homepage && "min-h-28 gap-3 px-4 py-3 text-2xl",
         active && "ring-2 ring-white/80",
         className,
       )}
@@ -87,7 +91,7 @@ export function PromoShortcutTile({
         className={cn(
           "flex h-12 w-16 shrink-0 items-center justify-center text-brand-blue",
           compact && "h-7 w-8",
-          homepage && "h-7 w-9",
+          homepage && "h-12 w-16",
         )}
       >
         {iconAsset ? (
@@ -101,17 +105,20 @@ export function PromoShortcutTile({
               "h-9 w-9 object-contain",
               iconImageClass,
               compact && "max-h-7 max-w-8",
-              homepage && "h-7 w-9",
+              homepage && "h-12 w-16",
             )}
           />
         ) : (
-          <Icon className={cn("size-5", compact && "size-4")} aria-hidden />
+          <Icon
+            className={cn("size-5", compact && "size-4", homepage && "size-8")}
+            aria-hidden
+          />
         )}
       </span>
       <span
         className={cn(
           "min-w-0 flex-1 leading-[1.08] break-words",
-          homepage && "line-clamp-3",
+          homepage && "line-clamp-3 text-balance",
         )}
       >
         {presentation.label}
@@ -151,7 +158,9 @@ export function AccountShortcutTile({
       >
         <User2 className={cn("size-5", compact && "size-4")} aria-hidden />
       </span>
-      <span className="min-w-0 flex-1 leading-[1.08] break-words">Moj nalog</span>
+      <span className="min-w-0 flex-1 leading-[1.08] break-words">
+        Moj nalog
+      </span>
     </Link>
   );
 }

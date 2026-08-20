@@ -28,6 +28,7 @@ import {
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { releaseOrderSupplierReservations } from "@/lib/rabalux/fulfillment";
+import { updateWebOrderItemQuantity } from "@/lib/admin/web-order-edit.server";
 import {
   canConfirmSupplierFulfillment,
   canResendSupplierOrder,
@@ -47,6 +48,52 @@ export const metadata = {
   title: "Narudžbina",
   robots: { index: false, follow: false },
 };
+
+async function updateWebOrderItemQuantityAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.webItemUpdate", entity: "OrderItem" },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const orderItemId = String(formData.get("orderItemId") ?? "");
+      const rawQty = String(formData.get("newQty") ?? "").trim();
+      if (!orderId || !orderItemId || !/^\d+$/.test(rawQty)) {
+        return {
+          ok: false as const,
+          error: "Unesite ispravnu novu količinu.",
+        };
+      }
+      const result = await updateWebOrderItemQuantity({
+        orderId,
+        orderItemId,
+        newQty: Number(rawQty),
+        actorId,
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      return {
+        ok: true as const,
+        entityId: orderItemId,
+        diff: {
+          orderId,
+          sku: result.sku,
+          previousQty: result.previousQty,
+          newQty: result.newQty,
+          totals: result.totals,
+          receiptRefreshed: result.receiptRefreshed,
+          receiptError: result.receiptError,
+        },
+        message: result.receiptRefreshed
+          ? `Stavka ${result.sku} je promenjena (${result.previousQty} → ${result.newQty}); rezervacije, iznosi i predračun su osveženi. Kupcu dokument nije automatski poslat.`
+          : `Stavka ${result.sku} je promenjena, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Ne ponavljajte izmenu; regenerišite dokument ručno.`,
+      };
+    },
+  )(formData);
+}
 
 async function updateStatus(_state: AdminActionState, formData: FormData) {
   "use server";
@@ -836,6 +883,27 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
   const latestFiscal = order.fiscalDocuments[0] ?? null;
+  const canOfferWebItemEdit =
+    ["KREIRANO", "POTVRDJENO", "U_PRIPREMI"].includes(order.status) &&
+    !order.stockRestoredAt &&
+    !order.cancelledAt &&
+    !order.fiscal &&
+    order.fiscalDocuments.length === 0 &&
+    order.reclamations.length === 0 &&
+    order.paymentRefunds.length === 0 &&
+    order.shipments.every(
+      (shipment) =>
+        shipment.purpose !== "ORDER_DELIVERY" || shipment.status === "FAILED",
+    ) &&
+    order.payments.length > 0 &&
+    order.payments.every(
+      (payment) =>
+        payment.status === "PENDING" &&
+        ["MANUAL", "COD"].includes(payment.provider) &&
+        !payment.providerRef &&
+        !payment.paymentReference &&
+        !payment.redirectUrl,
+    );
 
   return (
     <>
@@ -852,8 +920,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Ova porudžbina je samo za pregled: osnovni WEB podaci i stavke se
-            ne menjaju, dok operativne komande ostaju dostupne.
+            Osnovni WEB podaci ostaju samo za pregled. Količina stavke može da
+            se smanji ili stavka ukloni samo pre naplate, fiskalizacije i
+            otpreme; poslednja stavka se uklanja otkazivanjem cele porudžbine.
           </p>
           <Card>
             <CardTitle>Identitet prodajnog naloga</CardTitle>
@@ -887,6 +956,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                 { key: "qty", label: "Kol", align: "right" },
                 { key: "price", label: "Cena", align: "right" },
                 { key: "subtotal", label: "Ukupno", align: "right" },
+                ...(canOfferWebItemEdit
+                  ? [{ key: "edit", label: "Izmena", align: "right" as const }]
+                  : []),
               ]}
               rows={order.items.map((it) => ({
                 id: it.id,
@@ -896,6 +968,46 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   qty: it.qty,
                   price: formatRsd(num(it.unitPriceSale)),
                   subtotal: formatRsd(num(it.unitPriceSale) * it.qty),
+                  ...(canOfferWebItemEdit
+                    ? {
+                        edit:
+                          order.items.length > 1 || it.qty > 1 ? (
+                            <AdminActionForm
+                              action={updateWebOrderItemQuantityAction}
+                              preserveValues
+                              refreshOnSuccess
+                              className="flex min-w-48 items-end justify-end gap-2"
+                            >
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <input type="hidden" name="orderItemId" value={it.id} />
+                              <Field label="Nova kol." className="w-20 text-left">
+                                <input
+                                  type="number"
+                                  name="newQty"
+                                  min={0}
+                                  max={it.qty - 1}
+                                  step={1}
+                                  defaultValue={it.qty > 1 ? it.qty - 1 : 0}
+                                  required
+                                  aria-label={`Nova količina za ${it.sku}`}
+                                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-right text-sm"
+                                />
+                              </Field>
+                              <SubmitButton
+                                size="sm"
+                                variant="outline"
+                                confirm={`Promeniti ${it.sku} sa ${it.qty} na unetu količinu? Iznosi, rezervacije i predračun biće preračunati; kupcu dokument neće biti automatski poslat.`}
+                              >
+                                Sačuvaj
+                              </SubmitButton>
+                            </AdminActionForm>
+                          ) : (
+                            <span className="text-xs text-ink-500">
+                              Otkažite nalog
+                            </span>
+                          ),
+                      }
+                    : {}),
                 },
               }))}
               empty="Bez stavki."

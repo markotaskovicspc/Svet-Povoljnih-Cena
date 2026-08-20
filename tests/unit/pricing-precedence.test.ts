@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveProductPriceQuote, resolvePromotionPrice } from "@/lib/pricing";
+import {
+  lowestPublicDisplayedUnitPrice,
+  resolveProductPriceQuote,
+  resolvePromotionPrice,
+} from "@/lib/pricing";
 
 const now = new Date("2026-07-18T12:00:00.000Z");
 
@@ -90,6 +94,16 @@ describe("ERP pricing precedence", () => {
     expect(customer.payable.effective).toBe(8_000);
   });
 
+  it("uses the lowest publicly displayed loyalty offer for public product copy", () => {
+    const price = lowestPublicDisplayedUnitPrice(
+      { fullPrice: 10_000, loyaltyPrice: 8_000 },
+      now,
+    );
+
+    expect(price.kind).toBe("loyalty");
+    expect(price.effective).toBe(8_000);
+  });
+
   it("uses the active action and suppresses authenticated loyalty", () => {
     const quote = resolveProductPriceQuote(
       {
@@ -168,12 +182,14 @@ describe("ERP pricing precedence", () => {
         fullPrice: 10_000,
         referencePrice: 9_000,
         loyaltyDiscountPct: 30,
-        actionPrices: [{
-          price: 8_000,
-          priority: 1,
-          startsAt: "2026-07-01",
-          endsAt: "2026-07-31",
-        }],
+        actionPrices: [
+          {
+            price: 8_000,
+            priority: 1,
+            startsAt: "2026-07-01",
+            endsAt: "2026-07-31",
+          },
+        ],
       },
       { now, loggedIn: true },
     );
