@@ -1,19 +1,28 @@
 import type { Metadata } from "next";
+import { CmsFunctionalPage } from "@/components/content/cms-content-page";
 import { CookieSettingsPanel } from "@/components/privacy/cookie-consent";
-import { ContentBody, ContentHero } from "@/components/layout/content-shell";
 import { getGa4MeasurementId } from "@/lib/analytics/config";
+import { getFunctionalContentPage } from "@/lib/cms/pages";
 
-export const metadata: Metadata = {
-  title: "Podešavanja kolačića",
-  description: "Izaberite da li dozvoljavate analitičke kolačiće.",
-};
+const SLUG = "podesavanja-kolacica";
 
-export default function CookieSettingsPage() {
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getFunctionalContentPage(SLUG);
+  return {
+    title: page.seoTitle ?? page.title,
+    description: page.seoDescription,
+    alternates: { canonical: `/${SLUG}` },
+  };
+}
+
+export default async function CookieSettingsPage() {
+  const page = await getFunctionalContentPage(SLUG);
   const gaId = getGa4MeasurementId();
   return (
-    <>
-      <ContentHero title="Podešavanja kolačića" lead="Saglasnost možete promeniti u svakom trenutku." />
-      <ContentBody><CookieSettingsPanel gaConfigured={Boolean(gaId?.startsWith("G-"))} /></ContentBody>
-    </>
+    <CmsFunctionalPage page={page}>
+      <div className="not-prose mt-8">
+        <CookieSettingsPanel gaConfigured={Boolean(gaId?.startsWith("G-"))} />
+      </div>
+    </CmsFunctionalPage>
   );
 }

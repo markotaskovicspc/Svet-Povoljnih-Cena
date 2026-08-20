@@ -6,6 +6,7 @@ import { Card } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { buttonVariants } from "@/components/ui/button";
 import { footerColumnLabel } from "@/lib/cms/constants";
+import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
 import { contentPageStatus } from "./status";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,10 @@ export default async function ContentAdminPage() {
     },
     { published: 0, drafts: 0, archived: 0, footer: 0 },
   );
+  const standardPages = pages.filter(
+    (page) => !isFunctionalContentPageSlug(page.slug),
+  );
+  const pagesBySlug = new Map(pages.map((page) => [page.slug, page]));
 
   return (
     <>
@@ -106,7 +111,7 @@ export default async function ContentAdminPage() {
             { key: "author", label: "Autor" },
             { key: "actions", label: "", align: "right" },
           ]}
-          rows={pages.map((page) => {
+          rows={standardPages.map((page) => {
             const status = contentPageStatus(page);
             const author = page.draftRevision?.createdBy;
             const authorName = author
@@ -155,7 +160,9 @@ export default async function ContentAdminPage() {
             Funkcionalne javne stranice
           </h2>
           <p className="mb-4 text-sm text-ink-500">
-            Ove stranice imaju posebnu aplikacionu logiku, zato nisu izostavljene iz pregleda i ne uređuju se kao CMS tekst.
+            Naslov, uvodni tekst, dodatni sadržaj i SEO uređuju se kroz CMS.
+            Forme, kontakt kanali i panel kolačića ostaju zaštićeni kao deo
+            aplikacione logike.
           </p>
           <DataTable
             columns={[
@@ -165,31 +172,46 @@ export default async function ContentAdminPage() {
               { key: "status", label: "Status" },
               { key: "actions", label: "", align: "right" },
             ]}
-            rows={FUNCTIONAL_PUBLIC_PAGES.map((page) => ({
-              id: page.slug,
-              cells: {
-                title: <p className="font-medium text-ink-900">{page.title}</p>,
-                slug: <span className="font-mono text-xs">/{page.slug}</span>,
-                kind: "Funkcionalna",
-                status: (
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass("Objavljeno")}`}>
-                    Objavljeno
-                  </span>
-                ),
-                actions: (
-                  <div className="flex justify-end gap-3">
-                    <Link href={`/${page.slug}`} target="_blank" className="text-xs text-ink-500 hover:text-walnut hover:underline">
-                      Otvori
-                    </Link>
-                    {page.manageHref ? (
-                      <Link href={page.manageHref} className="text-xs font-medium text-walnut hover:underline">
-                        Upravljaj
+            rows={FUNCTIONAL_PUBLIC_PAGES.map((page) => {
+              const cmsPage = pagesBySlug.get(page.slug);
+              const status = cmsPage
+                ? contentPageStatus(cmsPage)
+                : "Potrebna inicijalizacija";
+              return {
+                id: page.slug,
+                cells: {
+                  title: (
+                    <p className="font-medium text-ink-900">
+                      {cmsPage?.title ?? page.title}
+                    </p>
+                  ),
+                  slug: <span className="font-mono text-xs">/{page.slug}</span>,
+                  kind: "Funkcionalna",
+                  status: (
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(status)}`}>
+                      {status}
+                    </span>
+                  ),
+                  actions: (
+                    <div className="flex justify-end gap-3">
+                      <Link href={`/${page.slug}`} target="_blank" className="text-xs text-ink-500 hover:text-walnut hover:underline">
+                        Otvori
                       </Link>
-                    ) : null}
-                  </div>
-                ),
-              },
-            }))}
+                      {page.manageHref ? (
+                        <Link href={page.manageHref} className="text-xs text-ink-500 hover:text-walnut hover:underline">
+                          Upravljaj
+                        </Link>
+                      ) : null}
+                      {cmsPage ? (
+                        <Link href={`/admin/sadrzaj/${cmsPage.id}`} className="text-xs font-medium text-walnut hover:underline">
+                          Izmeni
+                        </Link>
+                      ) : null}
+                    </div>
+                  ),
+                },
+              };
+            })}
           />
         </div>
       </div>

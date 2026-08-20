@@ -11,6 +11,7 @@ import {
   validateContentSlug,
 } from "@/lib/cms/constants";
 import { validateCmsMarkdown } from "@/lib/cms/markdown";
+import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
 
 const contentPageInputSchema = z
   .object({
@@ -318,6 +319,13 @@ export async function archiveContentPageAction(
       const id = String(formData.get("id") ?? "");
       const page = await db.contentPage.findUnique({ where: { id } });
       if (!page) return { ok: false as const, error: "Stranica nije pronađena." };
+      if (isFunctionalContentPageSlug(page.slug)) {
+        return {
+          ok: false as const,
+          error:
+            "Funkcionalna stranica mora ostati dostupna; njen sadržaj možete menjati i objavljivati kroz CMS.",
+        };
+      }
       await db.contentPage.update({
         where: { id },
         data: { archivedAt: new Date(), published: false },

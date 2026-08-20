@@ -11,8 +11,15 @@ import {
   contentPreviewPath,
   validateContentSlug,
 } from "@/lib/cms/constants";
-import { getPublishedContentPage } from "@/lib/cms/pages";
-import { SYSTEM_CONTENT_PAGES } from "@/lib/cms/system-pages";
+import {
+  getFunctionalContentPage,
+  getPublishedContentPage,
+} from "@/lib/cms/pages";
+import {
+  FUNCTIONAL_CONTENT_PAGE_SLUGS,
+  isFunctionalContentPageSlug,
+  SYSTEM_CONTENT_PAGES,
+} from "@/lib/cms/system-pages";
 import { contentPageStatus } from "@/app/admin/sadrzaj/status";
 
 const DATABASE_KEYS = [
@@ -52,6 +59,21 @@ describe("CMS Markdown safety", () => {
     expect(reclamationPage?.bodyMarkdown).not.toContain(
       "reklamacije@svetpovoljnihcena.rs",
     );
+  });
+
+  it("registers every functional public page as editable CMS content", () => {
+    expect([...FUNCTIONAL_CONTENT_PAGE_SLUGS].sort()).toEqual([
+      "komentari",
+      "kontakt",
+      "podesavanja-kolacica",
+      "servis",
+    ]);
+    for (const slug of FUNCTIONAL_CONTENT_PAGE_SLUGS) {
+      expect(isFunctionalContentPageSlug(slug)).toBe(true);
+      expect(SYSTEM_CONTENT_PAGES.find((page) => page.slug === slug)).toMatchObject({
+        functional: true,
+      });
+    }
   });
 
   it("accepts supported content, stable anchors and safe links", () => {
@@ -160,6 +182,19 @@ describe("CMS publication state", () => {
       slug: "o-nama",
       kind: "SYSTEM",
       title: "Pošten nameštaj, poštena cena.",
+    });
+  });
+
+  it("keeps functional pages available without a CMS row", async () => {
+    for (const key of DATABASE_KEYS) delete process.env[key];
+
+    const page = await getFunctionalContentPage("kontakt");
+
+    expect(page).toMatchObject({
+      id: null,
+      slug: "kontakt",
+      kind: "SYSTEM",
+      title: "Razgovarajmo.",
     });
   });
 

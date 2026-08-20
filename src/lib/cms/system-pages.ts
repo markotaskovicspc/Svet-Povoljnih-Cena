@@ -1,6 +1,7 @@
 export type SystemContentPageDefinition = {
   systemKey: string;
   slug: string;
+  functional?: boolean;
   template: "STANDARD" | "FAQ";
   eyebrow: string | null;
   heroNote: string | null;
@@ -424,6 +425,94 @@ Pored brisanja, možete tražiti pristup, ispravku, ograničenje obrade, prenos 
     footerColumn: "TERMS",
     footerOrder: 50,
   },
+  {
+    systemKey: "kontakt",
+    slug: "kontakt",
+    functional: true,
+    template: "STANDARD",
+    eyebrow: "Tu smo za vas",
+    heroNote: null,
+    title: "Razgovarajmo.",
+    lead:
+      "Za pitanja o proizvodima, porudžbinama i reklamacijama koristite potvrđene kanale ispod.",
+    bodyMarkdown: `## Podaci o firmi {#firma}
+
+**{{merchant.name}}** — {{merchant.address}}. PIB {{merchant.pib}}, matični broj {{merchant.registrationNumber}}. Tekući račun {{merchant.bankAccount}} ({{merchant.bankName}}).
+
+## Mediji i saradnja {#mediji}
+
+Za marketing, sadržaj i partnerstva pišite na [marketing@svetpovoljnihcena.rs](mailto:marketing@svetpovoljnihcena.rs). Za nabavku i veleprodaju — [b2b@svetpovoljnihcena.rs](mailto:b2b@svetpovoljnihcena.rs).`,
+    seoTitle: "Kontakt",
+    seoDescription:
+      "Kontakt podaci i podaci o trgovcu — Svet Povoljnih Cena.",
+    footerVisible: true,
+    footerLabel: "Kontakt",
+    footerColumn: "COMPANY",
+    footerOrder: 20,
+  },
+  {
+    systemKey: "servis",
+    slug: "servis",
+    functional: true,
+    template: "STANDARD",
+    eyebrow: "Pomoć posle kupovine",
+    heroNote: null,
+    title: "Servis za kupce.",
+    lead:
+      "Sve što vam može zatrebati posle porudžbine — od reklamacija do brze podrške.",
+    bodyMarkdown:
+      "Izaberite oblast u kojoj vam je potrebna pomoć. Ako niste sigurni gde da počnete, otvorite Pomoć ili Direktan kontakt.",
+    seoTitle: "Servis za kupce",
+    seoDescription:
+      "Servisni centar za pomoć, reklamacije, uslove kupovine, komentare i sugestije.",
+    footerVisible: true,
+    footerLabel: "Servis za kupce",
+    footerColumn: "COMPANY",
+    footerOrder: 40,
+  },
+  {
+    systemKey: "komentari",
+    slug: "komentari",
+    functional: true,
+    template: "STANDARD",
+    eyebrow: "Vaš glas",
+    heroNote: null,
+    title: "Komentari i sugestije.",
+    lead:
+      "Kuratiramo sledeću kolekciju na osnovu povratnih informacija. Pošaljite nam šta nedostaje, šta da popravimo, ili šta vas je oduševilo.",
+    bodyMarkdown: `## Šta očekivati od nas {#odgovor}
+
+Poruke pregleda tim za podršku. Ako želite odgovor, javićemo se na adresu e-pošte koju ste naveli. Alternativno pišite na [podrska@svetpovoljnihcena.rs](mailto:podrska@svetpovoljnihcena.rs).
+
+## Pošaljite poruku {#poruka}
+
+Poruka se čuva u našem sistemu za podršku. Za podatke o konkretnoj porudžbini koristite e-poštu sa koje je porudžbina poslata.`,
+    seoTitle: "Komentari i sugestije",
+    seoDescription:
+      "Pohvale, predlozi i kritike — recite nam šta da poboljšamo. Čitamo svaku poruku.",
+    footerVisible: true,
+    footerLabel: "Komentari i sugestije",
+    footerColumn: "COMPANY",
+    footerOrder: 60,
+  },
+  {
+    systemKey: "podesavanja-kolacica",
+    slug: "podesavanja-kolacica",
+    functional: true,
+    template: "STANDARD",
+    eyebrow: "Privatnost",
+    heroNote: null,
+    title: "Podešavanja kolačića",
+    lead: "Saglasnost možete promeniti u svakom trenutku.",
+    bodyMarkdown:
+      "Nužni kolačići omogućavaju osnovne funkcije sajta i uvek su aktivni. Analitičke kolačiće uključujemo samo uz vaš pristanak, koji možete promeniti u panelu ispod.",
+    seoTitle: "Podešavanja kolačića",
+    seoDescription: "Izaberite da li dozvoljavate analitičke kolačiće.",
+    footerVisible: false,
+    footerLabel: "Podešavanja kolačića",
+    footerColumn: "TERMS",
+    footerOrder: 60,
+  },
 ] as const satisfies readonly SystemContentPageDefinition[];
 
 export function getSystemContentPage(slugOrKey: string) {
@@ -435,3 +524,13 @@ export function getSystemContentPage(slugOrKey: string) {
 export const SYSTEM_CONTENT_SLUGS: ReadonlySet<string> = new Set(
   SYSTEM_CONTENT_PAGES.map((page) => page.slug),
 );
+
+export const FUNCTIONAL_CONTENT_PAGE_SLUGS: ReadonlySet<string> = new Set(
+  SYSTEM_CONTENT_PAGES.filter(
+    (page) => "functional" in page && page.functional,
+  ).map((page) => page.slug),
+);
+
+export function isFunctionalContentPageSlug(slug: string) {
+  return FUNCTIONAL_CONTENT_PAGE_SLUGS.has(slug);
+}

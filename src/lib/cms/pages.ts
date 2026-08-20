@@ -4,6 +4,7 @@ import type { ContentPageTemplate } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
 import {
   getSystemContentPage,
+  isFunctionalContentPageSlug,
   SYSTEM_CONTENT_PAGES,
   type SystemContentPageDefinition,
 } from "./system-pages";
@@ -117,6 +118,21 @@ export const getPublishedContentPage = cache(async (slug: string) => {
   }
   return fallback ? definitionSnapshot(fallback) : null;
 });
+
+export async function getFunctionalContentPage(slug: string) {
+  if (!isFunctionalContentPageSlug(slug)) {
+    throw new Error(`CMS page "${slug}" is not registered as functional.`);
+  }
+
+  const published = await getPublishedContentPage(slug);
+  if (published) return published;
+
+  const fallback = getSystemContentPage(slug);
+  if (!fallback) {
+    throw new Error(`Missing functional CMS fallback for "${slug}".`);
+  }
+  return definitionSnapshot(fallback);
+}
 
 export async function getPublishedCustomPage(slug: string) {
   const page = await getPublishedContentPage(slug);

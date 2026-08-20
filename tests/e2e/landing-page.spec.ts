@@ -102,7 +102,9 @@ test.describe("landing page create, publish and reopen acceptance", () => {
     const searchResult = page.getByRole("button").filter({ hasText: selectedProduct.sku });
     await expect(searchResult).toHaveCount(1);
     await searchResult.click();
-    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
+    await expect(page.locator('input[name="productSkus"]')).toHaveValue(
+      new RegExp(selectedProduct.sku),
+    );
     await page.getByRole("button", { name: "Sačuvaj nacrt" }).click();
     await expect(page).toHaveURL(
       /\/admin\/erp\/landing-strane\/(?!nova(?:[?#]|$))[^/?#]+$/,
@@ -163,7 +165,9 @@ test.describe("landing page create, publish and reopen acceptance", () => {
     await expect(page.getByLabel("Slug")).toHaveValue(slug);
     await expect(page.getByLabel("Slug")).toHaveAttribute("readonly");
     await expect(page.getByLabel("Naziv stranice (nevidljivi H1)")).toHaveValue(title);
-    await expect(page.getByText(selectedProduct.name, { exact: true })).toBeVisible();
+    await expect(page.locator('input[name="productSkus"]')).toHaveValue(
+      new RegExp(selectedProduct.sku),
+    );
     await expect(page.getByText("Verzija 2")).toBeVisible();
 
     const unexpectedRuntimeErrors = runtimeErrors.filter(

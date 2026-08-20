@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
-import {
-  ContentBody,
-  ContentHero,
-  HubCard,
-} from "@/components/layout/content-shell";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { CmsFunctionalPage } from "@/components/content/cms-content-page";
+import { HubCard } from "@/components/layout/content-shell";
+import { getFunctionalContentPage } from "@/lib/cms/pages";
 
-export const metadata: Metadata = {
-  title: "Servis za kupce",
-  description:
-    "Hub stranice za pomoć — reklamacije, uslovi kupovine, komentari i sugestije.",
-};
+const SLUG = "servis";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getFunctionalContentPage(SLUG);
+  return {
+    title: page.seoTitle ?? page.title,
+    description: page.seoDescription,
+    alternates: { canonical: `/${SLUG}` },
+  };
+}
 
 const hubs = [
   {
@@ -51,26 +53,17 @@ const hubs = [
   },
 ];
 
-export default function ServisPage() {
+export default async function ServisPage() {
+  const page = await getFunctionalContentPage(SLUG);
   return (
-    <>
-      <div className="mx-auto w-full max-w-[var(--container-content)] px-6 pt-6">
-        <Breadcrumbs trail={[{ label: "Servis za kupce" }]} />
-      </div>
-      <ContentHero
-        eyebrow="Pomoć posle kupovine"
-        title="Servis za kupce."
-        lead="Sve što vam može zatrebati posle porudžbine — od reklamacija do brze podrške."
-      />
-      <ContentBody>
-        <ul className="not-prose grid gap-4 sm:grid-cols-2">
-          {hubs.map((h) => (
-            <li key={h.href}>
-              <HubCard {...h} />
-            </li>
-          ))}
-        </ul>
-      </ContentBody>
-    </>
+    <CmsFunctionalPage page={page}>
+      <ul className="not-prose mt-8 grid gap-4 sm:grid-cols-2">
+        {hubs.map((hub) => (
+          <li key={hub.href}>
+            <HubCard {...hub} />
+          </li>
+        ))}
+      </ul>
+    </CmsFunctionalPage>
   );
 }

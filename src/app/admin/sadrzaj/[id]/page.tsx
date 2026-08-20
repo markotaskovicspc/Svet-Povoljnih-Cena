@@ -8,6 +8,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { ContentPageEditor } from "@/components/admin/content-page-editor";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { buttonVariants } from "@/components/ui/button";
+import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
 import {
   archiveContentPageAction,
   deleteContentPageDraftAction,
@@ -46,6 +47,7 @@ export default async function EditContentPage({
   });
   if (!page) notFound();
   const status = contentPageStatus(page);
+  const isFunctional = isFunctionalContentPageSlug(page.slug);
 
   return (
     <>
@@ -69,6 +71,12 @@ export default async function EditContentPage({
         {page.archivedAt ? (
           <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink-700">
             Stranica je arhivirana i nije dostupna kupcima. Možete je vratiti među nacrte ili objaviti novu verziju.
+          </div>
+        ) : null}
+        {isFunctional ? (
+          <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm text-ink-700">
+            Uređujete tekst i SEO funkcionalne stranice. Njena forma, linkovi ili
+            panel ostaju aktivni i ne mogu se ukloniti iz ovog editora.
           </div>
         ) : null}
         <ContentPageEditor
@@ -130,32 +138,34 @@ export default async function EditContentPage({
           </div>
         </Card>
 
-        <Card className="border-destructive/25">
-          <CardTitle>Upravljanje stranicom</CardTitle>
-          <div className="mt-4 flex flex-wrap gap-3">
-            {page.archivedAt ? (
-              <AdminActionForm action={unarchiveContentPageAction}>
-                <input type="hidden" name="id" value={page.id} />
-                <SubmitButton variant="outline">Vrati među nacrte</SubmitButton>
-              </AdminActionForm>
-            ) : (
-              <AdminActionForm action={archiveContentPageAction}>
-                <input type="hidden" name="id" value={page.id} />
-                <SubmitButton variant="destructive" confirm="Arhivirati stranicu i ukloniti je sa javnog sajta i iz footera?">
-                  Arhiviraj stranicu
-                </SubmitButton>
-              </AdminActionForm>
-            )}
-            {page.kind === "CUSTOM" && !page.publishedRevisionId ? (
-              <AdminActionForm action={deleteContentPageDraftAction}>
-                <input type="hidden" name="id" value={page.id} />
-                <SubmitButton variant="destructive" confirm="Trajno obrisati ovaj nikada objavljeni nacrt?">
-                  Obriši nacrt
-                </SubmitButton>
-              </AdminActionForm>
-            ) : null}
-          </div>
-        </Card>
+        {!isFunctional ? (
+          <Card className="border-destructive/25">
+            <CardTitle>Upravljanje stranicom</CardTitle>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {page.archivedAt ? (
+                <AdminActionForm action={unarchiveContentPageAction}>
+                  <input type="hidden" name="id" value={page.id} />
+                  <SubmitButton variant="outline">Vrati među nacrte</SubmitButton>
+                </AdminActionForm>
+              ) : (
+                <AdminActionForm action={archiveContentPageAction}>
+                  <input type="hidden" name="id" value={page.id} />
+                  <SubmitButton variant="destructive" confirm="Arhivirati stranicu i ukloniti je sa javnog sajta i iz footera?">
+                    Arhiviraj stranicu
+                  </SubmitButton>
+                </AdminActionForm>
+              )}
+              {page.kind === "CUSTOM" && !page.publishedRevisionId ? (
+                <AdminActionForm action={deleteContentPageDraftAction}>
+                  <input type="hidden" name="id" value={page.id} />
+                  <SubmitButton variant="destructive" confirm="Trajno obrisati ovaj nikada objavljeni nacrt?">
+                    Obriši nacrt
+                  </SubmitButton>
+                </AdminActionForm>
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
       </div>
     </>
   );
