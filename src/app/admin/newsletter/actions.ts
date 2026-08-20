@@ -38,6 +38,21 @@ function parseJson(raw: string, label: string) {
   }
 }
 
+function serbianCount(
+  count: number,
+  singular: string,
+  paucal: string,
+  plural: string,
+) {
+  const mod100 = Math.abs(count) % 100;
+  const mod10 = mod100 % 10;
+  if (mod10 === 1 && mod100 !== 11) return `${count} ${singular}`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `${count} ${paucal}`;
+  }
+  return `${count} ${plural}`;
+}
+
 function refreshCampaign(id?: string) {
   revalidatePath("/admin/newsletter");
   if (id) revalidatePath(`/admin/newsletter/kampanje/${id}`);
@@ -122,7 +137,7 @@ export async function submitNewsletterReviewAction(
     async (id, actorId) => {
       const result = await submitNewsletterCampaignForReview(id, actorId);
       return {
-        message: `Kampanja je na proveri. Podobnih primalaca: ${result.recipientCount}.`,
+        message: `Kampanja je na proveri. Podobno: ${serbianCount(result.recipientCount, "primalac", "primaoca", "primalaca")}.`,
         diff: { recipients: result.recipientCount, warnings: result.warnings },
       };
     },
@@ -261,7 +276,7 @@ export async function saveNewsletterAudienceAction(
       return {
         ok: true as const,
         entityId: audience.id,
-        message: `Publika je sačuvana. Trenutno odgovara ${preview.count} kontakata.`,
+        message: `Publika je sačuvana. Trenutno odgovara ${serbianCount(preview.count, "kontakt", "kontakta", "kontakata")}.`,
         result: preview,
         diff: { name, estimatedCount: preview.count, filter },
       };
