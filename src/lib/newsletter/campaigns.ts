@@ -179,11 +179,9 @@ export async function approveNewsletterCampaign(campaignId: string, actorId: str
     include: { audience: true },
   });
   if (campaign.status !== "IN_REVIEW") throw new Error("Kampanja prvo mora da bude poslata na proveru.");
-  const filter = newsletterAudienceFilterSchema.parse(
-    campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
-  );
-  const resolved = await resolveNewsletterAudience(filter);
-  const count = resolved.recipients.length;
+  const preflight = await preflightNewsletterCampaign(campaignId, false);
+  if (preflight.errors.length) throw new Error(preflight.errors.join(" "));
+  const count = preflight.recipientCount;
   if (count >= twoPersonThreshold() && campaign.createdById === actorId) {
     throw new Error(`Kampanju za ${count} primalaca mora da odobri drugi administrator.`);
   }
@@ -194,7 +192,7 @@ export async function approveNewsletterCampaign(campaignId: string, actorId: str
       approvedAt: new Date(),
       approvedById: actorId,
       recipients: count,
-      audienceBreakdown: resolved.breakdown,
+      audienceBreakdown: preflight.breakdown,
     },
   });
 }
@@ -210,6 +208,8 @@ export async function scheduleNewsletterCampaign(
   });
   if (campaign.status !== "APPROVED") throw new Error("Samo odobrena kampanja može da se zakaže.");
   if (scheduledAt.getTime() < Date.now() - 60_000) throw new Error("Vreme slanja je u prošlosti.");
+  const preflight = await preflightNewsletterCampaign(campaignId);
+  if (preflight.errors.length) throw new Error(preflight.errors.join(" "));
   const filter = newsletterAudienceFilterSchema.parse(
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
@@ -365,6 +365,12 @@ export async function preflightNewsletterCampaign(campaignId: string, requirePro
     content: campaign.content,
   });
   warnings.push(...rendered.warnings);
+  const productWarnings = rendered.warnings.filter((warning) =>
+    warning.includes("izostavljen"),
+  );
+  if (productWarnings.length) {
+    errors.push(`Preflight proizvoda nije prošao: ${productWarnings.join(" ")}`);
+  }
   if (!campaign.subject.trim()) errors.push("Naslov poruke je obavezan.");
   if (!rendered.blocks.length) errors.push("Kampanja nema sadržaj.");
   const resolved = await resolveNewsletterAudience(filter);
@@ -470,8 +476,11 @@ export async function sendNewsletterCampaign(campaignId: string) {
     previewText: campaign.previewText,
     content: campaign.content,
   });
-  if (rendered.warnings.some((warning) => warning.includes("izostavljen"))) {
-    throw new Error(`Preflight proizvoda nije prošao: ${rendered.warnings.join(" ")}`);
+  const productWarnings = rendered.warnings.filter((warning) =>
+    warning.includes("izostavljen"),
+  );
+  if (productWarnings.length) {
+    throw new Error(`Preflight proizvoda nije prošao: ${productWarnings.join(" ")}`);
   }
   const cfg = getEmailConfig();
   if (cfg.provider === "none") {
