@@ -188,7 +188,10 @@ export function ProductColorOptions({
 
   if (familyOptions.length) {
     return (
-      <div className={cn("grid gap-1.5", className)}>
+      <div
+        className={cn("grid gap-1.5", className)}
+        aria-label={label}
+      >
         <div
           className={cn(
             "min-w-0",
@@ -348,7 +351,10 @@ export function ProductColorOptions({
   const thumbnail = product.media?.images?.[0];
 
   return (
-    <div className={cn("grid gap-1.5", className)}>
+    <div
+      className={cn("grid gap-1.5", className)}
+      aria-label={label}
+    >
       <div className="grid gap-1.5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
         <span className="text-xs font-medium text-ink-500 md:mr-0.5">
           Varijanta:

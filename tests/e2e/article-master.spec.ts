@@ -115,6 +115,12 @@ test.describe("article master acceptance", () => {
       },
     });
     leafCategoryId = leafCategory.id;
+    const productGroup = await db.group.create({
+      data: {
+        slug: `qa-article-group-${runId}`,
+        name: `${tag} grupa artikala`,
+      },
+    });
     const supplier = await db.supplier.create({
       data: {
         code: `DOB-${runId}`.slice(0, 40),
@@ -137,11 +143,16 @@ test.describe("article master acceptance", () => {
         widthCm: 10,
         depthCm: 20,
         heightCm: 30,
+        containerQty: 1_000,
         articleStatus: "UZ",
         isActive: false,
+        groupId: productGroup.id,
         availableWebManual: true,
         availableWholesaleManual: true,
         availableExportManual: true,
+        categories: {
+          create: { categoryId: leafCategory.id },
+        },
         warehouseStocks: {
           create: [
             { warehouseId, qty: 8 },
@@ -348,6 +359,9 @@ test.describe("article master acceptance", () => {
     await expect(
       reloadedPackaging.getByLabel("Volumetrijska dimenzija"),
     ).toHaveValue("98 cm");
+    await expect(
+      page.getByText("Kategorija za isporuku: I", { exact: true }),
+    ).toBeVisible();
   });
 
   test("edits the full card, calculates stock/channels and imports XLSX", async ({
@@ -1630,6 +1644,7 @@ test.describe("article master acceptance", () => {
           "identity",
         ]),
       });
+    await page.getByText("Prikaz tabele", { exact: true }).click();
     const warehouseColumnCheckbox = page.getByRole("checkbox", {
       name: "Fizičko po magacinu",
       exact: true,

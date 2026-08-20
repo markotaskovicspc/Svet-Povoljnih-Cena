@@ -66,6 +66,7 @@ import {
   getDeliveryWindows,
   resolveDeliveryWindowForQuantity,
 } from "@/lib/delivery-windows";
+import { deliveryCategory } from "@/lib/delivery-tariff";
 import { formatRsd } from "@/lib/format";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
@@ -1378,6 +1379,11 @@ export default async function ProductDetail({
   const defaultWarehouseStock = defaultWarehouseRow
     ? defaultWarehouseRow.qty + defaultWarehouseReserved
     : product.stock + defaultWarehouseReserved;
+  const currentDeliveryCategory = deliveryCategory([
+    num(product.unitPackWidthCm),
+    num(product.unitPackDepthCm),
+    num(product.unitPackHeightCm),
+  ]);
   const retailPrice = resolveRetailPrice(product.priceListEntries, product.fullPrice, now);
   const activeAction = product.actionPrices.find(
     (entry) =>
@@ -1708,6 +1714,13 @@ export default async function ProductDetail({
                 />
                 <p className="mt-1 text-xs text-ink-500">
                   Možete uneti postojeću šifru sa magacinske deklaracije.
+                </p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-walnut">
+                  Kategorija za isporuku: {currentDeliveryCategory === 1
+                    ? "I"
+                    : currentDeliveryCategory === 2
+                      ? "II"
+                      : "nije određena"}
                 </p>
               </Field>
               <Field label="Kratki opis za kartice, naziv i dokumente">

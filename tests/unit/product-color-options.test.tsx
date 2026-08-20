@@ -41,6 +41,7 @@ describe("PDP boje proizvoda", () => {
       />,
     );
     expect(markup).not.toContain("Boja:");
+    expect(markup).toContain('aria-label="Boja proizvoda"');
     expect(markup).toContain("CRNA");
     expect(markup).toContain("NATUR");
     expect(markup).not.toContain("<button");
@@ -97,8 +98,13 @@ describe("PDP boje proizvoda", () => {
       },
     } as Product;
     const markup = renderToStaticMarkup(
-      <ProductColorOptions product={familyProduct} showLabels />,
+      <ProductColorOptions
+        product={familyProduct}
+        label="Boja proizvoda"
+        showLabels
+      />,
     );
+    expect(markup).toContain('aria-label="Boja proizvoda"');
     expect(markup).toContain('href="/p/sofa-black"');
     expect(markup).toContain('href="/p/sofa-green"');
     expect(markup).toContain("Crna");
