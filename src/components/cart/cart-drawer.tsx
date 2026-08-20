@@ -15,6 +15,7 @@ import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import { CartLoginOffer } from "./cart-view";
 import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
+import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
 
 /**
  * Mini-cart drawer (1F.2). Mounted globally; opens via `useCartUi`.
@@ -79,7 +80,14 @@ export function CartDrawer() {
             <CartLoginOffer onNavigate={close} />
             <div className="divide-border/60 divide-y px-4">
               {lines.map((l) => (
-                <CartLineRow key={l.sku} line={l} onNavigate={close} />
+                <CartLineRow
+                  key={l.sku}
+                  line={l}
+                  onNavigate={close}
+                  deliveryCategory={
+                    quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
+                  }
+                />
               ))}
             </div>
           </div>
@@ -109,6 +117,11 @@ export function CartDrawer() {
                   : formatRsd(shipping)}
               </span>
             </div>
+            <dl>
+              <DeliveryCategoryBreakdown
+                breakdown={quote?.deliveryCategoryBreakdown ?? null}
+              />
+            </dl>
             {shipping != null ? (
               <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
                 <span className="font-medium text-ink-900">Ukupno</span>

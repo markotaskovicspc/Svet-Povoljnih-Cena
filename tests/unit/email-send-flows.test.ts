@@ -140,6 +140,9 @@ describe("all transactional Resend send flows", () => {
     expect(input.html).toContain("/documents/garantni-list-logo.jpeg");
     expect(input.html).toContain("/reklamacije/prijava?order=");
     expect(input.html).toContain("guest-order-access-token-123456789");
+    expect(input.html).toContain("Vrednost artikala");
+    expect(input.html).toContain("Popust za prvu kupovinu");
+    expect(input.html).toContain("Popust za sačuvanu karticu");
     expect(input.text).toContain("SPC-AUDIT-0001");
     expect(input.attachments).toEqual([
       expect.objectContaining({ contentType: "application/pdf" }),

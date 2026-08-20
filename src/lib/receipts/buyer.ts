@@ -162,7 +162,7 @@ type OrderForReceipt = Prisma.OrderGetPayload<{
   };
 }>;
 
-function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
+export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
   return {
     number: order.number,
     createdAt: order.createdAt,
@@ -178,6 +178,12 @@ function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
     assemblyTotal: num(order.assemblyTotal),
     voucherCode: order.voucherCode,
     voucherDiscount: order.voucherDiscount ? num(order.voucherDiscount) : null,
+    firstPurchaseDiscount: order.firstPurchaseDiscount
+      ? num(order.firstPurchaseDiscount)
+      : null,
+    savedCardDiscount: order.savedCardDiscount
+      ? num(order.savedCardDiscount)
+      : null,
     total: num(order.total),
     paymentMethod: order.paymentMethod,
     shipping_address: {
@@ -190,7 +196,7 @@ function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
   };
 }
 
-function buildReceiptSnapshot(order: OrderForReceipt, recipient: string | null) {
+export function buildReceiptSnapshot(order: OrderForReceipt, recipient: string | null) {
   return {
     merchant: MERCHANT_LEGAL_INFO,
     recipient,
@@ -207,6 +213,12 @@ function buildReceiptSnapshot(order: OrderForReceipt, recipient: string | null) 
         assemblyTotal: num(order.assemblyTotal),
         savings: num(order.savings),
         voucherDiscount: order.voucherDiscount ? num(order.voucherDiscount) : null,
+        firstPurchaseDiscount: order.firstPurchaseDiscount
+          ? num(order.firstPurchaseDiscount)
+          : null,
+        savedCardDiscount: order.savedCardDiscount
+          ? num(order.savedCardDiscount)
+          : null,
         total: num(order.total),
       },
       customer: {

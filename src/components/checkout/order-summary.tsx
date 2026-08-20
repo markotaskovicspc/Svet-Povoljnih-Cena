@@ -13,6 +13,7 @@ import {
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
+import { DeliveryCategoryBreakdown } from "@/components/cart/delivery-category-breakdown";
 
 export interface SummaryTotals {
   itemsFull: number;
@@ -135,6 +136,12 @@ export function OrderSummary({
                   <p className="text-[11px] text-ink-500 tabular-nums">
                     {l.qty} × {formatRsd(l.unitPriceSale)}
                   </p>
+                  {deliveryQuote.deliveryCategoriesBySku?.[l.sku] ? (
+                    <p className="text-[11px] text-ink-500">
+                      {deliveryQuote.deliveryCategoriesBySku?.[l.sku] === 1 ? "I" : "II"}{" "}
+                      kategorija isporuke
+                    </p>
+                  ) : null}
                 </div>
                 <span className="text-xs font-medium text-ink-900 tabular-nums">
                   {formatRsd(l.unitPriceSale * l.qty)}
@@ -164,6 +171,9 @@ export function OrderSummary({
               </span>
             }
             value={formatRsd(totals.shipping)}
+          />
+          <DeliveryCategoryBreakdown
+            breakdown={deliveryQuote.deliveryCategoryBreakdown ?? null}
           />
           {totals.assembly > 0 ? (
             <Row

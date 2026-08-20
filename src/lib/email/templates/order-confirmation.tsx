@@ -84,8 +84,8 @@ export function OrderConfirmation({
       >
         <tbody>
           <tr>
-            <td>Artikli</td>
-            <td style={{ textAlign: "right" }}>{fmt(order.subtotal)}</td>
+            <td>Vrednost artikala</td>
+            <td style={{ textAlign: "right" }}>{fmt(order.subtotal + order.savings)}</td>
           </tr>
           {order.savings > 0 ? (
             <tr style={{ color: "#D7263D" }}>

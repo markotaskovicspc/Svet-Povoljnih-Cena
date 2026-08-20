@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculatePublishedDeliveryTariff,
   deliveryCategory,
+  deliveryRate,
   packageVolumetricDimension,
 } from "@/lib/delivery-tariff";
 import { formatProductCardDimensions } from "@/lib/product-dimensions";
@@ -30,12 +31,20 @@ describe("confirmed client rules", () => {
       qty: 2,
       unitPrice: 1_100,
       packQty: 1,
-      packWidthCm: 50,
-      packDepthCm: 40,
-      packHeightCm: 30,
+      unitPackWidthCm: 50,
+      unitPackDepthCm: 40,
+      unitPackHeightCm: 30,
       packGrossWeightKg: 4,
     };
-    expect(calculatePublishedDeliveryTariff([product], { loggedIn: false })?.total).toBe(399);
+    const guestTariff = calculatePublishedDeliveryTariff([product], {
+      loggedIn: false,
+    });
+    expect(guestTariff?.total).toBe(399);
+    expect(guestTariff?.categories[1]).toEqual({
+      weightKg: 8,
+      subtotal: 2_200,
+      price: 399,
+    });
     expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(0);
   });
 
@@ -43,22 +52,126 @@ describe("confirmed client rules", () => {
     expect(calculatePublishedDeliveryTariff([{
       qty: 1,
       unitPrice: 5_000,
-      packWidthCm: 101,
-      packDepthCm: 60,
-      packHeightCm: 40,
+      unitPackWidthCm: 101,
+      unitPackDepthCm: 60,
+      unitPackHeightCm: 40,
       packGrossWeightKg: 4,
     }], { loggedIn: false })?.total).toBe(699);
+  });
+
+  it("keeps the published weight boundaries inclusive at their upper limit", () => {
+    expect(deliveryRate(1, 5)).toBe(299);
+    expect(deliveryRate(1, 5.001)).toBe(399);
+    expect(deliveryRate(2, 50)).toBe(1_399);
+    expect(deliveryRate(2, 50.001)).toBeNull();
+  });
+
+  it("grants free category-I delivery only above the 2,000 RSD threshold", () => {
+    const product = {
+      qty: 1,
+      unitPrice: 2_000,
+      unitPackWidthCm: 50,
+      unitPackDepthCm: 40,
+      unitPackHeightCm: 30,
+      grossWeightKg: 2,
+    };
+
+    expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(299);
+    expect(
+      calculatePublishedDeliveryTariff(
+        [{ ...product, unitPrice: 2_000.01 }],
+        { loggedIn: true },
+      )?.total,
+    ).toBe(0);
   });
 
   it("returns no invented tariff above the published 50 kg ceiling", () => {
     expect(calculatePublishedDeliveryTariff([{
       qty: 1,
       unitPrice: 5_000,
-      packWidthCm: 70,
-      packDepthCm: 40,
-      packHeightCm: 30,
+      unitPackWidthCm: 70,
+      unitPackDepthCm: 40,
+      unitPackHeightCm: 30,
       packGrossWeightKg: 51,
     }], { loggedIn: true })).toBeNull();
+  });
+
+  it("classifies by the individual article package and sums each category separately", () => {
+    const tariff = calculatePublishedDeliveryTariff(
+      [
+        {
+          qty: 1,
+          unitPrice: 1_500,
+          unitPackWidthCm: 50,
+          unitPackDepthCm: 40,
+          unitPackHeightCm: 30,
+          packWidthCm: 200,
+          packDepthCm: 100,
+          packHeightCm: 80,
+          packGrossWeightKg: 4,
+        },
+        {
+          qty: 1,
+          unitPrice: 4_000,
+          unitPackWidthCm: 101,
+          unitPackDepthCm: 60,
+          unitPackHeightCm: 40,
+          packGrossWeightKg: 6,
+        },
+      ],
+      { loggedIn: true },
+    );
+
+    expect(tariff).toMatchObject({
+      total: 1_098,
+      categoryOnePrice: 299,
+      categoryTwoPrice: 799,
+      categories: {
+        1: { weightKg: 4, subtotal: 1_500, price: 299 },
+        2: { weightKg: 6, subtotal: 4_000, price: 799 },
+      },
+    });
+  });
+
+  it("uses one article's gross weight instead of charging the whole transport carton", () => {
+    const tariff = calculatePublishedDeliveryTariff(
+      [
+        {
+          qty: 1,
+          unitPrice: 5_000,
+          unitPackWidthCm: 50,
+          unitPackDepthCm: 40,
+          unitPackHeightCm: 30,
+          grossWeightKg: 2,
+          packQty: 10,
+          packGrossWeightKg: 23,
+        },
+      ],
+      { loggedIn: false },
+    );
+
+    expect(tariff?.categories[1].weightKg).toBe(2);
+    expect(tariff?.total).toBe(299);
+  });
+
+  it("derives an individual weight from the transport carton when unit weight is absent", () => {
+    const tariff = calculatePublishedDeliveryTariff(
+      [
+        {
+          qty: 2,
+          unitPrice: 500,
+          unitPackWidthCm: 50,
+          unitPackDepthCm: 40,
+          unitPackHeightCm: 30,
+          packQty: 30,
+          packGrossWeightKg: 30,
+        },
+      ],
+      { loggedIn: false },
+    );
+
+    expect(tariff?.categories[1].weightKg).toBe(2);
+    expect(tariff?.total).toBe(299);
   });
 
   it("finds the lowest non-loyalty public price before the active offer", () => {

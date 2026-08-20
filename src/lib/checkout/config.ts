@@ -21,7 +21,10 @@ import {
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
 } from "./config-shared";
-import { calculatePublishedDeliveryTariff } from "@/lib/delivery-tariff";
+import {
+  calculatePublishedDeliveryTariff,
+  productDeliveryCategory,
+} from "@/lib/delivery-tariff";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import {
   getActivePricingRules,
@@ -77,6 +80,9 @@ type QuoteProduct = {
     };
   }>;
   packQty: number | null;
+  unitPackWidthCm: Prisma.Decimal | null;
+  unitPackDepthCm: Prisma.Decimal | null;
+  unitPackHeightCm: Prisma.Decimal | null;
   packWidthCm: Prisma.Decimal | null;
   packDepthCm: Prisma.Decimal | null;
   packHeightCm: Prisma.Decimal | null;
@@ -207,6 +213,9 @@ export async function resolveDeliveryQuote({
               },
             },
             packQty: true,
+            unitPackWidthCm: true,
+            unitPackDepthCm: true,
+            unitPackHeightCm: true,
             packWidthCm: true,
             packDepthCm: true,
             packHeightCm: true,
@@ -333,6 +342,12 @@ export async function resolveDeliveryQuote({
             qty: Math.max(1, line.qty ?? 1),
             unitPrice,
             packQty: product.packQty,
+            unitPackWidthCm:
+              product.unitPackWidthCm == null ? null : num(product.unitPackWidthCm),
+            unitPackDepthCm:
+              product.unitPackDepthCm == null ? null : num(product.unitPackDepthCm),
+            unitPackHeightCm:
+              product.unitPackHeightCm == null ? null : num(product.unitPackHeightCm),
             packWidthCm: product.packWidthCm == null ? null : num(product.packWidthCm),
             packDepthCm: product.packDepthCm == null ? null : num(product.packDepthCm),
             packHeightCm: product.packHeightCm == null ? null : num(product.packHeightCm),
@@ -350,6 +365,19 @@ export async function resolveDeliveryQuote({
       ? calculatePublishedDeliveryTariff(publishedTariffLines, { loggedIn })
     : null;
   const publishedPrice = publishedTariff?.total;
+  const deliveryCategoriesBySku = Object.fromEntries(
+    products.flatMap((product) => {
+      const category = productDeliveryCategory({
+        unitPackWidthCm:
+          product.unitPackWidthCm == null ? null : num(product.unitPackWidthCm),
+        unitPackDepthCm:
+          product.unitPackDepthCm == null ? null : num(product.unitPackDepthCm),
+        unitPackHeightCm:
+          product.unitPackHeightCm == null ? null : num(product.unitPackHeightCm),
+      });
+      return category ? [[product.sku, category] as const] : [];
+    }),
+  ) as CheckoutDeliveryQuote["deliveryCategoriesBySku"];
 
   return {
     prices: {
@@ -360,6 +388,8 @@ export async function resolveDeliveryQuote({
         publishedPrice ??
         normalizePrice(Math.max(...truckPrices), SHIPPING_PRICES.kamion),
     },
+    deliveryCategoriesBySku,
+    deliveryCategoryBreakdown: publishedTariff?.categories ?? null,
     assemblyPrice: ASSEMBLY_ENABLED
       ? normalizePrice(assemblyPrice, DEFAULT_DELIVERY_QUOTE.assemblyPrice)
       : 0,

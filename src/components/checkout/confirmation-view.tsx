@@ -550,7 +550,10 @@ function OrderRecap({ order }: { order: Order }) {
         ))}
       </ul>
       <dl className="border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
-        <Row label="Artikli" value={formatRsd(order.subtotal)} />
+        <Row
+          label="Vrednost artikala"
+          value={formatRsd(order.subtotal + order.savings)}
+        />
         {order.savings > 0 ? (
           <Row label="Ušteda" value={`−${formatRsd(order.savings)}`} action />
         ) : null}

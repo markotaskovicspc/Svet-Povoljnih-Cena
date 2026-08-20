@@ -15,7 +15,11 @@ const order: InvoiceOrderInput = {
   subtotal: 6_400,
   shipping: 390,
   assemblyTotal: 0,
-  total: 6_790,
+  voucherCode: "TEST",
+  voucherDiscount: 100,
+  firstPurchaseDiscount: 150,
+  savedCardDiscount: 50,
+  total: 6_490,
   paymentMethod: "Pouzeće",
   shipping_address: {
     firstName: "Petar",

@@ -11,6 +11,8 @@ import { useCheckout } from "@/lib/checkout/store";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 import { useSession } from "next-auth/react";
+import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
+import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -19,6 +21,10 @@ import { useSession } from "next-auth/react";
 export function CartView() {
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
+  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(
+    lines,
+    hydrated && lines.length > 0,
+  );
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -54,13 +60,24 @@ export function CartView() {
         className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
       >
         <CartLoginOffer />
-        {lines.map((l) => <CartLineRow key={l.sku} line={l} variant="page" />)}
+        {lines.map((l) => (
+          <CartLineRow
+            key={l.sku}
+            line={l}
+            variant="page"
+            deliveryCategory={
+              quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
+            }
+          />
+        ))}
       </section>
 
       <CartSummary
         subtotal={subtotal}
         savings={savings}
         fullTotal={fullTotal}
+        quote={quote}
+        deliveryLoading={deliveryLoading}
       />
     </div>
   );
@@ -98,18 +115,20 @@ function CartSummary({
   subtotal,
   savings,
   fullTotal,
+  quote,
+  deliveryLoading,
 }: {
   subtotal: number;
   savings: number;
   fullTotal: number;
+  quote: CheckoutDeliveryQuote | null;
+  deliveryLoading: boolean;
 }) {
   const voucher = useCheckout((s) => s.voucher);
   const applyVoucher = useCheckout((s) => s.applyVoucher);
   const [code, setCode] = useState("");
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
-  const lines = useCart((state) => state.lines);
-  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(lines);
   const shipping = quote?.prices.kurir ?? null;
   const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
   const total = Math.max(0, subtotal + (shipping ?? 0) - voucherDiscount);
@@ -182,6 +201,9 @@ function CartSummary({
                 : formatRsd(shipping)}
             </dd>
           </div>
+          <DeliveryCategoryBreakdown
+            breakdown={quote?.deliveryCategoryBreakdown ?? null}
+          />
         </dl>
 
         <form

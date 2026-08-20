@@ -117,6 +117,24 @@ export function IpsPaymentConfirmation({
               <td style={{ textAlign: "right" }}>{fmt(order.assemblyTotal)}</td>
             </tr>
           ) : null}
+          {order.voucherDiscount && order.voucherCode ? (
+            <tr style={{ color: "#D7263D" }}>
+              <td>Vaučer „{order.voucherCode}”</td>
+              <td style={{ textAlign: "right" }}>−{fmt(order.voucherDiscount)}</td>
+            </tr>
+          ) : null}
+          {order.firstPurchaseDiscount ? (
+            <tr style={{ color: "#D7263D" }}>
+              <td>Popust za prvu kupovinu</td>
+              <td style={{ textAlign: "right" }}>−{fmt(order.firstPurchaseDiscount)}</td>
+            </tr>
+          ) : null}
+          {order.savedCardDiscount ? (
+            <tr style={{ color: "#D7263D" }}>
+              <td>Popust za sačuvanu karticu</td>
+              <td style={{ textAlign: "right" }}>−{fmt(order.savedCardDiscount)}</td>
+            </tr>
+          ) : null}
           <tr style={{ fontWeight: 600, fontSize: 16, color: "#1A1714" }}>
             <td style={{ paddingTop: 10 }}>Ukupno</td>
             <td style={{ paddingTop: 10, textAlign: "right" }}>{fmt(order.total)}</td>

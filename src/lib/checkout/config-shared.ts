@@ -1,4 +1,8 @@
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
+import type {
+  DeliveryCategory,
+  PublishedDeliveryCategoryBreakdown,
+} from "@/lib/delivery-tariff";
 
 export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
   kurir: 990,
@@ -36,6 +40,10 @@ export type CheckoutPaymentMethodConfig = {
 
 export type CheckoutDeliveryQuote = {
   prices: Record<ShippingMethod, number>;
+  /** Server-resolved public delivery category for each requested cart line. */
+  deliveryCategoriesBySku: Partial<Record<SKU, DeliveryCategory>>;
+  /** Present when the published category tariff, rather than an admin fallback, was used. */
+  deliveryCategoryBreakdown: PublishedDeliveryCategoryBreakdown | null;
   assemblyPrice: number;
   assemblyPricesBySku: Partial<Record<SKU, number>>;
   truckAvailable: boolean;
@@ -75,6 +83,8 @@ export const DEFAULT_PAYMENT_METHOD_CONFIG: CheckoutPaymentMethodConfig[] = [
 
 export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
   prices: SHIPPING_PRICES,
+  deliveryCategoriesBySku: {},
+  deliveryCategoryBreakdown: null,
   assemblyPrice: ASSEMBLY_ENABLED ? ASSEMBLY_PRICE_DEFAULT : 0,
   assemblyPricesBySku: {},
   truckAvailable: true,

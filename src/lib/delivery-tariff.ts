@@ -4,6 +4,9 @@ export type DeliveryTariffProduct = {
   qty: number;
   unitPrice: number;
   packQty?: number | null;
+  unitPackWidthCm?: number | null;
+  unitPackDepthCm?: number | null;
+  unitPackHeightCm?: number | null;
   packWidthCm?: number | null;
   packDepthCm?: number | null;
   packHeightCm?: number | null;
@@ -11,6 +14,19 @@ export type DeliveryTariffProduct = {
   grossWeightKg?: number | null;
   weightKg?: number | null;
 };
+
+export type DeliveryCategory = 1 | 2;
+
+export type PublishedDeliveryCategoryTotal = {
+  weightKg: number;
+  subtotal: number;
+  price: number;
+};
+
+export type PublishedDeliveryCategoryBreakdown = Record<
+  DeliveryCategory,
+  PublishedDeliveryCategoryTotal
+>;
 
 const RATES = {
   1: [[5, 299], [10, 399], [20, 599], [30, 899], [50, 999]],
@@ -36,6 +52,20 @@ export function deliveryCategory(dimensions: readonly number[]) {
   return volumetricDimension < 300 ? 1 : 2;
 }
 
+/** Public category is based on the package of one sellable article, not a transport carton. */
+export function productDeliveryCategory(
+  product: Pick<
+    DeliveryTariffProduct,
+    "unitPackWidthCm" | "unitPackDepthCm" | "unitPackHeightCm"
+  >,
+) {
+  return deliveryCategory([
+    product.unitPackWidthCm ?? 0,
+    product.unitPackDepthCm ?? 0,
+    product.unitPackHeightCm ?? 0,
+  ]);
+}
+
 export function deliveryRate(category: 1 | 2, weightKg: number) {
   if (!Number.isFinite(weightKg) || weightKg <= 0) return null;
   return RATES[category].find(([limit]) => weightKg <= limit)?.[1] ?? null;
@@ -51,22 +81,16 @@ export function calculatePublishedDeliveryTariff(
     2: { weightKg: 0, subtotal: 0 },
   };
   for (const product of products) {
-    const dimensions = [
-      product.packWidthCm ?? 0,
-      product.packDepthCm ?? 0,
-      product.packHeightCm ?? 0,
-    ];
-    const category = deliveryCategory(dimensions);
-    const packageWeight = product.packGrossWeightKg;
-    const unitWeight = product.grossWeightKg ?? product.weightKg;
-    if (!category || (!packageWeight && !unitWeight)) return null;
-    const packageCount = Math.max(
-      1,
-      Math.ceil(product.qty / Math.max(product.packQty ?? 1, 1)),
-    );
-    totals[category].weightKg += packageWeight
-      ? packageWeight * packageCount
-      : Math.max(unitWeight ?? 0, 0) * product.qty;
+    const category = productDeliveryCategory(product);
+    const packageWeight = positiveWeight(product.packGrossWeightKg);
+    const unitWeight =
+      positiveWeight(product.grossWeightKg) ??
+      positiveWeight(product.weightKg) ??
+      (packageWeight == null
+        ? null
+        : packageWeight / Math.max(product.packQty ?? 1, 1));
+    if (!category || unitWeight == null) return null;
+    totals[category].weightKg += unitWeight * product.qty;
     totals[category].subtotal += product.unitPrice * product.qty;
   }
 
@@ -81,5 +105,13 @@ export function calculatePublishedDeliveryTariff(
     total: categoryOnePrice + categoryTwoRate,
     categoryOnePrice,
     categoryTwoPrice: categoryTwoRate,
+    categories: {
+      1: { ...totals[1], price: categoryOnePrice },
+      2: { ...totals[2], price: categoryTwoRate },
+    } satisfies PublishedDeliveryCategoryBreakdown,
   };
+}
+
+function positiveWeight(value: number | null | undefined) {
+  return value != null && Number.isFinite(value) && value > 0 ? value : null;
 }

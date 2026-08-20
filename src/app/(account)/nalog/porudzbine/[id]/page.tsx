@@ -85,7 +85,10 @@ export default async function AccountOrderDetailPage({
           <section className="rounded-lg border border-border/70 bg-surface p-5">
             <h2 className="font-display text-xl text-ink-900">Ukupno</h2>
             <dl className="mt-4 space-y-2 text-sm">
-              <Row label="Artikli" value={formatRsd(order.subtotal)} />
+              <Row
+                label="Vrednost artikala"
+                value={formatRsd(order.subtotal + order.savings)}
+              />
               {order.savings > 0 ? (
                 <Row label="Ušteda" value={`-${formatRsd(order.savings)}`} />
               ) : null}

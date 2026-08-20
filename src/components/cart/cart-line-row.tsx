@@ -7,22 +7,28 @@ import { useCart, type CartLine } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
+import type { DeliveryCategory } from "@/lib/delivery-tariff";
 
 interface CartLineRowProps {
   line: CartLine;
   /** Drawer rows are denser than the /korpa table rows. */
   variant?: "drawer" | "page";
   onNavigate?: () => void;
+  /** Explicit null means that the server could not derive a public category. */
+  deliveryCategory?: DeliveryCategory | null;
 }
 
 export function CartLineRow({
   line,
   variant = "drawer",
   onNavigate,
+  deliveryCategory,
 }: CartLineRowProps) {
   const remove = useCart((s) => s.remove);
   const onSale = line.unitPriceSale < line.unitPriceFull;
   const lineTotal = line.unitPriceSale * line.qty;
+  const displayedDeliveryCategory =
+    deliveryCategory === undefined ? line.deliveryCategory : deliveryCategory;
 
   return (
     <div
@@ -60,9 +66,13 @@ export function CartLineRow({
         <p className="font-mono text-[11px] tracking-tight text-ink-500">
           {line.sku}
         </p>
-        {line.deliveryCategory ? (
+        {displayedDeliveryCategory ? (
           <p className="text-[11px] text-ink-500">
-            Kategorija isporuke: {line.deliveryCategory === 1 ? "I" : "II"}
+            {displayedDeliveryCategory === 1 ? "I" : "II"} kategorija isporuke
+          </p>
+        ) : deliveryCategory === null ? (
+          <p className="text-[11px] text-ink-500">
+            Kategorija isporuke nije automatski određena
           </p>
         ) : null}
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">

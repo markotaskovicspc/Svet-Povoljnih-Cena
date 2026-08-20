@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   const quote = await resolveDeliveryQuote({
     ...parsed.data,
-    loggedIn: Boolean(user),
+    loggedIn: user?.userType === "customer",
   });
   return NextResponse.json({ ok: true, data: quote });
 }
