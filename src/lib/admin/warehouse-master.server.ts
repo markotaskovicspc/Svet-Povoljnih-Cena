@@ -3,7 +3,10 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { normalizeWarehouseDetails } from "@/lib/admin/warehouse-master";
-import { warehouseArchiveBlocker } from "@/lib/admin/warehouse-archive";
+import {
+  warehouseArchiveBlocker,
+  warehouseDeleteBlocker,
+} from "@/lib/admin/warehouse-archive";
 
 const MAX_CREATE_ATTEMPTS = 4;
 
@@ -184,4 +187,66 @@ export async function restoreWarehouses(ids: string[]) {
     });
   }
   return archivedIds.length;
+}
+
+export async function deleteWarehouses(ids: string[]) {
+  const warehouseIds = uniqueWarehouseIds(ids);
+  return db.$transaction(
+    async (tx) => {
+      const warehouses = await tx.warehouse.findMany({
+        where: { id: { in: warehouseIds } },
+        select: {
+          id: true,
+          name: true,
+          active: true,
+          isDefault: true,
+          _count: {
+            select: {
+              stocks: true,
+              movements: true,
+              fiscalDocuments: true,
+              orderItems: true,
+              purchaseOrdersReceiving: true,
+              inboundInvoicesReceiving: true,
+              outgoingDispatchNotes: true,
+              incomingDispatchNotes: true,
+              stockCounts: true,
+              partnerReservations: true,
+              reclamations: true,
+              reclamationShipments: true,
+            },
+          },
+        },
+      });
+
+      if (warehouses.length !== warehouseIds.length) {
+        throw new Error("Jedan od izabranih magacina više ne postoji.");
+      }
+
+      for (const warehouse of warehouses) {
+        const referenceCount = Object.values(warehouse._count).reduce(
+          (sum, count) => sum + count,
+          0,
+        );
+        const blocker = warehouseDeleteBlocker({
+          name: warehouse.name,
+          active: warehouse.active,
+          isDefault: warehouse.isDefault,
+          referenceCount,
+        });
+        if (blocker) throw new Error(blocker);
+      }
+
+      const deleted = await tx.warehouse.deleteMany({
+        where: { id: { in: warehouseIds }, active: false, isDefault: false },
+      });
+      if (deleted.count !== warehouseIds.length) {
+        throw new Error(
+          "Magacin je u međuvremenu izmenjen. Osvežite stranicu i pokušajte ponovo.",
+        );
+      }
+      return warehouses.map((warehouse) => warehouse.name);
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }

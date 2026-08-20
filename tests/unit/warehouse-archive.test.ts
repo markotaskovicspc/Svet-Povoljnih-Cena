@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { warehouseArchiveBlocker } from "@/lib/admin/warehouse-archive";
+import {
+  warehouseArchiveBlocker,
+  warehouseDeleteBlocker,
+} from "@/lib/admin/warehouse-archive";
 
 const ready = {
   name: "Izdvojeni magacin",
@@ -28,6 +31,29 @@ describe("warehouse archive policy", () => {
   ] as const)("blocks archive when %s is present", (key, message) => {
     expect(
       warehouseArchiveBlocker({ ...ready, [key]: true }),
+    ).toContain(message);
+  });
+});
+
+describe("warehouse deletion policy", () => {
+  it("allows deleting only an empty archived non-default warehouse", () => {
+    expect(
+      warehouseDeleteBlocker({
+        name: "Prazan arhivirani magacin",
+        active: false,
+        isDefault: false,
+        referenceCount: 0,
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [{ active: true, isDefault: false, referenceCount: 0 }, "Prvo ga arhivirajte"],
+    [{ active: false, isDefault: true, referenceCount: 0 }, "podrazumevani"],
+    [{ active: false, isDefault: false, referenceCount: 1 }, "Ostaće u arhivi"],
+  ] as const)("blocks unsafe deletion %#", (state, message) => {
+    expect(
+      warehouseDeleteBlocker({ name: "Magacin sa istorijom", ...state }),
     ).toContain(message);
   });
 });

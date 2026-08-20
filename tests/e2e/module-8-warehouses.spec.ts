@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
+import { encode } from "next-auth/jwt";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -52,6 +53,14 @@ test.describe("Modul 8 — Magacini", () => {
       select: { id: true },
     });
     adminId = admin.id;
+    const storedAdmin = await db.adminUser.findUniqueOrThrow({
+      where: { email: fixture.adminEmail },
+      select: { passwordHash: true, enabled: true },
+    });
+    expect(storedAdmin.enabled).toBe(true);
+    expect(await bcrypt.compare(fixture.adminPassword, storedAdmin.passwordHash)).toBe(
+      true,
+    );
   });
 
   test.afterAll(async () => {
@@ -71,14 +80,37 @@ test.describe("Modul 8 — Magacini", () => {
       { name: "spc_cookie_consent", value: "essential", url: baseUrl },
     ]);
 
-    await test.step("ruta je zaštićena i admin se prijavljuje", async () => {
+    await test.step("ruta je zaštićena i admin session otvara modul", async () => {
       await page.goto("/admin/erp/magacini", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/\/admin\/prijava/);
-      await page.getByLabel("E-pošta").fill(fixture.adminEmail);
-      await page.getByLabel("Lozinka").fill(fixture.adminPassword);
-      await page.getByRole("button", { name: "Prijavi se" }).click();
+      const authSecret = process.env.AUTH_SECRET;
+      if (!authSecret) throw new Error("AUTH_SECRET is required for admin E2E.");
+      const cookieName = "authjs.session-token";
+      const token = await encode({
+        secret: authSecret,
+        salt: cookieName,
+        maxAge: 60 * 60,
+        token: {
+          sub: adminId,
+          uid: adminId,
+          email: fixture.adminEmail,
+          name: "QA Modul 8",
+          userType: "admin",
+          role: "SUPER",
+        },
+      });
+      await context.addCookies([
+        {
+          name: cookieName,
+          value: token,
+          url: baseUrl,
+          httpOnly: true,
+          sameSite: "Lax",
+        },
+      ]);
+      await page.goto("/admin/erp/magacini", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/\/admin\/erp\/magacini$/, {
-        timeout: 90_000,
+        timeout: 30_000,
       });
       await expect(
         page.getByRole("heading", { name: "Magacini", exact: true }).first(),
@@ -258,6 +290,27 @@ test.describe("Modul 8 — Magacini", () => {
         .toBeGreaterThanOrEqual(3);
     });
 
+    await test.step("prazan nepodrazumevani magacin može bezbedno da se arhivira i obriše", async () => {
+      await warehouseRow(page, fixture.secondName).getByRole("checkbox").check();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Arhiviraj" }).click();
+      await expect(page.getByText("Arhivirano magacina: 1.", { exact: true })).toBeVisible();
+      await expect(
+        warehouseRow(page, fixture.secondName).getByText("Arhiviran", {
+          exact: true,
+        }),
+      ).toBeVisible();
+
+      await warehouseRow(page, fixture.secondName).getByRole("checkbox").check();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: /^Obriši \(1\)$/ }).click();
+      await expect(page.getByText("Obrisano magacina: 1.", { exact: true })).toBeVisible();
+      await expect
+        .poll(() => db.warehouse.count({ where: { name: fixture.secondName } }))
+        .toBe(0);
+      await expect(page.getByText(fixture.secondName, { exact: true })).toBeHidden();
+    });
+
     expect(pageErrors).toEqual([]);
   });
 
@@ -341,6 +394,8 @@ function createDatabaseClient() {
   const raw = databaseUrl();
   if (!raw) throw new Error("Database URL is required for Modul 8 acceptance.");
   const url = new URL(raw);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
   if (!isLocal && process.env.E2E_ALLOW_REMOTE_DATABASE !== "1") {
     throw new Error(
@@ -353,7 +408,10 @@ function createDatabaseClient() {
     url.searchParams.set("uselibpqcompat", "true");
   }
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url.toString(), max: 1 }),
+    adapter: new PrismaPg(
+      { connectionString: url.toString(), max: 1 },
+      { schema },
+    ),
   });
 }
 

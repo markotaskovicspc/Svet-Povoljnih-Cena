@@ -59,6 +59,22 @@ const databaseUrl = testUrl.toString();
 const playwrightPort = "3025";
 const localBaseUrl = `http://127.0.0.1:${playwrightPort}`;
 const e2eDistDir = ".next-client-feedback-e2e";
+const defaultAcceptanceSpecs = [
+  "tests/e2e/sales-order.spec.ts",
+  "tests/e2e/pickup-batch.spec.ts",
+  "tests/e2e/stocktake-dispatch.spec.ts",
+  "tests/e2e/reclamation-analytics.spec.ts",
+  "tests/e2e/module-8-warehouses.spec.ts",
+];
+const requestedAcceptanceSpecs = (
+  process.env.CLIENT_FEEDBACK_E2E_SPECS ?? ""
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const acceptanceSpecs = requestedAcceptanceSpecs.length
+  ? requestedAcceptanceSpecs
+  : defaultAcceptanceSpecs;
 const childEnv = {
   ...process.env,
   DATABASE_URL: databaseUrl,
@@ -72,6 +88,7 @@ const childEnv = {
   E2E_PICKUP_BATCHES: "1",
   E2E_STOCKTAKE_DISPATCH: "1",
   E2E_RECLAMATION_ANALYTICS: "1",
+  E2E_MODULE_8_WAREHOUSES: "1",
   EMAIL_PROVIDER: "none",
   AUTH_SECRET: "local-client-feedback-auth-secret-32-chars",
   ORDER_ACCESS_TOKEN_SECRET: "local-client-feedback-order-secret-32-chars",
@@ -118,10 +135,7 @@ try {
       "playwright",
       "--",
       "test",
-      "tests/e2e/sales-order.spec.ts",
-      "tests/e2e/pickup-batch.spec.ts",
-      "tests/e2e/stocktake-dispatch.spec.ts",
-      "tests/e2e/reclamation-analytics.spec.ts",
+      ...acceptanceSpecs,
       "--project=desktop",
       "--workers=1",
     ],

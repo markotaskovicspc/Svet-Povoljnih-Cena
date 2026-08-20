@@ -33,3 +33,26 @@ export function warehouseArchiveBlocker(
   }
   return null;
 }
+
+export type WarehouseDeleteSnapshot = {
+  name: string;
+  active: boolean;
+  isDefault: boolean;
+  referenceCount: number;
+};
+
+export function warehouseDeleteBlocker(
+  warehouse: WarehouseDeleteSnapshot,
+): string | null {
+  const label = `Magacin „${warehouse.name}”`;
+  if (warehouse.active) {
+    return `${label} je aktivan. Prvo ga arhivirajte.`;
+  }
+  if (warehouse.isDefault) {
+    return `${label} je podrazumevani magacin i ne može se obrisati.`;
+  }
+  if (warehouse.referenceCount > 0) {
+    return `${label} ima zalihe, kretanja ili povezane dokumente. Ostaće u arhivi radi očuvanja istorije.`;
+  }
+  return null;
+}

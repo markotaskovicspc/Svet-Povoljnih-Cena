@@ -237,6 +237,15 @@ export const operationalErpModules: ErpModule[] = [
         action: "warehouse.restore",
         needsSelection: true,
       },
+      {
+        label: "Obriši",
+        pendingLabel: "Brisanje…",
+        tone: "danger",
+        action: "warehouse.delete",
+        needsSelection: true,
+        confirm:
+          "Trajno obrisati izabrane prazne arhivirane magacine? Magacini sa istorijom neće biti obrisani.",
+      },
     ],
     columns: [
       text("name", "Naziv"),

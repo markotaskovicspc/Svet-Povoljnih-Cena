@@ -38,6 +38,7 @@ import { deleteManualSalesOrders } from "@/lib/admin/sales-order.server";
 import {
   archiveWarehouses,
   createWarehouseWithAutomaticCode,
+  deleteWarehouses,
   restoreWarehouses,
 } from "@/lib/admin/warehouse-master.server";
 import {
@@ -178,6 +179,13 @@ async function runCommand(
           ? `Ponovo aktivirano magacina: ${restored}.`
           : "Izabrani magacini su već aktivni.",
       };
+    }
+    case "warehouse.delete": {
+      if (module !== "magacini") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const deleted = await deleteWarehouses(ids);
+      return { message: `Obrisano magacina: ${deleted.length}.` };
     }
     case "stocktake.create": {
       if (module !== "popisi") {
