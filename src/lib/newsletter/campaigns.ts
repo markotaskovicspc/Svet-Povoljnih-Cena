@@ -269,6 +269,46 @@ export async function cancelNewsletterCampaign(campaignId: string, actorId: stri
   });
 }
 
+export async function retryNewsletterCampaign(campaignId: string, actorId: string) {
+  const campaign = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
+  if (!["FAILED", "PARTIAL_FAILED"].includes(campaign.status)) {
+    throw new Error("Ponovno slanje je dozvoljeno samo za kampanju sa greškom.");
+  }
+  const now = new Date();
+  await db.$transaction([
+    db.newsletterCampaign.update({
+      where: { id: campaignId },
+      data: {
+        status: "SCHEDULED",
+        scheduledAt: now,
+        failureReason: null,
+        updatedById: actorId,
+      },
+    }),
+    db.backgroundJob.upsert({
+      where: { idempotencyKey: `newsletter-send:${campaignId}` },
+      create: {
+        kind: "NEWSLETTER_CAMPAIGN_SEND",
+        payload: { campaignId },
+        idempotencyKey: `newsletter-send:${campaignId}`,
+        maxAttempts: 8,
+        availableAt: now,
+      },
+      update: {
+        payload: { campaignId },
+        status: "QUEUED",
+        attempts: 0,
+        maxAttempts: 8,
+        availableAt: now,
+        lockedAt: null,
+        completedAt: null,
+        lastError: null,
+      },
+    }),
+  ]);
+  return { scheduledAt: now };
+}
+
 export async function duplicateNewsletterCampaign(campaignId: string, actorId: string) {
   const source = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
   const rendered = await renderNewsletterCampaign({

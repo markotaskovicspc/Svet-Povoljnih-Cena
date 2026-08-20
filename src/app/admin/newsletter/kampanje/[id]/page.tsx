@@ -19,6 +19,7 @@ import {
   cancelNewsletterCampaignAction,
   deleteNewsletterCampaignDraftAction,
   duplicateNewsletterCampaignAction,
+  retryNewsletterCampaignAction,
   saveNewsletterCampaignAction,
   saveNewsletterTemplateAction,
   scheduleNewsletterCampaignAction,
@@ -303,6 +304,18 @@ function WorkflowCard({
           <AdminActionForm action={cancelNewsletterCampaignAction}>
             <input type="hidden" name="id" value={campaign.id} />
             <SubmitButton variant="destructive" confirm="Otkazati ovu kampanju? Ako je provider već napravio zakazani broadcast, biće otkazan i tamo.">Otkaži</SubmitButton>
+          </AdminActionForm>
+        ) : null}
+        {campaign.status === "FAILED" || campaign.status === "PARTIAL_FAILED" ? (
+          <AdminActionForm action={retryNewsletterCampaignAction}>
+            <input type="hidden" name="id" value={campaign.id} />
+            <SubmitButton
+              variant="outline"
+              pendingLabel="Vraćam u red…"
+              confirm="Ponovo pokušati slanje iste kampanje? Idempotency zaštita sprečava duplikat ako je provider već prihvatio prethodni pokušaj."
+            >
+              Ponovi slanje
+            </SubmitButton>
           </AdminActionForm>
         ) : null}
         {campaign.status === "DRAFT" ? (

@@ -15,6 +15,7 @@ import {
   cancelNewsletterCampaign,
   createNewsletterCampaign,
   duplicateNewsletterCampaign,
+  retryNewsletterCampaign,
   saveCampaignAsTemplate,
   saveCampaignSchema,
   saveNewsletterCampaign,
@@ -183,6 +184,16 @@ export async function cancelNewsletterCampaignAction(
   return campaignAction(formData, "newsletter.campaign.cancel", async (id, actorId) => {
     await cancelNewsletterCampaign(id, actorId);
     return { message: "Kampanja je otkazana." };
+  });
+}
+
+export async function retryNewsletterCampaignAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  return campaignAction(formData, "newsletter.campaign.retry", async (id, actorId) => {
+    await retryNewsletterCampaign(id, actorId);
+    return { message: "Kampanja je ponovo stavljena u red za slanje." };
   });
 }
 
