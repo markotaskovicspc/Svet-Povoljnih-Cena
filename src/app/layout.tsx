@@ -5,7 +5,7 @@ import { Providers } from "@/components/providers";
 import { BRAND } from "@/lib/brand";
 
 const fontSans = Inter({
-  variable: "--font-sans",
+  variable: "--font-inter",
   subsets: ["latin", "latin-ext"],
   display: "swap",
 });

@@ -4,10 +4,9 @@ import {
   DispatchNoteType,
   DocumentPostingStatus,
   Prisma,
-  StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { adjustInventory } from "@/lib/inventory";
+import { reconcileWarehouseInventory } from "@/lib/inventory";
 import {
   nextStocktakeDispatchNumber,
   stocktakeDeleteBlocker,
@@ -23,9 +22,9 @@ async function defaultWarehouse() {
   });
 }
 
-function positiveQty(value: number) {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error("Količina mora biti pozitivan ceo broj.");
+function countedQty(value: number) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("Prebrojana količina mora biti nenegativan ceo broj.");
   }
   return value;
 }
@@ -172,7 +171,7 @@ export async function addStocktakeDispatchItem(input: {
 }) {
   const normalizedSku = input.sku.trim();
   if (!normalizedSku) throw new Error("Šifra artikla je obavezna.");
-  const qty = positiveQty(input.qty);
+  const qty = countedQty(input.qty);
 
   return db.$transaction(async (tx) => {
     await requireDraftStocktake(tx, input.dispatchId);
@@ -206,7 +205,7 @@ export async function updateStocktakeDispatchItem(input: {
   itemId: string;
   qty: number;
 }) {
-  const qty = positiveQty(input.qty);
+  const qty = countedQty(input.qty);
   return db.$transaction(async (tx) => {
     await requireDraftStocktake(tx, input.dispatchId);
     const updated = await tx.dispatchNoteItem.updateMany({
@@ -272,16 +271,15 @@ export async function postStocktakeDispatches(ids: string[], actorId: string) {
 
       for (const item of dispatch.items) {
         if (!item.productId) throw new Error(`Stavka ${item.sku} nema vezan artikal.`);
-        const qty = positiveQty(item.qty);
-        await adjustInventory(tx, {
+        const qty = countedQty(item.qty);
+        await reconcileWarehouseInventory(tx, {
           idempotencyKey: `stocktake-dispatch:${dispatch.id}:${item.id}`,
           dispatchNoteId: dispatch.id,
           warehouseId: dispatch.sourceWarehouseId,
           productId: item.productId,
           sku: item.sku,
-          qtyDelta: -qty,
-          kind: StockMovementKind.STOCK_COUNT,
-          note: `Popis ${dispatch.number} — otpremnica za ${STOCKTAKE_DESTINATION_NAME}`,
+          countedQty: qty,
+          note: `Popis ${dispatch.number}`,
           actorId,
         });
       }

@@ -7,10 +7,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-sans);
-  --font-display: var(--font-sans);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-inter);
+  --font-display: var(--font-inter);
+  --font-heading: var(--font-inter);
 
   /* Brand surfaces */
   --color-canvas: var(--canvas);
@@ -23,7 +23,7 @@
   --color-brand-blue-50: var(--brand-blue-50);
 
   /* Logo font (Ahkio-style) */
-  --font-logo: var(--font-sans);
+  --font-logo: var(--font-inter);
 
   /* Brand ink scale */
   --color-ink-900: var(--ink-900);
@@ -202,7 +202,7 @@
     @apply border-border outline-ring/50;
   }
   html {
-    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
@@ -215,19 +215,22 @@
     font-feature-settings: "cv05", "cv11", "ss03";
     overflow-x: clip;
   }
+  button, input, optgroup, select, textarea {
+    font: inherit;
+  }
   h1, h2, h3, h4, h5, .font-display {
-    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
     letter-spacing: 0;
     line-height: 1.15;
     font-weight: 700;
   }
   .font-logo {
-    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
     letter-spacing: 0.01em;
     font-weight: 800;
   }
   .font-mono, code, kbd, samp, pre {
-    font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   ::selection {
     background: var(--sand);

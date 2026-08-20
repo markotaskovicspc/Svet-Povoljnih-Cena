@@ -41,13 +41,19 @@ const headerSchema = z.object({
 const addItemSchema = z.object({
   dispatchId: z.string().min(1),
   sku: z.string().trim().min(1, "Šifra artikla je obavezna.").max(100),
-  qty: z.coerce.number().int().positive("Količina mora biti pozitivan ceo broj."),
+  qty: z.coerce
+    .number()
+    .int()
+    .nonnegative("Prebrojana količina mora biti nenegativan ceo broj."),
 });
 
 const itemSchema = z.object({
   dispatchId: z.string().min(1),
   itemId: z.string().min(1),
-  qty: z.coerce.number().int().positive("Količina mora biti pozitivan ceo broj."),
+  qty: z.coerce
+    .number()
+    .int()
+    .nonnegative("Prebrojana količina mora biti nenegativan ceo broj."),
 });
 
 const removeItemSchema = z.object({
@@ -200,7 +206,7 @@ async function postAction(_state: AdminActionState, formData: FormData) {
         ok: true as const,
         entityId: parsed.data.dispatchId,
         diff: { posted, destinationName: STOCKTAKE_DESTINATION_NAME },
-        message: "Popis je proknjižen kao otpremnica.",
+        message: "Popis je proknjižen i stanje magacina je usaglašeno.",
       };
     },
   )(formData);
@@ -238,7 +244,7 @@ export default async function StocktakeDispatchPage({
     db.warehouse.findMany({
       where: { active: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, code: true },
+      select: { id: true, name: true, code: true, isDefault: true },
     }),
   ]);
   if (!dispatch) notFound();
@@ -258,6 +264,37 @@ export default async function StocktakeDispatchPage({
     : [];
   const warehouseQty = new Map(
     warehouseStocks.map((stock) => [stock.productId, stock.qty]),
+  );
+  const productIds = dispatch.items.flatMap((item) =>
+    item.productId ? [item.productId] : [],
+  );
+  const reservationRows = productIds.length
+    ? await db.orderItem.groupBy({
+        by: ["productId"],
+        where: {
+          productId: { in: productIds },
+          warehouseReservedQty: { gt: 0 },
+          OR: [
+            { warehouseId: dispatch.sourceWarehouseId },
+            ...(warehouses.find(
+              (warehouse) => warehouse.id === dispatch.sourceWarehouseId,
+            )?.isDefault
+              ? [{ warehouseId: null }]
+              : []),
+          ],
+          order: {
+            status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+          },
+        },
+        _sum: { warehouseReservedQty: true },
+      })
+    : [];
+  const reservedQty = new Map(
+    reservationRows.flatMap((row) =>
+      row.productId
+        ? [[row.productId, row._sum.warehouseReservedQty ?? 0] as const]
+        : [],
+    ),
   );
   const editable = isStocktakeDispatchEditable(
     dispatch.status,
@@ -288,7 +325,7 @@ export default async function StocktakeDispatchPage({
               <input type="hidden" name="dispatchId" value={dispatch.id} />
               <SubmitButton
                 disabled={!editable || dispatch.items.length === 0}
-                confirm="Proknjižiti popis kao otpremnicu? Stavke će biti skinute sa izvornog lagera, a odredište je Popis."
+                confirm="Proknjižiti popis? Stanje izabranog magacina biće usaglašeno sa prebrojanim količinama."
                 pendingLabel="Knjiženje…"
               >
                 Proknjiži popis
@@ -300,7 +337,7 @@ export default async function StocktakeDispatchPage({
 
       <div className="space-y-6 px-4 py-6 md:px-8">
         <Card>
-          <CardTitle description="Popis se vodi kao STOCKTAKE otpremnica; prijemni magacin je fiksno Popis.">
+          <CardTitle description="Popis usaglašava stanje izabranog magacina sa fizički prebrojanim količinama.">
             Podaci otpremnice
           </CardTitle>
           {dispatch.archivedAt ? (
@@ -359,7 +396,7 @@ export default async function StocktakeDispatchPage({
 
         {editable ? (
           <Card>
-            <CardTitle description="Unesite šifru artikla i količinu koja se otprema iz izabranog magacina na Popis.">
+            <CardTitle description="Unesite šifru artikla i fizički prebrojanu količinu. Nula je dozvoljena.">
               Dodaj stavku
             </CardTitle>
             <AdminActionForm action={addItemAction} className="grid gap-4 md:grid-cols-[1fr_160px_auto] md:items-end">
@@ -367,8 +404,8 @@ export default async function StocktakeDispatchPage({
               <Field label="Šifra artikla">
                 <Input name="sku" required autoComplete="off" />
               </Field>
-              <Field label="Količina">
-                <Input name="qty" type="number" min={1} step={1} required defaultValue={1} />
+              <Field label="Prebrojano">
+                <Input name="qty" type="number" min={0} step={1} required defaultValue={0} />
               </Field>
               <SubmitButton pendingLabel="Dodavanje…">Dodaj stavku</SubmitButton>
             </AdminActionForm>
@@ -386,8 +423,9 @@ export default async function StocktakeDispatchPage({
                   <tr>
                     <th className="px-3 py-3">Šifra</th>
                     <th className="px-3 py-3">Naziv</th>
-                    <th className="px-3 py-3 text-right">Raspoloživo</th>
-                    <th className="px-3 py-3 text-right">Količina</th>
+                    <th className="px-3 py-3 text-right">Očekivano</th>
+                    <th className="px-3 py-3 text-right">Prebrojano</th>
+                    <th className="px-3 py-3 text-right">Razlika</th>
                     {editable ? <th className="px-3 py-3 text-right">Akcije</th> : null}
                   </tr>
                 </thead>
@@ -396,11 +434,15 @@ export default async function StocktakeDispatchPage({
                     const available = item.productId
                       ? (warehouseQty.get(item.productId) ?? item.product?.stock ?? 0)
                       : 0;
+                    const expected =
+                      available +
+                      (item.productId ? (reservedQty.get(item.productId) ?? 0) : 0);
+                    const difference = item.qty - expected;
                     return (
                       <tr key={item.id}>
                         <td className="px-3 py-3 font-medium">{item.sku}</td>
                         <td className="px-3 py-3">{item.name}</td>
-                        <td className="px-3 py-3 text-right tabular-nums">{available}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{expected}</td>
                         <td className="px-3 py-3 text-right tabular-nums">
                           {editable ? (
                             <AdminActionForm action={updateItemAction} className="ml-auto flex w-fit items-center gap-2">
@@ -410,7 +452,7 @@ export default async function StocktakeDispatchPage({
                                 aria-label={`Količina za ${item.sku}`}
                                 name="qty"
                                 type="number"
-                                min={1}
+                                min={0}
                                 step={1}
                                 required
                                 defaultValue={item.qty}
@@ -427,6 +469,17 @@ export default async function StocktakeDispatchPage({
                           ) : (
                             item.qty
                           )}
+                        </td>
+                        <td
+                          className={`px-3 py-3 text-right tabular-nums ${
+                            difference === 0
+                              ? "text-ink-500"
+                              : difference > 0
+                                ? "text-success"
+                                : "text-warning"
+                          }`}
+                        >
+                          {difference > 0 ? `+${difference}` : difference}
                         </td>
                         {editable ? (
                           <td className="px-3 py-3 text-right">

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
-  adjustInventory: vi.fn(),
+  reconcileWarehouseInventory: vi.fn(),
   findUnique: vi.fn(),
   updateMany: vi.fn(),
 }));
@@ -14,7 +14,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("@/lib/inventory", () => ({
-  adjustInventory: mocks.adjustInventory,
+  reconcileWarehouseInventory: mocks.reconcileWarehouseInventory,
 }));
 
 import { postStocktakeDispatches } from "@/lib/admin/stocktake-dispatch.server";
@@ -31,10 +31,10 @@ describe("stocktake dispatch posting", () => {
       }),
     );
     mocks.updateMany.mockResolvedValue({ count: 1 });
-    mocks.adjustInventory.mockResolvedValue({ id: "movement-1" });
+    mocks.reconcileWarehouseInventory.mockResolvedValue({ id: "movement-1" });
   });
 
-  it("locks a STOCKTAKE dispatch, enforces destination Popis and removes source stock", async () => {
+  it("locks a STOCKTAKE dispatch and reconciles source stock to the counted quantity", async () => {
     mocks.findUnique.mockResolvedValue({
       id: "dispatch-1",
       number: "POP-2030-0001",
@@ -46,7 +46,7 @@ describe("stocktake dispatch posting", () => {
           id: "item-1",
           productId: "product-1",
           sku: "SKU-1",
-          qty: 3,
+          qty: 13,
         },
       ],
     });
@@ -62,14 +62,13 @@ describe("stocktake dispatch posting", () => {
         }),
       }),
     );
-    expect(mocks.adjustInventory).toHaveBeenCalledWith(
+    expect(mocks.reconcileWarehouseInventory).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         dispatchNoteId: "dispatch-1",
         warehouseId: "warehouse-1",
         productId: "product-1",
-        qtyDelta: -3,
-        kind: "STOCK_COUNT",
+        countedQty: 13,
       }),
     );
   });
@@ -88,6 +87,6 @@ describe("stocktake dispatch posting", () => {
       "nema nijednu stavku",
     );
     expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.adjustInventory).not.toHaveBeenCalled();
+    expect(mocks.reconcileWarehouseInventory).not.toHaveBeenCalled();
   });
 });

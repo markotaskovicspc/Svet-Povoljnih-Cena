@@ -20,6 +20,11 @@ import {
   buildXExpressCreateOrderPayload,
   isXExpressCashOnDelivery,
 } from "./payload";
+import {
+  normalizeOrderItemIds,
+  sameShipmentAssignment,
+  withShipmentAssignment,
+} from "@/lib/courier/shipment-assignment";
 
 const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
@@ -29,6 +34,8 @@ export async function createXExpressShipmentForOrder(
     packageCount?: number;
     purpose?: ShipmentPurpose;
     reclamationId?: string;
+    orderItemIds?: string[];
+    codAmount?: number;
   } = {},
 ) {
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
@@ -84,7 +91,6 @@ export async function createXExpressShipmentForOrder(
           reclamationId: reclamation?.id ?? null,
         },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
   });
@@ -92,13 +98,24 @@ export async function createXExpressShipmentForOrder(
   if (order.shippingMethod !== "KURIR") {
     throw new XExpressConfigError("X Express se koristi samo za kurirsku isporuku.");
   }
+  const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
   const shipmentItems = reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : requestedOrderItemIds.length
+      ? order.items.filter((item) => requestedOrderItemIds.includes(item.id))
+      : order.items;
   if (!shipmentItems.length) {
     throw new XExpressConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+  }
+  if (
+    requestedOrderItemIds.length &&
+    shipmentItems.length !== requestedOrderItemIds.length
+  ) {
+    throw new XExpressConfigError(
+      "Jedna od izabranih stavki ne pripada ovoj porudžbini.",
+    );
   }
   if (shipmentItems.some((item) => item.withAssembly)) {
     throw new XExpressConfigError(
@@ -106,7 +123,22 @@ export async function createXExpressShipmentForOrder(
     );
   }
 
-  const existing = order.shipments[0];
+  const assignmentOrderItemIds = normalizeOrderItemIds(
+    shipmentItems.map((item) => item.id),
+  );
+  const codAmount =
+    Number.isFinite(options.codAmount) && Number(options.codAmount) >= 0
+      ? Number(options.codAmount)
+      : Number(order.total);
+  const existing = order.shipments.find(
+    (shipment) =>
+      shipment.provider === X_EXPRESS_PROVIDER &&
+      (!requestedOrderItemIds.length ||
+        sameShipmentAssignment(
+          shipment.rawCreateResponse,
+          assignmentOrderItemIds,
+        )),
+  );
   if (
     existing &&
     existing.provider === X_EXPRESS_PROVIDER &&
@@ -181,18 +213,21 @@ export async function createXExpressShipmentForOrder(
       reference: shipmentId,
       trackingCodes: allocated,
       purpose,
-      order: { ...order, items: shipmentItems },
+      order: { ...order, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
     });
     const providerResult = await client.createOrder(payload);
     const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;
-    const rawCreateResponse = {
+    const rawCreateResponse = withShipmentAssignment({
       addressCheck: addressCheck.raw,
       createOrder: providerResult.raw,
       reference: shipmentId,
       packages: payload.Packages,
-    };
+    }, {
+      orderItemIds: assignmentOrderItemIds,
+      codAmount,
+    });
     const data = {
       provider: X_EXPRESS_PROVIDER,
       purpose,
@@ -264,6 +299,8 @@ export async function createXExpressShipmentForOrder(
       warehouseId: reclamation?.warehouseId,
       message,
       raw: err instanceof XExpressProviderError ? err.raw : undefined,
+      orderItemIds: assignmentOrderItemIds,
+      codAmount,
     });
     throw err;
   }
@@ -329,7 +366,13 @@ async function persistFailedShipment(args: {
   warehouseId?: string | null;
   message: string;
   raw?: unknown;
+  orderItemIds: string[];
+  codAmount: number;
 }) {
+  const rawCreateResponse = withShipmentAssignment(args.raw, {
+    orderItemIds: args.orderItemIds,
+    codAmount: args.codAmount,
+  });
   const event = {
     status: "FAILED" as const,
     message: `X Express greška: ${args.message}`,
@@ -343,6 +386,7 @@ async function persistFailedShipment(args: {
         trackingNo: args.trackingNo,
         packageCount: args.packageCount,
         providerParcelNumbers: args.trackingCodes as Prisma.InputJsonValue,
+        rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
         syncError: args.message,
         events: { create: event },
       },
@@ -362,6 +406,7 @@ async function persistFailedShipment(args: {
       trackingNo: args.trackingNo,
       packageCount: args.packageCount,
       providerParcelNumbers: args.trackingCodes as Prisma.InputJsonValue,
+      rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
       status: "FAILED",
       syncError: args.message,
       events: { create: event },

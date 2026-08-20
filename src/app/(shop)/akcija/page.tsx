@@ -4,12 +4,11 @@ import { akcijaIcon } from "@/data/campaign-icons";
 import { listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
+import { getMonthlyActionMetadata } from "@/lib/storefront/monthly-action-metadata";
 
-export const metadata: Metadata = {
-  title: "Mesečna akcija — kuratirana selekcija po sniženim cenama",
-  description:
-    "Aktuelna akcijska ponuda nameštaja. Heroji meseca, najveći popusti i najpovoljnije cene na jednom mestu.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return getMonthlyActionMetadata();
+}
 
 export default async function AkcijaPage() {
   const query = { onSaleOnly: true };

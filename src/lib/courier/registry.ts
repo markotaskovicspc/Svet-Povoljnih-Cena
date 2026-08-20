@@ -30,10 +30,12 @@ import {
 import { SHIPMENT_STATUS_LABEL } from "./status";
 import { routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
+import type { SmallParcelProvider } from "@/lib/mygls/config";
 import {
   derivePhysicalPackages,
   type PhysicalPackage,
 } from "./packages";
+import { normalizeOrderItemIds } from "./shipment-assignment";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -81,6 +83,9 @@ export async function createShipmentForOrder(
     pickupDate?: Date;
     purpose?: ShipmentPurpose;
     reclamationId?: string;
+    orderItemIds?: string[];
+    provider?: SmallParcelProvider;
+    codAmount?: number;
   } = {},
 ) {
   const purpose = options.purpose ?? "ORDER_DELIVERY";
@@ -141,14 +146,16 @@ export async function createShipmentForOrder(
       shipments: {
         where: { purpose, reclamationId: reclamation?.id ?? null },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
 
-  const existing = order.shipments[0];
-  if (existing && existing.status !== "FAILED") return existing;
+  const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
+  const existing = requestedOrderItemIds.length
+    ? null
+    : order.shipments.find((shipment) => shipment.status !== "FAILED") ?? null;
+  if (existing) return existing;
   if (purpose === "ORDER_DELIVERY") {
     await assertSupplierPickupConfirmed(order.id);
   }
@@ -157,12 +164,22 @@ export async function createShipmentForOrder(
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : requestedOrderItemIds.length
+      ? order.items.filter((item) => requestedOrderItemIds.includes(item.id))
+      : order.items;
   if (!shipmentItems.length) {
     throw new CourierConfigError("Stavka reklamacije nije pronađena u porudžbini.");
   }
+  if (
+    requestedOrderItemIds.length &&
+    shipmentItems.length !== requestedOrderItemIds.length
+  ) {
+    throw new CourierConfigError(
+      "Jedna od izabranih stavki ne pripada ovoj porudžbini.",
+    );
+  }
 
-  const service = routeService({
+  const service = options.provider ? "COURIER_SMALL" : routeService({
     shippingMethod: order.shippingMethod,
     items: shipmentItems.map((item) => ({
       withAssembly: item.withAssembly,
@@ -190,9 +207,17 @@ export async function createShipmentForOrder(
     })),
   });
   if (service === "COURIER_SMALL") {
-    const selectedProvider = await getSelectedSmallParcelProvider();
+    const selectedProvider =
+      options.provider ?? (await getSelectedSmallParcelProvider());
     const packages =
-      options.packages ??
+      (options.packages
+        ? options.packages.filter(
+            (pkg) =>
+              !requestedOrderItemIds.length ||
+              !pkg.orderItemId ||
+              requestedOrderItemIds.includes(pkg.orderItemId),
+          )
+        : null) ??
       derivePhysicalPackages(
         shipmentItems.map((item) => ({
           id: item.id,
@@ -221,11 +246,15 @@ export async function createShipmentForOrder(
               ? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined
               : undefined),
           packages,
+          orderItemIds: requestedOrderItemIds,
+          codAmount: options.codAmount,
         })
       : createXExpressShipmentForOrder(order.id, {
           packageCount: options.packageCount ?? derivedPackageCount,
           purpose,
           reclamationId: reclamation?.id,
+          orderItemIds: requestedOrderItemIds,
+          codAmount: options.codAmount,
         });
   }
 
@@ -349,6 +378,7 @@ export async function applyShipmentEvent(
 
   const occurredAt = event.occurredAt ?? new Date();
   const newOrderStatus = orderStatusFor(event.status);
+  let appliedOrderStatus = newOrderStatus;
   const message = event.message ?? SHIPMENT_STATUS_LABEL[event.status];
   const selectedSmallProvider =
     service === "COURIER_SMALL"
@@ -409,15 +439,29 @@ export async function applyShipmentEvent(
       },
     });
 
-    if (shipment.purpose === "ORDER_DELIVERY" && newOrderStatus) {
+    if (
+      shipment.purpose === "ORDER_DELIVERY" &&
+      newOrderStatus === "ISPORUCENO"
+    ) {
+      const otherOpenShipments = await tx.shipment.count({
+        where: {
+          orderId: shipment.orderId,
+          purpose: "ORDER_DELIVERY",
+          id: { not: shipment.id },
+          status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] },
+        },
+      });
+      if (otherOpenShipments > 0) appliedOrderStatus = "U_ISPORUCI";
+    }
+    if (shipment.purpose === "ORDER_DELIVERY" && appliedOrderStatus) {
       await tx.order.update({
         where: { id: shipment.orderId },
-        data: { status: newOrderStatus },
+        data: { status: appliedOrderStatus },
       });
       await tx.orderStatusEvent.create({
         data: {
           orderId: shipment.orderId,
-          status: newOrderStatus,
+          status: appliedOrderStatus,
           note: message,
         },
       });
@@ -474,7 +518,7 @@ export async function applyShipmentEvent(
     shipmentId: shipment.id,
     orderId: shipment.orderId,
     status: event.status,
-    orderStatus: newOrderStatus,
+    orderStatus: appliedOrderStatus,
     customerEmail: shipment.order.user?.email ?? shipment.order.guestEmail ?? null,
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
     eventCreated,

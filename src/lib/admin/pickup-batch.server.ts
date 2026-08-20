@@ -467,6 +467,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
     for (const orderId of orderIds) {
       const shipment = await createShipmentForOrder(orderId, {
         packageCount: batch.lines.filter((line) => line.orderId === orderId).length,
+        provider: "X_EXPRESS",
       });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
@@ -607,6 +608,7 @@ async function createMyGlsLabelsForPickupBatch(
         pickupDate: batch.pickupDate,
         packages,
         packageCount: packages.length,
+        provider: "MYGLS",
       });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(

@@ -211,7 +211,7 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       ).toBeVisible();
 
       await page.locator('input[name="sku"]').fill(fixture.sku);
-      await page.locator('input[name="qty"]').first().fill("3");
+      await page.locator('input[name="qty"]').first().fill("13");
       await page.getByRole("button", { name: "Dodaj stavku" }).click();
       await expect(
         page.getByRole("status").filter({ hasText: `Artikal ${fixture.sku} je dodat.` }),
@@ -221,7 +221,8 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       });
       await expect(row).toContainText(fixture.productName);
       await expect(row).toContainText("10");
-      await expect(page.getByLabel(`Količina za ${fixture.sku}`)).toHaveValue("3");
+      await expect(page.getByLabel(`Količina za ${fixture.sku}`)).toHaveValue("13");
+      await expect(row).toContainText("+3");
 
       const stored = await db.dispatchNote.findUniqueOrThrow({
         where: { id: dispatchId },
@@ -236,16 +237,16 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
       expect(stored.items[0]).toMatchObject({
         productId,
         sku: fixture.sku,
-        qty: 3,
+        qty: 13,
       });
     });
 
-    await test.step("knjiženje skida zalihu i zaključava dokument", async () => {
+    await test.step("knjiženje prihvata i veći prebrojani broj, usaglašava zalihu i zaključava dokument", async () => {
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Proknjiži popis" }).click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Popis je proknjižen kao otpremnica.",
+          hasText: "Popis je proknjižen i stanje magacina je usaglašeno.",
         }),
       ).toBeVisible();
       await expect(
@@ -276,15 +277,15 @@ test.describe("Tačka 17 — Popisi kao otpremnice", () => {
         actorId: adminId,
       });
       expect(dispatch.postedAt).not.toBeNull();
-      expect(stock.qty).toBe(7);
-      expect(product.stock).toBe(7);
+      expect(stock.qty).toBe(13);
+      expect(product.stock).toBe(13);
       expect(movement).toMatchObject({
         dispatchNoteId: dispatchId,
         kind: "STOCK_COUNT",
-        qty: -3,
+        qty: 3,
         actorId: adminId,
-        balanceAfterWarehouse: 7,
-        balanceAfterTotal: 7,
+        balanceAfterWarehouse: 13,
+        balanceAfterTotal: 13,
       });
     });
 

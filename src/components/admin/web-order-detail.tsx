@@ -11,6 +11,10 @@ import {
   getSelectedSmallParcelProvider,
   syncCourierShipmentById,
 } from "@/lib/courier";
+import {
+  normalizeOrderItemIds,
+  readShipmentAssignment,
+} from "@/lib/courier/shipment-assignment";
 import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
@@ -148,21 +152,114 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
     { allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
+      const providerValue = String(formData.get("provider") ?? "").trim();
+      const provider =
+        providerValue === MYGLS_PROVIDER
+          ? "MYGLS"
+          : providerValue === X_EXPRESS_PROVIDER
+            ? "X_EXPRESS"
+            : null;
+      const orderItemIds = normalizeOrderItemIds(
+        formData.getAll("orderItemIds").map(String),
+      );
       const packageCount = Math.max(
         1,
         Math.min(99, Number(formData.get("packageCount") ?? 1) || 1),
       );
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
+      if (!provider || !orderItemIds.length) {
+        return {
+          ok: false as const,
+          error: "Izaberite kurira i najmanje jednu stavku porudžbine.",
+        };
+      }
+      const order = await db.order.findUnique({
+        where: { id },
+        select: {
+          total: true,
+          paymentMethod: true,
+          items: {
+            select: { id: true, qty: true, unitPriceSale: true },
+          },
+          shipments: {
+            where: { purpose: "ORDER_DELIVERY", status: { not: "FAILED" } },
+            select: { rawCreateResponse: true },
+          },
+        },
+      });
+      if (!order) return { ok: false as const, error: "Porudžbina ne postoji." };
+      const requestedItems = order.items.filter((item) =>
+        orderItemIds.includes(item.id),
+      );
+      if (requestedItems.length !== orderItemIds.length) {
+        return {
+          ok: false as const,
+          error: "Jedna od izabranih stavki ne pripada porudžbini.",
+        };
+      }
+      const allOrderItemIds = order.items.map((item) => item.id);
+      const assignedIds = new Set<string>();
+      let existingCodAmount = 0;
+      for (const shipment of order.shipments) {
+        const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+        for (const itemId of assignment?.orderItemIds ?? allOrderItemIds) {
+          assignedIds.add(itemId);
+        }
+        existingCodAmount += assignment?.codAmount ?? Number(order.total);
+      }
+      const alreadyAssigned = orderItemIds.find((itemId) => assignedIds.has(itemId));
+      if (alreadyAssigned) {
+        return {
+          ok: false as const,
+          error: "Jedna od izabranih stavki već ima aktivan kurirski nalog.",
+        };
+      }
+      const remainingIds = allOrderItemIds.filter((itemId) => !assignedIds.has(itemId));
+      const itemValue = (items: typeof order.items) =>
+        items.reduce(
+          (sum, item) => sum + num(item.unitPriceSale) * item.qty,
+          0,
+        );
+      const cashOnDelivery =
+        order.paymentMethod === "POUZECE_GOTOVINA" ||
+        order.paymentMethod === "POUZECE_KARTICA";
+      const selectedIsRemainder =
+        orderItemIds.length === remainingIds.length &&
+        orderItemIds.every((itemId) => remainingIds.includes(itemId));
+      const merchandiseValue = itemValue(order.items);
+      const proportionalCod =
+        merchandiseValue > 0
+          ? Math.round(
+              (Number(order.total) * itemValue(requestedItems) * 100) /
+                merchandiseValue,
+            ) / 100
+          : 0;
+      const codAmount = cashOnDelivery
+        ? Math.max(
+            0,
+            Math.min(
+              Number(order.total) - existingCodAmount,
+              selectedIsRemainder
+                ? Number(order.total) - existingCodAmount
+                : proportionalCod,
+            ),
+          )
+        : 0;
       // createShipmentForOrder throws on failure but still persists a FAILED
       // shipment row — revalidate in `finally` so that row is visible without a
       // hard reload, and surface the error instead of swallowing it (Bug #10).
       try {
-        const shipment = await createShipmentForOrder(id, { packageCount });
+        const shipment = await createShipmentForOrder(id, {
+          packageCount,
+          provider,
+          orderItemIds,
+          codAmount,
+        });
         return {
           ok: true as const,
           entityId: shipment.id,
           diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
-          message: `Kurirski nalog je kreiran (${shipment.provider}${
+          message: `Kurirski nalog je kreiran za ${orderItemIds.length} stavki (${shipment.provider}${
             shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""
           }).`,
         };
@@ -707,6 +804,20 @@ export async function WebOrderDetail({ id }: { id: string }) {
     (await getSelectedSmallParcelProvider()) === "MYGLS"
       ? MYGLS_PROVIDER
       : X_EXPRESS_PROVIDER;
+  const allOrderItemIds = order.items.map((item) => item.id);
+  const assignedOrderItemIds = new Set<string>();
+  for (const shipment of order.shipments) {
+    if (shipment.purpose !== "ORDER_DELIVERY" || shipment.status === "FAILED") {
+      continue;
+    }
+    const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+    for (const itemId of assignment?.orderItemIds ?? allOrderItemIds) {
+      assignedOrderItemIds.add(itemId);
+    }
+  }
+  const availableCourierItems = order.items.filter(
+    (item) => !assignedOrderItemIds.has(item.id),
+  );
   const latestIpsPayment =
     order.payments.find((payment) => payment.provider === "IPS") ?? null;
   const reservedRefundTotal = order.paymentRefunds
@@ -1092,7 +1203,19 @@ export async function WebOrderDetail({ id }: { id: string }) {
               <div className="space-y-3 text-sm">
                 {order.shipments.length ? (
                   <ul className="space-y-3">
-                    {order.shipments.map((shipment) => (
+                    {order.shipments.map((shipment) => {
+                      const assignment = readShipmentAssignment(
+                        shipment.rawCreateResponse,
+                      );
+                      const shipmentItems = (
+                        assignment?.orderItemIds ??
+                        (shipment.purpose === "ORDER_DELIVERY"
+                          ? allOrderItemIds
+                          : [])
+                      )
+                        .map((itemId) => order.items.find((item) => item.id === itemId))
+                        .filter((item): item is (typeof order.items)[number] => Boolean(item));
+                      return (
                       <li key={shipment.id} className="rounded-lg border border-border p-3">
                         <dl className="space-y-1 text-ink-700">
                           <Row k="Provider" v={shipment.provider ?? "—"} />
@@ -1107,6 +1230,19 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           <Row k="Status" v={shipment.status} />
                           <Row k="Kurir status" v={shipment.providerStatusCode ?? "—"} />
                           <Row k="Paketa" v={shipment.packageCount} />
+                          <Row
+                            k="Stavke"
+                            v={
+                              shipmentItems.length
+                                ? shipmentItems
+                                    .map((item) => `${item.sku} · ${item.name}`)
+                                    .join(", ")
+                                : "Reklamacija / ručni nalog"
+                            }
+                          />
+                          {assignment && assignment.codAmount > 0 ? (
+                            <Row k="COD ovog naloga" v={formatRsd(assignment.codAmount)} />
+                          ) : null}
                           {shipment.providerRouteCode || shipment.providerRouteName ? (
                             <Row
                               k="Reon"
@@ -1212,30 +1348,6 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               </AdminActionForm>
                             </>
                           ) : null}
-                          {shipment.status === "FAILED" &&
-                          shipment.provider === activeSmallProvider ? (
-                            <AdminActionForm action={createCourierShipment} className="flex items-end gap-2">
-                              <input type="hidden" name="id" value={order.id} />
-                              {shipment.provider === X_EXPRESS_PROVIDER ? (
-                                <Field label="Paketa">
-                                  <input
-                                    name="packageCount"
-                                    type="number"
-                                    min={1}
-                                    max={99}
-                                    defaultValue={shipment.packageCount || 1}
-                                    className="h-7 w-20 rounded-md border border-input bg-transparent px-2 text-xs"
-                                  />
-                                </Field>
-                              ) : null}
-                              <SubmitButton
-                                size="xs"
-                                confirm="Ponovo poslati zahtev za kurirski nalog?"
-                              >
-                                Ponovi nalog
-                              </SubmitButton>
-                            </AdminActionForm>
-                          ) : null}
                         </div>
                         {shipment.events.length ? (
                           <details className="mt-3 text-xs text-ink-600">
@@ -1254,36 +1366,88 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           </details>
                         ) : null}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className="text-ink-500">Kurirski nalog još nije kreiran.</p>
                 )}
-                {order.shipments.every(
-                  (shipment) => shipment.status === "FAILED",
-                ) ? (
-                    <AdminActionForm action={createCourierShipment} className="flex items-end justify-end gap-2">
-                      <input type="hidden" name="id" value={order.id} />
-                      {activeSmallProvider === X_EXPRESS_PROVIDER ? (
-                        <Field label="Paketa">
+                {availableCourierItems.length ? (
+                  <AdminActionForm
+                    action={createCourierShipment}
+                    className="space-y-3 rounded-lg border border-border p-3"
+                  >
+                    <input type="hidden" name="id" value={order.id} />
+                    <Field
+                      label="Kurir za izabrane stavke"
+                      hint="Možete prvo napraviti nalog za X Express stavke, a zatim poseban MyGLS nalog za preostale."
+                    >
+                      <select
+                        name="provider"
+                        defaultValue={activeSmallProvider}
+                        className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                      >
+                        <option value={X_EXPRESS_PROVIDER}>X Express</option>
+                        <option value={MYGLS_PROVIDER}>MyGLS (GLS)</option>
+                      </select>
+                    </Field>
+                    <fieldset className="space-y-2">
+                      <legend className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">
+                        Stavke u ovom kurirskom nalogu
+                      </legend>
+                      {availableCourierItems.map((item) => (
+                        <label
+                          key={item.id}
+                          className="flex items-start gap-2 rounded-lg border border-border/70 p-2"
+                        >
                           <input
-                            name="packageCount"
-                            type="number"
-                            min={1}
-                            max={99}
-                            defaultValue={Math.max(1, order.items.reduce((sum, item) => sum + item.qty, 0))}
-                            className="h-8 w-20 rounded-lg border border-input bg-transparent px-2 text-sm"
+                            type="checkbox"
+                            name="orderItemIds"
+                            value={item.id}
+                            defaultChecked
+                            className="mt-0.5"
                           />
-                        </Field>
-                      ) : null}
+                          <span>
+                            <span className="block font-medium">
+                              {item.sku} · {item.name}
+                            </span>
+                            <span className="text-xs text-ink-500">
+                              {item.qty} × {formatRsd(num(item.unitPriceSale))}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <Field label="Broj paketa" hint="Za MyGLS se koriste mere fizičkih paketa.">
+                        <input
+                          name="packageCount"
+                          type="number"
+                          min={1}
+                          max={99}
+                          defaultValue={Math.max(
+                            1,
+                            availableCourierItems.reduce(
+                              (sum, item) => sum + item.qty,
+                              0,
+                            ),
+                          )}
+                          className="h-8 w-24 rounded-lg border border-input bg-transparent px-2 text-sm"
+                        />
+                      </Field>
                       <SubmitButton
                         size="sm"
-                        confirm={`Kreirati ${activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog za ovu porudžbinu?`}
+                        confirm="Kreirati poseban kurirski nalog samo za označene stavke?"
                       >
-                        Kreiraj {activeSmallProvider === MYGLS_PROVIDER ? "MyGLS" : "X Express"} nalog
+                        Kreiraj nalog za izabrane stavke
                       </SubmitButton>
+                    </div>
                   </AdminActionForm>
-                ) : null}
+                ) : (
+                  <p className="rounded-lg bg-success/10 px-3 py-2 text-success">
+                    Sve stavke porudžbine imaju aktivan kurirski nalog.
+                  </p>
+                )}
               </div>
             )}
           </Card>

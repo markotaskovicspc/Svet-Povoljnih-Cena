@@ -171,6 +171,132 @@ export async function adjustInventory(
   });
 }
 
+/**
+ * Reconciles one warehouse with a physical stock count. The entered value is
+ * the counted physical quantity, not a quantity to subtract. Active checkout
+ * reservations stay reserved; only the available balance is corrected.
+ */
+export async function reconcileWarehouseInventory(
+  tx: Prisma.TransactionClient,
+  input: {
+    idempotencyKey: string;
+    warehouseId: string;
+    productId: string;
+    sku?: string;
+    countedQty: number;
+    dispatchNoteId: string;
+    note: string;
+    actorId?: string | null;
+  },
+) {
+  if (!Number.isInteger(input.countedQty) || input.countedQty < 0) {
+    throw new Error("Prebrojana količina mora biti nenegativan ceo broj.");
+  }
+  const existingMovement = await tx.stockMovement.findUnique({
+    where: { idempotencyKey: input.idempotencyKey },
+  });
+  if (existingMovement) return existingMovement;
+
+  await tx.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "Product" WHERE "id" = ${input.productId} FOR UPDATE`,
+  );
+  const [product, warehouse] = await Promise.all([
+    tx.product.findUnique({
+      where: { id: input.productId },
+      select: { sku: true, stock: true },
+    }),
+    tx.warehouse.findUnique({
+      where: { id: input.warehouseId },
+      select: { id: true, active: true, isDefault: true },
+    }),
+  ]);
+  if (!product) throw new Error("Proizvod ne postoji.");
+  if (!warehouse?.active) throw new Error("Aktivan magacin nije pronađen.");
+
+  const representedWarehouseStock = await tx.warehouseStock.findFirst({
+    where: { productId: input.productId },
+    select: { id: true },
+  });
+  const current = await tx.warehouseStock.upsert({
+    where: {
+      warehouseId_productId: {
+        warehouseId: warehouse.id,
+        productId: input.productId,
+      },
+    },
+    create: {
+      warehouseId: warehouse.id,
+      productId: input.productId,
+      qty: representedWarehouseStock ? 0 : product.stock,
+    },
+    update: {},
+    select: { qty: true },
+  });
+  const reservations = await tx.orderItem.aggregate({
+    where: {
+      productId: input.productId,
+      warehouseReservedQty: { gt: 0 },
+      ...(warehouse.isDefault
+        ? { OR: [{ warehouseId: warehouse.id }, { warehouseId: null }] }
+        : { warehouseId: warehouse.id }),
+      order: {
+        status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+      },
+    },
+    _sum: { warehouseReservedQty: true },
+  });
+  const reservedQty = reservations._sum.warehouseReservedQty ?? 0;
+  const expectedPhysicalQty = current.qty + reservedQty;
+  const targetAvailableQty = Math.max(0, input.countedQty - reservedQty);
+  const delta = targetAvailableQty - current.qty;
+
+  let warehouseBalance = current.qty;
+  let productBalance = product.stock;
+  if (delta !== 0) {
+    const updatedWarehouse = await tx.warehouseStock.update({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: input.productId,
+        },
+      },
+      data: { qty: targetAvailableQty },
+      select: { qty: true },
+    });
+    const updatedProduct = await tx.product.updateMany({
+      where: {
+        id: input.productId,
+        ...(delta < 0 ? { stock: { gte: Math.abs(delta) } } : {}),
+      },
+      data: { stock: { increment: delta } },
+    });
+    if (updatedProduct.count !== 1) {
+      throw new Error(
+        `Ukupno stanje za ${input.sku ?? product.sku} nije usaglašeno sa magacinima.`,
+      );
+    }
+    warehouseBalance = updatedWarehouse.qty;
+    productBalance = product.stock + delta;
+  }
+
+  await syncProductChannelAvailability(tx, input.productId);
+  return tx.stockMovement.create({
+    data: {
+      idempotencyKey: input.idempotencyKey,
+      warehouseId: warehouse.id,
+      productId: input.productId,
+      dispatchNoteId: input.dispatchNoteId,
+      kind: StockMovementKind.STOCK_COUNT,
+      sku: input.sku ?? product.sku,
+      qty: delta,
+      note: `${input.note} · očekivano ${expectedPhysicalQty}, prebrojano ${input.countedQty}, razlika ${input.countedQty - expectedPhysicalQty}`,
+      actorId: input.actorId ?? null,
+      balanceAfterWarehouse: warehouseBalance,
+      balanceAfterTotal: productBalance,
+    },
+  });
+}
+
 export async function setDefaultWarehouseStock(
   tx: Prisma.TransactionClient,
   input: {

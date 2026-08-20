@@ -116,7 +116,7 @@ export function OrderSummary({
             <Loader2 className="size-4 animate-spin" aria-hidden />
           </div>
         ) : !collapseLines ? (
-          <ul className="order-7 max-h-72 divide-y divide-border/60 overflow-y-auto border-t border-border/60 pt-2 pr-1">
+          <ul className="order-7 divide-y divide-border/60 border-t border-border/60 pt-2">
             {lines.map((l) => (
               <li
                 key={l.sku}

@@ -1,18 +1,82 @@
 import { db } from "@/lib/db";
-import { requireAdminAction } from "@/lib/admin";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { requireAdminAction, withAdminState } from "@/lib/admin";
+import type { AdminActionState } from "@/lib/admin/action-state";
 import { PageHeader } from "@/components/admin/page-header";
+import { AdminActionForm } from "@/components/admin/action-form";
+import { Card, CardTitle } from "@/components/admin/card";
+import { Field } from "@/components/admin/field";
+import { SubmitButton } from "@/components/admin/submit-button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ActionsAdmin } from "./actions-admin";
 import { getErpModule } from "@/lib/admin/erp";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { formatBelgradePricingDateTime } from "@/lib/admin/pricing-date-time";
 import { storefrontMonth } from "@/lib/storefront/promotion-filters";
 import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
+import {
+  getMonthlyActionMetadata,
+  MONTHLY_ACTION_METADATA_SETTING_KEY,
+} from "@/lib/storefront/monthly-action-metadata";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Akcije",
   robots: { index: false, follow: false },
 };
+
+const monthlyActionMetadataSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z.string().trim().min(10).max(320),
+});
+
+async function updateMonthlyActionMetadata(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["CONTENT"],
+      action: "storefront.monthlyActionMetadata.update",
+      entity: "AdminSetting",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = monthlyActionMetadataSchema.safeParse({
+        title: actionData.get("title"),
+        description: actionData.get("description"),
+      });
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error:
+            parsed.error.issues[0]?.message ??
+            "Naslov i SEO opis nisu ispravni.",
+        };
+      }
+      await db.adminSetting.upsert({
+        where: { key: MONTHLY_ACTION_METADATA_SETTING_KEY },
+        create: {
+          key: MONTHLY_ACTION_METADATA_SETTING_KEY,
+          value: parsed.data,
+          updatedBy: actorId,
+        },
+        update: { value: parsed.data, updatedBy: actorId },
+      });
+      revalidatePath("/admin/erp/akcije");
+      revalidatePath("/akcija");
+      return {
+        ok: true as const,
+        entityId: MONTHLY_ACTION_METADATA_SETTING_KEY,
+        diff: parsed.data,
+        message: "Naslov i SEO opis Mesečne akcije su sačuvani.",
+      };
+    },
+  )(formData);
+}
 
 export default async function ActionsPage({
   searchParams,
@@ -29,6 +93,7 @@ export default async function ActionsPage({
     groups,
     erpModule,
     databaseClock,
+    monthlyActionMetadata,
   ] =
     await Promise.all([
       db.action.findMany({
@@ -80,6 +145,7 @@ export default async function ActionsPage({
       }),
       getErpModule("akcije", { take: 10_000 }),
       db.$queryRaw<Array<{ now: Date }>>`SELECT NOW() AS "now"`,
+      getMonthlyActionMetadata(),
     ]);
 
   const productIds = Array.from(
@@ -197,6 +263,36 @@ export default async function ActionsPage({
           { label: "Akcije" },
         ]}
       />
+      <div className="px-4 pt-6 md:px-8">
+        <Card>
+          <CardTitle description="Ovde se menja tekst koji se vidi u browser tabu uz stranicu Mesečna akcija.">
+            Naslov stranice Mesečna akcija
+          </CardTitle>
+          <AdminActionForm
+            action={updateMonthlyActionMetadata}
+            className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] lg:items-end"
+          >
+            <Field label="Naslov browser taba">
+              <Input
+                name="title"
+                maxLength={160}
+                required
+                defaultValue={monthlyActionMetadata.title}
+              />
+            </Field>
+            <Field label="SEO opis">
+              <Textarea
+                name="description"
+                maxLength={320}
+                rows={2}
+                required
+                defaultValue={monthlyActionMetadata.description}
+              />
+            </Field>
+            <SubmitButton pendingLabel="Čuvanje…">Sačuvaj naslov</SubmitButton>
+          </AdminActionForm>
+        </Card>
+      </div>
       {erpModule ? (
         <div className="px-4 pt-6 md:px-8">
           <ErpGrid module={erpModule} />

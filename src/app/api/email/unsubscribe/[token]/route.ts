@@ -81,7 +81,7 @@ function htmlPage(title: string, text: string, action: string | null) {
     body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#faf7f2;color:#1a1714}
     main{min-height:100vh;display:grid;place-items:center;padding:24px}
     section{max-width:520px;background:#fff;border:1px solid #e8e0d2;border-radius:16px;padding:32px;box-shadow:0 2px 8px rgba(46,35,24,.08)}
-    h1{font-family:Georgia,serif;font-size:28px;margin:0 0 10px}
+    h1{font:700 28px/1.15 inherit;margin:0 0 10px}
     p{line-height:1.6;color:#3b342d}
     button{border:0;border-radius:999px;background:#1a1714;color:#faf7f2;padding:12px 22px;font-weight:600;cursor:pointer}
   </style>

@@ -13,6 +13,11 @@ import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabl
 import { MyGlsClient, bytesFromMyGls } from "./client";
 import { uploadMyGlsLabelPdf } from "./labels";
 import { buildMyGlsParcelForOrder, isMyGlsCashOnDelivery } from "./payload";
+import {
+  normalizeOrderItemIds,
+  sameShipmentAssignment,
+  withShipmentAssignment,
+} from "@/lib/courier/shipment-assignment";
 
 const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
@@ -23,6 +28,8 @@ export async function createMyGlsShipmentForOrder(
     reclamationId?: string;
     pickupDate?: Date;
     packages?: readonly PhysicalPackage[];
+    orderItemIds?: string[];
+    codAmount?: number;
   } = {},
 ) {
   const cfg = requireMyGlsEnabled();
@@ -58,7 +65,6 @@ export async function createMyGlsShipmentForOrder(
           reclamationId: reclamation?.id ?? null,
         },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
   });
@@ -66,19 +72,45 @@ export async function createMyGlsShipmentForOrder(
   if (order.shippingMethod !== "KURIR") {
     throw new MyGlsConfigError("MyGLS se koristi samo za kurirsku isporuku.");
   }
+  const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
   const shipmentItems = reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
-    : order.items;
+    : requestedOrderItemIds.length
+      ? order.items.filter((item) => requestedOrderItemIds.includes(item.id))
+      : order.items;
   if (!shipmentItems.length) {
     throw new MyGlsConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+  }
+  if (
+    requestedOrderItemIds.length &&
+    shipmentItems.length !== requestedOrderItemIds.length
+  ) {
+    throw new MyGlsConfigError(
+      "Jedna od izabranih stavki ne pripada ovoj porudžbini.",
+    );
   }
   if (shipmentItems.some((item) => item.withAssembly)) {
     throw new MyGlsConfigError("Porudžbina sa montažom/kamionskom logikom ne šalje se kroz MyGLS.");
   }
 
-  const existing = order.shipments[0];
+  const assignmentOrderItemIds = normalizeOrderItemIds(
+    shipmentItems.map((item) => item.id),
+  );
+  const codAmount =
+    Number.isFinite(options.codAmount) && Number(options.codAmount) >= 0
+      ? Number(options.codAmount)
+      : Number(order.total);
+  const existing = order.shipments.find(
+    (shipment) =>
+      shipment.provider === MYGLS_PROVIDER &&
+      (!requestedOrderItemIds.length ||
+        sameShipmentAssignment(
+          shipment.rawCreateResponse,
+          assignmentOrderItemIds,
+        )),
+  );
   if (existing && existing.provider === MYGLS_PROVIDER && existing.status !== "FAILED") {
     return existing;
   }
@@ -95,7 +127,7 @@ export async function createMyGlsShipmentForOrder(
   const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
   const parcel = buildMyGlsParcelForOrder({
     cfg,
-    order: { ...order, items: shipmentItems },
+    order: { ...order, total: codAmount, items: shipmentItems },
     pickupDate: options.pickupDate,
     packages: options.packages ?? [],
     purpose,
@@ -135,7 +167,10 @@ export async function createMyGlsShipmentForOrder(
       labelMimeType: label.mimeType,
       status: "CREATED" as const,
       providerStatusCode: null,
-      rawCreateResponse: response as Prisma.InputJsonValue,
+      rawCreateResponse: withShipmentAssignment(response, {
+        orderItemIds: assignmentOrderItemIds,
+        codAmount,
+      }) as Prisma.InputJsonValue,
       syncError: null,
     };
 
@@ -186,6 +221,8 @@ export async function createMyGlsShipmentForOrder(
       warehouseId: reclamation?.warehouseId,
       message,
       raw: err instanceof MyGlsProviderError ? err.raw : undefined,
+      orderItemIds: assignmentOrderItemIds,
+      codAmount,
     });
     throw err;
   }
@@ -281,7 +318,13 @@ async function persistFailedShipment(args: {
   warehouseId?: string | null;
   message: string;
   raw?: unknown;
+  orderItemIds: string[];
+  codAmount: number;
 }) {
+  const rawCreateResponse = withShipmentAssignment(args.raw, {
+    orderItemIds: args.orderItemIds,
+    codAmount: args.codAmount,
+  });
   const event = {
     status: "FAILED" as const,
     message: `MyGLS greška: ${args.message || SHIPMENT_STATUS_LABEL.FAILED}`,
@@ -292,6 +335,7 @@ async function persistFailedShipment(args: {
       where: { id: args.existingShipmentId },
       data: {
         status: "FAILED",
+        rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
         syncError: args.message,
         events: { create: event },
       },
@@ -309,6 +353,7 @@ async function persistFailedShipment(args: {
       reclamationQty: args.reclamationQty ?? null,
       warehouseId: args.warehouseId ?? null,
       status: "FAILED",
+      rawCreateResponse: rawCreateResponse as Prisma.InputJsonValue,
       syncError: args.message,
       events: { create: event },
     },

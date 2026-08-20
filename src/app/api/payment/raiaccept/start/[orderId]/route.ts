@@ -124,8 +124,8 @@ function notFound() {
 function errorPage(message: string, status = 503) {
   return new NextResponse(
     `<!doctype html><meta charset="utf-8"><title>RaiAccept plaćanje</title>` +
-      `<body style="font-family:system-ui;padding:40px;color:#1A1714;background:#FAF7F2">` +
-      `<h1 style="font-family:Georgia,serif">Kartično plaćanje trenutno nije moguće</h1>` +
+      `<body style="font-family:Inter,Arial,sans-serif;padding:40px;color:#1A1714;background:#FAF7F2">` +
+      `<h1>Kartično plaćanje trenutno nije moguće</h1>` +
       `<p>${escapeHtml(message)}</p>` +
       `<p><a href="/korpa">Nazad na korpu</a></p></body>`,
     {
