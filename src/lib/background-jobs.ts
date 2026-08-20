@@ -80,6 +80,20 @@ const schemas = {
 
 export type BackgroundJobKind = keyof typeof schemas;
 
+const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
+  "PASSWORD_RESET_EMAIL",
+  "BUYER_RECEIPT",
+  "SUPPLIER_RESERVATION",
+  "NEWSLETTER_CAMPAIGN_SEND",
+  "FISCAL_RECEIPT",
+  "ORDER_STATUS_EMAIL",
+  "IPS_PAYMENT_EMAIL",
+  "PAYMENT_REFUND",
+  "SUPPLIER_ORDER_EMAIL",
+  "SUPPLIER_CANCEL_EMAIL",
+  "SUPPLIER_RECLAMATION_EMAIL",
+];
+
 type JobRow = {
   id: string;
   kind: string;
@@ -215,21 +229,58 @@ export async function processPendingBackgroundJobs(limit = 20) {
   await enqueueDueNewsletterCampaigns();
   const now = new Date();
   const stale = new Date(now.getTime() - 15 * 60 * 1000);
-  const candidates = await db.backgroundJob.findMany({
+  const take = Math.min(Math.max(limit, 1), 100);
+  const eligible: Prisma.BackgroundJobWhereInput = {
+    availableAt: { lte: now },
+    OR: [
+      { status: { in: ["QUEUED", "RETRY"] } },
+      { status: "RUNNING", lockedAt: { lt: stale } },
+    ],
+  };
+  // Customer and commerce work must never sit behind a bulk supplier-media
+  // backlog. Fill each run by priority tier, while still using any remaining
+  // capacity for sync and media jobs.
+  const priority = await db.backgroundJob.findMany({
     where: {
-      availableAt: { lte: now },
-      OR: [
-        { status: { in: ["QUEUED", "RETRY"] } },
-        { status: "RUNNING", lockedAt: { lt: stale } },
-      ],
+      ...eligible,
+      kind: { in: HIGH_PRIORITY_BACKGROUND_JOB_KINDS },
     },
     orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
-    take: Math.min(Math.max(limit, 1), 100),
+    take,
     select: { id: true, kind: true },
   });
-  const media = candidates.filter(({ kind }) => kind === "RABALUX_MEDIA_PRODUCT");
-  const other = candidates.filter(({ kind }) => kind !== "RABALUX_MEDIA_PRODUCT");
-  const results = await Promise.all(other.map(({ id }) => processBackgroundJob(id)));
+  const standardSlots = take - priority.length;
+  const standard = standardSlots
+    ? await db.backgroundJob.findMany({
+      where: {
+        ...eligible,
+        kind: {
+          notIn: [
+            ...HIGH_PRIORITY_BACKGROUND_JOB_KINDS,
+            "RABALUX_MEDIA_PRODUCT",
+          ],
+        },
+      },
+      orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
+      take: standardSlots,
+      select: { id: true, kind: true },
+    })
+    : [];
+  const mediaSlots = standardSlots - standard.length;
+  const media = mediaSlots
+    ? await db.backgroundJob.findMany({
+      where: {
+        ...eligible,
+        kind: "RABALUX_MEDIA_PRODUCT",
+      },
+      orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
+      take: mediaSlots,
+      select: { id: true, kind: true },
+    })
+    : [];
+  const results = await Promise.all(
+    [...priority, ...standard].map(({ id }) => processBackgroundJob(id)),
+  );
   const mediaConcurrency = Math.min(
     Math.max(Number(process.env.RABALUX_MEDIA_WORKER_CONCURRENCY) || 2, 1),
     2,
@@ -263,7 +314,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
     expireStaleRabaluxWebAvailability(now),
   ]);
   return {
-    selected: candidates.length,
+    selected: priority.length + standard.length + media.length,
     completed: results.filter((result) => result.claimed && result.ok).length,
     failed: results.filter((result) => result.claimed && !result.ok).length,
     releasedPartnerReservations: partnerReservations.released,
