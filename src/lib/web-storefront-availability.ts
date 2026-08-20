@@ -194,6 +194,14 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
             {
               OR: [
                 { availableWebAuto: true },
+                // SP is the client's permanent ordinary assortment. Stock
+                // controls purchasing, not whether the product is published.
+                {
+                  AND: [
+                    { articleStatus: "SP" },
+                    nonRabaluxSupplierWhere(),
+                  ],
+                },
                 // Rabalux 0-2 rows remain catalog-visible; this flag controls
                 // purchasing for them, not publication.
                 rabaluxSupplierWhere(),
@@ -203,20 +211,14 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
         : []),
       {
         OR: [
-          // While the DC rollout guard is off, keep legacy SP items whose
-          // aggregate balance is still empty. Once another warehouse has a
-          // known positive balance, only audited DC stock may publish them.
-          ...(!enforceAutomaticAvailability
-            ? [
-                {
-                  AND: [
-                    { articleStatus: "SP" },
-                    nonRabaluxSupplierWhere(),
-                    { stock: { lte: 0 } },
-                  ],
-                } satisfies Prisma.ProductWhereInput,
-              ]
-            : []),
+          // SP is always published for ordinary suppliers. DC stock still
+          // controls the quantity exposed to the storefront and checkout.
+          {
+            AND: [
+              { articleStatus: "SP" },
+              nonRabaluxSupplierWhere(),
+            ],
+          },
           // PostgreSQL's three-valued NULL logic makes a relation-level
           // `NOT integrationKey = RABALUX` exclude ordinary suppliers whose
           // integration key is NULL. Spell out every non-Rabalux case so
@@ -241,27 +243,27 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
   };
 }
 
+/** Publication gate only. Purchasing is resolved from channel sellable stock. */
 export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
   const enforceAutomaticAvailability = isWebAutoAvailabilityEnforced();
+  const isOrdinaryProduct =
+    product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY;
+  const isOrdinarySp = isOrdinaryProduct && product.articleStatus === "SP";
   const generallyAvailable =
     !product.deletedAt &&
     product.isActive &&
     product.availableWebManual &&
-    (!enforceAutomaticAvailability || product.availableWebAuto);
+    (!enforceAutomaticAvailability || product.availableWebAuto || isOrdinarySp);
   if (!generallyAvailable) return false;
   const dcAvailable = product.dcAvailableQty ?? product.stock ?? 0;
-  if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) {
-    if (dcAvailable > 0) return true;
-    return (
-      !enforceAutomaticAvailability &&
-      product.articleStatus === "SP" &&
-      (product.stock ?? 0) <= 0
-    );
+  if (isOrdinaryProduct) {
+    if (isOrdinarySp) return true;
+    return dcAvailable > 0;
   }
   if (product.articleStatus === "ARH") return false;
 
   return Boolean(
-    product.supplier.enabled &&
+    product.supplier?.enabled &&
       isRabaluxEnabled() &&
       product.supplierApprovalStatus === "APPROVED" &&
       (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
@@ -280,6 +282,7 @@ export function storefrontPublicationBlockers(
   if (
     isWebAutoAvailabilityEnforced() &&
     product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY &&
+    product.articleStatus !== "SP" &&
     !product.availableWebAuto
   ) {
     reasons.push("Automatska web dostupnost je isključena");
@@ -293,12 +296,8 @@ export function storefrontPublicationBlockers(
 
   if (
     product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY &&
-    (product.dcAvailableQty ?? product.stock ?? 0) <= 0 &&
-    !(
-      !isWebAutoAvailabilityEnforced() &&
-      product.articleStatus === "SP" &&
-      (product.stock ?? 0) <= 0
-    )
+    product.articleStatus !== "SP" &&
+    (product.dcAvailableQty ?? product.stock ?? 0) <= 0
   ) {
     reasons.push("Nema pozitivnu raspoloživu količinu");
   }

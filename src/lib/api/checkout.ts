@@ -596,7 +596,7 @@ export async function createOrder(
     const sellable =
       p.supplier?.integrationKey === "RABALUX"
         ? rabaluxAvailability.sellableStock
-        : p.stock;
+        : p.dcAvailableQty;
     if (sellable < line.qty) {
       return { ok: false, error: { code: "OUT_OF_STOCK", sku: line.sku } };
     }

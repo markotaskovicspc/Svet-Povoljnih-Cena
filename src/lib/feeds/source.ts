@@ -5,6 +5,7 @@ import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
 import type { FeedProduct } from "./types";
 import { getFeedsConfig } from "./config";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
+import { resolveFeedAvailability } from "./availability";
 
 export type FeedChannel = "google" | "meta" | "tiktok";
 
@@ -33,6 +34,7 @@ interface ProductRow {
   fullPrice: { toString(): string };
   salePrice: { toString(): string } | null;
   stock: number;
+  dcAvailableQty: number;
   incomingStock: number;
   isActive: boolean;
   inGoogleMerchant: boolean;
@@ -44,18 +46,13 @@ interface ProductRow {
     label: string;
     family: { code: string };
   } | null;
+  supplier: { integrationKey: string | null } | null;
 }
 
 function toMajor(value: { toString(): string } | null): number | null {
   if (value == null) return null;
   const n = Number(value.toString());
   return Number.isFinite(n) ? n : null;
-}
-
-function pickAvailability(row: ProductRow): FeedProduct["availability"] {
-  if (row.stock > 0) return "in stock";
-  if (row.incomingStock > 0) return "preorder";
-  return "out of stock";
 }
 
 function stripHtml(input: string): string {
@@ -96,6 +93,7 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
       fullPrice: true,
       salePrice: true,
       stock: true,
+      dcAvailableQty: true,
       incomingStock: true,
       isActive: true,
       inGoogleMerchant: true,
@@ -115,6 +113,7 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
           family: { select: { code: true } },
         },
       },
+      supplier: { select: { integrationKey: true } },
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   })) as any as ProductRow[];
@@ -157,7 +156,12 @@ export async function loadFeedProducts(channel: FeedChannel): Promise<FeedProduc
       price,
       salePrice: sale != null && sale < price ? sale : null,
       currency: cfg.currency,
-      availability: pickAvailability(row),
+      availability: resolveFeedAvailability({
+        aggregateStock: row.stock,
+        dcAvailableQty: row.dcAvailableQty,
+        incomingStock: row.incomingStock,
+        supplierIntegrationKey: row.supplier?.integrationKey,
+      }),
       brand: cfg.defaultBrand,
       condition: "new",
       googleProductCategory: cfg.defaultGoogleCategory || null,

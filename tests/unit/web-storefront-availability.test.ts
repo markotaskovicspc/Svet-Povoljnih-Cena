@@ -79,7 +79,7 @@ describe("web storefront availability rollout", () => {
     ).toBe(true);
   });
 
-  it("requires automatic DC availability for every status when strict enforcement is enabled", () => {
+  it("keeps SP published but requires automatic DC availability for other statuses", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
 
     expect(isWebAutoAvailabilityEnforced()).toBe(true);
@@ -98,13 +98,22 @@ describe("web storefront availability rollout", () => {
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
-        articleStatus: "SP",
+        articleStatus: "IT",
         dcAvailableQty: 0,
       }),
     ).toBe(false);
+    expect(
+      isProductAvailableOnWeb({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: false,
+        articleStatus: "SP",
+        dcAvailableQty: 0,
+      }),
+    ).toBe(true);
   });
 
-  it("does not treat stock in another warehouse as SP web stock", () => {
+  it("publishes SP stock in another warehouse without treating it as DC stock", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
 
     expect(
@@ -117,12 +126,12 @@ describe("web storefront availability rollout", () => {
         dcAvailableQty: 0,
         supplier: { integrationKey: null, enabled: true },
       }),
-    ).toBe(false);
+    ).toBe(true);
 
     const serialized = JSON.stringify(webStorefrontProductWhere());
     expect(serialized).toContain('"dcAvailableQty":{"gt":0}');
     expect(serialized).toContain('"articleStatus":"SP"');
-    expect(serialized).toContain('"stock":{"lte":0}');
+    expect(serialized).not.toContain('"stock":{"lte":0}');
   });
 
   it("enforces the Rabalux minimum-3 purchase rule even while global auto availability is off", () => {
@@ -255,6 +264,6 @@ describe("web storefront availability rollout", () => {
         hasActiveRetailPrice: true,
         familyStorefrontEnabled: null,
       }),
-    ).toEqual(["Nema pozitivnu raspoloživu količinu"]);
+    ).toEqual([]);
   });
 });
