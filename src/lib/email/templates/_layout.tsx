@@ -47,7 +47,7 @@ export function EmailLayout({
               {/* Email clients require a plain img element with inline dimensions. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`${BRAND.url}/logo.jpeg`}
+                src={`${BRAND.url}/documents/garantni-list-logo.jpeg`}
                 alt={BRAND.name}
                 width="240"
                 height="57"

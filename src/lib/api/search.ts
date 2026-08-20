@@ -173,8 +173,17 @@ async function searchProductHits(
              )
              OR regexp_replace(lower(p.name), '[^[:alnum:]]+', '', 'g')
                   LIKE ${'%' + normalizedTerm + '%'}
+             OR p.name ILIKE ${'%' + q + '%'}
+             OR p."sizeLabel" ILIKE ${'%' + q + '%'}
              OR p.sku ILIKE ${'%' + q + '%'}
              OR p.barcode ILIKE ${'%' + q + '%'}
+             OR EXISTS (
+               SELECT 1
+                 FROM "ProductCategory" pc1
+                 JOIN "Category" c1 ON c1.id = pc1."categoryId"
+                WHERE pc1."productId" = p.id
+                  AND c1.name ILIKE ${'%' + q + '%'}
+             )
            ))
            OR (${!codeLike} AND (
              p.name ILIKE ${'%' + q + '%'}

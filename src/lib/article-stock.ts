@@ -2,6 +2,7 @@ import {
   CHANNEL_SAFETY_STOCK,
   resolveChannelAvailability,
 } from "@/lib/channel-availability";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 
 export type ArticleWarehouseStock = {
   warehouseId: string;
@@ -13,6 +14,7 @@ export type ArticleWarehouseStock = {
 export type ArticleOrderReservation = {
   warehouseId: string | null;
   qty: number;
+  debited?: boolean;
 };
 
 export type ArticlePartnerReservation = {
@@ -45,17 +47,19 @@ export function computeArticleStock(input: ArticleStockInput) {
     input.warehouses.find((warehouse) => warehouse.isDefault) ??
     input.warehouses[0] ??
     null;
-  const orderByWarehouse = new Map<string, number>();
+  const orderByWarehouse = new Map<
+    string,
+    Array<{ qty: number; debited?: boolean }>
+  >();
   const partnerByWarehouse = new Map<string, number>();
   const fallbackWarehouseId = defaultWarehouse?.warehouseId ?? "";
 
   for (const reservation of input.orderReservations) {
     const warehouseId = reservation.warehouseId ?? fallbackWarehouseId;
     if (!warehouseId) continue;
-    orderByWarehouse.set(
-      warehouseId,
-      (orderByWarehouse.get(warehouseId) ?? 0) + reservation.qty,
-    );
+    const rows = orderByWarehouse.get(warehouseId) ?? [];
+    rows.push({ qty: reservation.qty, debited: reservation.debited });
+    orderByWarehouse.set(warehouseId, rows);
   }
   for (const reservation of input.partnerReservations) {
     const warehouseId = reservation.warehouseId ?? fallbackWarehouseId;
@@ -67,17 +71,19 @@ export function computeArticleStock(input: ArticleStockInput) {
   }
 
   const balances: ArticleWarehouseBalance[] = input.warehouses.map((warehouse) => {
-    const orderReserved = orderByWarehouse.get(warehouse.warehouseId) ?? 0;
     const partnerReserved = partnerByWarehouse.get(warehouse.warehouseId) ?? 0;
+    const balance = resolveStoredWarehouseBalance({
+      storedQty: warehouse.qty,
+      orderReservations: orderByWarehouse.get(warehouse.warehouseId) ?? [],
+      partnerReserved,
+    });
     return {
       warehouseId: warehouse.warehouseId,
       warehouseName: warehouse.warehouseName,
       isDefault: warehouse.isDefault,
-      // Checkout reservations decrement WarehouseStock. Add them back only for
-      // the client's physical-vs-reserved presentation.
-      physical: warehouse.qty + orderReserved,
-      reserved: orderReserved + partnerReserved,
-      available: Math.max(warehouse.qty - partnerReserved, 0),
+      physical: balance.physical,
+      reserved: balance.reserved,
+      available: balance.available,
     };
   });
 

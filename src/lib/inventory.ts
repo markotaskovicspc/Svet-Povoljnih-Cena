@@ -337,7 +337,7 @@ export async function setDefaultWarehouseStock(
     },
     update: {},
   });
-  const checkoutReservations = await tx.orderItem.aggregate({
+  const checkoutReservations = await tx.orderItem.findMany({
     where: {
       productId: input.productId,
       warehouseReservedQty: { gt: 0 },
@@ -348,13 +348,58 @@ export async function setDefaultWarehouseStock(
         },
       },
     },
+    select: {
+      warehouseReservedQty: true,
+      stockMovements: {
+        select: { qty: true },
+      },
+    },
+  });
+  const activeCheckoutReservations = await tx.orderItem.aggregate({
+    where: {
+      productId: input.productId,
+      warehouseReservedQty: { gt: 0 },
+      OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
+      order: {
+        status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+      },
+    },
     _sum: { warehouseReservedQty: true },
   });
-  // WarehouseStock is decremented when checkout stock is reserved. The admin
-  // "Stanje" field represents a physical count, so preserve active reservations
-  // instead of adding them on top of the entered quantity.
+  const activePartnerReservations = await tx.partnerReservation.aggregate({
+    where: {
+      productId: input.productId,
+      status: "ACTIVE",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      AND: [{ OR: [{ warehouseId: warehouse.id }, { warehouseId: null }] }],
+    },
+    _sum: { qty: true },
+  });
+  const protectedQty =
+    (activeCheckoutReservations._sum.warehouseReservedQty ?? 0) +
+    (activePartnerReservations._sum.qty ?? 0);
+  if (input.targetQty < protectedQty) {
+    throw new Error(
+      `Fizičko stanje ne može biti manje od rezervisanih ${protectedQty} kom.`,
+    );
+  }
+  // Legacy reservations reduced WarehouseStock before fiscalization. Add only
+  // those rows back when comparing a newly entered physical count. New-model
+  // reservations already leave WarehouseStock physical.
   const currentPhysical =
-    row.qty + (checkoutReservations._sum.warehouseReservedQty ?? 0);
+    row.qty +
+    checkoutReservations
+      .filter(
+        (reservation) =>
+          reservation.stockMovements.reduce(
+            (sum, movement) => sum + movement.qty,
+            0,
+          ) < 0,
+      )
+      .reduce(
+        (sum, reservation) => sum + reservation.warehouseReservedQty,
+        0,
+      );
   const delta = input.targetQty - currentPhysical;
   if (delta === 0) {
     // No inventory fact changed. Channel availability was synchronized by the

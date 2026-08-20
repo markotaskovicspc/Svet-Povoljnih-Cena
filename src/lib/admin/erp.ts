@@ -1243,7 +1243,13 @@ async function getArticleRows(
             },
           },
         },
-        select: { warehouseId: true, warehouseReservedQty: true },
+        select: {
+          warehouseId: true,
+          warehouseReservedQty: true,
+          stockMovements: {
+            select: { qty: true },
+          },
+        },
       },
       partnerReservations: {
         where: {
@@ -1322,6 +1328,8 @@ async function getArticleRows(
       orderReservations: product.orderItems.map((row) => ({
         warehouseId: row.warehouseId,
         qty: row.warehouseReservedQty,
+        debited:
+          row.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0,
       })),
       partnerReservations: product.partnerReservations,
       manualWeb: product.availableWebManual,

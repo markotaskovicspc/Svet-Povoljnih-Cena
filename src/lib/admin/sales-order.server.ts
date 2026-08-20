@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
 import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 import {
@@ -63,9 +64,54 @@ const productInclude = {
       },
     },
   },
+  orderItems: {
+    where: {
+      warehouseReservedQty: { gt: 0 },
+      order: { status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] } },
+    },
+    select: {
+      warehouseId: true,
+      warehouseReservedQty: true,
+      stockMovements: {
+        select: { qty: true },
+      },
+    },
+  },
+  partnerReservations: {
+    where: { status: "ACTIVE" },
+    select: { warehouseId: true, qty: true, expiresAt: true },
+  },
 } satisfies Prisma.ProductInclude;
 
 type LoadedProduct = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+
+function warehouseBalance(
+  product: LoadedProduct,
+  warehouse: { id: string; isDefault: boolean },
+) {
+  const storedQty =
+    product.warehouseStocks.find((row) => row.warehouseId === warehouse.id)?.qty ??
+    (warehouse.isDefault ? product.stock : 0);
+  const belongsToWarehouse = (warehouseId: string | null) =>
+    warehouseId === warehouse.id || (warehouseId === null && warehouse.isDefault);
+  return resolveStoredWarehouseBalance({
+    storedQty,
+    orderReservations: product.orderItems
+      .filter((item) => belongsToWarehouse(item.warehouseId))
+      .map((item) => ({
+        qty: item.warehouseReservedQty,
+        debited:
+          item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0,
+      })),
+    partnerReserved: product.partnerReservations
+      .filter(
+        (item) =>
+          belongsToWarehouse(item.warehouseId) &&
+          (!item.expiresAt || item.expiresAt > new Date()),
+      )
+      .reduce((sum, item) => sum + item.qty, 0),
+  });
+}
 
 export type SalesOrderCustomerOption = {
   id: string;
@@ -312,9 +358,7 @@ async function productData(
       select: { id: true, code: true, name: true, isDefault: true },
     }));
   const defaultStock = defaultWarehouse
-    ? product.warehouseStocks.find(
-        (row) => row.warehouseId === defaultWarehouse.id,
-      )?.qty ?? product.stock
+    ? warehouseBalance(product, defaultWarehouse).available
     : product.stock;
   const suggestion = resolveSalesOrderWarehouse({
     articleStatus: product.articleStatus,
@@ -578,7 +622,6 @@ async function allocateLines(
         where: { id: product.id },
         data: { supplierReservedStock: { increment: line.qty } },
       });
-      await syncProductChannelAvailability(tx, product.id);
       await tx.orderItem.update({
         where: { id: orderItem.id },
         data: {
@@ -587,6 +630,7 @@ async function allocateLines(
           supplierReservedQty: line.qty,
         },
       });
+      await syncProductChannelAvailability(tx, product.id);
       const grouped = supplierLines.get(product.supplierId) ?? [];
       grouped.push({
         orderItemId: orderItem.id,
@@ -600,27 +644,12 @@ async function allocateLines(
 
     const warehouse = warehouseById.get(line.allocation);
     if (!warehouse) throw new Error(`Izabrani magacin za ${line.sku} nije aktivan.`);
-    const stockRow = product.warehouseStocks.find(
-      (row) => row.warehouseId === warehouse.id,
-    );
-    const available = stockRow?.qty ?? (warehouse.isDefault ? product.stock : 0);
+    const available = warehouseBalance(product, warehouse).available;
     if (available < line.qty) {
       throw new Error(
         `Magacin ${warehouse.name} nema dovoljnu količinu za ${line.sku}.`,
       );
     }
-    await adjustInventory(tx, {
-      idempotencyKey: `manual-sales:${args.orderId}:${args.operationKey}:reserve:${orderItem.id}`,
-      productId: product.id,
-      sku: product.sku,
-      qtyDelta: -line.qty,
-      warehouseId: warehouse.id,
-      kind: StockMovementKind.SALE_RESERVATION,
-      orderId: args.orderId,
-      orderItemId: orderItem.id,
-      actorId: args.actorId,
-      note: `Rezervacija za ručnu porudžbinu ${args.orderNumber}`,
-    });
     await tx.orderItem.update({
       where: { id: orderItem.id },
       data: {
@@ -629,6 +658,7 @@ async function allocateLines(
         supplierReservedQty: 0,
       },
     });
+    await syncProductChannelAvailability(tx, product.id);
   }
 
   for (const [supplierId, lines] of supplierLines) {
@@ -659,12 +689,19 @@ async function releaseManualAllocations(
       sku: true,
       warehouseId: true,
       warehouseReservedQty: true,
+      stockMovements: {
+        select: { qty: true },
+      },
       supplierReservedQty: true,
     },
   });
   for (const item of items) {
     if (!item.productId) continue;
-    if (item.warehouseReservedQty > 0 && item.warehouseId) {
+    if (
+      item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0 &&
+      item.warehouseReservedQty > 0 &&
+      item.warehouseId
+    ) {
       await adjustInventory(tx, {
         idempotencyKey: `manual-sales:${args.orderId}:${args.operationKey}:release:${item.id}`,
         productId: item.productId,
@@ -691,8 +728,15 @@ async function releaseManualAllocations(
       if (updated.count !== 1) {
         throw new Error(`Rezervacija dobavljača za ${item.sku} nije usklađena.`);
       }
-      await syncProductChannelAvailability(tx, item.productId);
     }
+    await tx.orderItem.update({
+      where: { id: item.id },
+      data: {
+        warehouseReservedQty: 0,
+        supplierReservedQty: 0,
+      },
+    });
+    await syncProductChannelAvailability(tx, item.productId);
   }
   await tx.supplierFulfillment.deleteMany({ where: { orderId: args.orderId } });
 }
@@ -1105,7 +1149,7 @@ export async function getSalesOrderDetail(
   const paid = order.payments.some((payment) => payment.status === "PAID");
   const defaultWarehouse = await db.warehouse.findFirst({
     where: { active: true, isDefault: true },
-    select: { id: true },
+    select: { id: true, isDefault: true },
   });
   const lines: SalesOrderFormLine[] = [];
   for (const item of order.items) {
@@ -1117,9 +1161,9 @@ export async function getSalesOrderDetail(
         );
         const suggestion = resolveSalesOrderWarehouse({
           articleStatus: item.product.articleStatus,
-          dcAvailableQty:
-            item.product.warehouseStocks.find((row) => row.warehouse.isDefault)?.qty ??
-            item.product.stock,
+          dcAvailableQty: defaultWarehouse
+            ? warehouseBalance(item.product, defaultWarehouse).available
+            : item.product.stock,
           defaultWarehouseId: defaultWarehouse?.id ?? null,
         });
         lines.push({

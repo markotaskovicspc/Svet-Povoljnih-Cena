@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { presignSchema, presignUpload } from "@/lib/api/uploads";
 import { lookupOrderForReclamation } from "@/lib/api/reclamations";
 import { getCurrentUser } from "@/lib/auth/session";
+import { readOrderAccessToken, verifyOrderAccessToken } from "@/lib/api/order-access";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -13,9 +14,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user || user.userType !== "customer") {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
   const body = await req.json().catch(() => null);
   const parsed = presignSchema.safeParse(body);
   if (!parsed.success) {
@@ -39,7 +37,15 @@ export async function POST(req: Request) {
     if (!item) {
       return NextResponse.json({ error: "unknown_item" }, { status: 422 });
     }
-    if (order.userId !== user.id) {
+    const accountOwner =
+      user?.userType === "customer" && order.userId === user.id;
+    const guestOwner =
+      order.userId === null &&
+      verifyOrderAccessToken({
+        token: readOrderAccessToken(req),
+        tokenHash: order.publicAccessTokenHash,
+      });
+    if (!accountOwner && !guestOwner) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     return NextResponse.json(

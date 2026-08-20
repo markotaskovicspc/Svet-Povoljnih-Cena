@@ -14,6 +14,7 @@ import {
   isRabaluxEnabled,
   isRabaluxSupplierOperational,
 } from "@/lib/rabalux/config";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 
 async function defaultWarehouse(tx: Prisma.TransactionClient) {
   const existing = await tx.warehouse.findFirst({
@@ -82,12 +83,36 @@ export async function syncProductChannelAvailability(
     },
     _sum: { qty: true },
   });
+  const orderReservations = await tx.orderItem.findMany({
+    where: {
+      productId,
+      warehouseReservedQty: { gt: 0 },
+      OR: [{ warehouseId: warehouse.id }, { warehouseId: null }],
+      order: {
+        status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+      },
+    },
+    select: {
+      warehouseReservedQty: true,
+      stockMovements: {
+        select: { qty: true },
+      },
+    },
+  });
   if (!product) throw new Error("Proizvod ne postoji.");
-  const dcPhysical = stock?.qty ?? (warehouseStockCount ? 0 : product.stock);
-  const dcAvailable = Math.max(
-    dcPhysical - (partnerReservations._sum.qty ?? 0),
-    0,
-  );
+  const dcBalance = resolveStoredWarehouseBalance({
+    storedQty: stock?.qty ?? (warehouseStockCount ? 0 : product.stock),
+    orderReservations: orderReservations.map((reservation) => ({
+      qty: reservation.warehouseReservedQty,
+      debited:
+        reservation.stockMovements.reduce(
+          (sum, movement) => sum + movement.qty,
+          0,
+        ) < 0,
+    })),
+    partnerReserved: partnerReservations._sum.qty ?? 0,
+  });
+  const dcAvailable = dcBalance.available;
   const effective = resolveChannelAvailability({
     physical: dcAvailable,
     manualWeb: product.availableWebManual,

@@ -30,14 +30,16 @@ import { deliveryCategory } from "@/lib/delivery-tariff";
  *
  * Returns the resolved sale unit price for callers that need it.
  */
-export function commitAddToCart(
+const pendingAvailabilityChecks = new Set<string>();
+
+export async function commitAddToCart(
   product: Product,
   qty = 1,
   options?: {
     availability?: ProductAvailability;
     deliveryCategory?: 1 | 2 | null;
   },
-): number {
+): Promise<number> {
   const price = effectiveUnitPrice(product);
   const sale = price.effective;
   const availability = options?.availability ?? getProductAvailability(product);
@@ -45,6 +47,38 @@ export function commitAddToCart(
   if (!availability.canAddToCart) {
     toast.error(availability.message);
     return sale;
+  }
+
+  if (pendingAvailabilityChecks.has(product.sku)) return sale;
+  pendingAvailabilityChecks.add(product.sku);
+  try {
+    const currentQty =
+      useCart.getState().lines.find((line) => line.sku === product.sku)?.qty ?? 0;
+    const response = await fetch(
+      `/api/products/${encodeURIComponent(product.slug)}/availability`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: currentQty + qty }),
+      },
+    );
+    const result = (await response.json().catch(() => null)) as
+      | { available?: boolean; message?: string | null }
+      | null;
+    if (!response.ok || !result?.available) {
+      toast.error(
+        result?.message ??
+          "Trenutno ne možemo da proverimo dostupnost artikla. Pokušajte ponovo.",
+      );
+      return sale;
+    }
+  } catch {
+    toast.error(
+      "Trenutno ne možemo da proverimo dostupnost artikla. Pokušajte ponovo.",
+    );
+    return sale;
+  } finally {
+    pendingAvailabilityChecks.delete(product.sku);
   }
 
   const line: Omit<CartLine, "qty"> = {

@@ -15,7 +15,6 @@ import {
   createOrderAccessToken,
   hashOrderAccessToken,
 } from "@/lib/api/order-access";
-import { adjustInventory, InsufficientInventoryError } from "@/lib/inventory";
 import { logOperationalError } from "@/lib/monitoring";
 import {
   computeOrderPricing,
@@ -56,7 +55,7 @@ import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
  *      rule resolution is Phase 3D), voucher, total. Never trust client totals.
  *   4. Allocate human number (`SPC-{year}-{seq}` — sequential per year).
  *   5. Create Order + OrderItems + initial Payment + initial status event.
- *   6. Decrement stock; the supplier reservation callback fires in 4A.
+ *   6. Reserve owned/supplier stock without reducing physical DC stock.
  *   7. Record voucher redemption if applied.
  *   8. Clear logged-in cart mirror.
  *
@@ -209,6 +208,7 @@ type GenericSupplierJobLine = {
 async function enqueueCheckoutPostCommit(args: {
   orderId: string;
   orderNumber: string;
+  accessToken: string;
   supplierFulfillmentIds: string[];
   genericSupplierLines: GenericSupplierJobLine[];
 }) {
@@ -221,13 +221,12 @@ async function enqueueCheckoutPostCommit(args: {
       }),
     ),
   );
-  const jobs: Array<Promise<unknown>> = [
-    enqueueBackgroundJob({
-      kind: "BUYER_RECEIPT",
-      payload: { orderId: args.orderId },
-      idempotencyKey: `buyer-receipt:${args.orderId}`,
-    }),
-  ];
+  const buyerReceiptJob = await enqueueBackgroundJob({
+    kind: "BUYER_RECEIPT",
+    payload: { orderId: args.orderId, accessToken: args.accessToken },
+    idempotencyKey: `buyer-receipt:${args.orderId}`,
+  });
+  const jobs: Array<Promise<unknown>> = [];
   if (args.genericSupplierLines.length) {
     jobs.push(
       enqueueBackgroundJob({
@@ -244,7 +243,9 @@ async function enqueueCheckoutPostCommit(args: {
   // The durable job already exists before this best-effort immediate attempt.
   // A provider outage cannot roll back checkout; the background cron retries it.
   await Promise.allSettled(
-    supplierEmailJobs.map((job) => processBackgroundJob(job.id)),
+    [buyerReceiptJob, ...supplierEmailJobs].map((job) =>
+      processBackgroundJob(job.id),
+    ),
   );
 }
 
@@ -474,6 +475,7 @@ export async function createOrder(
       await enqueueCheckoutPostCommit({
         orderId: existing.id,
         orderNumber: existing.number,
+        accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
         supplierFulfillmentIds: existing.supplierFulfillments.map(({ id }) => id),
         genericSupplierLines: existing.items.flatMap((item) =>
           item.productId &&
@@ -1039,25 +1041,6 @@ export async function createOrder(
               ? { warehouseQty: line.qty, supplierQty: 0 }
               : null;
         if (!allocation) throw new StockReservationError(line.sku);
-        try {
-          if (allocation.warehouseQty > 0) {
-            await adjustInventory(tx, {
-              idempotencyKey: `checkout:${order.id}:reservation:${product.id}`,
-              productId: product.id,
-              sku: line.sku,
-              qtyDelta: -allocation.warehouseQty,
-              kind: "SALE_RESERVATION",
-              orderId: order.id,
-              orderItemId: orderItem.id,
-              note: `Rezervacija za porudžbinu ${order.number}`,
-            });
-          }
-        } catch (err) {
-          if (err instanceof InsufficientInventoryError) {
-            throw new StockReservationError(line.sku);
-          }
-          throw err;
-        }
         if (allocation.supplierQty > 0) {
           if (
             !product.supplierId ||
@@ -1072,7 +1055,6 @@ export async function createOrder(
               supplierReservedStock: { increment: allocation.supplierQty },
             },
           });
-          await syncProductChannelAvailability(tx, product.id);
           const entries = supplierLines.get(product.supplierId) ?? [];
           entries.push({
             orderItemId: orderItem.id,
@@ -1089,6 +1071,10 @@ export async function createOrder(
             supplierReservedQty: allocation.supplierQty,
           },
         });
+        // Product rows are locked above, so concurrent checkouts serialize.
+        // Availability now falls through the reservation, while physical DC
+        // stock remains unchanged until fiscalization.
+        await syncProductChannelAvailability(tx, product.id);
       }
 
       const supplierFulfillmentIds: string[] = [];
@@ -1207,6 +1193,7 @@ export async function createOrder(
   await enqueueCheckoutPostCommit({
     orderId: created.id,
     orderNumber: created.number,
+    accessToken,
     supplierFulfillmentIds: created.supplierFulfillmentIds,
     genericSupplierLines,
   });

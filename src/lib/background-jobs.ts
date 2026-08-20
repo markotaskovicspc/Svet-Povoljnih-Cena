@@ -11,7 +11,10 @@ import {
 
 const schemas = {
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
-  BUYER_RECEIPT: z.object({ orderId: z.string().min(1) }),
+  BUYER_RECEIPT: z.object({
+    orderId: z.string().min(1),
+    accessToken: z.string().min(20).optional(),
+  }),
   SUPPLIER_RESERVATION: z.object({
     orderNumber: z.string().min(1),
     lines: z.array(z.object({ productId: z.string().min(1), qty: z.number().int().positive() })).min(1),
@@ -282,7 +285,10 @@ async function dispatchJob(job: JobRow) {
     }
     case "BUYER_RECEIPT": {
       const { issueBuyerReceiptForOrder } = await import("@/lib/receipts/buyer");
-      const result = await issueBuyerReceiptForOrder((payload as z.infer<typeof schemas.BUYER_RECEIPT>).orderId);
+      const buyerPayload = payload as z.infer<typeof schemas.BUYER_RECEIPT>;
+      const result = await issueBuyerReceiptForOrder(buyerPayload.orderId, {
+        accessToken: buyerPayload.accessToken,
+      });
       if (!result.ok || result.emailError) throw new Error(result.ok ? result.emailError ?? "receipt_email_failed" : result.error);
       return;
     }

@@ -41,11 +41,16 @@ export async function sendOrderConfirmation(args: {
   to: string;
   attachInvoice?: boolean;
   idempotencyKey?: string;
+  accessToken?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
   const { html, text } = await renderEmail(
-    OrderConfirmation({ order: args.order, baseUrl: cfg.baseUrl }),
+    OrderConfirmation({
+      order: args.order,
+      baseUrl: cfg.baseUrl,
+      accessToken: args.accessToken,
+    }),
   );
 
   const attachments: EmailAttachment[] = [];
@@ -53,7 +58,7 @@ export async function sendOrderConfirmation(args: {
     const pdfOrder = orderToPdfInput(args.order);
     attachments.push({
       filename: `predracun-racun-${args.order.id}.pdf`,
-      content: buildInvoicePdf(pdfOrder).toString("base64"),
+      content: (await buildInvoicePdf(pdfOrder)).toString("base64"),
       contentType: "application/pdf",
     });
     attachments.push({

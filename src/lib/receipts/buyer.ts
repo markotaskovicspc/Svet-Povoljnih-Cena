@@ -24,7 +24,11 @@ export type BuyerReceiptResult =
 
 export async function issueBuyerReceiptForOrder(
   orderId: string,
-  opts: { sendEmail?: boolean; forceEmail?: boolean } = {},
+  opts: {
+    sendEmail?: boolean;
+    forceEmail?: boolean;
+    accessToken?: string;
+  } = {},
 ): Promise<BuyerReceiptResult> {
   const row = await db.order.findUnique({
     where: { id: orderId },
@@ -40,7 +44,7 @@ export async function issueBuyerReceiptForOrder(
   const recipient = row.user?.email ?? row.guestEmail ?? null;
   const number = `PR-${row.number}`;
   const input = orderToPdfInput(row);
-  const pdf = buildInvoicePdf(input);
+  const pdf = await buildInvoicePdf(input);
   const uploaded = await uploadReceiptPdf({
     orderNumber: row.number,
     receiptNumber: number,
@@ -109,6 +113,7 @@ export async function issueBuyerReceiptForOrder(
   const send = await sendOrderConfirmation({
     order: loaded.order,
     to: loaded.recipient,
+    accessToken: opts.accessToken,
     idempotencyKey: opts.forceEmail
       ? `order-conf:${loaded.order.id}:resend:${Date.now()}`
       : undefined,
@@ -145,7 +150,7 @@ export async function buildBuyerReceiptPdfForInvoice(invoiceId: string) {
   if (!invoice) return null;
   return {
     invoice,
-    bytes: buildInvoicePdf(orderToPdfInput(invoice.order)),
+    bytes: await buildInvoicePdf(orderToPdfInput(invoice.order)),
   };
 }
 

@@ -3,6 +3,7 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import { rasterJpegPagesPdf } from "@/lib/pdf/raster-pages";
 
 /**
  * Minimal PDF generator for the order confirmation attachments
@@ -223,61 +224,265 @@ interface InvoiceOrderInput {
   shipping_address: { firstName: string; lastName: string; street: string; postalCode: string; city: string };
 }
 
-const fmt = (n: number) => `${n.toLocaleString("sr-Latn-RS").replace(/\u00A0/g, " ")} RSD`;
+type InvoiceLine = {
+  name: string;
+  sku: string;
+  qty: number;
+  gross: number;
+};
 
-export function buildInvoicePdf(order: InvoiceOrderInput): Buffer {
-  const lines: Line[] = [
-    { text: `Datum: ${order.createdAt.toLocaleDateString("sr-Latn-RS")}` },
-    { text: "" },
-    { text: "Prodavac:", bold: true },
-    { text: MERCHANT_LEGAL_INFO.name },
+const INVOICE_PIXEL_WIDTH = 1240;
+const INVOICE_PIXEL_HEIGHT = 1754;
+const INVOICE_ROWS_PER_PAGE = 10;
+
+export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer> {
+  const lines: InvoiceLine[] = order.items.flatMap((item) => [
     {
-      text: `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`,
+      name: item.name,
+      sku: item.sku,
+      qty: item.qty,
+      gross: item.unitPriceSale * item.qty,
     },
-    { text: MERCHANT_LEGAL_INFO.shortAddress },
-    {
-      text: `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`,
-    },
-    { text: "" },
-    { text: "Kupac:", bold: true },
-    {
-      text: `${order.shipping_address.firstName} ${order.shipping_address.lastName}`,
-    },
-    {
-      text: `${order.shipping_address.street}, ${order.shipping_address.postalCode} ${order.shipping_address.city}`,
-    },
-    { text: "" },
-    { text: "Stavke:", bold: true, spaceAbove: 4 },
-  ];
-  for (const it of order.items) {
-    lines.push({
-      text: `${it.qty} x ${it.name} (${it.sku}) — ${fmt(it.unitPriceSale * it.qty)}`,
-    });
-    if (it.assemblyPrice && it.assemblyPrice > 0) {
-      lines.push({ text: `   + montaža: ${fmt(it.assemblyPrice * it.qty)}` });
-    }
+    ...(item.assemblyPrice && item.assemblyPrice > 0
+      ? [{
+          name: `Montaža — ${item.name}`,
+          sku: `${item.sku}-M`,
+          qty: item.qty,
+          gross: item.assemblyPrice * item.qty,
+        }]
+      : []),
+  ]);
+  if (order.shipping > 0) {
+    lines.push({ name: "Isporuka", sku: "—", qty: 1, gross: order.shipping });
   }
-  lines.push({ text: "" });
-  lines.push({ text: `Artikli: ${fmt(order.subtotal)}` });
-  lines.push({ text: `Isporuka: ${fmt(order.shipping)}` });
-  if (order.assemblyTotal > 0) lines.push({ text: `Montaža: ${fmt(order.assemblyTotal)}` });
   if (order.voucherCode && order.voucherDiscount) {
-    lines.push({ text: `Vaučer ${order.voucherCode}: -${fmt(order.voucherDiscount)}` });
+    lines.push({
+      name: `Vaučer ${order.voucherCode}`,
+      sku: "—",
+      qty: 1,
+      gross: -order.voucherDiscount,
+    });
   }
   if (order.firstPurchaseDiscount) {
-    lines.push({ text: `Popust za prvu kupovinu: -${fmt(order.firstPurchaseDiscount)}` });
+    lines.push({
+      name: "Popust za prvu kupovinu",
+      sku: "—",
+      qty: 1,
+      gross: -order.firstPurchaseDiscount,
+    });
   }
   if (order.savedCardDiscount) {
-    lines.push({ text: `Popust za sačuvanu karticu: -${fmt(order.savedCardDiscount)}` });
+    lines.push({
+      name: "Popust za sačuvanu karticu",
+      sku: "—",
+      qty: 1,
+      gross: -order.savedCardDiscount,
+    });
   }
-  lines.push({ text: `Ukupno za uplatu: ${fmt(order.total)}`, bold: true, size: 13, spaceAbove: 6 });
-  lines.push({ text: "" });
-  lines.push({ text: `Način plaćanja: ${order.paymentMethod}` });
-  lines.push({ text: "" });
-  lines.push({ text: "Ovaj dokument je interna potvrda kupovine za kupca." });
-  lines.push({ text: MERCHANT_LEGAL_INFO.pdvNote });
+  const pages = chunkInvoiceLines(lines, INVOICE_ROWS_PER_PAGE);
+  const sharp = (await import("sharp")).default;
+  const jpegPages = await Promise.all(
+    pages.map((pageLines, pageIndex) =>
+      sharp(
+        Buffer.from(
+          invoicePageSvg(order, pageLines, pageIndex, pages.length),
+        ),
+      )
+        .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
+        .toBuffer(),
+    ),
+  );
+  return rasterJpegPagesPdf({
+    pages: jpegPages,
+    pixelWidth: INVOICE_PIXEL_WIDTH,
+    pixelHeight: INVOICE_PIXEL_HEIGHT,
+    pdfWidth: PAGE_WIDTH,
+    pdfHeight: PAGE_HEIGHT,
+  });
+}
 
-  return buildPdf(`Predračun / račun ${order.number}`, lines);
+function invoicePageSvg(
+  order: InvoiceOrderInput,
+  lines: InvoiceLine[],
+  pageIndex: number,
+  pageCount: number,
+) {
+  const blue = "#124987";
+  const tableX = 70;
+  const tableY = 430;
+  const headerHeight = 56;
+  const rowHeight = 66;
+  const widths = [440, 140, 75, 165, 165, 175];
+  const headers = ["Naziv artikla", "Šifra", "Kol.", "Osnovica", "PDV 20%", "Ukupno"];
+  let headerX = tableX;
+  const header = headers
+    .map((label, index) => {
+      const width = widths[index]!;
+      const value = `<rect x="${headerX}" y="${tableY}" width="${width}" height="${headerHeight}" class="head"/><text x="${headerX + 13}" y="${tableY + 35}" class="headText">${xmlEscapePdf(label)}</text>`;
+      headerX += width;
+      return value;
+    })
+    .join("");
+  const rows = lines
+    .map((line, index) => {
+      const y = tableY + headerHeight + index * rowHeight;
+      const basis = line.gross / 1.2;
+      const vat = line.gross - basis;
+      const values = [
+        line.name,
+        line.sku,
+        String(line.qty),
+        formatInvoiceMoney(basis),
+        formatInvoiceMoney(vat),
+        formatInvoiceMoney(line.gross),
+      ];
+      let x = tableX;
+      return values
+        .map((value, columnIndex) => {
+          const width = widths[columnIndex]!;
+          const alignRight = columnIndex >= 2;
+          const anchor = alignRight ? "end" : "start";
+          const textX = alignRight ? x + width - 12 : x + 12;
+          const text =
+            columnIndex === 0
+              ? invoiceMultilineText(textX, y + 25, value, 42)
+              : `<text x="${textX}" y="${y + 39}" text-anchor="${anchor}" class="cell${alignRight ? " numeric" : ""}">${xmlEscapePdf(value)}</text>`;
+          const cell = `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" class="cellBox"/>${text}`;
+          x += width;
+          return cell;
+        })
+        .join("");
+    })
+    .join("");
+  const tableBottom = tableY + headerHeight + lines.length * rowHeight;
+  const isLast = pageIndex === pageCount - 1;
+  const basisTotal = order.total / 1.2;
+  const vatTotal = order.total - basisTotal;
+  const totals = isLast
+    ? `<g transform="translate(650 ${tableBottom + 55})">
+        <text x="0" y="0" class="totalLabel">Osnovica bez PDV-a</text><text x="500" y="0" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(basisTotal))}</text>
+        <text x="0" y="48" class="totalLabel">PDV 20%</text><text x="500" y="48" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(vatTotal))}</text>
+        <rect x="-18" y="75" width="536" height="88" fill="#eaf1fa"/>
+        <text x="0" y="130" class="grandLabel">UKUPNO ZA UPLATU</text><text x="500" y="130" text-anchor="end" class="grandValue">${xmlEscapePdf(formatInvoiceMoney(order.total))}</text>
+      </g>
+      <rect x="70" y="${tableBottom + 260}" width="1100" height="74" class="infoBox"/>
+      <text x="92" y="${tableBottom + 306}" class="infoLabel">NAČIN PLAĆANJA</text>
+      <text x="1148" y="${tableBottom + 306}" text-anchor="end" class="infoValue">${xmlEscapePdf(paymentMethodLabel(order.paymentMethod))}</text>
+      <text x="82" y="${tableBottom + 380}" class="note">PDV 20% je prikazan po svakoj stavci i uključen je u ukupnu cenu.</text>`
+    : "";
+  const logo = LOGO_JPEG
+    ? `<image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="data:image/jpeg;base64,${LOGO_JPEG.toString("base64")}"/>`
+    : `<text x="70" y="104" class="brand">Svet Povoljnih Cena</text>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+  <svg xmlns="http://www.w3.org/2000/svg" width="${INVOICE_PIXEL_WIDTH}" height="${INVOICE_PIXEL_HEIGHT}" viewBox="0 0 ${INVOICE_PIXEL_WIDTH} ${INVOICE_PIXEL_HEIGHT}">
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #28313b; }
+      .brand { font-size: 34px; font-weight: 800; fill: ${blue}; }
+      .docTitle { font-size: 46px; font-weight: 800; fill: ${blue}; letter-spacing: 1px; }
+      .docNo { font-size: 23px; font-weight: 700; fill: #202b38; }
+      .date { font-size: 17px; fill: #3f4852; }
+      .partyBox, .cellBox, .infoBox { fill: #fff; stroke: #d5dce5; stroke-width: 1.5; }
+      .partyLabel { font-size: 17px; font-weight: 800; fill: ${blue}; }
+      .party { font-size: 16px; }
+      .head { fill: ${blue}; stroke: #fff; stroke-width: 1; }
+      .headText { font-size: 16px; font-weight: 700; fill: #fff; }
+      .cell { font-size: 15px; }
+      .numeric { font-weight: 600; }
+      .totalLabel, .totalValue { font-size: 17px; }
+      .totalValue { font-weight: 600; }
+      .grandLabel { font-size: 24px; font-weight: 800; fill: ${blue}; }
+      .grandValue { font-size: 28px; font-weight: 800; fill: ${blue}; }
+      .infoLabel { font-size: 17px; font-weight: 800; fill: ${blue}; }
+      .infoValue { font-size: 17px; font-weight: 600; }
+      .note { font-size: 14px; fill: #57616d; }
+      .footer { font-size: 13px; fill: #697380; }
+    </style>
+    <rect width="1240" height="1754" fill="#fff"/>
+    ${logo}
+    <text x="1170" y="86" text-anchor="end" class="docTitle">PREDRAČUN</text>
+    <text x="1170" y="119" text-anchor="end" class="docNo">${xmlEscapePdf(order.number)}</text>
+    <text x="1170" y="148" text-anchor="end" class="date">Datum: ${xmlEscapePdf(order.createdAt.toLocaleDateString("sr-Latn-RS"))}</text>
+    <rect x="70" y="165" width="1100" height="4" fill="${blue}"/>
+    <rect x="70" y="205" width="550" height="170" class="partyBox"/>
+    <rect x="620" y="205" width="550" height="170" class="partyBox"/>
+    <text x="92" y="242" class="partyLabel">PRODAVAC</text>
+    ${partyText(92, 274, [MERCHANT_LEGAL_INFO.name, `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`, MERCHANT_LEGAL_INFO.shortAddress, `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`])}
+    <text x="642" y="242" class="partyLabel">KUPAC</text>
+    ${partyText(642, 274, [`${order.shipping_address.firstName} ${order.shipping_address.lastName}`, `${order.shipping_address.street},`, `${order.shipping_address.postalCode} ${order.shipping_address.city}`])}
+    ${header}${rows}${totals}
+    <text x="70" y="1690" class="footer">${xmlEscapePdf(MERCHANT_LEGAL_INFO.name)} · PIB ${xmlEscapePdf(MERCHANT_LEGAL_INFO.pib)}</text>
+    <text x="1170" y="1690" text-anchor="end" class="footer">Strana ${pageIndex + 1}/${pageCount}</text>
+  </svg>`;
+}
+
+function partyText(x: number, y: number, values: string[]) {
+  return `<text x="${x}" y="${y}" class="party">${values
+    .map(
+      (value, index) =>
+        `<tspan x="${x}" dy="${index === 0 ? 0 : 25}">${xmlEscapePdf(value)}</tspan>`,
+    )
+    .join("")}</text>`;
+}
+
+function invoiceMultilineText(x: number, y: number, value: string, limit: number) {
+  const words = value.trim().split(/\s+/);
+  const result: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current || `${current} ${word}`.length <= limit) {
+      current = current ? `${current} ${word}` : word;
+    } else {
+      result.push(current);
+      current = word;
+    }
+  }
+  if (current) result.push(current);
+  return `<text x="${x}" y="${y}" class="cell">${result
+    .slice(0, 2)
+    .map(
+      (line, index) =>
+        `<tspan x="${x}" dy="${index === 0 ? 0 : 21}">${xmlEscapePdf(line)}</tspan>`,
+    )
+    .join("")}</text>`;
+}
+
+function chunkInvoiceLines(lines: InvoiceLine[], size: number) {
+  if (!lines.length) return [[]];
+  return Array.from({ length: Math.ceil(lines.length / size) }, (_, index) =>
+    lines.slice(index * size, (index + 1) * size),
+  );
+}
+
+function formatInvoiceMoney(value: number) {
+  return `${new Intl.NumberFormat("sr-Latn-RS", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+    .format(value)
+    .replace(/\u00a0/g, " ")} RSD`;
+}
+
+function paymentMethodLabel(value: string) {
+  const labels: Record<string, string> = {
+    IPS: "IPS Skeniraj",
+    KARTICA: "Platna kartica",
+    GOOGLE_PAY: "Google Pay",
+    APPLE_PAY: "Apple Pay",
+    UPLATA_NA_RACUN: "Uplata na račun",
+    POUZECE_GOTOVINA: "Pouzeće — gotovina",
+    POUZECE_KARTICA: "Pouzeće — kartica",
+  };
+  return labels[value] ?? value;
+}
+
+function xmlEscapePdf(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {

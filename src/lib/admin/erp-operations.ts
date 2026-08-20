@@ -28,6 +28,7 @@ import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
 import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
 import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -1170,7 +1171,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
     take,
     orderBy: { updatedAt: "desc" },
     include: {
-      warehouse: { select: { name: true } },
+      warehouse: { select: { id: true, name: true, isDefault: true } },
       product: {
         select: {
           sku: true,
@@ -1184,17 +1185,51 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
               status: "ACTIVE",
               OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
             },
-            select: { qty: true },
+            select: { qty: true, warehouseId: true },
+          },
+          orderItems: {
+            where: {
+              warehouseReservedQty: { gt: 0 },
+              order: {
+                status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+              },
+            },
+            select: {
+              warehouseId: true,
+              warehouseReservedQty: true,
+              stockMovements: {
+                select: { qty: true },
+              },
+            },
           },
         },
       },
     },
   });
   return rows.map((row) => {
-    const reserved = row.product.partnerReservations.reduce((sum, item) => sum + item.qty, 0);
+    const belongsToWarehouse = (warehouseId: string | null) =>
+      warehouseId === row.warehouse.id ||
+      (warehouseId === null && row.warehouse.isDefault);
+    const partnerReserved = row.product.partnerReservations
+      .filter((item) => belongsToWarehouse(item.warehouseId))
+      .reduce((sum, item) => sum + item.qty, 0);
+    const balance = resolveStoredWarehouseBalance({
+      storedQty: row.qty,
+      orderReservations: row.product.orderItems
+        .filter((item) => belongsToWarehouse(item.warehouseId))
+        .map((item) => ({
+          qty: item.warehouseReservedQty,
+          debited:
+            item.stockMovements.reduce(
+              (sum, movement) => sum + movement.qty,
+              0,
+            ) < 0,
+        })),
+      partnerReserved,
+    });
+    const { physical, reserved, available } = balance;
     const channels = resolveChannelAvailability({
-      physical: row.qty,
-      reserved,
+      physical: available,
       manualWeb: row.product.availableWebManual,
       manualWholesale: row.product.availableWholesaleManual,
       manualExport: row.product.availableExportManual,
@@ -1205,9 +1240,9 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
         warehouse: row.warehouse.name,
         sku: row.product.sku,
         product: row.product.name,
-        physical: row.qty,
+        physical,
         reserved,
-        available: channels.available,
+        available,
         incoming: row.product.incomingStock,
         web: channels.web,
         wholesale: channels.wholesale,

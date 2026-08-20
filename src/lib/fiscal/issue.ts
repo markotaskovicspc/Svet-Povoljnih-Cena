@@ -18,6 +18,7 @@ import { providerForPaymentMethod } from "@/lib/payments/types";
 import { fiscalize, type FiscalDispatchResult } from "./transport";
 import { uploadFiscalPdf } from "./pdf-storage";
 import { isUnsafeFiscalRedispatch } from "./retry-safety";
+import { ensureIssuedFiscalSaleInventoryPosted } from "./inventory-posting";
 
 export type FiscalIssueOutcome =
   | {
@@ -116,7 +117,12 @@ export async function issueFiscalSale(input: {
       include: { lines: true },
     });
     if (existing?.receiptNumber && existing.issuedAt) {
-      return saleOutcome(existing, order, false);
+      await ensureIssuedFiscalSaleInventoryPosted(existing.id);
+      const posted = await db.fiscalDocument.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: { lines: true },
+      });
+      return saleOutcome(posted, order, false);
     }
     return { ok: false, reason: "already_issued", error: "Sve izabrane stavke su već fiskalizovane." };
   }
@@ -140,7 +146,12 @@ export async function issueFiscalSale(input: {
     include: { lines: true },
   });
   if (existingDocument?.status === "ISSUED" && existingDocument.receiptNumber && existingDocument.issuedAt) {
-    return saleOutcome(existingDocument, order, false);
+    await ensureIssuedFiscalSaleInventoryPosted(existingDocument.id);
+    const posted = await db.fiscalDocument.findUniqueOrThrow({
+      where: { id: existingDocument.id },
+      include: { lines: true },
+    });
+    return saleOutcome(posted, order, false);
   }
   if (existingDocument && isUnsafeFiscalRedispatch(existingDocument)) {
     return {
@@ -226,6 +237,8 @@ export async function issueFiscalSale(input: {
     },
     include: { lines: true },
   });
+
+  await ensureIssuedFiscalSaleInventoryPosted(issued.id);
 
   return saleOutcome(issued, order, !existingDocument);
 }

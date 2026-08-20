@@ -9,6 +9,7 @@ import {
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logOperationalError } from "@/lib/monitoring";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { verifyOrderAccessToken } from "@/lib/api/order-access";
 
 /**
  * Reclamation flow (Phase 3C — item 5; spec §4.1).
@@ -58,17 +59,34 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
   // Try order number first, then fiscal receipt number.
   const byNumber = await db.order.findUnique({
     where: { number: orderNumberOrFiscal },
-    include: { items: true, fiscal: true },
+    include: {
+      items: { include: { reclamations: { select: { quantity: true } } } },
+      fiscal: true,
+    },
   });
   if (byNumber) return byNumber;
   const fiscalDocument = await db.fiscalDocument.findFirst({
     where: { receiptNumber: orderNumberOrFiscal, kind: "SALE", status: "ISSUED" },
-    include: { order: { include: { items: true, fiscal: true } } },
+    include: {
+      order: {
+        include: {
+          items: { include: { reclamations: { select: { quantity: true } } } },
+          fiscal: true,
+        },
+      },
+    },
   });
   if (fiscalDocument) return fiscalDocument.order;
   const legacyFiscal = await db.fiscalReceipt.findUnique({
     where: { receiptNumber: orderNumberOrFiscal },
-    include: { order: { include: { items: true, fiscal: true } } },
+    include: {
+      order: {
+        include: {
+          items: { include: { reclamations: { select: { quantity: true } } } },
+          fiscal: true,
+        },
+      },
+    },
   });
   return legacyFiscal?.order ?? null;
 }
@@ -78,6 +96,13 @@ export async function createReclamation(
   userId: string,
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, { expectedUserId: userId });
+}
+
+export async function createGuestReclamation(
+  input: CreateReclamationInput,
+  accessToken: string | null | undefined,
+): Promise<CreateReclamationResult> {
+  return createReclamationRecord(input, { guestAccessToken: accessToken ?? null });
 }
 
 export async function createAdminReclamation(
@@ -99,6 +124,7 @@ async function createReclamationRecord(
   input: CreateReclamationInput,
   options: {
     expectedUserId?: string;
+    guestAccessToken?: string | null;
     actorId?: string;
     requireDelivered?: boolean;
     type?: ReclamationType | null;
@@ -108,6 +134,16 @@ async function createReclamationRecord(
   const order = await lookupOrderForReclamation(input.orderNumberOrFiscal);
   if (!order) return { ok: false, reason: "ORDER_NOT_FOUND" };
   if (options.expectedUserId && order.userId !== options.expectedUserId) {
+    return { ok: false, reason: "UNAUTHORIZED" };
+  }
+  if (
+    options.guestAccessToken !== undefined &&
+    (order.userId !== null ||
+      !verifyOrderAccessToken({
+        token: options.guestAccessToken,
+        tokenHash: order.publicAccessTokenHash,
+      }))
+  ) {
     return { ok: false, reason: "UNAUTHORIZED" };
   }
   if (options.requireDelivered && order.status !== "ISPORUCENO") {
@@ -237,6 +273,18 @@ async function createReclamationRecord(
     throw error;
   }
 
+  try {
+    await enqueueBackgroundJob({
+      kind: "RECLAMATION_RECEIPT",
+      payload: { reclamationId: result.id },
+      idempotencyKey: `reclamation-receipt:${result.id}`,
+    });
+  } catch (error) {
+    logOperationalError("reclamation.receipt_enqueue_failed", error, {
+      reclamationId: result.id,
+    });
+  }
+
   if (item.supplierExternalSku) {
     try {
       await enqueueBackgroundJob({
@@ -255,6 +303,42 @@ async function createReclamationRecord(
   }
 
   return { ok: true, id: result.id, number: result.number };
+}
+
+export async function getGuestOrderForReclamation(
+  orderNumberOrFiscal: string,
+  accessToken: string | null | undefined,
+) {
+  const order = await lookupOrderForReclamation(orderNumberOrFiscal);
+  if (
+    !order ||
+    order.userId !== null ||
+    !verifyOrderAccessToken({
+      token: accessToken,
+      tokenHash: order.publicAccessTokenHash,
+    })
+  ) {
+    return null;
+  }
+
+  const items = order.items
+    .map((item) => {
+      const reclaimed = item.reclamations.reduce(
+        (sum, reclamation) => sum + reclamation.quantity,
+        0,
+      );
+      return {
+        sku: item.sku,
+        name: formatProductDisplayName(item.name, item.attribute1),
+        purchasedQty: item.qty,
+        remainingQty: item.qty - reclaimed,
+      };
+    })
+    .filter((item) => item.remainingQty > 0);
+
+  return items.length
+    ? { number: order.number, createdAt: order.createdAt, items }
+    : null;
 }
 
 export async function listReclamationsForUser(userId: string) {

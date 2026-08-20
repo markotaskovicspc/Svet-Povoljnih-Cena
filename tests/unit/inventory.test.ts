@@ -41,6 +41,16 @@ function transactionMock(options: { insufficient?: boolean; reserved?: number } 
       aggregate: vi.fn(async () => ({ _sum: { qty: 0 } })),
     },
     orderItem: {
+      findMany: vi.fn(async () =>
+        options.reserved
+          ? [
+              {
+                warehouseReservedQty: options.reserved,
+                stockMovements: [{ qty: -options.reserved }],
+              },
+            ]
+          : [],
+      ),
       aggregate: vi.fn(async () => ({
         _sum: { warehouseReservedQty: options.reserved ?? 0 },
       })),

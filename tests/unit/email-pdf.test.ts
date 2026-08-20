@@ -27,11 +27,12 @@ const order: InvoiceOrderInput = {
 };
 
 describe("customer PDF documents", () => {
-  it("brands the pro-forma with the same shared document header", () => {
-    const pdf = buildInvoicePdf(order).toString("binary");
-    expect(pdf).toContain("/Logo");
-    expect(pdf).toContain("Predracun / racun");
-    expect(pdf).toContain("Ukupno za uplatu");
+  it("renders the styled pro-forma as a branded A4 image PDF", async () => {
+    const bytes = await buildInvoicePdf(order);
+    const pdf = bytes.toString("binary");
+    expect(pdf).toContain("/Subtype /Image");
+    expect(pdf).toContain("/MediaBox [0 0 595 842]");
+    expect(bytes.length).toBeGreaterThan(20_000);
   });
 
   it("leaves return quantities blank and tells the customer what to circle", () => {

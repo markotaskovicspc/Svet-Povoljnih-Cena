@@ -7,7 +7,6 @@ import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { useCheckout } from "@/lib/checkout/store";
 import {
   SHIPPING_PRICES,
-  getPaymentLabel,
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
 } from "@/lib/checkout/config-shared";
@@ -68,9 +67,7 @@ interface OrderSummaryProps {
 
 export function OrderSummary({
   deliveryQuote,
-  paymentMethods,
   shippingMethod,
-  paymentMethod,
   perItemAssembly,
   cta,
   collapseLines,
@@ -196,15 +193,6 @@ export function OrderSummary({
             {formatRsd(totals.total)}
           </span>
         </div>
-
-        {paymentMethod ? (
-          <p className="order-4 text-[11px] text-ink-500">
-            Način plaćanja: {getPaymentLabel(paymentMethod, paymentMethods)}
-          </p>
-        ) : null}
-        <p className="order-5 text-[11px] text-ink-500">
-          Sve cene su iskazane u RSD sa dve decimale. PDV je uključen u cenu.
-        </p>
 
         {cta ? <div className="order-6">{cta}</div> : null}
 

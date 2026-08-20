@@ -87,7 +87,7 @@ export async function expirePendingPayments(limit = 100) {
         data: {
           orderId: order.id,
           status: "OTKAZANO",
-          note: "Online plaćanje je isteklo; rezervisana količina je vraćena na lager.",
+          note: "Online plaćanje je isteklo; rezervisana količina je oslobođena.",
         },
       });
       expired += 1;

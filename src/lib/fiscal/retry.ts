@@ -35,7 +35,17 @@ export async function retryPendingFiscalDocuments(limit = 25): Promise<FiscalRet
   const documents = await db.fiscalDocument.findMany({
     where: {
       kind: "SALE",
-      status: { in: ["PENDING", "FAILED"] },
+      OR: [
+        { status: { in: ["PENDING", "FAILED"] } },
+        {
+          status: "ISSUED",
+          lines: {
+            some: {
+              orderItem: { is: { warehouseReservedQty: { gt: 0 } } },
+            },
+          },
+        },
+      ],
       createdAt: { lt: new Date(Date.now() - MIN_AGE_MS) },
       attemptCount: { lt: MAX_ATTEMPTS },
     },
@@ -45,6 +55,7 @@ export async function retryPendingFiscalDocuments(limit = 25): Promise<FiscalRet
       id: true,
       orderId: true,
       source: true,
+      status: true,
       error: true,
       dispatchedAt: true,
     },
@@ -60,6 +71,26 @@ export async function retryPendingFiscalDocuments(limit = 25): Promise<FiscalRet
 
   const retriedOrders = new Set<string>();
   for (const document of documents) {
+    if (document.status === "ISSUED") {
+      summary.retried += 1;
+      try {
+        // The provider already issued this receipt, so never dispatch it
+        // again. The normal delivery flow detects the existing document,
+        // completes its idempotent stock posting, and sends the email that
+        // was skipped when the original stock posting failed.
+        const result = await issueAndDeliverFiscalReceipt(document.orderId, {
+          source: document.source === "REFUND" ? "MANUAL" : document.source,
+          forceEmail: true,
+        });
+        if (result.outcome.ok) summary.issued += 1;
+        else summary.failed += 1;
+      } catch (err) {
+        summary.failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[fiscal:retry] ${document.id} stock posting failed: ${message}`);
+      }
+      continue;
+    }
     if (isUnsafeFiscalRedispatch(document)) {
       summary.skippedUnsafe += 1;
       continue;

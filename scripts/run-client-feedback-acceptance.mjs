@@ -90,6 +90,7 @@ const childEnv = {
   E2E_RECLAMATION_ANALYTICS: "1",
   E2E_MODULE_8_WAREHOUSES: "1",
   EMAIL_PROVIDER: "none",
+  FISCAL_PROVIDER: "none",
   AUTH_SECRET: "local-client-feedback-auth-secret-32-chars",
   ORDER_ACCESS_TOKEN_SECRET: "local-client-feedback-order-secret-32-chars",
   AUTH_URL: localBaseUrl,

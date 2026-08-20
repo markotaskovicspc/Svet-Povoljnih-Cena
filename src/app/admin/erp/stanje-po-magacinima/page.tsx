@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import Link from "next/link";
 import { createHash, randomUUID } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import { db } from "@/lib/db";
@@ -22,7 +23,6 @@ import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { InventoryImportForm } from "@/components/admin/inventory-import-form";
-import { DataTable } from "@/components/admin/data-table";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { getErpModule } from "@/lib/admin/erp";
 
@@ -112,7 +112,13 @@ async function importOpeningInventory(
               warehouseReservedQty: { gt: 0 },
               order: { status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] } },
             },
-            select: { warehouseId: true, warehouseReservedQty: true },
+            select: {
+              warehouseId: true,
+              warehouseReservedQty: true,
+              stockMovements: {
+                select: { qty: true },
+              },
+            },
           },
         },
       });
@@ -127,13 +133,17 @@ async function importOpeningInventory(
       const currentPhysicalBySku = new Map(
         products.map((product) => {
           const warehouseRow = product.warehouseStocks[0];
-          const reserved = product.orderItems
+          const legacyDebited = product.orderItems
             .filter(
               (item) =>
-                item.warehouseId === warehouseRow?.warehouseId || item.warehouseId === null,
+                item.stockMovements.reduce(
+                  (sum, movement) => sum + movement.qty,
+                  0,
+                ) < 0 &&
+                (item.warehouseId === warehouseRow?.warehouseId || item.warehouseId === null),
             )
             .reduce((sum, item) => sum + item.warehouseReservedQty, 0);
-          return [product.sku, (warehouseRow?.qty ?? product.stock) + reserved] as const;
+          return [product.sku, (warehouseRow?.qty ?? product.stock) + legacyDebited] as const;
         }),
       );
       const fileHash = createHash("sha256").update(bytes).digest("hex");
@@ -255,14 +265,9 @@ async function importOpeningInventory(
 
 export default async function InventoryPage() {
   await requireAdminAction(["OPS"]);
-  const [warehouse, stockModule, movements, productCount, stockedCount] = await Promise.all([
+  const [warehouse, stockModule, productCount, stockedCount] = await Promise.all([
     db.warehouse.findFirst({ where: { active: true, isDefault: true } }),
     getErpModule("stanje-po-magacinima", { take: 10_000 }),
-    db.stockMovement.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: { warehouse: { select: { code: true } } },
-    }),
     db.product.count({ where: { deletedAt: null } }),
     db.product.count({ where: { deletedAt: null, stock: { gt: 0 } } }),
   ]);
@@ -275,6 +280,21 @@ export default async function InventoryPage() {
         crumbs={[{ href: "/admin", label: "Admin" }, { href: "/admin/erp", label: "ERP" }, { label: "Lager" }]}
       />
       <div className="space-y-6 px-4 py-6 md:px-8">
+        <nav className="flex flex-wrap gap-2" aria-label="Lager">
+          <Link
+            href="/admin/erp/stanje-po-magacinima"
+            aria-current="page"
+            className="rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-canvas"
+          >
+            Stanje
+          </Link>
+          <Link
+            href="/admin/erp/kretanja-zaliha"
+            className="rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-muted"
+          >
+            Promene zaliha
+          </Link>
+        </nav>
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard label="Magacin" value={warehouse?.code ?? "DC"} hint={warehouse?.name ?? "Kreira se pri prvom unosu"} />
           <StatCard label="Artikli" value={String(productCount)} />
@@ -301,13 +321,6 @@ export default async function InventoryPage() {
           </Card>
         </div>
         {stockModule ? <ErpGrid module={stockModule} /> : null}
-        <Card className="p-0">
-          <DataTable
-            columns={[{ key: "time", label: "Vreme" }, { key: "sku", label: "SKU" }, { key: "warehouse", label: "Magacin" }, { key: "kind", label: "Vrsta" }, { key: "qty", label: "Promena", align: "right" }, { key: "note", label: "Razlog" }]}
-            rows={movements.map((movement) => ({ id: movement.id, cells: { time: movement.createdAt.toLocaleString("sr-Latn-RS"), sku: movement.sku, warehouse: movement.warehouse.code, kind: movement.kind, qty: movement.qty, note: movement.note ?? "—" } }))}
-            empty="Nema kretanja lagera."
-          />
-        </Card>
       </div>
     </>
   );

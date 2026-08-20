@@ -122,7 +122,11 @@ describe("all transactional Resend send flows", () => {
 
   it("renders order confirmation, purchase PDFs and a guarantee for non-Rabalux items", async () => {
     await expect(
-      sendOrderConfirmation({ order, to: "delivered@resend.dev" }),
+      sendOrderConfirmation({
+        order,
+        to: "delivered@resend.dev",
+        accessToken: "guest-order-access-token-123456789",
+      }),
     ).resolves.toEqual(success);
 
     const input = mocks.trackedDispatch.mock.calls[0]?.[0];
@@ -133,6 +137,9 @@ describe("all transactional Resend send flows", () => {
       idempotencyKey: `order-conf:${order.id}`,
     });
     expect(input.html).toContain("Test proizvod");
+    expect(input.html).toContain("/documents/garantni-list-logo.jpeg");
+    expect(input.html).toContain("/reklamacije/prijava?order=");
+    expect(input.html).toContain("guest-order-access-token-123456789");
     expect(input.text).toContain("SPC-AUDIT-0001");
     expect(input.attachments).toEqual([
       expect.objectContaining({ contentType: "application/pdf" }),

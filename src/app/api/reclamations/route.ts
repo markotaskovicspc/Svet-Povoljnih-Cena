@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   createReclamation,
+  createGuestReclamation,
   createReclamationSchema,
   listReclamationsForUser,
 } from "@/lib/api/reclamations";
+import { readOrderAccessToken } from "@/lib/api/order-access";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -24,12 +26,6 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user || user.userType !== "customer") {
-    return NextResponse.json(
-      { ok: false, error: "unauthorized" },
-      { status: 401 },
-    );
-  }
   const body = await req.json().catch(() => null);
   const parsed = createReclamationSchema.safeParse(body);
   if (!parsed.success) {
@@ -47,7 +43,10 @@ export async function POST(req: Request) {
   if (!limited.ok) {
     return rateLimitJson(limited);
   }
-  const result = await createReclamation(parsed.data, user.id);
+  const result =
+    user?.userType === "customer"
+      ? await createReclamation(parsed.data, user.id)
+      : await createGuestReclamation(parsed.data, readOrderAccessToken(req));
   if (!result.ok) {
     return NextResponse.json(result, {
       status:

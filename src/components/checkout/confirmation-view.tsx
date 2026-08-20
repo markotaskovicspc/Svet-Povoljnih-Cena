@@ -70,7 +70,7 @@ export function ConfirmationView({
         </div>
         <OrderRecap order={order} />
       </div>
-      <Ctas />
+      <Ctas order={order} accessToken={accessToken} />
     </div>
   );
 }
@@ -530,7 +530,7 @@ function OrderRecap({ order }: { order: Order }) {
   return (
     <aside className="bg-surface ring-border/60 lg:sticky lg:top-28 lg:self-start flex flex-col gap-3 rounded-2xl p-5 ring-1">
       <h2 className="font-display text-lg text-ink-900">Sažetak</h2>
-      <ul className="divide-border/60 max-h-72 divide-y overflow-y-auto pr-1">
+      <ul className="divide-border/60 divide-y lg:max-h-72 lg:overflow-y-auto lg:pr-1">
         {order.items.map((it) => (
           <li
             key={it.sku}
@@ -652,7 +652,12 @@ function paymentStatusLabel(status: NonNullable<Order["payment"]>["status"]) {
   }
 }
 
-function Ctas() {
+function Ctas({ order, accessToken }: { order: Order; accessToken?: string }) {
+  const reclamationHref = order.userId
+    ? "/nalog/reklamacije"
+    : accessToken
+      ? `/reklamacije/prijava?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(accessToken)}`
+      : null;
   return (
     <div className="flex flex-wrap items-center justify-center gap-3">
       <Link
@@ -667,6 +672,14 @@ function Ctas() {
       >
         Pregled mog naloga
       </Link>
+      {reclamationHref ? (
+        <Link
+          href={reclamationHref}
+          className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center rounded-full px-4 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Prijavi reklamaciju
+        </Link>
+      ) : null}
     </div>
   );
 }

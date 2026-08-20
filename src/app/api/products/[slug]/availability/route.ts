@@ -1,16 +1,75 @@
 import { NextResponse } from "next/server";
 import { getProductBySlug } from "@/lib/api/catalog";
 import { getProductAvailability } from "@/lib/product-availability";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
+import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
+import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 
 export const runtime = "nodejs";
-export const dynamic = "force-static";
-export const revalidate = 15;
+export const dynamic = "force-dynamic";
 
-// Keep the build fast, then create and reuse each small JSON response on its
-// first request. Next.js ISR also serves the previous response while it
-// refreshes, so a burst cannot fan out into one database query per visitor.
-export function generateStaticParams() {
-  return [];
+const availabilityRequestSchema = z.object({
+  quantity: z.number().int().min(1).max(999),
+});
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> },
+) {
+  const parsed = availabilityRequestSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid" }, { status: 400 });
+  }
+  const { slug } = await params;
+  const product = await db.product.findUnique({
+    where: { slug },
+    select: {
+      stock: true,
+      dcAvailableQty: true,
+      deletedAt: true,
+      isActive: true,
+      availableWebManual: true,
+      availableWebAuto: true,
+      articleStatus: true,
+      supplierStock: true,
+      supplierReservedStock: true,
+      supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
+      supplier: {
+        select: { integrationKey: true, enabled: true },
+      },
+    },
+  });
+  if (!product || !isProductAvailableOnWeb(product)) {
+    return NextResponse.json({
+      available: false,
+      message: "Artikal trenutno nije dostupan za online kupovinu.",
+    });
+  }
+  const sellable =
+    product.supplier?.integrationKey === "RABALUX"
+      ? resolveRabaluxAvailability({
+          warehouseStock: product.dcAvailableQty,
+          supplierStock: product.supplierStock,
+          supplierReservedStock: product.supplierReservedStock,
+          lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
+          supplierOperational: isRabaluxSupplierOperational(product.supplier),
+          supplierApproved: product.supplierApprovalStatus === "APPROVED",
+        }).sellableStock
+      : product.stock;
+
+  const available = sellable >= parsed.data.quantity;
+  return NextResponse.json({
+    available,
+    message: available
+      ? null
+      : "Tražena količina trenutno nije dostupna. Osvežite korpu i pokušajte ponovo.",
+    checkedAt: new Date().toISOString(),
+  });
 }
 
 export async function GET(

@@ -19,15 +19,23 @@ const fmt = (n: number) =>
 export interface OrderConfirmationProps {
   order: Order;
   baseUrl?: string;
+  accessToken?: string;
 }
 
 export function OrderConfirmation({
   order,
   baseUrl = "https://www.svetpovoljnihcena.rs",
+  accessToken,
 }: OrderConfirmationProps) {
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
-    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
+    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}${
+        accessToken ? `&token=${encodeURIComponent(accessToken)}` : ""
+      }`;
+  const guestReclamationUrl =
+    !order.userId && accessToken
+      ? `${baseUrl}/reklamacije/prijava?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(accessToken)}`
+      : null;
   return (
     <EmailLayout preview={`Porudžbina ${order.id} je primljena`}>
       <EmailHeading>Hvala vam na porudžbini!</EmailHeading>
@@ -150,6 +158,16 @@ export function OrderConfirmation({
       </EmailParagraph>
 
       <EmailButton href={orderUrl}>Pregled porudžbine</EmailButton>
+      {guestReclamationUrl ? (
+        <>
+          <EmailDivider />
+          <EmailParagraph>
+            Kupili ste bez naloga? Sačuvajte ovu poruku — preko bezbednog linka
+            možete prijaviti reklamaciju za artikal iz ove porudžbine.
+          </EmailParagraph>
+          <EmailButton href={guestReclamationUrl}>Prijavi reklamaciju</EmailButton>
+        </>
+      ) : null}
     </EmailLayout>
   );
 }

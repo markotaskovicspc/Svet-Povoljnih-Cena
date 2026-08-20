@@ -438,9 +438,7 @@ function originalWarehouseAllocation(item: {
   warehouseDispatchedQty: number;
   supplierReservedQty: number;
 }) {
-  const tracked = item.warehouseReservedQty + item.warehouseDispatchedQty;
-  if (tracked > 0) return tracked;
-  return item.supplierReservedQty === 0 ? item.qty : 0;
+  return Math.max(item.qty - item.supplierReservedQty, 0);
 }
 
 async function prepareLines(
@@ -929,7 +927,7 @@ async function recordReservedDispatch(
       kind: StockMovementKind.DISPATCH,
       sku: input.sku,
       qty: 0,
-      note: `Otpremnica ${input.number}: ${input.quantity} kom. skinuto je kroz raniju rezervaciju porudžbine.`,
+      note: `Otpremnica ${input.number}: ${input.quantity} kom. evidentirano bez promene fizičkog lagera; lager knjiži fiskalizacija.`,
       actorId: input.actorId,
       balanceAfterWarehouse: warehouseStock?.qty ?? null,
       balanceAfterTotal: product?.stock ?? null,
@@ -1103,9 +1101,12 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
             where: { id: item.orderItemId },
             select: {
               id: true,
+              qty: true,
               orderId: true,
               warehouseId: true,
               warehouseReservedQty: true,
+              warehouseDispatchedQty: true,
+              supplierReservedQty: true,
               productId: true,
               order: { select: { number: true, status: true } },
             },
@@ -1125,52 +1126,33 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
               `Porudžbina ${orderItem.order.number} više nije aktivna za otpremu.`,
             );
           }
-          const reserved = Math.min(
-            orderItem.warehouseReservedQty,
-            item.qty,
-          );
-          const unreserved = item.qty - reserved;
+          const allocation = originalWarehouseAllocation(orderItem);
           const updated = await tx.orderItem.updateMany({
             where: {
               id: orderItem.id,
-              warehouseReservedQty: { gte: reserved },
+              warehouseDispatchedQty: { lte: allocation - item.qty },
             },
             data: {
-              warehouseReservedQty: { decrement: reserved },
               warehouseDispatchedQty: { increment: item.qty },
             },
           });
           if (updated.count !== 1) {
-            throw new Error(`Rezervacija za ${item.sku} je promenjena.`);
+            throw new Error(`Količina za otpremu artikla ${item.sku} je promenjena.`);
           }
-          if (reserved > 0) {
-            await recordReservedDispatch(tx, {
-              dispatchNoteId: dispatch.id,
-              warehouseId: dispatch.sourceWarehouseId,
-              productId: item.productId,
-              orderId: orderItem.orderId,
-              orderItemId: orderItem.id,
-              sku: item.sku,
-              quantity: reserved,
-              number: dispatch.number,
-              actorId,
-            });
-          }
-          if (unreserved > 0) {
-            await adjustInventory(tx, {
-              idempotencyKey: `dispatch:${dispatch.id}:${item.id}:unreserved`,
-              dispatchNoteId: dispatch.id,
-              warehouseId: dispatch.sourceWarehouseId,
-              productId: item.productId,
-              sku: item.sku,
-              qtyDelta: -unreserved,
-              kind: StockMovementKind.DISPATCH,
-              orderId: orderItem.orderId,
-              orderItemId: orderItem.id,
-              note: `Otpremnica ${dispatch.number}`,
-              actorId,
-            });
-          }
+          // A customer-order dispatch is logistical only. Fiscalization owns
+          // the single physical decrement, so posting the dispatch must not
+          // consume or release the active order reservation.
+          await recordReservedDispatch(tx, {
+            dispatchNoteId: dispatch.id,
+            warehouseId: dispatch.sourceWarehouseId,
+            productId: item.productId,
+            orderId: orderItem.orderId,
+            orderItemId: orderItem.id,
+            sku: item.sku,
+            quantity: item.qty,
+            number: dispatch.number,
+            actorId,
+          });
         }
         await tx.dispatchNote.update({
           where: { id: dispatch.id },

@@ -1272,6 +1272,9 @@ export default async function ProductDetail({
             select: {
               warehouseId: true,
               warehouseReservedQty: true,
+              stockMovements: {
+                select: { qty: true },
+              },
             },
           },
           familyMembership: {
@@ -1372,8 +1375,9 @@ export default async function ProductDetail({
   const defaultWarehouseReserved = product.orderItems
     .filter(
       (item) =>
-        item.warehouseId === defaultWarehouseRow?.warehouseId ||
-        item.warehouseId === null,
+        item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0 &&
+        (item.warehouseId === defaultWarehouseRow?.warehouseId ||
+          item.warehouseId === null),
     )
     .reduce((sum, item) => sum + item.warehouseReservedQty, 0);
   const defaultWarehouseStock = defaultWarehouseRow

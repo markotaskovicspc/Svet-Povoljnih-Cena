@@ -4,6 +4,7 @@ import {
   authenticatePartner,
   partnerRateLimitHeaders,
 } from "@/lib/partners/auth";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 
 export async function GET(request: Request) {
   const auth = await authenticatePartner(request, "inventory:read");
@@ -44,7 +45,22 @@ export async function GET(request: Request) {
         where: { warehouse: { active: true } },
         select: {
           qty: true,
-          warehouse: { select: { code: true, name: true, isDefault: true } },
+          warehouse: {
+            select: { id: true, code: true, name: true, isDefault: true },
+          },
+        },
+      },
+      orderItems: {
+        where: {
+          warehouseReservedQty: { gt: 0 },
+          order: { status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] } },
+        },
+        select: {
+          warehouseId: true,
+          warehouseReservedQty: true,
+          stockMovements: {
+            select: { qty: true },
+          },
         },
       },
       partnerReservations: {
@@ -52,19 +68,50 @@ export async function GET(request: Request) {
           status: "ACTIVE",
           OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
-        select: { qty: true },
+        select: { warehouseId: true, qty: true },
       },
       updatedAt: true,
     },
   });
 
   const items = products.map((product) => {
-    const physical = product.warehouseStocks.reduce((sum, stock) => sum + stock.qty, 0);
-    const reserved = product.partnerReservations.reduce(
-      (sum, reservation) => sum + reservation.qty,
+    const warehouses = product.warehouseStocks.map((stock) => {
+      const balance = resolveStoredWarehouseBalance({
+        storedQty: stock.qty,
+        orderReservations: product.orderItems
+          .filter(
+            (reservation) =>
+              reservation.warehouseId === stock.warehouse.id ||
+              (reservation.warehouseId === null && stock.warehouse.isDefault),
+          )
+          .map((reservation) => ({
+            qty: reservation.warehouseReservedQty,
+            debited:
+              reservation.stockMovements.reduce(
+                (sum, movement) => sum + movement.qty,
+                0,
+              ) < 0,
+          })),
+        partnerReserved: product.partnerReservations
+          .filter(
+            (reservation) => reservation.warehouseId === stock.warehouse.id,
+          )
+          .reduce((sum, reservation) => sum + reservation.qty, 0),
+      });
+      return { stock, balance };
+    });
+    const physical = warehouses.reduce(
+      (sum, warehouse) => sum + warehouse.balance.physical,
       0,
     );
-    const available = Math.max(physical - reserved, 0);
+    const reserved = warehouses.reduce(
+      (sum, warehouse) => sum + warehouse.balance.reserved,
+      0,
+    );
+    const available = warehouses.reduce(
+      (sum, warehouse) => sum + warehouse.balance.available,
+      0,
+    );
     return {
       sku: product.sku,
       name: product.name,
@@ -79,11 +126,13 @@ export async function GET(request: Request) {
           product.availableWholesaleManual && product.availableWholesaleAuto,
         export: product.availableExportManual && product.availableExportAuto,
       },
-      warehouses: product.warehouseStocks.map((stock) => ({
+      warehouses: warehouses.map(({ stock, balance }) => ({
         code: stock.warehouse.code,
         name: stock.warehouse.name,
         isDc: stock.warehouse.isDefault,
-        physical: stock.qty,
+        physical: balance.physical,
+        reserved: balance.reserved,
+        available: balance.available,
       })),
       updatedAt: product.updatedAt.toISOString(),
     };

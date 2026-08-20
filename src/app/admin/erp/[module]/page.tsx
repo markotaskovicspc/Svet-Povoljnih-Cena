@@ -82,6 +82,23 @@ export default async function ErpModulePage({
         }
       />
       <div className="px-8 py-6">
+        {slug === "kretanja-zaliha" ? (
+          <nav className="mb-6 flex flex-wrap gap-2" aria-label="Lager">
+            <Link
+              href="/admin/erp/stanje-po-magacinima"
+              className="rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-muted"
+            >
+              Stanje
+            </Link>
+            <Link
+              href="/admin/erp/kretanja-zaliha"
+              aria-current="page"
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-canvas"
+            >
+              Promene zaliha
+            </Link>
+          </nav>
+        ) : null}
         <ErpGrid
           key={`${erpModule.slug}:${isRabaluxStockView ? "rabalux-stock" : isStocktakeArchive ? "archive" : "default"}`}
           module={erpModule}

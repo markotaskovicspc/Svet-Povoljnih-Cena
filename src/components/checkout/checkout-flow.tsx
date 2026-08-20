@@ -47,7 +47,7 @@ import { ShippingForm } from "./shipping-form";
 import { AutomaticDeliverySection } from "./shipping-method";
 import { VoucherSection } from "./voucher-section";
 import { PaymentMethodStep } from "./payment-method";
-import { NotesConsent } from "./notes-consent";
+import { CheckoutConsent, NotesConsent } from "./notes-consent";
 import { OrderSummary, computeTotals } from "./order-summary";
 import { getConsentedAnalyticsContext } from "@/components/analytics/first-party-analytics";
 
@@ -713,9 +713,7 @@ export function CheckoutFlow({
             <>
               {step === "review" ? (
                 <>
-                  <p className="text-[11px] text-ink-500">
-                    Klikom na „Potvrdi porudžbinu” prihvatate iznos i Uslove kupovine.
-                  </p>
+                  <CheckoutConsent />
                   {deliveryQuoteError ? (
                     <p role="alert" className="mt-1 text-xs text-action">
                       {deliveryQuoteError}

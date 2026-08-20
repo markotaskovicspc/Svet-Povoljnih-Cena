@@ -51,4 +51,18 @@ describe("ERP numeric filters", () => {
       ).map((row) => row.id),
     ).toEqual(["beta", "empty"]);
   });
+
+  it("sorts the incoming-stock column numerically", () => {
+    const rows = [
+      { id: "ten", values: { incoming: 10 } },
+      { id: "zero", values: { incoming: 0 } },
+      { id: "hundred", values: { incoming: 100 } },
+    ];
+
+    expect(
+      filterAndSortGridRows(rows, ["incoming"], "", [], [
+        { columnKey: "incoming", direction: "desc" },
+      ]).map((row) => row.id),
+    ).toEqual(["hundred", "ten", "zero"]);
+  });
 });

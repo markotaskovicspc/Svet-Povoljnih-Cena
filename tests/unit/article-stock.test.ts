@@ -19,8 +19,8 @@ describe("article stock calculation", () => {
       },
     ],
     orderReservations: [
-      { warehouseId: "dc", qty: 3 },
-      { warehouseId: "store", qty: 1 },
+      { warehouseId: "dc", qty: 3, debited: false },
+      { warehouseId: "store", qty: 1, debited: false },
     ],
     partnerReservations: [{ warehouseId: "dc", qty: 2 }],
     manualWeb: true,
@@ -30,13 +30,13 @@ describe("article stock calculation", () => {
 
   it("separates physical, reserved and available quantities", () => {
     const result = computeArticleStock(input);
-    expect(result.physicalTotal).toBe(21);
+    expect(result.physicalTotal).toBe(17);
     expect(result.reservedTotal).toBe(6);
-    expect(result.availableTotal).toBe(15);
+    expect(result.availableTotal).toBe(11);
     expect(result.dc).toMatchObject({
-      physical: 15,
+      physical: 12,
       reserved: 5,
-      available: 10,
+      available: 7,
     });
   });
 
@@ -47,9 +47,9 @@ describe("article stock calculation", () => {
     });
     expect(result.contextual).toMatchObject({
       warehouseName: "Prodavnica",
-      physical: 6,
+      physical: 5,
       reserved: 1,
-      available: 5,
+      available: 4,
     });
     expect(result.channels).toMatchObject({
       webAuto: true,
@@ -64,15 +64,31 @@ describe("article stock calculation", () => {
       selectedWarehouseId: "store",
     });
     expect(result).toMatchObject({
-      physicalTotal: 21,
+      physicalTotal: 17,
       reservedTotal: 6,
-      availableTotal: 15,
+      availableTotal: 11,
       contextual: {
         warehouseId: "store",
-        physical: 6,
+        physical: 5,
         reserved: 1,
-        available: 5,
+        available: 4,
       },
+    });
+  });
+
+  it("keeps legacy early-debited reservations correct during the transition", () => {
+    const result = computeArticleStock({
+      ...input,
+      warehouses: [
+        { warehouseId: "dc", warehouseName: "DC", isDefault: true, qty: 9 },
+      ],
+      orderReservations: [{ warehouseId: "dc", qty: 3, debited: true }],
+      partnerReservations: [],
+    });
+    expect(result.dc).toMatchObject({
+      physical: 12,
+      reserved: 3,
+      available: 9,
     });
   });
 });

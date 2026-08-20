@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CheckoutFormData } from "./checkout-flow";
 
@@ -23,16 +22,11 @@ export function NotesConsent() {
   const {
     register,
     watch,
-    formState: { errors, isSubmitted },
   } = useFormContext<CheckoutFormData>();
   const notes = watch("notes") ?? "";
-  const paymentMethod = watch("paymentMethod");
-  const consentErr = isSubmitted ? errors.consent?.message : undefined;
-  const [openTerms, setOpenTerms] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4 lg:gap-3">
-      <label htmlFor="notes" className="flex flex-col gap-1.5">
+    <label htmlFor="notes" className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-ink-900">
           Napomene uz porudžbinu (opciono)
         </span>
@@ -49,8 +43,20 @@ export function NotesConsent() {
         <span className="text-right text-[11px] text-ink-500 tabular-nums">
           {notes.length}/{NOTES_MAX}
         </span>
-      </label>
+    </label>
+  );
+}
 
+export function CheckoutConsent() {
+  const {
+    register,
+    formState: { errors, isSubmitted },
+  } = useFormContext<CheckoutFormData>();
+  const consentErr = isSubmitted ? errors.consent?.message : undefined;
+  const [openTerms, setOpenTerms] = useState(false);
+
+  return (
+    <>
       <div className="bg-muted-bg ring-border/60 flex flex-col gap-2 rounded-2xl p-4 ring-1 lg:p-3">
         <label htmlFor="consent" className="flex items-start gap-3 text-sm">
           <input
@@ -93,14 +99,10 @@ export function NotesConsent() {
             {consentErr as string}
           </p>
         ) : null}
-        <p className="inline-flex items-center gap-1.5 pl-7 text-[11px] text-ink-500">
-          <ShieldCheck className="size-3.5" aria-hidden />
-          {getCheckoutPaymentTrustMessage(paymentMethod)}
-        </p>
       </div>
 
       <TermsDialog open={openTerms} onOpenChange={setOpenTerms} />
-    </div>
+    </>
   );
 }
 

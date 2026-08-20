@@ -44,7 +44,15 @@ const FIELD_ERROR_MESSAGES: Record<string, string> = {
   photos: "Proverite priložene fotografije.",
 };
 
-export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
+export function ReclamationForm({
+  orders,
+  accessToken,
+  guest = false,
+}: {
+  orders: OrderOption[];
+  accessToken?: string;
+  guest?: boolean;
+}) {
   const router = useRouter();
   const [orderNumber, setOrderNumber] = useState(orders[0]?.number ?? "");
   const [sku, setSku] = useState(orders[0]?.items[0]?.sku ?? "");
@@ -131,7 +139,10 @@ export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
     try {
       const presignRes = await fetch("/api/reclamations/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { "x-order-access-token": accessToken } : {}),
+        },
         body: JSON.stringify({
           filename: photo.file.name,
           contentType: photo.file.type,
@@ -217,7 +228,10 @@ export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
     try {
       const res = await fetch("/api/reclamations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { "x-order-access-token": accessToken } : {}),
+        },
         body: JSON.stringify({
           orderNumberOrFiscal: selectedOrder.number,
           sku,
@@ -288,7 +302,9 @@ export function ReclamationForm({ orders }: { orders: OrderOption[] }) {
           Broj reklamacije: <span className="font-mono">{success}</span>
         </p>
         <p className="mt-2 text-sm text-ink-600">
-          Potvrdu, tok obrade i konačan status pratite na ovoj stranici.
+          {guest
+            ? "Potvrda je poslata na e-poštu iz porudžbine. O promenama statusa obavestićemo vas mejlom."
+            : "Potvrdu, tok obrade i konačan status pratite na ovoj stranici."}
         </p>
         <Button
           type="button"

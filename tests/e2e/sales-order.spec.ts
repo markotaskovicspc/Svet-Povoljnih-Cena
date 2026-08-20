@@ -50,6 +50,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
   let dispatchId = "";
   let orderId: string | null = null;
   let webOrderId: string | null = null;
+  let fiscalOrderId: string | null = null;
   let webOrderNumber = "";
 
   test.beforeAll(async () => {
@@ -634,9 +635,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
           where: { id: { in: [dcProductId, supplierProductId] } },
         }),
       ]);
-      expect(dcStock.qty).toBe(8);
+      expect(dcStock.qty).toBe(10);
       expect(products.find((product) => product.id === dcProductId)?.stock).toBe(
-        8,
+        10,
       );
       expect(
         products.find((product) => product.id === supplierProductId)
@@ -707,8 +708,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
         true,
       );
       expect(updated.sefAcceptedAt).not.toBeNull();
-      expect(dcStock.qty).toBe(0);
-      expect(dcProduct.stock).toBe(0);
+      expect(dcStock.qty).toBe(10);
+      expect(dcProduct.stock).toBe(10);
+      expect(dcProduct.dcAvailableQty).toBe(0);
       expect(supplierProduct.supplierReservedStock).toBe(20);
     });
 
@@ -777,8 +779,122 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       expect(dcStock.qty).toBe(10);
       expect(dcProduct.stock).toBe(10);
       expect(supplierProduct.supplierReservedStock).toBe(0);
-      expect(movements.some((movement) => movement.qty < 0)).toBe(true);
-      expect(movements.some((movement) => movement.qty > 0)).toBe(true);
+      expect(movements).toHaveLength(0);
+    });
+
+    await test.step("fiskalizacija skida fizički DC lager tačno jednom", async () => {
+      const fiscalOrderNumber = `QA-FISCAL-${runId}`;
+      const fiscalOrder = await db.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            number: fiscalOrderNumber,
+            status: "KREIRANO",
+            channel: "WEB",
+            subtotal: 3_000,
+            total: 3_000,
+            shippingMethod: "KURIR",
+            paymentMethod: "UPLATA_NA_RACUN",
+            shipFirstName: "QA",
+            shipLastName: "Fiskalizacija",
+            shipPhone: "+38160111999",
+            shipStreet: "Bulevar fiskalizacije 1",
+            shipCity: "Beograd",
+            shipPostalCode: "11000",
+            guestEmail: `qa.fiscal.${runId}@example.invalid`,
+            termsAcceptedAt: new Date(),
+            items: {
+              create: {
+                productId: dcProductId,
+                sku: fixture.dcSku,
+                name: `QA DC artikal ${runId}`,
+                qty: 3,
+                unitPriceFull: 1_000,
+                unitPriceSale: 1_000,
+                warehouseId: dcWarehouseId,
+                warehouseReservedQty: 3,
+              },
+            },
+          },
+          select: { id: true },
+        });
+        await tx.product.update({
+          where: { id: dcProductId },
+          data: { dcAvailableQty: 7 },
+        });
+        return created;
+      });
+      fiscalOrderId = fiscalOrder.id;
+
+      const before = await db.warehouseStock.findUniqueOrThrow({
+        where: {
+          warehouseId_productId: {
+            warehouseId: dcWarehouseId,
+            productId: dcProductId,
+          },
+        },
+      });
+      expect(before.qty).toBe(10);
+
+      await page.goto(`/admin/erp/prodajni-nalozi/${fiscalOrderId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Izdaj fiskalni račun" }).click();
+      await expect(
+        page.getByRole("button", { name: "Ponovo pošalji fiskalni račun" }),
+      ).toBeVisible({ timeout: 90_000 });
+
+      const [document, item, stock, product, movements] = await Promise.all([
+        db.fiscalDocument.findFirstOrThrow({
+          where: { orderId: fiscalOrderId!, kind: "SALE", status: "ISSUED" },
+        }),
+        db.orderItem.findFirstOrThrow({ where: { orderId: fiscalOrderId! } }),
+        db.warehouseStock.findUniqueOrThrow({
+          where: {
+            warehouseId_productId: {
+              warehouseId: dcWarehouseId,
+              productId: dcProductId,
+            },
+          },
+        }),
+        db.product.findUniqueOrThrow({ where: { id: dcProductId } }),
+        db.stockMovement.findMany({
+          where: { orderId: fiscalOrderId!, kind: "SALE_RESERVATION" },
+        }),
+      ]);
+      expect(item.warehouseReservedQty).toBe(0);
+      expect(stock.qty).toBe(7);
+      expect(product.stock).toBe(7);
+      expect(product.dcAvailableQty).toBe(7);
+      expect(movements).toHaveLength(1);
+      expect(movements[0]).toMatchObject({
+        qty: -3,
+        fiscalDocumentId: document.id,
+      });
+
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: "Ponovo pošalji fiskalni račun" })
+        .click();
+      await expect
+        .poll(() =>
+          db.stockMovement.count({
+            where: { orderId: fiscalOrderId!, kind: "SALE_RESERVATION" },
+          }),
+        )
+        .toBe(1);
+      expect(
+        (
+          await db.warehouseStock.findUniqueOrThrow({
+            where: {
+              warehouseId_productId: {
+                warehouseId: dcWarehouseId,
+                productId: dcProductId,
+              },
+            },
+          })
+        ).qty,
+      ).toBe(7);
     });
   });
 
@@ -804,11 +920,13 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
           ...(customerId ? [{ customerId }] : []),
           ...(orderId ? [{ id: orderId }] : []),
           ...(webOrderId ? [{ id: webOrderId }] : []),
+          ...(fiscalOrderId ? [{ id: fiscalOrderId }] : []),
         ],
       },
     });
     orderId = null;
     webOrderId = null;
+    fiscalOrderId = null;
     await db.stockMovement.deleteMany({
       where: {
         productId: {
