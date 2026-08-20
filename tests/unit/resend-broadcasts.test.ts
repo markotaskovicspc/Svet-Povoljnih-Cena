@@ -13,6 +13,8 @@ import {
   createResendBroadcast,
   createResendSegment,
   getResendBroadcast,
+  listResendSegmentContactEmails,
+  removeResendContactFromSegment,
   sendResendBroadcast,
 } from "@/lib/email/resend-broadcasts";
 
@@ -29,7 +31,18 @@ describe("Resend broadcast lifecycle", () => {
       .mockResolvedValueOnce(json({ id: "broadcast-id" }))
       .mockResolvedValueOnce(json({ object: "broadcast" }))
       .mockResolvedValueOnce(json({ id: "broadcast-id", status: "sent" }))
-      .mockResolvedValueOnce(json({ object: "broadcast" }));
+      .mockResolvedValueOnce(json({ object: "broadcast" }))
+      .mockResolvedValueOnce(json({
+        object: "list",
+        has_more: true,
+        data: [{ id: "contact-1", email: "AUDIT@example.com" }],
+      }))
+      .mockResolvedValueOnce(json({
+        object: "list",
+        has_more: false,
+        data: [{ id: "contact-2", email: "second@example.com" }],
+      }))
+      .mockResolvedValueOnce(json({ id: "segment-id", deleted: true }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createResendSegment("SPC Audit")).resolves.toEqual({ id: "segment-id" });
@@ -52,6 +65,11 @@ describe("Resend broadcast lifecycle", () => {
       status: "sent",
     });
     await cancelResendBroadcast("broadcast-id");
+    await expect(listResendSegmentContactEmails("segment-id")).resolves.toEqual([
+      "audit@example.com",
+      "second@example.com",
+    ]);
+    await removeResendContactFromSegment("audit@example.com", "segment-id");
 
     expect(fetchMock.mock.calls.map(([url, request]) => [url, request.method])).toEqual([
       ["https://api.resend.com/segments", "POST"],
@@ -60,6 +78,9 @@ describe("Resend broadcast lifecycle", () => {
       ["https://api.resend.com/broadcasts/broadcast-id/send", "POST"],
       ["https://api.resend.com/broadcasts/broadcast-id", "GET"],
       ["https://api.resend.com/broadcasts/broadcast-id", "DELETE"],
+      ["https://api.resend.com/segments/segment-id/contacts?limit=100", "GET"],
+      ["https://api.resend.com/segments/segment-id/contacts?limit=100&after=contact-1", "GET"],
+      ["https://api.resend.com/contacts/audit%40example.com/segments/segment-id", "DELETE"],
     ]);
     for (const [, request] of fetchMock.mock.calls) {
       expect(request.headers).toEqual(

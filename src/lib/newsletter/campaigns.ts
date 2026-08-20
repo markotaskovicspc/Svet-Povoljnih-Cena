@@ -17,6 +17,8 @@ import {
   createResendBroadcast,
   createResendSegment,
   getResendBroadcast,
+  listResendSegmentContactEmails,
+  removeResendContactFromSegment,
   sendResendBroadcast,
 } from "@/lib/email/resend-broadcasts";
 import {
@@ -503,37 +505,29 @@ export async function sendNewsletterCampaign(campaignId: string) {
   if (cfg.provider !== "resend") throw new Error("Newsletter Broadcast slanje zahteva Resend provider.");
   if (!cfg.promotionsTopicId) throw new Error("RESEND_TOPIC_PROMOTIONS_ID nije konfigurisan.");
 
-  // A failed preparation may have partially populated its segment. Every new
-  // attempt before broadcast creation therefore gets a clean segment.
-  const segment = await createResendSegment(
-    `SPC ${campaign.id} ${campaign.title} ${Date.now()}`.slice(0, 120),
-  );
-  const segmentId = segment.id;
-  await db.newsletterCampaign.update({
-    where: { id: campaignId },
-    data: { providerSegmentId: segmentId },
-  });
+  // Resend plans cap the number of segments. A retry reuses its assigned
+  // segment, and a new campaign can recycle a segment only after its previous
+  // broadcast is fully sent. Always clear membership before repopulating it so
+  // a changed dynamic audience can never inherit stale recipients.
+  const segmentId = await prepareCleanCampaignSegment(campaign);
   const providerOptOuts: string[] = [];
-  for (let start = 0; start < recipients.length; start += 10) {
-    const batch = recipients.slice(start, start + 10);
-    await Promise.all(batch.map(async (recipient) => {
-      const sync = await syncResendContact({
-        email: recipient.email,
-        firstName: recipient.firstName,
-        lastName: recipient.lastName,
-        unsubscribed: false,
-        promotionalAudience: true,
-        subscriptionIntent: "preserve",
-        source: "campaign",
-      });
-      if (!sync.ok) throw new Error(sync.error);
-      if (sync.providerOptedOut) {
-        providerOptOuts.push(recipient.email);
-        await withdrawMarketingEmail(recipient.email, "resend-preference-reconciliation");
-        return;
-      }
-      await addResendContactToSegment(recipient.email, segmentId!);
-    }));
+  for (const recipient of recipients) {
+    const sync = await syncResendContact({
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      unsubscribed: false,
+      promotionalAudience: true,
+      subscriptionIntent: "preserve",
+      source: "campaign",
+    });
+    if (!sync.ok) throw new Error(sync.error);
+    if (sync.providerOptedOut) {
+      providerOptOuts.push(recipient.email);
+      await withdrawMarketingEmail(recipient.email, "resend-preference-reconciliation");
+      continue;
+    }
+    await addResendContactToSegment(recipient.email, segmentId);
   }
   if (providerOptOuts.length) {
     await db.newsletterCampaignRecipient.updateMany({
@@ -567,6 +561,96 @@ export async function sendNewsletterCampaign(campaignId: string) {
   await sendResendBroadcast(remote.id);
   await markCampaignAccepted(campaignId);
   return { ok: true as const, providerBroadcastId: remote.id, recipients: providerEligibleCount };
+}
+
+async function prepareCleanCampaignSegment(campaign: {
+  id: string;
+  title: string;
+  providerSegmentId: string | null;
+}) {
+  let segmentId = await prepareCampaignSegment(campaign);
+  let existingEmails: string[];
+  try {
+    existingEmails = await listResendSegmentContactEmails(segmentId);
+  } catch (error) {
+    if (!isMissingResendSegment(error)) throw error;
+    await db.newsletterCampaign.updateMany({
+      where: { id: campaign.id, providerSegmentId: segmentId },
+      data: { providerSegmentId: null },
+    });
+    segmentId = await prepareCampaignSegment({ ...campaign, providerSegmentId: null });
+    existingEmails = await listResendSegmentContactEmails(segmentId);
+  }
+  for (const email of existingEmails) {
+    await removeResendContactFromSegment(email, segmentId);
+  }
+  return segmentId;
+}
+
+async function prepareCampaignSegment(campaign: {
+  id: string;
+  title: string;
+  providerSegmentId: string | null;
+}) {
+  if (campaign.providerSegmentId) return campaign.providerSegmentId;
+  try {
+    const segment = await createResendSegment(
+      `SPC ${campaign.id} ${campaign.title} ${Date.now()}`.slice(0, 120),
+    );
+    await db.newsletterCampaign.update({
+      where: { id: campaign.id },
+      data: { providerSegmentId: segment.id },
+    });
+    return segment.id;
+  } catch (error) {
+    if (!isResendSegmentLimit(error)) throw error;
+  }
+
+  const reusable = await db.newsletterCampaign.findMany({
+    where: {
+      id: { not: campaign.id },
+      status: "SENT",
+      providerSegmentId: { not: null },
+      providerBroadcastId: { not: null },
+    },
+    orderBy: { sentAt: "asc" },
+    take: 10,
+    select: { id: true, providerSegmentId: true, providerBroadcastId: true },
+  });
+  for (const candidate of reusable) {
+    if (!candidate.providerSegmentId || !candidate.providerBroadcastId) continue;
+    const remote = await getResendBroadcast(candidate.providerBroadcastId).catch(() => null);
+    if (remote?.status !== "sent") continue;
+    const claimed = await db.$transaction(async (tx) => {
+      const released = await tx.newsletterCampaign.updateMany({
+        where: { id: candidate.id, providerSegmentId: candidate.providerSegmentId },
+        data: { providerSegmentId: null },
+      });
+      if (released.count !== 1) return false;
+      await tx.newsletterCampaign.update({
+        where: { id: campaign.id },
+        data: { providerSegmentId: candidate.providerSegmentId },
+      });
+      return true;
+    });
+    if (claimed) return candidate.providerSegmentId;
+  }
+  throw new Error(
+    "Resend nema slobodan segment za kampanju. Sačekajte da se prethodno slanje potpuno završi ili povećajte plan.",
+  );
+}
+
+function isResendSegmentLimit(error: unknown) {
+  return error instanceof Error && (
+    error.message.includes("plan includes") ||
+    (error.message.includes("/segments") && error.message.includes("400"))
+  );
+}
+
+function isMissingResendSegment(error: unknown) {
+  return error instanceof Error &&
+    error.message.includes("Resend GET /segments/") &&
+    error.message.includes(": 404 ");
 }
 
 export async function failNewsletterCampaign(campaignId: string, error: unknown) {

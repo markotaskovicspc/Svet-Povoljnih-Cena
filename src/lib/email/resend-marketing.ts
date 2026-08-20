@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getEmailConfig } from "./config";
+import { fetchResendApi } from "./resend-api";
 import { isEmailSuppressed } from "./tracking";
 
 export type ResendSubscriptionIntent = "grant" | "withdraw" | "preserve";
@@ -198,7 +199,7 @@ async function resendRequest(
   body: Record<string, unknown> | ReadonlyArray<Record<string, unknown>> | undefined,
   apiKey: string,
 ): Promise<ResendRequestResult> {
-  const res = await fetch(`https://api.resend.com${path}`, {
+  const res = await fetchResendApi(`https://api.resend.com${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${apiKey}`,
