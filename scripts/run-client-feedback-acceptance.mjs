@@ -56,7 +56,11 @@ const testUrl = new URL(baseUrl);
 testUrl.searchParams.set("schema", schema);
 testUrl.searchParams.set("options", `-c search_path=${schema}`);
 const databaseUrl = testUrl.toString();
-const playwrightPort = "3025";
+const playwrightPort =
+  process.env.CLIENT_FEEDBACK_E2E_PORT?.trim() || "3025";
+if (!/^\d+$/.test(playwrightPort) || Number(playwrightPort) > 65_535) {
+  throw new Error("CLIENT_FEEDBACK_E2E_PORT must be a valid TCP port.");
+}
 const localBaseUrl = `http://127.0.0.1:${playwrightPort}`;
 const e2eDistDir = ".next-client-feedback-e2e";
 const defaultAcceptanceSpecs = [

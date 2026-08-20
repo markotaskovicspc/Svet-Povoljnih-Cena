@@ -318,6 +318,18 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(heading).toHaveCount(1);
       await expect(heading).toBeVisible();
       await expect(page.getByText("Datum naloga", { exact: true })).toBeVisible();
+      const postButton = page.getByRole("button", {
+        name: "Kreiraj adresnice",
+        exact: true,
+      });
+      const blockReason = page.locator("#pickup-posting-block-reason");
+      await expect(postButton).toBeDisabled();
+      await expect(postButton).toHaveAttribute(
+        "aria-describedby",
+        "pickup-posting-block-reason",
+      );
+      await expect(blockReason).toContainText("Učitajte bar jednu");
+      await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
       const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
       const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
       await page.getByLabel("Početak preuzimanja").fill(pickupStart.toISOString().slice(0, 16));
@@ -419,6 +431,34 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(rows.nth(0)).toContainText("3");
     });
 
+    await test.step("cele dimenzije paketa prolaze HTML validaciju i čuvaju se", async () => {
+      const firstRow = page.locator("tbody tr").first();
+      const lineId = await firstRow.locator('input[name="lineId"]').getAttribute("value");
+      expect(lineId).toBeTruthy();
+      await firstRow.getByLabel("kg", { exact: true }).fill("1.25");
+      await firstRow.getByLabel("Š", { exact: true }).fill("10");
+      await firstRow.getByLabel("D", { exact: true }).fill("20");
+      await firstRow.getByLabel("V", { exact: true }).fill("30");
+      await expect(
+        firstRow.locator('input[type="number"]:invalid'),
+      ).toHaveCount(0);
+      await firstRow
+        .getByRole("button", { name: "Sačuvaj mere", exact: true })
+        .click();
+      await expect(
+        firstRow.getByRole("status").filter({
+          hasText: "Stvarne mere paketa su sačuvane",
+        }),
+      ).toBeVisible();
+      const savedLine = await db.pickupBatchLine.findUniqueOrThrow({
+        where: { id: lineId! },
+      });
+      expect(Number(savedLine.weightKg)).toBe(1.25);
+      expect(Number(savedLine.widthCm)).toBe(10);
+      expect(Number(savedLine.depthCm)).toBe(20);
+      expect(Number(savedLine.heightCm)).toBe(30);
+    });
+
     await test.step("ista porudžbina ne može u drugi nalog čak ni ako joj se status ručno vrati", async () => {
       await db.order.update({
         where: { id: eligibleOrderId },
@@ -501,6 +541,23 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(
         page.getByRole("link", { name: "Završi uređivanje", exact: true }),
       ).toHaveCount(1);
+      await page
+        .getByRole("link", { name: "Završi uređivanje", exact: true })
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`/admin/erp/preuzimanja/${secondBatchId}$`),
+      );
+      await expect(page.getByLabel("Početak preuzimanja")).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Učitaj porudžbine", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("Kliknite „Uredi“, pa „Učitaj porudžbine“.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page.getByRole("link", { name: "Uredi", exact: true }).click();
+      await expect(page).toHaveURL(/\?mode=edit$/);
     });
 
     await test.step("Kreiranje adresnica je blokirano i direktni API ne može da zaobiđe obavezni termin", async () => {

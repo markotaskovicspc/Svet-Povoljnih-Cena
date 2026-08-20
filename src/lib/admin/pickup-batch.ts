@@ -35,6 +35,38 @@ export function isPickupBatchEditable(status: PickupBatchStatus) {
   return status === "DRAFT";
 }
 
+export function pickupPostingBlockReason({
+  configurationIssue,
+  providerReason,
+  provider,
+  rowCount,
+  pickupStartSet,
+  pickupEndSet,
+  completePackageCount,
+}: {
+  configurationIssue?: string | null;
+  providerReason?: string | null;
+  provider: "MYGLS" | "X_EXPRESS";
+  rowCount: number;
+  pickupStartSet: boolean;
+  pickupEndSet: boolean;
+  completePackageCount: number;
+}) {
+  return (
+    configurationIssue ??
+    providerReason ??
+    (rowCount === 0
+      ? "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina."
+      : !pickupStartSet
+        ? "Unesite i sačuvajte termin preuzimanja."
+        : provider === "MYGLS" && !pickupEndSet
+          ? "Unesite kompletan vremenski prozor preuzimanja."
+          : provider === "MYGLS" && completePackageCount !== rowCount
+            ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
+            : null)
+  );
+}
+
 export function validateMyGlsPickupWindow(
   start: Date,
   end: Date,

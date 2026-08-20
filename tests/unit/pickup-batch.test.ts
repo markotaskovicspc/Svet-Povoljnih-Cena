@@ -7,6 +7,7 @@ import {
   parseBelgradeDateTimeLocal,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
+  pickupPostingBlockReason,
   validateMyGlsPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
@@ -62,6 +63,50 @@ describe("ERP module 13 pickup batches", () => {
     expect(isPickupBatchEditable("CANCELLED")).toBe(false);
     expect(PICKUP_BATCH_STATUS_LABEL.DRAFT).toBe("Novi");
     expect(PICKUP_BATCH_STATUS_LABEL.POSTING).toBe("Slanje kuriru");
+  });
+
+  it("explains every reason why posting is unavailable in workflow order", () => {
+    const readyXExpress = {
+      provider: "X_EXPRESS" as const,
+      rowCount: 1,
+      pickupStartSet: true,
+      pickupEndSet: true,
+      completePackageCount: 0,
+    };
+
+    expect(
+      pickupPostingBlockReason({
+        ...readyXExpress,
+        configurationIssue: "Prethodni pokušaj nije uspeo.",
+        providerReason: "Kurir nije konfigurisan.",
+      }),
+    ).toBe("Prethodni pokušaj nije uspeo.");
+    expect(
+      pickupPostingBlockReason({
+        ...readyXExpress,
+        providerReason: "Kurir nije konfigurisan.",
+      }),
+    ).toBe("Kurir nije konfigurisan.");
+    expect(
+      pickupPostingBlockReason({ ...readyXExpress, rowCount: 0 }),
+    ).toContain("Učitajte bar jednu");
+    expect(
+      pickupPostingBlockReason({ ...readyXExpress, pickupStartSet: false }),
+    ).toContain("sačuvajte termin");
+    expect(pickupPostingBlockReason(readyXExpress)).toBeNull();
+
+    const readyMyGls = {
+      ...readyXExpress,
+      provider: "MYGLS" as const,
+      completePackageCount: 1,
+    };
+    expect(
+      pickupPostingBlockReason({ ...readyMyGls, pickupEndSet: false }),
+    ).toContain("kompletan vremenski prozor");
+    expect(
+      pickupPostingBlockReason({ ...readyMyGls, completePackageCount: 0 }),
+    ).toContain("stvarnu težinu");
+    expect(pickupPostingBlockReason(readyMyGls)).toBeNull();
   });
 
   it("parses the Belgrade wall clock and enforces the 24h/2h MyGLS window", () => {

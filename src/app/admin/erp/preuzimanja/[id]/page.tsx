@@ -6,6 +6,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
+import { PendingLinkLabel } from "@/components/admin/pending-link-label";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import {
   MYGLS_BOOKING_CHANNELS,
   parseBelgradeDateTimeLocal,
   PICKUP_BATCH_STATUS_LABEL,
+  pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
 import { db } from "@/lib/db";
 
@@ -376,14 +378,18 @@ export default async function PickupBatchPage({
         }),
     );
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
-  const postingBlockReason =
-    (batch.labelsCreationStartedAt ? batch.configurationIssue : null) ??
-    posting.reason ??
-    (myGls && completePackageCount !== rows.length
-      ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
-      : myGls && !batch.pickupWindowEnd
-        ? "Unesite kompletan vremenski prozor preuzimanja."
-        : null);
+  const postingBlockReason = pickupPostingBlockReason({
+    configurationIssue: batch.labelsCreationStartedAt
+      ? batch.configurationIssue
+      : null,
+    providerReason: posting.reason,
+    provider: posting.provider,
+    rowCount: rows.length,
+    pickupStartSet: Boolean(batch.pickupDate),
+    pickupEndSet: Boolean(batch.pickupWindowEnd),
+    completePackageCount,
+  });
+  const postingReasonId = "pickup-posting-block-reason";
 
   return (
     <>
@@ -409,14 +415,17 @@ export default async function PickupBatchPage({
                   href={`/admin/erp/preuzimanja/${batch.id}`}
                   className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
                 >
-                  Završi uređivanje
+                  <PendingLinkLabel
+                    idle="Završi uređivanje"
+                    pending="Završavanje…"
+                  />
                 </Link>
               ) : (
                 <Link
                   href={`/admin/erp/preuzimanja/${batch.id}?mode=edit`}
                   className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
                 >
-                  Uredi
+                  <PendingLinkLabel idle="Uredi" pending="Otvaranje…" />
                 </Link>
               )
             ) : (
@@ -454,6 +463,7 @@ export default async function PickupBatchPage({
                     : "Proknjižiti nalog i poslati po jednu najavu za svaku porudžbinu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
                 }
                 title={postingBlockReason ?? undefined}
+                aria-describedby={postingBlockReason ? postingReasonId : undefined}
               >
                 {myGls ? "Kreiraj adresnice" : "Proknjiži"}
               </SubmitButton>
@@ -464,7 +474,15 @@ export default async function PickupBatchPage({
 
       <div className="space-y-6 px-4 py-6 md:px-8">
         <Card>
-          <CardTitle description="Zaglavlje naloga koje ostaje izmenjivo dok nalog nije proknjižen.">
+          <CardTitle
+            description={
+              editing
+                ? "Režim uređivanja je uključen. Svaka izmena se čuva svojim dugmetom; „Završi uređivanje“ samo vraća pregled naloga."
+                : editable
+                  ? "Ovo je pregled naloga. Kliknite „Uredi“ da promenite termin, učitate porudžbine ili unesete mere paketa."
+                  : "Nalog je zaključan za izmene jer više nije u statusu Novi."
+            }
+          >
             Podaci naloga
           </CardTitle>
           <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
@@ -522,7 +540,11 @@ export default async function PickupBatchPage({
             </fieldset>
           </AdminActionForm>
           {postingBlockReason ? (
-            <p className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning">
+            <p
+              id={postingReasonId}
+              className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
+            >
+              <strong>„{myGls ? "Kreiraj adresnice" : "Proknjiži"}“ je trenutno zaključan:</strong>{" "}
               {postingBlockReason}
             </p>
           ) : myGls ? (
@@ -539,36 +561,36 @@ export default async function PickupBatchPage({
 
           {myGls && batch.labelsCreatedAt ? (
             <div className="mt-4 rounded-lg border border-border p-4">
-              <h3 className="font-semibold">Ručна најava MyGLS prikupa</h3>
+              <h3 className="font-semibold">Ručna najava MyGLS prikupa</h3>
               {batch.externalBookedAt ? (
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                  <div><dt className="text-ink-500">Потврђено</dt><dd>{formatDateTime(batch.externalBookedAt)}</dd></div>
-                  <div><dt className="text-ink-500">Канал</dt><dd>{bookingChannelLabel(batch.externalBookingChannel)}</dd></div>
-                  <div><dt className="text-ink-500">Референца</dt><dd className="font-mono">{batch.externalBookingReference ?? "—"}</dd></div>
+                  <div><dt className="text-ink-500">Potvrđeno</dt><dd>{formatDateTime(batch.externalBookedAt)}</dd></div>
+                  <div><dt className="text-ink-500">Kanal</dt><dd>{bookingChannelLabel(batch.externalBookingChannel)}</dd></div>
+                  <div><dt className="text-ink-500">Referenca</dt><dd className="font-mono">{batch.externalBookingReference ?? "—"}</dd></div>
                 </dl>
               ) : (
                 <>
                   <p className="mt-1 text-sm text-ink-500">
-                    Ово поље попунити тек након што је GLS стварно примио најаву
-                    преко портала, имејла, телефона или договореног сталног термина.
+                    Ovo polje popuniti tek nakon što je GLS stvarno primio najavu
+                    preko portala, emaila, telefona ili dogovorenog stalnog termina.
                   </p>
                   <AdminActionForm action={confirmMyGlsBookingAction} className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
                     <input type="hidden" name="batchId" value={batch.id} />
-                    <Field label="Канал најаве">
+                    <Field label="Kanal najave">
                       <select name="channel" required className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                         {MYGLS_BOOKING_CHANNELS.map((channel) => (
                           <option key={channel} value={channel}>{MYGLS_BOOKING_CHANNEL_LABEL[channel]}</option>
                         ))}
                       </select>
                     </Field>
-                    <Field label="GLS референца / број потврде">
+                    <Field label="GLS referenca / broj potvrde">
                       <Input name="reference" required maxLength={120} />
                     </Field>
                     <SubmitButton
-                      pendingLabel="Евидентирање…"
-                      confirm="Потврдити да је GLS заиста примио најаву? Само креирана адресница није довољна."
+                      pendingLabel="Evidentiranje…"
+                      confirm="Potvrditi da je GLS zaista primio najavu? Samo kreirana adresnica nije dovoljna."
                     >
-                      Потврди најаву
+                      Potvrdi najavu
                     </SubmitButton>
                   </AdminActionForm>
                 </>
@@ -676,9 +698,16 @@ export default async function PickupBatchPage({
               </table>
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-ink-500">
-              Nalog još nema učitanih porudžbina.
-            </p>
+            <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-ink-500">
+              <p>Nalog još nema učitanih porudžbina.</p>
+              <p className="mt-1 text-xs">
+                {editing
+                  ? "Kliknite „Učitaj porudžbine“. Biće dodate samo nove kurirske porudžbine čiji su svi redovi u podrazumevanom DC magacinu."
+                  : editable
+                    ? "Kliknite „Uredi“, pa „Učitaj porudžbine“."
+                    : "Ovaj nalog više nije moguće dopunjavati."}
+              </p>
+            </div>
           )}
         </Card>
 
@@ -824,7 +853,7 @@ function PackageMeasureInput({
       <input
         name={name}
         type="number"
-        min="0.001"
+        min={step}
         max={max}
         step={step}
         required
