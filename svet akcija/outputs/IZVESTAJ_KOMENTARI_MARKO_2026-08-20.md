@@ -1,7 +1,7 @@
 # Izveštaj o komentarima koje je Marko ponovo označio kao nerešene
 
 Datum završne provere: 21. avgust 2026.
-Osnovica audita: `main` / `055bc9d`.
+Osnovica audita: `main` / `cc0eee9` (`fix: finish client feedback audit`).
 Obuhvat: 7, 30, 31, 32, 38, 44, 48, 50, 55, 58, 59, 62, 65, 76, 78, 87, 88, 89, 90, 92, 94, 95, 96, 99, 102, 103, 106, 113, 114 i 115.
 
 ## Kratak zaključak
@@ -30,9 +30,23 @@ Korišćeni su:
 - originalni spisak komentara 1–102 iz `kom v22 export.pdf`;
 - starija Pages verzija komentara 1–70;
 - lokalna istorija prethodnih Codex razgovora, uključujući posebne niti za komentare 94–115, newsletter i Rabalux;
-- Git istorija i trenutno stanje koda na `055bc9d`;
+- Git istorija i trenutno stanje koda na `cc0eee9`;
 - postojeći unit/E2E testovi i prethodno zabeležene browser/produkcijske provere;
 - nova verifikacija: kompletan unit paket, **161 fajl i 798/798 testova prošlo**, Playwright mobile search **7/7**, pet izolovanih acceptance scenarija **5/5** uključujući mobilni checkout na 390 px, i `npm run build`, **uspešno**.
+
+Posle push-a na `main`, Vercel deploy i GitHub Actions `verify` završili su se statusom **success**. Produkcija je zatim ručno pregledana u Chrome-u na 390 × 844 px i 1440 × 1000 px. Nije poslata stvarna porudžbina niti je menjan produkcijski admin sadržaj.
+
+### Produkcijska browser provera posle deploya
+
+- **#7:** `RAB-1046` sa stanjem 0 vraća „Proizvod nije pronađen“; `RAB-1047` sa stanjem 1 je vidljiv, ali na glavnom PDP-u nije kupiv; `RAB-2049` sa stanjem 3 je kupiv i prikazuje „Dostupno kod dobavljača · Isporuka 5–8 radnih dana“.
+- **#32:** PDP za URBAN SEAT prikazuje konačnu cenu 1.499 RSD i period „14.08.2026. do 31.08.2026.“.
+- **#48/#50/#65/#78:** PDP prikazuje mali thumbnail jedine varijante na beloj podlozi, bez vidljivog „BOJA: ...“, a browser title za HOME STYLE koristi najnižu javno prikazanu cenu 2.999 RSD.
+- **#55/#115:** mobilna pretraga odmah fokusira input; upit `trp` vraća kategoriju i proizvode iz „Trpezarije“.
+- **#58:** prijavljeni checkout ima spojeni korak „Isporuka i plaćanje“, default „Pouzeće — gotovina“, traženi raspored polja, fiksne mobilne komande i 2 × 2 pregled. Otvoren je samo korak potvrde; dugme „Potvrdi porudžbinu“ nije pritisnuto.
+- **#59:** mobilne prečice imaju font 24 px, minimalnu visinu 112 px i horizontalni overflow sa delimično vidljivom sledećom karticom.
+- **#62/#103:** novi title i logo su prisutni na produkciji; desktop meni i kategorije su čitljivi i otvaraju hijerarhijski meni.
+
+Produkcijski `/admin` preusmerava na admin prijavu u korišćenoj Chrome sesiji. Zato tačke **#44, #87, #89, #90, #92, #94, #106 i #114** nisu označene kao produkcijski vizuelno prihvaćene samo na osnovu lokalnih testova.
 
 Servis za direktno čitanje starih Codex niti nije odgovorio, pa je istorija rekonstruisana iz lokalno sačuvanih session JSONL zapisa. Za komentare posle 102 izvor su slike i mapiranje zabeleženo u prethodnoj niti; posebno je naznačeno gde to uvodi malu nesigurnost.
 
@@ -47,7 +61,7 @@ Legenda:
 
 ### 7 — samo Rabalux artikli sa zalihom u Srbiji
 
-**Status: ZATVORENO U KODU I PODACIMA POSLE MARKOVE PORUKE; završna produkcijska vizuelna provera još treba.**
+**Status: ZATVORENO U KODU, PODACIMA I PRODUKCIJSKOJ BROWSER PROVERI.**
 
 - Poslednji commit `055bc9d` je nastao nakon ranijeg spiska i menja pravilo objave.
 - Provera nedeljnog fajla za Srbiju: 2.868 redova, 506 pozitivnih; baza je imala 506/506 poklapanja, bez viška, manjka ili razlike u količini.
@@ -55,7 +69,7 @@ Legenda:
 - Prošli su ciljani testovi, svih 790 tadašnjih unit testova i build. U ovom auditu ponovo su prošli Rabalux policy testovi.
 - Dokaz: `src/lib/rabalux/weekly-stock-policy.ts`, `src/lib/web-storefront-availability.ts`, commit `055bc9d`.
 
-**Preostalo:** proveriti konkretne pozitivne i nulte SKU-ove na produkcijskom storefrontu posle potvrđenog Vercel deploya.
+Na produkciji su proverena tri granična slučaja: nula (`RAB-1046`) je skrivena, jedan komad (`RAB-1047`) je vidljiv ali nije kupiv, a tri komada (`RAB-2049`) su kupiva uz oznaku dobavljačke dostupnosti i rok 5–8 radnih dana.
 
 ### 30 — automatski garantni list za sopstvenu robu
 
@@ -87,6 +101,7 @@ U ovom prolazu generisan je A4 landscape uzorak, renderovan u PNG i vizuelno pre
 
 - Listing filter računa javnu konačnu cenu preko centralnog pricing engine-a, a `/sve-do-999` koristi limit 999.
 - Period akcije prikazuje početak i kraj na listingu/PDP-u.
+- Produkcijski PDP za URBAN SEAT prikazuje 1.499 RSD i period 14.08.2026–31.08.2026.
 - Dokaz: `src/lib/listing/filters.ts`, `src/lib/api/catalog.ts`, `src/components/listing/listing-shell.tsx`, `src/components/product/pdp-price.tsx`.
 
 Napomena: javni filter namerno koristi anonimnu cenu; personalizovana loyalty naplativa cena zahteva prijavljenog korisnika.
@@ -120,6 +135,7 @@ U ovom prolazu dodat je i uspešno pokrenut izolovani Playwright acceptance sa d
 - Varijante/boje se prikazuju na beloj podlozi.
 - Testovi proveravaju belu pozadinu i odsustvo starog gradijenta u relevantnim slučajevima.
 - Dokaz: `src/app/(shop)/p/[slug]/page.tsx`, `src/components/product/color-options.tsx`, `tests/unit/product-color-options.test.tsx`.
+- Produkcijski PDP je vizuelno potvrđen na mobilnom i desktop prikazu.
 
 ### 50 — mali thumbnail i kada postoji samo jedna boja
 
@@ -127,10 +143,11 @@ U ovom prolazu dodat je i uspešno pokrenut izolovani Playwright acceptance sa d
 
 - Za jednu boju se prikazuje jedan mali thumbnail/swatch i ne ostaje prazna rupa.
 - Dokaz: `src/components/product/color-options.tsx` i testovi za single-color prikaz.
+- Produkcijski PDP prikazuje jedan mali thumbnail bez prazne rupe.
 
 ### 55 — automatsko otvaranje tastature pri otvaranju pretrage
 
-**Status: ZATVORENO U KODU I LOKALNOM BROWSER TESTU.**
+**Status: ZATVORENO U KODU, LOKALNOM TESTU I PRODUKCIJSKOM BROWSER TESTU.**
 
 - Uklonjen je odloženi `setTimeout(100)` fokus.
 - Sheet sada dobija input kao `initialFocus`, pa je fokus deo samog otvaranja dijaloga.
@@ -139,9 +156,11 @@ U ovom prolazu dodat je i uspešno pokrenut izolovani Playwright acceptance sa d
 
 Markov realni iPhone ostaje koristan završni prijem, ali više nema poznatog odloženog-focus rizika u implementaciji.
 
+Na produkciji je posle otvaranja mobilne pretrage aktivni element bio input „Pretraga proizvoda“.
+
 ### 58 — mobilni checkout raspored
 
-**Status: ZATVORENO U KODU I IZOLOVANOM MOBILNOM ACCEPTANCE-U; DEPLOY NIJE RAĐEN.**
+**Status: ZATVORENO U KODU, IZOLOVANOM ACCEPTANCE-U I PRODUKCIJSKOJ MOBILNOJ PROVERI.**
 
 - Primenjen je originalni Markov zahtev, sa prednošću nad kasnijim konfliktnim komentarom 80.
 - Tok za gosta je sada `Identifikacija → Isporuka i plaćanje → Pregled i potvrda`; prijavljeni kupac nema korak identifikacije. Zaseban korak plaćanja je stvarno uklonjen, a njegova validacija spojena sa isporukom.
@@ -153,6 +172,8 @@ Markov realni iPhone ostaje koristan završni prijem, ali više nema poznatog od
 
 Dokaz: `src/components/checkout/checkout-flow.tsx`, `src/components/checkout/shipping-form.tsx`, `src/app/(checkout)/checkout/podaci/page.tsx`, `tests/e2e/checkout-confirmation-navigation.spec.ts`.
 
+Na produkciji su proverena oba checkout ekrana bez slanja porudžbine. Potvrđeni su spojeni korak, podrazumevano pouzeće, traženi raspored polja, fiksna mobilna navigacija, četiri pregledna bloka 2 × 2 i redosled saglasnost → potvrda → sažetak.
+
 ### 59 — duplo veći font mobilnih prečica
 
 **Status: ZATVORENO.**
@@ -162,6 +183,7 @@ Dokaz: `src/components/checkout/checkout-flow.tsx`, `src/components/checkout/shi
 - Desktop i dalje koristi mrežu od četiri kolone.
 - Unit test sada eksplicitno zahteva veliki font, veću visinu i horizontalni skrol.
 - Dokaz: `src/components/home/promo-shortcut-tile.tsx`, `tests/unit/shortcut-strip.test.tsx`.
+- Produkcijska merenja na 390 px: font 24 px, minimalna visina 112 px i horizontalni scroll sadržaja.
 
 ### 62 — Google logo, naslov i opis
 
@@ -176,9 +198,11 @@ Javna provera 20. avgusta pokazuje da je `www.svetpovoljnihcena.rs` dostupan, da
 
 **Preostalo:** vlasnik Search Console naloga treba da uradi URL inspection/reindex ako želi ubrzano osvežavanje i da vizuelno potvrdi logo/snippet u svom Google rezultatu.
 
+Produkcijski browser potvrđuje novi naslov stranice i vidljiv brend logo. To ne zatvara tačan izgled Google SERP snippet-a, koji Google može sam da prepiše.
+
 ### 65 — pogrešna cena u browser tabu proizvoda
 
-**Status: ZATVORENO U KODU I UNIT TESTU; SEO OSVEŽAVANJE SLEDI POSLE DEPLOYA.**
+**Status: ZATVORENO U KODU, UNIT TESTU I PRODUKCIJSKOM BROWSER TITLE-U.**
 
 - Luka je izabrao najnižu javno prikazanu loyalty cenu.
 - Dodat je centralni resolver `lowestPublicDisplayedUnitPrice()`, koji bira najnižu ponudu koju PDP javno renderuje, uključujući loyalty cenu dostupnu uz prijavu.
@@ -186,7 +210,7 @@ Javna provera 20. avgusta pokazuje da je `www.svetpovoljnihcena.rs` dostupan, da
 - Unit test potvrđuje primer redovne cene 10.000 i javne loyalty cene 8.000 RSD.
 - Dokaz: `src/app/(shop)/p/[slug]/page.tsx`, `src/lib/pricing/engine.ts`, `tests/unit/pricing-precedence.test.ts`.
 
-**Preostalo:** nakon deploya Google može kasniti sa osvežavanjem title-a; po potrebi zatražiti reindex kroz Search Console.
+Na produkciji naslov taba za HOME STYLE glasi „Trpezarijski sto HOME STYLE — 2.999 RSD · Svet Povoljnih Cena“, što odgovara najnižoj javno prikazanoj loyalty ceni. Google i dalje može kasniti sa osvežavanjem svog rezultata.
 
 ### 76 — SVG za banere i piktograme
 
@@ -203,6 +227,7 @@ Javna provera 20. avgusta pokazuje da je `www.svetpovoljnihcena.rs` dostupan, da
 - Kartice proizvoda prikazuju boje/varijante.
 - PDP prikazuje thumbnail/swatch bez vidljivog teksta „Boja: ...“; naziv ostaje u pristupačnom `aria-label`-u.
 - Dokaz: `src/components/product/color-options.tsx`, `src/components/product/product-card.tsx`, `tests/unit/product-color-options.test.tsx`.
+- Produkcijski PDP je potvrđen bez vidljivog teksta „BOJA: ...“.
 
 ### 87 — gde se menja natpis uz „Mesečna akcija“
 
@@ -224,7 +249,7 @@ Javna provera 20. avgusta pokazuje da je `www.svetpovoljnihcena.rs` dostupan, da
 
 ### 89 — brisanje artikla i promena količine u porudžbini
 
-**Status: ZATVORENO U KODU I IZOLOVANOM BROWSER ACCEPTANCE-U; DEPLOY NIJE RAĐEN.**
+**Status: ZATVORENO U KODU I IZOLOVANOM BROWSER ACCEPTANCE-U; PRODUKCIJSKI ADMIN SMOKE NIJE URAĐEN.**
 
 - U admin tabeli stavki postoji promena količine; dozvoljeno je samo smanjenje ili unos nule za uklanjanje.
 - Izmena je ograničena na WEB porudžbine u statusima `KREIRANO`, `POTVRDJENO` i `U_PRIPREMI`, pre fiskalizacije, otpreme, reklamacije/refundacije i nepovratne dobavljačke obrade.
@@ -234,7 +259,7 @@ Javna provera 20. avgusta pokazuje da je `www.svetpovoljnihcena.rs` dostupan, da
 - Predračun se regeneriše, audit/status događaj se upisuje, a fiskalna konkurentnost je ojačana da stari snapshot ne može paralelno da ode ka PFR-u.
 - Dokaz: `src/lib/admin/web-order-edit.ts`, `src/lib/admin/web-order-edit.server.ts`, `src/components/admin/web-order-detail.tsx`, `src/lib/fiscal/issue.ts`, `tests/unit/web-order-edit.test.ts`.
 
-Dodat je i uspešno pokrenut izolovani browser test koji pokriva smanjenje, brisanje, rezervacije, ukupne iznose, plaćanje, predračun, audit i zabranu brisanja poslednje stavke. Scenario je prošao **1/1**; privremena schema je obrisana. Pre produkcijskog korišćenja ostaje deploy i jedan kontrolisani admin smoke test.
+Dodat je i uspešno pokrenut izolovani browser test koji pokriva smanjenje, brisanje, rezervacije, ukupne iznose, plaćanje, predračun, audit i zabranu brisanja poslednje stavke. Scenario je prošao **1/1**; privremena schema je obrisana. Deploy je uspešan, ali kontrolisani produkcijski admin smoke test nije rađen jer korišćena Chrome sesija nije bila prijavljena kao administrator.
 
 ### 90 — „ovo mi se čini da ne radi ili ja ne znam da koristim“
 
@@ -311,11 +336,12 @@ U `BACKLOG.md` je dodat Phase 5 sa zasebnim acceptance kriterijumima za fiskaliz
 
 ### 103 — desktop kategorije da rade kao mobilne
 
-**Status: ZATVORENO I RANIJE PRODUKCIJSKI PROVERENO.**
+**Status: ZATVORENO I PONOVO PRODUKCIJSKI PROVERENO.**
 
 - Klik na kategoriju sa decom otvara sledeći nivo umesto listinga svih proizvoda.
 - Commit `18d7fcc` je prošao unit testove, build i produkcijsku browser proveru; za „Rasveta“ su prikazane podkategorije „Unutrašnja rasveta“, „Spoljna rasveta“, „Šinski sistem“ i „Sijalice“.
 - Dokaz: `src/components/layout/category-menu-action.ts`, `src/components/layout/desktop-menu.tsx`, `tests/unit/category-menu-action.test.ts`.
+- Posle ovog deploya desktop navigacija i hijerarhijski meni ponovo su otvoreni i vizuelno provereni na 1440 × 1000 px.
 
 ### 106 — sortiranje DC lagera po robi u dolasku
 
@@ -347,11 +373,12 @@ Mapiranje iz prethodne niti označava 114 kao CMS uređivanje funkcionalnih stra
 
 ### 115 — parcijalna pretraga, npr. „trp“ → „trpezarijske“
 
-**Status: ZATVORENO I RANIJE PRODUKCIJSKI PROVERENO.**
+**Status: ZATVORENO I PONOVO PRODUKCIJSKI PROVERENO.**
 
 - Za kratke code-like upite pretraga proverava normalizovani spojeni naziv i `ILIKE %upit%`; minimum je tri znaka.
 - U prethodnoj browser proveri `trp` je vraćao rezultate iz „trpezarijske“ kategorije/naziva.
 - Dokaz: `src/lib/api/search.ts`, commit `2d54af2` i prethodna produkcijska browser provera.
+- Posle ovog deploya upit `trp` je ponovo vratio kategoriju „Trpezarija“ i trpezarijske proizvode.
 
 ## Preporučeni redosled rada
 
@@ -393,6 +420,8 @@ Praktično, postoje „dve kutije“: DC kutija se puni iz CSV/XLSX i može ruč
 - Novi izolovani E2E acceptance: admin preference **1/1**, WEB izmena porudžbine **1/1**, reklamacije registrovanog i gost kupca **2/2**, mobilni checkout **1/1** na 390 × 844 px. Sve privremene schema-e su obrisane; private storage i email provajder bili su isključeni.
 - Lint svih promenjenih aplikacionih i test fajlova: **uspešno**.
 - `npm run build`: **uspešno** na Next.js 16.2.11; TypeScript, 83 statičke stranice i sve rute generisani bez greške.
-- Aplikacioni kod je menjan za #55, #58, #59, #65, #89 i #95/#96, uz kompatibilnost Prisma 7 advisory lock-a; #102 je razbijen u `BACKLOG.md`. Izmene još nisu commitovane niti deployovane.
+- Aplikacioni kod je menjan za #55, #58, #59, #65, #89 i #95/#96, uz kompatibilnost Prisma 7 advisory lock-a; #102 je razbijen u `BACKLOG.md`.
+- Commit `cc0eee9` je push-ovan na `main`; Vercel deployment i GitHub Actions `verify` imaju status **success**.
+- Produkcija je proverena u Chrome-u na mobilnom i desktop viewport-u. Javni storefront nalazi su prošli; produkcijski admin nije bio dostupan bez admin prijave.
 
-Zaključak: projekat je tehnički u buildable stanju. Za 58, 59 i 65 više nema nerešene poslovne odluke; devet preostalih implementiranih tačaka i dalje zahteva spoljno podešavanje, realne podatke ili Markovu vizuelnu potvrdu pre oznake „gotovo“.
+Zaključak: projekat je deployovan i javni storefront nalazi iz ovog kruga rade na produkciji. Za 58, 59 i 65 više nema nerešene poslovne odluke. Ipak, nisu svi Markovi komentari završeni do klijentskog prijema: devet preostalih implementiranih tačaka i dalje zahteva spoljno podešavanje, realne podatke, produkcijski admin/partner smoke test ili Markovu vizuelnu potvrdu pre oznake „gotovo“.
