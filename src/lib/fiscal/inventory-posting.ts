@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
 import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
+import { resolveFiscalReservationPosting } from "@/lib/reservation-stock";
 
 async function postIssuedFiscalSaleInventory(
   tx: Prisma.TransactionClient,
@@ -72,20 +73,20 @@ async function postIssuedFiscalSaleInventory(
     if (!item || item.productId !== line.productId) {
       throw new Error(`Stavka porudžbine za ${line.sku} nije usklađena.`);
     }
-    if (!item.warehouseId) continue;
-
     const warehouseQty = Math.min(line.qty, item.warehouseReservedQty);
     // A retry, a historical fiscal document, or a supplier-only part can have
     // no remaining owned-warehouse reservation. The transaction below clears
     // reservations atomically, so zero is already-posted/no-owned-stock work.
     if (warehouseQty === 0) continue;
 
-    const reservationWasDebited =
-      item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0;
-    if (!reservationWasDebited) {
+    const posting = resolveFiscalReservationPosting({
+      movementQtys: item.stockMovements.map((movement) => movement.qty),
+      warehouseId: item.warehouseId,
+    });
+    if (posting.type === "debit") {
       await adjustInventory(tx, {
         idempotencyKey: `fiscal-sale:${document.id}:${line.id}`,
-        warehouseId: item.warehouseId,
+        warehouseId: posting.warehouseId,
         productId: line.productId,
         sku: line.sku,
         qtyDelta: -warehouseQty,

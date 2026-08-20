@@ -4,6 +4,22 @@ export type OrderReservationQuantity = {
   debited?: boolean;
 };
 
+export type FiscalReservationPosting =
+  | { type: "already-debited" }
+  | { type: "debit"; warehouseId: string };
+
+export function resolveFiscalReservationPosting(input: {
+  movementQtys: number[];
+  warehouseId: string | null;
+}): FiscalReservationPosting {
+  const ledgerNet = input.movementQtys.reduce((sum, qty) => sum + qty, 0);
+  if (ledgerNet < 0) return { type: "already-debited" };
+  if (!input.warehouseId) {
+    throw new Error("DC rezervacija nema upisan magacin.");
+  }
+  return { type: "debit", warehouseId: input.warehouseId };
+}
+
 export function reservationQuantityTotals(
   reservations: OrderReservationQuantity[],
 ) {

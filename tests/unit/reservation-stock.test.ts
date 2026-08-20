@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   reservationQuantityTotals,
+  resolveFiscalReservationPosting,
   resolveStoredWarehouseBalance,
 } from "@/lib/reservation-stock";
 
@@ -40,5 +41,29 @@ describe("reservation stock model", () => {
         { qty: 4, debited: false },
       ]),
     ).toEqual({ reserved: 7, debited: 3, pending: 4 });
+  });
+
+  it("fiscalizes a legacy debit even when its old order item has no warehouse reference", () => {
+    expect(
+      resolveFiscalReservationPosting({
+        movementQtys: [-3],
+        warehouseId: null,
+      }),
+    ).toEqual({ type: "already-debited" });
+  });
+
+  it("requires a warehouse before a new reservation can debit physical stock", () => {
+    expect(() =>
+      resolveFiscalReservationPosting({
+        movementQtys: [],
+        warehouseId: null,
+      }),
+    ).toThrow("DC rezervacija nema upisan magacin.");
+    expect(
+      resolveFiscalReservationPosting({
+        movementQtys: [],
+        warehouseId: "warehouse-dc",
+      }),
+    ).toEqual({ type: "debit", warehouseId: "warehouse-dc" });
   });
 });

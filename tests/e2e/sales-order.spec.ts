@@ -51,6 +51,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
   let orderId: string | null = null;
   let webOrderId: string | null = null;
   let fiscalOrderId: string | null = null;
+  let legacyFiscalOrderId: string | null = null;
   let webOrderNumber = "";
 
   test.beforeAll(async () => {
@@ -896,6 +897,118 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
         ).qty,
       ).toBe(7);
     });
+
+    await test.step("stara rezervacija bez reference na magacin fiskalizuje se bez duplog skidanja", async () => {
+      const legacyOrderNumber = `QA-LEGACY-FISCAL-${runId}`;
+      const legacyOrder = await db.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            number: legacyOrderNumber,
+            status: "KREIRANO",
+            channel: "WEB",
+            subtotal: 2_000,
+            total: 2_000,
+            shippingMethod: "KURIR",
+            paymentMethod: "UPLATA_NA_RACUN",
+            shipFirstName: "QA",
+            shipLastName: "Stara rezervacija",
+            shipPhone: "+38160111998",
+            shipStreet: "Bulevar stare rezervacije 1",
+            shipCity: "Beograd",
+            shipPostalCode: "11000",
+            guestEmail: `qa.legacy.fiscal.${runId}@example.invalid`,
+            termsAcceptedAt: new Date(),
+            items: {
+              create: {
+                productId: dcProductId,
+                sku: fixture.dcSku,
+                name: `QA DC artikal ${runId}`,
+                qty: 2,
+                unitPriceFull: 1_000,
+                unitPriceSale: 1_000,
+                warehouseReservedQty: 2,
+              },
+            },
+          },
+          select: { id: true, items: { select: { id: true } } },
+        });
+        await tx.warehouseStock.update({
+          where: {
+            warehouseId_productId: {
+              warehouseId: dcWarehouseId,
+              productId: dcProductId,
+            },
+          },
+          data: { qty: { decrement: 2 } },
+        });
+        await tx.product.update({
+          where: { id: dcProductId },
+          data: { stock: 5, dcAvailableQty: 5 },
+        });
+        await tx.stockMovement.create({
+          data: {
+            idempotencyKey: `legacy-reservation:${created.id}`,
+            warehouseId: dcWarehouseId,
+            productId: dcProductId,
+            orderId: created.id,
+            orderItemId: created.items[0].id,
+            kind: "SALE_RESERVATION",
+            sku: fixture.dcSku,
+            qty: -2,
+            note: "QA simulacija stare rezervacije bez warehouseId na stavci",
+          },
+        });
+        return created;
+      });
+      legacyFiscalOrderId = legacyOrder.id;
+
+      await page.goto(`/admin/erp/prodajni-nalozi/${legacyFiscalOrderId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Izdaj fiskalni račun" }).click();
+      await expect(
+        page.getByRole("button", { name: "Ponovo pošalji fiskalni račun" }),
+      ).toBeVisible({ timeout: 90_000 });
+
+      const [item, stock, product, movements] = await Promise.all([
+        db.orderItem.findFirstOrThrow({ where: { orderId: legacyFiscalOrderId! } }),
+        db.warehouseStock.findUniqueOrThrow({
+          where: {
+            warehouseId_productId: {
+              warehouseId: dcWarehouseId,
+              productId: dcProductId,
+            },
+          },
+        }),
+        db.product.findUniqueOrThrow({ where: { id: dcProductId } }),
+        db.stockMovement.findMany({
+          where: { orderId: legacyFiscalOrderId!, kind: "SALE_RESERVATION" },
+        }),
+      ]);
+      expect(item.warehouseId).toBeNull();
+      expect(item.warehouseReservedQty).toBe(0);
+      expect(stock.qty).toBe(5);
+      expect(product.stock).toBe(5);
+      expect(product.dcAvailableQty).toBe(5);
+      expect(movements).toHaveLength(1);
+      expect(movements[0].qty).toBe(-2);
+
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: "Ponovo pošalji fiskalni račun" })
+        .click();
+      await expect
+        .poll(() =>
+          db.stockMovement.count({
+            where: {
+              orderId: legacyFiscalOrderId!,
+              kind: "SALE_RESERVATION",
+            },
+          }),
+        )
+        .toBe(1);
+    });
   });
 
   async function login(page: Page) {
@@ -921,12 +1034,14 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
           ...(orderId ? [{ id: orderId }] : []),
           ...(webOrderId ? [{ id: webOrderId }] : []),
           ...(fiscalOrderId ? [{ id: fiscalOrderId }] : []),
+          ...(legacyFiscalOrderId ? [{ id: legacyFiscalOrderId }] : []),
         ],
       },
     });
     orderId = null;
     webOrderId = null;
     fiscalOrderId = null;
+    legacyFiscalOrderId = null;
     await db.stockMovement.deleteMany({
       where: {
         productId: {
