@@ -278,9 +278,22 @@ export async function processPendingBackgroundJobs(limit = 20) {
       select: { id: true, kind: true },
     })
     : [];
-  const results = await Promise.all(
-    [...priority, ...standard].map(({ id }) => processBackgroundJob(id)),
+  const results: Array<Awaited<ReturnType<typeof processBackgroundJob>>> = [];
+  const nonMedia = [...priority, ...standard];
+  const spacingMs = Math.min(
+    Math.max(Number(process.env.BACKGROUND_JOB_SPACING_MS) || 250, 0),
+    2_000,
   );
+  // Business jobs can each fan out into multiple provider calls. Starting 20
+  // of them with Promise.all easily crosses Resend's 10 requests/second
+  // account limit. Keep them ordered and slightly spaced; media jobs below use
+  // their own bounded concurrency and do not call the email provider.
+  for (let index = 0; index < nonMedia.length; index += 1) {
+    results.push(await processBackgroundJob(nonMedia[index].id));
+    if (spacingMs && index < nonMedia.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, spacingMs));
+    }
+  }
   const mediaConcurrency = Math.min(
     Math.max(Number(process.env.RABALUX_MEDIA_WORKER_CONCURRENCY) || 2, 1),
     2,
