@@ -76,13 +76,32 @@ export async function POST(req: Request) {
   }
   const { recordNewsletterProviderEvent } = await import("@/lib/newsletter/campaigns");
   const newsletter = await recordNewsletterProviderEvent(payload);
-  if (
-    payload.type === "contact.updated" &&
-    payload.data?.unsubscribed === true &&
-    typeof payload.data?.email === "string"
-  ) {
-    const { withdrawMarketingEmail } = await import("@/lib/newsletter/contacts");
-    await withdrawMarketingEmail(payload.data.email, "resend-preference-page");
+  if (payload.type === "contact.updated" && typeof payload.data?.email === "string") {
+    if (payload.data.unsubscribed === true) {
+      const { withdrawMarketingEmail } = await import("@/lib/newsletter/contacts");
+      await withdrawMarketingEmail(payload.data.email, "resend-preference-page");
+    } else {
+      // Topic-only changes on Resend's preference page keep the contact's
+      // global `unsubscribed` flag false. Reconcile the Promotions topic in a
+      // background job so a topic opt-out is reflected in our local consent
+      // state before the next campaign is prepared.
+      const contactJob = await enqueueBackgroundJob({
+        kind: "NEWSLETTER_SYNC",
+        payload: {
+          email: payload.data.email,
+          subscriptionIntent: "preserve",
+        },
+        idempotencyKey: `newsletter-provider-reconcile:${eventId}`,
+        maxAttempts: 8,
+      });
+      after(async () => {
+        try {
+          await processBackgroundJob(contactJob.id);
+        } catch (error) {
+          console.error("[email] provider preference reconciliation failed", error);
+        }
+      });
+    }
   }
 
   let inbound:

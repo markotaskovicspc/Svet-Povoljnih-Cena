@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   recordNewsletterProviderEvent: vi.fn(),
   enqueueBackgroundJob: vi.fn(),
   processBackgroundJob: vi.fn(),
+  withdrawMarketingEmail: vi.fn(),
 }));
 
 vi.mock("next/server", async (importOriginal) => {
@@ -34,13 +35,14 @@ vi.mock("@/lib/newsletter/campaigns", () => ({
 }));
 
 vi.mock("@/lib/newsletter/contacts", () => ({
-  withdrawMarketingEmail: vi.fn(),
+  withdrawMarketingEmail: mocks.withdrawMarketingEmail,
 }));
 
 import { POST } from "@/app/api/email/events/route";
 
 describe("Resend events route", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.afterCallbacks.length = 0;
     mocks.recordProviderEvent.mockResolvedValue({ ok: true, duplicate: false });
     mocks.recordNewsletterProviderEvent.mockResolvedValue({ matched: false });
@@ -87,6 +89,48 @@ describe("Resend events route", () => {
     );
     expect(mocks.enqueueBackgroundJob).not.toHaveBeenCalled();
     expect(mocks.afterCallbacks).toHaveLength(0);
+  });
+
+  it("reconciles topic-only preference updates in the background", async () => {
+    const response = await POST(signedRequest({
+      type: "contact.updated",
+      data: {
+        email: "subscriber@example.com",
+        unsubscribed: false,
+      },
+    }, "event-contact-topic"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.enqueueBackgroundJob).toHaveBeenCalledWith({
+      kind: "NEWSLETTER_SYNC",
+      payload: {
+        email: "subscriber@example.com",
+        subscriptionIntent: "preserve",
+      },
+      idempotencyKey: "newsletter-provider-reconcile:event-contact-topic",
+      maxAttempts: 8,
+    });
+    expect(mocks.withdrawMarketingEmail).not.toHaveBeenCalled();
+    expect(mocks.afterCallbacks).toHaveLength(1);
+    await mocks.afterCallbacks[0]?.();
+    expect(mocks.processBackgroundJob).toHaveBeenCalledWith("job-1");
+  });
+
+  it("withdraws a globally unsubscribed contact immediately", async () => {
+    const response = await POST(signedRequest({
+      type: "contact.updated",
+      data: {
+        email: "subscriber@example.com",
+        unsubscribed: true,
+      },
+    }, "event-contact-global"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.withdrawMarketingEmail).toHaveBeenCalledWith(
+      "subscriber@example.com",
+      "resend-preference-page",
+    );
+    expect(mocks.enqueueBackgroundJob).not.toHaveBeenCalled();
   });
 
   it("returns immediately for a replayed event without repeating side effects", async () => {
