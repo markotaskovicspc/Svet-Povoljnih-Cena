@@ -50,12 +50,15 @@ describe("background job priority", () => {
     const { processPendingBackgroundJobs } = await import("@/lib/background-jobs");
     const result = await processPendingBackgroundJobs(20);
 
-    expect(mocks.findMany).toHaveBeenCalledTimes(3);
+    expect(mocks.findMany).toHaveBeenCalledTimes(4);
     expect(mocks.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: { kind: "NEWSLETTER_CAMPAIGN_SEND" },
+      take: 5,
+    });
+    expect(mocks.findMany.mock.calls[1]?.[0]).toMatchObject({
       where: {
         kind: {
           in: expect.arrayContaining([
-            "NEWSLETTER_CAMPAIGN_SEND",
             "PASSWORD_RESET_EMAIL",
             "BUYER_RECEIPT",
           ]),
@@ -63,7 +66,7 @@ describe("background job priority", () => {
       },
       take: 20,
     });
-    expect(mocks.findMany.mock.calls[1]?.[0]).toMatchObject({
+    expect(mocks.findMany.mock.calls[2]?.[0]).toMatchObject({
       where: {
         kind: {
           notIn: expect.arrayContaining([
@@ -74,7 +77,7 @@ describe("background job priority", () => {
       },
       take: 20,
     });
-    expect(mocks.findMany.mock.calls[2]?.[0]).toMatchObject({
+    expect(mocks.findMany.mock.calls[3]?.[0]).toMatchObject({
       where: { kind: "RABALUX_MEDIA_PRODUCT" },
       take: 20,
     });

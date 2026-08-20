@@ -84,7 +84,6 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "PASSWORD_RESET_EMAIL",
   "BUYER_RECEIPT",
   "SUPPLIER_RESERVATION",
-  "NEWSLETTER_CAMPAIGN_SEND",
   "FISCAL_RECEIPT",
   "ORDER_STATUS_EMAIL",
   "IPS_PAYMENT_EMAIL",
@@ -240,16 +239,28 @@ export async function processPendingBackgroundJobs(limit = 20) {
   // Customer and commerce work must never sit behind a bulk supplier-media
   // backlog. Fill each run by priority tier, while still using any remaining
   // capacity for sync and media jobs.
-  const priority = await db.backgroundJob.findMany({
+  const newsletter = await db.backgroundJob.findMany({
     where: {
       ...eligible,
-      kind: { in: HIGH_PRIORITY_BACKGROUND_JOB_KINDS },
+      kind: "NEWSLETTER_CAMPAIGN_SEND",
     },
     orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
-    take,
+    take: Math.min(take, 5),
     select: { id: true, kind: true },
   });
-  const standardSlots = take - priority.length;
+  const prioritySlots = take - newsletter.length;
+  const priority = prioritySlots
+    ? await db.backgroundJob.findMany({
+        where: {
+          ...eligible,
+          kind: { in: HIGH_PRIORITY_BACKGROUND_JOB_KINDS },
+        },
+        orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }],
+        take: prioritySlots,
+        select: { id: true, kind: true },
+      })
+    : [];
+  const standardSlots = prioritySlots - priority.length;
   const standard = standardSlots
     ? await db.backgroundJob.findMany({
       where: {
@@ -257,6 +268,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
         kind: {
           notIn: [
             ...HIGH_PRIORITY_BACKGROUND_JOB_KINDS,
+            "NEWSLETTER_CAMPAIGN_SEND",
             "RABALUX_MEDIA_PRODUCT",
           ],
         },
@@ -279,7 +291,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
     })
     : [];
   const results: Array<Awaited<ReturnType<typeof processBackgroundJob>>> = [];
-  const nonMedia = [...priority, ...standard];
+  const nonMedia = [...newsletter, ...priority, ...standard];
   const spacingMs = Math.min(
     Math.max(Number(process.env.BACKGROUND_JOB_SPACING_MS) || 250, 0),
     2_000,
@@ -327,7 +339,8 @@ export async function processPendingBackgroundJobs(limit = 20) {
     expireStaleRabaluxWebAvailability(now),
   ]);
   return {
-    selected: priority.length + standard.length + media.length,
+    selected:
+      newsletter.length + priority.length + standard.length + media.length,
     completed: results.filter((result) => result.claimed && result.ok).length,
     failed: results.filter((result) => result.claimed && !result.ok).length,
     releasedPartnerReservations: partnerReservations.released,
