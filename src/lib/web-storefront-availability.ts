@@ -49,9 +49,9 @@ function enabled(value: string | undefined) {
  * Until those balances are imported and verified, the storefront keeps honoring
  * the manual Web check without allowing an all-false auto backfill to hide the
  * complete ordinary catalog. Rabalux publication is intentionally independent
- * of this guard: every approved XLSX row stays visible, while its weekly Serbia
- * quantity still controls purchasing. Keep the guard off until the DC
- * import/audit is complete.
+ * of this guard: only approved XLSX rows with positive Serbia stock stay
+ * visible, while the minimum-three rule still controls purchasing. Keep the
+ * guard off until the DC import/audit is complete.
  */
 export function isWebAutoAvailabilityEnforced() {
   return enabled(process.env.ENFORCE_WEB_AUTO_AVAILABILITY);
@@ -202,8 +202,8 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
                     nonRabaluxSupplierWhere(),
                   ],
                 },
-                // Rabalux 0-2 rows remain catalog-visible; this flag controls
-                // purchasing for them, not publication.
+                // Positive Rabalux rows remain catalog-visible below the
+                // purchase threshold; this flag controls purchasing only.
                 rabaluxSupplierWhere(),
               ],
             } satisfies Prisma.ProductWhereInput,
@@ -234,6 +234,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
               rabaluxSupplierWhere(),
               { articleStatus: { not: "ARH" } },
               { supplierApprovalStatus: "APPROVED" },
+              { supplierStock: { gt: 0 } },
               { supplier: { is: { enabled: true } } },
             ],
           },
@@ -310,6 +311,9 @@ export function storefrontPublicationBlockers(
     if (!product.supplier.enabled) reasons.push("Rabalux dobavljač je isključen");
     if (product.supplierApprovalStatus !== "APPROVED") {
       reasons.push("Rabalux artikal nije odobren");
+    }
+    if ((product.supplierStock ?? 0) <= 0) {
+      reasons.push("Rabalux artikal nema pozitivno stanje u Srbiji");
     }
   }
 

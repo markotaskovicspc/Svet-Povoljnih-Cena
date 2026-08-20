@@ -340,11 +340,6 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
       fallbackReason: catalog.fallbackReason,
       rawItems: catalog.items,
       stock,
-      publicationEligibleSkus: new Set(
-        stock
-          .filter(isRabaluxSerbiaWebStockAvailable)
-          .map((item) => item.sourceSku),
-      ),
       ...selection,
     };
   }
@@ -368,14 +363,6 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
   const eligibleStockSkus = new Set(
     current.map((product) => product.supplierExternalId!),
   );
-  const publicationEligibleSkus = new Set(
-    current
-      .filter(
-        (product) =>
-          (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD,
-      )
-      .map((product) => product.supplierExternalId!),
-  );
   const items = catalog.items.filter((item) => eligibleStockSkus.has(item.sourceSku));
   const excludedMissingStock = catalog.items.filter(
     (item) => !currentBySku.has(item.sourceSku),
@@ -390,7 +377,6 @@ export async function fetchRabaluxSerbiaCatalog(supplier: Supplier) {
     items,
     stockBySku,
     eligibleStockSkus: [...eligibleStockSkus].sort(),
-    publicationEligibleSkus,
     rawCatalogRows: catalog.items.length,
     stockRows: stock.length,
     excludedMissingStock,
@@ -555,7 +541,7 @@ export async function syncRabaluxCatalog(options: RabaluxSyncOptions = {}) {
             sourceHash,
             options,
             pictogramIdsByCode,
-            catalog.publicationEligibleSkus.has(item.sourceSku),
+            catalog.stockBySku.get(item.sourceSku)?.stock ?? 0,
           ),
         ),
       );
@@ -715,7 +701,7 @@ export async function syncRabaluxCatalogProduct(
       sourceHash,
       options,
       pictogramIdsByCode,
-      catalog.publicationEligibleSkus.has(item.sourceSku),
+      catalog.stockBySku.get(item.sourceSku)?.stock ?? 0,
     );
     if (result.conflict) throw new Error(result.conflict);
     summary.ok = 1;
@@ -776,8 +762,7 @@ export async function syncRabaluxCatalogItemsForWeeklyStock(args: {
             allowRiskyPrices: false,
           },
           pictogramIdsByCode,
-          (args.stockBySourceSku.get(item.sourceSku) ?? 0) >=
-            RABALUX_PUBLIC_STOCK_THRESHOLD,
+          args.stockBySourceSku.get(item.sourceSku) ?? 0,
         ),
       ),
     );
@@ -816,8 +801,11 @@ async function upsertCatalogItem(
   sourceHash: string,
   options: RabaluxSyncOptions,
   pictogramIdsByCode: RabaluxPictogramIdMap,
-  canPurchaseFromSerbiaStock: boolean,
+  serbiaStock: number,
 ) {
+  const isPresentInSerbiaStock = serbiaStock > 0;
+  const canPurchaseFromSerbiaStock =
+    serbiaStock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
   const result = await db.$transaction(async (tx) => {
     const mapping =
       item.category && item.type
@@ -964,6 +952,7 @@ async function upsertCatalogItem(
       existing.deletedAt === null &&
       existing.lastSupplierSourceHash === itemSourceHash &&
       existing.supplierCatalogMissingCount === 0 &&
+      (isPresentInSerbiaStock || !existing.isActive) &&
       managedPictogramsMatch &&
       (!categoryId ||
         existing.categories.some((category) => category.categoryId === categoryId) ||
@@ -1022,6 +1011,7 @@ async function upsertCatalogItem(
         ? "PENDING_APPROVAL"
         : "PENDING_MAPPING";
     const activeCandidate =
+      isPresentInSerbiaStock &&
       item.valid &&
       existing?.articleStatus !== "ARH" &&
       approvalStatus === "APPROVED" &&
@@ -1110,7 +1100,9 @@ async function upsertCatalogItem(
         updateData.availableWebAuto = false;
       }
       // A positive Serbia-stock item may return after a prior soft removal.
-      updateData.deletedAt = null;
+      // A zero-stock catalog refresh must not revive a removed product.
+      if (isPresentInSerbiaStock) updateData.deletedAt = null;
+      else delete (updateData as Record<string, unknown>).deletedAt;
       delete (updateData as Record<string, unknown>).stock;
       delete (updateData as Record<string, unknown>).supplierStock;
       delete (updateData as Record<string, unknown>).incomingStock;
@@ -1124,10 +1116,10 @@ async function upsertCatalogItem(
         delete (updateData as Record<string, unknown>).salePrice;
         delete (updateData as Record<string, unknown>).discountPct;
       }
-      if (item.valid && !mediaChanged) {
+      if (item.valid && !mediaChanged && isPresentInSerbiaStock) {
         delete (updateData as Record<string, unknown>).isActive;
       }
-      if (overrideFields.has("media")) {
+      if (overrideFields.has("media") && isPresentInSerbiaStock) {
         delete (updateData as Record<string, unknown>).isActive;
       }
       if (isSecondaryFamilyMember) {

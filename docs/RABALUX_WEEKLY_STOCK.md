@@ -18,10 +18,11 @@ broj redova naglo padne ili je isti fajl već primenjen.
 
 ## Pravila
 
-- Svaka šifra koja postoji u XLSX-u ostaje vidljiva kada je odobrena i ima
-  kategoriju, aktivnu maloprodajnu cenu i spremnu sliku.
+- Samo šifra sa pozitivnim stanjem u XLSX-u ostaje vidljiva kada je odobrena i
+  ima kategoriju, aktivnu maloprodajnu cenu i spremnu sliku.
 - `3+`: proizvod je dostupan za kupovinu.
-- `0–2`: proizvod je vidljiv u katalogu, ali nije dostupan za kupovinu.
+- `1–2`: proizvod je vidljiv u katalogu, ali nije dostupan za kupovinu.
+- `0`: proizvod nije objavljen jer nema stanje u Srbiji.
 - Šifra koja uopšte ne postoji u kompletnom XLSX-u trajno se briše iz `Product`
   tabele. Povezani kataloški redovi brišu se kaskadno, istorijski dokumenti
   zadržavaju svoje SKU/naziv snapshot-e, a upravljani storage fajlovi odlaze u

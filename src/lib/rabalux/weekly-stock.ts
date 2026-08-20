@@ -696,7 +696,7 @@ function buildPreview(args: {
       before: Prisma.JsonNull,
       after: json({
         supplierStock: row.closingStock,
-        visibleCandidate: true,
+        visibleCandidate: row.closingStock > 0,
         purchaseCandidate: row.closingStock >= RABALUX_PUBLIC_STOCK_THRESHOLD,
       }),
       reversible: true,
