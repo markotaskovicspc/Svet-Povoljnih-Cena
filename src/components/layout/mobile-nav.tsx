@@ -324,11 +324,11 @@ export function MobileNav({
                               type="button"
                               onClick={() => enter(node)}
                               className={cn(
-                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-left text-[15px] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-left text-[clamp(12px,3.6vw,15px)] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
-                              <span className="flex min-w-0 items-center gap-3">
+                              <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
                                 <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
                                   <Image
                                     src={categoryImageUrl}
@@ -338,7 +338,7 @@ export function MobileNav({
                                     className="object-cover"
                                   />
                                 </span>
-                                <span className="min-w-0 break-words">
+                                <span className="min-w-0 truncate whitespace-nowrap">
                                   {node.label}
                                 </span>
                               </span>
@@ -352,11 +352,11 @@ export function MobileNav({
                               href={node.href}
                               onClick={close}
                               className={cn(
-                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-[15px] leading-snug font-medium break-words text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-[clamp(12px,3.6vw,15px)] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                                 isActive && "font-semibold text-brand-blue",
                               )}
                             >
-                              <span className="flex min-w-0 items-center gap-3">
+                              <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
                                 <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
                                   <Image
                                     src={categoryImageUrl}
@@ -366,7 +366,7 @@ export function MobileNav({
                                     className="object-cover"
                                   />
                                 </span>
-                                <span className="min-w-0 break-words">
+                                <span className="min-w-0 truncate whitespace-nowrap">
                                   {node.label}
                                 </span>
                               </span>
