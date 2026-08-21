@@ -11,6 +11,7 @@ import {
   contentPreviewPath,
   validateContentSlug,
 } from "@/lib/cms/constants";
+import { getFunctionalContentPageInitialization } from "@/lib/cms/functional-page-initialization";
 import {
   getFunctionalContentPage,
   getPublishedContentPage,
@@ -74,6 +75,40 @@ describe("CMS Markdown safety", () => {
         functional: true,
       });
     }
+  });
+
+  it("builds an editable seed for every functional page", () => {
+    for (const slug of FUNCTIONAL_CONTENT_PAGE_SLUGS) {
+      const initialization = getFunctionalContentPageInitialization(
+        slug,
+        "admin-1",
+      );
+
+      expect(initialization).toMatchObject({
+        page: {
+          slug,
+          kind: "SYSTEM",
+          published: false,
+        },
+        revision: {
+          version: 1,
+          createdById: "admin-1",
+        },
+      });
+      expect(initialization?.revision.title).toBe(
+        initialization?.page.title,
+      );
+      expect(initialization?.revision.bodyMarkdown).toBe(
+        initialization?.page.bodyMarkdown,
+      );
+    }
+
+    expect(
+      getFunctionalContentPageInitialization("o-nama", "admin-1"),
+    ).toBeNull();
+    expect(
+      getFunctionalContentPageInitialization("ne-postoji", "admin-1"),
+    ).toBeNull();
   });
 
   it("accepts supported content, stable anchors and safe links", () => {

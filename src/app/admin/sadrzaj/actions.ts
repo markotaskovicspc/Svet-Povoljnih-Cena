@@ -10,6 +10,7 @@ import {
   normalizeContentSlug,
   validateContentSlug,
 } from "@/lib/cms/constants";
+import { getFunctionalContentPageInitialization } from "@/lib/cms/functional-page-initialization";
 import { validateCmsMarkdown } from "@/lib/cms/markdown";
 import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
 
@@ -79,6 +80,77 @@ function refreshContentPaths(slug: string, refreshFooter: boolean) {
     revalidatePath("/p/[slug]", "page");
   }
   if (refreshFooter) revalidatePath("/", "layout");
+}
+
+export async function initializeFunctionalContentPageAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  const state = await withAdminState(
+    {
+      allowed: ["CONTENT"],
+      action: "content-page.initializeFunctional",
+      entity: "ContentPage",
+    },
+    async (actorId, formData: FormData) => {
+      const slug = normalizeContentSlug(String(formData.get("slug") ?? ""));
+      const initialization = getFunctionalContentPageInitialization(
+        slug,
+        actorId,
+      );
+      if (!initialization) {
+        return {
+          ok: false as const,
+          error: "Funkcionalna stranica nije pronađena.",
+        };
+      }
+
+      const initialized = await db.$transaction(async (tx) => {
+        const existing = await tx.contentPage.findUnique({
+          where: { slug },
+          select: { id: true, slug: true },
+        });
+        if (existing) return { ...existing, created: false };
+
+        const page = await tx.contentPage.create({
+          data: initialization.page,
+          select: { id: true, slug: true },
+        });
+        const revision = await tx.contentPageRevision.create({
+          data: {
+            pageId: page.id,
+            ...initialization.revision,
+          },
+          select: { id: true },
+        });
+        await tx.contentPage.update({
+          where: { id: page.id },
+          data: {
+            draftRevisionId: revision.id,
+            publishedRevisionId: revision.id,
+            published: true,
+          },
+        });
+        return { ...page, created: true };
+      });
+
+      refreshContentPaths(initialized.slug, initialized.created);
+      return {
+        ok: true as const,
+        entityId: initialized.id,
+        message: initialized.created
+          ? "Uređivanje stranice je omogućeno."
+          : "Uređivanje stranice je već omogućeno.",
+        result: initialized,
+        diff: { slug: initialized.slug, created: initialized.created },
+      };
+    },
+  )(formData);
+
+  if (state.ok && state.result) {
+    redirect(`/admin/sadrzaj/${state.result.id}`);
+  }
+  return state;
 }
 
 export async function saveContentPageAction(

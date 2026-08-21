@@ -2,11 +2,14 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
 import { PageHeader } from "@/components/admin/page-header";
+import { AdminActionForm } from "@/components/admin/action-form";
 import { Card } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
+import { SubmitButton } from "@/components/admin/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { footerColumnLabel } from "@/lib/cms/constants";
 import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
+import { initializeFunctionalContentPageAction } from "./actions";
 import { contentPageStatus } from "./status";
 
 export const dynamic = "force-dynamic";
@@ -206,7 +209,22 @@ export default async function ContentAdminPage() {
                         <Link href={`/admin/sadrzaj/${cmsPage.id}`} className="text-xs font-medium text-walnut hover:underline">
                           Izmeni
                         </Link>
-                      ) : null}
+                      ) : (
+                        <AdminActionForm
+                          action={initializeFunctionalContentPageAction}
+                          className="inline-flex"
+                        >
+                          <input type="hidden" name="slug" value={page.slug} />
+                          <SubmitButton
+                            variant="link"
+                            size="xs"
+                            pendingLabel="Priprema…"
+                            className="h-auto p-0 text-xs font-medium text-walnut"
+                          >
+                            Omogući uređivanje
+                          </SubmitButton>
+                        </AdminActionForm>
+                      )}
                     </div>
                   ),
                 },
