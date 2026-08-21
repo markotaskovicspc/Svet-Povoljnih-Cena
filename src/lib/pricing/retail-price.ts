@@ -31,12 +31,18 @@ export function resolveRetailPrice(
   fallback: { toNumber(): number } | number,
   now = new Date(),
 ) {
-  const entry = entries.find(
+  const entry = [...entries]
+    .sort(
+      (left, right) =>
+        right.validFrom.getTime() - left.validFrom.getTime() ||
+        left.priceList.code.localeCompare(right.priceList.code),
+    )
+    .find(
     (candidate) =>
       candidate.priceList.active &&
       isDateActive(candidate.priceList.validFrom, candidate.priceList.validTo, now) &&
       isDateActive(candidate.validFrom, candidate.validTo, now),
-  );
+    );
   const price = entry
     ? typeof entry.price === "number"
       ? entry.price

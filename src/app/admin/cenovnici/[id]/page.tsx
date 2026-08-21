@@ -16,6 +16,10 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { formatRsd } from "@/lib/format";
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
 import { grossMarginPct } from "@/lib/pricing/gross-margin";
+import {
+  normalizeRetailPriceTimeline,
+  upsertRetailPriceInterval,
+} from "@/lib/pricing/retail-price-write.server";
 
 export const dynamic = "force-dynamic";
 
@@ -56,22 +60,12 @@ async function saveEntry(_state: AdminActionState, formData: FormData) {
       if (!product) return { ok: false as const, error: "Artikal sa ovom šifrom ne postoji." };
 
       const saved = await db.$transaction(async (tx) => {
-        const entry = await tx.priceListEntry.upsert({
-          where: {
-            priceListId_productId_validFrom: {
-              priceListId: priceList.id,
-              productId: product.id,
-              validFrom,
-            },
-          },
-          create: {
-            priceListId: priceList.id,
-            productId: product.id,
-            price: parsed.data.price,
-            validFrom,
-            validTo,
-          },
-          update: { price: parsed.data.price, validTo },
+        const entry = await upsertRetailPriceInterval(tx, {
+          priceListId: priceList.id,
+          productId: product.id,
+          price: parsed.data.price,
+          validFrom,
+          validTo,
         });
         if (priceList.kind === "RETAIL") {
           const candidates = await tx.priceListEntry.findMany({
@@ -130,6 +124,10 @@ async function deleteEntry(_state: AdminActionState, formData: FormData) {
       if (!entry) return { ok: false as const, error: "Stavka više ne postoji." };
       await db.$transaction(async (tx) => {
         await tx.priceListEntry.delete({ where: { id: entry.id } });
+        await normalizeRetailPriceTimeline(tx, {
+          priceListId: entry.priceListId,
+          productId: entry.productId,
+        });
         if (entry.priceList.kind === "RETAIL") {
           const candidates = await tx.priceListEntry.findMany({
             where: {

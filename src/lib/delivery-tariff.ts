@@ -20,13 +20,26 @@ export type DeliveryCategory = 1 | 2;
 export type PublishedDeliveryCategoryTotal = {
   weightKg: number;
   subtotal: number;
-  price: number;
+  price: number | null;
 };
 
 export type PublishedDeliveryCategoryBreakdown = Record<
   DeliveryCategory,
   PublishedDeliveryCategoryTotal
 >;
+
+export type DeliveryTariffIssue =
+  | "MISSING_PACKAGE_DIMENSIONS"
+  | "MISSING_WEIGHT"
+  | "WEIGHT_ABOVE_50_KG";
+
+export type PublishedDeliveryTariffQuote = {
+  total: number | null;
+  categoryOnePrice: number | null;
+  categoryTwoPrice: number | null;
+  categories: PublishedDeliveryCategoryBreakdown | null;
+  issue: DeliveryTariffIssue | null;
+};
 
 const RATES = {
   1: [[5, 299], [10, 399], [20, 599], [30, 899], [50, 999]],
@@ -76,12 +89,34 @@ export function calculatePublishedDeliveryTariff(
   products: DeliveryTariffProduct[],
   options: { loggedIn: boolean },
 ) {
+  const quote = calculatePublishedDeliveryTariffQuote(products, options);
+  if (quote.total == null || !quote.categories) return null;
+  return {
+    total: quote.total,
+    categoryOnePrice: quote.categoryOnePrice!,
+    categoryTwoPrice: quote.categoryTwoPrice!,
+    categories: quote.categories,
+  };
+}
+
+/**
+ * Detailed tariff result used by checkout. Unlike the legacy nullable helper,
+ * it preserves category weights when the published table ends at 50 kg so the
+ * UI can explain why it must not invent a delivery price.
+ */
+export function calculatePublishedDeliveryTariffQuote(
+  products: DeliveryTariffProduct[],
+  options: { loggedIn: boolean },
+): PublishedDeliveryTariffQuote {
   const totals = {
     1: { weightKg: 0, subtotal: 0 },
     2: { weightKg: 0, subtotal: 0 },
   };
   for (const product of products) {
     const category = productDeliveryCategory(product);
+    if (!category) {
+      return unavailableTariff("MISSING_PACKAGE_DIMENSIONS");
+    }
     const packageWeight = positiveWeight(product.packGrossWeightKg);
     const unitWeight =
       positiveWeight(product.grossWeightKg) ??
@@ -89,27 +124,51 @@ export function calculatePublishedDeliveryTariff(
       (packageWeight == null
         ? null
         : packageWeight / Math.max(product.packQty ?? 1, 1));
-    if (!category || unitWeight == null) return null;
+    if (unitWeight == null) {
+      return unavailableTariff("MISSING_WEIGHT");
+    }
     totals[category].weightKg += unitWeight * product.qty;
     totals[category].subtotal += product.unitPrice * product.qty;
   }
 
   const categoryOneRate = totals[1].weightKg > 0 ? deliveryRate(1, totals[1].weightKg) : 0;
   const categoryTwoRate = totals[2].weightKg > 0 ? deliveryRate(2, totals[2].weightKg) : 0;
-  if (categoryOneRate == null || categoryTwoRate == null) return null;
   const categoryOnePrice =
     options.loggedIn && totals[1].subtotal > FREE_CATEGORY_ONE_THRESHOLD_RSD
       ? 0
       : categoryOneRate;
+  if (categoryOneRate == null || categoryTwoRate == null) {
+    return {
+      total: null,
+      categoryOnePrice,
+      categoryTwoPrice: categoryTwoRate,
+      categories: {
+        1: { ...totals[1], price: categoryOnePrice },
+        2: { ...totals[2], price: categoryTwoRate },
+      },
+      issue: "WEIGHT_ABOVE_50_KG",
+    };
+  }
   return {
-    total: categoryOnePrice + categoryTwoRate,
+    total: categoryOnePrice! + categoryTwoRate,
     categoryOnePrice,
     categoryTwoPrice: categoryTwoRate,
     categories: {
       1: { ...totals[1], price: categoryOnePrice },
       2: { ...totals[2], price: categoryTwoRate },
     } satisfies PublishedDeliveryCategoryBreakdown,
+    issue: null,
   };
+}
+
+function unavailableTariff(issue: Exclude<DeliveryTariffIssue, "WEIGHT_ABOVE_50_KG">) {
+  return {
+    total: null,
+    categoryOnePrice: null,
+    categoryTwoPrice: null,
+    categories: null,
+    issue,
+  } satisfies PublishedDeliveryTariffQuote;
 }
 
 function positiveWeight(value: number | null | undefined) {

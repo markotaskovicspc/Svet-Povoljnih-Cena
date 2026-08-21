@@ -19,10 +19,10 @@ export interface SummaryTotals {
   itemsFull: number;
   itemsSale: number;
   savings: number;
-  shipping: number;
+  shipping: number | null;
   assembly: number;
   voucherDiscount: number;
-  total: number;
+  total: number | null;
 }
 
 export function computeTotals({
@@ -38,11 +38,14 @@ export function computeTotals({
   shippingMethod: ShippingMethod;
   assemblyTotal: number;
   voucherDiscountRsd: number;
-  shippingPrices?: Record<ShippingMethod, number>;
+  shippingPrices?: Record<ShippingMethod, number | null>;
 }): SummaryTotals {
   const shipping = shippingPrices[shippingMethod];
   const voucherDiscount = Math.min(Math.max(0, voucherDiscountRsd), itemsSale);
-  const total = itemsSale + shipping + assemblyTotal - voucherDiscount;
+  const total =
+    shipping == null
+      ? null
+      : itemsSale + shipping + assemblyTotal - voucherDiscount;
   return {
     itemsFull,
     itemsSale,
@@ -50,7 +53,7 @@ export function computeTotals({
     shipping,
     assembly: assemblyTotal,
     voucherDiscount,
-    total: Math.max(0, total),
+    total: total == null ? null : Math.max(0, total),
   };
 }
 
@@ -170,7 +173,11 @@ export function OrderSummary({
                 Isporuka — {shippingMethod === "kurir" ? "kurir" : "kamion"}
               </span>
             }
-            value={formatRsd(totals.shipping)}
+            value={
+              totals.shipping == null
+                ? "Nije moguće obračunati"
+                : formatRsd(totals.shipping)
+            }
           />
           <DeliveryCategoryBreakdown
             breakdown={deliveryQuote.deliveryCategoryBreakdown ?? null}
@@ -200,7 +207,7 @@ export function OrderSummary({
             Ukupno za plaćanje
           </span>
           <span className="font-display text-2xl text-ink-900">
-            {formatRsd(totals.total)}
+            {totals.total == null ? "—" : formatRsd(totals.total)}
           </span>
         </div>
 

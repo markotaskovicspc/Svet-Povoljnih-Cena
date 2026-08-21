@@ -58,7 +58,7 @@ describe("kopiranje artikla", () => {
   });
 
   it("prenosi pozitivnu MP cenu u aktivni maloprodajni cenovnik", async () => {
-    const create = vi.fn().mockResolvedValue({ id: "entry-1" });
+    const upsert = vi.fn().mockResolvedValue({ id: "entry-1" });
     const tx = {
       priceList: {
         findMany: vi.fn().mockResolvedValue([
@@ -67,7 +67,9 @@ describe("kopiranje artikla", () => {
       },
       priceListEntry: {
         findFirst: vi.fn().mockResolvedValue(null),
-        create,
+        findMany: vi.fn().mockResolvedValue([]),
+        upsert,
+        update: vi.fn(),
       },
     } as unknown as Prisma.TransactionClient;
 
@@ -75,8 +77,8 @@ describe("kopiranje artikla", () => {
       fullPrice: 32_856,
     } as ArticleCopySource);
 
-    expect(create).toHaveBeenCalledOnce();
-    const createData = create.mock.calls[0]?.[0]?.data;
+    expect(upsert).toHaveBeenCalledOnce();
+    const createData = upsert.mock.calls[0]?.[0]?.create;
     expect(createData).toMatchObject({
       priceListId: "price-list-mp",
       productId: "product-copy",
@@ -87,7 +89,12 @@ describe("kopiranje artikla", () => {
   it("ne pravi MP stavku kada izvorna cena nije pozitivna", async () => {
     const tx = {
       priceList: { findMany: vi.fn() },
-      priceListEntry: { findFirst: vi.fn(), create: vi.fn() },
+      priceListEntry: {
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        upsert: vi.fn(),
+        update: vi.fn(),
+      },
     } as unknown as Prisma.TransactionClient;
 
     await expect(

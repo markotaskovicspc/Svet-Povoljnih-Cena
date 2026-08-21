@@ -122,6 +122,11 @@ export function CartDrawer() {
                 breakdown={quote?.deliveryCategoryBreakdown ?? null}
               />
             </dl>
+            {shipping == null && !deliveryLoading ? (
+              <p className="text-action text-xs">
+                Za ovu korpu dostava ne može automatski da se obračuna.
+              </p>
+            ) : null}
             {shipping != null ? (
               <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
                 <span className="font-medium text-ink-900">Ukupno</span>

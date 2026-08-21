@@ -1,6 +1,7 @@
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
 import type {
   DeliveryCategory,
+  DeliveryTariffIssue,
   PublishedDeliveryCategoryBreakdown,
 } from "@/lib/delivery-tariff";
 
@@ -39,7 +40,9 @@ export type CheckoutPaymentMethodConfig = {
 };
 
 export type CheckoutDeliveryQuote = {
-  prices: Record<ShippingMethod, number>;
+  prices: Record<ShippingMethod, number | null>;
+  /** Why an exact courier tariff could not be produced for a non-empty cart. */
+  pricingIssue: DeliveryTariffIssue | "NO_CONFIGURED_PRICE" | null;
   /** Server-resolved public delivery category for each requested cart line. */
   deliveryCategoriesBySku: Partial<Record<SKU, DeliveryCategory>>;
   /** Present when the published category tariff, rather than an admin fallback, was used. */
@@ -82,7 +85,8 @@ export const DEFAULT_PAYMENT_METHOD_CONFIG: CheckoutPaymentMethodConfig[] = [
 ];
 
 export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
-  prices: SHIPPING_PRICES,
+  prices: { kurir: null, kamion: null },
+  pricingIssue: null,
   deliveryCategoriesBySku: {},
   deliveryCategoryBreakdown: null,
   assemblyPrice: ASSEMBLY_ENABLED ? ASSEMBLY_PRICE_DEFAULT : 0,

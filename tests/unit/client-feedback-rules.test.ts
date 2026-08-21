@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculatePublishedDeliveryTariff,
+  calculatePublishedDeliveryTariffQuote,
   deliveryCategory,
   deliveryRate,
   packageVolumetricDimension,
@@ -94,6 +95,30 @@ describe("confirmed client rules", () => {
       unitPackHeightCm: 30,
       packGrossWeightKg: 51,
     }], { loggedIn: true })).toBeNull();
+  });
+
+  it("keeps the overweight category visible without inventing a fallback price", () => {
+    const quote = calculatePublishedDeliveryTariffQuote(
+      [
+        {
+          qty: 1,
+          unitPrice: 10_000,
+          unitPackWidthCm: 180,
+          unitPackDepthCm: 100,
+          unitPackHeightCm: 20,
+          grossWeightKg: 51,
+        },
+      ],
+      { loggedIn: true },
+    );
+
+    expect(quote).toMatchObject({
+      total: null,
+      issue: "WEIGHT_ABOVE_50_KG",
+      categories: {
+        2: { weightKg: 51, subtotal: 10_000, price: null },
+      },
+    });
   });
 
   it("classifies by the individual article package and sums each category separately", () => {

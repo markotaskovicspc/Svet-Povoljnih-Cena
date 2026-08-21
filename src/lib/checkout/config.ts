@@ -13,16 +13,14 @@ import { getPaymentMethodAcceptance } from "@/lib/provider-acceptance";
 import {
   ASSEMBLY_PRICE_DEFAULT,
   ASSEMBLY_ENABLED,
-  DEFAULT_DELIVERY_QUOTE,
   DEFAULT_PAYMENT_METHOD_CONFIG,
   DEFAULT_TRUCK_CITY_NAMES,
-  SHIPPING_PRICES,
   type CheckoutConfig,
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
 } from "./config-shared";
 import {
-  calculatePublishedDeliveryTariff,
+  calculatePublishedDeliveryTariffQuote,
   productDeliveryCategory,
 } from "@/lib/delivery-tariff";
 import { effectiveUnitPrice } from "@/lib/pricing";
@@ -269,18 +267,16 @@ export async function resolveDeliveryQuote({
     ? lines.map((line) => productBySku.get(line.sku) ?? null)
     : [null];
   const courierPrices = quoteProducts.map((product) =>
-    pickRulePrice(rules, product, cityRow?.id ?? null, "courierPrice", SHIPPING_PRICES.kurir),
+    pickRulePrice(rules, product, cityRow?.id ?? null, "courierPrice"),
   );
   const truckPrices = quoteProducts.map((product) =>
-    pickRulePrice(rules, product, cityRow?.id ?? null, "truckPrice", SHIPPING_PRICES.kamion),
+    pickRulePrice(rules, product, cityRow?.id ?? null, "truckPrice"),
   );
-  const assemblyPrice = pickRulePrice(
-    rules,
-    null,
-    cityRow?.id ?? null,
-    "assemblyPrice",
-    ASSEMBLY_PRICE_DEFAULT,
-  );
+  const configuredCourierPrice = combinedConfiguredPrice(courierPrices);
+  const configuredTruckPrice = combinedConfiguredPrice(truckPrices);
+  const assemblyPrice =
+    pickRulePrice(rules, null, cityRow?.id ?? null, "assemblyPrice") ??
+    ASSEMBLY_PRICE_DEFAULT;
   const assemblyPricesBySku = Object.fromEntries(
     lines.map((line) => {
       const product = productBySku.get(line.sku) ?? null;
@@ -292,8 +288,7 @@ export async function resolveDeliveryQuote({
               product,
               cityRow?.id ?? null,
               "assemblyPrice",
-              assemblyPrice,
-            );
+            ) ?? assemblyPrice;
       return [line.sku, price] as const;
     }),
   ) as Partial<Record<SKU, number>>;
@@ -362,9 +357,10 @@ export async function resolveDeliveryQuote({
         });
   const publishedTariff =
     lines.length && publishedTariffLines.length === lines.length
-      ? calculatePublishedDeliveryTariff(publishedTariffLines, { loggedIn })
-    : null;
+      ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, { loggedIn })
+      : null;
   const publishedPrice = publishedTariff?.total;
+  const courierPrice = publishedPrice ?? configuredCourierPrice;
   const deliveryCategoriesBySku = Object.fromEntries(
     products.flatMap((product) => {
       const category = productDeliveryCategory({
@@ -381,17 +377,19 @@ export async function resolveDeliveryQuote({
 
   return {
     prices: {
-      kurir:
-        publishedPrice ??
-        normalizePrice(Math.max(...courierPrices), SHIPPING_PRICES.kurir),
-      kamion:
-        publishedPrice ??
-        normalizePrice(Math.max(...truckPrices), SHIPPING_PRICES.kamion),
+      kurir: courierPrice,
+      // The published parcel table is not a truck tariff. Truck delivery is
+      // available only when an administrator has configured it explicitly.
+      kamion: configuredTruckPrice,
     },
+    pricingIssue:
+      lines.length && courierPrice == null
+        ? (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE")
+        : null,
     deliveryCategoriesBySku,
     deliveryCategoryBreakdown: publishedTariff?.categories ?? null,
     assemblyPrice: ASSEMBLY_ENABLED
-      ? normalizePrice(assemblyPrice, DEFAULT_DELIVERY_QUOTE.assemblyPrice)
+      ? normalizePrice(assemblyPrice, ASSEMBLY_PRICE_DEFAULT)
       : 0,
     assemblyPricesBySku: ASSEMBLY_ENABLED ? assemblyPricesBySku : {},
     truckAvailable,
@@ -418,13 +416,18 @@ function pickRulePrice(
   product: QuoteProduct | null,
   cityId: string | null,
   field: "courierPrice" | "truckPrice" | "assemblyPrice",
-  fallback: number,
 ) {
   const sorted = rules
     .filter((rule) => rule[field] != null && ruleAppliesToProduct(rule, product))
     .sort((a, b) => compareRules(a, b, cityId));
   const selected = sorted[0]?.[field];
-  return selected == null ? fallback : normalizePrice(num(selected), fallback);
+  return selected == null ? null : normalizePrice(num(selected), 0);
+}
+
+function combinedConfiguredPrice(prices: Array<number | null>) {
+  const configured = prices.filter((price): price is number => price != null);
+  if (!configured.length || configured.length !== prices.length) return null;
+  return Math.max(...configured);
 }
 
 function ruleAppliesToProduct(rule: DeliveryRule, product: QuoteProduct | null) {

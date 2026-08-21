@@ -649,6 +649,13 @@ export async function createOrder(
   if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
     return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
   }
+  const selectedShippingPrice =
+    input.shippingMethod === "KURIR"
+      ? deliveryQuote.prices.kurir
+      : deliveryQuote.prices.kamion;
+  if (selectedShippingPrice == null) {
+    return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
+  }
 
   // Per-line assembly is independent of the pricing engine.
   let assemblyTotal = 0;
@@ -735,10 +742,7 @@ export async function createOrder(
 
   const subtotal = pricing.subtotal;
   const savings = pricing.savings;
-  const shippingPrice =
-    input.shippingMethod === "KURIR"
-      ? deliveryQuote.prices.kurir
-      : deliveryQuote.prices.kamion;
+  const shippingPrice = selectedShippingPrice;
   const voucherDiscount = pricing.voucherDiscount;
   const voucherCode = pricing.voucherCode;
   const total = Math.max(

@@ -24,7 +24,11 @@ export function DeliveryCategoryBreakdown({
           {category === 1 ? "I" : "II"} kategorija ({formatWeight(total.weightKg)})
         </dt>
         <dd className="font-medium tabular-nums">
-          {total.price === 0 ? "Besplatno" : formatRsd(total.price)}
+          {total.price == null
+            ? "Nije obračunato"
+            : total.price === 0
+              ? "Besplatno"
+              : formatRsd(total.price)}
         </dd>
       </div>
     );

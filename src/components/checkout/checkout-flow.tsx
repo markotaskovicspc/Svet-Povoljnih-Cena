@@ -319,6 +319,9 @@ export function CheckoutFlow({
     hydrated &&
     lines.length > 0 &&
     resolvedDeliveryQuote.key === deliveryQuoteKey;
+  const selectedDeliveryPrice = deliveryQuote.prices[shippingMethod];
+  const deliveryQuoteIsPayable =
+    deliveryQuoteIsCurrent && selectedDeliveryPrice != null;
 
   const refreshDeliveryQuote = useCallback(
     async (signal?: AbortSignal) => {
@@ -349,6 +352,12 @@ export function CheckoutFlow({
             shouldDirty: true,
             shouldValidate: true,
           });
+        }
+        const selectedPrice =
+          result.data.prices[getValues("shippingMethod")];
+        if (selectedPrice == null) {
+          setDeliveryQuoteError(deliveryPricingMessage(result.data.pricingIssue));
+          return false;
         }
         return true;
       } catch (err) {
@@ -502,6 +511,9 @@ export function CheckoutFlow({
         if (!deliveryQuoteIsCurrent) {
           const quoteReady = await refreshDeliveryQuote();
           if (!quoteReady) return;
+        } else if (deliveryQuote.prices[getValues("shippingMethod")] == null) {
+          setDeliveryQuoteError(deliveryPricingMessage(deliveryQuote.pricingIssue));
+          return;
         }
       }
       const i = stepOrder.indexOf(step);
@@ -517,8 +529,12 @@ export function CheckoutFlow({
 
   const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
     setSubmitError(null);
-    if (!deliveryQuoteIsCurrent) {
-      setSubmitError("Sačekajte da se obračuna tačan iznos dostave.");
+    if (!deliveryQuoteIsPayable) {
+      setSubmitError(
+        deliveryQuoteIsCurrent
+          ? deliveryPricingMessage(deliveryQuote.pricingIssue)
+          : "Sačekajte da se obračuna tačan iznos dostave.",
+      );
       return;
     }
     rememberCheckoutFields(data);
@@ -654,7 +670,7 @@ export function CheckoutFlow({
           <button
             type="submit"
             form="checkout-order-form"
-            disabled={formState.isSubmitting || !deliveryQuoteIsCurrent}
+            disabled={formState.isSubmitting || !deliveryQuoteIsPayable}
             className={cn(
               "bg-action hover:bg-action/90 focus-visible:ring-action/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white transition focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 md:px-5",
               mobile && "flex-1",
@@ -663,9 +679,11 @@ export function CheckoutFlow({
             {formState.isSubmitting || !deliveryQuoteIsCurrent ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : null}
-            {deliveryQuoteIsCurrent
-              ? "Potvrdi porudžbinu"
-              : "Obračunavam dostavu…"}
+            {!deliveryQuoteIsCurrent
+              ? "Obračunavam dostavu…"
+              : deliveryQuoteIsPayable
+                ? "Potvrdi porudžbinu"
+                : "Dostava nije obračunata"}
           </button>
         )}
       </div>
@@ -832,6 +850,7 @@ function ReviewStep({
   paymentMethods: CheckoutPaymentMethodConfig[];
 }) {
   const data = useFormContext<CheckoutFormData>().getValues();
+  const reviewShippingPrice = deliveryQuote.prices[data.shippingMethod];
   const lines = useCart((s) => s.lines);
   const voucher = useCheckout((s) => s.voucher);
   const totals = useMemo(
@@ -880,7 +899,9 @@ function ReviewStep({
             {data.shippingMethod === "kurir"
               ? "Kurirska služba"
               : "Kamionska isporuka"}{" "}
-            · {formatRsd(deliveryQuote.prices[data.shippingMethod])}
+            · {reviewShippingPrice == null
+              ? "Nije moguće obračunati"
+              : formatRsd(reviewShippingPrice)}
           </p>
           {data.shippingMethod === "kurir" && data.glsDeliveryPoint ? (
             <p className="mt-1 text-xs text-ink-500">
@@ -898,7 +919,7 @@ function ReviewStep({
           <p className="text-sm text-ink-700 tabular-nums">
             Ukupno za plaćanje:{" "}
             <span className="font-medium text-ink-900">
-              {formatRsd(totals.total)}
+              {totals.total == null ? "—" : formatRsd(totals.total)}
             </span>
           </p>
         </ReviewBlock>
@@ -1243,13 +1264,28 @@ function readCreateOrderError(
     case "PAYMENT_UNAVAILABLE":
       return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
     case "DELIVERY_UNAVAILABLE":
-      return "Izabrani način isporuke trenutno nije dostupan za uneti grad.";
+      return "Dostava za ovu korpu trenutno ne može tačno da se obračuna. Proverite korpu ili kontaktirajte podršku.";
     case "EMPTY_CART":
       return "Korpa je prazna.";
     case "INTERNAL":
       return "Porudžbinu trenutno nije moguće kreirati zbog tehničke greške. Pokušajte ponovo kasnije.";
     default:
       return "Porudžbinu trenutno nije moguće kreirati. Proverite podatke i pokušajte ponovo.";
+  }
+}
+
+function deliveryPricingMessage(
+  issue: CheckoutDeliveryQuote["pricingIssue"],
+) {
+  switch (issue) {
+    case "WEIGHT_ABOVE_50_KG":
+      return "Ukupna težina jedne kategorije prelazi 50 kg, a za veće pošiljke nije podešena posebna cena dostave. Kontaktirajte podršku pre poručivanja.";
+    case "MISSING_PACKAGE_DIMENSIONS":
+    case "MISSING_WEIGHT":
+      return "Za jedan ili više artikala nedostaju podaci potrebni za tačan obračun dostave. Kontaktirajte podršku pre poručivanja.";
+    case "NO_CONFIGURED_PRICE":
+    default:
+      return "Dostava za ovu korpu trenutno ne može tačno da se obračuna. Kontaktirajte podršku pre poručivanja.";
   }
 }
 

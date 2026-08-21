@@ -20,4 +20,20 @@ describe("delivery category breakdown", () => {
     expect(html).toContain("II kategorija (6 kg)");
     expect(html).toContain("799 RSD");
   });
+
+  it("explains an unpriced overweight category", () => {
+    const html = renderToStaticMarkup(
+      <dl>
+        <DeliveryCategoryBreakdown
+          breakdown={{
+            1: { weightKg: 0, subtotal: 0, price: 0 },
+            2: { weightKg: 67, subtotal: 33_000, price: null },
+          }}
+        />
+      </dl>,
+    );
+
+    expect(html).toContain("II kategorija (67 kg)");
+    expect(html).toContain("Nije obračunato");
+  });
 });

@@ -131,7 +131,10 @@ function CartSummary({
   const [checkingVoucher, setCheckingVoucher] = useState(false);
   const shipping = quote?.prices.kurir ?? null;
   const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
-  const total = Math.max(0, subtotal + (shipping ?? 0) - voucherDiscount);
+  const total =
+    shipping == null
+      ? null
+      : Math.max(0, subtotal + shipping - voucherDiscount);
 
   async function applyCartVoucher(e: React.FormEvent) {
     e.preventDefault();
@@ -204,6 +207,11 @@ function CartSummary({
           <DeliveryCategoryBreakdown
             breakdown={quote?.deliveryCategoryBreakdown ?? null}
           />
+          {shipping == null && !deliveryLoading ? (
+            <p className="text-action text-xs">
+              Za ovu korpu dostava ne može automatski da se obračuna.
+            </p>
+          ) : null}
         </dl>
 
         <form
@@ -261,7 +269,7 @@ function CartSummary({
         <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">Ukupno za plaćanje</span>
           <span className="font-display text-2xl text-ink-900">
-            {formatRsd(total)}
+            {total == null ? "—" : formatRsd(total)}
           </span>
         </div>
 

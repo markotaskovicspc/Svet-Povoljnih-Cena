@@ -29,7 +29,8 @@ export function ShippingMethodStep({
   const perItemAssembly = watch("perItemAssembly");
   const glsDeliveryPoint = watch("glsDeliveryPoint");
 
-  const showKamion = deliveryQuote.truckAvailable;
+  const showKamion =
+    deliveryQuote.truckAvailable && deliveryQuote.prices.kamion != null;
 
   useEffect(() => {
     if (!glsDeliveryPointsEnabled || method !== "kurir") {
@@ -196,7 +197,7 @@ const MethodCard = ({
   id: string;
   label: string;
   desc: string;
-  price: number;
+  price: number | null;
   icon: React.ElementType;
   checked: boolean;
 } & React.ComponentProps<"input">) => (
@@ -225,13 +226,14 @@ const MethodCard = ({
         </div>
       </div>
       <span className="text-walnut text-sm font-medium tabular-nums">
-        {formatRsd(price)}
+        {price == null ? "Nije dostupno" : formatRsd(price)}
       </span>
     </div>
     <input
       id={`ship-${id}`}
       type="radio"
       value={id}
+      disabled={price == null}
       className="sr-only"
       {...props}
     />

@@ -26,6 +26,10 @@ export function CartLineRow({
 }: CartLineRowProps) {
   const remove = useCart((s) => s.remove);
   const onSale = line.unitPriceSale < line.unitPriceFull;
+  const isLoyaltyPrice =
+    line.unitPriceLoyalty != null &&
+    line.unitPriceSale === line.unitPriceLoyalty &&
+    onSale;
   const lineTotal = line.unitPriceSale * line.qty;
   const displayedDeliveryCategory =
     deliveryCategory === undefined ? line.deliveryCategory : deliveryCategory;
@@ -66,6 +70,9 @@ export function CartLineRow({
         <p className="font-mono text-[11px] tracking-tight text-ink-500">
           {line.sku}
         </p>
+        {isLoyaltyPrice ? (
+          <p className="text-action text-[11px] font-medium">Loyalty cena</p>
+        ) : null}
         {displayedDeliveryCategory ? (
           <p className="text-[11px] text-ink-500">
             {displayedDeliveryCategory === 1 ? "I" : "II"} kategorija isporuke

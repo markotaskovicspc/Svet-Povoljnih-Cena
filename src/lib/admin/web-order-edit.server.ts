@@ -193,6 +193,7 @@ export async function updateWebOrderItemQuantity(input: {
       userId: true,
       shipCity: true,
       shippingMethod: true,
+      shipping: true,
       items: {
         orderBy: { id: "asc" },
         select: { id: true, sku: true, qty: true },
@@ -220,9 +221,9 @@ export async function updateWebOrderItemQuantity(input: {
     loggedIn: Boolean(preview.userId),
   });
   const quotedShipping =
-    preview.shippingMethod === "KURIR"
+    (preview.shippingMethod === "KURIR"
       ? deliveryQuote.prices.kurir
-      : deliveryQuote.prices.kamion;
+      : deliveryQuote.prices.kamion) ?? num(preview.shipping);
   const operationKey = randomUUID();
 
   const result = await db.$transaction(
