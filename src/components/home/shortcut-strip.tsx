@@ -7,7 +7,7 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
 
   return (
     <section aria-label="Brze ponude" className="bg-white">
-      <div className="mx-auto flex w-full max-w-[var(--container-page)] snap-x snap-mandatory gap-3 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-4 md:overflow-visible md:px-6 md:py-6">
+      <div className="mx-auto grid w-full max-w-[var(--container-page)] grid-cols-2 gap-1.5 px-3 py-2 md:grid-cols-4 md:gap-2 md:px-6 md:py-6">
         {items.map((tab) => {
           return (
             <PromoShortcutTile
@@ -15,7 +15,7 @@ export function ShortcutStrip({ tabs }: { tabs: Tab[] }) {
               tab={tab}
               canonicalize={false}
               variant="homepage"
-              className="w-[78vw] shrink-0 snap-start text-brand-blue md:w-auto md:min-w-0"
+              className="text-brand-blue"
             />
           );
         })}
