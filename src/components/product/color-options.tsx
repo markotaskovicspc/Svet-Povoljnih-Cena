@@ -79,6 +79,8 @@ export function ProductColorOptions({
   onSelectSku?: (sku: string) => void;
 }) {
   const familyOptions = product.variantFamily?.options ?? [];
+  const showVariantThumbnails =
+    familyOptions.length > 0 && (showLabels || familyOptions.length > 1);
   const activeSku = selectedSku ?? product.variantFamily?.selectedSku ?? product.sku;
   const colors = getProductColorOptions(product);
   const railId = useId();
@@ -186,7 +188,7 @@ export function ProductColorOptions({
     [],
   );
 
-  if (familyOptions.length) {
+  if (showVariantThumbnails) {
     return (
       <div
         className={cn("grid gap-1.5", className)}

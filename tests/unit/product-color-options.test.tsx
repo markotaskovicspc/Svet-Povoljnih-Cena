@@ -161,11 +161,12 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain("overflow-x-auto");
     expect(markup).toContain("Prethodna varijanta");
     expect(markup).toContain("Sledeća varijanta");
+    expect(markup).not.toContain("data-product-colors");
     expect(markup).not.toContain("+2");
     expect(markup).not.toContain('href="/p/sku-6"');
   });
 
-  it("porodičnu varijantu prikazuje thumbnailom bez dodatnog kružića ispod", () => {
+  it("na kartici sa samo jednom porodičnom varijantom prikazuje kružiće boje", () => {
     const familyProduct = {
       ...product,
       sku: "MOP-RED-WHITE",
@@ -200,9 +201,10 @@ describe("PDP boje proizvoda", () => {
       <ProductColorOptions product={familyProduct} />,
     );
 
-    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
-    expect(markup).not.toContain("data-color-count=");
-    expect(markup).not.toContain("linear-gradient(90deg");
+    expect(markup).toContain("data-product-colors");
+    expect(markup).toContain("CRVENA / BELA");
+    expect(markup.match(/rounded-full/g)).toHaveLength(2);
+    expect(markup).not.toContain("data-variant-thumbnail");
   });
 
   it("dimenzijsku porodicu naziva varijantom, a ne bojom", () => {
