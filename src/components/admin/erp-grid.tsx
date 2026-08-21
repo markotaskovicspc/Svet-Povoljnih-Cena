@@ -46,6 +46,7 @@ import type {
   ErpRow,
   ErpValue,
 } from "@/lib/admin/erp";
+import { nextGridSorting } from "@/lib/admin/grid-query";
 
 type SavedView = {
   id?: string;
@@ -909,12 +910,7 @@ export function ErpGrid({
   };
 
   const toggleSort = (columnKey: string) => {
-    updateSorting((current) => {
-      const existing = current.find((item) => item.columnKey === columnKey);
-      if (!existing) return [{ columnKey, direction: "asc" }];
-      if (existing.direction === "asc") return [{ columnKey, direction: "desc" }];
-      return [];
-    });
+    updateSorting((current) => nextGridSorting(current, columnKey));
   };
 
   const startResize = (

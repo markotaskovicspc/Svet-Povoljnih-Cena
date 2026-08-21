@@ -6,7 +6,6 @@ import type {
   ErpRow,
   SalesOrderExportFilters,
 } from "@/lib/admin/erp";
-import { resolveChannelAvailability } from "@/lib/channel-availability";
 import {
   STOCK_MOVEMENT_KIND_LABELS,
   stockMovementKindLabel,
@@ -28,7 +27,10 @@ import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 import { activeRetailPriceEntryWhere } from "@/lib/pricing/retail-price-write.server";
 import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
 import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
-import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
+import {
+  buildWarehouseStockGridRows,
+  WAREHOUSE_GRID_INCOMING_ORDER_STATUSES,
+} from "@/lib/admin/warehouse-stock-grid";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -1185,88 +1187,105 @@ async function warehouseRows(take: number): Promise<ErpRow[]> {
 }
 
 async function warehouseStockRows(take: number): Promise<ErpRow[]> {
-  const rows = await db.warehouseStock.findMany({
-    take,
-    orderBy: { updatedAt: "desc" },
-    include: {
-      warehouse: { select: { id: true, name: true, isDefault: true } },
-      product: {
-        select: {
-          sku: true,
-          name: true,
-          incomingStock: true,
-          availableWebManual: true,
-          availableWholesaleManual: true,
-          availableExportManual: true,
-          partnerReservations: {
-            where: {
-              status: "ACTIVE",
-              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-            },
-            select: { qty: true, warehouseId: true },
-          },
-          orderItems: {
-            where: {
-              warehouseReservedQty: { gt: 0 },
-              order: {
-                status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
-              },
-            },
-            select: {
-              warehouseId: true,
-              warehouseReservedQty: true,
-              stockMovements: {
-                select: { qty: true },
-              },
-            },
-          },
+  const now = new Date();
+  const productSelect = {
+    id: true,
+    sku: true,
+    name: true,
+    stock: true,
+    incomingStock: true,
+    availableWebManual: true,
+    availableWholesaleManual: true,
+    availableExportManual: true,
+    partnerReservations: {
+      where: {
+        status: "ACTIVE" as const,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: { qty: true, warehouseId: true },
+    },
+    orderItems: {
+      where: {
+        warehouseReservedQty: { gt: 0 },
+        order: {
+          status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
+        },
+      },
+      select: {
+        warehouseId: true,
+        warehouseReservedQty: true,
+        stockMovements: {
+          select: { qty: true },
         },
       },
     },
-  });
-  return rows.map((row) => {
-    const belongsToWarehouse = (warehouseId: string | null) =>
-      warehouseId === row.warehouse.id ||
-      (warehouseId === null && row.warehouse.isDefault);
-    const partnerReserved = row.product.partnerReservations
-      .filter((item) => belongsToWarehouse(item.warehouseId))
-      .reduce((sum, item) => sum + item.qty, 0);
-    const balance = resolveStoredWarehouseBalance({
-      storedQty: row.qty,
-      orderReservations: row.product.orderItems
-        .filter((item) => belongsToWarehouse(item.warehouseId))
-        .map((item) => ({
-          qty: item.warehouseReservedQty,
-          debited:
-            item.stockMovements.reduce(
-              (sum, movement) => sum + movement.qty,
-              0,
-            ) < 0,
-        })),
-      partnerReserved,
-    });
-    const { physical, reserved, available } = balance;
-    const channels = resolveChannelAvailability({
-      physical: available,
-      manualWeb: row.product.availableWebManual,
-      manualWholesale: row.product.availableWholesaleManual,
-      manualExport: row.product.availableExportManual,
-    });
-    return {
-      id: row.id,
-      values: {
-        warehouse: row.warehouse.name,
-        sku: row.product.sku,
-        product: row.product.name,
-        physical,
-        reserved,
-        available,
-        incoming: row.product.incomingStock,
-        web: channels.web,
-        wholesale: channels.wholesale,
-        export: channels.export,
-      },
-    };
+  } satisfies Prisma.ProductSelect;
+  const warehouseSelect = {
+    id: true,
+    name: true,
+    isDefault: true,
+    active: true,
+  } satisfies Prisma.WarehouseSelect;
+  const [stocks, incomingOrderLines, productsWithStoredIncoming, defaultWarehouse] =
+    await Promise.all([
+      db.warehouseStock.findMany({
+        take,
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          qty: true,
+          warehouse: { select: warehouseSelect },
+          product: { select: productSelect },
+        },
+      }),
+      db.purchaseOrderItem.findMany({
+        take,
+        where: {
+          productId: { not: null },
+          product: { deletedAt: null },
+          purchaseOrder: {
+            status: { in: [...WAREHOUSE_GRID_INCOMING_ORDER_STATUSES] },
+          },
+        },
+        select: {
+          qty: true,
+          receivedQty: true,
+          product: { select: productSelect },
+          purchaseOrder: {
+            select: {
+              receivingWarehouse: { select: warehouseSelect },
+            },
+          },
+        },
+      }),
+      db.product.findMany({
+        take,
+        where: { deletedAt: null, incomingStock: { gt: 0 } },
+        select: productSelect,
+      }),
+      db.warehouse.findFirst({
+        where: { active: true, isDefault: true },
+        orderBy: { createdAt: "asc" },
+        select: warehouseSelect,
+      }),
+    ]);
+
+  return buildWarehouseStockGridRows({
+    stocks,
+    incomingOrderLines: incomingOrderLines.flatMap((line) =>
+      line.product
+        ? [
+            {
+              qty: line.qty,
+              receivedQty: line.receivedQty,
+              warehouse: line.purchaseOrder.receivingWarehouse,
+              product: line.product,
+            },
+          ]
+        : [],
+    ),
+    productsWithStoredIncoming,
+    defaultWarehouse,
   });
 }
 

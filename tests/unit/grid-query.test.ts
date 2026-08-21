@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { filterAndSortGridRows } from "@/lib/admin/grid-query";
+import {
+  filterAndSortGridRows,
+  nextGridSorting,
+} from "@/lib/admin/grid-query";
 
 describe("ERP numeric filters", () => {
   it("applies the saved greater-than-zero operator to physical stock", () => {
@@ -64,5 +67,90 @@ describe("ERP numeric filters", () => {
         { columnKey: "incoming", direction: "desc" },
       ]).map((row) => row.id),
     ).toEqual(["hundred", "ten", "zero"]);
+  });
+
+  it("cycles a column through ascending, descending and unsorted", () => {
+    const ascending = nextGridSorting([], "incoming");
+    const descending = nextGridSorting(ascending, "incoming");
+    const unsorted = nextGridSorting(descending, "incoming");
+
+    expect(ascending).toEqual([
+      { columnKey: "incoming", direction: "asc" },
+    ]);
+    expect(descending).toEqual([
+      { columnKey: "incoming", direction: "desc" },
+    ]);
+    expect(unsorted).toEqual([]);
+  });
+
+  it("replaces the previous column when a different header is clicked", () => {
+    expect(
+      nextGridSorting(
+        [{ columnKey: "incoming", direction: "desc" }],
+        "sku",
+      ),
+    ).toEqual([{ columnKey: "sku", direction: "asc" }]);
+  });
+
+  it("keeps equal incoming quantities stable in both directions", () => {
+    const rows = [
+      { id: "first", values: { incoming: 10 } },
+      { id: "second", values: { incoming: 10 } },
+      { id: "third", values: { incoming: 5 } },
+    ];
+
+    expect(
+      filterAndSortGridRows(rows, ["incoming"], "", [], [
+        { columnKey: "incoming", direction: "asc" },
+      ]).map((row) => row.id),
+    ).toEqual(["third", "first", "second"]);
+    expect(
+      filterAndSortGridRows(rows, ["incoming"], "", [], [
+        { columnKey: "incoming", direction: "desc" },
+      ]).map((row) => row.id),
+    ).toEqual(["first", "second", "third"]);
+  });
+
+  it("sorts the complete result before a caller slices a later page", () => {
+    const rows = Array.from({ length: 205 }, (_, index) => ({
+      id: String(index),
+      values: { incoming: index },
+    }));
+    const sorted = filterAndSortGridRows(rows, ["incoming"], "", [], [
+      { columnKey: "incoming", direction: "desc" },
+    ]);
+
+    expect(sorted.slice(0, 3).map((row) => row.values.incoming)).toEqual([
+      204, 203, 202,
+    ]);
+    expect(sorted.slice(100, 103).map((row) => row.values.incoming)).toEqual([
+      104, 103, 102,
+    ]);
+  });
+
+  it("combines incoming sorting with search and numeric filters", () => {
+    const rows = [
+      { id: "a", values: { sku: "LAMP-A", incoming: 100 } },
+      { id: "b", values: { sku: "LAMP-B", incoming: 10 } },
+      { id: "c", values: { sku: "CHAIR-C", incoming: 50 } },
+      { id: "d", values: { sku: "LAMP-D", incoming: 0 } },
+    ];
+
+    expect(
+      filterAndSortGridRows(
+        rows,
+        ["sku", "incoming"],
+        "lamp",
+        [
+          {
+            id: "positive",
+            columnKey: "incoming",
+            operator: "gt",
+            value: "0",
+          },
+        ],
+        [{ columnKey: "incoming", direction: "asc" }],
+      ).map((row) => row.id),
+    ).toEqual(["b", "a"]);
   });
 });

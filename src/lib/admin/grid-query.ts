@@ -21,6 +21,18 @@ export function parseGridArray<T>(raw: string | null): T[] {
   }
 }
 
+export function nextGridSorting(
+  current: AdminGridSort[],
+  columnKey: string,
+): AdminGridSort[] {
+  const existing = current.find((item) => item.columnKey === columnKey);
+  if (!existing) return [{ columnKey, direction: "asc" }];
+  if (existing.direction === "asc") {
+    return [{ columnKey, direction: "desc" }];
+  }
+  return [];
+}
+
 function matches(value: ErpValue, filter: AdminGridFilter) {
   const actualText = gridTextValue(value).trim().toLowerCase();
   const expectedText = filter.value.trim().toLowerCase();
