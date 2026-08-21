@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminAction } from "@/lib/admin";
 import {
+  BANNER_IMAGE_MAX_BYTES,
   BANNER_IMAGE_STAGING_PREFIX,
   getBannerStagingImageKey,
   validateBannerImageFile,
@@ -11,6 +12,10 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductMediaBucket } from "@/lib/supabase/storage";
 import { validateSafeSvgBytes } from "@/lib/media/safe-svg";
+import {
+  embedSvgLinkedImages,
+  SvgCompanionRequiredError,
+} from "@/lib/media/embed-svg-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +45,9 @@ export async function POST(request: Request) {
   if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const formData = await request.formData();
     const file = formData.get("file");
+    const companions = formData
+      .getAll("companions")
+      .filter((value): value is File => value instanceof File && value.size > 0);
     const placement = formData.get("placement");
     const variant = formData.get("variant");
     const parsed = uploadSchema.safeParse({
@@ -52,14 +60,53 @@ export async function POST(request: Request) {
     if (!parsed.success || !(file instanceof File)) {
       return noStoreJson({ error: "SVG upload nije ispravan." }, { status: 400 });
     }
+    if (companions.length > 20) {
+      return noStoreJson(
+        { error: "Za jedan SVG možete dodati najviše 20 pratećih slika." },
+        { status: 400 },
+      );
+    }
+    const totalBytes =
+      (file instanceof File ? file.size : 0) +
+      companions.reduce((sum, companion) => sum + companion.size, 0);
+    if (totalBytes > BANNER_IMAGE_MAX_BYTES) {
+      return noStoreJson(
+        { error: "SVG i prateće slike zajedno ne smeju biti veći od 8 MB." },
+        { status: 400 },
+      );
+    }
+
     let extension: string;
     let bytes: Buffer;
+    let embedded: string[] = [];
     try {
       extension = validateBannerImageFile(file);
       if (extension !== "svg") throw new Error("Direktan upload je namenjen SVG fajlu.");
-      bytes = Buffer.from(await file.arrayBuffer());
+      const sourceBytes = Buffer.from(await file.arrayBuffer());
+      const prepared = embedSvgLinkedImages(
+        sourceBytes,
+        await Promise.all(
+          companions.map(async (companion) => ({
+            name: companion.name,
+            bytes: new Uint8Array(await companion.arrayBuffer()),
+          })),
+        ),
+      );
+      bytes = Buffer.from(prepared.bytes);
+      embedded = prepared.embedded;
+      validateBannerImageFile({
+        name: file.name,
+        type: file.type,
+        size: bytes.length,
+      });
       validateSafeSvgBytes(bytes);
     } catch (error) {
+      if (error instanceof SvgCompanionRequiredError) {
+        return noStoreJson(
+          { error: error.message, code: error.code, missing: error.missing },
+          { status: 422 },
+        );
+      }
       return noStoreJson(
         { error: error instanceof Error ? error.message : "SVG nije ispravan." },
         { status: 400 },
@@ -71,15 +118,15 @@ export async function POST(request: Request) {
       admin.id,
       `${Date.now()}-${randomBytes(8).toString("hex")}-${parsed.data.variant}.${extension}`,
     ].join("/");
-    const { error } = await createAdminClient()
-      .storage.from(getProductMediaBucket())
-      .upload(key, bytes, {
-        cacheControl: "3600",
-        contentType: "image/svg+xml",
-        upsert: false,
-      });
+    const storage = createAdminClient().storage.from(getProductMediaBucket());
+    const { error } = await storage.upload(key, bytes, {
+      cacheControl: "3600",
+      contentType: "image/svg+xml",
+      upsert: false,
+    });
     if (error) return noStoreJson({ error: error.message }, { status: 502 });
-    return noStoreJson({ key, direct: true });
+    const publicUrl = storage.getPublicUrl(key).data.publicUrl;
+    return noStoreJson({ key, direct: true, publicUrl, embedded });
   }
 
   const input = uploadSchema.safeParse(await request.json().catch(() => null));

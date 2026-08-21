@@ -39,6 +39,64 @@ export function validateBannerImageFile(file: BannerImageFileMetadata) {
   return extension;
 }
 
+export function splitBannerUploadFiles<T extends BannerImageFileMetadata>(
+  files: T[],
+) {
+  if (files.length === 0) throw new Error("Izaberite sliku sa uređaja.");
+  if (files.length === 1) return { primary: files[0], companions: [] as T[] };
+
+  const svgFiles = files.filter(
+    (file) =>
+      file.type === "image/svg+xml" || /\.svg$/i.test(file.name.trim()),
+  );
+  if (svgFiles.length === 0) {
+    throw new Error("Za jedan baner izaberite samo jednu sliku.");
+  }
+  if (svgFiles.length > 1) {
+    throw new Error("Za jedan baner izaberite samo jedan SVG fajl.");
+  }
+  return {
+    primary: svgFiles[0],
+    companions: files.filter((file) => file !== svgFiles[0]),
+  };
+}
+
+function normalizedUploadName(value: string) {
+  return value.normalize("NFC").toLocaleLowerCase("en-US");
+}
+
+export function shouldContinuePendingBannerSvg(
+  files: BannerImageFileMetadata[],
+  missing: string[] | null | undefined,
+) {
+  if (!missing?.length) return false;
+  if (
+    files.some(
+      (file) => file.type === "image/svg+xml" || /\.svg$/i.test(file.name),
+    )
+  ) {
+    return false;
+  }
+  const missingNames = new Set(missing.map(normalizedUploadName));
+  return (
+    missingNames.has("povezana slika") ||
+    files.some((file) => missingNames.has(normalizedUploadName(file.name)))
+  );
+}
+
+export function mergeBannerUploadFiles<T extends Pick<File, "name">>(
+  previous: T[],
+  incoming: T[],
+) {
+  const merged = new Map(
+    previous.map((file) => [normalizedUploadName(file.name), file]),
+  );
+  for (const file of incoming) {
+    merged.set(normalizedUploadName(file.name), file);
+  }
+  return [...merged.values()];
+}
+
 export function getManagedBannerImageKey(value: string | null | undefined) {
   const key = getManagedProductMediaStorageKey(value);
   return key?.startsWith(BANNER_IMAGE_PREFIX) ? key : null;

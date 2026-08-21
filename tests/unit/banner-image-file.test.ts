@@ -3,6 +3,9 @@ import {
   BANNER_IMAGE_MAX_BYTES,
   getBannerStagingImageKey,
   getManagedBannerImageKey,
+  mergeBannerUploadFiles,
+  shouldContinuePendingBannerSvg,
+  splitBannerUploadFiles,
   toBannerImageUploadBody,
   validateBannerImageFile,
 } from "../../src/lib/banners/image-file";
@@ -61,6 +64,56 @@ describe("banner image files", () => {
         type: "image/jpeg",
       }),
     ).toThrow("Ekstenzija");
+  });
+
+  it("supports one normal image or one SVG with companion images in any order", () => {
+    const svg = { name: "hero.svg", size: 100, type: "image/svg+xml" };
+    const png = { name: "logo.png", size: 100, type: "image/png" };
+    const jpg = { name: "photo.jpg", size: 100, type: "image/jpeg" };
+
+    expect(splitBannerUploadFiles([png])).toEqual({
+      primary: png,
+      companions: [],
+    });
+    expect(splitBannerUploadFiles([png, svg, jpg])).toEqual({
+      primary: svg,
+      companions: [png, jpg],
+    });
+  });
+
+  it("rejects ambiguous multi-image banner selections", () => {
+    const png = { name: "a.png", size: 100, type: "image/png" };
+    const jpg = { name: "b.jpg", size: 100, type: "image/jpeg" };
+    const firstSvg = { name: "a.svg", size: 100, type: "image/svg+xml" };
+    const secondSvg = { name: "b.svg", size: 100, type: "image/svg+xml" };
+
+    expect(() => splitBannerUploadFiles([png, jpg])).toThrow("samo jednu");
+    expect(() => splitBannerUploadFiles([firstSvg, secondSvg])).toThrow(
+      "samo jedan SVG",
+    );
+  });
+
+  it("continues a pending SVG when a missing companion is selected later", () => {
+    const svg = { name: "hero.svg", size: 100, type: "image/svg+xml" };
+    const png = { name: "Logo.PNG", size: 100, type: "image/png" };
+    const replacement = { name: "new.jpg", size: 100, type: "image/jpeg" };
+
+    expect(shouldContinuePendingBannerSvg([png], ["logo.png"])).toBe(true);
+    expect(shouldContinuePendingBannerSvg([replacement], ["logo.png"])).toBe(
+      false,
+    );
+    expect(shouldContinuePendingBannerSvg([svg], ["logo.png"])).toBe(false);
+  });
+
+  it("merges repeated sequential selections by normalized file name", () => {
+    const first = { name: "logo.png" };
+    const replacement = { name: "LOGO.PNG" };
+    const svg = { name: "hero.svg" };
+
+    expect(mergeBannerUploadFiles([svg, first], [replacement])).toEqual([
+      svg,
+      replacement,
+    ]);
   });
 
   it("only treats the dedicated banner prefix as managed banner storage", () => {

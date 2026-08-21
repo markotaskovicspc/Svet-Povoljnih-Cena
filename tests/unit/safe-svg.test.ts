@@ -26,6 +26,26 @@ describe("safe SVG uploads", () => {
     ).toContain("<image");
   });
 
+  it("accepts benign generator metadata processing instructions", () => {
+    expect(
+      validateSafeSvgBytes(
+        bytes(
+          '<?xpacket begin="metadata"?><svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg><?xpacket end="w"?>',
+        ),
+      ),
+    ).toContain("xpacket");
+  });
+
+  it("still rejects stylesheet processing instructions", () => {
+    expect(() =>
+      validateSafeSvgBytes(
+        bytes(
+          '<?xml-stylesheet href="https://evil.example/a.css"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+        ),
+      ),
+    ).toThrow("spoljne deklaracije");
+  });
+
   it.each([
     '<svg xmlns="http://www.w3.org/2000/svg"><image href="../slika.png"/></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/a.png"/></svg>',

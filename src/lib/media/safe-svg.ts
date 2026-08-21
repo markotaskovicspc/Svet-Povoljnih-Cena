@@ -1,4 +1,8 @@
 import { SaxesParser, type SaxesTagNS } from "saxes";
+import {
+  hasRasterSignature,
+  type EmbeddableRasterMime,
+} from "./raster-signature";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const FORBIDDEN_ELEMENTS = new Set([
@@ -22,34 +26,6 @@ class SvgValidationError extends Error {}
 
 function reject(message: string): never {
   throw new SvgValidationError(message);
-}
-
-function startsWithBytes(bytes: Uint8Array, expected: number[]) {
-  return expected.every((value, index) => bytes[index] === value);
-}
-
-function asciiAt(bytes: Uint8Array, offset: number, value: string) {
-  return [...value].every(
-    (character, index) => bytes[offset + index] === character.charCodeAt(0),
-  );
-}
-
-function hasRasterSignature(mime: string, bytes: Uint8Array) {
-  if (mime === "image/png") {
-    return startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  }
-  if (mime === "image/jpeg") {
-    return startsWithBytes(bytes, [0xff, 0xd8, 0xff]);
-  }
-  if (mime === "image/webp") {
-    return asciiAt(bytes, 0, "RIFF") && asciiAt(bytes, 8, "WEBP");
-  }
-  if (mime === "image/avif") {
-    if (!asciiAt(bytes, 4, "ftyp")) return false;
-    const header = String.fromCharCode(...bytes.subarray(0, 64));
-    return header.includes("avif") || header.includes("avis");
-  }
-  return false;
 }
 
 function validateEmbeddedRaster(value: string) {
@@ -77,7 +53,7 @@ function validateEmbeddedRaster(value: string) {
   } catch {
     reject("SVG sadrži neispravnu ugrađenu sliku.");
   }
-  if (!hasRasterSignature(mime, decoded)) {
+  if (!hasRasterSignature(mime as EmbeddableRasterMime, decoded)) {
     reject("SVG sadrži neispravnu ugrađenu sliku.");
   }
 }
@@ -121,11 +97,14 @@ function validateElement(tag: SaxesTagNS) {
     }
     if (attributeName === "href") {
       if (!value || value.startsWith("#")) continue;
-      if (elementName === "image" && value.toLowerCase().startsWith("data:")) {
+      if (
+        (elementName === "image" || elementName === "feimage") &&
+        value.toLowerCase().startsWith("data:")
+      ) {
         validateEmbeddedRaster(value);
         continue;
       }
-      if (elementName === "image") {
+      if (elementName === "image" || elementName === "feimage") {
         reject(
           "SVG sadrži povezanu sliku. Ugradite je u SVG (Embed) ili izvezite fajl kao PNG/WebP.",
         );
@@ -164,8 +143,10 @@ export function validateSafeSvgBytes(input: ArrayBuffer | Uint8Array) {
   parser.on("doctype", () => {
     reject("SVG ne sme da sadrži spoljne deklaracije.");
   });
-  parser.on("processinginstruction", () => {
-    reject("SVG ne sme da sadrži spoljne deklaracije.");
+  parser.on("processinginstruction", ({ target }) => {
+    if (target.toLowerCase() === "xml-stylesheet") {
+      reject("SVG ne sme da sadrži spoljne deklaracije.");
+    }
   });
   parser.on("opentag", (tag) => {
     if (!rootSeen) {

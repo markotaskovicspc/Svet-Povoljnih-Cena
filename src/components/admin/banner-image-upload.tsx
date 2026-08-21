@@ -5,12 +5,21 @@ import { ImagePlus, RotateCcw, Upload } from "lucide-react";
 import {
   BANNER_IMAGE_MAX_BYTES,
   type BannerImageVariant,
+  mergeBannerUploadFiles,
+  shouldContinuePendingBannerSvg,
+  splitBannerUploadFiles,
   validateBannerImageFile,
 } from "@/lib/banners/image-file";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_IMAGES =
   "image/png,image/jpeg,image/webp,image/avif,image/svg+xml,.png,.jpg,.jpeg,.webp,.avif,.svg";
+
+class SvgCompanionUploadError extends Error {
+  constructor(readonly missing: string[]) {
+    super("SVG koristi prateću sliku.");
+  }
+}
 
 export function BannerImageUpload({
   name,
@@ -44,6 +53,11 @@ export function BannerImageUpload({
   const [uploadedKey, setUploadedKey] = useState("");
   const objectUrlRef = useRef("");
   const uploadedKeyRef = useRef("");
+  const pendingSvgRef = useRef<{
+    primary: File;
+    companions: File[];
+    missing: string[];
+  } | null>(null);
   const selectionRef = useRef(0);
   const uploadKeyName = name.replace(/File$/, "UploadKey");
 
@@ -73,6 +87,7 @@ export function BannerImageUpload({
 
   function resetPreview() {
     selectionRef.current += 1;
+    pendingSvgRef.current = null;
     clearUploadedKey();
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -96,13 +111,18 @@ export function BannerImageUpload({
       selectionRef.current += 1;
       cleanupStagedUpload(uploadedKeyRef.current);
       uploadedKeyRef.current = "";
+      pendingSvgRef.current = null;
       releaseObjectUrl();
     };
     // The current URL is fixed for the lifetime of an individual edit form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function stageFile(file: File, selection: number) {
+  async function stageFile(
+    file: File,
+    companions: File[],
+    selection: number,
+  ) {
     let stagedKey = "";
     try {
       if (file.type === "image/svg+xml") {
@@ -110,11 +130,25 @@ export function BannerImageUpload({
         formData.set("file", file);
         formData.set("placement", placement);
         formData.set("variant", variant);
+        for (const companion of companions) {
+          formData.append("companions", companion);
+        }
         const response = await fetch("/api/admin/banner-uploads", {
           method: "POST",
           body: formData,
         });
         const payload = await response.json().catch(() => null);
+        if (
+          !response.ok &&
+          payload?.code === "SVG_COMPANION_REQUIRED" &&
+          Array.isArray(payload.missing)
+        ) {
+          throw new SvgCompanionUploadError(
+            payload.missing.filter(
+              (value: unknown): value is string => typeof value === "string",
+            ),
+          );
+        }
         if (!response.ok || !payload?.key) {
           throw new Error(payload?.error ?? "Slanje SVG slike nije uspelo.");
         }
@@ -124,9 +158,14 @@ export function BannerImageUpload({
           return;
         }
         uploadedKeyRef.current = stagedKey;
+        pendingSvgRef.current = null;
         setUploadedKey(stagedKey);
         setUploading(false);
         setError("");
+        if (payload.publicUrl) {
+          releaseObjectUrl();
+          setPreviewUrl(String(payload.publicUrl));
+        }
         if (inputRef.current) {
           inputRef.current.value = "";
           inputRef.current.setCustomValidity("");
@@ -165,6 +204,7 @@ export function BannerImageUpload({
       }
 
       uploadedKeyRef.current = stagedKey;
+      pendingSvgRef.current = null;
       setUploadedKey(stagedKey);
       setUploading(false);
       setError("");
@@ -178,9 +218,22 @@ export function BannerImageUpload({
       if (stagedKey) cleanupStagedUpload(stagedKey);
       if (selectionRef.current !== selection) return;
       const message =
-        caught instanceof Error
-          ? caught.message
-          : "Slanje slike nije uspelo. Pokušajte ponovo.";
+        caught instanceof SvgCompanionUploadError
+          ? caught.missing.length === 1
+            ? `Dodajte i prateću sliku „${caught.missing[0]}” — prevucite je ovde ili je izaberite.`
+            : `Dodajte i prateće slike: ${caught.missing.join(", ")} — prevucite ih ovde ili ih izaberite.`
+          : caught instanceof Error
+            ? caught.message
+            : "Slanje slike nije uspelo. Pokušajte ponovo.";
+      if (caught instanceof SvgCompanionUploadError) {
+        pendingSvgRef.current = {
+          primary: file,
+          companions,
+          missing: caught.missing,
+        };
+      } else {
+        pendingSvgRef.current = null;
+      }
       setUploading(false);
       setUploadedKey("");
       uploadedKeyRef.current = "";
@@ -192,9 +245,21 @@ export function BannerImageUpload({
     }
   }
 
-  function applyFile(file: File | undefined) {
-    if (!file) return;
+  function applyFiles(incoming: File[]) {
+    if (!incoming.length) return;
+    const pending = pendingSvgRef.current;
+    const files = shouldContinuePendingBannerSvg(incoming, pending?.missing)
+      ? mergeBannerUploadFiles(
+          [pending!.primary, ...pending!.companions],
+          incoming,
+        )
+      : incoming;
+    let file: File;
+    let companions: File[];
     try {
+      const selected = splitBannerUploadFiles(files);
+      file = selected.primary;
+      companions = selected.companions;
       validateBannerImageFile(file);
     } catch (caught) {
       const message =
@@ -204,6 +269,7 @@ export function BannerImageUpload({
         inputRef.current.setCustomValidity(message);
       }
       selectionRef.current += 1;
+      pendingSvgRef.current = null;
       clearUploadedKey();
       releaseObjectUrl();
       setPreviewUrl(currentUrl ?? "");
@@ -218,6 +284,7 @@ export function BannerImageUpload({
     if (!input) return;
     selectionRef.current += 1;
     const selection = selectionRef.current;
+    pendingSvgRef.current = null;
     clearUploadedKey();
     input.setCustomValidity("Sačekajte da se slika otpremi.");
 
@@ -229,11 +296,12 @@ export function BannerImageUpload({
     setRemoved(false);
     setUploading(true);
     setError("");
-    void stageFile(file, selection);
+    void stageFile(file, companions, selection);
   }
 
   function removeCurrentSelection() {
     selectionRef.current += 1;
+    pendingSvgRef.current = null;
     clearUploadedKey();
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -265,10 +333,13 @@ export function BannerImageUpload({
         id={inputId}
         name={name}
         type="file"
+        multiple
         accept={ACCEPTED_IMAGES}
         className="sr-only"
         aria-describedby={`${inputId}-hint${error ? ` ${inputId}-error` : ""}`}
-        onChange={(event) => applyFile(event.currentTarget.files?.[0])}
+        onChange={(event) =>
+          applyFiles(Array.from(event.currentTarget.files ?? []))
+        }
       />
       {uploadedKey ? (
         <input type="hidden" name={uploadKeyName} value={uploadedKey} />
@@ -307,7 +378,7 @@ export function BannerImageUpload({
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          applyFile(event.dataTransfer.files?.[0]);
+          applyFiles(Array.from(event.dataTransfer.files ?? []));
         }}
       >
         {previewUrl ? (
@@ -351,7 +422,7 @@ export function BannerImageUpload({
               Prevucite sliku ovde
             </span>
             <span className="text-xs text-ink-500">
-              ili kliknite da je izaberete sa računara
+              ili kliknite da je izaberete sa računara ili telefona
             </span>
           </span>
         )}
@@ -361,6 +432,8 @@ export function BannerImageUpload({
         <span id={`${inputId}-hint`} className="text-xs text-ink-500">
           {hint}
           {required && !hasCurrentImage ? " Obavezna slika." : ""}
+          {" "}Ako SVG koristi prateću sliku, dodajte oba fajla zajedno ili
+          jedan za drugim.
         </span>
         {removeName && (hasCurrentImage || selectedName) ? (
           <button
