@@ -49,6 +49,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup.match(/<img/g)).toHaveLength(1);
     expect(markup).toContain("bg-white");
     expect(markup).not.toContain("data-color-count=");
+    expect(markup).not.toContain("linear-gradient(135deg");
     expect(markup).not.toContain("linear-gradient(90deg");
   });
 
@@ -116,7 +117,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(2);
     expect(markup.match(/<img/g)).toHaveLength(2);
     expect(markup).not.toContain("data-color-count=");
-    expect(markup).toContain("linear-gradient(135deg");
+    expect(markup).not.toContain("linear-gradient(135deg");
   });
 
   it("na kartici prikazuje sve boje u jednom pristupačnom karuselu", () => {
