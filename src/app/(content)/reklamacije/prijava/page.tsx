@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { ReclamationForm } from "@/app/(account)/nalog/reklamacije/reclamation-form";
 import { getGuestOrderForReclamation } from "@/lib/api/reclamations";
+import { GuestReclamationLinkRequestForm } from "../guest-link-request-form";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -61,9 +62,14 @@ export default async function GuestReclamationPage({
               Link nije važeći ili više nema artikala za prijavu.
             </p>
             <p className="mt-2 text-sm text-ink-500">
-              Otvorite originalni link iz potvrde porudžbine ili kontaktirajte
-              podršku.
+              Zatražite novi link koristeći broj porudžbine i e-poštu sa kojom
+              ste kupovali, ili kontaktirajte podršku.
             </p>
+            <div className="text-left">
+              <GuestReclamationLinkRequestForm
+                defaultOrderNumber={params.order ?? ""}
+              />
+            </div>
             <Link
               href="/kontakt"
               className="mt-5 inline-flex rounded-full border border-border px-4 py-2 text-sm font-medium text-ink-900"

@@ -15,6 +15,7 @@ export {
   sendFiscalReceipt,
   sendReclamationReceipt,
   sendReclamationStatusChanged,
+  sendGuestReclamationLink,
   sendPasswordReset,
   sendOtpEmail,
   sendMagicLink,

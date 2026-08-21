@@ -237,9 +237,10 @@ async function createReclamationRecord(
           customerEmail: account?.email ?? order.guestEmail ?? null,
           customerPhone,
           description: input.description,
-          // Legacy non-null column retained for historical reporting. Customer
-          // communication now happens in the authenticated portal, not by email.
-          notifyVia: "PHONE",
+          // Registered customers follow the case in their account. Guests do
+          // not have a portal, so their receipt and every status change must go
+          // to the e-mail address captured on the order.
+          notifyVia: order.userId ? "PHONE" : "EMAIL",
           purchaseDate: options.actorId ? order.createdAt : undefined,
           type: options.type ?? undefined,
           request: options.request ?? undefined,

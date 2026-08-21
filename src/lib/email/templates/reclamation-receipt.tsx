@@ -10,11 +10,13 @@ import {
 export interface ReclamationReceiptProps {
   reclamation: Reclamation;
   baseUrl?: string;
+  guest?: boolean;
 }
 
 export function ReclamationReceipt({
   reclamation,
   baseUrl = "https://www.svetpovoljnihcena.rs",
+  guest = false,
 }: ReclamationReceiptProps) {
   const url = `${baseUrl}/nalog/reklamacije`;
   return (
@@ -37,7 +39,14 @@ export function ReclamationReceipt({
       <EmailParagraph>
         Opis problema: <em>{reclamation.description}</em>
       </EmailParagraph>
-      <EmailButton href={url}>Pregled mojih reklamacija</EmailButton>
+      {guest ? (
+        <EmailParagraph>
+          O svakoj promeni statusa obavestićemo vas na ovu e-poštu. Za praćenje
+          nije potrebno da naknadno otvarate nalog.
+        </EmailParagraph>
+      ) : (
+        <EmailButton href={url}>Pregled mojih reklamacija</EmailButton>
+      )}
     </EmailLayout>
   );
 }

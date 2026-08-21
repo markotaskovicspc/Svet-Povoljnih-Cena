@@ -170,7 +170,11 @@ export async function loadOrderForEmail(
 
 export async function loadReclamationForEmail(
   reclamationId: string,
-): Promise<{ reclamation: Reclamation; recipient: string | null } | null> {
+): Promise<{
+  reclamation: Reclamation;
+  recipient: string | null;
+  guest: boolean;
+} | null> {
   const row = await db.reclamation.findUnique({
     where: { id: reclamationId },
     include: { photos: true, order: { select: { number: true } } },
@@ -207,5 +211,5 @@ export async function loadReclamationForEmail(
 
   const recipient =
     row.notifyVia === "EMAIL" ? row.customerEmail ?? null : null;
-  return { reclamation, recipient };
+  return { reclamation, recipient, guest: row.userId === null };
 }

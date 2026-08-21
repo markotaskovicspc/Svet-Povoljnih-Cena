@@ -8,6 +8,7 @@ import {
   type ShipmentStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
 import { syncXExpressShipmentById } from "@/lib/x-express/sync";
@@ -493,13 +494,25 @@ export async function applyShipmentEvent(
         },
       });
       if (resolved.count > 0) {
-        await tx.reclamationStatusEvent.create({
+        const statusEvent = await tx.reclamationStatusEvent.create({
           data: {
             reclamationId: shipment.reclamationId,
             status: "RESENO",
             note: `Zamena/deo potvrđeno isporučen (${shipment.trackingNo ?? shipment.id}).`,
           },
+          select: { id: true },
         });
+        await enqueueBackgroundJob(
+          {
+            kind: "RECLAMATION_STATUS_EMAIL",
+            payload: {
+              reclamationId: shipment.reclamationId,
+              eventId: statusEvent.id,
+            },
+            idempotencyKey: `reclamation-status-email:${statusEvent.id}`,
+          },
+          tx,
+        );
       }
     }
   });

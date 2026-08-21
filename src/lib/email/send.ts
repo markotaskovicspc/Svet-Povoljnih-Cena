@@ -10,6 +10,7 @@ import { OrderStatusChanged } from "./templates/order-status-changed";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
 import { ReclamationStatusChanged } from "./templates/reclamation-status-changed";
+import { GuestReclamationLink } from "./templates/guest-reclamation-link";
 import { PasswordReset } from "./templates/password-reset";
 import { OtpEmail } from "./templates/otp";
 import { EmailConfirmation } from "./templates/email-confirmation";
@@ -216,11 +217,16 @@ export async function sendFiscalReceipt(args: {
 export async function sendReclamationReceipt(args: {
   reclamation: Reclamation;
   to: string;
+  guest?: boolean;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
   const { html, text } = await renderEmail(
-    ReclamationReceipt({ reclamation: args.reclamation, baseUrl: cfg.baseUrl }),
+    ReclamationReceipt({
+      reclamation: args.reclamation,
+      baseUrl: cfg.baseUrl,
+      guest: args.guest,
+    }),
   );
   return trackedDispatch({
     kind: "reclamation_receipt",
@@ -238,6 +244,8 @@ export async function sendReclamationStatusChanged(args: {
   reclamation: Reclamation;
   status: ReclamationStatus;
   to: string;
+  guest?: boolean;
+  idempotencyKey?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
@@ -246,6 +254,7 @@ export async function sendReclamationStatusChanged(args: {
       reclamation: args.reclamation,
       status: args.status,
       baseUrl: cfg.baseUrl,
+      guest: args.guest,
     }),
   );
   return trackedDispatch({
@@ -260,7 +269,31 @@ export async function sendReclamationStatusChanged(args: {
       reclamation: args.reclamation.id,
       status: args.status,
     },
-    idempotencyKey: `reclamation-status:${args.reclamation.id}:${args.status}`,
+    idempotencyKey:
+      args.idempotencyKey ??
+      `reclamation-status:${args.reclamation.id}:${args.status}`,
+  });
+}
+
+export async function sendGuestReclamationLink(args: {
+  order: Order;
+  to: string;
+  accessToken: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const reclamationUrl = `${cfg.baseUrl}/reklamacije/prijava?order=${encodeURIComponent(args.order.id)}&token=${encodeURIComponent(args.accessToken)}`;
+  const { html, text } = await renderEmail(
+    GuestReclamationLink({ order: args.order, reclamationUrl }),
+  );
+  return trackedDispatch({
+    kind: "guest_reclamation_link",
+    to: args.to,
+    subject: `Link za reklamaciju — porudžbina ${args.order.id}`,
+    html,
+    text,
+    tags: { kind: "guest_reclamation_link", order: args.order.id },
+    idempotencyKey: `guest-reclamation-link:${args.order.id}:${hashId(args.accessToken)}`,
   });
 }
 

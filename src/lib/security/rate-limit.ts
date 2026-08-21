@@ -34,6 +34,8 @@ export const RATE_LIMITS = {
   search: { limit: 120, windowMs: MINUTE },
   upload: { limit: 10, windowMs: HOUR },
   reclamation: { limit: 10, windowMs: HOUR },
+  guestReclamationLinkIp: { limit: 20, windowMs: HOUR },
+  guestReclamationLinkIdentity: { limit: 5, windowMs: HOUR },
   registration: { limit: 5, windowMs: HOUR },
   comments: { limit: 5, windowMs: HOUR },
   accountMutation: { limit: 20, windowMs: HOUR },

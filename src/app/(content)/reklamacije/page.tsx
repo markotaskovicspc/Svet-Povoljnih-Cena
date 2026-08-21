@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CmsContentPage } from "@/components/content/cms-content-page";
+import { CmsFunctionalPage } from "@/components/content/cms-content-page";
 import { getPublishedContentPage } from "@/lib/cms/pages";
+import { GuestReclamationLinkRequestForm } from "./guest-link-request-form";
 
 const SLUG = "reklamacije";
 
@@ -18,9 +19,12 @@ export default async function ReklamacijePage() {
   const page = await getPublishedContentPage(SLUG);
   if (!page) notFound();
   return (
-    <CmsContentPage
+    <CmsFunctionalPage
       page={page}
       parentTrail={[{ label: "Servis za kupce", href: "/servis" }]}
-    />
+      widgetPosition="before"
+    >
+      <GuestReclamationLinkRequestForm />
+    </CmsFunctionalPage>
   );
 }

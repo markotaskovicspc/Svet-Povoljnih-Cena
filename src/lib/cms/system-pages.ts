@@ -115,10 +115,11 @@ Pišite nam preko [kontakt strane](/kontakt), ili otvorite zahtev u [Servisu za 
 
 ## Kako podneti reklamaciju {#kako}
 
-1. Prijavite se i otvorite portal [Moj nalog → Reklamacije](/nalog/reklamacije). Izaberite porudžbinu i artikal, dodajte komentar i fotografije.
-2. Broj reklamacije i svaku promenu statusa pratite u istom portalu.
-3. Tehnička služba donosi odluku u roku od **8 dana** (zakonski rok 15 dana).
-4. U dogovoru sa vama biramo: zamenu artikla, popravku, sniženje cene ili povraćaj sredstava.
+1. Ako imate nalog, otvorite [Moj nalog → Reklamacije](/nalog/reklamacije). Izaberite porudžbinu i artikal, dodajte komentar i fotografije.
+2. Ako ste kupili bez naloga, upotrebite bezbedan link iz potvrde porudžbine. Ako ste poruku izgubili, [zatražite novi link](/reklamacije#kupovina-bez-naloga) pomoću broja porudžbine i e-pošte korišćene pri kupovini.
+3. Registrovani kupac prati status u portalu, a kupac bez naloga dobija potvrdu i promene statusa e-poštom.
+4. Tehnička služba donosi odluku u roku od **8 dana** (zakonski rok 15 dana).
+5. U dogovoru sa vama biramo: zamenu artikla, popravku, sniženje cene ili povraćaj sredstava.
 
 ## Šta nije reklamacija {#napomena}
 

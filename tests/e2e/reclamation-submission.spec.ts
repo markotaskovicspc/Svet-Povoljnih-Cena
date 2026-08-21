@@ -7,6 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { config as loadEnv } from "dotenv";
+import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -23,6 +24,9 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
   const customerEmail = `${prefix.toLowerCase()}@example.invalid`;
   const customerPassword = `QaRek!${runId}x`;
   const guestToken = `${prefix}-guest-token-0123456789`;
+  const guestEmail = `${prefix.toLowerCase()}.guest@example.invalid`;
+  const recoveryToken = `${prefix}-recovery-token-0123456789`;
+  const recoveryEmail = `${prefix.toLowerCase()}.recovery@example.invalid`;
   let db: PrismaClient;
   let userId = "";
   const productIds: string[] = [];
@@ -31,9 +35,11 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
   const registeredOrderNumber = `${prefix}-REG`;
   const pendingOrderNumber = `${prefix}-PENDING`;
   const guestOrderNumber = `${prefix}-GUEST`;
+  const recoveryOrderNumber = `${prefix}-RECOVERY`;
   const registeredSku = `${prefix}-SKU-REG`;
   const pendingSku = `${prefix}-SKU-PENDING`;
   const guestSku = `${prefix}-SKU-GUEST`;
+  const recoverySku = `${prefix}-SKU-RECOVERY`;
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -51,7 +57,12 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
     });
     userId = user.id;
 
-    for (const [index, sku] of [registeredSku, pendingSku, guestSku].entries()) {
+    for (const [index, sku] of [
+      registeredSku,
+      pendingSku,
+      guestSku,
+      recoverySku,
+    ].entries()) {
       const product = await db.product.create({
         data: {
           sku,
@@ -85,8 +96,16 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
         number: guestOrderNumber,
         sku: guestSku,
         productId: productIds[2]!,
-        guestEmail: `${prefix.toLowerCase()}.guest@example.invalid`,
+        guestEmail,
         accessToken: guestToken,
+        status: "ISPORUCENO",
+      }),
+      await createOrder({
+        number: recoveryOrderNumber,
+        sku: recoverySku,
+        productId: productIds[3]!,
+        guestEmail: recoveryEmail,
+        accessToken: recoveryToken,
         status: "ISPORUCENO",
       }),
     );
@@ -99,16 +118,25 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
       select: { id: true },
     });
     const reclamationIds = reclamations.map((row) => row.id);
-    if (reclamationIds.length) {
-      await db.backgroundJob.deleteMany({
-        where: {
-          OR: reclamationIds.flatMap((id) => [
+    await db.emailMessage.deleteMany({
+      where: {
+        OR: [
+          { recipient: { contains: prefix.toLowerCase() } },
+          { subject: { contains: prefix } },
+        ],
+      },
+    });
+    await db.backgroundJob.deleteMany({
+      where: {
+        OR: [
+          ...reclamationIds.flatMap((id) => [
             { payload: { path: ["reclamationId"], equals: id } },
             { idempotencyKey: { contains: id } },
           ]),
-        },
-      });
-    }
+          ...orderIds.map((id) => ({ idempotencyKey: { contains: id } })),
+        ],
+      },
+    });
     await db.reclamation.deleteMany({ where: { orderId: { in: orderIds } } });
     await db.order.deleteMany({ where: { id: { in: orderIds } } });
     await db.product.deleteMany({ where: { id: { in: productIds } } });
@@ -208,6 +236,149 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
         }),
       )
       .toBe(1);
+
+    const saved = await db.reclamation.findFirstOrThrow({
+      where: { order: { number: guestOrderNumber } },
+      select: { id: true, number: true, notifyVia: true },
+    });
+    expect(saved.notifyVia).toBe("EMAIL");
+
+    const receiptJob = await db.backgroundJob.findFirstOrThrow({
+      where: {
+        kind: "RECLAMATION_RECEIPT",
+        payload: { path: ["reclamationId"], equals: saved.id },
+      },
+      select: { id: true },
+    });
+    await processBackgroundJobsThroughApp(page);
+    await expect
+      .poll(() =>
+        db.backgroundJob.findUnique({
+          where: { id: receiptJob.id },
+          select: { status: true },
+        }),
+      )
+      .toMatchObject({ status: "COMPLETED" });
+    await expect
+      .poll(() =>
+        db.emailMessage.count({
+          where: { kind: "reclamation_receipt", recipient: guestEmail },
+        }),
+      )
+      .toBe(1);
+
+    const event = await updateReclamationStatus({
+      reclamationId: saved.id,
+      status: "U_OBRADI",
+      note: "QA provera obaveštenja gosta.",
+    });
+    const statusJob = await db.backgroundJob.findUniqueOrThrow({
+      where: { idempotencyKey: `reclamation-status-email:${event.id}` },
+      select: { id: true },
+    });
+    await processBackgroundJobsThroughApp(page);
+    await expect
+      .poll(() =>
+        db.backgroundJob.findUnique({
+          where: { id: statusJob.id },
+          select: { status: true },
+        }),
+      )
+      .toMatchObject({ status: "COMPLETED" });
+    await expect
+      .poll(() =>
+        db.emailMessage.count({
+          where: { kind: "reclamation_status", recipient: guestEmail },
+        }),
+      )
+      .toBe(1);
+  });
+
+  test("gost može bez otkrivanja podataka da zatraži novi bezbedan link", async ({
+    page,
+  }) => {
+    const before = await db.order.findUniqueOrThrow({
+      where: { number: recoveryOrderNumber },
+      select: { publicAccessTokenHash: true },
+    });
+
+    await page.goto("/reklamacije", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Kupili ste bez naloga?" }),
+    ).toBeVisible();
+    await page.getByLabel("Broj porudžbine").fill(recoveryOrderNumber);
+    await page
+      .getByLabel("E-pošta iz porudžbine")
+      .fill("pogresna-adresa@example.invalid");
+    await page.getByRole("button", { name: "Pošalji bezbedan link" }).click();
+    await expect(
+      page.getByText("Ako se podaci poklapaju sa isporučenom porudžbinom"),
+    ).toBeVisible();
+    await expect
+      .poll(async () =>
+        (
+          await db.order.findUniqueOrThrow({
+            where: { number: recoveryOrderNumber },
+            select: { publicAccessTokenHash: true },
+          })
+        ).publicAccessTokenHash,
+      )
+      .toBe(before.publicAccessTokenHash);
+
+    await page.goto("/reklamacije", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Broj porudžbine").fill(recoveryOrderNumber);
+    await page.getByLabel("E-pošta iz porudžbine").fill(recoveryEmail);
+    await page.getByRole("button", { name: "Pošalji bezbedan link" }).click();
+    await expect(
+      page.getByText("Ako se podaci poklapaju sa isporučenom porudžbinom"),
+    ).toBeVisible();
+
+    await expect
+      .poll(async () =>
+        (
+          await db.order.findUniqueOrThrow({
+            where: { number: recoveryOrderNumber },
+            select: { publicAccessTokenHash: true },
+          })
+        ).publicAccessTokenHash,
+      )
+      .not.toBe(before.publicAccessTokenHash);
+    await expect
+      .poll(() =>
+        db.emailMessage.count({
+          where: {
+            kind: "guest_reclamation_link",
+            recipient: recoveryEmail,
+            status: "SENT",
+          },
+        }),
+      )
+      .toBe(1);
+
+    await page.goto(
+      `/reklamacije/prijava?order=${encodeURIComponent(recoveryOrderNumber)}&token=${encodeURIComponent(recoveryToken)}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await expect(page.getByText("Link nije važeći")).toBeVisible();
+    await expect(page.getByLabel("Broj porudžbine")).toHaveValue(
+      recoveryOrderNumber,
+    );
+
+    const attempts = [];
+    for (let index = 0; index < 6; index += 1) {
+      attempts.push(
+        await page.request.post("/api/reclamations/guest-link", {
+          data: {
+            orderNumber: `${prefix}-RATE-LIMIT`,
+            email: "rate-limit@example.invalid",
+          },
+        }),
+      );
+    }
+    expect(attempts.slice(0, 5).every((response) => response.status() === 200)).toBe(
+      true,
+    );
+    expect(attempts[5]?.status()).toBe(429);
   });
 
   async function createOrder(input: {
@@ -256,6 +427,21 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
       select: { id: true },
     });
     return order.id;
+  }
+
+  async function processBackgroundJobsThroughApp(page: Page) {
+    const secret =
+      process.env.BACKGROUND_JOBS_CRON_SECRET ?? process.env.CRON_SECRET;
+    if (!secret) {
+      throw new Error(
+        "Reclamation acceptance requires BACKGROUND_JOBS_CRON_SECRET or CRON_SECRET.",
+      );
+    }
+    const response = await page.request.post(
+      "/api/cron/background-jobs?limit=100",
+      { headers: { authorization: `Bearer ${secret}` } },
+    );
+    expect(response.status()).toBe(200);
   }
 
   async function loginCustomer(page: Page) {

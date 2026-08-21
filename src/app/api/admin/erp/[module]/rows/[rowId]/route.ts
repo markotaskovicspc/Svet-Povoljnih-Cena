@@ -57,6 +57,7 @@ import {
   hasProductVolumeSource,
   PRODUCT_LOGISTICS_SOURCE_ERROR,
 } from "@/lib/admin/purchase-order";
+import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 
 type CellValue = string | number | boolean | null;
 type PersistedCellResult = {
@@ -205,7 +206,7 @@ async function persistErpCell(
     case "newsletter-kampanje":
       return persistNewsletterCell(rowId, columnKey, value);
     case "reklamacije-dnevnik":
-      return persistReclamationCell(rowId, columnKey, value);
+      return persistReclamationCell(rowId, columnKey, value, actorId);
     case "admin-podesavanja":
       return persistAdminSettingCell(rowId, columnKey, value);
     default:
@@ -1218,22 +1219,19 @@ async function persistNewsletterCell(rowId: string, columnKey: string, value: Ce
   return { value };
 }
 
-async function persistReclamationCell(rowId: string, columnKey: string, value: CellValue) {
+async function persistReclamationCell(
+  rowId: string,
+  columnKey: string,
+  value: CellValue,
+  actorId: string,
+) {
   if (columnKey === "status") {
     const status = enumFromMap(ReclamationStatus, value, "Nepoznat status reklamacije.");
-    await db.$transaction([
-      db.reclamation.update({
-        where: { id: rowId },
-        data: {
-          status,
-          resolvedAt:
-            status === ReclamationStatus.RESENO || status === ReclamationStatus.ODBIJENO
-              ? new Date()
-              : null,
-        },
-      }),
-      db.reclamationStatusEvent.create({ data: { reclamationId: rowId, status } }),
-    ]);
+    await updateReclamationStatus({
+      reclamationId: rowId,
+      status,
+      actorId,
+    });
     return { value: status };
   }
   const data: Prisma.ReclamationUncheckedUpdateInput = {};

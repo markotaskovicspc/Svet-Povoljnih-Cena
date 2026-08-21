@@ -38,6 +38,7 @@ import {
   sendBackInStockAlert,
   sendEmailConfirmation,
   sendFiscalReceipt,
+  sendGuestReclamationLink,
   sendIpsPaymentConfirmation,
   sendMagicLink,
   sendOnSaleAlert,
@@ -258,8 +259,51 @@ describe("all transactional Resend send flows", () => {
           idempotencyKey: `reclamation-status:${reclamation.id}:${status}`,
         }),
       );
+      expect(mocks.trackedDispatch.mock.calls[0]?.[0].html).toContain(
+        "/nalog/reklamacije",
+      );
     },
   );
+
+  it("renders a valid guest reclamation recovery link without account-only actions", async () => {
+    await sendGuestReclamationLink({
+      order,
+      to: "guest@example.invalid",
+      accessToken: "guest-reclamation-recovery-token-0123456789",
+    });
+    await sendReclamationReceipt({
+      reclamation,
+      to: "guest@example.invalid",
+      guest: true,
+    });
+    await sendReclamationStatusChanged({
+      reclamation,
+      status: "u_obradi",
+      to: "guest@example.invalid",
+      guest: true,
+      idempotencyKey: "reclamation-status:event-audit",
+    });
+
+    const recovery = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(recovery).toMatchObject({
+      kind: "guest_reclamation_link",
+      to: "guest@example.invalid",
+      subject: expect.stringContaining(order.id),
+      idempotencyKey: expect.stringContaining(
+        `guest-reclamation-link:${order.id}:`,
+      ),
+    });
+    expect(recovery.html).toContain(
+      `/reklamacije/prijava?order=${encodeURIComponent(order.id)}&amp;token=guest-reclamation-recovery-token-0123456789`,
+    );
+    expect(mocks.trackedDispatch.mock.calls[1]?.[0].html).not.toContain(
+      "/nalog/reklamacije",
+    );
+    expect(mocks.trackedDispatch.mock.calls[2]?.[0]).toMatchObject({
+      idempotencyKey: "reclamation-status:event-audit",
+      html: expect.not.stringContaining("/nalog/reklamacije"),
+    });
+  });
 
   it("renders password reset, OTP, email confirmation and escaped magic link flows", async () => {
     await sendPasswordReset({
@@ -327,6 +371,11 @@ describe("all transactional Resend send flows", () => {
     await sendFiscalReceipt({ order, to: "", receiptNumber: "AUDIT" });
     await sendReclamationReceipt({ reclamation, to: "" });
     await sendReclamationStatusChanged({ reclamation, status: "reseno", to: "" });
+    await sendGuestReclamationLink({
+      order,
+      to: "",
+      accessToken: "guest-reclamation-recovery-token-0123456789",
+    });
     await sendBackInStockAlert({
       to: "",
       userId: "user-audit",

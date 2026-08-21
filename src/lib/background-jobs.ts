@@ -11,6 +11,10 @@ import {
 
 const schemas = {
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
+  GUEST_RECLAMATION_LINK_EMAIL: z.object({
+    orderId: z.string().min(1),
+    accessToken: z.string().min(20),
+  }),
   BUYER_RECEIPT: z.object({
     orderId: z.string().min(1),
     accessToken: z.string().min(20).optional(),
@@ -61,7 +65,10 @@ const schemas = {
     actorId: z.string().min(1).nullable().optional(),
   }),
   RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
-  RECLAMATION_STATUS_EMAIL: z.object({ reclamationId: z.string().min(1) }),
+  RECLAMATION_STATUS_EMAIL: z.object({
+    reclamationId: z.string().min(1),
+    eventId: z.string().min(1).optional(),
+  }),
   RABALUX_MEDIA_PRODUCT: z.object({
     productId: z.string().min(1),
     assetId: z.string().min(1).optional(),
@@ -82,12 +89,15 @@ export type BackgroundJobKind = keyof typeof schemas;
 
 const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "PASSWORD_RESET_EMAIL",
+  "GUEST_RECLAMATION_LINK_EMAIL",
   "BUYER_RECEIPT",
   "SUPPLIER_RESERVATION",
   "FISCAL_RECEIPT",
   "ORDER_STATUS_EMAIL",
   "IPS_PAYMENT_EMAIL",
   "PAYMENT_REFUND",
+  "RECLAMATION_RECEIPT",
+  "RECLAMATION_STATUS_EMAIL",
   "SUPPLIER_ORDER_EMAIL",
   "SUPPLIER_CANCEL_EMAIL",
   "SUPPLIER_RECLAMATION_EMAIL",
@@ -108,15 +118,19 @@ export class PermanentBackgroundJobError extends Error {
   }
 }
 
-export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
-  kind: K;
-  payload: z.input<(typeof schemas)[K]>;
-  idempotencyKey: string;
-  maxAttempts?: number;
-}) {
+export async function enqueueBackgroundJob<K extends BackgroundJobKind>(
+  args: {
+    kind: K;
+    payload: z.input<(typeof schemas)[K]>;
+    idempotencyKey: string;
+    maxAttempts?: number;
+  },
+  tx?: Prisma.TransactionClient,
+) {
   const payload = schemas[args.kind].parse(args.payload);
+  const client = tx ?? db;
   try {
-    return await db.backgroundJob.create({
+    return await client.backgroundJob.create({
       data: {
         kind: args.kind,
         payload: payload as Prisma.InputJsonValue,
@@ -127,7 +141,7 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const existing = await db.backgroundJob.findUniqueOrThrow({
+      const existing = await client.backgroundJob.findUniqueOrThrow({
         where: { idempotencyKey: args.idempotencyKey.slice(0, 200) },
         select: { id: true, status: true, lastError: true },
       });
@@ -135,7 +149,7 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(args: {
         existing.status === "FAILED" &&
         !existing.lastError?.startsWith("[permanent]")
       ) {
-        return db.backgroundJob.update({
+        return client.backgroundJob.update({
           where: { id: existing.id },
           data: {
             payload: payload as Prisma.InputJsonValue,
@@ -360,6 +374,44 @@ async function dispatchJob(job: JobRow) {
       if (!result.ok) throw new Error(result.error);
       return;
     }
+    case "GUEST_RECLAMATION_LINK_EMAIL": {
+      const {
+        loadOrderForEmail,
+        sendGuestReclamationLink,
+      } = await import("@/lib/email");
+      const { verifyOrderAccessToken } = await import("@/lib/api/order-access");
+      const args = payload as z.infer<
+        typeof schemas.GUEST_RECLAMATION_LINK_EMAIL
+      >;
+      const [loaded, access] = await Promise.all([
+        loadOrderForEmail(args.orderId),
+        db.order.findUnique({
+          where: { id: args.orderId },
+          select: {
+            userId: true,
+            publicAccessTokenHash: true,
+          },
+        }),
+      ]);
+      if (
+        !loaded?.recipient ||
+        !access ||
+        access.userId !== null ||
+        !verifyOrderAccessToken({
+          token: args.accessToken,
+          tokenHash: access.publicAccessTokenHash,
+        })
+      ) {
+        return;
+      }
+      const result = await sendGuestReclamationLink({
+        order: loaded.order,
+        to: loaded.recipient,
+        accessToken: args.accessToken,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return;
+    }
     case "BUYER_RECEIPT": {
       const { issueBuyerReceiptForOrder } = await import("@/lib/receipts/buyer");
       const buyerPayload = payload as z.infer<typeof schemas.BUYER_RECEIPT>;
@@ -466,7 +518,11 @@ async function dispatchJob(job: JobRow) {
       const { loadReclamationForEmail, sendReclamationReceipt } = await import("@/lib/email");
       const loaded = await loadReclamationForEmail((payload as z.infer<typeof schemas.RECLAMATION_RECEIPT>).reclamationId);
       if (!loaded?.recipient) return;
-      const result = await sendReclamationReceipt({ reclamation: loaded.reclamation, to: loaded.recipient });
+      const result = await sendReclamationReceipt({
+        reclamation: loaded.reclamation,
+        to: loaded.recipient,
+        guest: loaded.guest,
+      });
       if (!result.ok) throw new Error(result.error);
       return;
     }
@@ -478,6 +534,10 @@ async function dispatchJob(job: JobRow) {
         reclamation: loaded.reclamation,
         status: loaded.reclamation.status,
         to: loaded.recipient,
+        guest: loaded.guest,
+        idempotencyKey: `reclamation-status:${loaded.reclamation.id}:${(
+          payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>
+        ).eventId ?? loaded.reclamation.status}`,
       });
       if (!result.ok) throw new Error(result.error);
       return;

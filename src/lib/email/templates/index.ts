@@ -10,6 +10,7 @@ export { OrderStatusChanged } from "./order-status-changed";
 export { FiscalReceiptEmail } from "./fiscal-receipt";
 export { ReclamationReceipt } from "./reclamation-receipt";
 export { ReclamationStatusChanged } from "./reclamation-status-changed";
+export { GuestReclamationLink } from "./guest-reclamation-link";
 export { PasswordReset } from "./password-reset";
 export { OtpEmail } from "./otp";
 export { EmailConfirmation } from "./email-confirmation";

@@ -40,6 +40,7 @@ import {
   createReclamationSchema,
   lookupOrderForReclamation,
 } from "@/lib/api/reclamations";
+import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -232,16 +233,12 @@ async function updateStatus(formData: FormData) {
       if (!id || !Object.values(ReclamationStatus).includes(status)) {
         return { ok: false as const, error: "Nedostaje ID ili status." };
       }
-      const resolved = status === "RESENO" || status === "ODBIJENO";
-      await db.$transaction([
-        db.reclamation.update({
-          where: { id },
-          data: { status, resolvedAt: resolved ? new Date() : null },
-        }),
-        db.reclamationStatusEvent.create({
-          data: { reclamationId: id, status, note, actorId },
-        }),
-      ]);
+      await updateReclamationStatus({
+        reclamationId: id,
+        status,
+        note,
+        actorId,
+      });
       revalidatePath("/admin/erp/reklamacije-dnevnik");
       revalidatePath("/nalog/reklamacije");
       return { ok: true as const, entityId: id, diff: { status, note } };

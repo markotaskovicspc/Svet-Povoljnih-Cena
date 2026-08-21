@@ -29,12 +29,14 @@ export interface ReclamationStatusChangedProps {
   reclamation: Reclamation;
   status: ReclamationStatus;
   baseUrl?: string;
+  guest?: boolean;
 }
 
 export function ReclamationStatusChanged({
   reclamation,
   status,
   baseUrl = "https://www.svetpovoljnihcena.rs",
+  guest = false,
 }: ReclamationStatusChangedProps) {
   const copy = STATUS_COPY[status];
   const url = `${baseUrl}/nalog/reklamacije`;
@@ -49,7 +51,14 @@ export function ReclamationStatusChanged({
         <br />
         SKU artikla: {reclamation.sku}
       </EmailParagraph>
-      <EmailButton href={url}>Pregled reklamacija</EmailButton>
+      {guest ? (
+        <EmailParagraph>
+          Ovo obaveštenje je poslato na adresu korišćenu prilikom kupovine bez
+          naloga.
+        </EmailParagraph>
+      ) : (
+        <EmailButton href={url}>Pregled reklamacija</EmailButton>
+      )}
     </EmailLayout>
   );
 }
