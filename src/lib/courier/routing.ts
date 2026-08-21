@@ -22,6 +22,11 @@ export type RoutedPackage = {
   bulky: boolean;
 };
 
+export type CourierRoutingResolution =
+  | { kind: "single"; provider: "MYGLS" | "X_EXPRESS" }
+  | { kind: "mixed" }
+  | { kind: "invalid_dimensions" };
+
 function expandedPackages(order: PackageRouteInput) {
   return order.items.flatMap((item) => {
     const packageCount = Math.max(
@@ -36,6 +41,34 @@ function expandedPackages(order: PackageRouteInput) {
     const bulky = largestDimension > 60;
     return Array.from({ length: packageCount }, () => ({ bulky }));
   });
+}
+
+/**
+ * Resolves the launch routing rule for an order or a selected set of lines.
+ * Automatic routing is deliberately blocked when a catalogue dimension is
+ * missing: treating an unknown side as zero could send a large parcel to the
+ * wrong courier.
+ */
+export function resolveCourierProvider(
+  order: PackageRouteInput,
+): CourierRoutingResolution {
+  const providers = new Set<"MYGLS" | "X_EXPRESS">();
+  for (const item of order.items) {
+    const dimensions = [
+      item.packWidthCm,
+      item.packDepthCm,
+      item.packHeightCm,
+    ].map(Number);
+    if (dimensions.some((value) => !Number.isFinite(value) || value <= 0)) {
+      return { kind: "invalid_dimensions" };
+    }
+    providers.add(
+      Math.max(...dimensions) > 60 ? "MYGLS" : "X_EXPRESS",
+    );
+  }
+  if (!providers.size) return { kind: "invalid_dimensions" };
+  if (providers.size > 1) return { kind: "mixed" };
+  return { kind: "single", provider: [...providers][0]! };
 }
 
 /**

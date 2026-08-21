@@ -277,7 +277,7 @@ async function runCommand(
       if (module !== "preuzimanja") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
-      return createPickupBatchCommand();
+      return createPickupBatchCommand(input);
     case "pickup.delete":
       if (module !== "preuzimanja") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
@@ -573,8 +573,14 @@ async function createWarehouse(
   };
 }
 
-async function createPickupBatchCommand(): Promise<CommandResult> {
-  const batch = await createPickupBatch();
+async function createPickupBatchCommand(
+  input: Record<string, unknown>,
+): Promise<CommandResult> {
+  const provider = input.provider === "MYGLS" || input.provider === "X_EXPRESS"
+    ? input.provider
+    : null;
+  if (!provider) throw new Error("Izaberite X Express ili MyGLS.");
+  const batch = await createPickupBatch(provider);
   return {
     message: `Nalog ${batch.number} je kreiran.`,
     createdId: batch.id,

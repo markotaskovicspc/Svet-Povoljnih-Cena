@@ -5,7 +5,6 @@ import { listAddresses } from "@/lib/api/addresses";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
-import { getSelectedSmallParcelProvider } from "@/lib/courier";
 import { getCheckoutConfig } from "@/lib/checkout/config";
 import { CheckoutStartedAnalytics } from "@/components/analytics/first-party-analytics";
 
@@ -40,11 +39,13 @@ export default async function CheckoutPodaciPage() {
     .filter(Boolean)
     .join(" ");
   const accountName = account?.name ?? (accountFullName || null);
-  const smallParcelProvider = await getSelectedSmallParcelProvider();
   // Paket Shop/locker delivery is intentionally paused until MyGLS confirms
   // the account services and delivery-point master-data feed.
   const glsDeliveryPointsEnabled = false;
-  const xExpressAddressEnabled = smallParcelProvider === "X_EXPRESS";
+  // A structured X Express address is collected for every courier order.
+  // MyGLS can use the same human-readable address, while a later X Express
+  // route would otherwise be blocked by missing provider town/street IDs.
+  const xExpressAddressEnabled = true;
   const checkoutConfig = await getCheckoutConfig();
 
   return (

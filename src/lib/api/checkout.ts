@@ -25,7 +25,6 @@ import { normalizeProductColorLabel } from "@/lib/product-colors";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 import { MYGLS_PROVIDER } from "@/lib/mygls";
-import { getSelectedSmallParcelProvider } from "@/lib/courier";
 import {
   isPaymentMethodEnabled,
   resolveDeliveryQuote,
@@ -759,9 +758,8 @@ export async function createOrder(
     Boolean(bill) &&
     (bill?.liceType === "pravno" ||
       (!bill?.liceType && Boolean(bill?.companyName || bill?.pib)));
-  const smallParcelProvider = await getSelectedSmallParcelProvider();
-  const glsProviderActive = smallParcelProvider === "MYGLS";
-  const xExpressProviderActive = smallParcelProvider === "X_EXPRESS";
+  const glsProviderActive = false;
+  const xExpressProviderActive = input.shippingMethod === "KURIR";
   const xExpressTown =
     input.shippingMethod === "KURIR" && xExpressProviderActive
       ? await db.xExpressTown.findFirst({
@@ -1013,6 +1011,11 @@ export async function createOrder(
           qty: number;
         }>
       >();
+      const defaultDc = await tx.warehouse.findFirst({
+        where: { active: true, isDefault: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
 
       for (const line of input.lines) {
         const product = bySku.get(line.sku)!;
@@ -1045,6 +1048,11 @@ export async function createOrder(
               ? { warehouseQty: line.qty, supplierQty: 0 }
               : null;
         if (!allocation) throw new StockReservationError(line.sku);
+        if (allocation.warehouseQty > 0 && !defaultDc) {
+          throw new Error(
+            "Podrazumevani DC magacin nije podešen; porudžbina ne može bezbedno da rezerviše robu.",
+          );
+        }
         if (allocation.supplierQty > 0) {
           if (
             !product.supplierId ||
@@ -1071,6 +1079,7 @@ export async function createOrder(
         await tx.orderItem.update({
           where: { id: orderItem.id },
           data: {
+            warehouseId: allocation.warehouseQty > 0 ? defaultDc!.id : null,
             warehouseReservedQty: allocation.warehouseQty,
             supplierReservedQty: allocation.supplierQty,
           },

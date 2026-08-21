@@ -36,6 +36,7 @@ export async function createXExpressShipmentForOrder(
     reclamationId?: string;
     orderItemIds?: string[];
     codAmount?: number;
+    packageMasses?: number[];
   } = {},
 ) {
   const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
@@ -216,6 +217,7 @@ export async function createXExpressShipmentForOrder(
       order: { ...order, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
+      packageMasses: options.packageMasses,
     });
     const providerResult = await client.createOrder(payload);
     const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;

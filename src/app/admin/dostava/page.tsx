@@ -10,10 +10,6 @@ import {
   MYGLS_PROVIDER,
   syncMyGlsMasterData,
 } from "@/lib/mygls";
-import {
-  getSelectedSmallParcelProvider,
-  setSelectedSmallParcelProvider,
-} from "@/lib/courier";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -54,8 +50,6 @@ const ruleSchema = z.object({
     .nullable()
     .optional(),
 });
-
-const smallParcelProviderSchema = z.enum(["MYGLS", "X_EXPRESS"]);
 
 async function updateDeliveryWindows(
   _state: AdminActionState,
@@ -103,41 +97,6 @@ async function updateDeliveryWindows(
         entityId: DELIVERY_WINDOWS_SETTING_KEY,
         diff: parsed.data,
         message: "Globalni rokovi isporuke su sačuvani.",
-      };
-    },
-  )(formData);
-}
-
-async function updateSmallParcelProvider(
-  _state: AdminActionState,
-  formData: FormData,
-) {
-  "use server";
-
-  return withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "delivery.smallParcelProvider.update",
-      entity: "AdminSetting",
-    },
-    async (actorId, actionData: FormData) => {
-      const parsed = smallParcelProviderSchema.safeParse(
-        actionData.get("provider"),
-      );
-      if (!parsed.success) {
-        return { ok: false as const, error: "Izaberite MyGLS ili X Express." };
-      }
-      await setSelectedSmallParcelProvider(parsed.data, actorId);
-      revalidatePath("/admin/dostava");
-      revalidatePath("/admin/erp");
-      revalidatePath("/admin/erp/preuzimanja");
-      revalidatePath("/checkout/podaci");
-      revalidatePath("/admin/erp/prodajni-nalozi");
-      return {
-        ok: true as const,
-        entityId: "courier.smallParcelProvider",
-        diff: { provider: parsed.data },
-        message: `Aktivni kurir je ${parsed.data === "MYGLS" ? "MyGLS" : "X Express"}.`,
       };
     },
   )(formData);
@@ -284,10 +243,7 @@ export default async function DeliveryPage() {
       take: 5,
     }),
   ]);
-  const [smallProvider, deliveryWindows] = await Promise.all([
-    getSelectedSmallParcelProvider(),
-    getDeliveryWindows(),
-  ]);
+  const deliveryWindows = await getDeliveryWindows();
 
   return (
     <>
@@ -324,29 +280,21 @@ export default async function DeliveryPage() {
           </p>
         </Card>
         <Card>
-          <CardTitle description="Ručni izbor važi za nove male kurirske pošiljke, checkout i knjiženje naloga u Modulu 13.">
-            Aktivni kurir za male pošiljke
+          <CardTitle description="Obe službe su u upotrebi; kurir se određuje iz mera svakog fizičkog paketa.">
+            Automatski izbor kurira
           </CardTitle>
-          <AdminActionForm
-            action={updateSmallParcelProvider}
-            className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
-          >
-            <Field label="Kurirska služba">
-              <select
-                key={smallProvider}
-                name="provider"
-                defaultValue={smallProvider}
-                className="h-8 min-w-52 rounded-lg border border-input bg-transparent px-2 text-sm"
-              >
-                <option value="MYGLS">MyGLS</option>
-                <option value="X_EXPRESS">X Express</option>
-              </select>
-            </Field>
-            <SubmitButton pendingLabel="Čuvanje…">Sačuvaj izbor</SubmitButton>
-          </AdminActionForm>
+          <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <div className="rounded-lg border border-border p-3">
+              <p className="font-semibold">X Express</p>
+              <p className="mt-1 text-ink-600">Svaka strana paketa je do 60 cm.</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="font-semibold">MyGLS</p>
+              <p className="mt-1 text-ink-600">Bar jedna strana paketa je preko 60 cm, uz MyGLS ograničenja.</p>
+            </div>
+          </div>
           <p className="mt-3 text-xs text-ink-500">
-            Automatska pravila izbora još nisu uključena. Već kreirane aktivne
-            pošiljke ostaju kod prvobitnog kurira da ne bi nastao dupli nalog.
+            Nepotpune mere, prekoračena ograničenja i porudžbine koje mešaju oba kurira ne šalju se automatski.
           </p>
         </Card>
 
@@ -457,7 +405,7 @@ export default async function DeliveryPage() {
             >
               X Express šifarnici
             </CardTitle>
-            <ProviderStatus active={smallProvider === "X_EXPRESS"} />
+            <ProviderStatus label="Koristi se za pakete do 60 cm" />
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="text-sm text-ink-700">
                 <p>
@@ -478,12 +426,12 @@ export default async function DeliveryPage() {
             >
               MyGLS šifarnici
             </CardTitle>
-            <ProviderStatus active={smallProvider === "MYGLS"} />
+            <ProviderStatus label="Koristi se za pakete preko 60 cm" />
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="text-sm text-ink-700">
                 <p>
                   MyGLS keš sadrži paket shopove/lockere i lokacije za Srbiju.
-                  Koristi se kada ga izaberete kao aktivnog kurira iznad.
+                  Koristi se za pakete koji po dimenzijama pripadaju MyGLS-u.
                 </p>
                 <SyncRunList runs={glsRuns} />
               </div>
@@ -534,14 +482,12 @@ export default async function DeliveryPage() {
   );
 }
 
-function ProviderStatus({ active }: { active: boolean }) {
+function ProviderStatus({ label }: { label: string }) {
   return (
     <span
-      className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-        active ? "bg-green-50 text-green-700" : "bg-ink-50 text-ink-500"
-      }`}
+      className="mt-2 inline-flex rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700"
     >
-      {active ? "Aktivan kurir za male pošiljke" : "Nije aktivan provider"}
+      {label}
     </span>
   );
 }

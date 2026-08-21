@@ -9,6 +9,7 @@ import {
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
   validateMyGlsPickupWindow,
+  validateXExpressPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
 describe("ERP module 13 pickup batches", () => {
@@ -29,6 +30,11 @@ describe("ERP module 13 pickup batches", () => {
       "Datum naloga",
     ]);
     expect(definition?.detailHrefBase).toBe("/admin/erp/preuzimanja");
+    expect(definition?.commands[0]?.fields?.[0]).toMatchObject({
+      key: "provider",
+      options: ["X_EXPRESS", "MYGLS"],
+      required: true,
+    });
   });
 
   it("keeps only GLS posting blocked while the local workflow is available", () => {
@@ -71,7 +77,7 @@ describe("ERP module 13 pickup batches", () => {
       rowCount: 1,
       pickupStartSet: true,
       pickupEndSet: true,
-      completePackageCount: 0,
+      completePackageCount: 1,
     };
 
     expect(
@@ -93,6 +99,9 @@ describe("ERP module 13 pickup batches", () => {
     expect(
       pickupPostingBlockReason({ ...readyXExpress, pickupStartSet: false }),
     ).toContain("sačuvajte termin");
+    expect(
+      pickupPostingBlockReason({ ...readyXExpress, completePackageCount: 0 }),
+    ).toContain("stvarnu težinu");
     expect(pickupPostingBlockReason(readyXExpress)).toBeNull();
 
     const readyMyGls = {
@@ -107,6 +116,24 @@ describe("ERP module 13 pickup batches", () => {
       pickupPostingBlockReason({ ...readyMyGls, completePackageCount: 0 }),
     ).toContain("stvarnu težinu");
     expect(pickupPostingBlockReason(readyMyGls)).toBeNull();
+  });
+
+  it("enforces X Express one-hour pickup notice", () => {
+    const now = new Date("2026-08-21T06:00:00.000Z");
+    expect(() =>
+      validateXExpressPickupWindow(
+        new Date("2026-08-21T07:00:00.000Z"),
+        new Date("2026-08-21T08:00:00.000Z"),
+        now,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateXExpressPickupWindow(
+        new Date("2026-08-21T06:59:59.000Z"),
+        new Date("2026-08-21T08:00:00.000Z"),
+        now,
+      ),
+    ).toThrow("najmanje 1 sat");
   });
 
   it("parses the Belgrade wall clock and enforces the 24h/2h MyGLS window", () => {

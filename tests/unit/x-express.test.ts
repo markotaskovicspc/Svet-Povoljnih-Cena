@@ -203,6 +203,18 @@ describe("X Express official API contract", () => {
     expect(payload).not.toHaveProperty("Options");
   });
 
+  it("uses operator-confirmed package masses when they are supplied", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "758bb513-499d-4ab1-8697-5e747602f222",
+      trackingCodes: ["AAA0850300000", "AAA0850300001"],
+      packageMasses: [1.25, 2.5],
+      order,
+      townId: 791113,
+    });
+    expect(payload.Packages.map((pkg) => pkg.Mass)).toEqual([1.25, 2.5]);
+  });
+
   it("blocks reclamation pickup until exact customer coordinates are available", () => {
     expect(() =>
       buildXExpressCreateOrderPayload({

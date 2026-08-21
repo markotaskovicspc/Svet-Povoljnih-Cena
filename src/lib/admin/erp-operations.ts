@@ -544,7 +544,25 @@ export const operationalErpModules: ErpModule[] = [
     status: "blocked_external",
     blockedReason: PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
     commands: [
-      { label: "Novi", tone: "primary", action: "pickup.create" },
+      {
+        label: "Novi",
+        tone: "primary",
+        action: "pickup.create",
+        description: "Izaberite kurira; porudžbine će se zatim učitati samo ako njihove dimenzije odgovaraju tom kuriru.",
+        fields: [
+          {
+            key: "provider",
+            label: "Kurirska služba",
+            type: "text",
+            required: true,
+            options: ["X_EXPRESS", "MYGLS"],
+            valueLabels: {
+              X_EXPRESS: "X Express — sve stranice do 60 cm",
+              MYGLS: "MyGLS — bar jedna stranica preko 60 cm",
+            },
+          },
+        ],
+      },
       {
         label: "Uredi",
         tone: "neutral",

@@ -8,9 +8,11 @@ import {
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
+  requireCompletePhysicalPackages,
   requireCompleteMyGlsPackages,
   type PhysicalPackage,
 } from "@/lib/courier/packages";
+import { resolveCourierProvider } from "@/lib/courier/routing";
 import {
   getMyGlsConfig,
   MYGLS_PROVIDER,
@@ -28,6 +30,7 @@ import {
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   validateMyGlsPickupWindow,
+  validateXExpressPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
 type Transaction = Prisma.TransactionClient;
@@ -88,8 +91,8 @@ export async function getPickupPostingAvailability(
   }
 }
 
-export async function createPickupBatch() {
-  const availability = await getPickupPostingAvailability();
+export async function createPickupBatch(provider: SmallParcelProvider) {
+  const availability = await getPickupPostingAvailability(provider);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       return await db.$transaction(async (tx) => {
@@ -148,8 +151,8 @@ export async function savePickupWindow(
     validateMyGlsPickupWindow(pickupDate, pickupWindowEnd, new Date(), {
       requireLeadTime: priorMyGlsPickupCount === 0,
     });
-  } else if (pickupWindowEnd <= pickupDate) {
-    throw new Error("Kraj termina mora biti posle početka preuzimanja.");
+  } else {
+    validateXExpressPickupWindow(pickupDate, pickupWindowEnd);
   }
   return db.pickupBatch.update({
     where: { id: batchId },
@@ -169,6 +172,7 @@ export async function savePickupPackage(
         select: {
           id: true,
           status: true,
+          provider: true,
           labelsCreationStartedAt: true,
           labelsCreatedAt: true,
         },
@@ -177,9 +181,23 @@ export async function savePickupPackage(
   });
   if (!line) throw new Error("Paket nije pronađen u ovom nalogu.");
   assertEditableBatch(line.batch);
-  const [pkg] = requireCompleteMyGlsPackages([
-    { ...input, packageNo: line.packageNo },
-  ]);
+  const provider = normalizeProvider(line.batch.provider) ??
+    (await getSelectedSmallParcelProvider());
+  const rawPackage = { ...input, packageNo: line.packageNo };
+  const [pkg] = provider === "MYGLS"
+    ? requireCompleteMyGlsPackages([rawPackage])
+    : requireCompletePhysicalPackages([rawPackage]);
+  const largestSide = Math.max(pkg.widthCm, pkg.depthCm, pkg.heightCm);
+  if (provider === "X_EXPRESS" && largestSide > 60) {
+    throw new Error(
+      "Paket sa stranicom preko 60 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
+    );
+  }
+  if (provider === "MYGLS" && largestSide <= 60) {
+    throw new Error(
+      "Paket do 60 cm na svakoj strani pripada X Express nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
+    );
+  }
   return db.pickupBatchLine.update({
     where: { id: line.id },
     data: {
@@ -203,6 +221,7 @@ export async function loadEligibleOrders(
         id: true,
         status: true,
         number: true,
+        provider: true,
         labelsCreationStartedAt: true,
         labelsCreatedAt: true,
       },
@@ -225,15 +244,24 @@ export async function loadEligibleOrders(
           SELECT 1
           FROM "OrderItem" AS items
           WHERE items."orderId" = orders."id"
-            AND items."warehouseId" = ${dc.id}
+            AND items."warehouseReservedQty" > 0
         )
         AND NOT EXISTS (
           SELECT 1
           FROM "OrderItem" AS mixed_items
           WHERE mixed_items."orderId" = orders."id"
             AND (
-              mixed_items."warehouseId" IS NULL
-              OR mixed_items."warehouseId" <> ${dc.id}
+              mixed_items."supplierReservedQty" > 0
+              OR mixed_items."withAssembly" = true
+              OR mixed_items."warehouseReservedQty" < mixed_items."qty"
+              OR (
+                mixed_items."warehouseId" IS NOT NULL
+                AND mixed_items."warehouseId" <> ${dc.id}
+              )
+              OR (
+                mixed_items."warehouseId" IS NULL
+                AND mixed_items."warehouseReservedQty" <= 0
+              )
             )
         )
         AND NOT EXISTS (
@@ -246,12 +274,21 @@ export async function loadEligibleOrders(
       LIMIT 2000
     `);
     const orderIds = candidates.map((row) => row.id);
-    if (!orderIds.length) return { orderCount: 0, lineCount: 0 };
+    if (!orderIds.length) {
+      return {
+        orderCount: 0,
+        lineCount: 0,
+        candidateCount: 0,
+        skippedOtherProviderCount: 0,
+        skippedMixedCount: 0,
+        skippedInvalidDimensionsCount: 0,
+        skippedOversizedCount: 0,
+      };
+    }
 
     const items = await tx.orderItem.findMany({
       where: {
         orderId: { in: orderIds },
-        warehouseId: dc.id,
       },
       select: {
         id: true,
@@ -259,6 +296,7 @@ export async function loadEligibleOrders(
         sku: true,
         name: true,
         qty: true,
+        withAssembly: true,
         product: {
           select: {
             packQty: true,
@@ -279,36 +317,106 @@ export async function loadEligibleOrders(
       },
       orderBy: [{ orderId: "asc" }, { sku: "asc" }, { id: "asc" }],
     });
-    const packages = orderIds.flatMap((orderId) =>
-      derivePhysicalPackages(items.filter((item) => item.orderId === orderId)).map(
-        (pkg) => ({ ...pkg, orderId }),
-      ),
-    );
+    const provider = normalizeProvider(batch.provider) ??
+      (await getSelectedSmallParcelProvider());
+    let skippedOtherProviderCount = 0;
+    let skippedMixedCount = 0;
+    let skippedInvalidDimensionsCount = 0;
+    let skippedOversizedCount = 0;
+    const packages: Array<PhysicalPackage & { orderId: string }> = [];
+    const loadedOrderIds: string[] = [];
+    for (const orderId of orderIds) {
+      const orderItems = items.filter((item) => item.orderId === orderId);
+      const routing = resolveCourierProvider({
+        shippingMethod: "KURIR",
+        items: orderItems.map((item) => ({
+          withAssembly: item.withAssembly,
+          qty: item.qty,
+          packQty: item.product?.packQty,
+          packWidthCm: numberOrNull(
+            item.product?.packWidthCm ??
+              item.product?.unitPackWidthCm ??
+              item.product?.widthCm,
+          ),
+          packDepthCm: numberOrNull(
+            item.product?.packDepthCm ??
+              item.product?.unitPackDepthCm ??
+              item.product?.depthCm,
+          ),
+          packHeightCm: numberOrNull(
+            item.product?.packHeightCm ??
+              item.product?.unitPackHeightCm ??
+              item.product?.heightCm,
+          ),
+        })),
+      });
+      if (routing.kind === "invalid_dimensions") {
+        skippedInvalidDimensionsCount += 1;
+        continue;
+      }
+      if (routing.kind === "mixed") {
+        skippedMixedCount += 1;
+        continue;
+      }
+      if (routing.provider !== provider) {
+        skippedOtherProviderCount += 1;
+        continue;
+      }
+      const orderPackages = derivePhysicalPackages(orderItems);
+      if (
+        provider === "MYGLS" &&
+        orderPackages.some((pkg) => hasKnownMyGlsLimitViolation(pkg))
+      ) {
+        skippedOversizedCount += 1;
+        continue;
+      }
+      loadedOrderIds.push(orderId);
+      packages.push(...orderPackages.map((pkg) => ({ ...pkg, orderId })));
+    }
+    if (!loadedOrderIds.length) {
+      return {
+        orderCount: 0,
+        lineCount: 0,
+        candidateCount: orderIds.length,
+        skippedOtherProviderCount,
+        skippedMixedCount,
+        skippedInvalidDimensionsCount,
+        skippedOversizedCount,
+      };
+    }
     await tx.pickupBatchLine.createMany({
       data: packages.map((pkg) => ({
-          batchId,
-          orderId: pkg.orderId,
-          orderItemId: pkg.orderItemId,
-          packageNo: pkg.packageNo,
-          weightKg: pkg.weightKg,
-          widthCm: pkg.widthCm,
-          depthCm: pkg.depthCm,
-          heightCm: pkg.heightCm,
-        })),
+        batchId,
+        orderId: pkg.orderId,
+        orderItemId: pkg.orderItemId,
+        packageNo: pkg.packageNo,
+        weightKg: pkg.weightKg,
+        widthCm: pkg.widthCm,
+        depthCm: pkg.depthCm,
+        heightCm: pkg.heightCm,
+      })),
     });
     await tx.order.updateMany({
-      where: { id: { in: orderIds }, status: "KREIRANO" },
+      where: { id: { in: loadedOrderIds }, status: "KREIRANO" },
       data: { status: "U_PRIPREMI" },
     });
     await tx.orderStatusEvent.createMany({
-      data: orderIds.map((orderId) => ({
+      data: loadedOrderIds.map((orderId) => ({
         orderId,
         status: "U_PRIPREMI" as const,
         note: `Porudžbina učitana u nalog za preuzimanje ${batch.number}.`,
         actorId,
       })),
     });
-    return { orderCount: orderIds.length, lineCount: packages.length };
+    return {
+      orderCount: loadedOrderIds.length,
+      lineCount: packages.length,
+      candidateCount: orderIds.length,
+      skippedOtherProviderCount,
+      skippedMixedCount,
+      skippedInvalidDimensionsCount,
+      skippedOversizedCount,
+    };
   }, TRANSACTION_OPTIONS);
 }
 
@@ -405,11 +513,11 @@ async function postPickupBatch(batchId: string, actorId: string) {
     },
   });
   if (!summary) throw new Error("Nalog za preuzimanje ne postoji.");
-  if (
-    normalizeProvider(summary.provider) === "MYGLS" &&
-    (!summary.pickupDate || !summary.pickupWindowEnd)
-  ) {
+  if (!summary.pickupDate || !summary.pickupWindowEnd) {
     throw new Error("Početak i kraj termina preuzimanja su obavezni.");
+  }
+  if (normalizeProvider(summary.provider) === "X_EXPRESS") {
+    validateXExpressPickupWindow(summary.pickupDate, summary.pickupWindowEnd);
   }
   const availability = await getPickupPostingAvailability(summary.provider);
   if (!availability.available) throw new Error(availability.reason);
@@ -447,7 +555,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
       where: { id: batchId },
       include: {
         lines: {
-          select: { orderId: true },
+          include: { orderItem: { select: { name: true } } },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         },
       },
@@ -465,8 +573,30 @@ async function postPickupBatch(batchId: string, actorId: string) {
 
     const shipmentIds: string[] = [];
     for (const orderId of orderIds) {
+      const packageLines = batch.lines.filter((line) => line.orderId === orderId);
+      const packages = requireCompletePhysicalPackages(
+        packageLines.map((line) => ({
+          packageNo: line.packageNo,
+          orderItemId: line.orderItemId,
+          content: line.orderItem?.name,
+          weightKg: Number(line.weightKg ?? 0),
+          widthCm: Number(line.widthCm ?? 0),
+          depthCm: Number(line.depthCm ?? 0),
+          heightCm: Number(line.heightCm ?? 0),
+        })),
+      );
+      if (
+        packages.some(
+          (pkg) => Math.max(pkg.widthCm, pkg.depthCm, pkg.heightCm) > 60,
+        )
+      ) {
+        throw new Error(
+          "X Express nalog sadrži paket sa stranicom preko 60 cm; prebacite porudžbinu u MyGLS nalog.",
+        );
+      }
       const shipment = await createShipmentForOrder(orderId, {
-        packageCount: batch.lines.filter((line) => line.orderId === orderId).length,
+        packageCount: packages.length,
+        packages,
         provider: "X_EXPRESS",
       });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
@@ -831,6 +961,27 @@ function normalizeProvider(value: string | null | undefined): SmallParcelProvide
   if (normalized === "MYGLS") return "MYGLS";
   if (normalized === "X_EXPRESS" || normalized === "XPRESS") return "X_EXPRESS";
   return null;
+}
+
+function numberOrNull(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function hasKnownMyGlsLimitViolation(pkg: PhysicalPackage) {
+  const weightKg = numberOrNull(pkg.weightKg);
+  const dimensions = [
+    numberOrNull(pkg.widthCm),
+    numberOrNull(pkg.depthCm),
+    numberOrNull(pkg.heightCm),
+  ];
+  if (weightKg != null && weightKg > 40) return true;
+  if (dimensions.some((value) => value == null)) return false;
+  const complete = dimensions as number[];
+  const longest = Math.max(...complete);
+  const girth =
+    longest + 2 * (complete.reduce((sum, value) => sum + value, 0) - longest);
+  return longest > 200 || girth > 300;
 }
 
 function isRetryableCreateError(error: unknown) {

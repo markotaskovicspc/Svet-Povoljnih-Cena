@@ -47,21 +47,24 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
+const providerSchema = z.enum(["MYGLS", "X_EXPRESS"]);
 const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
 const packageSchema = batchSchema.extend({
   lineId: z.string().min(1),
-  weightKg: z.coerce.number().positive().max(40),
-  widthCm: z.coerce.number().positive().max(200),
-  depthCm: z.coerce.number().positive().max(200),
-  heightCm: z.coerce.number().positive().max(200),
+  weightKg: z.coerce.number().positive().max(1000),
+  widthCm: z.coerce.number().positive().max(500),
+  depthCm: z.coerce.number().positive().max(500),
+  heightCm: z.coerce.number().positive().max(500),
 });
 const bookingSchema = batchSchema.extend({
   channel: z.enum(MYGLS_BOOKING_CHANNELS),
   reference: z.string().trim().min(1).max(120),
 });
 
-async function createAction() {
+async function createAction(formData: FormData) {
   "use server";
+  const provider = providerSchema.safeParse(formData.get("provider"));
+  if (!provider.success) return;
   const state = await withAdminState(
     {
       allowed: ["OPS"],
@@ -69,7 +72,7 @@ async function createAction() {
       entity: "PickupBatch",
     },
     async () => {
-      const batch = await createPickupBatch();
+      const batch = await createPickupBatch(provider.data);
       return {
         ok: true as const,
         entityId: batch.id,
@@ -210,9 +213,7 @@ async function loadOrdersAction(
         ok: true as const,
         entityId: parsed.data.batchId,
         diff: result,
-        message: result.lineCount
-          ? `Učitano redova: ${result.lineCount} iz ${result.orderCount} porudžbina.`
-          : "Nema novih kreiranih kurirskih porudžbina sa redovima u DC magacinu.",
+        message: pickupLoadMessage(result),
       };
     },
   )(formData);
@@ -405,8 +406,15 @@ export default async function PickupBatchPage({
         actions={
           <div className="flex flex-wrap gap-2">
             <form action={createAction}>
+              <input type="hidden" name="provider" value="X_EXPRESS" />
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi
+                Novi X Express
+              </SubmitButton>
+            </form>
+            <form action={createAction}>
+              <input type="hidden" name="provider" value="MYGLS" />
+              <SubmitButton variant="outline" pendingLabel="Kreiranje…">
+                Novi MyGLS
               </SubmitButton>
             </form>
             {editable ? (
@@ -452,9 +460,9 @@ export default async function PickupBatchPage({
                   !canPost ||
                   !rows.length ||
                   !batch.pickupDate ||
+                  !batch.pickupWindowEnd ||
                   !posting.available ||
-                  (myGls &&
-                    (!batch.pickupWindowEnd || completePackageCount !== rows.length))
+                  completePackageCount !== rows.length
                 }
                 pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
                 confirm={
@@ -516,7 +524,7 @@ export default async function PickupBatchPage({
           <AdminActionForm action={saveDateAction}>
             <fieldset disabled={!editing} className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_auto] md:items-end">
               <input type="hidden" name="batchId" value={batch.id} />
-              <Field label="Početak preuzimanja" hint={myGls ? "Za prvi prikup: najmanje 24 sata od trenutka najave." : undefined}>
+              <Field label="Početak preuzimanja" hint={myGls ? "Za prvi prikup: najmanje 24 sata od trenutka najave." : "Najmanje 1 sat od trenutka najave."}>
                 <Input
                   name="pickupStart"
                   type="datetime-local"
@@ -601,7 +609,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description="Učitavaju se samo kreirane kurirske porudžbine sa redovima u podrazumevanom DC magacinu. Porudžbina koja je već u bilo kom nalogu preskače se.">
+            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnim dimenzijama pripadaju kuriru ${myGls ? "MyGLS (bar jedna stranica preko 60 cm)" : "X Express (svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču.`}>
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
@@ -663,10 +671,10 @@ export default async function PickupBatchPage({
                           <AdminActionForm action={savePackageAction} className="flex min-w-[500px] items-end gap-2">
                             <input type="hidden" name="batchId" value={batch.id} />
                             <input type="hidden" name="lineId" value={row.lineId} />
-                            <PackageMeasureInput name="weightKg" label="kg" max={40} step="0.001" value={row.weightKg} />
-                            <PackageMeasureInput name="widthCm" label="Š" max={200} value={row.widthCm} />
-                            <PackageMeasureInput name="depthCm" label="D" max={200} value={row.depthCm} />
-                            <PackageMeasureInput name="heightCm" label="V" max={200} value={row.heightCm} />
+                            <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
+                            <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
+                            <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
+                            <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
                             <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj mere</SubmitButton>
                           </AdminActionForm>
                         ) : (
@@ -866,6 +874,29 @@ function PackageMeasureInput({
 
 function display(value: string) {
   return value || "—";
+}
+
+function pickupLoadMessage(
+  result: Awaited<ReturnType<typeof loadEligibleOrders>>,
+) {
+  const skipped = [
+    result.skippedOtherProviderCount
+      ? `${result.skippedOtherProviderCount} za drugog kurira`
+      : null,
+    result.skippedMixedCount
+      ? `${result.skippedMixedCount} mešovitih`
+      : null,
+    result.skippedInvalidDimensionsCount
+      ? `${result.skippedInvalidDimensionsCount} bez kompletnih dimenzija`
+      : null,
+    result.skippedOversizedCount
+      ? `${result.skippedOversizedCount} preko MyGLS ograničenja`
+      : null,
+  ].filter(Boolean);
+  const loaded = result.lineCount
+    ? `Učitano redova: ${result.lineCount} iz ${result.orderCount} porudžbina.`
+    : "Nema novih porudžbina koje odgovaraju ovom kuriru i pravilima DC rezervacije.";
+  return skipped.length ? `${loaded} Preskočeno: ${skipped.join(", ")}.` : loaded;
 }
 
 function revalidatePickupPaths(batchId: string) {

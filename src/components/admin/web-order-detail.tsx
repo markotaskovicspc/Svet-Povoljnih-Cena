@@ -8,9 +8,9 @@ import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import {
   createShipmentForOrder,
-  getSelectedSmallParcelProvider,
   syncCourierShipmentById,
 } from "@/lib/courier";
+import { resolveCourierProvider } from "@/lib/courier/routing";
 import {
   normalizeOrderItemIds,
   readShipmentAssignment,
@@ -819,7 +819,24 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const order = await db.order.findUnique({
     where: { id },
     include: {
-      items: true,
+      items: {
+        include: {
+          product: {
+            select: {
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+            },
+          },
+        },
+      },
       events: { orderBy: { createdAt: "desc" } },
       payments: { orderBy: { createdAt: "desc" } },
       paymentRefunds: { orderBy: { createdAt: "desc" } },
@@ -847,10 +864,38 @@ export async function WebOrderDetail({ id }: { id: string }) {
     },
   });
   if (!order) notFound();
-  const activeSmallProvider =
-    (await getSelectedSmallParcelProvider()) === "MYGLS"
-      ? MYGLS_PROVIDER
-      : X_EXPRESS_PROVIDER;
+  const courierRouting = resolveCourierProvider({
+    shippingMethod: order.shippingMethod,
+    items: order.items.map((item) => ({
+      withAssembly: item.withAssembly,
+      qty: item.qty,
+      packQty: item.product?.packQty,
+      packWidthCm: Number(
+        item.product?.packWidthCm ??
+          item.product?.unitPackWidthCm ??
+          item.product?.widthCm ??
+          0,
+      ),
+      packDepthCm: Number(
+        item.product?.packDepthCm ??
+          item.product?.unitPackDepthCm ??
+          item.product?.depthCm ??
+          0,
+      ),
+      packHeightCm: Number(
+        item.product?.packHeightCm ??
+          item.product?.unitPackHeightCm ??
+          item.product?.heightCm ??
+          0,
+      ),
+    })),
+  });
+  const automaticProvider =
+    courierRouting.kind === "single"
+      ? courierRouting.provider === "MYGLS"
+        ? MYGLS_PROVIDER
+        : X_EXPRESS_PROVIDER
+      : "";
   const allOrderItemIds = order.items.map((item) => item.id);
   const assignedOrderItemIds = new Set<string>();
   for (const shipment of order.shipments) {
@@ -1496,9 +1541,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
                     >
                       <select
                         name="provider"
-                        defaultValue={activeSmallProvider}
+                        defaultValue={automaticProvider}
                         className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
                       >
+                        <option value="" disabled>Automatski izbor nije moguć</option>
                         <option value={X_EXPRESS_PROVIDER}>X Express</option>
                         <option value={MYGLS_PROVIDER}>MyGLS (GLS)</option>
                       </select>
@@ -1667,9 +1713,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
 }
 
 async function smallParcelAutoCreateEnabled() {
-  return (await getSelectedSmallParcelProvider()) === "MYGLS"
-    ? getMyGlsConfig().autoCreate
-    : getXExpressConfig().autoCreate;
+  return getMyGlsConfig().autoCreate || getXExpressConfig().autoCreate;
 }
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {

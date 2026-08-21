@@ -6,7 +6,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import ExcelJS from "exceljs";
 import { config as loadEnv } from "dotenv";
@@ -44,10 +44,6 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
   let createdDcWarehouse = false;
   let otherWarehouseId = "";
   let collectionId = "";
-  let originalProviderSetting: {
-    value: Prisma.JsonValue;
-    updatedBy: string | null;
-  } | null = null;
   const productIds: string[] = [];
   const orderIds: string[] = [];
   const batchIds: string[] = [];
@@ -72,20 +68,6 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       select: { id: true },
     });
     adminId = admin.id;
-    originalProviderSetting = await db.adminSetting.findUnique({
-      where: { key: "courier.smallParcelProvider" },
-      select: { value: true, updatedBy: true },
-    });
-    await db.adminSetting.upsert({
-      where: { key: "courier.smallParcelProvider" },
-      create: {
-        key: "courier.smallParcelProvider",
-        value: "MYGLS",
-        updatedBy: adminId,
-      },
-      update: { value: "MYGLS", updatedBy: adminId },
-    });
-
     const existingDc = await db.warehouse.findFirst({
       where: { active: true, isDefault: true },
       orderBy: { createdAt: "asc" },
@@ -172,7 +154,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       status: "KREIRANO",
       shippingMethod: "KURIR",
       lines: [
-        { product: products[0]!, warehouseId: dcWarehouseId, qty: 2 },
+        { product: products[0]!, warehouseId: null, qty: 2 },
         { product: products[1]!, warehouseId: dcWarehouseId, qty: 3 },
       ],
     });
@@ -258,40 +240,14 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       }
     });
 
-    await test.step("OPS admin može ručno da izabere X Express ili MyGLS", async () => {
+    await test.step("pravila dostave prikazuju automatske uloge oba kurira", async () => {
       await page.goto("/admin/dostava", { waitUntil: "domcontentloaded" });
-      const provider = page.getByLabel("Kurirska služba");
-      await expect(provider).toHaveValue("MYGLS");
-
-      await provider.selectOption("X_EXPRESS");
-      await page.getByRole("button", { name: "Sačuvaj izbor" }).click();
       await expect(
-        page.getByRole("status").filter({
-          hasText: "Aktivni kurir je X Express",
-        }),
+        page.getByRole("heading", { name: "Automatski izbor kurira" }),
       ).toBeVisible();
-      expect(
-        (
-          await db.adminSetting.findUniqueOrThrow({
-            where: { key: "courier.smallParcelProvider" },
-          })
-        ).value,
-      ).toBe("X_EXPRESS");
-
-      await provider.selectOption("MYGLS");
-      await page.getByRole("button", { name: "Sačuvaj izbor" }).click();
-      await expect(
-        page.getByRole("status").filter({
-          hasText: "Aktivni kurir je MyGLS",
-        }),
-      ).toBeVisible();
-      expect(
-        (
-          await db.adminSetting.findUniqueOrThrow({
-            where: { key: "courier.smallParcelProvider" },
-          })
-        ).value,
-      ).toBe("MYGLS");
+      await expect(page.getByText("Svaka strana paketa je do 60 cm.")).toBeVisible();
+      await expect(page.getByText(/Bar jedna strana paketa je preko 60 cm/)).toBeVisible();
+      await expect(page.getByLabel("Kurirska služba")).toHaveCount(0);
       await page.goto("/admin/erp/preuzimanja", {
         waitUntil: "domcontentloaded",
       });
@@ -299,6 +255,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("Novi otvara editabilan nalog i datum se čuva", async () => {
       await page.getByRole("button", { name: "Novi", exact: true }).click();
+      const createDialog = page.getByRole("dialog");
+      await createDialog.getByLabel("Kurirska služba").selectOption("MYGLS");
+      await createDialog.getByRole("button", { name: "Novi", exact: true }).click();
       await expect(page).toHaveURL(
         /\/admin\/erp\/preuzimanja\/[^/?]+\?mode=edit$/,
       );
@@ -310,6 +269,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       firstBatchNumber = batch.number;
       expect(batch.status).toBe("DRAFT");
       expect(batch.courier).toBe("COURIER_SMALL");
+      expect(batch.provider).toBe("MYGLS");
 
       const heading = page.getByRole("heading", {
         name: `Nalog za preuzimanje ${firstBatchNumber}`,
@@ -436,7 +396,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const lineId = await firstRow.locator('input[name="lineId"]').getAttribute("value");
       expect(lineId).toBeTruthy();
       await firstRow.getByLabel("kg", { exact: true }).fill("1.25");
-      await firstRow.getByLabel("Š", { exact: true }).fill("10");
+      await firstRow.getByLabel("Š", { exact: true }).fill("70");
       await firstRow.getByLabel("D", { exact: true }).fill("20");
       await firstRow.getByLabel("V", { exact: true }).fill("30");
       await expect(
@@ -454,7 +414,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         where: { id: lineId! },
       });
       expect(Number(savedLine.weightKg)).toBe(1.25);
-      expect(Number(savedLine.widthCm)).toBe(10);
+      expect(Number(savedLine.widthCm)).toBe(70);
       expect(Number(savedLine.depthCm)).toBe(20);
       expect(Number(savedLine.heightCm)).toBe(30);
     });
@@ -464,7 +424,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         where: { id: eligibleOrderId },
         data: { status: "KREIRANO" },
       });
-      await page.getByRole("button", { name: "Novi", exact: true }).click();
+      await page.getByRole("button", { name: "Novi MyGLS", exact: true }).click();
       await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
         firstBatchId,
       );
@@ -485,7 +445,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         .click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Nema novih kreiranih kurirskih porudžbina",
+          hasText: "Nema novih porudžbina koje odgovaraju ovom kuriru",
         }),
       ).toBeVisible();
       expect(
@@ -689,6 +649,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         description: input.shortDescription,
         fullPrice: 1_000,
         collectionId,
+        packWidthCm: 70,
+        packDepthCm: 20,
+        packHeightCm: 20,
+        packGrossWeightKg: 1.25,
       },
       select: {
         id: true,
@@ -724,7 +688,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         colorPrimary: string | null;
         colorSecondary: string | null;
       };
-      warehouseId: string;
+      warehouseId: string | null;
       qty: number;
     }>;
   }) {
@@ -801,24 +765,6 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     if (adminId) {
       await db.auditLog.deleteMany({ where: { actorId: adminId } });
     }
-    if (originalProviderSetting) {
-      await db.adminSetting.upsert({
-        where: { key: "courier.smallParcelProvider" },
-        create: {
-          key: "courier.smallParcelProvider",
-          value: originalProviderSetting.value as Prisma.InputJsonValue,
-          updatedBy: originalProviderSetting.updatedBy,
-        },
-        update: {
-          value: originalProviderSetting.value as Prisma.InputJsonValue,
-          updatedBy: originalProviderSetting.updatedBy,
-        },
-      });
-    } else {
-      await db.adminSetting.deleteMany({
-        where: { key: "courier.smallParcelProvider" },
-      });
-    }
     await db.rateLimitBucket.deleteMany({
       where: { key: { contains: fixture.adminEmail } },
     });
@@ -848,8 +794,8 @@ function createDatabaseClient() {
     );
   }
   if (!isLocal) {
-    url.searchParams.set("sslmode", url.searchParams.get("sslmode") || "require");
-    url.searchParams.set("uselibpqcompat", "true");
+    url.searchParams.set("sslmode", "no-verify");
+    url.searchParams.delete("uselibpqcompat");
   }
   return new PrismaClient({
     adapter: new PrismaPg(

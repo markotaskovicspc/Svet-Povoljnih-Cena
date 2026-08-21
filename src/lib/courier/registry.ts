@@ -29,7 +29,7 @@ import {
   type CourierWebhookEvent,
 } from "./types";
 import { SHIPMENT_STATUS_LABEL } from "./status";
-import { routeService } from "./routing";
+import { resolveCourierProvider, routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
 import type { SmallParcelProvider } from "@/lib/mygls/config";
 import {
@@ -180,7 +180,7 @@ export async function createShipmentForOrder(
     );
   }
 
-  const service = options.provider ? "COURIER_SMALL" : routeService({
+  const routeInput = {
     shippingMethod: order.shippingMethod,
     items: shipmentItems.map((item) => ({
       withAssembly: item.withAssembly,
@@ -206,10 +206,26 @@ export async function createShipmentForOrder(
       ),
       packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
     })),
-  });
+  } as const;
+  const routing = resolveCourierProvider(routeInput);
+  if (routing.kind === "invalid_dimensions") {
+    throw new CourierConfigError(
+      "Automatski izbor kurira zahteva širinu, dužinu i visinu svakog paketa u šifarniku artikala.",
+    );
+  }
+  if (routing.kind === "mixed") {
+    throw new CourierConfigError(
+      "Porudžbina sadrži i X Express i MyGLS pakete. Mešovite porudžbine se još obrađuju ručno.",
+    );
+  }
+  if (options.provider && options.provider !== routing.provider) {
+    throw new CourierConfigError(
+      `Izabrani kurir ne odgovara dimenzijama paketa; porudžbina pripada ${routing.provider === "MYGLS" ? "MyGLS" : "X Express"} nalogu.`,
+    );
+  }
+  const service = routeService(routeInput);
   if (service === "COURIER_SMALL") {
-    const selectedProvider =
-      options.provider ?? (await getSelectedSmallParcelProvider());
+    const selectedProvider = routing.provider;
     const packages =
       (options.packages
         ? options.packages.filter(
@@ -252,11 +268,34 @@ export async function createShipmentForOrder(
         })
       : createXExpressShipmentForOrder(order.id, {
           packageCount: options.packageCount ?? derivedPackageCount,
+          packageMasses: packages.map((pkg) => Number(pkg.weightKg ?? 0)),
           purpose,
           reclamationId: reclamation?.id,
           orderItemIds: requestedOrderItemIds,
           codAmount: options.codAmount,
         });
+  }
+
+  if (routing.provider === "MYGLS") {
+    const packages =
+      options.packages ??
+      derivePhysicalPackages(
+        shipmentItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          qty: item.qty,
+          product: item.product,
+        })),
+      );
+    return createMyGlsShipmentForOrder(order.id, {
+      purpose,
+      reclamationId: reclamation?.id,
+      pickupDate:
+        options.pickupDate ?? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined,
+      packages,
+      orderItemIds: requestedOrderItemIds,
+      codAmount: options.codAmount,
+    });
   }
 
   if (purpose === "RECLAMATION_RETURN") {

@@ -155,6 +155,49 @@ export function requireCompleteMyGlsPackages(
   });
 }
 
+/** Validates that actual measurements exist, without applying provider caps. */
+export function requireCompletePhysicalPackages(
+  packages: readonly PhysicalPackage[],
+): CompletePhysicalPackage[] {
+  if (!packages.length) {
+    throw new Error("Kurirski nalog mora sadržati najmanje jedan fizički paket.");
+  }
+  if (packages.length > MAX_COURIER_PACKAGES) {
+    throw new Error(`Kurirski nalog može imati najviše ${MAX_COURIER_PACKAGES} paketa.`);
+  }
+  return packages.map((pkg, index) => {
+    const packageNo = positiveInteger(pkg.packageNo) ?? index + 1;
+    const values = {
+      weightKg: positiveNumber(pkg.weightKg),
+      widthCm: positiveNumber(pkg.widthCm),
+      depthCm: positiveNumber(pkg.depthCm),
+      heightCm: positiveNumber(pkg.heightCm),
+    };
+    const missing = [
+      ["težina", values.weightKg],
+      ["širina", values.widthCm],
+      ["dubina/dužina", values.depthCm],
+      ["visina", values.heightCm],
+    ]
+      .filter(([, value]) => value == null)
+      .map(([label]) => label);
+    if (missing.length) {
+      throw new Error(
+        `Paket ${packageNo} nema kompletne stvarne mere: ${missing.join(", ")}.`,
+      );
+    }
+    return {
+      packageNo,
+      orderItemId: pkg.orderItemId,
+      content: pkg.content,
+      weightKg: values.weightKg!,
+      widthCm: values.widthCm!,
+      depthCm: values.depthCm!,
+      heightCm: values.heightCm!,
+    };
+  });
+}
+
 function positiveNumber(value: unknown) {
   if (value == null || value === "") return null;
   const number = Number(value);

@@ -5,6 +5,7 @@ export const PICKUP_BATCH_EXTERNAL_BLOCK_REASON =
 
 export const MYGLS_PICKUP_MIN_LEAD_MS = 24 * 60 * 60_000;
 export const MYGLS_PICKUP_MIN_WINDOW_MS = 2 * 60 * 60_000;
+export const X_EXPRESS_PICKUP_MIN_LEAD_MS = 60 * 60_000;
 export const PICKUP_TIME_ZONE = "Europe/Belgrade";
 
 export const MYGLS_BOOKING_CHANNELS = [
@@ -59,12 +60,31 @@ export function pickupPostingBlockReason({
       ? "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina."
       : !pickupStartSet
         ? "Unesite i sačuvajte termin preuzimanja."
-        : provider === "MYGLS" && !pickupEndSet
-          ? "Unesite kompletan vremenski prozor preuzimanja."
-          : provider === "MYGLS" && completePackageCount !== rowCount
+        : !pickupEndSet
+          ? provider === "MYGLS"
+            ? "Unesite kompletan vremenski prozor preuzimanja."
+            : "Unesite kraj termina preuzimanja."
+          : completePackageCount !== rowCount
             ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
             : null)
   );
+}
+
+export function validateXExpressPickupWindow(
+  start: Date,
+  end: Date,
+  now = new Date(),
+) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error("Termin preuzimanja nije ispravan.");
+  }
+  if (start.getTime() - now.getTime() < X_EXPRESS_PICKUP_MIN_LEAD_MS) {
+    throw new Error("X Express prikup mora biti najavljen najmanje 1 sat unapred.");
+  }
+  if (end <= start) {
+    throw new Error("Kraj termina mora biti posle početka preuzimanja.");
+  }
+  return { start, end };
 }
 
 export function validateMyGlsPickupWindow(

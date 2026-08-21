@@ -176,6 +176,15 @@ export function requireXExpressShipmentConfig(cashOnDelivery = false) {
   if (!/^[A-Z]{3}$/.test(cfg.codePrefix)) {
     throw new XExpressConfigError("X Express code prefix mora imati tačno tri velika slova.");
   }
+  if (
+    cfg.codePrefix === "AAA" &&
+    cfg.codeRangeStart === 850300000 &&
+    cfg.codeRangeEnd === 850599999
+  ) {
+    throw new XExpressConfigError(
+      "X Express je podešen na primer opsega AAA/850300000–850599999. Zatražite stvarno dodeljeni prefiks i opseg kodova.",
+    );
+  }
   if (![1, 2, 3, 4].includes(cfg.servicePayerId)) {
     throw new XExpressConfigError("X Express ServicePayerId mora biti 1, 2, 3 ili 4.");
   }
