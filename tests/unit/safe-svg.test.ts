@@ -14,10 +14,40 @@ describe("safe SVG uploads", () => {
     ).toContain("<path");
   });
 
+  it("accepts internal paint references and embedded raster images", () => {
+    const embeddedPng =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    expect(
+      validateSafeSvgBytes(
+        bytes(
+          `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="paint"><stop stop-color="#fff"/></linearGradient></defs><rect fill="url(#paint)" width="1" height="1"/><image xlink:href="data:image/png;base64,${embeddedPng}" width="1" height="1"/></svg>`,
+        ),
+      ),
+    ).toContain("<image");
+  });
+
+  it.each([
+    '<svg xmlns="http://www.w3.org/2000/svg"><image href="../slika.png"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/a.png"/></svg>',
+  ])("rejects linked raster images with an actionable message", (source) => {
+    expect(() => validateSafeSvgBytes(bytes(source))).toThrow(
+      "Ugradite je u SVG (Embed)",
+    );
+  });
+
+  it.each([
+    '<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/svg+xml;base64,PHN2Zy8+"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,PHN2Zy8+"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://evil.example/a.svg)"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><style>@import "https://evil.example/a.css"</style></svg>',
+  ])("rejects unsafe embedded or CSS resources", (source) => {
+    expect(() => validateSafeSvgBytes(bytes(source))).toThrow();
+  });
+
   it.each([
     '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
-    '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil.example/a.png"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>HTML</div></foreignObject></svg>',
     '<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"/>',
   ])("rejects active or externally loaded markup", (source) => {
     expect(() => validateSafeSvgBytes(bytes(source))).toThrow();
