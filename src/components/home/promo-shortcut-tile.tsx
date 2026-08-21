@@ -82,7 +82,7 @@ export function PromoShortcutTile({
       className={cn(
         "group flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
         compact && "min-h-10 gap-1.5 px-2 py-1 text-[11px]",
-        homepage && "h-14 min-h-14 gap-1.5 px-2 py-1.5 text-sm",
+        homepage && "h-14 min-h-14 gap-1.5 px-2 py-1.5 text-[15px]",
         active && "ring-2 ring-white/80",
         className,
       )}
