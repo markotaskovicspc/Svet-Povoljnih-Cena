@@ -59,6 +59,7 @@ import {
 } from "@/lib/product-newness";
 import {
   heroProductsWhere,
+  isStorefrontHeroProduct,
   excludeRabaluxPromotionProductsWhere,
   limitedOfferProductsWhere,
   permanentPriceProductsWhere,
@@ -76,6 +77,33 @@ import {
   type FacetExtents,
   type FacetValues,
 } from "@/lib/listing/filters";
+
+interface HeroResolutionContext {
+  now: Date;
+  monthlyHeroSkus: ReadonlySet<string>;
+}
+
+const NO_MONTHLY_HEROES = new Set<string>();
+
+async function getMonthlyHeroSkus(now: Date) {
+  const rows = await db.heroOfMonth.findMany({
+    where: storefrontMonth(now),
+    orderBy: { order: "asc" },
+    select: { productSku: true },
+  });
+  return new Set(rows.map((row) => row.productSku));
+}
+
+function resolvedHeroStatus(
+  product: ProductCardCoreRow,
+  context?: HeroResolutionContext,
+) {
+  return isStorefrontHeroProduct(
+    product,
+    context?.monthlyHeroSkus ?? NO_MONTHLY_HEROES,
+    context?.now,
+  );
+}
 
 /**
  * Catalog read layer (Phase 3C).
@@ -318,6 +346,7 @@ function mapProduct(
   p: ProductRow,
   pricingRules?: ActivePricingRules,
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+  heroContext?: HeroResolutionContext,
 ): ProductDTO {
   const availability = productStockAvailability(p);
   const isRabalux = p.supplier?.integrationKey === "RABALUX";
@@ -383,7 +412,7 @@ function mapProduct(
     incomingStock: p.incomingStock,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
-    isHero: p.isHero,
+    isHero: resolvedHeroStatus(p, heroContext),
     isNew: isRabalux ? false : productNewUntilIsActive(p.newUntil),
     newUntil: isRabalux ? undefined : p.newUntil?.toISOString(),
     isLimited: isRabalux ? false : p.isLimited,
@@ -592,6 +621,7 @@ function mapProductListItem(
   p: ProductCardCoreRow,
   pricingRules?: ActivePricingRules,
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+  heroContext?: HeroResolutionContext,
 ): ProductDTO {
   const availability = productStockAvailability(p);
   const isRabalux = p.supplier?.integrationKey === "RABALUX";
@@ -657,7 +687,7 @@ function mapProductListItem(
     incomingStock: p.incomingStock,
     supplierNextArrivalAt: p.supplierNextArrivalAt?.toISOString(),
     availabilitySource: availability.source,
-    isHero: p.isHero,
+    isHero: resolvedHeroStatus(p, heroContext),
     isNew: isRabalux ? false : productNewUntilIsActive(p.newUntil),
     newUntil: isRabalux ? undefined : p.newUntil?.toISOString(),
     isLimited: isRabalux ? false : p.isLimited,
@@ -721,6 +751,7 @@ function attachProductVariantFamily(
   membership: FamilyMembershipRow | null,
   pricingRules?: ActivePricingRules,
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+  heroContext?: HeroResolutionContext,
 ): ProductDTO {
   if (!membership) return product;
 
@@ -736,6 +767,7 @@ function attachProductVariantFamily(
       member.product,
       pricingRules,
       deliveryWindows,
+      heroContext,
     );
     return [{
       productId: variant.id,
@@ -822,12 +854,14 @@ function mapProductListRow(
   row: ProductListRow,
   pricingRules?: ActivePricingRules,
   deliveryWindows: DeliveryWindows = DEFAULT_DELIVERY_WINDOWS,
+  heroContext?: HeroResolutionContext,
 ) {
   return attachProductVariantFamily(
-    mapProductListItem(row, pricingRules, deliveryWindows),
+    mapProductListItem(row, pricingRules, deliveryWindows, heroContext),
     row.familyMembership,
     pricingRules,
     deliveryWindows,
+    heroContext,
   );
 }
 
@@ -1353,6 +1387,32 @@ function buildProductListingWhere(
   return where;
 }
 
+type HeroListingCursor =
+  | { phase: "hero"; id?: string }
+  | { phase: "regular"; id?: string };
+
+const HERO_CURSOR_PREFIX = "hero:";
+const REGULAR_CURSOR_PREFIX = "regular:";
+
+function parseHeroListingCursor(cursor?: string): HeroListingCursor {
+  if (!cursor) return { phase: "hero" };
+  if (cursor.startsWith(HERO_CURSOR_PREFIX)) {
+    return { phase: "hero", id: cursor.slice(HERO_CURSOR_PREFIX.length) || undefined };
+  }
+  if (cursor.startsWith(REGULAR_CURSOR_PREFIX)) {
+    return {
+      phase: "regular",
+      id: cursor.slice(REGULAR_CURSOR_PREFIX.length) || undefined,
+    };
+  }
+  // Cursors issued before hero-aware pagination are regular product ids.
+  return { phase: "regular", id: cursor };
+}
+
+function heroListingCursor(phase: HeroListingCursor["phase"], id?: string) {
+  return `${phase === "hero" ? HERO_CURSOR_PREFIX : REGULAR_CURSOR_PREFIX}${id ?? ""}`;
+}
+
 async function loadProducts(
   input: ListProductsInput = {},
 ): Promise<ListProductsResult> {
@@ -1361,23 +1421,17 @@ async function loadProducts(
   }
 
   const now = new Date();
-  const heroPeriod = input.heroOnly ? storefrontMonth(now) : null;
-  const [pricingRules, deliveryWindows, monthlyHeroes] = await Promise.all([
+  const [pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     getActivePricingRules(),
     getDeliveryWindows(),
-    heroPeriod
-      ? db.heroOfMonth.findMany({
-          where: heroPeriod,
-          orderBy: { order: "asc" },
-          select: { productSku: true },
-        })
-      : Promise.resolve([]),
+    getMonthlyHeroSkus(now),
   ]);
+  const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
   const listingWhere = buildProductListingWhere(
     input,
     now,
     pricingRules,
-    monthlyHeroes.map((hero) => hero.productSku),
+    Array.from(monthlyHeroSkus),
   );
   const orderBy: Prisma.ProductOrderByWithRelationInput[] = (() => {
     switch (input.sort) {
@@ -1402,13 +1456,8 @@ async function loadProducts(
       input.sort === "price-asc" ||
       input.sort === "price-desc",
   );
-  const monthlyHeroSkus = new Set(monthlyHeroes.map((hero) => hero.productSku));
-  const project = (product: ProductListRow) => {
-    const mapped = mapProductListRow(product, pricingRules, deliveryWindows);
-    return input.heroOnly && monthlyHeroSkus.has(mapped.sku)
-      ? { ...mapped, isHero: true }
-      : mapped;
-  };
+  const project = (product: ProductListRow) =>
+    mapProductListRow(product, pricingRules, deliveryWindows, heroContext);
 
   if (usesResolvedPrice) {
     const rows = await db.product.findMany({
@@ -1437,16 +1486,22 @@ async function loadProducts(
         }
         return true;
       });
-    if (input.sort === "price-asc" || input.sort === "price-desc") {
-      const direction = input.sort === "price-asc" ? 1 : -1;
-      priced.sort(
-        (left, right) =>
-          (left.price - right.price) * direction ||
-          left.product.sku.localeCompare(right.product.sku, "sr", {
-            numeric: true,
-          }),
-      );
-    }
+    const sortsByResolvedPrice =
+      input.sort === "price-asc" || input.sort === "price-desc";
+    const direction = input.sort === "price-desc" ? -1 : 1;
+    priced.sort(
+      (left, right) =>
+        Number(Boolean(right.product.isHero)) -
+          Number(Boolean(left.product.isHero)) ||
+        (sortsByResolvedPrice
+          ? (left.price - right.price) * direction
+          : 0) ||
+        (sortsByResolvedPrice
+          ? left.product.sku.localeCompare(right.product.sku, "sr", {
+              numeric: true,
+            })
+          : 0),
+    );
     const cursorIndex = input.cursor
       ? priced.findIndex(({ rowId }) => rowId === input.cursor)
       : -1;
@@ -1461,26 +1516,77 @@ async function loadProducts(
     };
   }
 
-  const rowsQuery = db.product.findMany({
-    where: listingWhere,
+  const heroWhere = heroProductsWhere(now, Array.from(monthlyHeroSkus));
+  const heroListingWhere: Prisma.ProductWhereInput = {
+    AND: [listingWhere, heroWhere],
+  };
+  const regularListingWhere: Prisma.ProductWhereInput = {
+    AND: [listingWhere, { NOT: heroWhere }],
+  };
+  const cursor = parseHeroListingCursor(input.cursor);
+  const totalPromise =
+    input.includeTotal === false
+      ? Promise.resolve(0)
+      : db.product.count({ where: listingWhere });
+
+  if (cursor.phase === "regular") {
+    const [rows, total] = await Promise.all([
+      db.product.findMany({
+        where: regularListingWhere,
+        select: productListSelect,
+        orderBy,
+        take: limit + 1,
+        ...(cursor.id ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+      }),
+      totalPromise,
+    ]);
+    const hasMore = rows.length > limit;
+    const slice = hasMore ? rows.slice(0, limit) : rows;
+    return {
+      items: slice.map(project),
+      nextCursor: hasMore
+        ? heroListingCursor("regular", slice[slice.length - 1]!.id)
+        : null,
+      total,
+    };
+  }
+
+  const heroRows = await db.product.findMany({
+    where: heroListingWhere,
     select: productListSelect,
     orderBy,
     take: limit + 1,
-    ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+    ...(cursor.id ? { cursor: { id: cursor.id }, skip: 1 } : {}),
   });
-  const [rows, total] = await Promise.all([
-    rowsQuery,
-    input.includeTotal === false
-      ? Promise.resolve(0)
-      : db.product.count({ where: listingWhere }),
-  ]);
+  if (heroRows.length > limit) {
+    const slice = heroRows.slice(0, limit);
+    return {
+      items: slice.map(project),
+      nextCursor: heroListingCursor("hero", slice[slice.length - 1]!.id),
+      total: await totalPromise,
+    };
+  }
 
-  const hasMore = rows.length > limit;
-  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const remaining = limit - heroRows.length;
+  const regularRows = await db.product.findMany({
+    where: regularListingWhere,
+    select: productListSelect,
+    orderBy,
+    take: remaining + 1,
+  });
+  const regularSlice = regularRows.slice(0, remaining);
+  const hasMoreRegular = regularRows.length > remaining;
   return {
-    items: slice.map(project),
-    nextCursor: hasMore ? slice[slice.length - 1]!.id : null,
-    total,
+    items: [...heroRows, ...regularSlice].map(project),
+    nextCursor: hasMoreRegular
+      ? heroListingCursor(
+          "regular",
+          regularSlice.length
+            ? regularSlice[regularSlice.length - 1]!.id
+            : undefined,
+        )
+      : null,
+    total: await totalPromise,
   };
 }
 
@@ -1752,16 +1858,18 @@ async function loadProductBySlug(
   slug: string,
 ): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return getSvetAkcijaFallbackBySlug(slug);
-  const [row, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [row, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.product.findFirst({
       where: { slug, ...webStorefrontVisibleProductWhere() },
       include: productInclude,
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
   if (!row) return getSvetAkcijaFallbackBySlug(slug);
-  return mapProduct(row, pricingRules, deliveryWindows);
+  return mapProduct(row, pricingRules, deliveryWindows, { now, monthlyHeroSkus });
 }
 
 const getProductBySlugAcrossRequests = unstable_cache(
@@ -1816,18 +1924,21 @@ export async function getProductCardsBySlugs(
   }
 
   try {
-    const [rows, pricingRules, deliveryWindows] = await Promise.all([
+    const now = new Date();
+    const [rows, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
       db.product.findMany({
         where: { slug: { in: orderedSlugs }, ...webStorefrontVisibleProductWhere() },
         select: productListSelect,
       }),
       getActivePricingRules(),
       getDeliveryWindows(),
+      getMonthlyHeroSkus(now),
     ]);
+    const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
     const productsBySlug = new Map(
       rows.map((row) => [
         row.slug,
-        mapProductListRow(row, pricingRules, deliveryWindows),
+        mapProductListRow(row, pricingRules, deliveryWindows, heroContext),
       ]),
     );
     return orderedSlugs
@@ -1850,10 +1961,13 @@ export async function getProductsBySkus(
   if (!orderedSkus.length || !hasDatabaseConnection()) return [];
 
   try {
-    const [pricingRules, deliveryWindows] = await Promise.all([
+    const now = new Date();
+    const [pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
       getActivePricingRules(),
       getDeliveryWindows(),
+      getMonthlyHeroSkus(now),
     ]);
+    const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
     const rows: ProductListRow[] = [];
     for (let index = 0; index < orderedSkus.length; index += 500) {
       const batch = orderedSkus.slice(index, index + 500);
@@ -1866,7 +1980,7 @@ export async function getProductsBySkus(
     const productsBySku = new Map(
       rows.map((row) => [
         row.sku,
-        mapProductListRow(row, pricingRules, deliveryWindows),
+        mapProductListRow(row, pricingRules, deliveryWindows, heroContext),
       ]),
     );
     return orderedSkus
@@ -1880,16 +1994,18 @@ export async function getProductsBySkus(
 
 export async function getProductBySku(sku: string): Promise<ProductDTO | null> {
   if (!hasDatabaseConnection()) return null;
-  const [row, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [row, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.product.findFirst({
       where: { sku, ...webStorefrontVisibleProductWhere() },
       include: productInclude,
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
   if (!row) return null;
-  return mapProduct(row, pricingRules, deliveryWindows);
+  return mapProduct(row, pricingRules, deliveryWindows, { now, monthlyHeroSkus });
 }
 
 /** "Često kupovano zajedno" — items in the same `collection`. */
@@ -1899,7 +2015,8 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
     select: { collectionId: true },
   });
   if (!p?.collectionId) return [];
-  const [rows, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [rows, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.product.findMany({
       where: {
         collectionId: p.collectionId,
@@ -1912,9 +2029,15 @@ export async function getFrequentlyBought(productId: string, limit = 6) {
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
+  const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
   return rows
-    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows, heroContext))
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.isHero)) - Number(Boolean(left.isHero)),
+    )
     .slice(0, limit);
 }
 
@@ -1925,7 +2048,8 @@ export async function getRelatedProducts(productId: string, limit = 8) {
     select: { groupId: true },
   });
   if (!p?.groupId) return [];
-  const [rows, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [rows, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.product.findMany({
       where: {
         groupId: p.groupId,
@@ -1938,15 +2062,22 @@ export async function getRelatedProducts(productId: string, limit = 8) {
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
+  const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
   return rows
-    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows, heroContext))
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.isHero)) - Number(Boolean(left.isHero)),
+    )
     .slice(0, limit);
 }
 
 /** Cross-sell list backing the post-add-to-cart "Predlog kupovine" modal. */
 export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
-  const [rule, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [rule, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.recommendationRule.findFirst({
       where: { enabled: true, group: { slug: groupSlug } },
       include: { products: { include: productInclude } },
@@ -1954,11 +2085,13 @@ export async function getRecommendationsForGroup(groupSlug: string, limit = 6) {
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
   if (!rule) return [];
+  const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
   return rule.products
     .filter((product) => isProductAvailableOnWeb(product))
-    .map((product) => mapProduct(product, pricingRules, deliveryWindows))
+    .map((product) => mapProduct(product, pricingRules, deliveryWindows, heroContext))
     .slice(0, limit);
 }
 
@@ -1979,7 +2112,8 @@ export async function getCartRecommendationsForSkus(
   );
   if (!groupIds.length) return [];
 
-  const [rules, pricingRules, deliveryWindows] = await Promise.all([
+  const now = new Date();
+  const [rules, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.recommendationRule.findMany({
       where: { enabled: true, groupId: { in: groupIds } },
       include: { products: { include: productInclude } },
@@ -1987,7 +2121,9 @@ export async function getCartRecommendationsForSkus(
     }),
     getActivePricingRules(),
     getDeliveryWindows(),
+    getMonthlyHeroSkus(now),
   ]);
+  const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
 
   const seenSkus = new Set(uniqueSkus);
   const out: ProductDTO[] = [];
@@ -1999,7 +2135,12 @@ export async function getCartRecommendationsForSkus(
       ) {
         continue;
       }
-      const mapped = mapProduct(product, pricingRules, deliveryWindows);
+      const mapped = mapProduct(
+        product,
+        pricingRules,
+        deliveryWindows,
+        heroContext,
+      );
       seenSkus.add(product.sku);
       out.push(mapped);
       if (out.length >= limit) return out;

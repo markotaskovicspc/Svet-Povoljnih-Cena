@@ -2,6 +2,20 @@ import type { Prisma } from "@prisma/client";
 
 export const STOREFRONT_TIME_ZONE = "Europe/Belgrade";
 
+interface StorefrontHeroAction {
+  kind?: string | null;
+  startsAt: string | Date;
+  endsAt: string | Date;
+  isPermanent?: boolean | null;
+}
+
+interface StorefrontHeroProduct {
+  sku: string;
+  isHero?: boolean | null;
+  action?: StorefrontHeroAction | null;
+  actionPrices?: Array<{ action: StorefrontHeroAction }> | null;
+}
+
 export function storefrontMonth(date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: STOREFRONT_TIME_ZONE,
@@ -12,6 +26,36 @@ export function storefrontMonth(date: Date) {
     Number(parts.find((part) => part.type === type)?.value);
 
   return { year: value("year"), month: value("month") };
+}
+
+function isLiveHeroAction(action: StorefrontHeroAction, now: Date) {
+  if (action.kind !== "HEROJI") return false;
+  if (action.isPermanent) return true;
+  const time = now.getTime();
+  return (
+    new Date(action.startsAt).getTime() <= time &&
+    new Date(action.endsAt).getTime() >= time
+  );
+}
+
+/**
+ * Resolves every canonical source of the storefront "Heroj meseca" status.
+ * `Product.isHero` is retained for legacy/imported products, while the ERP
+ * action editor writes month-scoped assignments to `HeroOfMonth`.
+ */
+export function isStorefrontHeroProduct(
+  product: StorefrontHeroProduct,
+  monthlyHeroSkus: ReadonlySet<string>,
+  now: Date = new Date(),
+) {
+  return Boolean(
+    product.isHero ||
+      monthlyHeroSkus.has(product.sku) ||
+      (product.action && isLiveHeroAction(product.action, now)) ||
+      product.actionPrices?.some(({ action }) =>
+        isLiveHeroAction(action, now),
+      ),
+  );
 }
 
 export function heroProductsWhere(

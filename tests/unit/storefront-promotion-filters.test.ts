@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   excludeRabaluxPromotionProductsWhere,
   heroProductsWhere,
+  isStorefrontHeroProduct,
   limitedOfferProductsWhere,
   permanentPriceProductsWhere,
   storefrontMonth,
@@ -44,6 +45,44 @@ describe("storefront promotion filters", () => {
         ]),
       }),
     );
+  });
+
+  it("resolves a current monthly assignment even when the legacy flag is false", () => {
+    expect(
+      isStorefrontHeroProduct(
+        { sku: "110187", isHero: false },
+        new Set(["110187"]),
+        new Date("2026-08-21T12:00:00.000Z"),
+      ),
+    ).toBe(true);
+  });
+
+  it("resolves live HEROJI actions and rejects expired ones", () => {
+    const now = new Date("2026-08-21T12:00:00.000Z");
+    const action = {
+      kind: "HEROJI",
+      startsAt: "2026-08-01T00:00:00.000Z",
+      endsAt: "2026-08-31T23:59:59.000Z",
+    };
+
+    expect(
+      isStorefrontHeroProduct(
+        { sku: "LIVE", isHero: false, actionPrices: [{ action }] },
+        new Set(),
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isStorefrontHeroProduct(
+        {
+          sku: "EXPIRED",
+          isHero: false,
+          action: { ...action, endsAt: "2026-08-20T23:59:59.000Z" },
+        },
+        new Set(),
+        now,
+      ),
+    ).toBe(false);
   });
 
   it("treats both limited and ERP DTZ articles as 'Dok traju zalihe'", () => {

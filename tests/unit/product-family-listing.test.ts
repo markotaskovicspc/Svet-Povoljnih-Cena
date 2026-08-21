@@ -202,6 +202,37 @@ describe("dinamički filteri listinga", () => {
       ]);
   });
 
+  it("zadržava Heroje meseca na vrhu kod svake ponuđene vrste sortiranja", () => {
+    const regularCheap = {
+      ...product,
+      sku: "REGULAR-CHEAP",
+      fullPrice: 500,
+      discountPct: 80,
+      variantFamily: undefined,
+    } as Product;
+    const heroExpensive = {
+      ...product,
+      sku: "HERO-EXPENSIVE",
+      isHero: true,
+      fullPrice: 10_000,
+      discountPct: 5,
+      variantFamily: undefined,
+    } as Product;
+
+    for (const sort of [
+      "default",
+      "price-asc",
+      "price-desc",
+      "discount-desc",
+    ] as const) {
+      expect(
+        applySort([regularCheap, heroExpensive], sort, "akcija").map(
+          (item) => item.sku,
+        ),
+      ).toEqual(["HERO-EXPENSIVE", "REGULAR-CHEAP"]);
+    }
+  });
+
   it("podtab prepoznaje proizvod po nazivu kada je kategorija šira", () => {
     expect(
       matchesListingSubTab(

@@ -39,6 +39,22 @@ const readyProduct: Product = {
 };
 
 describe("ProductCard image regression", () => {
+  it("prikazuje oznaku Heroj meseca zajedno sa oznakom Novo", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          isHero: true,
+          isNew: true,
+          newUntil: "2100-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Heroj meseca"');
+    expect(html).toContain('aria-label="Novo"');
+  });
+
   it("ne prikazuje šifru artikla na kartici", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, { product: readyProduct }),

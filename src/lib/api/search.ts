@@ -135,7 +135,48 @@ async function searchProductHits(
              p."fullPrice"   AS full_price,
              p."salePrice"   AS sale_price,
              p."discountPct" AS discount_pct,
-             p."isHero"      AS is_hero,
+             (
+               p."isHero"
+               OR EXISTS (
+                 SELECT 1
+                   FROM "HeroOfMonth" hom
+                  WHERE hom."productSku" = p.sku
+                    AND hom.year = EXTRACT(
+                      YEAR FROM (now() AT TIME ZONE 'Europe/Belgrade')
+                    )::int
+                    AND hom.month = EXTRACT(
+                      MONTH FROM (now() AT TIME ZONE 'Europe/Belgrade')
+                    )::int
+               )
+               OR EXISTS (
+                 SELECT 1
+                   FROM "Action" direct_action
+                  WHERE direct_action.id = p."actionId"
+                    AND direct_action.kind = 'HEROJI'
+                    AND (
+                      direct_action."isPermanent" = true
+                      OR (
+                        direct_action."startsAt" <= now()
+                        AND direct_action."endsAt" >= now()
+                      )
+                    )
+               )
+               OR EXISTS (
+                 SELECT 1
+                   FROM "ActionProduct" action_product
+                   JOIN "Action" priced_action
+                     ON priced_action.id = action_product."actionId"
+                  WHERE action_product."productId" = p.id
+                    AND priced_action.kind = 'HEROJI'
+                    AND (
+                      priced_action."isPermanent" = true
+                      OR (
+                        priced_action."startsAt" <= now()
+                        AND priced_action."endsAt" >= now()
+                      )
+                    )
+               )
+             ) AS is_hero,
              (SELECT pm.url FROM "ProductMedia" pm
                 WHERE pm."productId" = p.id AND pm.kind = 'IMAGE'
                 ORDER BY pm."order" ASC LIMIT 1) AS thumbnail,
@@ -217,7 +258,7 @@ async function searchProductHits(
                   ) THEN 5
                   ELSE 6
                 END ASC,
-                p."isHero" DESC,
+                is_hero DESC,
                 COALESCE(p."discountPct", 0) DESC,
                 COALESCE(p."salePrice", p."fullPrice") ASC
        LIMIT ${queryLimit}
@@ -277,7 +318,7 @@ async function searchProductHits(
       loyaltyPrice: quote.loyaltyOffer?.effective,
       salePrice: quote.actionOffer?.effective ?? quote.full,
       discountPct: quote.actionOffer?.discountPct ?? 0,
-      isHero: r.is_hero,
+      isHero: Boolean(product.isHero),
     }];
   });
 }

@@ -397,17 +397,24 @@ export function resolveListingProducts(
  */
 export function applySort(products: Product[], sort: SortKey, kind: ListingKind): Product[] {
   const list = [...products];
+  const cmpHero = (a: Product, b: Product) =>
+    Number(Boolean(b.isHero)) - Number(Boolean(a.isHero));
   switch (sort) {
     case "price-asc":
       return list.sort(
-        (a, b) => finalListingPrice(a) - finalListingPrice(b),
+        (a, b) =>
+          cmpHero(a, b) || finalListingPrice(a) - finalListingPrice(b),
       );
     case "price-desc":
       return list.sort(
-        (a, b) => finalListingPrice(b) - finalListingPrice(a),
+        (a, b) =>
+          cmpHero(a, b) || finalListingPrice(b) - finalListingPrice(a),
       );
     case "discount-desc":
-      return list.sort((a, b) => (b.discountPct ?? 0) - (a.discountPct ?? 0));
+      return list.sort(
+        (a, b) =>
+          cmpHero(a, b) || (b.discountPct ?? 0) - (a.discountPct ?? 0),
+      );
     case "default":
     default:
       return defaultSortFor(list, kind);
