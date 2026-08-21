@@ -146,7 +146,7 @@ describe("filter dostupnosti", () => {
 });
 
 describe("dinamički filteri listinga", () => {
-  it("lokalni filter i sortiranje koriste krajnju važeću cenu", () => {
+  it("lokalni filter i sortiranje koriste najnižu javno prikazanu krajnju cenu", () => {
     const fullPriceOnly = {
       ...product,
       sku: "FULL-PRICE",
@@ -176,17 +176,30 @@ describe("dinamički filteri listinga", () => {
         endsAt: "2020-01-01T00:00:00.000Z",
       },
     } as Product;
-    const products = [expiredAction, fullPriceOnly, activeAction];
+    const loyaltyOffer = {
+      ...product,
+      sku: "LOYALTY-OFFER",
+      fullPrice: 4_000,
+      loyaltyPrice: 1_200,
+      loyaltyDiscountPct: 70,
+      variantFamily: undefined,
+    } as Product;
+    const products = [expiredAction, fullPriceOnly, activeAction, loyaltyOffer];
 
     expect(computeExtents(products).price).toEqual([1_000, 3_000]);
     expect(
       applyFilters(products, {
         ...emptyFilterState(),
-        price: [1_000, 1_499],
+        price: [1_000, 1_299],
       }).map((item) => item.sku),
-    ).toEqual(["ACTIVE-ACTION"]);
+    ).toEqual(["LOYALTY-OFFER"]);
     expect(applySort(products, "price-asc", "kategorija").map((item) => item.sku))
-      .toEqual(["ACTIVE-ACTION", "FULL-PRICE", "EXPIRED-ACTION"]);
+      .toEqual([
+        "LOYALTY-OFFER",
+        "ACTIVE-ACTION",
+        "FULL-PRICE",
+        "EXPIRED-ACTION",
+      ]);
   });
 
   it("podtab prepoznaje proizvod po nazivu kada je kategorija šira", () => {

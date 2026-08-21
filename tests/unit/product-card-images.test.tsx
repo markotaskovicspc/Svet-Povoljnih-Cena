@@ -183,7 +183,7 @@ describe("ProductCard image regression", () => {
     expect(html).not.toContain("min-h-3.5 truncate");
   });
 
-  it("prikazuje period akcije i rok isporuke u donjem redu", () => {
+  it("period akcije ostavlja zaglavlju, a na kartici prikazuje rok isporuke", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {
         product: {
@@ -199,9 +199,9 @@ describe("ProductCard image regression", () => {
       }),
     );
 
-    expect(html).toContain(
-      "Akcija do 31.08.2026. · Isporuka 3–5 radnih dana",
-    );
+    expect(html).toContain("Isporuka 3–5 radnih dana");
+    expect(html).not.toContain("Akcija do");
+    expect(html).not.toContain("31.08.2026.");
   });
 
   it("na aktivnoj akciji ne prikazuje niti koristi loyalty cenu", () => {

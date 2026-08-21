@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
-import { formatRsd, formatDate } from "@/lib/format";
+import { formatRsd } from "@/lib/format";
 import { getMediaVariantUrl, isRenderableImageUrl } from "@/lib/media";
 import { getProductAvailability } from "@/lib/product-availability";
 import { useWishlist, useIsWished } from "@/lib/hooks/use-wishlist";
@@ -178,15 +178,13 @@ export function ProductCard({
   const dimensions = formatProductCardDimensions(product.dimensionsCm);
   const promoLine = product.action?.isPermanent
     ? "Trajno niska cena"
-    : price.kind === "sale" && product.action?.endsAt
-      ? `Akcija do ${formatDate(product.action.endsAt)}`
-      : price.kind === "linear"
-        ? "Dodatni akcijski popust"
-        : quote.loyaltyOffer
-          ? loyaltyEligible
-            ? "Loyalty cena je aktivna"
-            : "Loyalty cena uz prijavljen nalog"
-          : "";
+    : price.kind === "linear"
+      ? "Dodatni akcijski popust"
+      : quote.loyaltyOffer
+        ? loyaltyEligible
+          ? "Loyalty cena je aktivna"
+          : "Loyalty cena uz prijavljen nalog"
+        : "";
   const availability = getProductAvailability(product);
   const deliveryLine =
     product.supplierIntegrationKey?.toUpperCase() === "RABALUX" &&

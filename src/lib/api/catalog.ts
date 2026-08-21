@@ -35,7 +35,7 @@ import {
   pricingRuleInputsForProduct,
   type ActivePricingRules,
 } from "@/lib/pricing/rules";
-import { resolveProductPriceQuote } from "@/lib/pricing/engine";
+import { lowestPublicDisplayedUnitPrice } from "@/lib/pricing/engine";
 import {
   isProductAvailableOnWeb,
   storefrontAvailabilityWhere,
@@ -1425,10 +1425,7 @@ async function loadProducts(
       .map(({ rowId, product }) => ({
         rowId,
         product,
-        price: resolveProductPriceQuote(product, {
-          now: evaluatedAt,
-          loggedIn: false,
-        }).payable.effective,
+        price: lowestPublicDisplayedUnitPrice(product, evaluatedAt).effective,
       }))
       .filter(({ price }) => {
         if (input.maxPrice != null && price > input.maxPrice) return false;
@@ -1585,7 +1582,7 @@ function computeProductFacets(
       },
       pricingRules,
     );
-    const finalPrice = resolveProductPriceQuote(
+    const finalPrice = lowestPublicDisplayedUnitPrice(
       {
         fullPrice: retailPrice.price,
         salePrice: numOrNull(row.salePrice),
@@ -1609,8 +1606,8 @@ function computeProductFacets(
         })),
         linearPromotions: ruleInputs.linearPromotions,
       },
-      { now: evaluatedAt, loggedIn: false },
-    ).payable.effective;
+      evaluatedAt,
+    ).effective;
     if (input.maxPrice != null && finalPrice > input.maxPrice) continue;
     if (
       input.priceRange &&

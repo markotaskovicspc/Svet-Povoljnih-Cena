@@ -38,11 +38,14 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatDate as formatStorefrontDate } from "@/lib/format";
 import {
   fetchListingFacets,
   fetchListingPage,
 } from "@/lib/listing/fetch-products";
+import {
+  formatListingActionPeriod,
+  type ListingActionPeriod,
+} from "@/lib/listing/action-period";
 import {
   campaignStickers,
   type CampaignStickerKey,
@@ -86,7 +89,7 @@ interface ListingShellProps {
   campaignSticker?: CampaignStickerKey;
   headerVariant?: "default" | "promo";
   /** Optional period banner (e.g. action validity). */
-  period?: { startsAt?: string; endsAt: string; label?: string };
+  period?: ListingActionPeriod;
   periodPlacement?: "below-title" | "title-line";
   trail: Crumb[];
   source: Product[];
@@ -192,6 +195,7 @@ function ListingShellInner({
   const listingQueryRef = useRef("");
   const displayTitleIcon =
     titleIcon ?? (campaignSticker ? campaignStickers[campaignSticker] : undefined);
+  const periodText = period ? formatListingActionPeriod(period) : undefined;
 
   // Scroll-restore on back navigation.
   useEffect(() => {
@@ -439,14 +443,14 @@ function ListingShellInner({
                 </h1>
                 {period && periodPlacement === "title-line" ? (
                   <p className="inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
-                    {period.label ?? "Akcija"} važi{period.startsAt ? ` od ${formatDate(period.startsAt)}` : ""} do {formatDate(period.endsAt)}
+                    {periodText}
                   </p>
                 ) : null}
               </div>
             </div>
             {period && periodPlacement === "below-title" ? (
               <p className="mt-2 inline-flex rounded-full bg-action/10 px-3 py-1 text-xs font-bold text-action ring-1 ring-action/20">
-                {period.label ?? "Akcija"} važi{period.startsAt ? ` od ${formatDate(period.startsAt)}` : ""} do {formatDate(period.endsAt)}
+                {periodText}
               </p>
             ) : null}
             {!period && subtitle ? (
@@ -748,10 +752,6 @@ function EmptyState({ onReset }: { onReset: () => void }) {
       </div>
     </div>
   );
-}
-
-function formatDate(value: string) {
-  return formatStorefrontDate(value);
 }
 
 /** Skeleton grid for suspense fallbacks. */

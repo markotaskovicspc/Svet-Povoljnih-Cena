@@ -7,7 +7,7 @@
 import type { Product } from "@/types";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
-import { resolveProductPriceQuote } from "@/lib/pricing";
+import { lowestPublicDisplayedUnitPrice } from "@/lib/pricing";
 
 export const LISTING_PAGE_SIZE = 36;
 
@@ -66,9 +66,9 @@ export const emptyFilterState = (): FilterState => ({
   dynamic: {},
 });
 
-/** Mirrors the anonymous public price used by the catalog API. */
+/** Mirrors the lowest final price publicly shown on a product card. */
 function finalListingPrice(product: Product) {
-  return resolveProductPriceQuote(product, { loggedIn: false }).payable.effective;
+  return lowestPublicDisplayedUnitPrice(product).effective;
 }
 
 /**
