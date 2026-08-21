@@ -12,7 +12,7 @@ import { getProductMediaBucket } from "@/lib/supabase/storage";
 import {
   getManagedMobileShortcutIconKey,
   MOBILE_SHORTCUT_ICON_PREFIX,
-  validateMobileShortcutIconFile,
+  validateMobileShortcutIconUpload,
 } from "@/lib/mobile-shortcuts/icon-file";
 import {
   landingPageIsLive,
@@ -99,10 +99,11 @@ type AdminMobileShortcutRow = {
 };
 
 async function uploadShortcutIcon(position: number, file: File) {
-  const extension = validateMobileShortcutIconFile(file);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const extension = validateMobileShortcutIconUpload(file, bytes);
   const key = `${MOBILE_SHORTCUT_ICON_PREFIX}slot-${position}-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
-  const { error } = await storage.upload(key, Buffer.from(await file.arrayBuffer()), {
+  const { error } = await storage.upload(key, bytes, {
     cacheControl: "31536000",
     contentType: file.type,
     upsert: false,
@@ -631,11 +632,14 @@ function ShortcutEditor({
             </select>
           </Field>
 
-          <Field label="Nova ikona" hint="PNG, JPG ili WebP; najviše 750 KB.">
+          <Field
+            label="Nova ikona"
+            hint="PNG, JPG, WebP ili bezbedan SVG; najviše 750 KB."
+          >
             <Input
               name="iconFile"
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg"
             />
           </Field>
         </div>
