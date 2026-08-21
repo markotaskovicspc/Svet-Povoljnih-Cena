@@ -128,16 +128,18 @@ export function AccountShortcutTile({
   active,
   compact = false,
   className,
+  href = "/nalog",
   onClick,
 }: {
   active?: boolean;
   compact?: boolean;
   className?: string;
+  href?: string;
   onClick?: () => void;
 }) {
   return (
     <Link
-      href="/nalog"
+      href={href}
       onClick={onClick}
       className={cn(
         "flex min-h-14 items-center gap-3 rounded-md border border-brand-blue/10 bg-white px-3 py-3 text-sm font-semibold text-brand-blue shadow-soft-1 transition hover:border-brand-blue/25 hover:bg-brand-blue-50 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",

@@ -21,6 +21,7 @@ import {
   mobileFilterHeaderEnabled,
   OPEN_MOBILE_FILTERS_EVENT,
 } from "@/lib/listing/mobile-filter-header";
+import { customerLoginHref } from "@/lib/auth/customer-callback";
 
 const SCROLL_THRESHOLD = 16;
 
@@ -36,6 +37,9 @@ export function Header({
   const pathname = usePathname();
   const showMobileFilters = mobileFilterHeaderEnabled(pathname);
   const isCustomerLoggedIn = useLoyaltyEligibility();
+  const accountHref = isCustomerLoggedIn
+    ? "/nalog"
+    : customerLoginHref(pathname);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -76,7 +80,7 @@ export function Header({
         </div>
         <div className="flex items-center gap-1">
           <Link
-            href="/nalog"
+            href={accountHref}
             className={cn(
               "inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold whitespace-nowrap transition focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none",
               isCustomerLoggedIn
@@ -148,7 +152,7 @@ export function Header({
         </Link>
         <div className="flex shrink-0 items-center gap-0">
           <Link
-            href="/nalog"
+            href={accountHref}
             aria-label="Moj nalog"
             className={cn(
               "inline-flex size-9 items-center justify-center rounded-full transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none",

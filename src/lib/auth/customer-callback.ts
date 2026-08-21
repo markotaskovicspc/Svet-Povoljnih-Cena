@@ -10,3 +10,8 @@ export function customerCallback(raw?: string | string[]) {
 
   return value;
 }
+
+export function customerLoginHref(returnTo?: string | string[]) {
+  const callbackUrl = customerCallback(returnTo);
+  return `/nalog/prijava?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+}

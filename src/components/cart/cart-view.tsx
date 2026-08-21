@@ -13,6 +13,7 @@ import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 import { useSession } from "next-auth/react";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
 import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
+import { customerLoginHref } from "@/lib/auth/customer-callback";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -341,7 +342,7 @@ export function CartLoginOffer({ onNavigate }: { onNavigate?: () => void } = {})
 export function CartLoginOfferLink({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
-      href={`/nalog/prijava?callbackUrl=${encodeURIComponent("/korpa")}`}
+      href={customerLoginHref("/korpa")}
       onClick={onNavigate}
       className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
     >

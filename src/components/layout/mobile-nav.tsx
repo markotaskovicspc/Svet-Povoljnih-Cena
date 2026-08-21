@@ -33,6 +33,7 @@ import { InstantSearch } from "./instant-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
+import { customerLoginHref } from "@/lib/auth/customer-callback";
 
 interface Crumb {
   label: string;
@@ -80,6 +81,9 @@ export function MobileNav({
 }) {
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
+  const accountHref = isCustomerLoggedIn
+    ? "/nalog"
+    : customerLoginHref(pathname);
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<Crumb[]>([
     { label: "Sve kategorije", nodes: categories },
@@ -155,7 +159,7 @@ export function MobileNav({
                   <Home className="size-5" aria-hidden />
                 </Link>
                 <Link
-                  href="/nalog"
+                  href={accountHref}
                   onClick={close}
                   aria-label="Moj nalog"
                   className={cn(
@@ -289,6 +293,7 @@ export function MobileNav({
                         <li>
                           <AccountShortcutTile
                             active={isCustomerLoggedIn}
+                            href={accountHref}
                             compact
                             onClick={close}
                             className="h-[clamp(42px,13vw,60px)] border-white/20 text-[clamp(11px,3.15vw,13px)] focus-visible:ring-white/70"
