@@ -344,17 +344,16 @@ export function CheckoutFlow({
           throw new Error("Dostava trenutno ne može da se obračuna.");
         }
         setResolvedDeliveryQuote({ key: deliveryQuoteKey, quote: result.data });
-        if (
-          !result.data.truckAvailable &&
-          getValues("shippingMethod") === "kamion"
-        ) {
-          setValue("shippingMethod", "kurir", {
+        const resolvedMethod = result.data.recommendedMethod;
+        if (resolvedMethod && getValues("shippingMethod") !== resolvedMethod) {
+          setValue("shippingMethod", resolvedMethod, {
             shouldDirty: true,
             shouldValidate: true,
           });
         }
-        const selectedPrice =
-          result.data.prices[getValues("shippingMethod")];
+        const selectedPrice = resolvedMethod
+          ? result.data.prices[resolvedMethod]
+          : null;
         if (selectedPrice == null) {
           setDeliveryQuoteError(deliveryPricingMessage(result.data.pricingIssue));
           return false;
@@ -1283,7 +1282,9 @@ function deliveryPricingMessage(
 ) {
   switch (issue) {
     case "WEIGHT_ABOVE_50_KG":
-      return "Ukupna težina jedne kategorije prelazi 50 kg, a za veće pošiljke nije podešena posebna cena dostave. Kontaktirajte podršku pre poručivanja.";
+      return "Ukupna težina jedne kategorije prelazi 50 kg, a kamionska isporuka trenutno nema podešenu cenu.";
+    case "TRUCK_UNAVAILABLE_FOR_CITY":
+      return "Za korpu preko 50 kg potrebna je kamionska isporuka, koja trenutno nije dostupna u unetom gradu.";
     case "MISSING_PACKAGE_DIMENSIONS":
     case "MISSING_WEIGHT":
       return "Za jedan ili više artikala nedostaju podaci potrebni za tačan obračun dostave. Kontaktirajte podršku pre poručivanja.";

@@ -37,7 +37,8 @@ export function CartDrawer() {
     lines,
     open,
   );
-  const shipping = quote?.prices.kurir ?? null;
+  const shippingMethod = quote?.recommendedMethod ?? null;
+  const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -108,7 +109,9 @@ export function CartDrawer() {
               </div>
             ) : null}
             <div className="flex items-baseline justify-between text-sm">
-              <span className="text-ink-700">Isporuka</span>
+              <span className="text-ink-700">
+                {shippingMethod === "kamion" ? "Kamionska isporuka" : "Isporuka"}
+              </span>
               <span className="font-semibold text-ink-900">
                 {shipping == null
                   ? deliveryLoading
@@ -122,6 +125,11 @@ export function CartDrawer() {
                 breakdown={quote?.deliveryCategoryBreakdown ?? null}
               />
             </dl>
+            {shippingMethod === "kamion" ? (
+              <p className="text-ink-500 text-xs">
+                Za ovu korpu primenjena je fiksna tarifa za kamionsku isporuku.
+              </p>
+            ) : null}
             {shipping == null && !deliveryLoading ? (
               <p className="text-action text-xs">
                 Za ovu korpu dostava ne može automatski da se obračuna.

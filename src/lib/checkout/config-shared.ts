@@ -3,6 +3,7 @@ import type {
   DeliveryCategory,
   DeliveryTariffIssue,
   PublishedDeliveryCategoryBreakdown,
+  PublishedDeliveryTariffQuote,
 } from "@/lib/delivery-tariff";
 
 export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
@@ -41,8 +42,14 @@ export type CheckoutPaymentMethodConfig = {
 
 export type CheckoutDeliveryQuote = {
   prices: Record<ShippingMethod, number | null>;
+  /** Delivery method that matches the resolved cart tariff. */
+  recommendedMethod: ShippingMethod | null;
   /** Why an exact courier tariff could not be produced for a non-empty cart. */
-  pricingIssue: DeliveryTariffIssue | "NO_CONFIGURED_PRICE" | null;
+  pricingIssue:
+    | DeliveryTariffIssue
+    | "NO_CONFIGURED_PRICE"
+    | "TRUCK_UNAVAILABLE_FOR_CITY"
+    | null;
   /** Server-resolved public delivery category for each requested cart line. */
   deliveryCategoriesBySku: Partial<Record<SKU, DeliveryCategory>>;
   /** Present when the published category tariff, rather than an admin fallback, was used. */
@@ -85,7 +92,8 @@ export const DEFAULT_PAYMENT_METHOD_CONFIG: CheckoutPaymentMethodConfig[] = [
 ];
 
 export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
-  prices: { kurir: null, kamion: null },
+  prices: SHIPPING_PRICES,
+  recommendedMethod: "kurir",
   pricingIssue: null,
   deliveryCategoriesBySku: {},
   deliveryCategoryBreakdown: null,
@@ -94,6 +102,51 @@ export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
   truckAvailable: true,
   truckCities: [...DEFAULT_TRUCK_CITY_NAMES],
 };
+
+export function resolveDeliveryMethodQuote({
+  publishedTariff,
+  configuredCourierPrice,
+  configuredTruckPrice,
+  truckAvailable,
+}: {
+  publishedTariff: PublishedDeliveryTariffQuote | null;
+  configuredCourierPrice: number | null;
+  configuredTruckPrice: number | null;
+  truckAvailable: boolean;
+}): Pick<
+  CheckoutDeliveryQuote,
+  | "prices"
+  | "recommendedMethod"
+  | "pricingIssue"
+  | "deliveryCategoryBreakdown"
+> {
+  const requiresTruck = publishedTariff?.issue === "WEIGHT_ABOVE_50_KG";
+  const courierPrice = requiresTruck
+    ? null
+    : (publishedTariff?.total ??
+      configuredCourierPrice ??
+      SHIPPING_PRICES.kurir);
+  const truckPrice = truckAvailable
+    ? (configuredTruckPrice ?? SHIPPING_PRICES.kamion)
+    : null;
+  const recommendedMethod =
+    courierPrice != null ? "kurir" : truckPrice != null ? "kamion" : null;
+
+  return {
+    prices: { kurir: courierPrice, kamion: truckPrice },
+    recommendedMethod,
+    pricingIssue:
+      recommendedMethod != null
+        ? null
+        : requiresTruck && !truckAvailable
+          ? "TRUCK_UNAVAILABLE_FOR_CITY"
+          : (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE"),
+    // A flat truck or courier fallback covers the complete cart. Category
+    // prices are meaningful only when the published table itself resolved.
+    deliveryCategoryBreakdown:
+      publishedTariff?.total != null ? publishedTariff.categories : null,
+  };
+}
 
 export function getPaymentLabel(
   method: PaymentMethod,

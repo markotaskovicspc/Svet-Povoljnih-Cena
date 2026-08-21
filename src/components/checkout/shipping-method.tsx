@@ -152,6 +152,7 @@ export function ShippingMethodStep({
  * its live quote is shown inside the address step.
  */
 export function AutomaticDeliverySection({
+  deliveryQuote,
   glsDeliveryPointsEnabled = false,
 }: {
   deliveryQuote: CheckoutDeliveryQuote;
@@ -161,12 +162,28 @@ export function AutomaticDeliverySection({
   const glsDeliveryPoint = watch("glsDeliveryPoint");
 
   useEffect(() => {
-    setValue("shippingMethod", "kurir", { shouldDirty: false });
+    setValue("shippingMethod", deliveryQuote.recommendedMethod ?? "kurir", {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
     setValue("perItemAssembly", {}, { shouldDirty: false });
-    if (!glsDeliveryPointsEnabled) {
+    if (
+      !glsDeliveryPointsEnabled ||
+      deliveryQuote.recommendedMethod !== "kurir"
+    ) {
       setValue("glsDeliveryPoint", null, { shouldDirty: false });
     }
-  }, [glsDeliveryPointsEnabled, setValue]);
+  }, [deliveryQuote.recommendedMethod, glsDeliveryPointsEnabled, setValue]);
+
+  if (deliveryQuote.recommendedMethod === "kamion") {
+    return (
+      <div className="rounded-2xl border border-border/60 bg-muted-bg p-4 text-sm text-ink-700">
+        Za ovu korpu automatski je izabrana kamionska isporuka — {formatRsd(
+          deliveryQuote.prices.kamion ?? 0,
+        )}.
+      </div>
+    );
+  }
 
   if (!glsDeliveryPointsEnabled) return null;
 

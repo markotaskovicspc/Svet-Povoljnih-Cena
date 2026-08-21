@@ -130,7 +130,8 @@ function CartSummary({
   const [code, setCode] = useState("");
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [checkingVoucher, setCheckingVoucher] = useState(false);
-  const shipping = quote?.prices.kurir ?? null;
+  const shippingMethod = quote?.recommendedMethod ?? null;
+  const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
   const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
   const total =
     shipping == null
@@ -195,7 +196,7 @@ function CartSummary({
           <div className="flex items-baseline justify-between">
             <dt className="text-ink-700 inline-flex items-center gap-1.5">
               <Truck className="size-3.5" aria-hidden />
-              Isporuka
+              {shippingMethod === "kamion" ? "Kamionska isporuka" : "Isporuka"}
             </dt>
             <dd className="font-medium text-ink-900">
               {shipping == null
@@ -208,6 +209,11 @@ function CartSummary({
           <DeliveryCategoryBreakdown
             breakdown={quote?.deliveryCategoryBreakdown ?? null}
           />
+          {shippingMethod === "kamion" ? (
+            <p className="text-ink-500 text-xs">
+              Za ovu korpu primenjena je fiksna tarifa za kamionsku isporuku.
+            </p>
+          ) : null}
           {shipping == null && !deliveryLoading ? (
             <p className="text-action text-xs">
               Za ovu korpu dostava ne može automatski da se obračuna.

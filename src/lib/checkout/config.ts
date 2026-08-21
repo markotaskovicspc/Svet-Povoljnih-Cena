@@ -15,6 +15,7 @@ import {
   ASSEMBLY_ENABLED,
   DEFAULT_PAYMENT_METHOD_CONFIG,
   DEFAULT_TRUCK_CITY_NAMES,
+  resolveDeliveryMethodQuote,
   type CheckoutConfig,
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
@@ -359,8 +360,12 @@ export async function resolveDeliveryQuote({
     lines.length && publishedTariffLines.length === lines.length
       ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, { loggedIn })
       : null;
-  const publishedPrice = publishedTariff?.total;
-  const courierPrice = publishedPrice ?? configuredCourierPrice;
+  const resolvedDelivery = resolveDeliveryMethodQuote({
+    publishedTariff,
+    configuredCourierPrice,
+    configuredTruckPrice,
+    truckAvailable,
+  });
   const deliveryCategoriesBySku = Object.fromEntries(
     products.flatMap((product) => {
       const category = productDeliveryCategory({
@@ -376,18 +381,11 @@ export async function resolveDeliveryQuote({
   ) as CheckoutDeliveryQuote["deliveryCategoriesBySku"];
 
   return {
-    prices: {
-      kurir: courierPrice,
-      // The published parcel table is not a truck tariff. Truck delivery is
-      // available only when an administrator has configured it explicitly.
-      kamion: configuredTruckPrice,
-    },
-    pricingIssue:
-      lines.length && courierPrice == null
-        ? (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE")
-        : null,
+    prices: resolvedDelivery.prices,
+    recommendedMethod: resolvedDelivery.recommendedMethod,
+    pricingIssue: lines.length ? resolvedDelivery.pricingIssue : null,
     deliveryCategoriesBySku,
-    deliveryCategoryBreakdown: publishedTariff?.categories ?? null,
+    deliveryCategoryBreakdown: resolvedDelivery.deliveryCategoryBreakdown,
     assemblyPrice: ASSEMBLY_ENABLED
       ? normalizePrice(assemblyPrice, ASSEMBLY_PRICE_DEFAULT)
       : 0,
