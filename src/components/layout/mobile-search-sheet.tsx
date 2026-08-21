@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Loader2, Search } from "lucide-react";
@@ -93,6 +94,14 @@ export function MobileSearchSheet({
         aria-label="Pretraži"
         aria-busy={!interactive}
         disabled={!interactive}
+        onClick={(event) => {
+          // Base UI moves focus after the dialog mounts. Mobile browsers can
+          // treat that as detached from the tap and keep the keyboard closed,
+          // so mount and focus the input before this user gesture ends.
+          event.preventBaseUIHandler();
+          flushSync(() => setOpen(true));
+          inputRef.current?.focus({ preventScroll: true });
+        }}
         className={cn(
           "flex w-full items-center justify-between rounded-lg border border-border bg-white text-left text-ink-400 shadow-soft-1 transition hover:border-brand-blue/35 hover:text-ink-500 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70",
           compact ? "h-10 gap-2 px-3 text-xs" : "h-11 gap-3 px-4 text-sm",
