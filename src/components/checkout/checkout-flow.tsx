@@ -784,6 +784,15 @@ export function CheckoutFlow({
                   ) : null}
                 </motion.div>
               </AnimatePresence>
+              {deliveryQuoteError &&
+              (step === "shipping" || step === "review") ? (
+                <div
+                  role="alert"
+                  className="mt-4 rounded-xl border border-action/30 bg-action/5 px-4 py-3 text-sm text-action"
+                >
+                  {deliveryQuoteError}
+                </div>
+              ) : null}
               {submitError ? (
                 <div
                   role="alert"
@@ -810,11 +819,6 @@ export function CheckoutFlow({
               {step === "review" ? (
                 <div className="mt-5 border-t border-border/60 pt-5">
                   <CheckoutConsent />
-                  {deliveryQuoteError ? (
-                    <p role="alert" className="mt-2 text-xs text-action">
-                      {deliveryQuoteError}
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
             </div>
