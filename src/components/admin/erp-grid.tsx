@@ -95,7 +95,12 @@ function fieldValueLabel(
   labels: Record<string, string> | undefined,
 ) {
   if (!labels) return null;
-  return labels[value.trim().toLocaleLowerCase("sr-Latn-RS")] ?? null;
+  const trimmed = value.trim();
+  return (
+    labels[trimmed] ??
+    labels[trimmed.toLocaleLowerCase("sr-Latn-RS")] ??
+    null
+  );
 }
 
 function formatValue(value: ErpValue, column: ErpColumn) {
@@ -1250,7 +1255,7 @@ export function ErpGrid({
                       <option value="">Izaberite vrednost</option>
                       {field.options.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {fieldValueLabel(option, field.valueLabels) ?? option}
                         </option>
                       ))}
                     </select>
@@ -1272,7 +1277,7 @@ export function ErpGrid({
                       }}
                     />
                   )}
-                  {field.valueLabels ? (
+                  {field.valueLabels && !field.options ? (
                     <p
                       aria-live="polite"
                       className={cn(

@@ -256,6 +256,21 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     await test.step("Novi otvara editabilan nalog i datum se čuva", async () => {
       await page.getByRole("button", { name: "Novi", exact: true }).click();
       const createDialog = page.getByRole("dialog");
+      await expect(
+        createDialog.getByRole("option", {
+          name: "X Express — sve stranice do 60 cm",
+          exact: true,
+        }),
+      ).toBeAttached();
+      await expect(
+        createDialog.getByRole("option", {
+          name: "MyGLS — bar jedna stranica preko 60 cm",
+          exact: true,
+        }),
+      ).toBeAttached();
+      await expect(
+        createDialog.getByText("Unesite šifru da proverite naziv artikla."),
+      ).toHaveCount(0);
       await createDialog.getByLabel("Kurirska služba").selectOption("MYGLS");
       await createDialog.getByRole("button", { name: "Novi", exact: true }).click();
       await expect(page).toHaveURL(
