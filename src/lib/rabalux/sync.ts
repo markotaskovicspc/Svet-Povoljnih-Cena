@@ -1011,7 +1011,7 @@ async function upsertCatalogItem(
         ? "PENDING_APPROVAL"
         : "PENDING_MAPPING";
     const activeCandidate =
-      isPresentInSerbiaStock &&
+      canPurchaseFromSerbiaStock &&
       item.valid &&
       existing?.articleStatus !== "ARH" &&
       approvalStatus === "APPROVED" &&

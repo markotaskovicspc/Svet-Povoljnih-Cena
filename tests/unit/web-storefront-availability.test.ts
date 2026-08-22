@@ -173,16 +173,14 @@ describe("web storefront availability rollout", () => {
     ).toBe(false);
   });
 
-  it("publishes only positive Serbia stock without requiring 3 units", () => {
+  it("publishes Rabalux only at 3+ units", () => {
     process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
     process.env.RABALUX_ENABLED = "true";
     const serialized = JSON.stringify(webStorefrontProductWhere());
 
     expect(serialized).toContain('"supplierApprovalStatus":"APPROVED"');
-    expect(serialized).toContain('"supplierStock":{"gt":0}');
-    expect(serialized).not.toContain(
-      `"supplierStock":{"gte":3}`,
-    );
+    expect(serialized).toContain('"supplierStock":{"gte":3}');
+    expect(serialized).not.toContain('"supplierStock":{"gt":0}');
     expect(
       storefrontPublicationBlockers({
         isActive: true,
@@ -195,14 +193,27 @@ describe("web storefront availability rollout", () => {
         supplier: { integrationKey: "RABALUX", enabled: true },
         hasActiveRetailPrice: true,
       }),
-    ).toEqual(["Rabalux artikal nema pozitivno stanje u Srbiji"]);
+    ).toEqual(["Rabalux artikal ima manje od 3 komada u Srbiji"]);
     expect(
       storefrontPublicationBlockers({
         isActive: true,
         availableWebManual: true,
         availableWebAuto: false,
         articleStatus: "SP",
-        supplierStock: 1,
+        supplierStock: 2,
+        supplierApprovalStatus: "APPROVED",
+        lastSupplierStockSyncAt: new Date(),
+        supplier: { integrationKey: "RABALUX", enabled: true },
+        hasActiveRetailPrice: true,
+      }),
+    ).toEqual(["Rabalux artikal ima manje od 3 komada u Srbiji"]);
+    expect(
+      storefrontPublicationBlockers({
+        isActive: true,
+        availableWebManual: true,
+        availableWebAuto: true,
+        articleStatus: "SP",
+        supplierStock: 3,
         supplierApprovalStatus: "APPROVED",
         lastSupplierStockSyncAt: new Date(),
         supplier: { integrationKey: "RABALUX", enabled: true },

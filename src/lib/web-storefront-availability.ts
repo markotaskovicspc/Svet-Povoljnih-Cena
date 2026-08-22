@@ -49,9 +49,9 @@ function enabled(value: string | undefined) {
  * Until those balances are imported and verified, the storefront keeps honoring
  * the manual Web check without allowing an all-false auto backfill to hide the
  * complete ordinary catalog. Rabalux publication is intentionally independent
- * of this guard: only approved XLSX rows with positive Serbia stock stay
- * visible, while the minimum-three rule still controls purchasing. Keep the
- * guard off until the DC import/audit is complete.
+ * of this guard: only approved XLSX rows at or above the public stock threshold
+ * stay visible and purchasable. Keep the guard off until the DC import/audit is
+ * complete.
  */
 export function isWebAutoAvailabilityEnforced() {
   return enabled(process.env.ENFORCE_WEB_AUTO_AVAILABILITY);
@@ -202,8 +202,8 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
                     nonRabaluxSupplierWhere(),
                   ],
                 },
-                // Positive Rabalux rows remain catalog-visible below the
-                // purchase threshold; this flag controls purchasing only.
+                // Rabalux publication is controlled by the supplier threshold
+                // below, independently of the ordinary-catalog rollout guard.
                 rabaluxSupplierWhere(),
               ],
             } satisfies Prisma.ProductWhereInput,
@@ -234,7 +234,9 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
               rabaluxSupplierWhere(),
               { articleStatus: { not: "ARH" } },
               { supplierApprovalStatus: "APPROVED" },
-              { supplierStock: { gt: 0 } },
+              {
+                supplierStock: { gte: RABALUX_PUBLIC_STOCK_THRESHOLD },
+              },
               { supplier: { is: { enabled: true } } },
             ],
           },
@@ -312,8 +314,12 @@ export function storefrontPublicationBlockers(
     if (product.supplierApprovalStatus !== "APPROVED") {
       reasons.push("Rabalux artikal nije odobren");
     }
-    if ((product.supplierStock ?? 0) <= 0) {
-      reasons.push("Rabalux artikal nema pozitivno stanje u Srbiji");
+    if (
+      (product.supplierStock ?? 0) < RABALUX_PUBLIC_STOCK_THRESHOLD
+    ) {
+      reasons.push(
+        `Rabalux artikal ima manje od ${RABALUX_PUBLIC_STOCK_THRESHOLD} komada u Srbiji`,
+      );
     }
   }
 

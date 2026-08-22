@@ -18,18 +18,18 @@ broj redova naglo padne ili je isti fajl već primenjen.
 
 ## Pravila
 
-- Samo šifra sa pozitivnim stanjem u XLSX-u ostaje vidljiva kada je odobrena i
-  ima kategoriju, aktivnu maloprodajnu cenu i spremnu sliku.
+- Samo šifra са најмање 3 комада у XLSX-у остаје видљива када је одобрена и
+  има категорију, активну малопродајну цену и спремну слику.
 - `3+`: proizvod je dostupan za kupovinu.
-- `1–2`: proizvod je vidljiv u katalogu, ali nije dostupan za kupovinu.
-- `0`: proizvod nije objavljen jer nema stanje u Srbiji.
+- `0–2`: производ остаје сачуван за администрацију, али се не приказује у
+  каталогу, претрази, feed-овима или филтеру „Нема на стању“.
 - Šifra koja uopšte ne postoji u kompletnom XLSX-u trajno se briše iz `Product`
   tabele. Povezani kataloški redovi brišu se kaskadno, istorijski dokumenti
   zadržavaju svoje SKU/naziv snapshot-e, a upravljani storage fajlovi odlaze u
   retry red za trajno brisanje.
-- Svaka šifra iz XLSX-a koje još nema na sajtu povlači se iz kataloškog feeda,
-  bez obzira na količinu. Nepoznata ili nemapirana šifra ostaje evidentirana za
-  administrativnu obradu.
+- Свака шифра из XLSX-а које још нема у бази повлачи се из каталошког feed-а,
+  без обзира на количину. Непозната или немапирана шифра остаје евидентирана за
+  административну обраду, али се на сајту приказује тек са најмање 3 комада.
 - Ако шифре више нема у каталошком feed-у, она се ипак креира у бази са називом
   и стањем из XLSX-а. Остаје необјављена док не добије цену, категорију и слике.
 - Дневни каталошки sync не сме да уклони шифру која постоји у последњем

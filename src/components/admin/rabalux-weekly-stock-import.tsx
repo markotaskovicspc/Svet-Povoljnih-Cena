@@ -48,8 +48,9 @@ export function RabaluxWeeklyStockImport({
         <p className="mt-1 text-xs text-ink-500">
           XLSX je potpuna lista Rabalux proizvoda za Srbiju. Šifra koje nema u
           fajlu briše se iz baze; 0–{RABALUX_PUBLIC_STOCK_THRESHOLD - 1} ostaje
-          vidljivo bez kupovine, a {RABALUX_PUBLIC_STOCK_THRESHOLD}+ je dostupno
-          za kupovinu kada su kataloški podaci spremni.
+          sačuvano samo u administraciji i ne prikazuje se na sajtu, a
+          {" "}{RABALUX_PUBLIC_STOCK_THRESHOLD}+ je dostupno za kupovinu kada su
+          kataloški podaci spremni.
         </p>
       </div>
       <form action={preview} className="flex flex-wrap items-end gap-3">

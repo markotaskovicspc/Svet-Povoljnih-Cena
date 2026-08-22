@@ -29,10 +29,10 @@ export function resolveRabaluxWeeklyStockPolicy(input: {
     input.hasActiveRetailPrice;
   const supplierPassesThreshold =
     input.closingStock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
-  // The complete weekly XLSX is authoritative for Serbia: only a positive
-  // closing balance is present in Serbia and may stay published. Quantities
-  // 1-2 remain visible but unavailable; 3+ may be purchased.
-  const isActive = hasPublicationData && input.closingStock > 0;
+  // The complete weekly XLSX is authoritative for Serbia. Rows below the
+  // public threshold remain in the database for administration, but are not
+  // active or published on the storefront.
+  const isActive = hasPublicationData && supplierPassesThreshold;
 
   return {
     hasPublicationData,

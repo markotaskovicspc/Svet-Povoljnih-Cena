@@ -40,7 +40,10 @@ import {
   reviewRabaluxProduct,
   rollbackRabaluxRun,
 } from "@/lib/rabalux/governance";
-import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
+import {
+  storefrontAvailabilityWhere,
+  webStorefrontProductWhere,
+} from "@/lib/web-storefront-availability";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
 
 const PREFIX = "RAB-IT-";
@@ -292,7 +295,7 @@ function rabaluxStockFeed(
 }
 
 describe("Rabalux checkout integration", () => {
-  it("moves 2→3→2 through the public threshold and preserves the DC exception", async () => {
+  it("moves 2→3→2 through the public threshold without a DC exception", async () => {
     const product = await createProduct({
       suffix: "THRESHOLD",
       warehouseStock: 0,
@@ -302,8 +305,19 @@ describe("Rabalux checkout integration", () => {
       db.product.count({
         where: { id: product.id, ...webStorefrontProductWhere() },
       });
+    const visibleAsOutOfStock = () =>
+      db.product.count({
+        where: {
+          id: product.id,
+          AND: [
+            webStorefrontProductWhere(),
+            storefrontAvailabilityWhere(["out-of-stock"]),
+          ],
+        },
+      });
 
     expect(await visible()).toBe(0);
+    expect(await visibleAsOutOfStock()).toBe(0);
     await db.product.update({
       where: { id: product.id },
       data: { supplierStock: 3, lastSupplierStockSyncAt: new Date() },
@@ -318,7 +332,8 @@ describe("Rabalux checkout integration", () => {
       where: { id: product.id },
       data: { dcAvailableQty: 1 },
     });
-    expect(await visible()).toBe(1);
+    expect(await visible()).toBe(0);
+    expect(await visibleAsOutOfStock()).toBe(0);
     await db.product.update({
       where: { id: product.id },
       data: { articleStatus: "ARH", isActive: true },
