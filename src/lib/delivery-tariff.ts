@@ -1,4 +1,6 @@
 export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 2_000;
+/** Customer-favouring checkout estimate when an article has no usable weight data. */
+export const MISSING_UNIT_WEIGHT_FALLBACK_KG = 1;
 
 export type DeliveryTariffProduct = {
   qty: number;
@@ -122,11 +124,8 @@ export function calculatePublishedDeliveryTariffQuote(
       positiveWeight(product.grossWeightKg) ??
       positiveWeight(product.weightKg) ??
       (packageWeight == null
-        ? null
+        ? MISSING_UNIT_WEIGHT_FALLBACK_KG
         : packageWeight / Math.max(product.packQty ?? 1, 1));
-    if (unitWeight == null) {
-      return unavailableTariff("MISSING_WEIGHT");
-    }
     totals[category].weightKg += unitWeight * product.qty;
     totals[category].subtotal += product.unitPrice * product.qty;
   }

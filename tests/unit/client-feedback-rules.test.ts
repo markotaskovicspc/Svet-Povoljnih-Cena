@@ -199,6 +199,33 @@ describe("confirmed client rules", () => {
     expect(tariff?.total).toBe(299);
   });
 
+  it("counts an article without any weight data as 1 kg per unit", () => {
+    const quote = calculatePublishedDeliveryTariffQuote(
+      [
+        {
+          qty: 3,
+          unitPrice: 500,
+          unitPackWidthCm: 50,
+          unitPackDepthCm: 40,
+          unitPackHeightCm: 30,
+          packQty: null,
+          packGrossWeightKg: null,
+          grossWeightKg: null,
+          weightKg: null,
+        },
+      ],
+      { loggedIn: false },
+    );
+
+    expect(quote).toMatchObject({
+      total: 299,
+      issue: null,
+      categories: {
+        1: { weightKg: 3, subtotal: 1_500, price: 299 },
+      },
+    });
+  });
+
   it("finds the lowest non-loyalty public price before the active offer", () => {
     const reference = lowestPublicPriceLast30Days(
       [{
