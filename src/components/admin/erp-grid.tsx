@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type FormEvent,
@@ -60,6 +61,8 @@ type SavedView = {
   searchColumn?: string;
   context?: Record<string, string>;
 };
+
+export type ErpGridInitialView = Omit<SavedView, "id" | "name">;
 
 type EditingCell = {
   rowId: string;
@@ -275,6 +278,7 @@ export function ErpGrid({
   initialQuery = "",
   initialSearchColumn = "",
   initialContext = {},
+  initialView,
 }: {
   module: ErpModule;
   fixedFilters?: AdminGridFilter[];
@@ -282,13 +286,16 @@ export function ErpGrid({
   initialQuery?: string;
   initialSearchColumn?: string;
   initialContext?: Record<string, string>;
+  initialView?: ErpGridInitialView;
 }) {
   const router = useRouter();
   const clientReady = useClientReady();
   const defaultColumns = useMemo(
     () => {
       const knownColumns = new Set(module.columns.map((column) => column.key));
-      const requestedColumns = (initialVisibleColumns ?? []).filter((key) =>
+      const requestedColumns = (
+        initialView?.visibleColumns ?? initialVisibleColumns ?? []
+      ).filter((key) =>
         knownColumns.has(key),
       );
       return requestedColumns.length
@@ -297,30 +304,51 @@ export function ErpGrid({
             .filter((column) => column.defaultVisible)
             .map((column) => column.key);
     },
-    [initialVisibleColumns, module.columns],
+    [initialView?.visibleColumns, initialVisibleColumns, module.columns],
   );
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(initialView?.query ?? initialQuery);
   const [searchColumn, setSearchColumn] = useState(() =>
-    module.columns.some((column) => column.key === initialSearchColumn)
-      ? initialSearchColumn
+    module.columns.some(
+      (column) =>
+        column.key === (initialView?.searchColumn ?? initialSearchColumn),
+    )
+      ? (initialView?.searchColumn ?? initialSearchColumn)
       : "",
   );
-  const [filters, setFilters] = useState<AdminGridFilter[]>([]);
-  const [sorting, setSorting] = useState<AdminGridSort[]>([]);
+  const [filters, setFilters] = useState<AdminGridFilter[]>(
+    initialView?.filters ?? [],
+  );
+  const [sorting, setSorting] = useState<AdminGridSort[]>(
+    initialView?.sorting ?? [],
+  );
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
   const [cellEdits, setCellEdits] = useState<Record<string, Record<string, ErpValue>>>({});
   // Keep the server render and the first client render identical. Reading a
   // saved browser-only order in the state initializer changes the rendered
   // <th> sequence during hydration and makes React discard the server tree.
-  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
-    module.columns.map((column) => column.key),
-  );
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    const defaultOrder = module.columns.map((column) => column.key);
+    const knownColumns = new Set(defaultOrder);
+    const requestedOrder = (initialView?.columnOrder ?? []).filter((key) =>
+      knownColumns.has(key),
+    );
+    return requestedOrder.length
+      ? [
+          ...requestedOrder,
+          ...defaultOrder.filter((key) => !requestedOrder.includes(key)),
+        ]
+      : defaultOrder;
+  });
   const [views, setViews] = useState<SavedView[]>([]);
   const [showSaveViewForm, setShowSaveViewForm] = useState(false);
   const [saveViewName, setSaveViewName] = useState("");
   const [savingView, setSavingView] = useState(false);
   const [pendingDeleteViewId, setPendingDeleteViewId] = useState<string | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
+    initialView?.columnWidths ?? {},
+  );
+  const tableSettingsRef = useRef<HTMLDetailsElement>(null);
+  const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
@@ -348,6 +376,7 @@ export function ErpGrid({
         (module.contextFilters ?? []).map((filter) => [filter.key, ""]),
       ),
       ...initialContext,
+      ...(initialView?.context ?? {}),
     }),
   );
   const canEditColumn = (columnKey: string) =>
@@ -376,11 +405,27 @@ export function ErpGrid({
   };
 
   useEffect(() => {
+    if (initialView?.columnOrder?.length) return;
     const timeout = window.setTimeout(() => {
       setColumnOrder(readColumnOrder(module.slug, module.columns));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [module.columns, module.slug]);
+  }, [initialView?.columnOrder, module.columns, module.slug]);
+
+  useEffect(() => {
+    if (!tableSettingsOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !tableSettingsRef.current?.contains(event.target)
+      ) {
+        setTableSettingsOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [tableSettingsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -817,6 +862,7 @@ export function ErpGrid({
     updateQuery(view.query);
     setSearchColumn(view.searchColumn ?? "");
     setContext((current) => ({ ...current, ...(view.context ?? {}) }));
+    setTableSettingsOpen(false);
   };
 
   const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
@@ -1388,7 +1434,14 @@ export function ErpGrid({
               <Button type="button" variant="outline" onClick={resetColumns}>
                 Reset kolona
               </Button>
-              <details className="group relative">
+              <details
+                ref={tableSettingsRef}
+                open={tableSettingsOpen}
+                onToggle={(event) =>
+                  setTableSettingsOpen(event.currentTarget.open)
+                }
+                className="group relative"
+              >
                 <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:bg-muted [&::-webkit-details-marker]:hidden">
                   <Settings2 className="size-4" aria-hidden />
                   Prikaz tabele

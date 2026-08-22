@@ -12,9 +12,12 @@ export {
   allowedNavFor,
   adminNavPreferencesFromColumns,
   applyAdminNavPreferences,
+  articleSavedViewHref,
+  withArticleSavedViewLinks,
 } from "./nav";
 export type {
   AdminNavGroup,
   AdminNavItem,
   AdminNavPreferences,
+  ArticleSavedViewNavLink,
 } from "./nav";

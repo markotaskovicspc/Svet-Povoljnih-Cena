@@ -25,6 +25,8 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
       label: "Cene i promocije",
       hiddenHref: "/admin/erp/magacini",
       hiddenLabel: "Magacini",
+      viewNames: ["Svi artikli RAB", "Lageri"],
+      viewQuery: `NAV-A-${runId}`,
     },
     {
       email: `qa.nav.b.${runId}@example.invalid`,
@@ -34,6 +36,8 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
       label: "Magacini",
       hiddenHref: "/admin/erp/akcije",
       hiddenLabel: "Cene i promocije",
+      viewNames: ["Svi artikli drugog admina"],
+      viewQuery: `NAV-B-${runId}`,
     },
   ] as const;
   let db: PrismaClient;
@@ -54,6 +58,25 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
         select: { id: true },
       });
       adminIds.push(admin.id);
+      for (const viewName of account.viewNames) {
+        await db.adminSavedView.create({
+          data: {
+            adminUserId: admin.id,
+            module: "artikli",
+            name: viewName,
+            query: account.viewQuery,
+            filters: [],
+            sorting: [],
+            columns: {
+              visibleColumns: ["sku", "shortName"],
+              columnOrder: ["sku", "shortName"],
+              columnWidths: {},
+              searchColumn: "",
+              context: {},
+            },
+          },
+        });
+      }
     }
   });
 
@@ -105,6 +128,27 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
       await assertDesktopMenu(pageA, accounts[0]);
       await assertDesktopMenu(pageB, accounts[1]);
 
+      const navA = pageA.locator("aside nav");
+      await navA.getByRole("link", { name: "Lageri", exact: true }).click();
+      await expect(pageA).toHaveURL(/\/admin\/erp\/artikli\?view=/);
+      await expect(
+        navA.getByRole("link", { name: "Lageri", exact: true }),
+      ).toHaveAttribute("aria-current", "page");
+      await expect(
+        pageA.getByPlaceholder("Brza pretraga po vidljivim kolonama"),
+      ).toHaveValue(accounts[0].viewQuery);
+
+      await pageA.getByText("Prikaz tabele", { exact: true }).click();
+      await expect(
+        pageA.getByRole("heading", { name: "Pogledi", exact: true }),
+      ).toBeVisible();
+      await pageA
+        .getByRole("heading", { name: "Matični podaci o artiklima" })
+        .click();
+      await expect(
+        pageA.getByRole("heading", { name: "Pogledi", exact: true }),
+      ).toBeHidden();
+
       const crossUserDelete = await pageA.request.delete(
         "/api/admin/saved-views",
         { data: { id: viewB.view.id } },
@@ -138,8 +182,8 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
         query: "",
         filters: [],
         sorting: [],
-        visibleColumns: ["/admin", href],
-        columnOrder: ["/admin", href],
+        visibleColumns: ["/admin", "/admin/erp/artikli", href],
+        columnOrder: ["/admin", "/admin/erp/artikli", href],
         columnWidths: {},
         context: {},
         isDefault: true,
@@ -155,6 +199,11 @@ test.describe("lični admin meni je odvojen po korisniku", () => {
     const nav = page.locator("aside nav");
     await expect(nav.getByRole("link", { name: account.label })).toBeVisible();
     await expect(nav.getByRole("link", { name: account.hiddenLabel })).toHaveCount(0);
+    for (const viewName of account.viewNames) {
+      await expect(
+        nav.getByRole("link", { name: viewName, exact: true }),
+      ).toBeVisible();
+    }
   }
 });
 

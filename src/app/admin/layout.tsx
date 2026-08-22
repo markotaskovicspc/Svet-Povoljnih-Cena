@@ -10,6 +10,7 @@ import {
   adminNavPreferencesFromColumns,
   allowedNavFor,
   applyAdminNavPreferences,
+  withArticleSavedViewLinks,
 } from "@/lib/admin";
 import { Button } from "@/components/ui/button";
 
@@ -59,18 +60,35 @@ export default async function AdminLayout({
   };
 
   const availableNav = allowedNavFor(user.role);
-  const navigationView = await db.adminSavedView.findFirst({
-    where: {
-      adminUserId: sessionUser.id,
-      module: "admin-navigation",
-      isDefault: true,
-    },
-    orderBy: { updatedAt: "desc" },
-    select: { columns: true },
-  });
-  const nav = applyAdminNavPreferences(
+  const [navigationView, articleSavedViews] = await Promise.all([
+    db.adminSavedView.findFirst({
+      where: {
+        adminUserId: sessionUser.id,
+        module: "admin-navigation",
+        isDefault: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { columns: true },
+    }),
+    db.adminSavedView.findMany({
+      where: {
+        adminUserId: sessionUser.id,
+        module: "artikli",
+      },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
+  ]);
+  const nav = withArticleSavedViewLinks(
+    applyAdminNavPreferences(
+      availableNav,
+      adminNavPreferencesFromColumns(navigationView?.columns),
+    ),
+    articleSavedViews,
+  );
+  const availableNavWithViews = withArticleSavedViewLinks(
     availableNav,
-    adminNavPreferencesFromColumns(navigationView?.columns),
+    articleSavedViews,
   );
 
   async function doSignOut() {
@@ -82,13 +100,13 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-canvas">
       <div className="mx-auto grid min-h-screen w-full max-w-[1600px] md:grid-cols-[260px_1fr]">
         <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-border/60 bg-surface md:block">
-          <AdminSidebar nav={nav} availableNav={availableNav} />
+          <AdminSidebar nav={nav} availableNav={availableNavWithViews} />
         </aside>
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8">
             <div className="flex min-w-0 items-center gap-2">
               <div className="md:hidden">
-                <AdminMobileNav nav={nav} availableNav={availableNav} />
+                <AdminMobileNav nav={nav} availableNav={availableNavWithViews} />
               </div>
               <p className="min-w-0 truncate text-xs text-ink-500">
                 Prijavljen kao{" "}

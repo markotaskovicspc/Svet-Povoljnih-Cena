@@ -7,7 +7,7 @@ import {
   DASHBOARD_CONTEXT_KEYS,
   isDashboardContextEntry,
 } from "@/lib/admin/dashboard-context";
-import { allowedNavFor } from "@/lib/admin/nav";
+import { allowedNavFor, articleSavedViewHref } from "@/lib/admin/nav";
 
 const ADMIN_NAVIGATION_MODULE = "admin-navigation";
 
@@ -127,11 +127,23 @@ export async function POST(request: Request) {
     );
   }
 
+  const articleSavedViewHrefs =
+    moduleSlug === ADMIN_NAVIGATION_MODULE
+      ? (
+          await db.adminSavedView.findMany({
+            where: { adminUserId: admin.id, module: "artikli" },
+            select: { id: true },
+          })
+        ).map((view) => articleSavedViewHref(view.id))
+      : [];
   const knownColumns = new Set(
     moduleSlug === ADMIN_NAVIGATION_MODULE
-      ? allowedNavFor(admin.role).flatMap((group) =>
-          group.items.map((item) => item.href),
-        )
+      ? [
+          ...allowedNavFor(admin.role).flatMap((group) =>
+            group.items.map((item) => item.href),
+          ),
+          ...articleSavedViewHrefs,
+        ]
       : (definition?.columns.map((column) => column.key) ?? []),
   );
   const cleanColumns = (value: unknown) =>

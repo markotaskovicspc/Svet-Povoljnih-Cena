@@ -6,6 +6,7 @@ export type AdminNavItem = {
   /** Roles that may see / open the page. SUPER always allowed. */
   allowed: readonly AdminRoleName[];
   description?: string;
+  nested?: boolean;
 };
 
 export type AdminNavGroup = {
@@ -115,14 +116,72 @@ export function allowedNavFor(role: AdminRoleName | null | undefined): AdminNavG
     .filter((g) => g.items.length > 0);
 }
 
-export function activeAdminNavHref(nav: AdminNavGroup[], pathname: string) {
+export type ArticleSavedViewNavLink = {
+  id: string;
+  name: string;
+};
+
+export function articleSavedViewHref(id: string) {
+  return `/admin/erp/artikli?view=${encodeURIComponent(id)}`;
+}
+
+export function withArticleSavedViewLinks(
+  nav: AdminNavGroup[],
+  views: ArticleSavedViewNavLink[],
+): AdminNavGroup[] {
+  const cleanViews = views.filter(
+    (view) => view.id.trim().length > 0 && view.name.trim().length > 0,
+  );
+  if (!cleanViews.length) return nav;
+
+  return nav.map((group) => {
+    const articleIndex = group.items.findIndex(
+      (item) => item.href === "/admin/erp/artikli",
+    );
+    if (articleIndex < 0) return group;
+
+    const article = group.items[articleIndex]!;
+    const savedViewItems: AdminNavItem[] = cleanViews.map((view) => ({
+      href: articleSavedViewHref(view.id),
+      label: view.name.trim(),
+      allowed: article.allowed,
+      description: "Sačuvani pogled artikala",
+      nested: true,
+    }));
+    return {
+      ...group,
+      items: [
+        ...group.items.slice(0, articleIndex + 1),
+        ...savedViewItems,
+        ...group.items.slice(articleIndex + 1),
+      ],
+    };
+  });
+}
+
+export function activeAdminNavHref(
+  nav: AdminNavGroup[],
+  pathname: string,
+  search = "",
+) {
+  const currentSearch = new URLSearchParams(search);
   return nav
     .flatMap((group) => group.items)
-    .filter((item) =>
-      item.href === "/admin"
+    .filter((item) => {
+      const [itemPath = "", itemSearch = ""] = item.href.split("?");
+      if (itemSearch) {
+        const expectedSearch = new URLSearchParams(itemSearch);
+        return (
+          pathname === itemPath &&
+          Array.from(expectedSearch.entries()).every(
+            ([key, value]) => currentSearch.get(key) === value,
+          )
+        );
+      }
+      return item.href === "/admin"
         ? pathname === "/admin"
-        : pathname === item.href || pathname.startsWith(`${item.href}/`),
-    )
+        : pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+    })
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 }
 

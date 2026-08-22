@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { AdminNavGroup } from "@/lib/admin/nav";
 import {
@@ -26,15 +26,17 @@ import { activeAdminNavHref } from "@/lib/admin/nav";
 function AdminNavContent({
   nav,
   pathname,
+  search,
   onNavigate,
   customizer,
 }: {
   nav: AdminNavGroup[];
   pathname: string;
+  search?: string;
   onNavigate?: () => void;
   customizer?: ReactNode;
 }) {
-  const activeHref = activeAdminNavHref(nav, pathname);
+  const activeHref = activeAdminNavHref(nav, pathname, search);
 
   return (
     <nav className="flex flex-col gap-6 px-4 py-6 text-sm">
@@ -62,8 +64,10 @@ function AdminNavContent({
                 href={item.href}
                 prefetch={false}
                 onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "rounded-lg px-2 py-1.5 transition-colors",
+                  item.nested && "ml-3 border-l border-border/70 pl-3 text-xs",
                   active
                     ? "bg-walnut/10 text-walnut"
                     : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
@@ -266,10 +270,12 @@ export function AdminSidebar({
   availableNav: AdminNavGroup[];
 }) {
   const pathname = usePathname() ?? "/admin";
+  const search = useSearchParams().toString();
   return (
     <AdminNavContent
       nav={nav}
       pathname={pathname}
+      search={search}
       customizer={<AdminNavCustomizer nav={nav} availableNav={availableNav} />}
     />
   );
@@ -283,6 +289,7 @@ export function AdminMobileNav({
   availableNav: AdminNavGroup[];
 }) {
   const pathname = usePathname() ?? "/admin";
+  const search = useSearchParams().toString();
   const [open, setOpen] = useState(false);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -305,6 +312,7 @@ export function AdminMobileNav({
           <AdminNavContent
             nav={nav}
             pathname={pathname}
+            search={search}
             onNavigate={() => setOpen(false)}
             customizer={
               <AdminNavCustomizer nav={nav} availableNav={availableNav} />

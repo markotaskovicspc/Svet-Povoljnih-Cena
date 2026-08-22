@@ -2,9 +2,13 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { erpModules, getErpModule, getErpModuleDefinition } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
-import { ErpGrid } from "@/components/admin/erp-grid";
+import {
+  ErpGrid,
+  type ErpGridInitialView,
+} from "@/components/admin/erp-grid";
 import { requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +38,7 @@ export default async function ErpModulePage({
 }) {
   const { module: slug } = await params;
   const search = await searchParams;
-  await requireAdminAction(allowedRolesForErpModule(slug));
+  const admin = await requireAdminAction(allowedRolesForErpModule(slug));
   if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
   const definition = getErpModuleDefinition(slug);
   if (definition?.redirectHref) redirect(definition.redirectHref);
@@ -45,6 +49,75 @@ export default async function ErpModulePage({
   if (!erpModule) notFound();
   const isRabaluxStockView =
     slug === "artikli" && search.view === "rabalux-stock";
+  const selectedSavedView =
+    slug === "artikli" && search.view && !isRabaluxStockView
+      ? await db.adminSavedView.findFirst({
+          where: {
+            id: search.view,
+            adminUserId: admin.id,
+            module: "artikli",
+          },
+          select: {
+            query: true,
+            filters: true,
+            sorting: true,
+            columns: true,
+          },
+        })
+      : null;
+  const savedColumns =
+    selectedSavedView?.columns &&
+    typeof selectedSavedView.columns === "object" &&
+    !Array.isArray(selectedSavedView.columns)
+      ? (selectedSavedView.columns as Record<string, unknown>)
+      : {};
+  const stringArray = (value: unknown) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
+  const initialSavedView: ErpGridInitialView | undefined = selectedSavedView
+    ? {
+        query:
+          typeof selectedSavedView.query === "string"
+            ? selectedSavedView.query
+            : "",
+        searchColumn:
+          typeof savedColumns.searchColumn === "string"
+            ? savedColumns.searchColumn
+            : "",
+        filters: Array.isArray(selectedSavedView.filters)
+          ? (selectedSavedView.filters as ErpGridInitialView["filters"])
+          : [],
+        sorting: Array.isArray(selectedSavedView.sorting)
+          ? (selectedSavedView.sorting as ErpGridInitialView["sorting"])
+          : [],
+        visibleColumns: stringArray(savedColumns.visibleColumns),
+        columnOrder: stringArray(savedColumns.columnOrder),
+        columnWidths:
+          savedColumns.columnWidths &&
+          typeof savedColumns.columnWidths === "object" &&
+          !Array.isArray(savedColumns.columnWidths)
+            ? Object.fromEntries(
+                Object.entries(savedColumns.columnWidths).filter(
+                  (entry): entry is [string, number] =>
+                    typeof entry[1] === "number" &&
+                    Number.isFinite(entry[1]),
+                ),
+              )
+            : {},
+        context:
+          savedColumns.context &&
+          typeof savedColumns.context === "object" &&
+          !Array.isArray(savedColumns.context)
+            ? Object.fromEntries(
+                Object.entries(savedColumns.context).filter(
+                  (entry): entry is [string, string] =>
+                    typeof entry[1] === "string",
+                ),
+              )
+            : {},
+      }
+    : undefined;
   const rabaluxStockColumns = [
     "photo",
     "status",
@@ -100,7 +173,7 @@ export default async function ErpModulePage({
           </nav>
         ) : null}
         <ErpGrid
-          key={`${erpModule.slug}:${isRabaluxStockView ? "rabalux-stock" : isStocktakeArchive ? "archive" : "default"}`}
+          key={`${erpModule.slug}:${search.view ?? (isStocktakeArchive ? "archive" : "default")}`}
           module={erpModule}
           initialVisibleColumns={
             isRabaluxStockView ? rabaluxStockColumns : undefined
@@ -110,6 +183,7 @@ export default async function ErpModulePage({
             isRabaluxStockView ? "supplierIntegrationKey" : ""
           }
           initialContext={isStocktakeArchive ? { archive: "1" } : undefined}
+          initialView={initialSavedView}
         />
       </div>
     </>
