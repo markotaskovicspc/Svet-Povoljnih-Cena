@@ -5,15 +5,18 @@ import { cn } from "@/lib/utils";
 export function PdpPictograms({
   pictograms,
   className,
+  placement = "features",
 }: {
   pictograms: Pictogram[];
   className?: string;
+  placement?: "features" | "delivery";
 }) {
   const visible = pictograms.slice(0, 6);
   if (!visible.length) return null;
 
   return (
     <ul
+      data-pdp-pictogram-placement={placement}
       className={cn(
         "pointer-events-none flex flex-col items-start gap-1.5",
         className,

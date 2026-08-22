@@ -38,6 +38,7 @@ import {
 } from "@/data/campaign-icons";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { formatProductCardDimensions } from "@/lib/product-dimensions";
+import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
 
 interface ProductCardProps {
   product: Product;
@@ -172,6 +173,11 @@ export function ProductCard({
   const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
+  const { featurePictograms, deliveryPictogram } =
+    resolveStorefrontPictograms({
+      pictograms: product.pictograms,
+      supplierIntegrationKey: product.supplierIntegrationKey,
+    });
   const quote = resolveProductPriceQuote(pricingProduct);
   const price = quote.payable;
   const hasReducedPrice = Boolean(quote.actionOffer || quote.loyaltyOffer);
@@ -325,12 +331,12 @@ export function ProductCard({
               </div>
             )}
         </div>
-        {topLeftBadges.length || product.pictograms.length ? (
+        {topLeftBadges.length || featurePictograms.length ? (
           <div className="pointer-events-none absolute top-0 left-0 flex max-w-[78%] flex-col items-start gap-1">
             {topLeftBadges.slice(0, 2).map((b) => (
               <ProductBadge key={b.key} badge={b} />
             ))}
-            <ProductCardPictograms pictograms={product.pictograms} />
+            <ProductCardPictograms pictograms={featurePictograms} />
           </div>
         ) : null}
         {bottomLeftBadges.length ? (
@@ -340,6 +346,13 @@ export function ProductCard({
             ))}
           </div>
         ) : null}
+        <ul
+          data-product-card-delivery-pictogram
+          aria-label="Isporuka proizvoda"
+          className="pointer-events-none absolute right-1 bottom-1 z-10"
+        >
+          <ProductCardPictogram pictogram={deliveryPictogram} />
+        </ul>
         </Link>
 
         {images.length > 1 ? (
@@ -640,23 +653,32 @@ function ProductCardPictograms({
       className="flex flex-col gap-1"
     >
       {visible.map((pictogram) => (
-        <li
-          key={pictogram.code}
-          title={pictogram.label}
-          className="relative size-[25px] overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7"
-        >
-          <Image
-            src={pictogram.iconUrl}
-            alt=""
-            width={40}
-            height={40}
-            sizes="(min-width: 768px) 28px, 25px"
-            className="size-full scale-[1.18] object-contain"
-          />
-          <span className="sr-only">{pictogram.label}</span>
-        </li>
+        <ProductCardPictogram key={pictogram.code} pictogram={pictogram} />
       ))}
     </ul>
+  );
+}
+
+function ProductCardPictogram({
+  pictogram,
+}: {
+  pictogram: Product["pictograms"][number];
+}) {
+  return (
+    <li
+      title={pictogram.label}
+      className="relative size-[25px] overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7"
+    >
+      <Image
+        src={pictogram.iconUrl}
+        alt=""
+        width={40}
+        height={40}
+        sizes="(min-width: 768px) 28px, 25px"
+        className="size-full scale-[1.18] object-contain"
+      />
+      <span className="sr-only">{pictogram.label}</span>
+    </li>
   );
 }
 

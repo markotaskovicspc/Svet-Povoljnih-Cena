@@ -293,6 +293,7 @@ describe("ProductCard image regression", () => {
       createElement(ProductCard, {
         product: {
           ...readyProduct,
+          supplierIntegrationKey: "RABALUX",
           loyaltyPrice: 700,
           loyaltyDiscountPct: 30,
           pictograms: [
@@ -328,6 +329,7 @@ describe("ProductCard image regression", () => {
       createElement(ProductCard, {
         product: {
           ...readyProduct,
+          supplierIntegrationKey: "RABALUX",
           pictograms: Array.from({ length: 7 }, (_, index) => ({
             id: `pictogram-${index}`,
             code: `card-icon-${index}`,
@@ -341,5 +343,47 @@ describe("ProductCard image regression", () => {
     expect(html).toContain("data-product-card-pictograms");
     expect(html.match(/title="Kartica oznaka/g)).toHaveLength(6);
     expect(html).not.toContain("Kartica oznaka 6");
+  });
+
+  it("prikazuje 2+1 na non-Rabalux artiklu i 48h u donjem desnom uglu", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, { product: readyProduct }),
+    );
+
+    const features = html.indexOf("data-product-card-pictograms");
+    const warranty = html.indexOf('title="2+1"');
+    const delivery = html.indexOf("data-product-card-delivery-pictogram");
+    const deliveryIcon = html.indexOf('title="48h"');
+
+    expect(features).toBeGreaterThanOrEqual(0);
+    expect(warranty).toBeGreaterThan(features);
+    expect(delivery).toBeGreaterThan(warranty);
+    expect(deliveryIcon).toBeGreaterThan(delivery);
+    expect(html).toMatch(
+      /data-product-card-delivery-pictogram[^>]*class="[^"]*right-1 bottom-1/,
+    );
+  });
+
+  it("ne prikazuje 2+1 na Rabalux artiklu, ali zadržava 48h delivery poziciju", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          supplierIntegrationKey: "RABALUX",
+          pictograms: [
+            {
+              id: "assigned-warranty",
+              code: "3",
+              label: "2+1",
+              iconUrl: "https://example.test/warranty.png",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).not.toContain('title="2+1"');
+    expect(html).toContain("data-product-card-delivery-pictogram");
+    expect(html).toContain('title="48h"');
   });
 });

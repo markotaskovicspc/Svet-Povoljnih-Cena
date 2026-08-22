@@ -153,6 +153,27 @@ describe("PDP price and benefit display", () => {
     expect(markup).not.toContain("text-\[10px\]");
   });
 
+  it("marks the delivery pictogram placement for the gallery corner", () => {
+    const markup = renderToStaticMarkup(
+      <PdpPictograms
+        placement="delivery"
+        className="absolute right-3 bottom-3"
+        pictograms={[
+          {
+            id: "delivery-48h",
+            code: "48h",
+            label: "48h",
+            iconUrl: "https://example.test/delivery.png",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('data-pdp-pictogram-placement="delivery"');
+    expect(markup).toContain("absolute right-3 bottom-3");
+    expect(markup).toContain("48h");
+  });
+
   it("hides only the generic duplicate availability sentence", () => {
     const availability = getProductAvailability({
       stock: 0,

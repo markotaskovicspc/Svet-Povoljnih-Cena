@@ -31,6 +31,7 @@ import {
 } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 import { PdpPictograms } from "@/components/product/pdp-pictograms";
+import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
 
 const FALLBACK_BLUR =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==";
@@ -89,6 +90,11 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const activeIndex = slides.length ? Math.min(active, slides.length - 1) : 0;
   const slide = slides[activeIndex] ?? slides[0];
   const posterUrl = slides.find((s) => s.kind === "image")?.asset.url;
+  const { featurePictograms, deliveryPictogram } =
+    resolveStorefrontPictograms({
+      pictograms: product.pictograms,
+      supplierIntegrationKey: product.supplierIntegrationKey,
+    });
 
   const markImageFailed = useCallback((url: string) => {
     setFailedImageUrls((current) =>
@@ -201,12 +207,17 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
         <div className="relative grid aspect-[4/3] place-items-center text-ink-300 md:h-[min(65vh,620px)] md:min-h-[360px] md:aspect-auto">
           <PackageSearch className="size-20" aria-hidden />
           <span className="sr-only">Slika proizvoda nije dostupna</span>
-          {badges ? (
+          {badges || featurePictograms.length ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
-              <PdpPictograms pictograms={product.pictograms} />
+              <PdpPictograms pictograms={featurePictograms} />
             </div>
           ) : null}
+          <PdpPictograms
+            pictograms={[deliveryPictogram]}
+            placement="delivery"
+            className="absolute right-3 bottom-3 z-10"
+          />
         </div>
       </div>
     );
@@ -281,14 +292,19 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               </div>
             ))}
           </div>
-          {badges ? (
+          {badges || featurePictograms.length ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
               {slide.kind === "image" ? (
-                <PdpPictograms pictograms={product.pictograms} />
+                <PdpPictograms pictograms={featurePictograms} />
               ) : null}
             </div>
           ) : null}
+          <PdpPictograms
+            pictograms={[deliveryPictogram]}
+            placement="delivery"
+            className="absolute right-3 bottom-3 z-10"
+          />
           {slides.length > 1 ? (
             <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
               {slides.map((_, index) => (
@@ -309,7 +325,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           {slides.length > 1 ? (
-            <span className="absolute right-3 bottom-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+            <span className="absolute right-[4.25rem] bottom-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
               {activeIndex + 1}/{slides.length}
             </span>
           ) : null}
@@ -391,14 +407,19 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             ))}
           </div>
 
-          {badges ? (
+          {badges || featurePictograms.length ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
               {slide.kind === "image" ? (
-                <PdpPictograms pictograms={product.pictograms} />
+                <PdpPictograms pictograms={featurePictograms} />
               ) : null}
             </div>
           ) : null}
+          <PdpPictograms
+            pictograms={[deliveryPictogram]}
+            placement="delivery"
+            className="absolute right-4 bottom-4 z-10"
+          />
           {slides.length > 1 ? (
             <>
               <button
@@ -434,7 +455,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   />
                 ))}
               </div>
-              <span className="absolute right-4 bottom-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+              <span className="absolute right-[4.75rem] bottom-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
                 {activeIndex + 1}/{slides.length}
               </span>
             </>
