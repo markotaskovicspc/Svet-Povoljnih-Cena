@@ -13,6 +13,7 @@ import { PricingEligibilityProvider } from "@/components/pricing/pricing-eligibi
 import { CartPricingSync } from "@/components/cart/cart-pricing-sync";
 import { CustomerCommerceSync } from "@/components/cart/customer-commerce-sync";
 import { CustomerSessionSync } from "@/components/account/customer-session-sync";
+import { CartDrawerAuthReturn } from "@/components/cart/cart-drawer-auth-return";
 
 export function Providers({
   children,
@@ -24,6 +25,7 @@ export function Providers({
   return (
     <SessionProvider refetchOnWindowFocus={false}>
       <CustomerSessionSync />
+      <CartDrawerAuthReturn />
       <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
         <MotionConfig reducedMotion="user">
           <CartPricingSync />

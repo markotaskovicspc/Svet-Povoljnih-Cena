@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Loader2, LogIn, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import type { CartLine } from "@/lib/hooks/use-cart";
@@ -14,6 +15,7 @@ import { useSession } from "next-auth/react";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
 import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
 import { customerLoginHref } from "@/lib/auth/customer-callback";
+import { cartDrawerLoginReturnPath } from "@/lib/cart/cart-drawer-auth-return";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -311,7 +313,13 @@ export function getCartLoginOfferDetails(lines: CartLine[]) {
   return { discountPct, potentialSavings };
 }
 
-export function CartLoginOffer({ onNavigate }: { onNavigate?: () => void } = {}) {
+export function CartLoginOffer({
+  onNavigate,
+  reopenDrawerAfterLogin = false,
+}: {
+  onNavigate?: () => void;
+  reopenDrawerAfterLogin?: boolean;
+} = {}) {
   const loyaltyEligible = useLoyaltyEligibility();
   const { data: session, status } = useSession();
   const loggedIn =
@@ -340,16 +348,58 @@ export function CartLoginOffer({ onNavigate }: { onNavigate?: () => void } = {})
           </p>
         </div>
       </div>
-      <CartLoginOfferLink onNavigate={onNavigate} />
+      {reopenDrawerAfterLogin ? (
+        <CartDrawerLoginOfferLink onNavigate={onNavigate} />
+      ) : (
+        <CartLoginOfferLink onNavigate={onNavigate} />
+      )}
     </div>
   );
 }
 
-export function CartLoginOfferLink({ onNavigate }: { onNavigate?: () => void }) {
+export function CartLoginOfferLink({
+  onNavigate,
+}: {
+  onNavigate?: () => void;
+}) {
   return (
     <Link
       href={customerLoginHref("/korpa")}
       onClick={onNavigate}
+      className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
+    >
+      Prijavite se
+    </Link>
+  );
+}
+
+function CartDrawerLoginOfferLink({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const fallbackReturnPath = cartDrawerLoginReturnPath(pathname);
+
+  return (
+    <Link
+      href={customerLoginHref(fallbackReturnPath)}
+      onClick={(event) => {
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        onNavigate?.();
+        const returnPath = cartDrawerLoginReturnPath(
+          window.location.pathname,
+          window.location.search,
+        );
+        router.push(customerLoginHref(returnPath));
+      }}
       className="bg-ink-900 hover:bg-walnut inline-flex shrink-0 items-center justify-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition"
     >
       Prijavite se
