@@ -12,6 +12,7 @@ import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { PricingEligibilityProvider } from "@/components/pricing/pricing-eligibility";
 import { CartPricingSync } from "@/components/cart/cart-pricing-sync";
 import { CustomerCommerceSync } from "@/components/cart/customer-commerce-sync";
+import { CustomerSessionSync } from "@/components/account/customer-session-sync";
 
 export function Providers({
   children,
@@ -22,6 +23,7 @@ export function Providers({
 }) {
   return (
     <SessionProvider refetchOnWindowFocus={false}>
+      <CustomerSessionSync />
       <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
         <MotionConfig reducedMotion="user">
           <CartPricingSync />
