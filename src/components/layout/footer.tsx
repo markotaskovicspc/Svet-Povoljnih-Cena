@@ -8,7 +8,6 @@ import type { CmsFooterState } from "@/lib/cms/pages";
 const SOCIAL_ICON_SRC: Record<string, string> = {
   fb: "/icons/facebook.svg",
   ig: "/icons/instagram.svg",
-  tt: "/icons/tiktok.svg",
 };
 
 const LOCKED_LINK_ORDER: Record<string, number> = {

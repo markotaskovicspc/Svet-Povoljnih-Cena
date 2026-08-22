@@ -189,7 +189,10 @@ export const paymentMethods = [
 ] as const;
 
 export const socials = [
-  { id: "fb", label: "Facebook", href: `https://facebook.com/${BRAND.socialHandle}` },
+  {
+    id: "fb",
+    label: "Facebook",
+    href: "https://www.facebook.com/share/14oYhUrNkcb/?mibextid=wwXIfr",
+  },
   { id: "ig", label: "Instagram", href: `https://instagram.com/${BRAND.socialHandle}` },
-  { id: "tt", label: "TikTok", href: `https://tiktok.com/@${BRAND.socialHandle}` },
 ] as const;
