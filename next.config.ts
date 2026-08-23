@@ -119,6 +119,9 @@ const nextConfig: NextConfig = {
   distDir,
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1"],
+  // resvg selects a platform-specific native binding at runtime. Keep it out
+  // of the Server Components/Turbopack bundle so Node can resolve that binding.
+  serverExternalPackages: ["@resvg/resvg-js"],
   turbopack: {
     // Worktrees may share dependencies from a parent checkout. Next 16 only
     // resolves files inside this root, so use the smallest ancestor that
@@ -132,6 +135,8 @@ const nextConfig: NextConfig = {
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-linux-x64/**/*",
       "node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "node_modules/@resvg/resvg-js/**/*",
+      "node_modules/@resvg/resvg-js-linux-x64-gnu/**/*",
     ],
   },
   experimental: {

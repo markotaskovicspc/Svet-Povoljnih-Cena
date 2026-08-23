@@ -204,6 +204,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
     await test.step("module 4 renders both required overviews and all header columns", async () => {
       await page.goto("/admin/erp/porudzbenice", {
         waitUntil: "domcontentloaded",
+        timeout: 30_000,
       });
       await expect(page.getByRole("heading", { name: "Porudžbenice" })).toBeVisible();
       for (const command of [

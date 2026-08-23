@@ -1,7 +1,7 @@
 import "server-only";
 
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Resvg } from "@resvg/resvg-js";
 import sharp from "sharp";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { rasterJpegPagesPdf } from "@/lib/pdf/raster-pages";
@@ -19,8 +19,6 @@ const PDF_FONT_PATH = join(
   "documents",
   "spc-pdf-geist-regular.ttf",
 );
-
-let pdfFontDataUriPromise: Promise<string> | null = null;
 
 export type PurchaseOrderPdfInput = {
   number: string;
@@ -70,32 +68,37 @@ export async function buildPurchaseOrderPdf(order: PurchaseOrderPdfInput) {
   if (!order.items.length) {
     throw new Error("Porudžbenica mora imati bar jednu stavku.");
   }
-  const [fontDataUri, renderedItems] = await Promise.all([
-    loadPdfFontDataUri(),
-    Promise.all(
-      order.items.map(async (item) => ({
-        ...item,
-        imageDataUri: await loadImageDataUri(item.imageUrl),
-      })),
-    ),
-  ]);
+  const renderedItems = await Promise.all(
+    order.items.map(async (item) => ({
+      ...item,
+      imageDataUri: await loadImageDataUri(item.imageUrl),
+    })),
+  );
   const pageItems = chunk(renderedItems, ITEMS_PER_PAGE);
   const jpegPages = await Promise.all(
-    pageItems.map((items, pageIndex) =>
-      sharp(
-        Buffer.from(
-          purchaseOrderPageSvg(
-            order,
-            items,
-            pageIndex,
-            pageItems.length,
-            fontDataUri,
-          ),
-        ),
-      )
+    pageItems.map((items, pageIndex) => {
+      const svg = purchaseOrderPageSvg(
+        order,
+        items,
+        pageIndex,
+        pageItems.length,
+      );
+      const renderer = new Resvg(svg, {
+        background: "#ffffff",
+        fitTo: { mode: "original" },
+        font: {
+          fontFiles: [PDF_FONT_PATH],
+          loadSystemFonts: false,
+          defaultFontFamily: "Geist",
+          sansSerifFamily: "Geist",
+        },
+        textRendering: 1,
+      });
+
+      return sharp(renderer.render().asPng())
         .jpeg({ quality: 94, chromaSubsampling: "4:4:4" })
-        .toBuffer(),
-    ),
+        .toBuffer();
+    }),
   );
 
   return rasterJpegPagesPdf({
@@ -105,15 +108,6 @@ export async function buildPurchaseOrderPdf(order: PurchaseOrderPdfInput) {
     pdfWidth: PDF_WIDTH,
     pdfHeight: PDF_HEIGHT,
   });
-}
-
-function loadPdfFontDataUri() {
-  if (!pdfFontDataUriPromise) {
-    pdfFontDataUriPromise = readFile(PDF_FONT_PATH).then(
-      (font) => `data:font/ttf;base64,${font.toString("base64")}`,
-    );
-  }
-  return pdfFontDataUriPromise;
 }
 
 async function loadImageDataUri(value: string | null | undefined) {
@@ -138,7 +132,6 @@ function purchaseOrderPageSvg(
   items: RenderedItem[],
   pageIndex: number,
   pageCount: number,
-  fontDataUri: string,
 ) {
   const x = 60;
   const tableY = 455;
@@ -261,13 +254,7 @@ function purchaseOrderPageSvg(
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${PAGE_WIDTH}" height="${PAGE_HEIGHT}" viewBox="0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}">
     <style>
-      @font-face {
-        font-family: "SPC PDF";
-        src: url("${fontDataUri}") format("truetype");
-        font-style: normal;
-        font-weight: 100 900;
-      }
-      text { font-family: "SPC PDF", sans-serif; fill: #111; }
+      text { font-family: "Geist", sans-serif; fill: #111; }
       .title { font-size: 42px; font-weight: 800; }
       .number { font-size: 36px; font-weight: 800; }
       .label { font-size: 18px; font-weight: 700; }
