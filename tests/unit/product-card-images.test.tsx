@@ -345,26 +345,24 @@ describe("ProductCard image regression", () => {
     expect(html).not.toContain("Kartica oznaka 6");
   });
 
-  it("prikazuje 2+1 na non-Rabalux artiklu i 48h u donjem desnom uglu", () => {
+  it("prikazuje 2+1 iznad 48h u donjem desnom uglu non-Rabalux artikla", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, { product: readyProduct }),
     );
 
-    const features = html.indexOf("data-product-card-pictograms");
+    const corner = html.indexOf("data-product-card-corner-pictograms");
     const warranty = html.indexOf('title="2+1"');
-    const delivery = html.indexOf("data-product-card-delivery-pictogram");
     const deliveryIcon = html.indexOf('title="48h"');
 
-    expect(features).toBeGreaterThanOrEqual(0);
-    expect(warranty).toBeGreaterThan(features);
-    expect(delivery).toBeGreaterThan(warranty);
-    expect(deliveryIcon).toBeGreaterThan(delivery);
+    expect(corner).toBeGreaterThanOrEqual(0);
+    expect(warranty).toBeGreaterThan(corner);
+    expect(deliveryIcon).toBeGreaterThan(warranty);
     expect(html).toMatch(
-      /data-product-card-delivery-pictogram[^>]*class="[^"]*right-1 bottom-1/,
+      /data-product-card-corner-pictograms[^>]*class="[^"]*right-1 bottom-1[^"]*flex flex-col/,
     );
   });
 
-  it("ne prikazuje 2+1 na Rabalux artiklu, ali zadržava 48h delivery poziciju", () => {
+  it("ne prikazuje 2+1 na Rabalux artiklu, ali zadržava 48h u uglu", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {
         product: {
@@ -383,7 +381,7 @@ describe("ProductCard image regression", () => {
     );
 
     expect(html).not.toContain('title="2+1"');
-    expect(html).toContain("data-product-card-delivery-pictogram");
+    expect(html).toContain("data-product-card-corner-pictograms");
     expect(html).toContain('title="48h"');
   });
 });

@@ -9,7 +9,7 @@ export function PdpPictograms({
 }: {
   pictograms: Pictogram[];
   className?: string;
-  placement?: "features" | "delivery";
+  placement?: "features" | "corner";
 }) {
   const visible = pictograms.slice(0, 6);
   if (!visible.length) return null;
@@ -21,7 +21,11 @@ export function PdpPictograms({
         "pointer-events-none flex flex-col items-start gap-1.5",
         className,
       )}
-      aria-label="Karakteristike proizvoda"
+      aria-label={
+        placement === "corner"
+          ? "Promotivne pogodnosti proizvoda"
+          : "Karakteristike proizvoda"
+      }
     >
       {visible.map((pictogram) => (
         <li

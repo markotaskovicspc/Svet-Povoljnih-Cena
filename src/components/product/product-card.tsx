@@ -173,7 +173,7 @@ export function ProductCard({
   const imageBadges = deriveImageBadges(pricingProduct);
   const topLeftBadges = imageBadges.topLeft;
   const bottomLeftBadges = imageBadges.bottomLeft;
-  const { featurePictograms, deliveryPictogram } =
+  const { featurePictograms, cornerPictograms } =
     resolveStorefrontPictograms({
       pictograms: product.pictograms,
       supplierIntegrationKey: product.supplierIntegrationKey,
@@ -347,11 +347,16 @@ export function ProductCard({
           </div>
         ) : null}
         <ul
-          data-product-card-delivery-pictogram
-          aria-label="Isporuka proizvoda"
-          className="pointer-events-none absolute right-1 bottom-1 z-10"
+          data-product-card-corner-pictograms
+          aria-label="Promotivne pogodnosti proizvoda"
+          className="pointer-events-none absolute right-1 bottom-1 z-10 flex flex-col gap-1"
         >
-          <ProductCardPictogram pictogram={deliveryPictogram} />
+          {cornerPictograms.map((pictogram) => (
+            <ProductCardPictogram
+              key={pictogram.code}
+              pictogram={pictogram}
+            />
+          ))}
         </ul>
         </Link>
 

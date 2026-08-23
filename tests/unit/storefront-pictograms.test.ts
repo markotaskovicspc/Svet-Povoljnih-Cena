@@ -26,19 +26,17 @@ const productFeature: Pictogram = {
 };
 
 describe("storefront pictogram placement", () => {
-  it("adds 2+1 to every non-Rabalux product and puts 48h in the delivery slot", () => {
+  it("stacks 2+1 above 48h in the corner for every non-Rabalux product", () => {
     const resolved = resolveStorefrontPictograms({
       pictograms: [productFeature],
       supplierIntegrationKey: null,
     });
 
-    expect(resolved.featurePictograms).toEqual([
+    expect(resolved.featurePictograms).toEqual([productFeature]);
+    expect(resolved.cornerPictograms).toEqual([
       WARRANTY_2_PLUS_1_PICTOGRAM,
-      productFeature,
-    ]);
-    expect(resolved.deliveryPictogram).toEqual(
       EXPRESS_DELIVERY_48H_PICTOGRAM,
-    );
+    ]);
   });
 
   it("does not add 2+1 to Rabalux products", () => {
@@ -48,7 +46,9 @@ describe("storefront pictogram placement", () => {
     });
 
     expect(resolved.featurePictograms).toEqual([productFeature]);
-    expect(resolved.deliveryPictogram.code).toBe("48h");
+    expect(resolved.cornerPictograms).toEqual([
+      EXPRESS_DELIVERY_48H_PICTOGRAM,
+    ]);
   });
 
   it("reuses admin-configured global pictograms without duplicating them", () => {
@@ -57,16 +57,16 @@ describe("storefront pictogram placement", () => {
       supplierIntegrationKey: "OTHER",
     });
 
-    expect(resolved.featurePictograms).toEqual([
+    expect(resolved.featurePictograms).toEqual([productFeature]);
+    expect(resolved.cornerPictograms).toEqual([
       configuredWarranty,
-      productFeature,
+      configuredDelivery,
     ]);
-    expect(resolved.deliveryPictogram).toBe(configuredDelivery);
     expect(
-      resolved.featurePictograms.filter((pictogram) => pictogram.code === "3"),
+      resolved.cornerPictograms.filter((pictogram) => pictogram.code === "3"),
     ).toHaveLength(1);
     expect(
-      resolved.featurePictograms.some((pictogram) => pictogram.code === "48h"),
-    ).toBe(false);
+      resolved.cornerPictograms.filter((pictogram) => pictogram.code === "48h"),
+    ).toHaveLength(1);
   });
 });

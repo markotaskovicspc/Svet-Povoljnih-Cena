@@ -90,7 +90,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const activeIndex = slides.length ? Math.min(active, slides.length - 1) : 0;
   const slide = slides[activeIndex] ?? slides[0];
   const posterUrl = slides.find((s) => s.kind === "image")?.asset.url;
-  const { featurePictograms, deliveryPictogram } =
+  const { featurePictograms, cornerPictograms } =
     resolveStorefrontPictograms({
       pictograms: product.pictograms,
       supplierIntegrationKey: product.supplierIntegrationKey,
@@ -214,8 +214,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           <PdpPictograms
-            pictograms={[deliveryPictogram]}
-            placement="delivery"
+            pictograms={cornerPictograms}
+            placement="corner"
             className="absolute right-3 bottom-3 z-10"
           />
         </div>
@@ -301,8 +301,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           <PdpPictograms
-            pictograms={[deliveryPictogram]}
-            placement="delivery"
+            pictograms={cornerPictograms}
+            placement="corner"
             className="absolute right-3 bottom-3 z-10"
           />
           {slides.length > 1 ? (
@@ -416,8 +416,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </div>
           ) : null}
           <PdpPictograms
-            pictograms={[deliveryPictogram]}
-            placement="delivery"
+            pictograms={cornerPictograms}
+            placement="corner"
             className="absolute right-4 bottom-4 z-10"
           />
           {slides.length > 1 ? (

@@ -48,23 +48,25 @@ export function resolveStorefrontPictograms({
       pictogram.code !== WARRANTY_PICTOGRAM_CODE &&
       pictogram.code !== EXPRESS_DELIVERY_PICTOGRAM_CODE,
   );
-  const featurePictograms = isRabalux
-    ? productSpecific
-    : [
-        findConfiguredPictogram(
-          pictograms,
-          WARRANTY_PICTOGRAM_CODE,
-          WARRANTY_2_PLUS_1_PICTOGRAM,
-        ),
-        ...productSpecific,
-      ];
-
-  return {
-    featurePictograms,
-    deliveryPictogram: findConfiguredPictogram(
+  const cornerPictograms = [
+    ...(!isRabalux
+      ? [
+          findConfiguredPictogram(
+            pictograms,
+            WARRANTY_PICTOGRAM_CODE,
+            WARRANTY_2_PLUS_1_PICTOGRAM,
+          ),
+        ]
+      : []),
+    findConfiguredPictogram(
       pictograms,
       EXPRESS_DELIVERY_PICTOGRAM_CODE,
       EXPRESS_DELIVERY_48H_PICTOGRAM,
     ),
+  ];
+
+  return {
+    featurePictograms: productSpecific,
+    cornerPictograms,
   };
 }
