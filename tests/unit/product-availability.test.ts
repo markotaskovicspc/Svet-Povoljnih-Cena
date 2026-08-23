@@ -35,12 +35,12 @@ describe("product availability messaging", () => {
       ...readyProduct,
       supplierIntegrationKey: "RABALUX",
       availabilitySource: "SUPPLIER",
-      deliveryDays: { min: 5, max: 8 },
+      deliveryDays: { min: 1, max: 2 },
     });
     expect(result).toMatchObject({
       canAddToCart: true,
       label: "Dostupno kod dobavljača",
-      message: "Dostupno kod dobavljača · Isporuka 5–8 radnih dana",
+      message: "Dostupno kod dobavljača · Isporuka 1–2 radnih dana",
     });
   });
 
