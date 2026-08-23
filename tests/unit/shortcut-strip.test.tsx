@@ -49,9 +49,11 @@ describe("ShortcutStrip", () => {
     expect(html.match(/data-shortcut-variant="homepage"/g)).toHaveLength(4);
     expect(html).toContain("Niske cene pod trajnom zaštitom");
     expect(html).toContain("grid-cols-2");
-    expect(html).toContain("h-14 min-h-14");
-    expect(html).toContain("text-[20px]");
-    expect(html).toContain("truncate whitespace-nowrap");
+    expect(html).toContain("min-h-14");
+    expect(html).not.toContain("h-14 min-h-14");
+    expect(html).toContain("text-[14.5px]");
+    expect(html).toContain("whitespace-normal");
+    expect(html).not.toContain("line-clamp-3");
     expect(html).not.toContain("overflow-x-auto");
     expect(html).not.toContain("min-h-28");
     expect(html).not.toContain("text-2xl");
