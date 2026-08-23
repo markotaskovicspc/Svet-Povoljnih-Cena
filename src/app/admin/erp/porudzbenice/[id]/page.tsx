@@ -9,6 +9,7 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
+import { PurchaseOrderSendDialog } from "@/components/admin/purchase-order-send-dialog";
 import { PurchaseOrderSupplierFields } from "@/components/admin/purchase-order-supplier-fields";
 import { PurchaseOrderDeliveryFields } from "@/components/admin/purchase-order-delivery-fields";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -28,8 +29,12 @@ import {
   calculatePurchaseOrderFinancials,
   isPackQuantityValid,
   purchaseOrderCapacityWarnings,
+  purchaseOrderSendDate,
+  purchaseOrderSupplierEmailIssue,
 } from "@/lib/admin/purchase-order";
+import { renderPurchaseOrderSupplierEmail } from "@/lib/admin/purchase-order-email";
 import { db } from "@/lib/db";
+import { getEmailConfig } from "@/lib/email/config";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { getActivePricingRules } from "@/lib/pricing/rules";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
@@ -324,7 +329,11 @@ async function sendAction(_state: AdminActionState, formData: FormData) {
       await sendPurchaseOrder(id, actorId);
       revalidatePath(`/admin/erp/porudzbenice/${id}`);
       revalidatePath("/admin/erp/porudzbenice");
-      return { ok: true as const, entityId: id };
+      return {
+        ok: true as const,
+        entityId: id,
+        message: "Porudžbenica je poslata dobavljaču.",
+      };
     },
   )(formData);
 }
@@ -397,6 +406,35 @@ export default async function PurchaseOrderEditorPage({
         ? null
         : Number(order.transportDefinition.payloadKg),
   });
+  const supplierEmail = order.supplier?.email?.trim() || null;
+  const supplierEmailIssue = order.supplier
+    ? purchaseOrderSupplierEmailIssue(supplierEmail)
+    : "Izaberite dobavljača pre slanja porudžbenice.";
+  const invalidPackSkus = order.items
+    .filter(
+      (item) => item.packQty && item.packQty > 0 && item.qty % item.packQty !== 0,
+    )
+    .map((item) => item.sku);
+  const sendBlockers = [
+    order.status === PurchaseOrderStatus.RECEIVED
+      ? "Primljena porudžbenica ne može ponovo da se šalje."
+      : null,
+    order.status === PurchaseOrderStatus.CANCELLED
+      ? "Otkazana porudžbenica ne može da se šalje."
+      : null,
+    order.items.length ? null : "Porudžbenica mora imati bar jednu stavku.",
+    supplierEmailIssue,
+    order.loadingLocation ? null : "Izaberite mesto utovara.",
+    order.transportDefinition ? null : "Izaberite tip transporta.",
+    invalidPackSkus.length
+      ? `Količina nije deljiva pakovanjem: ${invalidPackSkus.join(", ")}.`
+      : null,
+  ].filter((message): message is string => Boolean(message));
+  const emailPreview = await renderPurchaseOrderSupplierEmail(order.number);
+  const sendDateLabel = new Intl.DateTimeFormat("sr-Latn-RS", {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(purchaseOrderSendDate());
   const relevantProducts = products.filter(
     (product) => !order.supplierId || product.supplierId === order.supplierId,
   );
@@ -459,24 +497,22 @@ export default async function PurchaseOrderEditorPage({
             >
               Vezani dokumenti
             </Link>
-            <AdminActionForm action={sendAction}>
-              <input type="hidden" name="poId" value={order.id} />
-              <SubmitButton
-                variant="outline"
-                pendingLabel="Slanje…"
-                confirm={
-                  capacityWarnings.length
-                    ? `Kapacitet je prekoračen. ${capacityWarnings.join(" ")} Da li ipak želite da pošaljete porudžbenicu?`
-                    : undefined
-                }
-                disabled={
-                  order.status === PurchaseOrderStatus.RECEIVED ||
-                  order.status === PurchaseOrderStatus.CANCELLED
-                }
-              >
-                Pošalji dobavljaču
-              </SubmitButton>
-            </AdminActionForm>
+            <PurchaseOrderSendDialog
+              key={order.updatedAt.toISOString()}
+              action={sendAction}
+              orderId={order.id}
+              orderNumber={order.number}
+              supplierName={order.supplier?.name ?? null}
+              supplierEmail={supplierEmail}
+              sender={getEmailConfig().from}
+              subject={emailPreview.subject}
+              emailHtml={emailPreview.html}
+              attachmentFilename={emailPreview.attachmentFilename}
+              attachmentHref={`/api/admin/purchase-orders/${order.id}/pdf?mode=send-preview`}
+              sendDateLabel={sendDateLabel}
+              blockers={sendBlockers}
+              warnings={capacityWarnings}
+            />
           </div>
         }
       />

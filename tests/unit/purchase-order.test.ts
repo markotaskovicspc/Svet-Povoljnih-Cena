@@ -10,6 +10,8 @@ import {
   PURCHASE_ORDER_EMAIL_BODY,
   purchaseOrderCapacityWarnings,
   purchaseOrderEmailSubject,
+  purchaseOrderSendDate,
+  purchaseOrderSupplierEmailIssue,
   resolvePurchaseOrderLineLogistics,
   resolveOpenPurchaseOrderCustomsRate,
 } from "@/lib/admin/purchase-order";
@@ -349,5 +351,24 @@ describe("ERP module 4 purchase-order rules", () => {
     expect(PURCHASE_ORDER_EMAIL_BODY).toBe(
       "Dear,\nPlease kindly confirm receipt of our new order.\nIf any parameters or specifications of the order are not suitable or require adjustment, please inform us by email and specify which parts need to be revised.\n\nBest regards",
     );
+  });
+
+  it("uses the current Belgrade business date for the PDF sent to a supplier", () => {
+    expect(
+      purchaseOrderSendDate(new Date("2026-08-23T21:59:00.000Z")).toISOString(),
+    ).toBe("2026-08-23T00:00:00.000Z");
+    expect(
+      purchaseOrderSendDate(new Date("2026-08-23T22:01:00.000Z")).toISOString(),
+    ).toBe("2026-08-24T00:00:00.000Z");
+  });
+
+  it("requires a valid supplier email before sending", () => {
+    expect(purchaseOrderSupplierEmailIssue(null)).toBe(
+      "Dobavljač nema unetu kontakt email adresu.",
+    );
+    expect(purchaseOrderSupplierEmailIssue("pogresno@dobavljac")).toBe(
+      "Kontakt email dobavljača nije ispravan.",
+    );
+    expect(purchaseOrderSupplierEmailIssue(" sales@supplier.example ")).toBeNull();
   });
 });

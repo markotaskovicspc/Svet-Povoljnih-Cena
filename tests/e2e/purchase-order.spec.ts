@@ -458,6 +458,75 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       expect(order.bmPct).not.toBeNull();
     });
 
+    await test.step("send preview blocks a missing email and renders the exact message and attachment", async () => {
+      await db.supplier.update({
+        where: { id: supplierId },
+        data: { email: null },
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+
+      await page.getByRole("button", { name: "Pošalji dobavljaču" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByRole("heading", { name: /Pregled pre slanja/ }),
+      ).toBeVisible();
+      await expect(dialog.getByText("Kontakt email nije unet")).toBeVisible();
+      await expect(
+        dialog.getByText("Dobavljač nema unetu kontakt email adresu."),
+      ).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: "Potvrdi i pošalji" }),
+      ).toBeDisabled();
+      await expect(
+        dialog.getByRole("button", { name: "Osveži podatke" }),
+      ).toBeVisible();
+
+      const order = await db.purchaseOrder.findUniqueOrThrow({
+        where: { id: purchaseOrderId! },
+        select: { number: true },
+      });
+      const [storedPdf, sendPreviewPdf] = await Promise.all([
+        page.request.get(`/api/admin/purchase-orders/${purchaseOrderId}/pdf`),
+        page.request.get(
+          `/api/admin/purchase-orders/${purchaseOrderId}/pdf?mode=send-preview`,
+        ),
+      ]);
+      expect(storedPdf.status()).toBe(200);
+      expect(sendPreviewPdf.status()).toBe(200);
+      expect(Buffer.compare(await storedPdf.body(), await sendPreviewPdf.body())).not.toBe(0);
+      await expect(dialog.getByText(`Order NO ${order.number}`)).toBeVisible();
+      const attachment = dialog.getByRole("link", {
+        name: new RegExp(`porudzbenica-${order.number.replace("/", "-")}\\.pdf`),
+      });
+      await expect(attachment).toHaveAttribute(
+        "href",
+        `/api/admin/purchase-orders/${purchaseOrderId}/pdf?mode=send-preview`,
+      );
+      await expect(attachment).toHaveAttribute("target", "_blank");
+
+      const emailFrame = page.frameLocator(
+        `iframe[title="Email pregled porudžbenice ${order.number}"]`,
+      );
+      await expect(
+        emailFrame.getByRole("heading", { name: `New order ${order.number}` }),
+      ).toBeVisible();
+      await expect(
+        emailFrame.getByText("Please kindly confirm receipt of our new order."),
+      ).toBeVisible();
+      await expect(
+        emailFrame.getByText(`porudzbenica-${order.number.replace("/", "-")}.pdf`),
+      ).toBeVisible();
+
+      await dialog.getByRole("button", { name: "Odustani" }).click();
+      await expect(dialog).toBeHidden();
+      await db.supplier.update({
+        where: { id: supplierId },
+        data: { email: fixture.supplierEmail },
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+    });
+
     await test.step("capacity warning clears and sending before posting locks the order date", async () => {
       await expect(
         page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
@@ -471,6 +540,12 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
       ).toHaveCount(0);
       await page.getByRole("button", { name: "Pošalji dobavljaču" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText(fixture.supplierEmail)).toBeVisible();
+      await expect(
+        dialog.getByText("Primalac i obavezni podaci su spremni za slanje."),
+      ).toBeVisible();
+      await dialog.getByRole("button", { name: "Potvrdi i pošalji" }).click();
       await expect
         .poll(async () =>
           (
@@ -558,6 +633,10 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
         },
       });
       await page.getByRole("button", { name: "Pošalji dobavljaču" }).click();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Potvrdi i pošalji" })
+        .click();
       await expect
         .poll(() =>
           db.emailMessage.count({

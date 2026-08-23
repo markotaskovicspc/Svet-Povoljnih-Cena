@@ -14,6 +14,7 @@ import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 import { rebuildInboundInvoiceAllocations } from "@/lib/admin/inbound-invoice.server";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
+import { renderPurchaseOrderSupplierEmail } from "@/lib/admin/purchase-order-email";
 import { trackedDispatch } from "@/lib/email";
 import { getActivePricingRules } from "@/lib/pricing/rules";
 import {
@@ -22,10 +23,10 @@ import {
   calculateUnitLogistics,
   canReceivePurchaseOrder,
   isPackQuantityValid,
-  PURCHASE_ORDER_EMAIL_BODY,
-  purchaseOrderEmailSubject,
   resolvePurchaseOrderLineLogistics,
   resolveOpenPurchaseOrderCustomsRate,
+  purchaseOrderSendDate,
+  purchaseOrderSupplierEmailIssue,
 } from "@/lib/admin/purchase-order";
 import { assertInboundCostVolumeReady } from "@/lib/admin/inbound-invoice";
 
@@ -595,9 +596,10 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
   if (!order.items.length) {
     throw new Error("Porudžbenica mora imati bar jednu stavku.");
   }
-  if (!order.supplier?.email) {
-    throw new Error("Dobavljač mora imati kontakt email pre slanja porudžbenice.");
-  }
+  if (!order.supplier) throw new Error("Izaberite dobavljača pre slanja porudžbenice.");
+  const supplierEmailIssue = purchaseOrderSupplierEmailIssue(order.supplier.email);
+  if (supplierEmailIssue) throw new Error(supplierEmailIssue);
+  const supplierEmail = order.supplier.email!.trim();
   if (!order.loadingLocation) {
     throw new Error("Izaberite mesto utovara pre slanja porudžbenice.");
   }
@@ -612,38 +614,40 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       `Količina nije deljiva pakovanjem: ${invalidPacks.map((item) => item.sku).join(", ")}.`,
     );
   }
-  const pdf = await buildPurchaseOrderPdf({
-    ...order,
-    totalPrice: Number(order.totalPrice),
-    totalVolume: Number(order.totalVolume ?? 0),
-    items: order.items.map((item) => ({
-      sku: item.sku,
-      name: item.name,
-      supplierProductName: item.supplierProductName,
-      attributes: item.attributes,
-      pattern: item.pattern,
-      packQty: item.packQty,
-      qty: item.qty,
-      purchasePrice: Number(item.purchasePrice),
-      currency: item.currency,
-      totalVolume: Number(item.totalVolume ?? 0),
-      certificates: item.certificates,
-      barcode: item.barcode,
-      imageUrl: item.product?.media[0]?.url ?? null,
-    })),
-  });
-  const html = PURCHASE_ORDER_EMAIL_BODY.split("\n")
-    .map((line) => (line ? `<p>${escapeHtml(line)}</p>` : "<br>"))
-    .join("");
+  const sendDate = purchaseOrderSendDate();
+  const [pdf, email] = await Promise.all([
+    buildPurchaseOrderPdf({
+      ...order,
+      orderDate: sendDate,
+      totalPrice: Number(order.totalPrice),
+      totalVolume: Number(order.totalVolume ?? 0),
+      items: order.items.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        supplierProductName: item.supplierProductName,
+        attributes: item.attributes,
+        pattern: item.pattern,
+        packQty: item.packQty,
+        qty: item.qty,
+        purchasePrice: Number(item.purchasePrice),
+        currency: item.currency,
+        totalVolume: Number(item.totalVolume ?? 0),
+        certificates: item.certificates,
+        barcode: item.barcode,
+        imageUrl: item.product?.media[0]?.url ?? null,
+      })),
+    }),
+    renderPurchaseOrderSupplierEmail(order.number),
+  ]);
   const result = await trackedDispatch({
     kind: "purchase_order",
-    to: order.supplier.email,
-    subject: purchaseOrderEmailSubject(order.number),
-    html,
-    text: PURCHASE_ORDER_EMAIL_BODY,
+    to: supplierEmail,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
     attachments: [
       {
-        filename: `porudzbenica-${order.number.replaceAll("/", "-")}.pdf`,
+        filename: email.attachmentFilename,
         content: pdf.toString("base64"),
         contentType: "application/pdf",
       },
@@ -658,7 +662,7 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       where: { id },
       data: {
         status: PurchaseOrderStatus.SENT,
-        orderDate: dateAtUtcMidnight(new Date()),
+        orderDate: sendDate,
         pdfUrl: `/api/admin/purchase-orders/${order.id}/pdf`,
       },
     }),
@@ -671,15 +675,6 @@ export async function sendPurchaseOrder(id: string, actorId: string) {
       },
     }),
   ]);
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }
 
 /** Returns advisory master-data gaps without blocking the stock receipt. */

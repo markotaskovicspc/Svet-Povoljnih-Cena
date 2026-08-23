@@ -2,16 +2,20 @@ import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
+import { purchaseOrderAttachmentFilename } from "@/lib/admin/purchase-order-email";
+import { purchaseOrderSendDate } from "@/lib/admin/purchase-order";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   await requireAdminAction(["OPS"]);
   const { id } = await context.params;
+  const previewForSending =
+    new URL(request.url).searchParams.get("mode") === "send-preview";
   const order = await db.purchaseOrder.findUnique({
     where: { id },
     include: {
@@ -38,6 +42,7 @@ export async function GET(
   }
   const pdf = await buildPurchaseOrderPdf({
     ...order,
+    orderDate: previewForSending ? purchaseOrderSendDate() : order.orderDate,
     totalPrice: Number(order.totalPrice),
     totalVolume: Number(order.totalVolume ?? 0),
     items: order.items.map((item) => ({
@@ -56,7 +61,7 @@ export async function GET(
       imageUrl: item.product?.media[0]?.url ?? null,
     })),
   });
-  const filename = `porudzbenica-${order.number.replaceAll("/", "-")}.pdf`;
+  const filename = purchaseOrderAttachmentFilename(order.number);
 
   return new NextResponse(new Uint8Array(pdf), {
     headers: {

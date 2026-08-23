@@ -342,3 +342,23 @@ Best regards`;
 export function purchaseOrderEmailSubject(number: string) {
   return `Order NO ${number}`;
 }
+
+export function purchaseOrderSendDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Belgrade",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day)));
+}
+
+export function purchaseOrderSupplierEmailIssue(value: string | null | undefined) {
+  const email = value?.trim() ?? "";
+  if (!email) return "Dobavljač nema unetu kontakt email adresu.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "Kontakt email dobavljača nije ispravan.";
+  }
+  return null;
+}
