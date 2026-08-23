@@ -8,6 +8,7 @@ import { resolveDeliveryQuote } from "@/lib/checkout/config";
 import { adjustInventory } from "@/lib/inventory";
 import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import {
   calculateEditedWebOrderTotals,
   planWebOrderQuantityReduction,
@@ -587,15 +588,32 @@ export async function updateWebOrderItemQuantity(input: {
           orderId: order.id,
           status: order.status,
           actorId: input.actorId,
-          note: `WEB stavka ${item.sku} promenjena: ${item.qty} → ${input.newQty}. Kupcu dokument nije automatski poslat.`,
+          note: `WEB stavka ${item.sku} promenjena: ${item.qty} → ${input.newQty}. Obaveštenje kupcu je zakazano.`,
         },
       });
+
+      await enqueueBackgroundJob(
+        {
+          kind: "ORDER_ITEMS_CHANGED_EMAIL",
+          payload: {
+            orderId: order.id,
+            itemName: item.name,
+            sku: item.sku,
+            previousQty: item.qty,
+            newQty: input.newQty,
+            operationKey,
+          },
+          idempotencyKey: `order-items-changed-job:${order.id}:${operationKey}`,
+        },
+        tx,
+      );
 
       return {
         orderId: order.id,
         orderNumber: order.number,
         itemId: item.id,
         sku: item.sku,
+        itemName: item.name,
         previousQty: item.qty,
         newQty: input.newQty,
         totals,
@@ -627,5 +645,10 @@ export async function updateWebOrderItemQuantity(input: {
     receiptError = error instanceof Error ? error.message : "Nepoznata greška.";
   }
 
-  return { ...result, receiptRefreshed, receiptError };
+  return {
+    ...result,
+    receiptRefreshed,
+    receiptError,
+    customerNotificationQueued: true,
+  };
 }

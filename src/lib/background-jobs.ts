@@ -55,6 +55,21 @@ const schemas = {
       "VRACENO",
     ]).optional(),
   }),
+  ORDER_ITEMS_CHANGED_EMAIL: z.object({
+    orderId: z.string().min(1),
+    itemName: z.string().min(1).max(300),
+    sku: z.string().min(1).max(100),
+    previousQty: z.number().int().positive(),
+    newQty: z.number().int().nonnegative(),
+    operationKey: z.string().min(1).max(100),
+  }),
+  ORDER_CANCELLATION_WAREHOUSE_EMAIL: z.object({
+    orderId: z.string().min(1),
+    recipients: z.array(z.email()).min(1).max(20),
+    pickupBatchNumbers: z.array(z.string().min(1).max(100)).max(20),
+    removedPickupLines: z.number().int().nonnegative(),
+    activeShipmentCount: z.number().int().nonnegative(),
+  }),
   IPS_PAYMENT_EMAIL: z.object({ orderId: z.string().min(1) }),
   PAYMENT_REFUND: z.object({
     orderId: z.string().min(1),
@@ -94,6 +109,8 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "SUPPLIER_RESERVATION",
   "FISCAL_RECEIPT",
   "ORDER_STATUS_EMAIL",
+  "ORDER_ITEMS_CHANGED_EMAIL",
+  "ORDER_CANCELLATION_WAREHOUSE_EMAIL",
   "IPS_PAYMENT_EMAIL",
   "PAYMENT_REFUND",
   "RECLAMATION_RECEIPT",
@@ -492,6 +509,42 @@ async function dispatchJob(job: JobRow) {
         order: loaded.order,
         status: args.status ? lowerOrderStatus(args.status) : loaded.order.status,
         to: loaded.recipient,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "ORDER_ITEMS_CHANGED_EMAIL": {
+      const { loadOrderForEmail, sendOrderItemsChanged } = await import("@/lib/email");
+      const args = payload as z.infer<typeof schemas.ORDER_ITEMS_CHANGED_EMAIL>;
+      const loaded = await loadOrderForEmail(args.orderId);
+      if (!loaded?.recipient) return;
+      const result = await sendOrderItemsChanged({
+        order: loaded.order,
+        to: loaded.recipient,
+        itemName: args.itemName,
+        sku: args.sku,
+        previousQty: args.previousQty,
+        newQty: args.newQty,
+        idempotencyKey: `order-items-changed:${args.orderId}:${args.operationKey}`,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "ORDER_CANCELLATION_WAREHOUSE_EMAIL": {
+      const { sendWarehouseOrderCancellation } = await import("@/lib/email");
+      const args = payload as z.infer<typeof schemas.ORDER_CANCELLATION_WAREHOUSE_EMAIL>;
+      const order = await db.order.findUnique({
+        where: { id: args.orderId },
+        select: { number: true },
+      });
+      if (!order) return;
+      const result = await sendWarehouseOrderCancellation({
+        to: args.recipients,
+        orderNumber: order.number,
+        pickupBatchNumbers: args.pickupBatchNumbers,
+        removedPickupLines: args.removedPickupLines,
+        activeShipmentCount: args.activeShipmentCount,
+        idempotencyKey: `warehouse-order-cancel:${args.orderId}`,
       });
       if (!result.ok) throw new Error(result.error);
       return;

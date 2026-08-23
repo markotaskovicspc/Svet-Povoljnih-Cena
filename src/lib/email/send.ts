@@ -7,6 +7,8 @@ import { formatRsd } from "@/lib/format";
 import { OrderConfirmation } from "./templates/order-confirmation";
 import { IpsPaymentConfirmation } from "./templates/ips-payment-confirmation";
 import { OrderStatusChanged } from "./templates/order-status-changed";
+import { OrderItemsChanged } from "./templates/order-items-changed";
+import { WarehouseOrderCancelled } from "./templates/warehouse-order-cancelled";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
 import { ReclamationStatusChanged } from "./templates/reclamation-status-changed";
@@ -120,6 +122,71 @@ export async function sendOrderStatusChanged(args: {
     text,
     tags: { kind: "order_status", order: args.order.id, status: args.status },
     idempotencyKey: `order-status:${args.order.id}:${args.status}`,
+  });
+}
+
+export async function sendOrderItemsChanged(args: {
+  order: Order;
+  to: string;
+  itemName: string;
+  sku: string;
+  previousQty: number;
+  newQty: number;
+  idempotencyKey: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const { html, text } = await renderEmail(
+    OrderItemsChanged({
+      order: args.order,
+      itemName: args.itemName,
+      sku: args.sku,
+      previousQty: args.previousQty,
+      newQty: args.newQty,
+      baseUrl: cfg.baseUrl,
+    }),
+  );
+  return trackedDispatch({
+    kind: "order_items_changed",
+    to: args.to,
+    subject: `Porudžbina ${args.order.id} — izmena artikla`,
+    html,
+    text,
+    bcc: cfg.orderBcc,
+    tags: {
+      kind: "order_items_changed",
+      order: args.order.id,
+      sku: args.sku,
+    },
+    idempotencyKey: args.idempotencyKey,
+  });
+}
+
+export async function sendWarehouseOrderCancellation(args: {
+  to: string[];
+  orderNumber: string;
+  pickupBatchNumbers: string[];
+  removedPickupLines: number;
+  activeShipmentCount: number;
+  idempotencyKey: string;
+}): Promise<DispatchResult> {
+  if (!args.to.length) return NULL;
+  const { html, text } = await renderEmail(
+    WarehouseOrderCancelled({
+      orderNumber: args.orderNumber,
+      pickupBatchNumbers: args.pickupBatchNumbers,
+      removedPickupLines: args.removedPickupLines,
+      activeShipmentCount: args.activeShipmentCount,
+    }),
+  );
+  return trackedDispatch({
+    kind: "warehouse_order_cancelled",
+    to: args.to,
+    subject: `HITNO: otkazana porudžbina ${args.orderNumber}`,
+    html,
+    text,
+    tags: { kind: "warehouse_order_cancelled", order: args.orderNumber },
+    idempotencyKey: args.idempotencyKey,
   });
 }
 

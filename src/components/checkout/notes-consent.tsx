@@ -47,28 +47,59 @@ export function NotesConsent() {
   );
 }
 
-export function CheckoutConsent() {
+export function CheckoutConsent({
+  id = "consent",
+  mirror = false,
+}: {
+  id?: string;
+  mirror?: boolean;
+} = {}) {
   const {
     register,
+    watch,
+    setValue,
     formState: { errors, isSubmitted },
   } = useFormContext<CheckoutFormData>();
+  const consent = watch("consent");
   const consentErr = isSubmitted ? errors.consent?.message : undefined;
   const [openTerms, setOpenTerms] = useState(false);
+  const registration = mirror
+    ? null
+    : register("consent", {
+        validate: (v) =>
+          v === true || "Saglasnost je obavezna pre porudžbine",
+      });
 
   return (
     <>
       <div className="bg-muted-bg ring-border/60 flex flex-col gap-2 rounded-2xl p-4 ring-1 lg:p-3">
-        <label htmlFor="consent" className="flex items-start gap-3 text-sm">
-          <input
-            id="consent"
-            type="checkbox"
-            className="accent-walnut mt-0.5 size-4"
-            aria-invalid={Boolean(consentErr) || undefined}
-            aria-describedby={consentErr ? "consent-error" : undefined}
-            {...register("consent", {
-              validate: (v) => v === true || "Saglasnost je obavezna pre porudžbine",
-            })}
-          />
+        <label htmlFor={id} className="flex items-start gap-3 text-sm">
+          {mirror ? (
+            <input
+              id={id}
+              type="checkbox"
+              checked={Boolean(consent)}
+              onChange={(event) =>
+                setValue("consent", event.target.checked, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                })
+              }
+              className="accent-walnut mt-0.5 size-4"
+              aria-invalid={Boolean(consentErr) || undefined}
+              aria-describedby={consentErr ? `${id}-error` : undefined}
+            />
+          ) : (
+            <input
+              id={id}
+              type="checkbox"
+              className="accent-walnut mt-0.5 size-4"
+              aria-invalid={Boolean(consentErr) || undefined}
+              aria-describedby={consentErr ? `${id}-error` : undefined}
+              {...(registration ?? {})}
+            />
+          )}
           <span className="text-ink-700">
             Saglasan/a sam sa{" "}
             <button
@@ -90,7 +121,7 @@ export function CheckoutConsent() {
         </label>
         {consentErr ? (
           <p
-            id="consent-error"
+            id={`${id}-error`}
             className={cn(
               "text-action pl-7 text-[11px]",
               "animate-in fade-in slide-in-from-top-1",

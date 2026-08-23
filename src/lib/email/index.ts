@@ -12,6 +12,8 @@ export {
   sendOrderConfirmation,
   sendIpsPaymentConfirmation,
   sendOrderStatusChanged,
+  sendOrderItemsChanged,
+  sendWarehouseOrderCancellation,
   sendFiscalReceipt,
   sendReclamationReceipt,
   sendReclamationStatusChanged,

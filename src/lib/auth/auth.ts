@@ -16,6 +16,7 @@ import {
 } from "@/lib/auth/customer-password-policy";
 import { envValue } from "@/lib/env";
 import { checkRateLimit, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { resolveAuthJwtMaxAge } from "@/lib/auth/session-policy";
 
 const customerCredentialsSchema = z.object({
   email: z.string().email(),
@@ -34,7 +35,6 @@ const adminCredentialsSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
-const DAY = 60 * 60 * 24;
 const CREDENTIAL_PROVIDER_IDS = new Set([
   "credentials",
   "phone-otp",
@@ -260,6 +260,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: [admin.firstName, admin.lastName].filter(Boolean).join(" ") || admin.email,
             userType: "admin",
             role: admin.role,
+            // Admin sessions are operational sessions. Keep them across
+            // browser restarts and deployments instead of forcing staff to
+            // re-authenticate during routine work.
+            remember: true,
           };
         } catch (err) {
           console.error("[admin-credentials] authorize failed", {
@@ -334,14 +338,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   jwt: {
-    // "Zapamti me" — extend lifetime to 90 days when the user opted in,
-    // otherwise fall back to the default `session.maxAge`.
+    // "Zapamti me" and admin sessions last 90 days. Ordinary customer
+    // sessions still expire after 30 days even though the persistent cookie
+    // has the longer outer lifetime.
     async encode(params) {
       const { encode } = await import("next-auth/jwt");
       const remember = (params.token as { remember?: boolean } | null)?.remember;
       return encode({
         ...params,
-        maxAge: remember ? 90 * DAY : params.maxAge,
+        maxAge: resolveAuthJwtMaxAge(remember),
       });
     },
   },

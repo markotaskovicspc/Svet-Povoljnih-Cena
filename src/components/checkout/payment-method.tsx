@@ -124,7 +124,10 @@ export function PaymentMethodStep({
   }
 
   return (
-    <fieldset className="flex snap-x gap-3 overflow-x-auto pb-1 lg:gap-2.5">
+    <fieldset
+      data-testid="checkout-payment-methods"
+      className="flex snap-x gap-3 overflow-x-auto p-0.5 pb-1.5 lg:gap-2.5"
+    >
       {methods.map((method) => {
         const meta = METHOD_META[method.id];
         const Icon = meta.icon;

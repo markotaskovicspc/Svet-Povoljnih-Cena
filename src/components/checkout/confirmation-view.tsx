@@ -20,6 +20,7 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
 import { PurchaseAnalytics } from "@/components/analytics/first-party-analytics";
+import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 
 /**
  * `/checkout/potvrda` view. Reads the placed order from the checkout store
@@ -70,6 +71,11 @@ export function ConfirmationView({
         </div>
         <OrderRecap order={order} />
       </div>
+      <CancelOrderButton
+        orderNumber={order.id}
+        status={order.status}
+        accessToken={accessToken}
+      />
       <Ctas order={order} accessToken={accessToken} />
     </div>
   );

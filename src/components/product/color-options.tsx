@@ -79,8 +79,10 @@ export function ProductColorOptions({
   onSelectSku?: (sku: string) => void;
 }) {
   const familyOptions = product.variantFamily?.options ?? [];
-  const showVariantThumbnails =
-    familyOptions.length > 0 && (showLabels || familyOptions.length > 1);
+  // Listing cards and the PDP use the same thumbnail language. Even a
+  // one-option family must keep its miniature; falling back to coloured dots
+  // made a single variant look different from every other family member.
+  const showVariantThumbnails = familyOptions.length > 0;
   const activeSku = selectedSku ?? product.variantFamily?.selectedSku ?? product.sku;
   const colors = getProductColorOptions(product);
   const railId = useId();
@@ -219,37 +221,44 @@ export function ProductColorOptions({
               {familyOptions.map((option) => {
                 const selected = option.sku === activeSku;
                 const content = (
-                  <span
-                    className={cn(
-                      "relative block overflow-hidden rounded-md bg-white",
-                      showLabels ? "size-14" : "size-9",
-                    )}
-                    data-variant-thumbnail
-                  >
-                    {option.thumbnail ? (
-                      <Image
-                        src={getMediaVariantUrl(option.thumbnail, "thumb")}
-                        alt=""
-                        fill
-                        sizes={showLabels ? "56px" : "36px"}
-                        className="object-contain p-0.5"
-                      />
-                    ) : (
-                      <span
-                        className="absolute inset-1 rounded-sm ring-1 ring-black/10"
-                        style={{
-                          backgroundColor:
-                            option.colorHex ??
-                            COLOR_HEX[option.label.toLowerCase()] ??
-                            "#d8d4c8",
-                        }}
-                      />
-                    )}
-                  </span>
+                  <>
+                    <span
+                      className={cn(
+                        "relative block overflow-hidden rounded-md bg-white",
+                        showLabels ? "size-14" : "size-9",
+                      )}
+                      data-variant-thumbnail
+                    >
+                      {option.thumbnail ? (
+                        <Image
+                          src={getMediaVariantUrl(option.thumbnail, "thumb")}
+                          alt=""
+                          fill
+                          sizes={showLabels ? "56px" : "36px"}
+                          className="object-contain p-0.5"
+                        />
+                      ) : (
+                        <span
+                          className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                          style={{
+                            backgroundColor:
+                              option.colorHex ??
+                              COLOR_HEX[option.label.toLowerCase()] ??
+                              "#d8d4c8",
+                          }}
+                        />
+                      )}
+                    </span>
+                    {showLabels ? (
+                      <span className="max-w-32 truncate text-xs font-medium text-ink-700">
+                        {option.label}
+                      </span>
+                    ) : null}
+                  </>
                 );
                 const classes = cn(
                   "inline-flex shrink-0 snap-start items-center rounded-lg bg-white transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut",
-                  showLabels ? "p-1.5" : "p-0.5",
+                  showLabels ? "gap-2 p-1.5 pr-2.5" : "p-0.5",
                   selected
                     ? "ring-2 ring-brand-blue"
                     : "ring-1 ring-border hover:ring-ink-500",
@@ -321,22 +330,37 @@ export function ProductColorOptions({
 
   if (!showLabels) {
     const color = colors[0]!;
+    const thumbnail = product.media?.images?.[0];
     return (
       <div
-        className={cn("flex min-h-5 items-center gap-1.5", className)}
+        className={cn("flex min-h-5 items-center", className)}
         aria-label={`${label}: ${color.label}`}
-        data-product-colors
       >
-        {color.colors.map((hex, index) => (
+        <span
+          className="inline-flex rounded-lg bg-white p-0.5 ring-1 ring-border"
+          data-variant-option
+          data-variant-selected="true"
+          title={color.label}
+        >
           <span
-            key={`${hex}-${index}`}
-            className="size-3.5 rounded-full ring-1 ring-black/15"
-            style={{ backgroundColor: hex }}
-            aria-hidden
-          />
-        ))}
-        <span className="truncate text-[11px] font-medium text-ink-500">
-          {color.label}
+            className="relative block size-9 overflow-hidden rounded-md bg-white"
+            data-variant-thumbnail
+          >
+            {thumbnail ? (
+              <Image
+                src={getMediaVariantUrl(thumbnail, "thumb")}
+                alt=""
+                fill
+                sizes="36px"
+                className="object-contain p-0.5"
+              />
+            ) : (
+              <span
+                className="absolute inset-1 rounded-sm ring-1 ring-black/10"
+                style={{ backgroundColor: color.colors[0] }}
+              />
+            )}
+          </span>
         </span>
       </div>
     );
@@ -355,7 +379,7 @@ export function ProductColorOptions({
           Varijanta:
         </span>
         <span
-          className="inline-flex w-fit items-center rounded-lg bg-white p-1.5 ring-2 ring-brand-blue"
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-white p-1.5 pr-2.5 ring-2 ring-brand-blue"
           data-variant-option
           data-variant-selected="true"
         >
@@ -377,6 +401,9 @@ export function ProductColorOptions({
                 style={{ backgroundColor: color.colors[0] }}
               />
             )}
+          </span>
+          <span className="max-w-40 truncate text-xs font-medium text-ink-700">
+            {color.label}
           </span>
         </span>
       </div>

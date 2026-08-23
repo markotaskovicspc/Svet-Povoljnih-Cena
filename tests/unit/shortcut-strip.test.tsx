@@ -50,7 +50,8 @@ describe("ShortcutStrip", () => {
     expect(html).toContain("Niske cene pod trajnom zaštitom");
     expect(html).toContain("grid-cols-2");
     expect(html).toContain("h-14 min-h-14");
-    expect(html).toContain("text-[15px]");
+    expect(html).toContain("text-[20px]");
+    expect(html).toContain("truncate whitespace-nowrap");
     expect(html).not.toContain("overflow-x-auto");
     expect(html).not.toContain("min-h-28");
     expect(html).not.toContain("text-2xl");

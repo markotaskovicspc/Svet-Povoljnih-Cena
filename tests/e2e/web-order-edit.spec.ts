@@ -204,6 +204,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         invoiceMatchesTotal: true,
         invoiceStatus: "ISSUED",
         invoiceEmailedAt: null,
+        itemChangeEmailJobs: 1,
       });
 
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -240,6 +241,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         savings: 200,
         paymentMatchesTotal: true,
         invoiceMatchesTotal: true,
+        itemChangeEmailJobs: 2,
       });
 
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -264,6 +266,26 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         }),
       )
       .toBe(2);
+
+    await db.order.update({
+      where: { id: orderId },
+      data: { status: "ISPORUCENO" },
+    });
+    await page.goto("/admin/erp/reklamacije-dnevnik", {
+      waitUntil: "domcontentloaded",
+    });
+    const partialOrderDigits = runId.split("-").at(-1)!;
+    await page
+      .getByRole("combobox", {
+        name: "Broj porudžbine ili fiskalnog računa",
+      })
+      .fill(partialOrderDigits);
+    await page.getByRole("option", { name: new RegExp(orderNumber) }).click();
+    const itemSelect = page.getByLabel("Artikal sa porudžbine");
+    await expect(itemSelect).toContainText(skus[0]);
+    await expect(itemSelect).not.toContainText(skus[1]);
+    await itemSelect.selectOption(skus[0]);
+    await expect(itemSelect).toHaveValue(skus[0]);
   });
 
   async function readState() {
@@ -300,6 +322,12 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     );
     const payment = order.payments[0];
     const invoice = order.invoices[0];
+    const itemChangeEmailJobs = await db.backgroundJob.count({
+      where: {
+        kind: "ORDER_ITEMS_CHANGED_EMAIL",
+        payload: { path: ["orderId"], equals: orderId },
+      },
+    });
     return {
       quantities,
       reservations,
@@ -313,6 +341,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         Boolean(invoice) && Number(invoice?.total) === Number(order.total),
       invoiceStatus: invoice?.status,
       invoiceEmailedAt: invoice?.emailedAt ?? null,
+      itemChangeEmailJobs,
     };
   }
 

@@ -65,6 +65,8 @@ interface OrderSummaryProps {
   perItemAssembly?: Record<SKU, boolean>;
   /** Optional CTA appended at the bottom (used by the final review state). */
   cta?: React.ReactNode;
+  /** Content that must sit immediately above the desktop confirmation CTA. */
+  beforeCta?: React.ReactNode;
   /** Hide the cart-line list; useful on confirmation page. */
   collapseLines?: boolean;
 }
@@ -74,6 +76,7 @@ export function OrderSummary({
   shippingMethod,
   perItemAssembly,
   cta,
+  beforeCta,
   collapseLines,
 }: OrderSummaryProps) {
   const hydrated = useCart((s) => s.hydrated);
@@ -211,6 +214,7 @@ export function OrderSummary({
           </span>
         </div>
 
+        {beforeCta ? <div className="order-5">{beforeCta}</div> : null}
         {cta ? <div className="order-6">{cta}</div> : null}
 
         <p className="order-8 border-border/60 inline-flex items-center gap-1.5 border-t pt-3 text-[11px] text-ink-500">

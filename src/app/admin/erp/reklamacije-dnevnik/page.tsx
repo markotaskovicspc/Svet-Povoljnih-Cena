@@ -41,6 +41,7 @@ import {
   lookupOrderForReclamation,
 } from "@/lib/api/reclamations";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
+import { ReclamationOrderFields } from "@/components/admin/reclamation-order-search";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -456,24 +457,7 @@ export default async function ReclamationsPage({
             className="mt-4 grid gap-4 lg:grid-cols-2"
             testId="manual-reclamation-form"
           >
-            <Field label="Broj porudžbine ili fiskalnog računa">
-              <input
-                name="orderNumberOrFiscal"
-                required
-                autoComplete="off"
-                placeholder="npr. SPC-2026-000123"
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              />
-            </Field>
-            <Field label="SKU artikla">
-              <input
-                name="sku"
-                required
-                autoComplete="off"
-                placeholder="Šifra artikla sa porudžbine"
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              />
-            </Field>
+            <ReclamationOrderFields />
             <Field label="Količina">
               <input
                 name="quantity"

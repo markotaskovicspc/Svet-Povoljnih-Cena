@@ -43,7 +43,9 @@ import {
   sendMagicLink,
   sendOnSaleAlert,
   sendOrderConfirmation,
+  sendOrderItemsChanged,
   sendOrderStatusChanged,
+  sendWarehouseOrderCancellation,
   sendOtpEmail,
   sendPasswordReset,
   sendReclamationReceipt,
@@ -202,6 +204,55 @@ describe("all transactional Resend send flows", () => {
         html: expect.stringContaining("tracking.example/audit"),
       }),
     );
+  });
+
+  it("obaveštava kupca o uklonjenoj stavci i potvrđuje da ostale ostaju", async () => {
+    await sendOrderItemsChanged({
+      order: {
+        ...order,
+        total: 1_490,
+      },
+      to: "delivered@resend.dev",
+      itemName: "Test proizvod",
+      sku: "AUDIT-1",
+      previousQty: 2,
+      newQty: 0,
+      idempotencyKey: "order-items-changed:audit-operation",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input).toMatchObject({
+      kind: "order_items_changed",
+      to: "delivered@resend.dev",
+      bcc: "porudzbine@svetpovoljnihcena.rs",
+      idempotencyKey: "order-items-changed:audit-operation",
+    });
+    expect(input.subject).toContain(order.id);
+    expect(input.html).toContain("Test proizvod");
+    expect(input.html).toContain("2 → 0");
+    expect(input.html).toContain("Sve ostale stavke ostaju potvrđene");
+    expect(input.text).toContain("1.490");
+  });
+
+  it("šalje magacinu broj naloga kada kupac otkaže već učitanu porudžbinu", async () => {
+    await sendWarehouseOrderCancellation({
+      to: ["dc@example.invalid"],
+      orderNumber: order.id,
+      pickupBatchNumbers: ["PRE-2026-00501"],
+      removedPickupLines: 0,
+      activeShipmentCount: 1,
+      idempotencyKey: "warehouse-order-cancel:audit",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input).toMatchObject({
+      kind: "warehouse_order_cancelled",
+      to: ["dc@example.invalid"],
+      idempotencyKey: "warehouse-order-cancel:audit",
+    });
+    expect(input.subject).toContain("HITNO");
+    expect(input.html).toContain("PRE-2026-00501");
+    expect(input.html).toContain("aktivan kurirski nalog");
   });
 
   it("renders IPS payment and fiscal receipt flows with metadata and attachments", async () => {
@@ -366,6 +417,15 @@ describe("all transactional Resend send flows", () => {
 
   it("does not dispatch recipient-optional flows when the address is empty", async () => {
     await sendOrderConfirmation({ order, to: "" });
+    await sendOrderItemsChanged({
+      order,
+      to: "",
+      itemName: "Test proizvod",
+      sku: "AUDIT-1",
+      previousQty: 2,
+      newQty: 1,
+      idempotencyKey: "order-items-changed:empty",
+    });
     await sendOrderStatusChanged({ order, status: "potvrdjeno", to: "" });
     await sendIpsPaymentConfirmation({ order, to: "" });
     await sendFiscalReceipt({ order, to: "", receiptNumber: "AUDIT" });

@@ -86,10 +86,11 @@ async function updateWebOrderItemQuantityAction(
           totals: result.totals,
           receiptRefreshed: result.receiptRefreshed,
           receiptError: result.receiptError,
+          customerNotificationQueued: result.customerNotificationQueued,
         },
         message: result.receiptRefreshed
-          ? `Stavka ${result.sku} je promenjena (${result.previousQty} → ${result.newQty}); rezervacije, iznosi i predračun su osveženi. Kupcu dokument nije automatski poslat.`
-          : `Stavka ${result.sku} je promenjena, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Ne ponavljajte izmenu; regenerišite dokument ručno.`,
+          ? `Stavka ${result.sku} je promenjena (${result.previousQty} → ${result.newQty}); rezervacije, iznosi i predračun su osveženi, a obaveštenje kupcu je zakazano.`
+          : `Stavka ${result.sku} je promenjena i obaveštenje kupcu je zakazano, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Ne ponavljajte izmenu; regenerišite dokument ručno.`,
       };
     },
   )(formData);

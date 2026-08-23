@@ -14,7 +14,7 @@ describe("PDP boje proizvoda", () => {
     media: { images: [{ url: "/products/chair-black.webp" }] },
   } as Product;
 
-  it("prikazuje boje i naziv na karticama", () => {
+  it("na kartici prikazuje jednu thumbnail varijantu bez kružića i vidljivog naziva", () => {
     const markup = renderToStaticMarkup(
       <ProductColorOptions product={product} />,
     );
@@ -26,13 +26,15 @@ describe("PDP boje proizvoda", () => {
         colors: ["#181716", "#c7a36f"],
       },
     ]);
-    expect(markup).toContain("data-product-colors");
-    expect(markup).toContain("CRNA / NATUR");
-    expect(markup.match(/rounded-full/g)).toHaveLength(2);
-    expect(markup).not.toContain('title="CRNA / NATUR"');
+    expect(markup).not.toContain("data-product-colors");
+    expect(markup).not.toContain(">CRNA / NATUR<");
+    expect(markup).toContain('title="CRNA / NATUR"');
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
+    expect(markup.match(/<img/g)).toHaveLength(1);
+    expect(markup).not.toContain("rounded-full");
   });
 
-  it("na PDP-u prikazuje samo thumbnail varijante bez vidljivog naziva boje", () => {
+  it("na PDP-u prikazuje thumbnail i vidljiv naziv boje", () => {
     const markup = renderToStaticMarkup(
       <ProductColorOptions
         product={product}
@@ -42,7 +44,7 @@ describe("PDP boje proizvoda", () => {
     );
     expect(markup).not.toContain("Boja:");
     expect(markup).toContain('aria-label="Boja proizvoda: CRNA / NATUR"');
-    expect(markup).not.toContain(">CRNA / NATUR<");
+    expect(markup).toContain(">CRNA / NATUR<");
     expect(markup).not.toContain("<button");
     expect(markup).toContain("Varijanta:");
     expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
@@ -108,8 +110,8 @@ describe("PDP boje proizvoda", () => {
     expect(markup).toContain('href="/p/sofa-black"');
     expect(markup).toContain('href="/p/sofa-green"');
     expect(markup).toContain("Crna");
-    expect(markup).not.toContain(">Crna</span>");
-    expect(markup).not.toContain(">Zelena</span>");
+    expect(markup).toContain(">Crna</span>");
+    expect(markup).toContain(">Zelena</span>");
     expect(markup).toContain("SKU SOFA-GREEN");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain("Varijanta:");
@@ -166,7 +168,7 @@ describe("PDP boje proizvoda", () => {
     expect(markup).not.toContain('href="/p/sku-6"');
   });
 
-  it("na kartici sa samo jednom porodičnom varijantom prikazuje kružiće boje", () => {
+  it("na kartici sa samo jednom porodičnom varijantom prikazuje thumbnail", () => {
     const familyProduct = {
       ...product,
       sku: "MOP-RED-WHITE",
@@ -201,10 +203,11 @@ describe("PDP boje proizvoda", () => {
       <ProductColorOptions product={familyProduct} />,
     );
 
-    expect(markup).toContain("data-product-colors");
-    expect(markup).toContain("CRVENA / BELA");
-    expect(markup.match(/rounded-full/g)).toHaveLength(2);
-    expect(markup).not.toContain("data-variant-thumbnail");
+    expect(markup).not.toContain("data-product-colors");
+    expect(markup).not.toContain(">CRVENA / BELA<");
+    expect(markup.match(/data-variant-thumbnail/g)).toHaveLength(1);
+    expect(markup.match(/<img/g)).toHaveLength(1);
+    expect(markup).not.toContain("rounded-full");
   });
 
   it("dimenzijsku porodicu naziva varijantom, a ne bojom", () => {

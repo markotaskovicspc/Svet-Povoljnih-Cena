@@ -1,5 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 import type { AdminRoleName } from "@prisma/client";
+import { AUTH_COOKIE_MAX_AGE_SECONDS } from "@/lib/auth/session-policy";
 
 /**
  * Edge-safe Auth.js configuration.
@@ -59,7 +60,10 @@ const authSecret =
 export const authConfig = {
   secret: authSecret,
   trustHost: true,
-  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 30 },
+  // The cookie itself may persist for 90 days so operational/admin sessions
+  // survive browser restarts. The JWT encoder below still limits ordinary
+  // customer sessions without "Zapamti me" to 30 days.
+  session: { strategy: "jwt", maxAge: AUTH_COOKIE_MAX_AGE_SECONDS },
   pages: {
     signIn: "/nalog/prijava",
     error: "/nalog/prijava",

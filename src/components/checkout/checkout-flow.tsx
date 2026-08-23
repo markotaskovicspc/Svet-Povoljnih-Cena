@@ -816,8 +816,11 @@ export function CheckoutFlow({
                 </div>
               ) : null}
               {step === "review" ? (
-                <div className="mt-5 border-t border-border/60 pt-5">
-                  <CheckoutConsent />
+                <div
+                  data-testid="mobile-checkout-consent"
+                  className="mt-5 border-t border-border/60 pt-5 lg:hidden"
+                >
+                  <CheckoutConsent id="consent-mobile" />
                 </div>
               ) : null}
             </div>
@@ -832,6 +835,13 @@ export function CheckoutFlow({
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
+          beforeCta={
+            step === "review" ? (
+              <div data-testid="desktop-checkout-consent" className="hidden lg:block">
+                <CheckoutConsent id="consent-desktop" mirror />
+              </div>
+            ) : null
+          }
           cta={renderNavigation(false)}
         />
       </div>

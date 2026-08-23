@@ -186,21 +186,27 @@ export function MobileNav({
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
             {stack.length > 1 ? (
-              <div className="shrink-0 border-b border-border">
+              <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
                 <button
                   type="button"
                   onClick={back}
                   aria-label="Nazad"
-                  className="flex min-h-13 w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                  className="flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-left text-sm font-semibold text-brand-blue transition hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 break-words">
-                    Povratak na glavni meni
+                  <span className="min-w-0 truncate">
+                    {current.label}
                   </span>
                 </button>
-                <p className="px-4 pb-3 text-xs font-semibold tracking-wide text-ink-500 uppercase">
-                  {current.label}
-                </p>
+                {current.href ? (
+                  <Link
+                    href={current.href}
+                    onClick={close}
+                    className="shrink-0 rounded-md py-1 pl-2 text-sm font-semibold text-ink-700 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                  >
+                    Pogledaj sve
+                  </Link>
+                ) : null}
               </div>
             ) : null}
             <AnimatePresence mode="wait" initial={false}>
@@ -302,14 +308,6 @@ export function MobileNav({
                       </ul>
                     </div>
                   </>
-                ) : current.href ? (
-                  <Link
-                    href={current.href}
-                    onClick={close}
-                    className="flex min-h-14 items-center border-b border-border px-4 py-4 text-[15px] font-semibold text-ink-900 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                  >
-                    Pogledaj sve
-                  </Link>
                 ) : null}
 
                 {stack.length !== 1 ? (

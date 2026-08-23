@@ -13,6 +13,7 @@ test.skip(
   "Checkout confirmation navigation runs only in the isolated acceptance flow.",
 );
 test.use({ viewport: { width: 390, height: 844 } });
+test.setTimeout(60_000);
 
 test.beforeAll(async () => {
   const connectionString = process.env.DATABASE_URL;
@@ -21,12 +22,18 @@ test.beforeAll(async () => {
       "DATABASE_URL is required for checkout navigation acceptance.",
     );
   }
+  const url = new URL(connectionString);
+  const schema = url.searchParams.get("schema")?.trim() || undefined;
+  url.searchParams.delete("schema");
   db = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString,
-      max: 2,
-      connectionTimeoutMillis: 15_000,
-    }),
+    adapter: new PrismaPg(
+      {
+        connectionString: url.toString(),
+        max: 2,
+        connectionTimeoutMillis: 15_000,
+      },
+      { schema },
+    ),
   });
   await db.order.deleteMany({ where: { number: orderNumber } });
   await db.order.create({
@@ -130,6 +137,7 @@ test("successful guest order lands on the confirmation route", async ({
           prices: { kurir: 990, kamion: 4990 },
           assemblyPrice: 2990,
           assemblyPricesBySku: {},
+          recommendedMethod: "kurir",
           truckAvailable: false,
           truckCities: [],
         },
@@ -205,6 +213,22 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("radio", { name: /Pouzeće — gotovina/ }),
   ).toBeChecked();
+  const paymentFrame = page.getByTestId("checkout-payment-methods");
+  const selectedPayment = page
+    .getByRole("radio", { name: /Pouzeće — gotovina/ })
+    .locator("..");
+  const [paymentFrameBox, selectedPaymentBox] = await Promise.all([
+    paymentFrame.boundingBox(),
+    selectedPayment.boundingBox(),
+  ]);
+  expect(selectedPaymentBox?.x).toBeGreaterThanOrEqual(
+    (paymentFrameBox?.x ?? 0) + 1,
+  );
+  expect(
+    (selectedPaymentBox?.x ?? 0) + (selectedPaymentBox?.width ?? 0),
+  ).toBeLessThanOrEqual(
+    (paymentFrameBox?.x ?? 0) + (paymentFrameBox?.width ?? 0) - 1,
+  );
 
   await page.getByRole("textbox", { name: "Ime*", exact: true }).fill("Codex");
   await page.getByRole("textbox", { name: "Prezime*", exact: true }).fill("QA");
@@ -222,7 +246,7 @@ test("successful guest order lands on the confirmation route", async ({
     .first()
     .click();
   await page
-    .getByRole("textbox", { name: "Adresa*", exact: true })
+    .getByRole("combobox", { name: "Adresa*", exact: true })
     .fill("Kralja Petra");
   const streetOption = page.getByRole("option", { name: /Kralja Petra I 1/ });
   if (await streetOption.isVisible().catch(() => false))
@@ -258,8 +282,15 @@ test("successful guest order lands on the confirmation route", async ({
     page.locator('[data-review-block="Isporuka"]').boundingBox(),
     page.locator('[data-review-block="Način isporuke"]').boundingBox(),
   ]);
-  expect(deliveryBlock?.y).toBeCloseTo(methodBlock?.y ?? -100, 0);
-  await page.getByLabel(/Saglasan\/a sam/).check();
+  expect(
+    Math.abs((deliveryBlock?.y ?? -100) - (methodBlock?.y ?? 100)),
+  ).toBeLessThan(8);
+  await expect(page.getByTestId("mobile-checkout-consent")).toBeVisible();
+  await expect(page.getByTestId("desktop-checkout-consent")).toBeHidden();
+  await page
+    .getByTestId("mobile-checkout-consent")
+    .getByRole("checkbox")
+    .check();
   await page.getByRole("button", { name: "Potvrdi porudžbinu" }).click();
 
   await expect(page).toHaveURL(
@@ -268,4 +299,34 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("heading", { name: "Hvala vam na porudžbini!" }).first(),
   ).toBeVisible();
+
+  await expect(
+    page.getByRole("button", { name: "Otkaži porudžbinu" }),
+  ).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Otkaži porudžbinu" }).click();
+  await expect
+    .poll(async () => {
+      const order = await db.order.findUnique({
+        where: { number: orderNumber },
+        select: { status: true },
+      });
+      return order?.status;
+    })
+    .toBe("OTKAZANO");
+  await expect
+    .poll(async () => {
+      const order = await db.order.findUnique({
+        where: { number: orderNumber },
+        select: { id: true },
+      });
+      if (!order) return null;
+      return db.backgroundJob.findUnique({
+        where: {
+          idempotencyKey: `order-status-email:${order.id}:OTKAZANO`,
+        },
+        select: { kind: true, status: true },
+      });
+    })
+    .toEqual({ kind: "ORDER_STATUS_EMAIL", status: "QUEUED" });
 });

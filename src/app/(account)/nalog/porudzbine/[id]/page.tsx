@@ -5,6 +5,7 @@ import { ArrowLeft, PackageCheck } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
 import { getOrderForUser } from "@/lib/api/orders";
 import { formatRsd } from "@/lib/format";
+import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 
 export const metadata: Metadata = {
   title: "Detalji porudžbine",
@@ -149,6 +150,13 @@ export default async function AccountOrderDetailPage({
             ) : null}
           </section>
         </aside>
+      </div>
+
+      <div className="mt-6">
+        <CancelOrderButton
+          orderNumber={order.number}
+          status={order.status}
+        />
       </div>
 
       <section className="mt-6 rounded-lg border border-border/70 bg-surface p-5">
