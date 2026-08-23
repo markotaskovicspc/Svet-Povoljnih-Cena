@@ -56,11 +56,15 @@ export async function GET(
       imageUrl: item.product?.media[0]?.url ?? null,
     })),
   });
+  const filename = `porudzbenica-${order.number.replaceAll("/", "-")}.pdf`;
+
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="porudzbenica-${order.number.replaceAll("/", "-")}.pdf"`,
-      "cache-control": "private, no-store",
+      "content-disposition": `inline; filename="${filename}"`,
+      "content-length": String(pdf.byteLength),
+      "cache-control": "private, no-store, max-age=0",
+      "x-content-type-options": "nosniff",
     },
   });
 }

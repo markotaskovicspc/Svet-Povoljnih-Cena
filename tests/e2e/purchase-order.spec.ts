@@ -516,7 +516,22 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       );
       expect(pdf.status()).toBe(200);
       expect(pdf.headers()["content-type"]).toContain("application/pdf");
-      expect((await pdf.body()).subarray(0, 8).toString()).toBe("%PDF-1.4");
+      expect(pdf.headers()["content-disposition"]).toMatch(
+        /^inline; filename="porudzbenica-.+\.pdf"$/,
+      );
+      expect(pdf.headers()["x-content-type-options"]).toBe("nosniff");
+      const pdfBody = await pdf.body();
+      expect(pdf.headers()["content-length"]).toBe(String(pdfBody.byteLength));
+      expect(pdfBody.subarray(0, 8).toString()).toBe("%PDF-1.4");
+      expect(pdfBody.subarray(-6).toString()).toBe("%%EOF\n");
+
+      const pdfLink = page.getByRole("link", { name: "Štampa PDF" });
+      await expect(pdfLink).toHaveAttribute("target", "_blank");
+      await expect(pdfLink).toHaveAttribute("rel", "noopener noreferrer");
+      await expect(pdfLink).toHaveAttribute(
+        "href",
+        `/api/admin/purchase-orders/${purchaseOrderId}/pdf`,
+      );
 
       const downloadPromise = page.waitForEvent("download");
       await page.getByRole("link", { name: "Štampa Excel" }).click();

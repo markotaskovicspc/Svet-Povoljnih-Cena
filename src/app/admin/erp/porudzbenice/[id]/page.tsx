@@ -438,12 +438,14 @@ export default async function PurchaseOrderEditorPage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link
+            <a
               href={`/api/admin/purchase-orders/${order.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
               Štampa PDF
-            </Link>
+            </a>
             <a
               href={`/api/admin/purchase-orders/${order.id}/excel`}
               download={`porudzbenica-${order.number.replaceAll("/", "-")}.xlsx`}

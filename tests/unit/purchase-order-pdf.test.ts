@@ -53,4 +53,48 @@ describe("purchase-order PDF", () => {
       writeFileSync(process.env.PO_PDF_SAMPLE_PATH, pdf);
     }
   });
+
+  it("builds a valid multi-page PDF for long and XML-sensitive article data", async () => {
+    const pdf = await buildPurchaseOrderPdf({
+      number: "QA & 14/26",
+      orderDate: new Date("2026-08-23T12:00:00Z"),
+      currency: "EUR",
+      totalPrice: 9_876.54,
+      totalVolume: 12.345,
+      parity: "DAP <Beograd>",
+      notes: 'Napomena sa & < > " znakovima',
+      supplier: {
+        name: "Dobavljač & partner",
+        address: "Industrijska 1",
+        city: "Beograd",
+        country: "Srbija",
+        paymentTerms: "30% avans & 70% pre utovara",
+      },
+      loadingLocation: { name: "Luka <Ningbo>", city: "Ningbo" },
+      items: Array.from({ length: 8 }, (_, index) => ({
+        sku: `QA-${index + 1}`,
+        name: `Dugačak naziv artikla & posebni znakovi <${index + 1}>`,
+        supplierProductName: `SUP-${index + 1}`,
+        attributes: 'Masiv & metal "premium"',
+        pattern: "Crna & bela",
+        packQty: 2,
+        qty: index + 1,
+        purchasePrice: 123.45 + index,
+        currency: "EUR",
+        totalVolume: 0.25 * (index + 1),
+        certificates: "CE & FSC",
+        barcode: `86000000000${index}`,
+      })),
+    });
+
+    const binary = pdf.toString("binary");
+    expect(pdf.subarray(0, 8).toString()).toBe("%PDF-1.4");
+    expect(pdf.subarray(-6).toString()).toBe("%%EOF\n");
+    expect(binary.match(/\/Type \/Page /g)).toHaveLength(2);
+    expect(binary).toContain("/Count 2");
+
+    if (process.env.PO_PDF_SAMPLE_PATH) {
+      writeFileSync(process.env.PO_PDF_SAMPLE_PATH, pdf);
+    }
+  });
 });
