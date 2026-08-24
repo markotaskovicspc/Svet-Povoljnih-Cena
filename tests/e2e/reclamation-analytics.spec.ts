@@ -88,12 +88,10 @@ test.describe("Admin analitika reklamacija", () => {
         where: { id: productA.id },
         data: {
           palletQty: 40,
-          widthCm: 10,
-          depthCm: 10,
-          heightCm: 10,
-          unitPackWidthCm: 100,
-          unitPackDepthCm: 100,
-          unitPackHeightCm: 100,
+          packQty: 1,
+          packWidthCm: 100,
+          packDepthCm: 100,
+          packHeightCm: 100,
         },
       }),
       db.warehouseStock.createMany({
@@ -425,9 +423,17 @@ test.describe("Admin analitika reklamacija", () => {
         hasText: `${prefix}-A-OPEN-31`,
       });
       await expect(card).toHaveCount(1);
-      await card.locator('select[name="status"]').selectOption("U_OBRADI");
-      await card.locator('textarea[name="note"]').fill("QA provera analitike");
-      await card.getByRole("button", { name: "Sačuvaj", exact: true }).click();
+      await card
+        .getByRole("link", { name: "Otvori detalj i obradu", exact: true })
+        .click();
+      await expect(page).toHaveURL(
+        new RegExp(`/admin/erp/reklamacije-dnevnik/${mutableReclamationId}$`),
+      );
+      await page.locator('select[name="status"]').selectOption("U_OBRADI");
+      await page.locator('textarea[name="note"]').fill("QA provera analitike");
+      await page
+        .getByRole("button", { name: "Promeni status", exact: true })
+        .click();
       await expect
         .poll(async () =>
           db.reclamation.findUnique({
@@ -538,7 +544,7 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(warehouseStockRow).toContainText("81 m³");
       await expect(
         page.getByText(
-          "Zapremina = stanje × Š × D × V pakovanja pojedinačnog artikla ÷ 1.000.000.",
+          "Zapremina koristi 69 m³ ÷ komada u kontejneru; ako taj podatak ne postoji, koristi Š × D × V transportnog pakovanja ÷ 1.000.000 ÷ komada u paketu.",
           { exact: false },
         ),
       ).toBeVisible();
@@ -640,26 +646,29 @@ test.describe("Admin analitika reklamacija", () => {
         waitUntil: "domcontentloaded",
       });
 
+      await page
+        .getByText("+ Ručno evidentiraj reklamaciju", { exact: false })
+        .click();
       const form = page.getByTestId("manual-reclamation-form");
       await expect(form).toBeVisible();
-      await form
-        .locator('input[name="orderNumberOrFiscal"]')
-        .fill(fixture.activeOrder);
-      await form.locator('input[name="sku"]').fill(fixture.skuA);
-      await form.locator('input[name="quantity"]').fill("1");
-      await form.locator('textarea[name="description"]').fill(
-        `${prefix} prerana ručna reklamacija`,
-      );
-      await form.getByRole("button", { name: "Evidentiraj reklamaciju" }).click();
-      await expect(form.getByRole("alert")).toContainText(
-        "samo za isporučenu porudžbinu",
-      );
+      const orderSearch = form.getByRole("combobox", {
+        name: "Broj porudžbine ili fiskalnog računa",
+      });
+      const skuSelect = form.locator('select[name="sku"]');
+      await orderSearch.fill(fixture.activeOrder);
+      await expect(
+        form.getByText("Nema isporučenih porudžbina sa tim nizom."),
+      ).toBeVisible();
+      await expect(skuSelect).toBeDisabled();
 
       const description = `${prefix} ručni unos reklamacije`;
+      await orderSearch.fill(fixture.deliveredOrder);
       await form
-        .locator('input[name="orderNumberOrFiscal"]')
-        .fill(fixture.deliveredOrder);
-      await form.locator('input[name="sku"]').fill(fixture.skuC);
+        .getByRole("option", { name: new RegExp(fixture.deliveredOrder) })
+        .click();
+      await expect(skuSelect).toBeEnabled();
+      await skuSelect.selectOption(fixture.skuC);
+      await form.locator('input[name="quantity"]').fill("1");
       await form.locator('select[name="type"]').selectOption("KVAR");
       await form.locator('select[name="request"]').selectOption("ZAMENA");
       await form.locator('textarea[name="description"]').fill(description);

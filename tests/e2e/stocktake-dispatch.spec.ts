@@ -404,8 +404,8 @@ function createDatabaseClient() {
     );
   }
   if (!isLocal) {
-    url.searchParams.set("sslmode", url.searchParams.get("sslmode") || "require");
-    url.searchParams.set("uselibpqcompat", "true");
+    url.searchParams.set("sslmode", "no-verify");
+    url.searchParams.delete("uselibpqcompat");
   }
   return new PrismaClient({
     adapter: new PrismaPg(

@@ -526,7 +526,7 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await expect(page.getByLabel("Vrsta porudžbine")).toHaveValue("WEB");
       await expect(page.getByLabel("Vrsta porudžbine")).toBeDisabled();
       await expect(
-        page.getByText("Ova porudžbina je samo za pregled:", {
+        page.getByText("Osnovni WEB podaci ostaju samo za pregled.", {
           exact: false,
         }),
       ).toBeVisible();

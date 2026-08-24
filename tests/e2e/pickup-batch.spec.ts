@@ -222,14 +222,14 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "Novi",
         "Uredi",
         "Obriši",
-        "Kreiraj adresnice",
+        "Proknjiži",
       ]) {
         await expect(
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
       }
       await expect(
-        page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
+        page.getByRole("button", { name: "Proknjiži", exact: true }),
       ).toBeDisabled();
       for (const header of ["Status", "Broj naloga", "Datum naloga"]) {
         await expect(
@@ -303,7 +303,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "aria-describedby",
         "pickup-posting-block-reason",
       );
-      await expect(blockReason).toContainText("Učitajte bar jednu");
+      await expect(blockReason).toContainText("MyGLS integracija nije uključena");
       await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
       const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
       const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);

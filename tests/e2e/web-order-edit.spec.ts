@@ -274,6 +274,9 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     await page.goto("/admin/erp/reklamacije-dnevnik", {
       waitUntil: "domcontentloaded",
     });
+    await page
+      .getByText("+ Ručno evidentiraj reklamaciju", { exact: false })
+      .click();
     const partialOrderDigits = runId.split("-").at(-1)!;
     await page
       .getByRole("combobox", {
