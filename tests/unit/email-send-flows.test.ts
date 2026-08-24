@@ -17,7 +17,7 @@ vi.mock("@/lib/email/config", () => ({
     from: "Svet povoljnih cena <no-reply@svetpovoljnihcena.rs>",
     marketingFrom: "Svet povoljnih cena <ponude@svetpovoljnihcena.rs>",
     replyTo: "podrska@svetpovoljnihcena.rs",
-    orderBcc: "porudzbine@svetpovoljnihcena.rs",
+    orderBcc: "office@svetpovoljnihcena.rs",
     reclamationsInbox: "reklamacije@svetpovoljnihcena.rs",
     commentsInbox: "komentar@svetpovoljnihcena.rs",
     inboundSecret: "test-inbound",
@@ -137,7 +137,10 @@ describe("all transactional Resend send flows", () => {
     expect(input).toMatchObject({
       kind: "order_confirmation",
       to: "delivered@resend.dev",
-      bcc: "porudzbine@svetpovoljnihcena.rs",
+      bcc: [
+        "office@svetpovoljnihcena.rs",
+        "porudzbine@svetpovoljnihcena.rs",
+      ],
       idempotencyKey: `order-conf:${order.id}`,
     });
     expect(input.html).toContain("Test proizvod");
@@ -363,7 +366,7 @@ describe("all transactional Resend send flows", () => {
     expect(input).toMatchObject({
       kind: "order_items_changed",
       to: "delivered@resend.dev",
-      bcc: "porudzbine@svetpovoljnihcena.rs",
+      bcc: "office@svetpovoljnihcena.rs",
       idempotencyKey: "order-items-changed:audit-operation",
     });
     expect(input.subject).toContain(order.id);
