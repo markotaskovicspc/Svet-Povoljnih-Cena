@@ -34,6 +34,7 @@ import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility"
 import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
 import { customerLoginHref } from "@/lib/auth/customer-callback";
+import { CategoryMenuGrid } from "./category-menu-grid";
 
 interface Crumb {
   label: string;
@@ -186,28 +187,28 @@ export function MobileNav({
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
             {stack.length > 1 ? (
-              <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+              <div className="shrink-0 border-b border-border">
                 <button
                   type="button"
                   onClick={back}
                   aria-label="Nazad"
-                  className="flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-left text-sm font-semibold text-brand-blue transition hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                  className="flex min-h-13 w-full items-center gap-3 py-3 pr-4 pl-[4.35rem] text-left text-sm font-semibold whitespace-nowrap text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 truncate">
-                    {current.label}
-                  </span>
+                  <span>Povratak na glavni meni</span>
                 </button>
-                {current.href ? (
-                  <Link
-                    href={current.href}
-                    onClick={close}
-                    className="shrink-0 rounded-md py-1 pl-2 text-sm font-semibold text-ink-700 transition hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                  >
-                    Pogledaj sve
-                  </Link>
-                ) : null}
               </div>
+            ) : null}
+
+            {current.href ? (
+              <Link
+                href={current.href}
+                onClick={close}
+                aria-label={`Pogledaj sve iz kategorije ${current.label}`}
+                className="flex min-h-14 shrink-0 items-center border-b border-border py-4 pr-4 pl-[6.1rem] text-[15px] font-semibold text-ink-900 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+              >
+                Pogledaj sve
+              </Link>
             ) : null}
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
@@ -225,59 +226,11 @@ export function MobileNav({
               >
                 {stack.length === 1 ? (
                   <>
-                    <div className="shrink-0 bg-white px-[clamp(10px,3.2vw,14px)] pt-3 pb-[clamp(24px,7vw,34px)]">
-                      <ul className="grid grid-cols-2 gap-x-[clamp(10px,3.2vw,14px)] gap-y-[clamp(24px,7vw,32px)]">
-                        {categories.map((node) => {
-                          const tile = {
-                            ...node,
-                            imageUrl: getCategoryMenuImage(node),
-                          };
-                          return (
-                            <li key={tile.href}>
-                              {getCategoryMenuAction(tile) === "submenu" ? (
-                                <button
-                                  type="button"
-                                  onClick={() => enter(tile)}
-                                  className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                                >
-                                  <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
-                                    <Image
-                                      src={tile.imageUrl}
-                                      alt=""
-                                      fill
-                                      sizes="(max-width: 768px) 45vw, 320px"
-                                      className="object-cover transition duration-200 group-hover:scale-105"
-                                    />
-                                  </span>
-                                  <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
-                                    {tile.label}
-                                  </span>
-                                </button>
-                              ) : (
-                                <Link
-                                  href={tile.href}
-                                  onClick={close}
-                                  className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                                >
-                                  <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
-                                    <Image
-                                      src={tile.imageUrl}
-                                      alt=""
-                                      fill
-                                      sizes="(max-width: 768px) 45vw, 320px"
-                                      className="object-cover transition duration-200 group-hover:scale-105"
-                                    />
-                                  </span>
-                                  <span className="mt-1.5 block min-h-[1.35em] px-1 text-center text-[clamp(10px,2.85vw,12px)] leading-[1.25] font-black text-ink-800 uppercase">
-                                    {tile.label}
-                                  </span>
-                                </Link>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                    <CategoryMenuGrid
+                      categories={current.nodes}
+                      onEnter={enter}
+                      onNavigate={close}
+                    />
 
                     <div className="min-h-fit flex-1 border-y border-brand-blue/10 bg-brand-blue px-[clamp(10px,3.2vw,14px)] pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                       <ul className="grid grid-cols-2 gap-[clamp(10px,3vw,13px)]">

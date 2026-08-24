@@ -20,6 +20,7 @@ import type { Tab } from "@/types";
 import { BrandLogo } from "./brand-logo";
 import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
+import { CategoryMenuGrid } from "./category-menu-grid";
 
 interface Crumb {
   label: string;
@@ -104,12 +105,10 @@ export function DesktopMenu({
               <button
                 type="button"
                 onClick={back}
-                className="flex min-h-13 w-full items-center gap-3 px-5 py-3 text-left text-sm font-semibold text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6"
+                className="flex min-h-13 w-full items-center gap-3 py-3 pr-5 pl-[4.6rem] text-left text-sm font-semibold whitespace-nowrap text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:pr-6 sm:pl-[4.85rem]"
               >
                 <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                <span className="min-w-0 break-words">
-                  Povratak na glavni meni
-                </span>
+                <span>Povratak na glavni meni</span>
               </button>
             </div>
           ) : null}
@@ -118,56 +117,19 @@ export function DesktopMenu({
             <Link
               href={current.href}
               onClick={close}
-              className="flex min-h-14 items-center border-b border-border px-5 py-4 text-[15px] font-semibold text-ink-900 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:px-6"
+              aria-label={`Pogledaj sve iz kategorije ${current.label}`}
+              className="flex min-h-14 items-center border-b border-border py-4 pr-5 pl-[6.1rem] text-[15px] font-semibold text-ink-900 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:pr-6 sm:pl-[6.6rem]"
             >
               Pogledaj sve
             </Link>
           ) : null}
 
           {stack.length === 1 ? (
-            <ul className="grid grid-cols-2 gap-x-3.5 gap-y-6 px-4 pt-4 pb-6 sm:px-5">
-              {current.nodes.map((node) => {
-                const categoryImageUrl = getCategoryMenuImage(node);
-                const tileContent = (
-                  <>
-                    <span className="relative block aspect-[1.45/1] w-full overflow-hidden rounded-md bg-muted-bg">
-                      <Image
-                        src={categoryImageUrl}
-                        alt=""
-                        fill
-                        sizes="180px"
-                        className="object-cover transition duration-200 group-hover:scale-105"
-                      />
-                    </span>
-                    <span className="mt-1.5 block min-h-[1.35em] overflow-visible px-1 text-center text-xs leading-[1.25] font-black whitespace-nowrap text-ink-800 uppercase">
-                      {node.label}
-                    </span>
-                  </>
-                );
-
-                return (
-                  <li key={node.href}>
-                    {getCategoryMenuAction(node) === "submenu" ? (
-                      <button
-                        type="button"
-                        onClick={() => enter(node)}
-                        className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                      >
-                        {tileContent}
-                      </button>
-                    ) : (
-                      <Link
-                        href={node.href}
-                        onClick={close}
-                        className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                      >
-                        {tileContent}
-                      </Link>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <CategoryMenuGrid
+              categories={current.nodes}
+              onEnter={enter}
+              onNavigate={close}
+            />
           ) : (
             <ul className="divide-y divide-border">
               {current.nodes.map((node) => {
