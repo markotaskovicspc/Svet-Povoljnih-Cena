@@ -57,32 +57,51 @@ export function CartView() {
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <section
-        aria-label="Stavke u korpi"
-        className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
-      >
-        <CartLoginOffer />
-        {lines.map((l) => (
-          <CartLineRow
-            key={l.sku}
-            line={l}
-            variant="page"
-            deliveryCategory={
-              quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
-            }
-          />
-        ))}
-      </section>
+    <>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section
+          aria-label="Stavke u korpi"
+          className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
+        >
+          <CartLoginOffer />
+          {lines.map((l) => (
+            <CartLineRow
+              key={l.sku}
+              line={l}
+              variant="page"
+              deliveryCategory={
+                quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
+              }
+            />
+          ))}
+        </section>
 
-      <CartSummary
-        subtotal={subtotal}
-        savings={savings}
-        fullTotal={fullTotal}
-        quote={quote}
-        deliveryLoading={deliveryLoading}
-      />
-    </div>
+        <CartSummary
+          subtotal={subtotal}
+          savings={savings}
+          fullTotal={fullTotal}
+          quote={quote}
+          deliveryLoading={deliveryLoading}
+        />
+      </div>
+
+      <div
+        data-testid="mobile-cart-checkout-bar"
+        className="border-border/60 fixed inset-x-0 bottom-0 z-50 border-t bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(36,30,25,0.10)] backdrop-blur md:hidden"
+      >
+        <Link
+          href="/checkout/podaci"
+          onClick={(event) => {
+            event.preventDefault();
+            window.location.assign("/checkout/podaci");
+          }}
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 mx-auto inline-flex w-full max-w-[var(--container-page)] items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Nastavi ka podacima za isporuku
+          <ArrowRight className="size-4" aria-hidden />
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -283,8 +302,12 @@ function CartSummary({
         </div>
 
         <Link
-          href="/checkout"
-          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-20 inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas shadow-soft-2 transition focus-visible:ring-2 focus-visible:outline-none md:static md:shadow-none"
+          href="/checkout/podaci"
+          onClick={(event) => {
+            event.preventDefault();
+            window.location.assign("/checkout/podaci");
+          }}
+          className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 hidden items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:inline-flex"
         >
           Nastavi ka podacima za isporuku
           <ArrowRight className="size-4" aria-hidden />

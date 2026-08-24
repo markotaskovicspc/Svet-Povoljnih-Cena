@@ -85,14 +85,10 @@ export default async function CheckoutPodaciPage({
           { label: "Završetak porudžbine" },
         ]}
       />
-      <h1 className="font-display mt-2 text-2xl text-ink-900 md:text-4xl">
+      <h1 className="font-display mt-2 hidden text-2xl text-ink-900 sm:block md:text-4xl">
         Završetak porudžbine
       </h1>
-      <p className="mt-1 max-w-prose text-xs text-ink-500 md:text-sm">
-        Sve što vam treba za bezbednu kupovinu — u jednom toku, bez odlaska sa
-        stranice.
-      </p>
-      <div className="mt-3 md:mt-5">
+      <div className="mt-2 sm:mt-3 md:mt-5">
         {account?.email && !account.emailVerified ? (
           <div className="mb-4">
             <EmailVerificationBanner email={account.email} />

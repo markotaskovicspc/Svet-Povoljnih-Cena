@@ -725,6 +725,8 @@ export function CheckoutFlow({
 
   return (
     <FormProvider {...methods}>
+      <MobileCheckoutHeader step={step} />
+
       <div className="grid gap-5 [overflow-anchor:none] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
         <div
           className={cn(
@@ -737,27 +739,35 @@ export function CheckoutFlow({
             active={step !== "identity"}
             onSubmit={handleSubmit(onSubmit, onInvalid)}
           >
-            <CheckoutStepper activeStep={step} steps={stepOrder} />
+            <div className="hidden sm:block">
+              <CheckoutStepper activeStep={step} steps={stepOrder} />
+            </div>
 
           <div
             className={cn(
-              "border-border/60 border-t",
+              "sm:border-border/60 sm:border-t",
               step === "review"
-                ? "mt-4 pt-4"
+                ? "sm:mt-4 sm:pt-4"
                 : isCompactDesktopStep
-                  ? "mt-4 pt-4 lg:mt-3 lg:pt-3"
-                  : "mt-5 pt-5",
+                  ? "sm:mt-4 sm:pt-4 lg:mt-3 lg:pt-3"
+                  : "sm:mt-5 sm:pt-5",
             )}
           >
             <h2
               className={cn(
                 "font-display text-xl text-ink-900 sm:text-2xl",
                 isCompactDesktopStep && "lg:text-xl",
+                step === "shipping" && "sr-only sm:not-sr-only",
               )}
             >
               {STEP_TITLES[step]}
             </h2>
-            <div className={cn("mt-4", isCompactDesktopStep && "lg:mt-3")}>
+            <div
+              className={cn(
+                step === "shipping" ? "mt-0 sm:mt-4" : "mt-4",
+                isCompactDesktopStep && "lg:mt-3",
+              )}
+            >
               <AnimatePresence>
                 <motion.div
                   key={step}
@@ -894,6 +904,58 @@ export function CheckoutFlow({
         </div>
       )}
     </FormProvider>
+  );
+}
+
+function MobileCheckoutHeader({ step }: { step: CheckoutStep }) {
+  const activeStep = step === "review" ? 2 : 1;
+
+  return (
+    <div
+      data-testid="mobile-checkout-header"
+      className="mb-3 flex items-center justify-between gap-3 sm:hidden"
+    >
+      <h1 className="font-display min-w-0 whitespace-nowrap text-xl leading-none text-ink-900">
+        Završetak porudžbine
+      </h1>
+      <ol
+        aria-label="Dva koraka do završetka porudžbine"
+        className="flex shrink-0 items-center gap-2"
+      >
+        {[1, 2].map((number) => {
+          const current = number === activeStep;
+          const completed = number < activeStep;
+          return (
+            <li key={number} className="flex items-center gap-2">
+              {number > 1 ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-px w-4",
+                    completed || current ? "bg-ink-900/40" : "bg-border/60",
+                  )}
+                />
+              ) : null}
+              <span
+                data-checkout-mobile-step={number}
+                aria-label={`Korak ${number} od 2`}
+                aria-current={current ? "step" : undefined}
+                className={cn(
+                  "inline-flex size-7 items-center justify-center rounded-full text-xs font-medium ring-1",
+                  completed && "bg-ink-900 text-canvas ring-ink-900",
+                  current && "bg-walnut text-canvas ring-walnut",
+                  !completed &&
+                    !current &&
+                    "ring-border/60 bg-surface text-ink-500",
+                )}
+              >
+                {number}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

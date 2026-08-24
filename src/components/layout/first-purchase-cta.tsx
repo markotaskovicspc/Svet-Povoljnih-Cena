@@ -44,6 +44,7 @@ export function FirstPurchaseCta() {
     !visible ||
     isCustomerLoggedIn ||
     pathname.startsWith("/nalog") ||
+    pathname.startsWith("/korpa") ||
     pathname.startsWith("/checkout")
   ) {
     return null;

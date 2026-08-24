@@ -156,8 +156,12 @@ export function CartDrawer() {
                 Pregled korpe
               </Link>
               <Link
-                href="/checkout"
-                onClick={close}
+                href="/checkout/podaci"
+                onClick={(event) => {
+                  event.preventDefault();
+                  close();
+                  window.location.assign("/checkout/podaci");
+                }}
                 className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex flex-1 items-center justify-center rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
               >
                 Plati

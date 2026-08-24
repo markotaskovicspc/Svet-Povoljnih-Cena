@@ -94,16 +94,14 @@ test("successful guest order lands on the confirmation route", async ({
       "spc-cart",
       JSON.stringify({
         state: {
-          lines: [
-            {
-              sku: "QA-NAVIGATION",
-              name: "QA checkout navigation",
-              slug: "qa-checkout-navigation",
-              qty: 1,
-              unitPriceFull: 100,
-              unitPriceSale: 100,
-            },
-          ],
+          lines: Array.from({ length: 4 }, (_, index) => ({
+            sku: `QA-NAVIGATION-${index + 1}`,
+            name: `QA checkout navigation ${index + 1}`,
+            slug: `qa-checkout-navigation-${index + 1}`,
+            qty: 1,
+            unitPriceFull: 100,
+            unitPriceSale: 100,
+          })),
         },
         version: 0,
       }),
@@ -196,7 +194,55 @@ test("successful guest order lands on the confirmation route", async ({
     }),
   );
 
-  await page.goto("/checkout/podaci", { waitUntil: "domcontentloaded" });
+  await page.goto("/korpa", { waitUntil: "domcontentloaded" });
+  const mobileCartBar = page.getByTestId("mobile-cart-checkout-bar");
+  await expect(mobileCartBar).toBeVisible();
+  await expect(mobileCartBar).toHaveCSS("position", "fixed");
+  const mobileCartBarBox = await mobileCartBar.boundingBox();
+  expect(mobileCartBarBox?.y).toBeGreaterThanOrEqual(0);
+  expect(
+    (mobileCartBarBox?.y ?? 0) + (mobileCartBarBox?.height ?? 0),
+  ).toBeLessThanOrEqual(844);
+  await mobileCartBar
+    .getByRole("link", { name: "Nastavi ka podacima za isporuku" })
+    .click();
+  await expect(page).toHaveURL(/\/checkout\/podaci$/);
+
+  const mobileCheckoutHeader = page.getByTestId("mobile-checkout-header");
+  await expect(mobileCheckoutHeader).toBeVisible();
+  await expect(
+    mobileCheckoutHeader.getByRole("heading", {
+      name: "Završetak porudžbine",
+    }),
+  ).toBeVisible();
+  await expect(
+    mobileCheckoutHeader.locator("[data-checkout-mobile-step]"),
+  ).toHaveCount(2);
+  await expect(
+    page.getByText(
+      "Sve što vam treba za bezbednu kupovinu — u jednom toku, bez odlaska sa stranice.",
+    ),
+  ).toHaveCount(0);
+  const [checkoutTitleBox, checkoutStepOneBox, checkoutStepTwoBox] =
+    await Promise.all([
+      mobileCheckoutHeader
+        .getByRole("heading", { name: "Završetak porudžbine" })
+        .boundingBox(),
+      mobileCheckoutHeader
+        .locator('[data-checkout-mobile-step="1"]')
+        .boundingBox(),
+      mobileCheckoutHeader
+        .locator('[data-checkout-mobile-step="2"]')
+        .boundingBox(),
+    ]);
+  const titleCenterY =
+    (checkoutTitleBox?.y ?? 0) + (checkoutTitleBox?.height ?? 0) / 2;
+  expect(checkoutTitleBox?.height).toBeLessThanOrEqual(32);
+  for (const stepBox of [checkoutStepOneBox, checkoutStepTwoBox]) {
+    const stepCenterY = (stepBox?.y ?? 0) + (stepBox?.height ?? 0) / 2;
+    expect(Math.abs(titleCenterY - stepCenterY)).toBeLessThanOrEqual(4);
+  }
+
   await page.getByRole("button", { name: "Nastavi kao gost" }).click();
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
@@ -205,7 +251,7 @@ test("successful guest order lands on the confirmation route", async ({
     .toBeLessThanOrEqual(8);
   await expect(
     page.getByRole("heading", { name: "Isporuka i plaćanje" }),
-  ).toBeVisible();
+  ).toHaveClass(/sr-only/);
   await expect(page.getByTestId("mobile-checkout-navigation")).toHaveCSS(
     "position",
     "fixed",
