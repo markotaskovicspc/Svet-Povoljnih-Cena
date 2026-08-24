@@ -98,13 +98,115 @@ export function paginateSearchSkuRows<T>(rows: T[], offset: number, limit: numbe
 export function normalizeSearchTerm(value: string) {
   return value
     .trim()
-    .normalize("NFC")
+    .normalize("NFD")
     .toLocaleLowerCase("sr-Latn-RS")
+    .replace(/đ/g, "d")
+    .replace(/\p{M}+/gu, "")
     .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+export function tokenizeSearchQuery(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .trim()
+        .normalize("NFD")
+        .toLocaleLowerCase("sr-Latn-RS")
+        .replace(/đ/g, "d")
+        .replace(/\p{M}+/gu, "")
+        .split(/[^\p{L}\p{N}]+/gu)
+        .filter((token) => token.length >= 2 || /^\d$/.test(token)),
+    ),
+  );
+}
+
+export function searchTextMatchesTokens(query: string, values: string[]) {
+  const queryTokens = tokenizeSearchQuery(query);
+  if (!queryTokens.length) return false;
+  const words = values.flatMap(tokenizeSearchQuery);
+
+  return queryTokens.every((token) =>
+    words.some(
+      (word) =>
+        word === token ||
+        (token.length >= 3 && word.startsWith(token)),
+    ),
+  );
 }
 
 export function isCodeLikeSearchQuery(value: string) {
   return /^[a-z0-9_-]{2,8}$/i.test(value.trim()) && !value.includes(" ");
+}
+
+const SQL_DIACRITICS = "čćžšđ";
+const SQL_ASCII = "cczsd";
+const FUZZY_TOKEN_MIN_LENGTH = 5;
+const FUZZY_SIMILARITY_THRESHOLD = 0.55;
+
+function normalizedSqlText(value: Prisma.Sql) {
+  return Prisma.sql`translate(lower(COALESCE(${value}, '')), ${SQL_DIACRITICS}, ${SQL_ASCII})`;
+}
+
+function normalizedSqlPhrase(value: Prisma.Sql) {
+  return Prisma.sql`btrim(regexp_replace(${normalizedSqlText(value)}, '[^[:alnum:]]+', ' ', 'g'))`;
+}
+
+function wordMatchSql(
+  value: Prisma.Sql,
+  token: string,
+  options: { fuzzy?: boolean; prefix?: boolean } = {},
+) {
+  const allowPrefix = options.prefix !== false && token.length >= 3;
+  const allowFuzzy = options.fuzzy !== false && token.length >= FUZZY_TOKEN_MIN_LENGTH;
+
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+        FROM unnest(
+          regexp_split_to_array(${normalizedSqlText(value)}, '[^[:alnum:]]+')
+        ) AS search_words(word)
+       WHERE search_words.word = ${token}
+          OR (${allowPrefix} AND search_words.word LIKE ${`${token}%`})
+          OR (
+            ${allowFuzzy}
+            AND similarity(search_words.word, ${token}) >= ${FUZZY_SIMILARITY_THRESHOLD}
+          )
+    )
+  `;
+}
+
+function identifierContainsSql(value: Prisma.Sql, token: string) {
+  return Prisma.sql`${normalizedSqlText(value)} LIKE ${`%${token}%`}`;
+}
+
+function categoryTokenMatchSql(token: string, productAlias = "p") {
+  const categoryName = Prisma.raw("search_category.name");
+  return Prisma.sql`
+    EXISTS (
+      SELECT 1
+        FROM "ProductCategory" search_pc
+        JOIN "Category" search_category ON search_category.id = search_pc."categoryId"
+       WHERE search_pc."productId" = ${Prisma.raw(`${productAlias}.id`)}
+         AND ${wordMatchSql(categoryName, token)}
+    )
+  `;
+}
+
+function productTokenMatchSql(token: string) {
+  return Prisma.sql`(
+    ${wordMatchSql(Prisma.raw("p.name"), token)}
+    OR ${wordMatchSql(Prisma.raw('p."sizeLabel"'), token)}
+    OR ${identifierContainsSql(Prisma.raw("p.sku"), token)}
+    OR ${identifierContainsSql(Prisma.raw("p.barcode"), token)}
+    OR ${categoryTokenMatchSql(token)}
+  )`;
+}
+
+function allTokenMatchesSql(
+  tokens: string[],
+  matcher: (token: string) => Prisma.Sql,
+) {
+  return Prisma.join(tokens.map(matcher), " AND ");
 }
 
 async function searchProductHits(
@@ -117,8 +219,16 @@ async function searchProductHits(
   const safeLimit = Math.min(Math.max(limit, 1), 96);
   const safeOffset = Math.max(0, Math.round(offset));
   const queryLimit = Math.min(1000, Math.max(safeLimit + safeOffset, safeLimit) * 4);
-  const codeLike = isCodeLikeSearchQuery(q);
-  const normalizedTerm = normalizeSearchTerm(q);
+  const tokens = tokenizeSearchQuery(q);
+  if (!tokens.length) return [];
+  const normalizedPhrase = tokens.join(" ");
+  const productTokenMatches = allTokenMatchesSql(tokens, productTokenMatchSql);
+  const allExactNameTokens = allTokenMatchesSql(tokens, (token) =>
+    wordMatchSql(Prisma.raw("p.name"), token, { fuzzy: false, prefix: false }),
+  );
+  const allPrefixNameTokens = allTokenMatchesSql(tokens, (token) =>
+    wordMatchSql(Prisma.raw("p.name"), token, { fuzzy: false }),
+  );
   const enforceAutoAvailability = isWebAutoAvailabilityEnforced();
   if (!hasDatabaseConnection()) {
     throw new SearchUnavailableError("Database connection string is not configured.");
@@ -207,56 +317,14 @@ async function searchProductHits(
               AND pl.kind = 'RETAIL'
               AND pl.active = true
          )
-         AND (
-           (${codeLike} AND (
-             lower(${q}) = ANY (
-               regexp_split_to_array(lower(p.name), '[^[:alnum:]_-]+')
-             )
-             OR regexp_replace(lower(p.name), '[^[:alnum:]]+', '', 'g')
-                  LIKE ${'%' + normalizedTerm + '%'}
-             OR p.name ILIKE ${'%' + q + '%'}
-             OR p."sizeLabel" ILIKE ${'%' + q + '%'}
-             OR p.sku ILIKE ${'%' + q + '%'}
-             OR p.barcode ILIKE ${'%' + q + '%'}
-             OR EXISTS (
-               SELECT 1
-                 FROM "ProductCategory" pc1
-                 JOIN "Category" c1 ON c1.id = pc1."categoryId"
-                WHERE pc1."productId" = p.id
-                  AND c1.name ILIKE ${'%' + q + '%'}
-             )
-           ))
-           OR (${!codeLike} AND (
-             p.name ILIKE ${'%' + q + '%'}
-             OR p."sizeLabel" ILIKE ${'%' + q + '%'}
-             OR p.sku ILIKE ${'%' + q + '%'}
-             OR p.barcode ILIKE ${'%' + q + '%'}
-             OR EXISTS (
-               SELECT 1
-                 FROM "ProductCategory" pc2
-                 JOIN "Category" c2 ON c2.id = pc2."categoryId"
-                WHERE pc2."productId" = p.id
-                  AND c2.name ILIKE ${'%' + q + '%'}
-             )
-           ))
-         )
+         AND ${productTokenMatches}
        ORDER BY CASE
-                  WHEN lower(p.name) = lower(${q}) THEN 0
-                  WHEN lower(p.sku) = lower(${q}) OR lower(COALESCE(p.barcode, '')) = lower(${q}) THEN 1
-                  WHEN ${codeLike} AND lower(${q}) = ANY (
-                    regexp_split_to_array(lower(p.name), '[^[:alnum:]_-]+')
-                  ) THEN 2
-                  WHEN p.name ILIKE ${q + '%'} THEN 2
-                  WHEN p.name ILIKE ${'%' + q + '%'} THEN 3
-                  WHEN p.sku ILIKE ${'%' + q + '%'} OR p.barcode ILIKE ${'%' + q + '%'} THEN 4
-                  WHEN EXISTS (
-                    SELECT 1
-                      FROM "ProductCategory" pc3
-                      JOIN "Category" c3 ON c3.id = pc3."categoryId"
-                     WHERE pc3."productId" = p.id
-                       AND c3.name ILIKE ${'%' + q + '%'}
-                  ) THEN 5
-                  ELSE 6
+                  WHEN lower(p.sku) = lower(${q})
+                    OR lower(COALESCE(p.barcode, '')) = lower(${q}) THEN 0
+                  WHEN ${normalizedSqlPhrase(Prisma.raw("p.name"))} = ${normalizedPhrase} THEN 1
+                  WHEN ${allExactNameTokens} THEN 2
+                  WHEN ${allPrefixNameTokens} THEN 3
+                  ELSE 4
                 END ASC,
                 is_hero DESC,
                 COALESCE(p."discountPct", 0) DESC,
@@ -332,11 +400,34 @@ function navigationRank(name: string, query: string) {
 }
 
 async function searchNavigationHits(query: string): Promise<SearchNavigationHit[]> {
-  const categories = await db.category.findMany({
-    where: { name: { contains: query, mode: "insensitive" } },
-    select: { id: true, name: true, path: true, level: true },
-    take: 12,
-  });
+  const tokens = tokenizeSearchQuery(query);
+  if (!tokens.length) return [];
+  const categoryName = Prisma.raw("search_nav.name");
+  const exactTokenMatches = allTokenMatchesSql(tokens, (token) =>
+    wordMatchSql(categoryName, token, { fuzzy: false, prefix: false }),
+  );
+  const prefixTokenMatches = allTokenMatchesSql(tokens, (token) =>
+    wordMatchSql(categoryName, token, { fuzzy: false }),
+  );
+  const tokenMatches = allTokenMatchesSql(tokens, (token) =>
+    wordMatchSql(categoryName, token),
+  );
+  const normalizedPhrase = tokens.join(" ");
+  const categories = await db.$queryRaw<
+    Array<{ id: string; name: string; path: string; level: number }>
+  >(Prisma.sql`
+    SELECT search_nav.id, search_nav.name, search_nav.path, search_nav.level
+      FROM "Category" search_nav
+     WHERE ${tokenMatches}
+     ORDER BY CASE
+                WHEN ${normalizedSqlPhrase(categoryName)} = ${normalizedPhrase} THEN 0
+                WHEN ${exactTokenMatches} THEN 1
+                WHEN ${prefixTokenMatches} THEN 2
+                ELSE 3
+              END ASC,
+              search_nav.name ASC
+     LIMIT 12
+  `);
 
   return categories
     .map((category) => ({
