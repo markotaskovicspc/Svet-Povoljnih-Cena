@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdir, writeFile } from "node:fs/promises";
 import type { Order, OrderStatus, Reclamation, ReclamationStatus } from "@/types";
 
 const mocks = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ import {
   sendReclamationReceipt,
   sendReclamationStatusChanged,
 } from "@/lib/email/send";
+import { buildWithdrawalFormPageSvgs } from "@/lib/email/pdf";
 
 const success = { ok: true as const, id: "resend-message-id", provider: "resend" as const };
 
@@ -141,12 +143,29 @@ describe("all transactional Resend send flows", () => {
     });
     expect(input.html).toContain("Test proizvod");
     expect(input.html).toContain("/documents/garantni-list-logo.jpeg");
+    expect(input.html).toContain("Porudžbina je primljena");
+    expect(input.html).toContain("Dokumenta u prilogu");
+    expect(input.html).toContain("Garantni list je popunjen");
+    expect(input.html).toContain("Garantni list - garancija 1 (jedna) godina");
+    expect(input.html).toContain("Predračun sa pregledom cena i PDV-a");
+    expect(input.html).toContain("Plaćeno");
+    expect(input.html).not.toContain("Svet Akcija");
     expect(input.html).toContain("/reklamacije/prijava?order=");
     expect(input.html).toContain("guest-order-access-token-123456789");
     expect(input.html).toContain("Vrednost artikala");
     expect(input.html).toContain("Popust za prvu kupovinu");
     expect(input.html).toContain("Popust za sačuvanu karticu");
     expect(input.text).toContain("SPC-AUDIT-0001");
+    expect(input.metadata).toEqual({
+      orderId: order.id,
+      attachmentNames: [
+        `predracun-racun-${order.id}.pdf`,
+        `obrazac-za-odustajanje-${order.id}.pdf`,
+        `garantni-list-${order.id}.pdf`,
+      ],
+      attachmentCount: 3,
+      guaranteeItemCount: 1,
+    });
     expect(input.attachments).toEqual([
       expect.objectContaining({ contentType: "application/pdf" }),
       expect.objectContaining({ contentType: "application/pdf" }),
@@ -156,6 +175,111 @@ describe("all transactional Resend send flows", () => {
       }),
     ]);
     expect(input.attachments.every((item: { content: string }) => item.content.length > 100)).toBe(true);
+
+    if (process.env.ORDER_EMAIL_SAMPLE_DIR) {
+      const previewOrder: Order = {
+        ...order,
+        id: "SPC-2026-PREGLED",
+        items: [
+          {
+            ...order.items[0]!,
+            sku: "110087",
+            name: "Trpezarijska stolica URBAN SEAT",
+            qty: 3,
+            unitPriceFull: 1_999,
+            unitPriceSale: 1_499,
+            withAssembly: false,
+            assemblyPrice: null,
+          },
+          {
+            ...order.items[0]!,
+            sku: "110185",
+            name: "Korpa za veš CLEAN BOX",
+            qty: 1,
+            unitPriceFull: 2_999,
+            unitPriceSale: 2_427,
+            withAssembly: false,
+            assemblyPrice: null,
+          },
+          {
+            ...order.items[0]!,
+            sku: "110086",
+            name: "Trpezarijska stolica ELEGANCE SEAT",
+            qty: 1,
+            unitPriceFull: 3_099,
+            unitPriceSale: 2_570,
+            withAssembly: false,
+            assemblyPrice: null,
+          },
+        ],
+        subtotal: 9_494,
+        savings: 2_601,
+        shipping: 599,
+        assemblyTotal: 0,
+        voucherCode: null,
+        voucherDiscount: null,
+        firstPurchaseDiscount: null,
+        savedCardDiscount: null,
+        total: 10_093,
+        paymentMethod: "pouzece_gotovina",
+        payment: { status: "pending" },
+        shippingAddress: {
+          ...order.shippingAddress,
+          firstName: "QA20",
+          lastName: "Kupac",
+          street: "QA test ulica 20",
+          city: "Novi Sad",
+          postalCode: "21000",
+        },
+      };
+      await sendOrderConfirmation({
+        order: previewOrder,
+        to: "preview@example.invalid",
+        accessToken: "preview-access-token-123456789",
+      });
+      const previewInput = mocks.trackedDispatch.mock.calls.at(-1)?.[0];
+      await mkdir(process.env.ORDER_EMAIL_SAMPLE_DIR, { recursive: true });
+      await Promise.all([
+        writeFile(
+          `${process.env.ORDER_EMAIL_SAMPLE_DIR}/order-confirmation.html`,
+          previewInput.html,
+        ),
+        writeFile(
+          `${process.env.ORDER_EMAIL_SAMPLE_DIR}/order-confirmation.txt`,
+          previewInput.text,
+        ),
+        writeFile(
+          `${process.env.ORDER_EMAIL_SAMPLE_DIR}/withdrawal-preview.svg`,
+          buildWithdrawalFormPageSvgs({
+            number: previewOrder.id,
+            createdAt: new Date(previewOrder.createdAt),
+            items: previewOrder.items.map((item) => ({
+              sku: item.sku,
+              name: item.name,
+              qty: item.qty,
+              unitPriceSale: item.unitPriceSale,
+              assemblyPrice: item.assemblyPrice ?? null,
+            })),
+            subtotal: previewOrder.subtotal,
+            shipping: previewOrder.shipping,
+            assemblyTotal: previewOrder.assemblyTotal,
+            voucherCode: previewOrder.voucherCode ?? null,
+            voucherDiscount: previewOrder.voucherDiscount ?? null,
+            firstPurchaseDiscount: previewOrder.firstPurchaseDiscount ?? null,
+            savedCardDiscount: previewOrder.savedCardDiscount ?? null,
+            total: previewOrder.total,
+            paymentMethod: previewOrder.paymentMethod,
+            shipping_address: previewOrder.shippingAddress,
+          })[0]!,
+        ),
+        ...previewInput.attachments.map((attachment: { filename: string; content: string }) =>
+          writeFile(
+            `${process.env.ORDER_EMAIL_SAMPLE_DIR}/${attachment.filename}`,
+            Buffer.from(attachment.content, "base64"),
+          ),
+        ),
+      ]);
+    }
   });
 
   it("does not attach a guarantee when every order item is Rabalux", async () => {
@@ -172,11 +296,51 @@ describe("all transactional Resend send flows", () => {
 
     const input = mocks.trackedDispatch.mock.calls[0]?.[0];
     expect(input.attachments).toHaveLength(2);
+    expect(input.html).not.toContain("Garantni list je popunjen");
+    expect(input.metadata).toMatchObject({
+      attachmentCount: 2,
+      guaranteeItemCount: 0,
+    });
     expect(
       input.attachments.some((attachment: { filename: string }) =>
         attachment.filename.startsWith("garantni-list-"),
       ),
     ).toBe(false);
+  });
+
+  it("shows customer-friendly cash-on-delivery labels instead of raw values", async () => {
+    await sendOrderConfirmation({
+      order: {
+        ...order,
+        paymentMethod: "pouzece_gotovina",
+        payment: { status: "pending" },
+      },
+      to: "delivered@resend.dev",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.html).toContain("Pouzeće - gotovina");
+    expect(input.html).toContain("Plaćanje prilikom isporuke");
+    expect(input.html).not.toContain("pouzece_gotovina");
+    expect(input.html).not.toContain(">pending<");
+  });
+
+  it("keeps attachment copy aligned when purchase documents are disabled", async () => {
+    await sendOrderConfirmation({
+      order,
+      to: "delivered@resend.dev",
+      attachInvoice: false,
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.html).not.toContain("Predračun sa pregledom cena i PDV-a");
+    expect(input.html).not.toContain("Obrazac za odustanak od kupovine");
+    expect(input.html).toContain("Garantni list - garancija");
+    expect(input.attachments).toHaveLength(1);
+    expect(input.metadata).toMatchObject({
+      attachmentCount: 1,
+      guaranteeItemCount: 1,
+    });
   });
 
   it.each<OrderStatus>([

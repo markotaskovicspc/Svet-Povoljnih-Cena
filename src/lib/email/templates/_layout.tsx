@@ -1,13 +1,15 @@
-/**
- * React Email components — preview-only renderers used in Phase 2 to lock
- * copy/structure. Phase 4 swaps the host element to `@react-email/components`
- * so the same JSX can be rendered into HTML by Resend.
- *
- * Until then, these compile to ordinary divs/tables and can be rendered in a
- * future internal `/admin/email-preview` route.
- */
 import type { ReactNode } from "react";
 import { BRAND } from "@/lib/brand";
+
+const COLORS = {
+  blue: "#123F5A",
+  blueSoft: "#EAF4F7",
+  ink: "#172B36",
+  muted: "#5F6F78",
+  line: "#DCE6EA",
+  page: "#F2F6F8",
+  white: "#FFFFFF",
+} as const;
 
 export interface EmailLayoutProps {
   preview: string;
@@ -15,87 +17,133 @@ export interface EmailLayoutProps {
   footerNote?: string;
 }
 
-export function EmailLayout({
-  preview,
-  children,
-  footerNote,
-}: EmailLayoutProps) {
+/** Table-based, inline-only shell that remains stable in Gmail and Outlook. */
+export function EmailLayout({ preview, children, footerNote }: EmailLayoutProps) {
   return (
-    <div
+    <table
       lang="sr-Latn"
+      role="presentation"
+      cellPadding={0}
+      cellSpacing={0}
+      width="100%"
       style={{
+        width: "100%",
+        borderCollapse: "collapse",
+        backgroundColor: COLORS.page,
+        color: COLORS.ink,
         fontFamily:
-          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        backgroundColor: "#FAF7F2",
-        color: "#1A1714",
-        padding: "32px 16px",
+          "Arial, Helvetica, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}
     >
-      <span style={{ display: "none", overflow: "hidden", maxHeight: 0 }}>
-        {preview}
-      </span>
-      <table
-        role="presentation"
-        cellPadding={0}
-        cellSpacing={0}
-        width="100%"
-        style={{ maxWidth: 560, margin: "0 auto" }}
-      >
-        <tbody>
-          <tr>
-            <td style={{ padding: "0 0 24px" }}>
-              {/* Email clients require a plain img element with inline dimensions. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`${BRAND.url}/documents/garantni-list-logo.jpeg`}
-                alt={BRAND.name}
-                width="240"
-                height="57"
-                style={{
-                  display: "block",
-                  width: 240,
-                  maxWidth: "72%",
-                  height: "auto",
-                }}
-              />
-            </td>
-          </tr>
-          <tr>
-            <td
+      <tbody>
+        <tr>
+          <td align="center" style={{ padding: "28px 12px" }}>
+            <span
               style={{
-                backgroundColor: "#FFFFFF",
-                borderRadius: 16,
-                padding: 32,
-                boxShadow: "0 2px 6px rgba(46,35,24,0.06)",
+                display: "none",
+                overflow: "hidden",
+                maxHeight: 0,
+                maxWidth: 0,
+                opacity: 0,
+                color: "transparent",
+                lineHeight: "1px",
               }}
             >
-              {children}
-            </td>
-          </tr>
-          <tr>
-            <td
+              {preview}
+            </span>
+            <table
+              role="presentation"
+              cellPadding={0}
+              cellSpacing={0}
+              width="100%"
               style={{
-                padding: "20px 8px",
-                fontSize: 11,
-                color: "#6B6259",
-                lineHeight: 1.5,
+                width: "100%",
+                maxWidth: 640,
+                borderCollapse: "separate",
+                backgroundColor: COLORS.white,
+                borderTop: `5px solid ${COLORS.blue}`,
+                borderRadius: 12,
+                boxShadow: "0 8px 24px rgba(18,63,90,0.10)",
               }}
             >
-              {footerNote ??
-                "Dobili ste ovu poruku jer ste izvršili akciju na svetpovoljnihcena.rs."}
-              <br />
-              {BRAND.legalName} · Beograd, Srbija ·{" "}
-              <a
-                href="https://www.svetpovoljnihcena.rs"
-                style={{ color: "#6B4423" }}
-              >
-                www.svetpovoljnihcena.rs
-              </a>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              <tbody>
+                <tr>
+                  <td style={{ padding: "28px 24px 18px" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`${BRAND.url}/documents/garantni-list-logo.jpeg`}
+                      alt={BRAND.name}
+                      width="220"
+                      height="36"
+                      style={{
+                        display: "block",
+                        width: 220,
+                        maxWidth: "78%",
+                        height: "auto",
+                        border: 0,
+                      }}
+                    />
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "8px 24px 32px" }}>{children}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table
+              role="presentation"
+              cellPadding={0}
+              cellSpacing={0}
+              width="100%"
+              style={{ width: "100%", maxWidth: 640, borderCollapse: "collapse" }}
+            >
+              <tbody>
+                <tr>
+                  <td
+                    align="center"
+                    style={{
+                      padding: "18px 12px 0",
+                      fontSize: 11,
+                      color: COLORS.muted,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {footerNote ??
+                      "Dobili ste ovu poruku jer ste izvršili akciju na sajtu svetpovoljnihcena.rs."}
+                    <br />
+                    {BRAND.legalName} · Beograd, Srbija
+                    <br />
+                    <a
+                      href={BRAND.url}
+                      style={{ color: COLORS.blue, textDecoration: "underline" }}
+                    >
+                      {BRAND.domain}
+                    </a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+export function EmailEyebrow({ children }: { children: ReactNode }) {
+  return (
+    <p
+      style={{
+        margin: "0 0 8px",
+        color: COLORS.blue,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+      }}
+    >
+      {children}
+    </p>
   );
 }
 
@@ -103,14 +151,30 @@ export function EmailHeading({ children }: { children: ReactNode }) {
   return (
     <h1
       style={{
-        fontFamily: "Playfair Display, Georgia, serif",
-        fontSize: 26,
-        margin: "0 0 8px",
-        letterSpacing: "-0.01em",
+        color: COLORS.ink,
+        fontSize: 28,
+        lineHeight: 1.2,
+        margin: "0 0 10px",
+        letterSpacing: "-0.02em",
       }}
     >
       {children}
     </h1>
+  );
+}
+
+export function EmailSectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <h2
+      style={{
+        color: COLORS.ink,
+        fontSize: 16,
+        lineHeight: 1.3,
+        margin: "0 0 12px",
+      }}
+    >
+      {children}
+    </h2>
   );
 }
 
@@ -120,8 +184,8 @@ export function EmailParagraph({ children }: { children: ReactNode }) {
       style={{
         margin: "0 0 12px",
         fontSize: 14,
-        lineHeight: 1.6,
-        color: "#3B342D",
+        lineHeight: 1.65,
+        color: COLORS.muted,
       }}
     >
       {children}
@@ -131,32 +195,87 @@ export function EmailParagraph({ children }: { children: ReactNode }) {
 
 export function EmailButton({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a
-      href={href}
-      style={{
-        display: "inline-block",
-        backgroundColor: "#1A1714",
-        color: "#FAF7F2",
-        padding: "12px 22px",
-        borderRadius: 999,
-        fontSize: 14,
-        fontWeight: 500,
-        textDecoration: "none",
-      }}
-    >
-      {children}
-    </a>
+    <table role="presentation" cellPadding={0} cellSpacing={0}>
+      <tbody>
+        <tr>
+          <td style={{ backgroundColor: COLORS.blue, borderRadius: 7 }}>
+            <a
+              href={href}
+              style={{
+                display: "inline-block",
+                color: COLORS.white,
+                padding: "13px 22px",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.2,
+                textDecoration: "none",
+              }}
+            >
+              {children}
+            </a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
 export function EmailDivider() {
   return (
-    <hr
+    <table
+      role="presentation"
+      cellPadding={0}
+      cellSpacing={0}
+      width="100%"
+      style={{ width: "100%", borderCollapse: "collapse" }}
+    >
+      <tbody>
+        <tr>
+          <td
+            aria-hidden="true"
+            style={{
+              borderTop: `1px solid ${COLORS.line}`,
+              height: 24,
+              lineHeight: "24px",
+            }}
+          >
+            &nbsp;
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+export function EmailNotice({ children }: { children: ReactNode }) {
+  return (
+    <table
+      role="presentation"
+      cellPadding={0}
+      cellSpacing={0}
+      width="100%"
       style={{
-        border: 0,
-        borderTop: "1px solid #E8E0D2",
-        margin: "20px 0",
+        width: "100%",
+        borderCollapse: "separate",
+        backgroundColor: COLORS.blueSoft,
+        borderLeft: `4px solid ${COLORS.blue}`,
+        borderRadius: 7,
       }}
-    />
+    >
+      <tbody>
+        <tr>
+          <td
+            style={{
+              padding: "14px 16px",
+              color: COLORS.ink,
+              fontSize: 13,
+              lineHeight: 1.55,
+            }}
+          >
+            {children}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

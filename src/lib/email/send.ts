@@ -23,6 +23,7 @@ import { getEmailConfig } from "./config";
 import { buildInvoicePdf, buildWithdrawalFormPdf } from "./pdf";
 import {
   buildGuaranteePdf,
+  GUARANTEE_TERM_TEXT,
   guaranteeItemsForOrder,
 } from "./guarantee-pdf";
 import { trackedDispatch } from "./tracking";
@@ -48,11 +49,14 @@ export async function sendOrderConfirmation(args: {
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
+  const guaranteeItems = guaranteeItemsForOrder(args.order.items);
   const { html, text } = await renderEmail(
     OrderConfirmation({
       order: args.order,
       baseUrl: cfg.baseUrl,
       accessToken: args.accessToken,
+      includesPurchaseDocuments: args.attachInvoice !== false,
+      guaranteeTermText: guaranteeItems.length ? GUARANTEE_TERM_TEXT : undefined,
     }),
   );
 
@@ -66,11 +70,10 @@ export async function sendOrderConfirmation(args: {
     });
     attachments.push({
       filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
-      content: buildWithdrawalFormPdf(pdfOrder).toString("base64"),
+      content: (await buildWithdrawalFormPdf(pdfOrder)).toString("base64"),
       contentType: "application/pdf",
     });
   }
-  const guaranteeItems = guaranteeItemsForOrder(args.order.items);
   if (guaranteeItems.length) {
     attachments.push({
       filename: `garantni-list-${args.order.id}.pdf`,
@@ -94,6 +97,12 @@ export async function sendOrderConfirmation(args: {
     bcc: cfg.orderBcc,
     attachments,
     tags: { kind: "order_confirmation", order: args.order.id },
+    metadata: {
+      orderId: args.order.id,
+      attachmentNames: attachments.map((attachment) => attachment.filename),
+      attachmentCount: attachments.length,
+      guaranteeItemCount: guaranteeItems.length,
+    },
     idempotencyKey: args.idempotencyKey ?? `order-conf:${args.order.id}`,
   });
 }

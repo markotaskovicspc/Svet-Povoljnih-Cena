@@ -123,7 +123,7 @@ export async function issueAndDeliverFiscalReceipt(
     };
   }));
 
-  const withdrawalForm = buildWithdrawalFormPdf({
+  const withdrawalForm = await buildWithdrawalFormPdf({
     number: loaded.order.id,
     createdAt: new Date(loaded.order.createdAt),
     items: loaded.order.items.map((item) => ({

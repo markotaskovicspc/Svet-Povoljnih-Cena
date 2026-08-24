@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { rasterJpegPagesPdf } from "@/lib/pdf/raster-pages";
+import { renderPdfSvgToJpeg } from "@/lib/pdf/render-svg";
 
 /**
  * Minimal PDF generator for the order confirmation attachments
@@ -28,6 +29,12 @@ const MARGIN_Y = 60;
 const HEADER_HEIGHT = 62;
 const LOGO_WIDTH = 240;
 const LOGO_HEIGHT = 39.8;
+const DOCUMENT_DATE_FORMATTER = new Intl.DateTimeFormat("sr-Latn-RS", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Europe/Belgrade",
+});
 
 const LOGO_JPEG = (() => {
   try {
@@ -280,16 +287,11 @@ export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer>
     });
   }
   const pages = chunkInvoiceLines(lines, INVOICE_ROWS_PER_PAGE);
-  const sharp = (await import("sharp")).default;
   const jpegPages = await Promise.all(
     pages.map((pageLines, pageIndex) =>
-      sharp(
-        Buffer.from(
-          invoicePageSvg(order, pageLines, pageIndex, pages.length),
-        ),
-      )
-        .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
-        .toBuffer(),
+      renderPdfSvgToJpeg(
+        invoicePageSvg(order, pageLines, pageIndex, pages.length),
+      ),
     ),
   );
   return rasterJpegPagesPdf({
@@ -312,7 +314,7 @@ function invoicePageSvg(
   const tableY = 430;
   const headerHeight = 56;
   const rowHeight = 66;
-  const widths = [440, 140, 75, 165, 165, 175];
+  const widths = [390, 135, 75, 155, 155, 190];
   const headers = ["Naziv artikla", "Šifra", "Kol.", "Osnovica", "PDV 20%", "Ukupno"];
   let headerX = tableX;
   const header = headers
@@ -377,7 +379,7 @@ function invoicePageSvg(
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${INVOICE_PIXEL_WIDTH}" height="${INVOICE_PIXEL_HEIGHT}" viewBox="0 0 ${INVOICE_PIXEL_WIDTH} ${INVOICE_PIXEL_HEIGHT}">
     <style>
-      text { font-family: Arial, Helvetica, sans-serif; fill: #28313b; }
+      text { font-family: Geist, sans-serif; fill: #28313b; }
       .brand { font-size: 34px; font-weight: 800; fill: ${blue}; }
       .docTitle { font-size: 46px; font-weight: 800; fill: ${blue}; letter-spacing: 1px; }
       .docNo { font-size: 23px; font-weight: 700; fill: #202b38; }
@@ -402,7 +404,7 @@ function invoicePageSvg(
     ${logo}
     <text x="1170" y="86" text-anchor="end" class="docTitle">PREDRAČUN</text>
     <text x="1170" y="119" text-anchor="end" class="docNo">${xmlEscapePdf(order.number)}</text>
-    <text x="1170" y="148" text-anchor="end" class="date">Datum: ${xmlEscapePdf(order.createdAt.toLocaleDateString("sr-Latn-RS"))}</text>
+    <text x="1170" y="148" text-anchor="end" class="date">Datum: ${xmlEscapePdf(DOCUMENT_DATE_FORMATTER.format(order.createdAt))}</text>
     <rect x="70" y="165" width="1100" height="4" fill="${blue}"/>
     <rect x="70" y="205" width="550" height="170" class="partyBox"/>
     <rect x="620" y="205" width="550" height="170" class="partyBox"/>
@@ -411,6 +413,7 @@ function invoicePageSvg(
     <text x="642" y="242" class="partyLabel">KUPAC</text>
     ${partyText(642, 274, [`${order.shipping_address.firstName} ${order.shipping_address.lastName}`, `${order.shipping_address.street},`, `${order.shipping_address.postalCode} ${order.shipping_address.city}`])}
     ${header}${rows}${totals}
+    <text x="70" y="1662" class="footer">Predračun nije fiskalni račun.</text>
     <text x="70" y="1690" class="footer">${xmlEscapePdf(MERCHANT_LEGAL_INFO.name)} · PIB ${xmlEscapePdf(MERCHANT_LEGAL_INFO.pib)}</text>
     <text x="1170" y="1690" text-anchor="end" class="footer">Strana ${pageIndex + 1}/${pageCount}</text>
   </svg>`;
@@ -473,7 +476,7 @@ function paymentMethodLabel(value: string) {
     POUZECE_GOTOVINA: "Pouzeće — gotovina",
     POUZECE_KARTICA: "Pouzeće — kartica",
   };
-  return labels[value] ?? value;
+  return labels[value.trim().toUpperCase()] ?? value;
 }
 
 function xmlEscapePdf(value: string) {
@@ -485,43 +488,217 @@ function xmlEscapePdf(value: string) {
     .replace(/'/g, "&apos;");
 }
 
-export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
-  const lines: Line[] = [
-    { text: "(Zakon o zaštiti potrošača, član 28)", spaceAbove: 2 },
-    { text: "" },
-    {
-      text: "Popunite ovaj obrazac samo ako želite da odustanete od ugovora i pošaljite ga na: reklamacije@svetpovoljnihcena.rs ili poštom na adresu sedišta firme.",
-    },
-    { text: "" },
-    { text: `Broj porudžbine: ${order.number}` },
-    { text: `Datum porudžbine: ${order.createdAt.toLocaleDateString("sr-Latn-RS")}` },
-    {
-      text: `Kupac: ${order.shipping_address.firstName} ${order.shipping_address.lastName}, ${order.shipping_address.street}, ${order.shipping_address.postalCode} ${order.shipping_address.city}`,
-    },
-    { text: "" },
-    {
-      text: "Ovim obaveštavam da odustajem od kupovine sledećih artikala:",
-    },
-    {
-      text: "Zaokružite artikal koji vraćate i upišite količinu.",
-      bold: true,
-      spaceAbove: 4,
-    },
-  ];
-  for (const it of order.items) {
-    lines.push({
-      text: `(   ) ${it.name} (${it.sku}) | Količina: __________`,
-      spaceAbove: 3,
-    });
-  }
-  lines.push({ text: "" });
-  lines.push({ text: "Datum: __________________________" });
-  lines.push({ text: "Potpis kupca: __________________________" });
-  lines.push({ text: "" });
-  lines.push({
-    text: "Pravo na odustanak imate u roku od 14 dana od preuzimanja robe, bez navođenja razloga. Povraćaj sredstava sledi u roku od 14 dana od prijema vraćenog artikla.",
+const WITHDRAWAL_FIRST_PAGE_ITEMS = 6;
+const WITHDRAWAL_NEXT_PAGE_ITEMS = 10;
+
+export async function buildWithdrawalFormPdf(
+  order: InvoiceOrderInput,
+): Promise<Buffer> {
+  const pageSvgs = buildWithdrawalFormPageSvgs(order);
+  const jpegPages = await Promise.all(
+    pageSvgs.map((svg) => renderPdfSvgToJpeg(svg)),
+  );
+
+  return rasterJpegPagesPdf({
+    pages: jpegPages,
+    pixelWidth: INVOICE_PIXEL_WIDTH,
+    pixelHeight: INVOICE_PIXEL_HEIGHT,
+    pdfWidth: PAGE_WIDTH,
+    pdfHeight: PAGE_HEIGHT,
   });
-  return buildPdf("Obrazac za odustanak", lines);
+}
+
+export function buildWithdrawalFormPageSvgs(order: InvoiceOrderInput) {
+  const pages = paginateWithdrawalItems(order.items);
+  return pages.map((items, pageIndex) =>
+    withdrawalFormPageSvg(order, items, pageIndex, pages.length),
+  );
+}
+
+function paginateWithdrawalItems(items: InvoiceOrderInput["items"]) {
+  if (items.length <= WITHDRAWAL_FIRST_PAGE_ITEMS) return [items];
+
+  const pages = [items.slice(0, WITHDRAWAL_FIRST_PAGE_ITEMS)];
+  for (
+    let index = WITHDRAWAL_FIRST_PAGE_ITEMS;
+    index < items.length;
+    index += WITHDRAWAL_NEXT_PAGE_ITEMS
+  ) {
+    pages.push(items.slice(index, index + WITHDRAWAL_NEXT_PAGE_ITEMS));
+  }
+  return pages;
+}
+
+function withdrawalFormPageSvg(
+  order: InvoiceOrderInput,
+  items: InvoiceOrderInput["items"],
+  pageIndex: number,
+  pageCount: number,
+) {
+  const blue = "#123F5A";
+  const ink = "#172B36";
+  const muted = "#5F6F78";
+  const line = "#DCE6EA";
+  const soft = "#F2F7F9";
+  const firstPage = pageIndex === 0;
+  const lastPage = pageIndex === pageCount - 1;
+  const tableX = 70;
+  const tableY = firstPage ? 610 : 320;
+  const headerHeight = 58;
+  const rowHeight = 88;
+  const widths = [105, 465, 170, 135, 225];
+  const headers = ["Vraćam", "Artikal", "Šifra", "Naručeno", "Količina za povraćaj"];
+  let headerX = tableX;
+  const header = headers
+    .map((label, index) => {
+      const width = widths[index]!;
+      const centered = index !== 1;
+      const x = centered ? headerX + width / 2 : headerX + 14;
+      const anchor = centered ? ' text-anchor="middle"' : "";
+      const value = `<rect x="${headerX}" y="${tableY}" width="${width}" height="${headerHeight}" class="tableHead"/><text x="${x}" y="${tableY + 36}"${anchor} class="tableHeadText">${xmlEscapePdf(label)}</text>`;
+      headerX += width;
+      return value;
+    })
+    .join("");
+
+  let rowY = tableY + headerHeight;
+  const rows = items
+    .map((item) => {
+      const y = rowY;
+      rowY += rowHeight;
+      const nameLines = wrapSvgText(item.name, 38).slice(0, 2);
+      const name = `<text x="${tableX + widths[0]! + 14}" y="${y + 32}" class="itemName">${nameLines
+        .map(
+          (value, index) =>
+            `<tspan x="${tableX + widths[0]! + 14}" dy="${index === 0 ? 0 : 24}">${xmlEscapePdf(value)}</tspan>`,
+        )
+        .join("")}</text>`;
+      const skuX = tableX + widths[0]! + widths[1]! + widths[2]! / 2;
+      const orderedX =
+        tableX + widths[0]! + widths[1]! + widths[2]! + widths[3]! / 2;
+      const returnX = tableX + widths.slice(0, 4).reduce((sum, width) => sum + width, 0);
+      return `<rect x="${tableX}" y="${y}" width="1100" height="${rowHeight}" class="tableRow"/>
+        ${withdrawalVerticalLines(tableX, y, rowHeight, widths)}
+        <rect x="${tableX + 38}" y="${y + 29}" width="30" height="30" rx="3" class="checkbox"/>
+        ${name}
+        <text x="${skuX}" y="${y + 51}" text-anchor="middle" class="cell">${xmlEscapePdf(item.sku)}</text>
+        <text x="${orderedX}" y="${y + 51}" text-anchor="middle" class="cell">${item.qty}</text>
+        <line x1="${returnX + 32}" y1="${y + 58}" x2="${returnX + widths[4]! - 32}" y2="${y + 58}" class="writeLine"/>`;
+    })
+    .join("");
+  const tableBottom = rowY;
+  const logo = LOGO_JPEG
+    ? `<image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="data:image/jpeg;base64,${LOGO_JPEG.toString("base64")}"/>`
+    : `<text x="70" y="104" class="brand">Svet Povoljnih Cena</text>`;
+  const pageIntro = firstPage
+    ? `<text x="70" y="238" class="title">OBRAZAC ZA ODUSTANAK</text>
+      <text x="70" y="278" class="legal">Obrazac za odustanak od ugovora zaključenog na daljinu</text>
+      <rect x="70" y="315" width="1100" height="88" rx="9" class="notice"/>
+      <text x="94" y="350" class="noticeTitle">Kako da označite artikle</text>
+      <text x="94" y="380" class="noticeText">Stavite X u prazno polje uz svaki artikal koji vraćate i upišite količinu za povraćaj.</text>
+      <rect x="70" y="432" width="1100" height="126" rx="9" class="metaBox"/>
+      <text x="94" y="468" class="metaLabel">BROJ PORUDŽBINE</text>
+      <text x="94" y="500" class="metaValue">${xmlEscapePdf(order.number)}</text>
+      <text x="430" y="468" class="metaLabel">DATUM PORUDŽBINE</text>
+      <text x="430" y="500" class="metaValue">${xmlEscapePdf(DOCUMENT_DATE_FORMATTER.format(order.createdAt))}</text>
+      <text x="700" y="468" class="metaLabel">KUPAC I ADRESA</text>
+      <text x="700" y="500" class="metaValue">${xmlEscapePdf(`${order.shipping_address.firstName} ${order.shipping_address.lastName}`)}</text>
+      <text x="700" y="530" class="metaText">${xmlEscapePdf(`${order.shipping_address.street}, ${order.shipping_address.postalCode} ${order.shipping_address.city}`)}</text>
+      <text x="70" y="595" class="section">Artikli za povraćaj</text>`
+    : `<text x="70" y="238" class="title smallTitle">ARTIKLI ZA POVRAĆAJ - NASTAVAK</text>
+      <text x="70" y="282" class="legal">Porudžbina ${xmlEscapePdf(order.number)} · označite X i upišite količinu</text>`;
+
+  const continuation = !lastPage
+    ? `<text x="70" y="${Math.min(tableBottom + 70, 1570)}" class="continuation">Spisak artikala se nastavlja na sledećoj strani.</text>`
+    : "";
+  const signatureY = Math.min(tableBottom + 86, 1410);
+  const completion = lastPage
+    ? `<text x="70" y="${signatureY}" class="section">Izjava kupca</text>
+      <text x="70" y="${signatureY + 38}" class="body">Ovim obaveštavam trgovca da odustajem od kupovine označenih artikala iz navedene porudžbine.</text>
+      <text x="70" y="${signatureY + 92}" class="fieldLabel">Datum podnošenja</text>
+      <line x1="70" y1="${signatureY + 132}" x2="410" y2="${signatureY + 132}" class="writeLine"/>
+      <text x="660" y="${signatureY + 92}" class="fieldLabel">Potpis kupca</text>
+      <line x1="660" y1="${signatureY + 132}" x2="1170" y2="${signatureY + 132}" class="writeLine"/>
+      <rect x="70" y="${signatureY + 174}" width="1100" height="86" rx="8" class="rightsBox"/>
+      <text x="92" y="${signatureY + 208}" class="rights">Pravo na odustanak ostvarujete u zakonskom roku, bez obaveze da navedete razlog.</text>
+      <text x="92" y="${signatureY + 238}" class="rights">Popunjen obrazac pošaljite na reklamacije@svetpovoljnihcena.rs ili na adresu trgovca.</text>`
+    : "";
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+  <svg xmlns="http://www.w3.org/2000/svg" width="${INVOICE_PIXEL_WIDTH}" height="${INVOICE_PIXEL_HEIGHT}" viewBox="0 0 ${INVOICE_PIXEL_WIDTH} ${INVOICE_PIXEL_HEIGHT}">
+    <style>
+      text { font-family: Geist, sans-serif; fill: ${ink}; }
+      .brand { font-size: 34px; font-weight: 800; fill: ${blue}; }
+      .docType { font-size: 15px; font-weight: 700; letter-spacing: 1.4px; fill: ${blue}; }
+      .docNo { font-size: 17px; font-weight: 700; }
+      .title { font-size: 38px; font-weight: 800; fill: ${blue}; letter-spacing: .4px; }
+      .smallTitle { font-size: 32px; }
+      .legal { font-size: 18px; fill: ${muted}; }
+      .notice { fill: #EAF4F7; stroke: #CFE2E8; stroke-width: 1.5; }
+      .noticeTitle { font-size: 18px; font-weight: 800; fill: ${blue}; }
+      .noticeText { font-size: 17px; }
+      .metaBox { fill: #fff; stroke: ${line}; stroke-width: 1.5; }
+      .metaLabel { font-size: 13px; font-weight: 800; letter-spacing: 1px; fill: ${muted}; }
+      .metaValue { font-size: 19px; font-weight: 700; }
+      .metaText { font-size: 15px; fill: ${muted}; }
+      .section { font-size: 21px; font-weight: 800; fill: ${blue}; }
+      .tableHead { fill: ${blue}; stroke: #fff; stroke-width: 1; }
+      .tableHeadText { font-size: 15px; font-weight: 800; fill: #fff; }
+      .tableRow { fill: #fff; stroke: ${line}; stroke-width: 1.3; }
+      .checkbox { fill: #fff; stroke: ${blue}; stroke-width: 2.5; }
+      .itemName { font-size: 16px; font-weight: 650; }
+      .cell { font-size: 15px; }
+      .writeLine { stroke: #53656f; stroke-width: 1.5; }
+      .continuation { font-size: 16px; font-weight: 700; fill: ${blue}; }
+      .body { font-size: 16px; }
+      .fieldLabel { font-size: 15px; font-weight: 700; fill: ${muted}; }
+      .rightsBox { fill: ${soft}; stroke: ${line}; stroke-width: 1.2; }
+      .rights { font-size: 15px; fill: ${muted}; }
+      .footer { font-size: 12px; fill: ${muted}; }
+      .rule { stroke: ${line}; stroke-width: 1; }
+    </style>
+    <rect width="1240" height="1754" fill="#ffffff"/>
+    ${logo}
+    <text x="1170" y="82" text-anchor="end" class="docType">ODUSTANAK OD KUPOVINE</text>
+    <text x="1170" y="116" text-anchor="end" class="docNo">${xmlEscapePdf(order.number)}</text>
+    <rect x="70" y="165" width="1100" height="4" fill="${blue}"/>
+    ${pageIntro}
+    ${header}${rows}${continuation}${completion}
+    <text x="70" y="1690" class="footer">${xmlEscapePdf(MERCHANT_LEGAL_INFO.name)} · PIB ${xmlEscapePdf(MERCHANT_LEGAL_INFO.pib)} · ${xmlEscapePdf(MERCHANT_LEGAL_INFO.shortAddress)}</text>
+    <text x="1170" y="1690" text-anchor="end" class="footer">Strana ${pageIndex + 1}/${pageCount}</text>
+  </svg>`;
+}
+
+function withdrawalVerticalLines(
+  x: number,
+  y: number,
+  height: number,
+  widths: number[],
+) {
+  let cursor = x;
+  return widths
+    .slice(0, -1)
+    .map((width) => {
+      cursor += width;
+      return `<line x1="${cursor}" y1="${y}" x2="${cursor}" y2="${y + height}" class="rule"/>`;
+    })
+    .join("");
+}
+
+function wrapSvgText(value: string, limit: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current || `${current} ${word}`.length <= limit) {
+      current = current ? `${current} ${word}` : word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
 export type { InvoiceOrderInput };

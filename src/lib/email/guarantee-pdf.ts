@@ -2,6 +2,9 @@ import "server-only";
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import { rasterJpegPagesPdf } from "@/lib/pdf/raster-pages";
+import { renderPdfSvgToJpeg } from "@/lib/pdf/render-svg";
 import type { OrderItem } from "@/types";
 
 const PAGE_WIDTH = 1240;
@@ -11,6 +14,12 @@ const PDF_HEIGHT = 842;
 const MAX_ITEM_TABLE_HEIGHT = 430;
 
 export const GUARANTEE_TERM_TEXT = "1 (jedna) godina";
+export const GUARANTEE_PROVIDER = {
+  name: MERCHANT_LEGAL_INFO.name,
+  address: MERCHANT_LEGAL_INFO.shortAddress,
+  pib: MERCHANT_LEGAL_INFO.pib,
+  reclamationsEmail: "reklamacije@svetpovoljnihcena.rs",
+} as const;
 
 type GuaranteeItem = Pick<
   OrderItem,
@@ -33,7 +42,7 @@ let logoDataUriPromise: Promise<string> | null = null;
 
 export function guaranteeItemsForOrder(items: OrderItem[]) {
   return items.filter(
-    (item) => item.supplierIntegrationKey?.toUpperCase() !== "RABALUX",
+    (item) => item.supplierIntegrationKey?.trim().toUpperCase() !== "RABALUX",
   );
 }
 
@@ -42,9 +51,6 @@ export async function buildGuaranteePdf(input: GuaranteePdfInput) {
     throw new Error("Garantni list zahteva bar jednu stavku.");
   }
 
-  // Avoid loading Sharp's native runtime in checkout and email routes which
-  // only import the guarantee helpers but do not generate the document.
-  const { default: sharp } = await import("sharp");
   const logoDataUri = await loadLogoDataUri();
   const pages = paginateItems(input.items.map(renderItem));
   const renderedPages = await Promise.all(
@@ -56,13 +62,17 @@ export async function buildGuaranteePdf(input: GuaranteePdfInput) {
         pageIndex,
         pageCount: pages.length,
       });
-      return sharp(Buffer.from(svg))
-        .jpeg({ quality: 94, chromaSubsampling: "4:4:4" })
-        .toBuffer();
+      return renderPdfSvgToJpeg(svg, 94);
     }),
   );
 
-  return jpegPagesPdf(renderedPages);
+  return rasterJpegPagesPdf({
+    pages: renderedPages,
+    pixelWidth: PAGE_WIDTH,
+    pixelHeight: PAGE_HEIGHT,
+    pdfWidth: PDF_WIDTH,
+    pdfHeight: PDF_HEIGHT,
+  });
 }
 
 function loadLogoDataUri() {
@@ -74,7 +84,7 @@ function loadLogoDataUri() {
 
 function renderItem(item: GuaranteeItem): RenderedItem {
   const nameLines = wrapText(item.name, 45);
-  const categoryLines = wrapText(item.categoryName ?? "", 28);
+  const categoryLines = wrapText(item.categoryName?.trim() || "Nije navedena", 28);
   const lineCount = Math.max(nameLines.length, categoryLines.length, 1);
   return {
     ...item,
@@ -108,7 +118,7 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   pageCount: number;
 }) {
   const tableX = 145;
-  const tableY = 586;
+  const tableY = 500;
   const tableWidth = 950;
   const headerHeight = 38;
   const columns = [380, 260, 210, 100];
@@ -142,43 +152,45 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" width="${PAGE_WIDTH}" height="${PAGE_HEIGHT}" viewBox="0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}">
     <style>
-      text { font-family: Arial, Helvetica, sans-serif; fill: #151f2b; }
-      .title { font-size: 40px; font-weight: 800; fill: #11283f; }
-      .subtitle { font-size: 21px; fill: #30343a; }
-      .section { font-size: 23px; font-weight: 700; fill: #3d78a5; }
-      .label { font-size: 18px; font-weight: 700; fill: #365e84; }
-      .value { font-size: 18px; fill: #101820; }
+      text { font-family: Geist, sans-serif; fill: #172b36; }
+      .title { font-size: 40px; font-weight: 800; fill: #123f5a; }
+      .subtitle { font-size: 18px; fill: #5f6f78; }
+      .section { font-size: 23px; font-weight: 800; fill: #123f5a; }
+      .label { font-size: 17px; font-weight: 700; fill: #355c70; }
+      .value { font-size: 16px; fill: #172b36; }
       .thead { font-size: 16px; font-weight: 700; fill: #365e84; }
       .cell { font-size: 15px; fill: #101820; }
       .body { font-size: 17px; font-weight: 400; fill: #101820; }
-      .body-bold { font-size: 17px; font-weight: 700; fill: #365e84; }
-      .important { font-size: 16px; font-weight: 700; fill: #294d72; }
+      .body-bold { font-size: 17px; font-weight: 700; fill: #123f5a; }
+      .important { font-size: 16px; font-weight: 700; fill: #123f5a; }
       .footer { font-size: 12px; fill: #6a6f75; }
-      .label-bg { fill: #f0f2f6; }
-      .header-bg { fill: #eef1f5; }
-      .row { fill: #ffffff; stroke: #d5dbe2; stroke-width: 1; }
-      .rule { stroke: #d5dbe2; stroke-width: 1; }
+      .label-bg { fill: #f2f7f9; }
+      .provider-box { fill: #ffffff; stroke: #dce6ea; stroke-width: 1.5; }
+      .header-bg { fill: #eaf4f7; }
+      .row { fill: #ffffff; stroke: #dce6ea; stroke-width: 1; }
+      .rule { stroke: #dce6ea; stroke-width: 1; }
     </style>
     <rect width="1240" height="1754" fill="#ffffff"/>
-    <image x="205" y="28" width="830" height="198" preserveAspectRatio="xMidYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>
+    <image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>
+    <text x="1095" y="86" text-anchor="end" class="title">GARANTNI LIST</text>
+    <text x="1095" y="122" text-anchor="end" class="subtitle">${xmlEscape(input.number)}</text>
+    <rect x="145" y="165" width="950" height="4" fill="#123f5a"/>
 
-    <text x="145" y="275" class="title">GARANTNI LIST</text>
-    <text x="145" y="316" class="subtitle">Komercijalna garancija za robu</text>
+    <text x="145" y="218" class="section">Podaci o davaocu garancije</text>
+    <rect x="145" y="238" width="950" height="190" rx="8" class="provider-box"/>
+    <rect x="145" y="238" width="290" height="190" rx="8" class="label-bg"/>
+    ${providerRow(278, "Naziv", GUARANTEE_PROVIDER.name)}
+    ${providerRow(322, "Adresa", GUARANTEE_PROVIDER.address)}
+    ${providerRow(366, "PIB", GUARANTEE_PROVIDER.pib)}
+    ${providerRow(410, "Kontakt za reklamacije", GUARANTEE_PROVIDER.reclamationsEmail)}
 
-    <text x="145" y="355" class="section">Podaci o davaocu garancije</text>
-    <rect x="155" y="374" width="280" height="168" class="label-bg"/>
-    ${providerRow(406, "Naziv", "SVET POVOLJNIH CENA")}
-    ${providerRow(448, "Adresa", "Jurija Gagarina 32, Novi Beograd")}
-    ${providerRow(490, "PIB", "115085587")}
-    ${providerRow(532, "Kontakt za reklamacije", "reklamacije@svetpovoljnihcena.rs")}
-
-    <text x="145" y="570" class="section">Podaci o robi i kupovini</text>
+    <text x="145" y="480" class="section">Podaci o robi i kupovini</text>
     <rect x="${tableX}" y="${tableY}" width="${tableWidth}" height="${headerHeight}" class="header-bg" stroke="#d5dbe2" stroke-width="1"/>
     ${verticalLines(tableX, tableY, headerHeight, columns)}
-    <text x="155" y="611" class="thead">Naziv proizvoda</text>
-    <text x="535" y="611" class="thead">Tip proizvoda</text>
-    <text x="795" y="611" class="thead">Šifra proizvoda</text>
-    <text x="1045" y="611" text-anchor="middle" class="thead">Količina</text>
+    <text x="155" y="525" class="thead">Naziv proizvoda</text>
+    <text x="535" y="525" class="thead">Tip proizvoda</text>
+    <text x="795" y="525" class="thead">Šifra proizvoda</text>
+    <text x="1045" y="525" text-anchor="middle" class="thead">Količina</text>
     ${itemRows}
 
     <rect x="155" y="${metaY}" width="280" height="84" class="label-bg"/>
@@ -269,77 +281,4 @@ function xmlEscape(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function jpegPagesPdf(pages: Buffer[]) {
-  const objects: Buffer[] = [];
-  const push = (body: Buffer | string) => {
-    objects.push(typeof body === "string" ? Buffer.from(body, "binary") : body);
-    return objects.length;
-  };
-
-  const pageObjectIds: number[] = [];
-  for (const [index, jpeg] of pages.entries()) {
-    const imageObject = push(
-      Buffer.concat([
-        Buffer.from(
-          `<< /Type /XObject /Subtype /Image /Width ${PAGE_WIDTH} /Height ${PAGE_HEIGHT} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
-          "binary",
-        ),
-        jpeg,
-        Buffer.from("\nendstream", "binary"),
-      ]),
-    );
-    const imageName = `/Im${index + 1}`;
-    const stream = `q\n${PDF_WIDTH} 0 0 ${PDF_HEIGHT} 0 0 cm\n${imageName} Do\nQ`;
-    const contentObject = push(
-      `<< /Length ${Buffer.byteLength(stream, "binary")} >>\nstream\n${stream}\nendstream`,
-    );
-    pageObjectIds.push(
-      push(
-        `<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 ${PDF_WIDTH} ${PDF_HEIGHT}] /Contents ${contentObject} 0 R /Resources << /XObject << ${imageName} ${imageObject} 0 R >> >> >>`,
-      ),
-    );
-  }
-
-  const pagesObject = push(
-    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjectIds.length} >>`,
-  );
-  const catalogObject = push(`<< /Type /Catalog /Pages ${pagesObject} 0 R >>`);
-  for (const pageObject of pageObjectIds) {
-    objects[pageObject - 1] = Buffer.from(
-      objects[pageObject - 1]!
-        .toString("binary")
-        .replace("__PARENT__", `${pagesObject} 0 R`),
-      "binary",
-    );
-  }
-
-  const header = Buffer.from("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n", "binary");
-  const blocks: Buffer[] = [header];
-  const offsets: number[] = [];
-  let offset = header.length;
-  objects.forEach((object, index) => {
-    offsets.push(offset);
-    const block = Buffer.concat([
-      Buffer.from(`${index + 1} 0 obj\n`, "binary"),
-      object,
-      Buffer.from("\nendobj\n", "binary"),
-    ]);
-    blocks.push(block);
-    offset += block.length;
-  });
-
-  const xrefOffset = offset;
-  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const itemOffset of offsets) {
-    xref += `${String(itemOffset).padStart(10, "0")} 00000 n \n`;
-  }
-  blocks.push(
-    Buffer.from(
-      `${xref}trailer\n<< /Size ${objects.length + 1} /Root ${catalogObject} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
-      "binary",
-    ),
-  );
-  return Buffer.concat(blocks);
 }
