@@ -48,7 +48,8 @@ export function resolveStorefrontPictograms({
       pictogram.code !== WARRANTY_PICTOGRAM_CODE &&
       pictogram.code !== EXPRESS_DELIVERY_PICTOGRAM_CODE,
   );
-  const cornerPictograms = [
+  const featurePictograms = [
+    ...productSpecific,
     ...(!isRabalux
       ? [
           findConfiguredPictogram(
@@ -58,6 +59,8 @@ export function resolveStorefrontPictograms({
           ),
         ]
       : []),
+  ];
+  const cornerPictograms = [
     findConfiguredPictogram(
       pictograms,
       EXPRESS_DELIVERY_PICTOGRAM_CODE,
@@ -66,7 +69,7 @@ export function resolveStorefrontPictograms({
   ];
 
   return {
-    featurePictograms: productSpecific,
+    featurePictograms,
     cornerPictograms,
   };
 }

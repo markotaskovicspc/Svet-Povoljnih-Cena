@@ -26,15 +26,17 @@ const productFeature: Pictogram = {
 };
 
 describe("storefront pictogram placement", () => {
-  it("stacks 2+1 above 48h in the corner for every non-Rabalux product", () => {
+  it("places 2+1 last in the top-left feature stack for every non-Rabalux product", () => {
     const resolved = resolveStorefrontPictograms({
       pictograms: [productFeature],
       supplierIntegrationKey: null,
     });
 
-    expect(resolved.featurePictograms).toEqual([productFeature]);
-    expect(resolved.cornerPictograms).toEqual([
+    expect(resolved.featurePictograms).toEqual([
+      productFeature,
       WARRANTY_2_PLUS_1_PICTOGRAM,
+    ]);
+    expect(resolved.cornerPictograms).toEqual([
       EXPRESS_DELIVERY_48H_PICTOGRAM,
     ]);
   });
@@ -57,13 +59,15 @@ describe("storefront pictogram placement", () => {
       supplierIntegrationKey: "OTHER",
     });
 
-    expect(resolved.featurePictograms).toEqual([productFeature]);
-    expect(resolved.cornerPictograms).toEqual([
+    expect(resolved.featurePictograms).toEqual([
+      productFeature,
       configuredWarranty,
+    ]);
+    expect(resolved.cornerPictograms).toEqual([
       configuredDelivery,
     ]);
     expect(
-      resolved.cornerPictograms.filter((pictogram) => pictogram.code === "3"),
+      resolved.featurePictograms.filter((pictogram) => pictogram.code === "3"),
     ).toHaveLength(1);
     expect(
       resolved.cornerPictograms.filter((pictogram) => pictogram.code === "48h"),

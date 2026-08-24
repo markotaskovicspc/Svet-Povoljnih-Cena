@@ -345,18 +345,35 @@ describe("ProductCard image regression", () => {
     expect(html).not.toContain("Kartica oznaka 6");
   });
 
-  it("prikazuje 2+1 iznad 48h u donjem desnom uglu non-Rabalux artikla", () => {
+  it("prikazuje 2+1 poslednji gore levo, a samo 48h dole desno", () => {
     const html = renderToStaticMarkup(
-      createElement(ProductCard, { product: readyProduct }),
+      createElement(ProductCard, {
+        product: {
+          ...readyProduct,
+          pictograms: [
+            {
+              id: "product-feature",
+              code: "feature",
+              label: "Posebna karakteristika",
+              iconUrl: "https://example.test/feature.png",
+            },
+          ],
+        },
+      }),
     );
 
+    const features = html.indexOf("data-product-card-pictograms");
     const corner = html.indexOf("data-product-card-corner-pictograms");
+    const productFeature = html.indexOf('title="Posebna karakteristika"');
     const warranty = html.indexOf('title="2+1"');
     const deliveryIcon = html.indexOf('title="48h"');
 
+    expect(features).toBeGreaterThanOrEqual(0);
+    expect(productFeature).toBeGreaterThan(features);
+    expect(warranty).toBeGreaterThan(productFeature);
     expect(corner).toBeGreaterThanOrEqual(0);
-    expect(warranty).toBeGreaterThan(corner);
-    expect(deliveryIcon).toBeGreaterThan(warranty);
+    expect(deliveryIcon).toBeGreaterThan(corner);
+    expect(corner).toBeGreaterThan(warranty);
     expect(html).toMatch(
       /data-product-card-corner-pictograms[^>]*class="[^"]*right-1 bottom-1[^"]*flex flex-col/,
     );

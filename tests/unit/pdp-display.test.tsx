@@ -153,18 +153,12 @@ describe("PDP price and benefit display", () => {
     expect(markup).not.toContain("text-\[10px\]");
   });
 
-  it("stacks 2+1 above 48h in the gallery corner", () => {
+  it("renders only 48h in the gallery corner", () => {
     const markup = renderToStaticMarkup(
       <PdpPictograms
         placement="corner"
         className="absolute right-3 bottom-3"
         pictograms={[
-          {
-            id: "warranty-2-plus-1",
-            code: "3",
-            label: "2+1",
-            iconUrl: "https://example.test/warranty.png",
-          },
           {
             id: "delivery-48h",
             code: "48h",
@@ -177,7 +171,8 @@ describe("PDP price and benefit display", () => {
 
     expect(markup).toContain('data-pdp-pictogram-placement="corner"');
     expect(markup).toContain("absolute right-3 bottom-3");
-    expect(markup.indexOf("2+1")).toBeLessThan(markup.indexOf("48h"));
+    expect(markup).toContain("48h");
+    expect(markup).not.toContain("2+1");
   });
 
   it("hides only the generic duplicate availability sentence", () => {
