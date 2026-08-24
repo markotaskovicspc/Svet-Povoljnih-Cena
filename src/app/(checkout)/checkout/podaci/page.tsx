@@ -7,6 +7,14 @@ import { db } from "@/lib/db";
 import { EmailVerificationBanner } from "@/components/account/email-verification-banner";
 import { getCheckoutConfig } from "@/lib/checkout/config";
 import { CheckoutStartedAnalytics } from "@/components/analytics/first-party-analytics";
+import { getConfiguredSocialAuthProviders } from "@/lib/auth/social-providers";
+import { appleAction, facebookAction, googleAction } from "@/app/(account)/nalog/auth-actions";
+import {
+  loginCustomerAction,
+  registerCustomerAction,
+} from "@/app/(account)/nalog/customer-auth-actions";
+import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
+import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 
 export const metadata: Metadata = {
   title: "Završetak porudžbine",
@@ -15,7 +23,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CheckoutPodaciPage() {
+export default async function CheckoutPodaciPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth?: string; authError?: string }>;
+}) {
+  const sp = await searchParams;
   const user = await getCurrentUser();
   const account =
     user?.userType === "customer"
@@ -47,6 +60,21 @@ export default async function CheckoutPodaciPage() {
   // route would otherwise be blocked by missing provider town/street IDs.
   const xExpressAddressEnabled = true;
   const checkoutConfig = await getCheckoutConfig();
+  const socialProviders = getConfiguredSocialAuthProviders(
+    {
+      google: googleAction,
+      facebook: facebookAction,
+      apple: appleAction,
+    },
+    { includeUnavailable: true },
+  );
+  const initialAuthIntent = checkoutAuthIntent(sp.auth);
+  const loginError =
+    initialAuthIntent === "login" ? checkoutLoginError(sp.authError) : undefined;
+  const registrationError =
+    initialAuthIntent === "register"
+      ? checkoutRegistrationError(sp.authError)
+      : undefined;
 
   return (
     <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
@@ -74,6 +102,12 @@ export default async function CheckoutPodaciPage() {
           checkoutConfig={checkoutConfig}
           glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
           xExpressAddressEnabled={xExpressAddressEnabled}
+          socialAuthProviders={socialProviders}
+          loginAction={loginCustomerAction}
+          registrationAction={registerCustomerAction}
+          initialAuthIntent={initialAuthIntent}
+          loginError={loginError}
+          registrationError={registrationError}
           initialCustomer={
             user?.userType === "customer"
               ? {
@@ -104,4 +138,24 @@ export default async function CheckoutPodaciPage() {
       </div>
     </div>
   );
+}
+
+function checkoutAuthIntent(value?: string) {
+  return value === "login" || value === "register" ? value : undefined;
+}
+
+function checkoutLoginError(value?: string): LoginErrorCode | undefined {
+  return value === "invalid" || value === "generic" ? value : undefined;
+}
+
+function checkoutRegistrationError(
+  value?: string,
+): RegistrationErrorCode | undefined {
+  return value === "email_taken" ||
+    value === "invalid_email" ||
+    value === "weak_password" ||
+    value === "rate_limited" ||
+    value === "generic"
+    ? value
+    : undefined;
 }

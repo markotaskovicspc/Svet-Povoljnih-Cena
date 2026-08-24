@@ -50,6 +50,10 @@ import { PaymentMethodStep } from "./payment-method";
 import { CheckoutConsent, NotesConsent } from "./notes-consent";
 import { OrderSummary, computeTotals } from "./order-summary";
 import { getConsentedAnalyticsContext } from "@/components/analytics/first-party-analytics";
+import type { SocialAuthProvider } from "@/components/account/social-auth-buttons";
+import type { CustomerAuthFormAction } from "@/components/account/customer-auth-methods";
+import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
+import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -141,11 +145,23 @@ export function CheckoutFlow({
   initialCustomer,
   glsDeliveryPointsEnabled = false,
   xExpressAddressEnabled = false,
+  socialAuthProviders = [],
+  loginAction,
+  registrationAction,
+  initialAuthIntent,
+  loginError,
+  registrationError,
 }: {
   checkoutConfig: CheckoutConfig;
   initialCustomer?: CheckoutInitialCustomer;
   glsDeliveryPointsEnabled?: boolean;
   xExpressAddressEnabled?: boolean;
+  socialAuthProviders?: SocialAuthProvider[];
+  loginAction?: CustomerAuthFormAction;
+  registrationAction?: CustomerAuthFormAction;
+  initialAuthIntent?: "login" | "register";
+  loginError?: LoginErrorCode;
+  registrationError?: RegistrationErrorCode;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -396,6 +412,12 @@ export function CheckoutFlow({
   }, [isAuthenticatedCustomer, methods, setIdentity, setStep, step]);
 
   useEffect(() => {
+    if (isAuthenticatedCustomer || !initialAuthIntent) return;
+    setIdentity(initialAuthIntent);
+    methods.setValue("identity", initialAuthIntent, { shouldDirty: false });
+  }, [initialAuthIntent, isAuthenticatedCustomer, methods, setIdentity]);
+
+  useEffect(() => {
     if (step === "method" || step === "payment") setStep("shipping");
   }, [setStep, step]);
 
@@ -492,6 +514,13 @@ export function CheckoutFlow({
 
   const next = async () => {
     if (isAdvancing) return;
+    if (
+      step === "identity" &&
+      identity !== "guest" &&
+      !isAuthenticatedCustomer
+    ) {
+      return;
+    }
     setIsAdvancing(true);
     try {
       const ok = await validateStep(
@@ -618,6 +647,9 @@ export function CheckoutFlow({
     return <EmptyCartCard onReset={reset} />;
   }
 
+  const requiresCheckoutAuthentication =
+    step === "identity" && identity !== "guest" && !isAuthenticatedCustomer;
+
   const renderNavigation = (mobile: boolean) => (
     <div
       data-testid={mobile ? "mobile-checkout-navigation" : undefined}
@@ -651,17 +683,19 @@ export function CheckoutFlow({
           <button
             type="button"
             onClick={next}
-            disabled={isAdvancing}
+            disabled={isAdvancing || requiresCheckoutAuthentication}
             className={cn(
               "bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:px-5",
               mobile && "flex-1",
+              requiresCheckoutAuthentication &&
+                "cursor-not-allowed opacity-60 hover:bg-ink-900",
             )}
           >
             {isAdvancing ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : null}
-            Nastavi
-            {!isAdvancing ? (
+            {requiresCheckoutAuthentication ? "Dovršite prijavu" : "Nastavi"}
+            {!isAdvancing && !requiresCheckoutAuthentication ? (
               <ArrowRight className="size-4" aria-hidden />
             ) : null}
           </button>
@@ -692,17 +726,18 @@ export function CheckoutFlow({
   return (
     <FormProvider {...methods}>
       <div className="grid gap-5 [overflow-anchor:none] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
-        <form
-          id="checkout-order-form"
-          onSubmit={handleSubmit(onSubmit, onInvalid)}
-          noValidate
+        <div
           className={cn(
             "bg-surface ring-border/60 rounded-2xl p-4 ring-1 sm:p-5",
             isCompactDesktopStep && "lg:p-4",
             step === "review" && "lg:p-5",
           )}
         >
-          <CheckoutStepper activeStep={step} steps={stepOrder} />
+          <CheckoutOrderFormBoundary
+            active={step !== "identity"}
+            onSubmit={handleSubmit(onSubmit, onInvalid)}
+          >
+            <CheckoutStepper activeStep={step} steps={stepOrder} />
 
           <div
             className={cn(
@@ -747,6 +782,12 @@ export function CheckoutFlow({
                         methods.setValue("identity", c, { shouldDirty: true });
                       }}
                       onAuthenticatedContinue={next}
+                      socialProviders={socialAuthProviders}
+                      loginAction={loginAction}
+                      registrationAction={registrationAction}
+                      initialAuthIntent={initialAuthIntent}
+                      loginError={loginError}
+                      registrationError={registrationError}
                     />
                   ) : null}
                   {step === "shipping" ? (
@@ -824,8 +865,9 @@ export function CheckoutFlow({
                 </div>
               ) : null}
             </div>
-          </div>
-        </form>
+            </div>
+          </CheckoutOrderFormBoundary>
+        </div>
 
         {renderNavigation(true)}
 
@@ -852,6 +894,29 @@ export function CheckoutFlow({
         </div>
       )}
     </FormProvider>
+  );
+}
+
+function CheckoutOrderFormBoundary({
+  active,
+  onSubmit,
+  children,
+}: {
+  active: boolean;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+  children: React.ReactNode;
+}) {
+  if (!active) return <div className="contents">{children}</div>;
+
+  return (
+    <form
+      id="checkout-order-form"
+      onSubmit={onSubmit}
+      noValidate
+      className="contents"
+    >
+      {children}
+    </form>
   );
 }
 

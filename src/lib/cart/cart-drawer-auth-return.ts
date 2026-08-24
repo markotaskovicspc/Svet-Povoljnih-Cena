@@ -4,12 +4,14 @@ const CART_DRAWER_RETURN_VALUE = "open";
 export function cartDrawerLoginReturnPath(
   pathname: string,
   queryString = "",
+  hash = "",
 ): string {
   const params = new URLSearchParams(
     queryString.startsWith("?") ? queryString.slice(1) : queryString,
   );
   params.set(CART_DRAWER_RETURN_PARAM, CART_DRAWER_RETURN_VALUE);
-  return `${pathname}?${params.toString()}`;
+  const normalizedHash = hash && !hash.startsWith("#") ? `#${hash}` : hash;
+  return `${pathname}?${params.toString()}${normalizedHash}`;
 }
 
 export function consumeCartDrawerReturnMarker(rawUrl: string): string | null {

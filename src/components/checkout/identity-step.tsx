@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
   LogIn,
   UserPlus,
   UserRound,
-  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IdentityChoice } from "@/lib/checkout/store";
-import { SocialProviderMark } from "@/components/account/social-auth-buttons";
+import type { SocialAuthProvider } from "@/components/account/social-auth-buttons";
+import {
+  CustomerAuthMethods,
+  type CustomerAuthFormAction,
+} from "@/components/account/customer-auth-methods";
+import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
+import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 
 /**
  * Step 1 — three identity cards. The choice is bubbled to the parent (via
@@ -26,6 +29,12 @@ export function IdentityStep({
   authenticatedCustomer,
   onPick,
   onAuthenticatedContinue,
+  socialProviders = [],
+  loginAction,
+  registrationAction,
+  initialAuthIntent,
+  loginError,
+  registrationError,
 }: {
   value: IdentityChoice | null;
   authenticatedCustomer?: {
@@ -34,53 +43,19 @@ export function IdentityStep({
   };
   onPick: (c: IdentityChoice) => void;
   onAuthenticatedContinue?: () => void;
+  socialProviders?: SocialAuthProvider[];
+  loginAction?: CustomerAuthFormAction;
+  registrationAction?: CustomerAuthFormAction;
+  initialAuthIntent?: "login" | "register";
+  loginError?: LoginErrorCode;
+  registrationError?: RegistrationErrorCode;
 }) {
-  const [showSocial, setShowSocial] = useState<"login" | "register" | null>(
+  const [showAuth, setShowAuth] = useState<"login" | "register" | null>(
     authenticatedCustomer
       ? null
-      : value === "login" || value === "register"
-        ? value
-        : null,
+      : initialAuthIntent ??
+          (value === "login" || value === "register" ? value : null),
   );
-  const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
-  const [socialError, setSocialError] = useState<string | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (authenticatedCustomer) return;
-    let cancelled = false;
-    fetch("/api/auth/providers")
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) setProviders(data ?? {});
-      })
-      .catch(() => {
-        if (!cancelled) setProviders({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authenticatedCustomer]);
-
-  function handleSocial(providerId: string) {
-    setSocialError(null);
-    onPick(showSocial ?? "login");
-    if (providers && !providers[providerId]) {
-      setSocialError(`${providerLabel(providerId)} prijava nije konfigurisana.`);
-      return;
-    }
-    setPendingProvider(providerId);
-    startTransition(() => {
-      void signIn(providerId, { callbackUrl: "/checkout/podaci" })
-        .catch(() => {
-          setSocialError(
-            `${providerLabel(providerId)} prijava trenutno nije dostupna. Pokušajte drugim načinom prijave.`,
-          );
-        })
-        .finally(() => setPendingProvider(null));
-    });
-  }
 
   const choices: {
     id: IdentityChoice;
@@ -156,7 +131,8 @@ export function IdentityStep({
     <div className="grid gap-3 md:grid-cols-3">
       {choices.map((c) => {
         const Icon = c.icon;
-        const active = value === c.id;
+        const active =
+          c.id === "guest" ? value === "guest" && !showAuth : showAuth === c.id;
         const cardClassName = cn(
           "bg-surface ring-border/60 group flex h-full min-h-[92px] flex-row items-center gap-3 rounded-lg p-3 text-left ring-1 transition focus-visible:outline-none md:min-h-0 md:rounded-2xl md:flex-col md:items-start md:gap-3 md:p-5",
           "hover:ring-walnut/40 hover:shadow-soft-2",
@@ -187,92 +163,55 @@ export function IdentityStep({
             </div>
           </>
         );
-        return c.id === "guest" ? (
+        return (
           <button
             key={c.id}
             type="button"
             onClick={() => {
               onPick(c.id);
-              setShowSocial(null);
+              setShowAuth(c.id === "guest" ? null : c.id);
             }}
             aria-pressed={active}
+            aria-expanded={c.id === "guest" ? undefined : active}
             className={cardClassName}
           >
             {content}
           </button>
-        ) : (
-          <Link
-            key={c.id}
-            href={`/nalog/${c.id === "login" ? "prijava" : "registracija"}?callbackUrl=${encodeURIComponent("/checkout/podaci")}`}
-            onClick={() => {
-              onPick(c.id);
-              setShowSocial(c.id as "login" | "register");
-            }}
-            aria-pressed={active}
-            className={cardClassName}
-          >
-            {content}
-          </Link>
         );
       })}
 
-      {showSocial ? (
+      {showAuth && loginAction && registrationAction ? (
         <motion.div
-          key={showSocial}
+          key={showAuth}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           className="md:col-span-3"
         >
           <div className="bg-surface ring-border/60 mt-1 rounded-2xl p-5 ring-1">
-            <p className="text-sm font-medium text-ink-900">
-              {showSocial === "login"
-                ? "Prijavite se brzo putem"
-                : "Registracija putem"}
+            <p className="font-display text-lg text-ink-900">
+              {showAuth === "login" ? "Prijavite se" : "Kreirajte nalog"}
             </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {[
-                { id: "google" as const, label: "Google" },
-                { id: "apple" as const, label: "Apple" },
-                { id: "facebook" as const, label: "Facebook" },
-              ].map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  disabled={isPending && pendingProvider === id}
-                  className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
-                  onClick={() => handleSocial(id)}
-                >
-                  <SocialProviderMark id={id} />
-                  {pendingProvider === id ? "Otvaranje..." : label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3">
-              <Link
-                href={`/nalog/${showSocial === "login" ? "prijava" : "registracija"}?callbackUrl=${encodeURIComponent("/checkout/podaci")}`}
-                className="ring-border/60 hover:bg-muted-bg focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none"
-                onClick={() => onPick(showSocial)}
-              >
-                <Mail className="size-4" aria-hidden />
-                E-pošta i lozinka
-              </Link>
-            </div>
-            {socialError ? (
-              <p className="mt-3 text-[11px] text-action" aria-live="polite">
-                {socialError}
-              </p>
-            ) : null}
+            <p className="mt-1 text-sm text-ink-500">
+              {showAuth === "login"
+                ? "Izaberite isti način prijave koji koristite na stranici naloga."
+                : "Najbrže je preko Google, Apple ili Facebook naloga."}
+            </p>
+            <CustomerAuthMethods
+              callbackUrl="/checkout/podaci"
+              intent={showAuth}
+              providers={socialProviders}
+              loginAction={loginAction}
+              registrationAction={registrationAction}
+              surface="checkout"
+              loginError={showAuth === "login" ? loginError : undefined}
+              registrationError={
+                showAuth === "register" ? registrationError : undefined
+              }
+            />
           </div>
         </motion.div>
       ) : null}
     </div>
   );
-}
-
-function providerLabel(providerId: string) {
-  if (providerId === "google") return "Google";
-  if (providerId === "apple") return "Apple";
-  if (providerId === "facebook") return "Facebook";
-  return "Društvena";
 }

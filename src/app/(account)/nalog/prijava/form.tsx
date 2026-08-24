@@ -23,7 +23,11 @@ export function LoginError({ error }: { error?: LoginErrorCode }) {
   );
 }
 
-export function CustomerLoginFields() {
+export function CustomerLoginFields({
+  autoFocus = true,
+}: {
+  autoFocus?: boolean;
+} = {}) {
   const { pending } = useFormStatus();
 
   return (
@@ -36,7 +40,7 @@ export function CustomerLoginFields() {
           type="email"
           required
           autoComplete="email"
-          autoFocus
+          autoFocus={autoFocus}
           placeholder="ime@primer.rs"
           className="h-10 bg-white md:h-11"
         />

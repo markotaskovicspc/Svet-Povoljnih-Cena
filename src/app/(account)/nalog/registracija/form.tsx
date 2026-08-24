@@ -40,7 +40,11 @@ export function RegistrationError({
   );
 }
 
-export function CustomerRegistrationFields() {
+export function CustomerRegistrationFields({
+  autoFocus = true,
+}: {
+  autoFocus?: boolean;
+} = {}) {
   const { pending } = useFormStatus();
 
   return (
@@ -53,7 +57,7 @@ export function CustomerRegistrationFields() {
           type="email"
           required
           autoComplete="email"
-          autoFocus
+          autoFocus={autoFocus}
           placeholder="ime@primer.rs"
           className="h-11 bg-white"
         />

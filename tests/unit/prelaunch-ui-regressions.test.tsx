@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { IdentityStep } from "@/components/checkout/identity-step";
 import { getCheckoutPaymentTrustMessage } from "@/components/checkout/notes-consent";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
@@ -9,17 +9,57 @@ import {
 } from "@/lib/api/search";
 import { missingXExpressStreetDeactivation } from "@/lib/x-express/sync";
 
-vi.mock("next-auth/react", () => ({ signIn: vi.fn() }));
-
 describe("pre-launch UI regressions", () => {
-  it("does not advertise the incomplete SMS OTP flow", () => {
+  it("keeps every checkout login method inside the identity step", () => {
+    const authAction = async () => undefined;
     const html = renderToStaticMarkup(
-      <IdentityStep value="login" onPick={() => undefined} />,
+      <IdentityStep
+        value="login"
+        onPick={() => undefined}
+        loginAction={authAction}
+        registrationAction={authAction}
+        socialProviders={[
+          { id: "google", label: "Google", action: authAction },
+          { id: "apple", label: "Apple", action: authAction },
+          { id: "facebook", label: "Facebook", action: authAction },
+        ]}
+      />,
     );
 
-    expect(html).toContain("E-pošta i lozinka");
-    expect(html).toContain("/nalog/prijava?callbackUrl=%2Fcheckout%2Fpodaci");
+    expect(html).toContain("ili nastavite e-poštom");
+    expect(html).toContain('name="password"');
+    expect(html).toContain('name="authSurface" value="checkout"');
+    expect(html).toContain('name="callbackUrl" value="/checkout/podaci"');
+    expect(html).toContain("Prijavite se uz Google");
+    expect(html).toContain("Prijavite se uz Apple");
+    expect(html).toContain("Prijavite se uz Facebook");
+    expect(html).not.toContain("/nalog/prijava?callbackUrl=");
     expect(html).not.toContain("SMS kod");
+  });
+
+  it("keeps checkout registration inline and returns to checkout", () => {
+    const authAction = async () => undefined;
+    const html = renderToStaticMarkup(
+      <IdentityStep
+        value="register"
+        onPick={() => undefined}
+        loginAction={authAction}
+        registrationAction={authAction}
+        socialProviders={[
+          { id: "google", label: "Google", action: authAction },
+          { id: "apple", label: "Apple", action: authAction },
+          { id: "facebook", label: "Facebook", action: authAction },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('name="authSurface" value="checkout"');
+    expect(html).toContain('name="callbackUrl" value="/checkout/podaci"');
+    expect(html).toContain('name="marketingEmailConsent"');
+    expect(html).toContain("Registrujte se uz Google");
+    expect(html).toContain("Registrujte se uz Apple");
+    expect(html).toContain("Registrujte se uz Facebook");
+    expect(html).not.toContain("/nalog/registracija?callbackUrl=");
   });
 
   it("describes only the selected payment transport", () => {

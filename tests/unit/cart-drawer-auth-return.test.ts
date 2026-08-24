@@ -7,9 +7,13 @@ import {
 
 describe("cart drawer auth return", () => {
   it("marks the current storefront URL for reopening the drawer", () => {
-    expect(cartDrawerLoginReturnPath("/novo", "sort=price-asc&page=2")).toBe(
-      "/novo?sort=price-asc&page=2&spcCart=open",
-    );
+    expect(
+      cartDrawerLoginReturnPath(
+        "/novo",
+        "sort=price-asc&page=2",
+        "#artikli",
+      ),
+    ).toBe("/novo?sort=price-asc&page=2&spcCart=open#artikli");
   });
 
   it("replaces an existing marker instead of duplicating it", () => {

@@ -1,32 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { AuthError } from "next-auth";
 import { Heart, PackageCheck, ShieldCheck, Sparkles } from "lucide-react";
 
-import {
-  CustomerRegistrationFields,
-  RegistrationError,
-  type RegistrationErrorCode,
-} from "./form";
-import { SocialAuthButtons } from "@/components/account/social-auth-buttons";
+import type { RegistrationErrorCode } from "./form";
+import { CustomerAuthMethods } from "@/components/account/customer-auth-methods";
 import { getConfiguredSocialAuthProviders } from "@/lib/auth/social-providers";
 import { getCurrentUser } from "@/lib/auth/session";
-import { signIn } from "@/lib/auth/auth";
-import { registerCustomer } from "@/lib/auth/credentials";
-import { setMarketingConsent } from "@/lib/auth/gdpr";
-import { sendEmailConfirmationForUser } from "@/lib/auth/email-verification";
 import { customerCallback } from "@/lib/auth/customer-callback";
-import { isValidCustomerPassword } from "@/lib/auth/customer-password-policy";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
-import { BRAND } from "@/lib/brand";
 import {
-  checkRateLimit,
-  getClientIpFromHeaders,
-  rateLimitKey,
-  RATE_LIMITS,
-} from "@/lib/security/rate-limit";
+  loginCustomerAction,
+  registerCustomerAction,
+} from "../customer-auth-actions";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Registracija",
@@ -35,85 +22,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function registrationUrl(error: RegistrationErrorCode, callbackUrl: string) {
-  return `/nalog/registracija?error=${error}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
-}
-
-async function registerAction(formData: FormData) {
-  "use server";
-
-  const callbackUrl = customerCallback(
-    String(formData.get("callbackUrl") ?? ""),
-  );
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const marketingEmailConsent =
-    formData.get("marketingEmailConsent") === "true";
-
-  const requestHeaders = await headers();
-  const limited = await checkRateLimit(
-    rateLimitKey("registration", getClientIpFromHeaders(requestHeaders), email),
-    RATE_LIMITS.registration,
-  );
-  if (!limited.ok) {
-    redirect(registrationUrl("rate_limited", callbackUrl));
-  }
-
-  if (!emailPattern.test(email)) {
-    redirect(registrationUrl("invalid_email", callbackUrl));
-  }
-  if (!isValidCustomerPassword(password)) {
-    redirect(registrationUrl("weak_password", callbackUrl));
-  }
-
-  let registrationError: RegistrationErrorCode | null = null;
-
-  try {
-    const user = await registerCustomer({
-      email,
-      password,
-    });
-    if (marketingEmailConsent) {
-      await setMarketingConsent(user.id, { email: true });
-    }
-    await sendEmailConfirmationForUser(user.id, {
-      includeFirstPurchaseOffer: marketingEmailConsent,
-    }).catch((err) => {
-      console.error("[email] registration confirmation failed", err);
-    });
-  } catch (err) {
-    registrationError =
-      err instanceof Error && err.message === "EMAIL_TAKEN"
-        ? "email_taken"
-        : "generic";
-  }
-
-  if (registrationError) {
-    redirect(registrationUrl(registrationError, callbackUrl));
-  }
-
-  let signInError = false;
-
-  try {
-    await signIn("credentials", {
-      email,
-      password,
-      redirect: true,
-      redirectTo: callbackUrl,
-    });
-  } catch (err) {
-    if (err instanceof AuthError) {
-      signInError = true;
-    } else {
-      throw err;
-    }
-  }
-
-  if (signInError) redirect(registrationUrl("generic", callbackUrl));
-}
 
 export default async function CustomerRegistrationPage({
   searchParams,
@@ -174,27 +82,14 @@ export default async function CustomerRegistrationPage({
           Najbrže je preko Google, Apple ili Facebook naloga.
         </p>
 
-        <div className="mt-5">
-          <RegistrationError error={sp.error} />
-        </div>
-
-        <SocialAuthButtons
+        <CustomerAuthMethods
           callbackUrl={callbackUrl}
           intent="register"
           providers={socialProviders}
-          showDivider={false}
+          loginAction={loginCustomerAction}
+          registrationAction={registerCustomerAction}
+          registrationError={sp.error}
         />
-
-        <div className="mt-6 flex items-center gap-3 text-xs tracking-[0.18em] text-ink-400 uppercase">
-          <span className="h-px flex-1 bg-border" />
-          ili nastavite e-poštom
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <form action={registerAction} className="mt-5">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <CustomerRegistrationFields />
-        </form>
 
         <p className="mt-6 text-center text-sm text-ink-500">
           Već imate nalog?{" "}

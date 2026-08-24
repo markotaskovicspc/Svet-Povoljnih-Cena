@@ -397,6 +397,7 @@ function CartDrawerLoginOfferLink({ onNavigate }: { onNavigate?: () => void }) {
         const returnPath = cartDrawerLoginReturnPath(
           window.location.pathname,
           window.location.search,
+          window.location.hash,
         );
         router.push(customerLoginHref(returnPath));
       }}

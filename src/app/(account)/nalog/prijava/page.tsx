@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AuthError } from "next-auth";
 import { ShieldCheck } from "lucide-react";
-import { CustomerLoginFields, LoginError, type LoginErrorCode } from "./form";
-import { SocialAuthButtons } from "@/components/account/social-auth-buttons";
+import type { LoginErrorCode } from "./form";
+import { CustomerAuthMethods } from "@/components/account/customer-auth-methods";
 import { getConfiguredSocialAuthProviders } from "@/lib/auth/social-providers";
 import { getCurrentUser } from "@/lib/auth/session";
-import { signIn } from "@/lib/auth/auth";
 import { customerCallback } from "@/lib/auth/customer-callback";
 import { appleAction, facebookAction, googleAction } from "../auth-actions";
+import {
+  loginCustomerAction,
+  registerCustomerAction,
+} from "../customer-auth-actions";
 import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
@@ -19,38 +21,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-async function loginAction(formData: FormData) {
-  "use server";
-
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const remember = String(formData.get("remember") ?? "") === "true";
-  const callbackUrl = customerCallback(
-    String(formData.get("callbackUrl") ?? ""),
-  );
-
-  try {
-    await signIn("credentials", {
-      email,
-      password,
-      remember,
-      redirect: true,
-      redirectTo: callbackUrl,
-    });
-  } catch (err) {
-    if (err instanceof AuthError) {
-      const error: LoginErrorCode =
-        err.type === "CredentialsSignin" || err.type === "CallbackRouteError"
-          ? "invalid"
-          : "generic";
-      redirect(
-        `/nalog/prijava?error=${error}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
-      );
-    }
-    throw err;
-  }
-}
 
 export default async function CustomerLoginPage({
   searchParams,
@@ -111,33 +81,16 @@ export default async function CustomerLoginPage({
               Lozinka je promenjena. Prijavite se novom lozinkom.
             </p>
           ) : null}
-          <LoginError error={sp.error} />
         </div>
 
-        <SocialAuthButtons
+        <CustomerAuthMethods
           callbackUrl={callbackUrl}
           intent="login"
           providers={socialProviders}
-          showDivider={false}
+          loginAction={loginCustomerAction}
+          registrationAction={registerCustomerAction}
+          loginError={sp.error}
         />
-
-        <div className="mt-4 flex items-center gap-3 text-[11px] tracking-[0.14em] text-ink-400 uppercase md:mt-6 md:text-xs md:tracking-[0.18em]">
-          <span className="h-px flex-1 bg-border" />
-          ili nastavite e-poštom
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <form action={loginAction} className="mt-4 md:mt-5">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <CustomerLoginFields />
-        </form>
-
-        <Link
-          href="/nalog/lozinka/zaboravljena"
-          className="mt-3 inline-flex w-full justify-center text-sm font-medium text-walnut hover:underline"
-        >
-          Zaboravili ste lozinku?
-        </Link>
 
         <p className="mt-4 text-center text-sm text-ink-500 md:mt-6">
           Nemate nalog?{" "}
