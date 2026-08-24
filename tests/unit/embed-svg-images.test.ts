@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   embedSvgLinkedImages,
@@ -112,4 +113,20 @@ describe("embedding linked SVG images", () => {
       "moja slika.webp",
     );
   });
+
+  it.each(["999.svg", "novo.svg"])(
+    "normalizes the legacy Illustrator asset %s before upload",
+    (name) => {
+      const source = readFileSync(
+        new URL(`../../public/brand/promo-stickers/${name}`, import.meta.url),
+      );
+      const output = embedSvgLinkedImages(source, []);
+      const validated = validateSafeSvgBytes(output.bytes);
+
+      expect(validated).toContain("<path");
+      expect(validated).not.toContain("<!DOCTYPE");
+      expect(validated).not.toContain("foreignObject");
+      expect(validated).not.toContain("aipgf");
+    },
+  );
 });

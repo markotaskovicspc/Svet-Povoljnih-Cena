@@ -105,12 +105,18 @@ export function BannerImageUpload({
     const input = inputRef.current;
     const form = input?.form;
     if (!form) return;
+    const cleanupBeforePageExit = () => {
+      const key = uploadedKeyRef.current;
+      uploadedKeyRef.current = "";
+      cleanupStagedUpload(key);
+    };
     form.addEventListener("reset", resetPreview);
+    window.addEventListener("pagehide", cleanupBeforePageExit);
     return () => {
       form.removeEventListener("reset", resetPreview);
+      window.removeEventListener("pagehide", cleanupBeforePageExit);
       selectionRef.current += 1;
-      cleanupStagedUpload(uploadedKeyRef.current);
-      uploadedKeyRef.current = "";
+      cleanupBeforePageExit();
       pendingSvgRef.current = null;
       releaseObjectUrl();
     };
@@ -124,82 +130,95 @@ export function BannerImageUpload({
     selection: number,
   ) {
     let stagedKey = "";
+    const stagedKeys: string[] = [];
     try {
-      if (file.type === "image/svg+xml") {
-        const formData = new FormData();
-        formData.set("file", file);
-        formData.set("placement", placement);
-        formData.set("variant", variant);
-        for (const companion of companions) {
-          formData.append("companions", companion);
-        }
-        const response = await fetch("/api/admin/banner-uploads", {
+      const uploadFiles = [file, ...companions];
+      if (
+        uploadFiles.reduce((sum, uploadFile) => sum + uploadFile.size, 0) >
+        BANNER_IMAGE_MAX_BYTES
+      ) {
+        throw new Error(
+          "SVG i prateće slike zajedno ne smeju biti veći od 8 MB.",
+        );
+      }
+
+      const isSvg = file.type === "image/svg+xml";
+      const uploadedFiles: Array<{ key: string; name: string }> = [];
+      for (const uploadFile of uploadFiles) {
+        const presignResponse = await fetch("/api/admin/banner-uploads", {
           method: "POST",
-          body: formData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: uploadFile.name,
+            contentType: uploadFile.type,
+            bytes: uploadFile.size,
+            placement,
+            variant,
+          }),
         });
-        const payload = await response.json().catch(() => null);
+        const presign = await presignResponse.json().catch(() => null);
+        if (!presignResponse.ok || !presign?.uploadUrl || !presign?.key) {
+          throw new Error(
+            presign?.error ?? "Priprema slanja slike nije uspela.",
+          );
+        }
+        const uploadKey = String(presign.key);
+        stagedKeys.push(uploadKey);
+        const uploadResponse = await fetch(String(presign.uploadUrl), {
+          method: "PUT",
+          headers: {
+            "Content-Type":
+              uploadFile.type === "image/svg+xml"
+                ? "application/octet-stream"
+                : uploadFile.type,
+          },
+          body: uploadFile,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error("Slanje slike nije uspelo. Pokušajte ponovo.");
+        }
+        uploadedFiles.push({ key: uploadKey, name: uploadFile.name });
+        if (selectionRef.current !== selection) {
+          for (const key of stagedKeys) cleanupStagedUpload(key);
+          return;
+        }
+      }
+      stagedKey = uploadedFiles[0].key;
+
+      let publicUrl = "";
+      if (isSvg) {
+        const finalizeResponse = await fetch("/api/admin/banner-uploads", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key: stagedKey,
+            placement,
+            variant,
+            companions: uploadedFiles.slice(1),
+          }),
+        });
+        const finalized = await finalizeResponse.json().catch(() => null);
         if (
-          !response.ok &&
-          payload?.code === "SVG_COMPANION_REQUIRED" &&
-          Array.isArray(payload.missing)
+          !finalizeResponse.ok &&
+          finalized?.code === "SVG_COMPANION_REQUIRED" &&
+          Array.isArray(finalized.missing)
         ) {
           throw new SvgCompanionUploadError(
-            payload.missing.filter(
+            finalized.missing.filter(
               (value: unknown): value is string => typeof value === "string",
             ),
           );
         }
-        if (!response.ok || !payload?.key) {
-          throw new Error(payload?.error ?? "Slanje SVG slike nije uspelo.");
+        if (!finalizeResponse.ok || !finalized?.key) {
+          throw new Error(
+            finalized?.error ?? "Bezbednosna provera SVG slike nije uspela.",
+          );
         }
-        stagedKey = String(payload.key);
-        if (selectionRef.current !== selection) {
-          cleanupStagedUpload(stagedKey);
-          return;
-        }
-        uploadedKeyRef.current = stagedKey;
-        pendingSvgRef.current = null;
-        setUploadedKey(stagedKey);
-        setUploading(false);
-        setError("");
-        if (payload.publicUrl) {
-          releaseObjectUrl();
-          setPreviewUrl(String(payload.publicUrl));
-        }
-        if (inputRef.current) {
-          inputRef.current.value = "";
-          inputRef.current.setCustomValidity("");
-        }
-        return;
-      }
-
-      const presignResponse = await fetch("/api/admin/banner-uploads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          bytes: file.size,
-          placement,
-          variant,
-        }),
-      });
-      const presign = await presignResponse.json().catch(() => null);
-      if (!presignResponse.ok || !presign?.uploadUrl || !presign?.key) {
-        throw new Error(presign?.error ?? "Priprema slanja slike nije uspela.");
-      }
-      stagedKey = String(presign.key);
-
-      const uploadResponse = await fetch(String(presign.uploadUrl), {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Slanje slike nije uspelo. Pokušajte ponovo.");
+        stagedKey = String(finalized.key);
+        publicUrl = finalized.publicUrl ? String(finalized.publicUrl) : "";
       }
       if (selectionRef.current !== selection) {
-        cleanupStagedUpload(stagedKey);
+        for (const key of stagedKeys) cleanupStagedUpload(key);
         return;
       }
 
@@ -208,6 +227,10 @@ export function BannerImageUpload({
       setUploadedKey(stagedKey);
       setUploading(false);
       setError("");
+      if (publicUrl) {
+        releaseObjectUrl();
+        setPreviewUrl(publicUrl);
+      }
       if (inputRef.current) {
         // The original bytes have reached Supabase directly. Clearing the file
         // keeps the subsequent Server Action well below Vercel's 4.5 MB cap.
@@ -215,7 +238,7 @@ export function BannerImageUpload({
         inputRef.current.setCustomValidity("");
       }
     } catch (caught) {
-      if (stagedKey) cleanupStagedUpload(stagedKey);
+      for (const key of stagedKeys) cleanupStagedUpload(key);
       if (selectionRef.current !== selection) return;
       const message =
         caught instanceof SvgCompanionUploadError

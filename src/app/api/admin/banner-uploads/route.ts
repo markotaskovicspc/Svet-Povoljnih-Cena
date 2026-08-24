@@ -34,10 +34,29 @@ const cleanupSchema = z.object({
   variant: z.enum(["desktop", "mobile"]),
 });
 
+const finalizeSvgSchema = cleanupSchema.extend({
+  companions: z
+    .array(
+      z.object({
+        key: z.string().min(1).max(600),
+        name: z.string().min(1).max(255),
+      }),
+    )
+    .max(20)
+    .default([]),
+});
+
 function noStoreJson(body: unknown, init?: ResponseInit) {
   const response = NextResponse.json(body, init);
   response.headers.set("cache-control", "private, no-store");
   return response;
+}
+
+async function removeStagedObjects(keys: string[]) {
+  if (keys.length === 0) return { error: null };
+  return createAdminClient()
+    .storage.from(getProductMediaBucket())
+    .remove(keys);
 }
 
 export async function POST(request: Request) {
@@ -144,9 +163,6 @@ export async function POST(request: Request) {
       type: input.data.contentType,
       size: input.data.bytes,
     });
-    if (extension === "svg") {
-      throw new Error("SVG se šalje kroz bezbednu direktnu proveru.");
-    }
   } catch (error) {
     return noStoreJson(
       {
@@ -177,6 +193,157 @@ export async function POST(request: Request) {
   });
 }
 
+/**
+ * SVG files first travel straight to Supabase so an 8 MB file never crosses
+ * Vercel's 4.5 MB request-body boundary. This small follow-up request downloads
+ * the random staging object server-side, sanitizes it, and atomically replaces
+ * it before the browser is given a public preview URL.
+ */
+export async function PUT(request: Request) {
+  const admin = await requireAdminAction(["CONTENT"]);
+  const input = finalizeSvgSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!input.success) {
+    return noStoreJson({ error: "Neispravan SVG upload ključ." }, { status: 400 });
+  }
+
+  const expectedKey = {
+    actorId: admin.id,
+    placement: input.data.placement,
+    variant: input.data.variant,
+  };
+  const key = getBannerStagingImageKey(input.data.key, expectedKey);
+  if (!key || !key.endsWith(".svg")) {
+    return noStoreJson(
+      { error: "SVG upload ključ nije dozvoljen." },
+      { status: 403 },
+    );
+  }
+
+  const companions = input.data.companions.map((companion) => ({
+    ...companion,
+    key: getBannerStagingImageKey(companion.key, expectedKey),
+  }));
+  if (
+    companions.some(
+      (companion) => !companion.key || companion.key.endsWith(".svg"),
+    ) ||
+    new Set([key, ...companions.map((companion) => companion.key)]).size !==
+      companions.length + 1
+  ) {
+    await removeStagedObjects([
+      key,
+      ...companions
+        .map((companion) => companion.key)
+        .filter((companionKey): companionKey is string => Boolean(companionKey)),
+    ]);
+    return noStoreJson(
+      { error: "Prateći SVG upload ključevi nisu dozvoljeni." },
+      { status: 403 },
+    );
+  }
+
+  const cleanupKeys = [
+    key,
+    ...companions.map((companion) => companion.key as string),
+  ];
+
+  const storage = createAdminClient().storage.from(getProductMediaBucket());
+  const downloads = await Promise.all(
+    cleanupKeys.map((downloadKey) => storage.download(downloadKey)),
+  );
+  const downloadFailure = downloads.find(({ data, error }) => error || !data);
+  if (downloadFailure) {
+    await removeStagedObjects(cleanupKeys);
+    return noStoreJson(
+      {
+        error:
+          downloadFailure.error?.message ?? "SVG upload nije pronađen.",
+      },
+      { status: 502 },
+    );
+  }
+
+  let bytes: Buffer;
+  let embedded: string[] = [];
+  try {
+    const blobs = downloads.map(({ data }) => data as Blob);
+    const totalBytes = blobs.reduce((sum, blob) => sum + blob.size, 0);
+    if (totalBytes > BANNER_IMAGE_MAX_BYTES) {
+      throw new Error(
+        "SVG i prateće slike zajedno ne smeju biti veći od 8 MB.",
+      );
+    }
+    const source = blobs[0];
+    if (!source) throw new Error("SVG upload nije pronađen.");
+    validateBannerImageFile({
+      name: key,
+      type: "image/svg+xml",
+      size: source.size,
+    });
+    const prepared = embedSvgLinkedImages(
+      new Uint8Array(await source.arrayBuffer()),
+      await Promise.all(
+        companions.map(async (companion, index) => {
+          const blob = blobs[index + 1];
+          if (!blob) throw new Error("Prateći SVG upload nije pronađen.");
+          return {
+            name: companion.name,
+            bytes: new Uint8Array(await blob.arrayBuffer()),
+          };
+        }),
+      ),
+    );
+    embedded = prepared.embedded;
+    bytes = Buffer.from(validateSafeSvgBytes(prepared.bytes));
+    validateBannerImageFile({
+      name: key,
+      type: "image/svg+xml",
+      size: bytes.length,
+    });
+  } catch (error) {
+    await removeStagedObjects(cleanupKeys);
+    if (error instanceof SvgCompanionRequiredError) {
+      return noStoreJson(
+        { error: error.message, code: error.code, missing: error.missing },
+        { status: 422 },
+      );
+    }
+    return noStoreJson(
+      { error: error instanceof Error ? error.message : "SVG nije ispravan." },
+      { status: 400 },
+    );
+  }
+
+  const { error: updateError } = await storage.update(key, bytes, {
+    cacheControl: "3600",
+    contentType: "image/svg+xml",
+  });
+  if (updateError) {
+    await removeStagedObjects(cleanupKeys);
+    return noStoreJson({ error: updateError.message }, { status: 502 });
+  }
+
+  const companionKeys = cleanupKeys.slice(1);
+  const { error: companionCleanupError } =
+    await removeStagedObjects(companionKeys);
+  if (companionCleanupError) {
+    await removeStagedObjects(cleanupKeys);
+    return noStoreJson(
+      { error: companionCleanupError.message },
+      { status: 502 },
+    );
+  }
+
+  return noStoreJson({
+    key,
+    direct: true,
+    publicUrl: storage.getPublicUrl(key).data.publicUrl,
+    embedded,
+  });
+}
+
 export async function DELETE(request: Request) {
   const admin = await requireAdminAction(["CONTENT"]);
   const input = cleanupSchema.safeParse(await request.json().catch(() => null));
@@ -196,9 +363,7 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const { error } = await createAdminClient()
-    .storage.from(getProductMediaBucket())
-    .remove([key]);
+  const { error } = await removeStagedObjects([key]);
   if (error) {
     return noStoreJson({ error: error.message }, { status: 502 });
   }

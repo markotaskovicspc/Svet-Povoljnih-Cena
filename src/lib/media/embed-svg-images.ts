@@ -1,5 +1,6 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { detectRasterMime } from "./raster-signature";
+import { normalizeSvgMarkupForUpload } from "./safe-svg";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink";
@@ -81,6 +82,7 @@ export function embedSvgLinkedImages(
   } catch {
     throw new Error("SVG mora biti ispravan UTF-8 fajl.");
   }
+  source = normalizeSvgMarkupForUpload(source);
 
   const parseErrors: string[] = [];
   const document = new DOMParser({

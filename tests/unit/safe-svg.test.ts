@@ -58,6 +58,20 @@ describe("safe SVG uploads", () => {
     expect(output).toBe('<svg xmlns="http://www.w3.org/2000/svg"/>');
   });
 
+  it("normalizes legacy Illustrator namespaces and removes PGF fallbacks", () => {
+    const output = validateSafeSvgBytes(
+      bytes(
+        `<?xml version="1.0"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [<!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">]><svg xmlns="http://www.w3.org/2000/svg" xmlns:i="&ns_ai;" xmlns:xlink="http://www.w3.org/1999/xlink"><switch><foreignObject requiredExtensions="&ns_ai;"><i:aipgfRef xlink:href="#adobe_pgf"/></foreignObject><g i:extraneous="self"><path d="M0 0h1v1z"/></g></switch><i:aipgf id="adobe_pgf"><![CDATA[generator payload]]></i:aipgf></svg>`,
+      ),
+    );
+
+    expect(output).toContain("<path");
+    expect(output).not.toContain("<!DOCTYPE");
+    expect(output).not.toContain("foreignObject");
+    expect(output).not.toContain("aipgf");
+    expect(output).not.toContain("&ns_ai;");
+  });
+
   it("rejects custom entity references instead of resolving them", () => {
     expect(() =>
       validateSafeSvgBytes(
