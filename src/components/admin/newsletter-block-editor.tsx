@@ -138,10 +138,28 @@ export function NewsletterBlockEditor({
 
       <div className="xl:sticky xl:top-6 xl:self-start">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Brzi pregled sadržaja</p>
-        <div className="max-h-[760px] overflow-y-auto rounded-2xl border bg-[#faf7f2] p-4 shadow-inner">
-          <div className="mx-auto max-w-[560px] rounded-2xl bg-white p-6">
-            {blocks.map((block) => <BlockPreview key={block.id} block={block} products={products} />)}
+        <div className="max-h-[760px] overflow-y-auto rounded-2xl border bg-[#f2f6f8] p-4 shadow-inner">
+          <div className="mx-auto max-w-[560px] overflow-hidden rounded-xl border-t-[5px] border-[#123f5a] bg-white shadow-[0_8px_24px_rgba(18,63,90,0.10)]">
+            <div className="px-6 pb-[18px] pt-7">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/documents/garantni-list-logo.jpeg"
+                alt="Svet Povoljnih Cena"
+                width={220}
+                height={36}
+                className="block h-auto w-[220px] max-w-[78%]"
+              />
+            </div>
+            <div className="px-6 pb-8 pt-2">
+              {blocks.map((block) => <BlockPreview key={block.id} block={block} products={products} />)}
+            </div>
           </div>
+          <p className="mx-auto max-w-[560px] px-3 pt-[18px] text-center text-[11px] leading-[1.6] text-[#5f6f78]">
+            Ovu poruku primate jer se vaša adresa nalazi na listi kontakata.<br />
+            <span className="text-[#123f5a] underline">Odjavite se ili promenite podešavanja</span><br />
+            SVET POVOLJNIH CENA DOO BEOGRAD (NOVI BEOGRAD) · Beograd, Srbija<br />
+            <span className="text-[#123f5a] underline">www.svetpovoljnihcena.rs</span>
+          </p>
         </div>
       </div>
     </div>
@@ -150,16 +168,16 @@ export function NewsletterBlockEditor({
 
 function BlockPreview({ block, products }: { block: Block; products: Array<{ sku: string; name: string }> }) {
   switch (block.type) {
-    case "heading": return <h2 className="mb-4 font-display text-2xl">{block.text || "Naslov"}</h2>;
-    case "text": return <p className="mb-5 whitespace-pre-line text-sm leading-6 text-ink-700">{block.text}</p>;
+    case "heading": return <h2 className="mb-4 text-[28px] font-bold leading-[1.2] tracking-[-0.02em] text-[#172b36]">{block.text || "Naslov"}</h2>;
+    case "text": return <p className="mb-5 whitespace-pre-line text-[15px] leading-[1.65] text-[#5f6f78]">{block.text}</p>;
     case "image":
       // Admin email previews accept arbitrary remote URLs; Next Image's
       // deployment-time host allowlist is intentionally not applicable here.
       // eslint-disable-next-line @next/next/no-img-element
-      return block.url ? <div className="mb-5 overflow-hidden rounded-xl bg-muted-bg"><img src={block.url} alt={block.alt} className="h-auto w-full" /></div> : <div className="mb-5 rounded-xl bg-muted-bg p-8 text-center text-xs text-ink-500">Slika</div>;
-    case "button": return <div className="mb-5"><span className="inline-block rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white">{block.label}</span></div>;
-    case "divider": return <hr className="my-6 border-border" />;
-    case "voucher": return <div className="mb-5 rounded-xl border border-dashed border-walnut bg-canvas p-4 text-center"><p className="font-mono text-xl font-bold">{block.code || "KOD"}</p><p className="text-xs text-ink-500">{block.text}</p></div>;
-    case "products": return <div className="mb-5"><h3 className="mb-2 font-display text-lg">{block.title}</h3><div className="grid grid-cols-2 gap-2">{block.skus.map((sku) => <div key={sku} className="rounded-lg bg-muted-bg p-3 text-xs"><strong>{sku}</strong><br />{products.find((product) => product.sku === sku)?.name ?? "Proizvod će biti proveren pri čuvanju"}</div>)}</div></div>;
+      return block.url ? <div className="mb-5 overflow-hidden rounded-lg bg-[#f5f8f9]"><img src={block.url} alt={block.alt} className="h-auto w-full" /></div> : <div className="mb-5 rounded-lg bg-[#f5f8f9] p-8 text-center text-xs text-[#5f6f78]">Slika</div>;
+    case "button": return <div className="mb-6"><span className="inline-block rounded-[7px] bg-[#123f5a] px-[22px] py-[13px] text-sm font-bold leading-[1.2] text-white">{block.label}</span></div>;
+    case "divider": return <hr className="my-[26px] border-[#dce6ea]" />;
+    case "voucher": return <div className="mb-[22px] rounded-lg border border-dashed border-[#123f5a] bg-[#eaf4f7] p-5 text-center"><p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#123f5a]">Kod za popust</p><p className="mb-2 font-mono text-2xl font-bold text-[#172b36]">{block.code || "KOD"}</p><p className="text-[13px] text-[#5f6f78]">{block.text}</p></div>;
+    case "products": return <div className="mb-5"><h3 className="mb-2 text-[23px] font-bold leading-[1.3] text-[#172b36]">{block.title}</h3><div className="grid grid-cols-2 gap-2">{block.skus.map((sku) => <div key={sku} className="rounded-lg bg-[#f5f8f9] p-3 text-xs text-[#172b36]"><strong>{sku}</strong><br />{products.find((product) => product.sku === sku)?.name ?? "Proizvod će biti proveren pri čuvanju"}</div>)}</div></div>;
   }
 }

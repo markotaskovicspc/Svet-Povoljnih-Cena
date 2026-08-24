@@ -2,11 +2,16 @@ import "server-only";
 
 import ExcelJS from "exceljs";
 import { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { databaseIdentifier, db } from "@/lib/db";
 import {
   NEWSLETTER_CONSENT_VERSION,
   NEWSLETTER_POLICY_VERSION,
 } from "@/lib/newsletter/contacts";
+import {
+  audienceFilterJson,
+  emptyAudienceFilter,
+  previewNewsletterAudience,
+} from "@/lib/newsletter/audience";
 
 const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 100_000;
@@ -66,10 +71,20 @@ export async function previewNewsletterContactImport(file: File) {
   return preview(parsed);
 }
 
-export async function importNewsletterContacts(file: File, actorId: string) {
+export async function importNewsletterContacts(
+  file: File,
+  actorId: string,
+  listNameRaw: string,
+) {
   const parsed = await parseContactFile(file);
   const summary = preview(parsed);
+  const listName = cleanListName(listNameRaw);
   const importedAt = new Date();
+  const marketingContactTable = databaseIdentifier("MarketingContact");
+  const consentEventTable = databaseIdentifier("MarketingConsentEvent");
+  const subscriberTable = databaseIdentifier("NewsletterSubscriber");
+  const contactStatusType = databaseIdentifier("MarketingContactStatus");
+  const consentEventType = databaseIdentifier("MarketingConsentEventType");
 
   for (let offset = 0; offset < parsed.contacts.length; offset += CHUNK_SIZE) {
     const chunk = parsed.contacts.slice(offset, offset + CHUNK_SIZE);
@@ -98,8 +113,8 @@ export async function importNewsletterContacts(file: File, actorId: string) {
             "rowNumber" integer
           )
         )
-        INSERT INTO "MarketingContact" (
-          id, email, "firstName", "lastName", language, status, source,
+        INSERT INTO ${marketingContactTable} AS existing_contact (
+          id, email, "firstName", "lastName", language, status, source, tags,
           "consentVersion", "subscribedAt", "confirmedAt", "createdAt", "updatedAt"
         )
         SELECT
@@ -108,54 +123,59 @@ export async function importNewsletterContacts(file: File, actorId: string) {
           imported."firstName",
           imported."lastName",
           'sr-Latn',
-          CASE WHEN imported.consented THEN 'ACTIVE'::"MarketingContactStatus"
-               ELSE 'PENDING'::"MarketingContactStatus" END,
+          CASE WHEN imported.consented THEN 'ACTIVE'::${contactStatusType}
+               ELSE 'PENDING'::${contactStatusType} END,
           imported.source,
-          ${NEWSLETTER_CONSENT_VERSION},
+          ARRAY[${listName}::text]::TEXT[],
+          ${NEWSLETTER_CONSENT_VERSION}::text,
           CASE WHEN imported.consented THEN imported."consentedAt" ELSE NULL END,
           CASE WHEN imported.consented THEN imported."consentedAt" ELSE NULL END,
-          ${importedAt},
-          ${importedAt}
+          ${importedAt}::timestamptz,
+          ${importedAt}::timestamptz
         FROM imported
         ON CONFLICT (email) DO UPDATE SET
-          "firstName" = COALESCE(EXCLUDED."firstName", "MarketingContact"."firstName"),
-          "lastName" = COALESCE(EXCLUDED."lastName", "MarketingContact"."lastName"),
-          source = COALESCE("MarketingContact".source, EXCLUDED.source),
+          "firstName" = COALESCE(EXCLUDED."firstName", existing_contact."firstName"),
+          "lastName" = COALESCE(EXCLUDED."lastName", existing_contact."lastName"),
+          source = COALESCE(existing_contact.source, EXCLUDED.source),
+          tags = ARRAY(
+            SELECT DISTINCT tag
+            FROM unnest(existing_contact.tags || EXCLUDED.tags) AS tag
+          ),
           status = CASE
-            WHEN "MarketingContact".status IN (
-              'UNSUBSCRIBED'::"MarketingContactStatus",
-              'SUPPRESSED'::"MarketingContactStatus"
-            ) THEN "MarketingContact".status
-            WHEN "MarketingContact".status = 'ACTIVE'::"MarketingContactStatus"
-              THEN "MarketingContact".status
-            WHEN EXCLUDED.status = 'ACTIVE'::"MarketingContactStatus"
+            WHEN existing_contact.status IN (
+              'UNSUBSCRIBED'::${contactStatusType},
+              'SUPPRESSED'::${contactStatusType}
+            ) THEN existing_contact.status
+            WHEN existing_contact.status = 'ACTIVE'::${contactStatusType}
+              THEN existing_contact.status
+            WHEN EXCLUDED.status = 'ACTIVE'::${contactStatusType}
               THEN EXCLUDED.status
-            ELSE "MarketingContact".status
+            ELSE existing_contact.status
           END,
           "consentVersion" = CASE
-            WHEN EXCLUDED.status = 'ACTIVE'::"MarketingContactStatus"
+            WHEN EXCLUDED.status = 'ACTIVE'::${contactStatusType}
               THEN EXCLUDED."consentVersion"
-            ELSE "MarketingContact"."consentVersion"
+            ELSE existing_contact."consentVersion"
           END,
           "subscribedAt" = CASE
-            WHEN "MarketingContact".status IN (
-              'UNSUBSCRIBED'::"MarketingContactStatus",
-              'SUPPRESSED'::"MarketingContactStatus"
-            ) THEN "MarketingContact"."subscribedAt"
-            WHEN EXCLUDED.status = 'ACTIVE'::"MarketingContactStatus"
-              THEN COALESCE("MarketingContact"."subscribedAt", EXCLUDED."subscribedAt")
-            ELSE "MarketingContact"."subscribedAt"
+            WHEN existing_contact.status IN (
+              'UNSUBSCRIBED'::${contactStatusType},
+              'SUPPRESSED'::${contactStatusType}
+            ) THEN existing_contact."subscribedAt"
+            WHEN EXCLUDED.status = 'ACTIVE'::${contactStatusType}
+              THEN COALESCE(existing_contact."subscribedAt", EXCLUDED."subscribedAt")
+            ELSE existing_contact."subscribedAt"
           END,
           "confirmedAt" = CASE
-            WHEN "MarketingContact".status IN (
-              'UNSUBSCRIBED'::"MarketingContactStatus",
-              'SUPPRESSED'::"MarketingContactStatus"
-            ) THEN "MarketingContact"."confirmedAt"
-            WHEN EXCLUDED.status = 'ACTIVE'::"MarketingContactStatus"
-              THEN COALESCE("MarketingContact"."confirmedAt", EXCLUDED."confirmedAt")
-            ELSE "MarketingContact"."confirmedAt"
+            WHEN existing_contact.status IN (
+              'UNSUBSCRIBED'::${contactStatusType},
+              'SUPPRESSED'::${contactStatusType}
+            ) THEN existing_contact."confirmedAt"
+            WHEN EXCLUDED.status = 'ACTIVE'::${contactStatusType}
+              THEN COALESCE(existing_contact."confirmedAt", EXCLUDED."confirmedAt")
+            ELSE existing_contact."confirmedAt"
           END,
-          "updatedAt" = ${importedAt}
+          "updatedAt" = ${importedAt}::timestamptz
       `);
 
       await tx.$executeRaw(Prisma.sql`
@@ -171,30 +191,31 @@ export async function importNewsletterContacts(file: File, actorId: string) {
             "rowNumber" integer
           )
         )
-        INSERT INTO "MarketingConsentEvent" (
+        INSERT INTO ${consentEventTable} (
           id, "contactId", type, source, "consentVersion", "policyVersion",
           "actorId", evidence, "occurredAt"
         )
         SELECT
           concat('nle_', md5(random()::text || clock_timestamp()::text || contact.id)),
           contact.id,
-          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::"MarketingContactStatus"
-               THEN 'GRANTED'::"MarketingConsentEventType"
-               ELSE 'MIGRATED'::"MarketingConsentEventType" END,
+          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::${contactStatusType}
+               THEN 'GRANTED'::${consentEventType}
+               ELSE 'MIGRATED'::${consentEventType} END,
           imported.source,
-          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::"MarketingContactStatus"
-               THEN ${NEWSLETTER_CONSENT_VERSION} ELSE NULL END,
-          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::"MarketingContactStatus"
-               THEN ${NEWSLETTER_POLICY_VERSION} ELSE NULL END,
-          ${actorId},
+          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::${contactStatusType}
+               THEN ${NEWSLETTER_CONSENT_VERSION}::text ELSE NULL END,
+          CASE WHEN imported.consented AND contact.status = 'ACTIVE'::${contactStatusType}
+               THEN ${NEWSLETTER_POLICY_VERSION}::text ELSE NULL END,
+          ${actorId}::text,
           jsonb_build_object(
-            'importedFile', ${safeFileName(file.name)},
+            'importedFile', ${safeFileName(file.name)}::text,
+            'contactList', ${listName}::text,
             'rowNumber', imported."rowNumber",
             'explicitConsent', imported.consented
           ),
-          CASE WHEN imported.consented THEN imported."consentedAt" ELSE ${importedAt} END
+          CASE WHEN imported.consented THEN imported."consentedAt" ELSE ${importedAt}::timestamptz END
         FROM imported
-        JOIN "MarketingContact" contact ON contact.email = imported.email
+        JOIN ${marketingContactTable} contact ON contact.email = imported.email
       `);
 
       await tx.$executeRaw(Prisma.sql`
@@ -211,11 +232,11 @@ export async function importNewsletterContacts(file: File, actorId: string) {
           )
         ), active AS (
           SELECT contact.email, contact.source
-          FROM "MarketingContact" contact
+          FROM ${marketingContactTable} contact
           JOIN imported ON imported.email = contact.email
-          WHERE contact.status = 'ACTIVE'::"MarketingContactStatus"
+          WHERE contact.status = 'ACTIVE'::${contactStatusType}
         )
-        INSERT INTO "NewsletterSubscriber" (
+        INSERT INTO ${subscriberTable} (
           id, email, consent, source, "createdAt", "unsubscribedAt"
         )
         SELECT
@@ -223,7 +244,7 @@ export async function importNewsletterContacts(file: File, actorId: string) {
           active.email,
           true,
           active.source,
-          ${importedAt},
+          ${importedAt}::timestamptz,
           NULL
         FROM active
         ON CONFLICT (email) DO UPDATE SET
@@ -233,7 +254,45 @@ export async function importNewsletterContacts(file: File, actorId: string) {
     });
   }
 
-  return summary;
+  const audienceName = `Lista — ${listName}`;
+  const filter = {
+    ...emptyAudienceFilter(),
+    groups: [{
+      id: "imported-list",
+      logic: "AND" as const,
+      rules: [{
+        id: "imported-list-tag",
+        field: "tag" as const,
+        operator: "equals" as const,
+        value: listName,
+      }],
+    }],
+  };
+  const audiencePreview = await previewNewsletterAudience(filter, {
+    includeContactsWithoutConsent: true,
+  });
+  const audience = await db.newsletterAudience.upsert({
+    where: { name: audienceName },
+    create: {
+      name: audienceName,
+      description: `Kontakti iz uvezene liste „${listName}”.`,
+      filter: audienceFilterJson(filter),
+      estimatedCount: audiencePreview.count,
+      estimatedAt: importedAt,
+      createdById: actorId,
+      updatedById: actorId,
+    },
+    update: {
+      description: `Kontakti iz uvezene liste „${listName}”.`,
+      filter: audienceFilterJson(filter),
+      estimatedCount: audiencePreview.count,
+      estimatedAt: importedAt,
+      updatedById: actorId,
+    },
+    select: { id: true, name: true, estimatedCount: true },
+  });
+
+  return { ...summary, audience };
 }
 
 async function parseContactFile(file: File) {
@@ -424,4 +483,10 @@ function excelValue(value: ExcelJS.CellValue) {
 
 function safeFileName(value: string) {
   return value.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 160);
+}
+
+function cleanListName(value: string) {
+  const clean = value.trim().replace(/\s+/g, " ").slice(0, 150);
+  if (!clean) throw new Error("Unesite naziv liste kontakata.");
+  return clean;
 }

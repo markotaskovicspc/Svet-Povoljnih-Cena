@@ -355,11 +355,11 @@ model Product {
   collection   Collection? @relation(fields: [collectionId], references: [id])
 
   // Assembled article dimensions ŠxDxV (cm)
-  widthCm             Decimal?  @db.Decimal(8, 2)
-  depthCm             Decimal?  @db.Decimal(8, 2)
-  heightCm            Decimal?  @db.Decimal(8, 2)
-  weightKg            Decimal?  @db.Decimal(10, 3)
-  grossWeightKg       Decimal?  @db.Decimal(10, 3)
+  widthCm       Decimal? @db.Decimal(8, 2)
+  depthCm       Decimal? @db.Decimal(8, 2)
+  heightCm      Decimal? @db.Decimal(8, 2)
+  weightKg      Decimal? @db.Decimal(10, 3)
+  grossWeightKg Decimal? @db.Decimal(10, 3)
 
   // Individual article package dimensions ŠxDxV (cm)
   unitPackWidthCm  Decimal? @db.Decimal(8, 2)
@@ -367,26 +367,26 @@ model Product {
   unitPackHeightCm Decimal? @db.Decimal(8, 2)
 
   // Transport package dimensions ŠxDxV (cm)
-  packQty             Int?
+  packQty                Int?
   /// Number of sellable units placed on one pallet.
-  palletQty           Int?
-  packWidthCm         Decimal?  @db.Decimal(8, 2)
-  packDepthCm         Decimal?  @db.Decimal(8, 2)
-  packHeightCm        Decimal?  @db.Decimal(8, 2)
-  packGrossWeightKg   Decimal?  @db.Decimal(10, 3)
+  palletQty              Int?
+  packWidthCm            Decimal?  @db.Decimal(8, 2)
+  packDepthCm            Decimal?  @db.Decimal(8, 2)
+  packHeightCm           Decimal?  @db.Decimal(8, 2)
+  packGrossWeightKg      Decimal?  @db.Decimal(10, 3)
   /// Quantity of sellable units that fills one standard 69 m³ container.
   containerQty           Int?
   /// Gross weight of one full container, used for proportional PO logistics.
-  containerGrossWeightKg Decimal? @db.Decimal(12, 3)
-  supplierProductName String?
-  materialText        String?   @db.Text
-  hsCode              String?
-  moq                 Int?
-  tncFrom             DateTime?
-  tncUntil            DateTime?
-  ananasBrokeragePct  Decimal?  @db.Decimal(8, 2)
-  ananasStoragePct    Decimal?  @db.Decimal(8, 2)
-  ananasDeliveryPct   Decimal?  @db.Decimal(8, 2)
+  containerGrossWeightKg Decimal?  @db.Decimal(12, 3)
+  supplierProductName    String?
+  materialText           String?   @db.Text
+  hsCode                 String?
+  moq                    Int?
+  tncFrom                DateTime?
+  tncUntil               DateTime?
+  ananasBrokeragePct     Decimal?  @db.Decimal(8, 2)
+  ananasStoragePct       Decimal?  @db.Decimal(8, 2)
+  ananasDeliveryPct      Decimal?  @db.Decimal(8, 2)
 
   // Pricing in RSD
   fullPrice          Decimal  @db.Decimal(12, 2)
@@ -410,15 +410,15 @@ model Product {
   // Flags
   isHero            Boolean   @default(false)
   isNew             Boolean   @default(false)
-  newUntil           DateTime?
+  newUntil          DateTime?
   /// First transition into the published/active catalog. Reactivation does not reset it.
-  firstPublishedAt   DateTime?
+  firstPublishedAt  DateTime?
   /// True only while the four-month window is managed from first publication.
   /// Manual admin/XLSX changes set this false so supplier syncs cannot renew the window.
   newUntilAutomatic Boolean   @default(true)
   isLimited         Boolean   @default(false)
   /// "Dok traju zalihe"
-  isDtz     Boolean   @default(false)
+  isDtz             Boolean   @default(false)
 
   // Stock
   stock                 Int       @default(0)
@@ -506,7 +506,7 @@ model Product {
   lookupAssignments        ProductLookupAssignment[]
   priceListEntries         PriceListEntry[]
   actionPrices             ActionProduct[]
-  loyaltyRules            LoyaltyRuleProduct[]
+  loyaltyRules             LoyaltyRuleProduct[]
   loyaltyPriceHistory      LoyaltyPriceHistory[]
   dispatchNoteItems        DispatchNoteItem[]
   partnerReservations      PartnerReservation[]
@@ -1525,13 +1525,13 @@ model Shipment {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  reclamation Reclamation? @relation(fields: [reclamationId], references: [id], onDelete: SetNull)
-  warehouse   Warehouse?   @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reclamation Reclamation?    @relation(fields: [reclamationId], references: [id], onDelete: SetNull)
+  warehouse   Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   events      ShipmentEvent[]
 
-  @@index([orderId])
   @@unique([reclamationId, purpose])
+  @@index([orderId])
   @@index([reclamationId, purpose])
   @@index([warehouseId, purpose])
   @@index([provider, status, lastStatusSyncAt])
@@ -1955,18 +1955,18 @@ model Warehouse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stocks                  WarehouseStock[]
-  movements               StockMovement[]
-  fiscalDocuments         FiscalDocument[]
-  orderItems              OrderItem[]
-  purchaseOrdersReceiving PurchaseOrder[]      @relation("PurchaseOrderReceivingWarehouse")
-  inboundInvoicesReceiving InboundInvoice[]    @relation("InboundInvoiceReceivingWarehouse")
-  outgoingDispatchNotes   DispatchNote[]       @relation("DispatchSourceWarehouse")
-  incomingDispatchNotes   DispatchNote[]       @relation("DispatchDestinationWarehouse")
-  stockCounts             StockCount[]
-  partnerReservations     PartnerReservation[]
-  reclamations            Reclamation[]
-  reclamationShipments    Shipment[]
+  stocks                   WarehouseStock[]
+  movements                StockMovement[]
+  fiscalDocuments          FiscalDocument[]
+  orderItems               OrderItem[]
+  purchaseOrdersReceiving  PurchaseOrder[]      @relation("PurchaseOrderReceivingWarehouse")
+  inboundInvoicesReceiving InboundInvoice[]     @relation("InboundInvoiceReceivingWarehouse")
+  outgoingDispatchNotes    DispatchNote[]       @relation("DispatchSourceWarehouse")
+  incomingDispatchNotes    DispatchNote[]       @relation("DispatchDestinationWarehouse")
+  stockCounts              StockCount[]
+  partnerReservations      PartnerReservation[]
+  reclamations             Reclamation[]
+  reclamationShipments     Shipment[]
 
   @@index([active, isDefault])
 }
@@ -2202,30 +2202,30 @@ model PurchaseOrderStatusEvent {
 }
 
 model InboundInvoice {
-  id              String               @id @default(cuid())
-  number          String               @unique
-  type            InboundInvoiceType   @default(COGS)
-  supplierId      String?
-  purchaseOrderId String?
-  warehouseId     String?
-  status          InboundInvoiceStatus @default(DRAFT)
-  invoiceDate     DateTime?
-  currency        ErpCurrency          @default(RSD)
-  exchangeRate    Decimal              @default(1) @db.Decimal(14, 6)
-  value           Decimal              @default(0) @db.Decimal(12, 2)
-  invoiceValueRsd Decimal?              @db.Decimal(12, 2)
-  customsValueRsd Decimal?              @db.Decimal(12, 2)
-  transportValueRsd Decimal?            @db.Decimal(12, 2)
-  otherRelatedCostsRsd Decimal?         @db.Decimal(12, 2)
-  netValue        Decimal              @default(0) @db.Decimal(12, 2)
-  vatValue        Decimal              @default(0) @db.Decimal(12, 2)
-  grossValue      Decimal              @default(0) @db.Decimal(12, 2)
-  allocationBasis AllocationBasis      @default(VALUE)
-  cogsStatus      CogsStatus           @default(PENDING)
-  notes           String?              @db.Text
-  lockedAt        DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                   String               @id @default(cuid())
+  number               String               @unique
+  type                 InboundInvoiceType   @default(COGS)
+  supplierId           String?
+  purchaseOrderId      String?
+  warehouseId          String?
+  status               InboundInvoiceStatus @default(DRAFT)
+  invoiceDate          DateTime?
+  currency             ErpCurrency          @default(RSD)
+  exchangeRate         Decimal              @default(1) @db.Decimal(14, 6)
+  value                Decimal              @default(0) @db.Decimal(12, 2)
+  invoiceValueRsd      Decimal?             @db.Decimal(12, 2)
+  customsValueRsd      Decimal?             @db.Decimal(12, 2)
+  transportValueRsd    Decimal?             @db.Decimal(12, 2)
+  otherRelatedCostsRsd Decimal?             @db.Decimal(12, 2)
+  netValue             Decimal              @default(0) @db.Decimal(12, 2)
+  vatValue             Decimal              @default(0) @db.Decimal(12, 2)
+  grossValue           Decimal              @default(0) @db.Decimal(12, 2)
+  allocationBasis      AllocationBasis      @default(VALUE)
+  cogsStatus           CogsStatus           @default(PENDING)
+  notes                String?              @db.Text
+  lockedAt             DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
@@ -2488,16 +2488,16 @@ model ActionProduct {
 }
 
 model LoyaltyRule {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
-  discountPct Decimal   @db.Decimal(8, 2)
+  discountPct Decimal      @db.Decimal(8, 2)
   scope       LoyaltyScope @default(ALL_PRODUCTS)
-  priority    Int       @default(0)
+  priority    Int          @default(0)
   startsAt    DateTime?
   endsAt      DateTime?
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   products LoyaltyRuleProduct[]
 
@@ -2764,27 +2764,27 @@ enum PickupBatchStatus {
 }
 
 model PickupBatch {
-  id                 String            @id @default(cuid())
-  number             String            @unique
-  courier            ShipmentService?
+  id                       String            @id @default(cuid())
+  number                   String            @unique
+  courier                  ShipmentService?
   /// Provider is snapshotted when the batch is created so a later global
   /// provider switch cannot send an existing batch to the wrong courier.
-  provider            String?
-  status             PickupBatchStatus @default(DRAFT)
-  manifestRef        String?
+  provider                 String?
+  status                   PickupBatchStatus @default(DRAFT)
+  manifestRef              String?
   /// Start and end of the agreed local pickup window (stored as UTC instants).
-  pickupDate         DateTime?
-  pickupWindowEnd    DateTime?
-  labelsCreationStartedAt DateTime?
-  labelsCreatedAt    DateTime?
-  labelsCreatedById  String?
-  externalBookedAt   DateTime?
-  externalBookingChannel String?
+  pickupDate               DateTime?
+  pickupWindowEnd          DateTime?
+  labelsCreationStartedAt  DateTime?
+  labelsCreatedAt          DateTime?
+  labelsCreatedById        String?
+  externalBookedAt         DateTime?
+  externalBookingChannel   String?
   externalBookingReference String?
-  externalBookedById String?
-  configurationIssue String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  externalBookedById       String?
+  configurationIssue       String?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   lines PickupBatchLine[]
 
@@ -3114,37 +3114,37 @@ enum ReclamationWarehouseStatus {
 }
 
 model Reclamation {
-  id                        String                 @id @default(cuid())
+  id                        String                     @id @default(cuid())
   /// Public identifier R-{n}-{orderNo}
-  number                    String                 @unique
+  number                    String                     @unique
   orderId                   String
   orderItemId               String?
   productId                 String?
   sku                       String
-  quantity                  Int                    @default(1)
+  quantity                  Int                        @default(1)
   customerFirst             String
   customerLast              String
   customerEmail             String?
   customerPhone             String?
-  description               String                 @db.VarChar(250)
+  description               String                     @db.VarChar(250)
   notifyVia                 NotifyChannel
-  status                    ReclamationStatus      @default(PRIMLJENO)
+  status                    ReclamationStatus          @default(PRIMLJENO)
   purchaseDate              DateTime?
   type                      ReclamationType?
   request                   ReclamationRequest?
-  decision                  ReclamationDecision    @default(CEKA)
+  decision                  ReclamationDecision        @default(CEKA)
   respondedAt               DateTime?
   resolution                ReclamationResolution?
-  resolutionNote            String?                @db.Text
-  adminNote                 String?                @db.Text
+  resolutionNote            String?                    @db.Text
+  adminNote                 String?                    @db.Text
   courierRequestedAt        DateTime?
   warehouseRequestedAt      DateTime?
   warehouseId               String?
   warehouseStatus           ReclamationWarehouseStatus @default(NOT_REQUESTED)
   supplierNotifiedAt        DateTime?
-  supplierNotificationError String?                @db.Text
+  supplierNotificationError String?                    @db.Text
   userId                    String?
-  createdAt                 DateTime               @default(now())
+  createdAt                 DateTime                   @default(now())
   resolvedAt                DateTime?
 
   order     Order                    @relation(fields: [orderId], references: [id])
@@ -3269,6 +3269,7 @@ model MarketingContact {
   language       String                 @default("sr-Latn")
   status         MarketingContactStatus @default(PENDING)
   source         String?
+  tags           String[]               @default([])
   consentVersion String?
   subscribedAt   DateTime?
   confirmedAt    DateTime?
@@ -3351,43 +3352,44 @@ model NewsletterTemplate {
 }
 
 model NewsletterCampaign {
-  id                     String                   @id @default(cuid())
-  title                  String
-  subject                String
-  previewText            String?
-  body                   String                   @db.Text
-  content                Json                     @default("[]")
-  html                   String?                  @db.Text
-  text                   String?                  @db.Text
-  fromName               String?
-  fromEmail              String?
-  replyTo                String?
-  audienceId             String?
-  audienceMode           NewsletterAudienceMode   @default(DYNAMIC)
-  audienceFilterSnapshot Json?
-  audienceBreakdown      Json?
-  topicKey               String                   @default("promotions")
-  status                 NewsletterCampaignStatus @default(DRAFT)
-  approvedAt             DateTime?
-  approvedById           String?
-  scheduledAt            DateTime?
-  sentAt                 DateTime?
-  cancelledAt            DateTime?
-  providerBroadcastId    String?                  @unique
-  providerSegmentId      String?
-  failureReason          String?                  @db.Text
-  recipients             Int?
-  delivered              Int?
-  opened                 Int?
-  clicked                Int?
-  bounced                Int?
-  complained             Int?
-  unsubscribed           Int?
-  failed                 Int?
-  createdById            String?
-  updatedById            String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
+  id                            String                   @id @default(cuid())
+  title                         String
+  subject                       String
+  previewText                   String?
+  body                          String                   @db.Text
+  content                       Json                     @default("[]")
+  html                          String?                  @db.Text
+  text                          String?                  @db.Text
+  fromName                      String?
+  fromEmail                     String?
+  replyTo                       String?
+  audienceId                    String?
+  audienceMode                  NewsletterAudienceMode   @default(DYNAMIC)
+  includeContactsWithoutConsent Boolean                  @default(false)
+  audienceFilterSnapshot        Json?
+  audienceBreakdown             Json?
+  topicKey                      String                   @default("promotions")
+  status                        NewsletterCampaignStatus @default(DRAFT)
+  approvedAt                    DateTime?
+  approvedById                  String?
+  scheduledAt                   DateTime?
+  sentAt                        DateTime?
+  cancelledAt                   DateTime?
+  providerBroadcastId           String?                  @unique
+  providerSegmentId             String?
+  failureReason                 String?                  @db.Text
+  recipients                    Int?
+  delivered                     Int?
+  opened                        Int?
+  clicked                       Int?
+  bounced                       Int?
+  complained                    Int?
+  unsubscribed                  Int?
+  failed                        Int?
+  createdById                   String?
+  updatedById                   String?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
 
   audience           NewsletterAudience?           @relation(fields: [audienceId], references: [id], onDelete: SetNull)
   versions           NewsletterCampaignVersion[]
@@ -3399,17 +3401,18 @@ model NewsletterCampaign {
 }
 
 model NewsletterCampaignVersion {
-  id             String   @id @default(cuid())
-  campaignId     String
-  version        Int
-  subject        String
-  previewText    String?
-  content        Json
-  html           String   @db.Text
-  text           String   @db.Text
-  audienceFilter Json?
-  createdById    String?
-  createdAt      DateTime @default(now())
+  id                            String   @id @default(cuid())
+  campaignId                    String
+  version                       Int
+  subject                       String
+  previewText                   String?
+  content                       Json
+  html                          String   @db.Text
+  text                          String   @db.Text
+  audienceFilter                Json?
+  includeContactsWithoutConsent Boolean  @default(false)
+  createdById                   String?
+  createdAt                     DateTime @default(now())
 
   campaign NewsletterCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -3418,25 +3421,26 @@ model NewsletterCampaignVersion {
 }
 
 model NewsletterCampaignRecipient {
-  id                String                    @id @default(cuid())
-  campaignId        String
-  contactId         String?
-  email             String
-  firstName         String?
-  lastName          String?
-  language          String                    @default("sr-Latn")
-  status            NewsletterRecipientStatus @default(QUEUED)
-  providerMessageId String?                   @unique
-  failureReason     String?                   @db.Text
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-  openedAt          DateTime?
-  clickedAt         DateTime?
-  bouncedAt         DateTime?
-  complainedAt      DateTime?
-  unsubscribedAt    DateTime?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  id                       String                    @id @default(cuid())
+  campaignId               String
+  contactId                String?
+  email                    String
+  firstName                String?
+  lastName                 String?
+  language                 String                    @default("sr-Latn")
+  consentStatusAtSelection MarketingContactStatus?
+  status                   NewsletterRecipientStatus @default(QUEUED)
+  providerMessageId        String?                   @unique
+  failureReason            String?                   @db.Text
+  sentAt                   DateTime?
+  deliveredAt              DateTime?
+  openedAt                 DateTime?
+  clickedAt                DateTime?
+  bouncedAt                DateTime?
+  complainedAt             DateTime?
+  unsubscribedAt           DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 
   campaign NewsletterCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   contact  MarketingContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)

@@ -6,6 +6,7 @@ import { fetchResendApi } from "./resend-api";
 import { isEmailSuppressed } from "./tracking";
 
 export type ResendSubscriptionIntent = "grant" | "withdraw" | "preserve";
+export type ResendPreferenceScope = "promotions" | "global-only";
 
 interface SyncContactInput {
   email: string;
@@ -15,6 +16,7 @@ interface SyncContactInput {
   source: string;
   promotionalAudience?: boolean;
   subscriptionIntent?: ResendSubscriptionIntent;
+  preferenceScope?: ResendPreferenceScope;
 }
 
 type ResendRequestResult =
@@ -36,6 +38,7 @@ export async function syncResendContact(input: SyncContactInput): Promise<SyncRe
   const intent: ResendSubscriptionIntent = suppressed || input.unsubscribed
     ? "withdraw"
     : input.subscriptionIntent ?? "preserve";
+  const preferenceScope = input.preferenceScope ?? "promotions";
   const contactPath = `/contacts/${encodeURIComponent(email)}`;
   const existing = await resendRequest("GET", contactPath, undefined, cfg.apiKey);
 
@@ -47,10 +50,18 @@ export async function syncResendContact(input: SyncContactInput): Promise<SyncRe
     const createBody: Record<string, unknown> = { email, unsubscribed: false };
     if (input.firstName) createBody.first_name = input.firstName;
     if (input.lastName) createBody.last_name = input.lastName;
-    if (input.promotionalAudience && cfg.newsletterSegmentId) {
+    if (
+      input.promotionalAudience &&
+      preferenceScope === "promotions" &&
+      cfg.newsletterSegmentId
+    ) {
       createBody.segments = [{ id: cfg.newsletterSegmentId }];
     }
-    if (input.promotionalAudience && cfg.promotionsTopicId) {
+    if (
+      input.promotionalAudience &&
+      preferenceScope === "promotions" &&
+      cfg.promotionsTopicId
+    ) {
       createBody.topics = [{ id: cfg.promotionsTopicId, subscription: "opt_in" }];
     }
     const created = await resendRequest("POST", "/contacts", createBody, cfg.apiKey);
@@ -71,7 +82,10 @@ export async function syncResendContact(input: SyncContactInput): Promise<SyncRe
         cfg.apiKey,
       );
       if (!topics.ok) return topics;
-      if (!providerTopicOptedIn(topics.data, cfg.promotionsTopicId)) {
+      const topicBlocksSend = preferenceScope === "promotions"
+        ? !providerTopicOptedIn(topics.data, cfg.promotionsTopicId)
+        : providerTopicOptedOut(topics.data, cfg.promotionsTopicId);
+      if (topicBlocksSend) {
         return { ok: true, providerOptedOut: true };
       }
     }
@@ -225,12 +239,22 @@ function providerGloballyUnsubscribed(data: unknown) {
 }
 
 function providerTopicOptedIn(data: unknown, topicId: string) {
+  return providerTopicSubscription(data, topicId) === "opt_in";
+}
+
+function providerTopicOptedOut(data: unknown, topicId: string) {
+  return providerTopicSubscription(data, topicId) === "opt_out";
+}
+
+function providerTopicSubscription(data: unknown, topicId: string) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return false;
   const rows = (data as { data?: unknown }).data;
   if (!Array.isArray(rows)) return false;
-  return rows.some((row) => (
+  const topic = rows.find((row) => (
     row && typeof row === "object" && !Array.isArray(row) &&
-    (row as { id?: unknown }).id === topicId &&
-    (row as { subscription?: unknown }).subscription === "opt_in"
+    (row as { id?: unknown }).id === topicId
   ));
+  if (!topic || typeof topic !== "object" || Array.isArray(topic)) return false;
+  const subscription = (topic as { subscription?: unknown }).subscription;
+  return subscription === "opt_in" || subscription === "opt_out" ? subscription : false;
 }

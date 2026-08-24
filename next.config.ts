@@ -96,7 +96,7 @@ const contentSecurityPolicy = [
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  `img-src 'self' data: blob: https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com`,
+  `img-src 'self' data: blob: https://www.svetpovoljnihcena.rs https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com`,
   `connect-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com`,
   `media-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "worker-src 'self' blob:",

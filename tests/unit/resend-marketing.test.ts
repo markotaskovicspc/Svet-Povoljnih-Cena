@@ -63,6 +63,28 @@ describe("Resend contact synchronization", () => {
     expect(create).not.toHaveProperty("properties");
   });
 
+  it("creates a missing pending contact without granting promotional consent", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "not found" }, 404))
+      .mockResolvedValueOnce(jsonResponse({ id: "contact-pending" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(syncResendContact({
+      email: "pending@example.com",
+      unsubscribed: false,
+      promotionalAudience: true,
+      subscriptionIntent: "preserve",
+      preferenceScope: "global-only",
+      source: "campaign",
+    })).resolves.toEqual({ ok: true });
+
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string)).toEqual({
+      email: "pending@example.com",
+      unsubscribed: false,
+    });
+  });
+
   it("preserves an existing opted-in provider preference without writing it again", async () => {
     const fetchMock = vi
       .fn()
@@ -106,6 +128,68 @@ describe("Resend contact synchronization", () => {
     })).resolves.toEqual({ ok: true, providerOptedOut: true });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows a pending contact when the provider has no explicit topic preference", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ email: "pending@example.com", unsubscribed: false }))
+      .mockResolvedValueOnce(jsonResponse({ object: "list", data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(syncResendContact({
+      email: "pending@example.com",
+      unsubscribed: false,
+      promotionalAudience: true,
+      subscriptionIntent: "preserve",
+      preferenceScope: "global-only",
+      source: "campaign",
+    })).resolves.toEqual({ ok: true });
+
+    expect(fetchMock.mock.calls.map(([url, request]) => [url, request.method])).toEqual([
+      ["https://api.resend.com/contacts/pending%40example.com", "GET"],
+      ["https://api.resend.com/contacts/pending%40example.com/topics", "GET"],
+    ]);
+  });
+
+  it("still excludes an explicitly topic-opted-out pending contact", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ email: "pending@example.com", unsubscribed: false }))
+      .mockResolvedValueOnce(jsonResponse({
+        object: "list",
+        data: [{ id: "topic-promotions", subscription: "opt_out" }],
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(syncResendContact({
+      email: "pending@example.com",
+      unsubscribed: false,
+      promotionalAudience: true,
+      subscriptionIntent: "preserve",
+      preferenceScope: "global-only",
+      source: "campaign",
+    })).resolves.toEqual({ ok: true, providerOptedOut: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("still excludes a globally opted-out pending contact", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ email: "pending@example.com", unsubscribed: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(syncResendContact({
+      email: "pending@example.com",
+      unsubscribed: false,
+      promotionalAudience: true,
+      subscriptionIntent: "preserve",
+      preferenceScope: "global-only",
+      source: "campaign",
+    })).resolves.toEqual({ ok: true, providerOptedOut: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("re-enables an existing contact only for an explicit grant", async () => {

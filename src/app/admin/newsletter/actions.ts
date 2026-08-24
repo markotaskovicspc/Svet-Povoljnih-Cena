@@ -9,6 +9,7 @@ import {
   audienceFilterJson,
   newsletterAudienceFilterSchema,
   previewNewsletterAudience,
+  selectedNewsletterAudiences,
 } from "@/lib/newsletter/audience";
 import {
   approveNewsletterCampaign,
@@ -92,6 +93,10 @@ export async function saveNewsletterCampaignAction(
   const state = await withAdminState(
     { allowed, action: "newsletter.campaign.save", entity: "NewsletterCampaign" },
     async (actorId, formData: FormData) => {
+      const audienceIds = formData.getAll("audienceIds")
+        .map((item) => String(item).trim())
+        .filter(Boolean);
+      const legacyAudienceId = value(formData, "audienceId");
       const parsed = saveCampaignSchema.safeParse({
         id: value(formData, "id"),
         title: value(formData, "title"),
@@ -100,8 +105,14 @@ export async function saveNewsletterCampaignAction(
         fromName: value(formData, "fromName"),
         fromEmail: value(formData, "fromEmail"),
         replyTo: value(formData, "replyTo"),
-        audienceId: value(formData, "audienceId"),
+        audienceIds: audienceIds.length
+          ? audienceIds
+          : legacyAudienceId
+            ? [legacyAudienceId]
+            : [],
         audienceMode: value(formData, "audienceMode") || "DYNAMIC",
+        includeContactsWithoutConsent:
+          formData.get("includeContactsWithoutConsent") === "on",
         topicKey: value(formData, "topicKey") || "promotions",
         content: parseJson(value(formData, "content"), "Sadržaj kampanje"),
       });
@@ -122,8 +133,9 @@ export async function saveNewsletterCampaignAction(
         result,
         diff: {
           title: parsed.data.title,
-          audienceId: parsed.data.audienceId || null,
+          audienceIds: parsed.data.audienceIds,
           audienceMode: parsed.data.audienceMode,
+          includeContactsWithoutConsent: parsed.data.includeContactsWithoutConsent,
           blockCount: parsed.data.content.length,
         },
       };
@@ -307,7 +319,14 @@ export async function deleteNewsletterAudienceAction(
     { allowed, action: "newsletter.audience.delete", entity: "NewsletterAudience" },
     async (_actorId, formData: FormData) => {
       const id = value(formData, "id");
-      const used = await db.newsletterCampaign.count({ where: { audienceId: id } });
+      const campaigns = await db.newsletterCampaign.findMany({
+        select: { audienceId: true, audienceFilterSnapshot: true },
+      });
+      const used = campaigns.filter((campaign) =>
+        campaign.audienceId === id ||
+        selectedNewsletterAudiences(campaign.audienceFilterSnapshot)
+          .some((audience) => audience.id === id),
+      ).length;
       if (used) return { ok: false as const, error: `Publika se koristi u ${used} kampanja i ne može da se obriše.` };
       await db.newsletterAudience.delete({ where: { id } });
       revalidatePath("/admin/newsletter");
@@ -386,24 +405,20 @@ export async function importNewsletterContactsAction(
     },
     async (actorId, formData: FormData) => {
       const file = formData.get("contactsFile");
-      const accepted = formData.get("consentPolicyAccepted") === "on";
+      const listName = value(formData, "listName");
       if (!(file instanceof File) || file.size === 0) {
         return { ok: false as const, error: "Izaberite CSV ili XLSX fajl." };
       }
-      if (!accepted) {
-        return {
-          ok: false as const,
-          error:
-            "Potvrdite pravilo saglasnosti: samo izričito označeni kontakti postaju aktivni.",
-        };
+      if (!listName) {
+        return { ok: false as const, error: "Unesite naziv liste kontakata." };
       }
-      const result = await importNewsletterContacts(file, actorId);
+      const result = await importNewsletterContacts(file, actorId, listName);
       revalidatePath("/admin/newsletter");
       return {
         ok: true as const,
-        message: importSummary("Uvoz je završen.", result),
+        message: `${importSummary("Uvoz je završen.", result)} Publika „${result.audience.name}” je spremna za izbor u nacrtu.`,
         result,
-        diff: { fileName: file.name, ...result },
+        diff: { fileName: file.name, listName, ...result },
       };
     },
   )(formData);
@@ -419,7 +434,7 @@ function importSummary(
     duplicateRows: number;
   },
 ) {
-  return `${prefix} Ispravnih: ${result.uniqueValid}; aktivnih uz izričitu saglasnost: ${result.explicitConsent}; bez dokaza saglasnosti (čekaju potvrdu i ne dobijaju kampanje): ${result.withoutConsent}; neispravnih: ${result.invalidRows}; duplikata u fajlu: ${result.duplicateRows}.`;
+  return `${prefix} Ispravnih: ${result.uniqueValid}; redova sa izričitom saglasnošću: ${result.explicitConsent}; bez zabeležene saglasnosti (mogu se uključiti u nacrt uz upozorenje): ${result.withoutConsent}; neispravnih: ${result.invalidRows}; duplikata u fajlu: ${result.duplicateRows}.`;
 }
 
 async function campaignAction(

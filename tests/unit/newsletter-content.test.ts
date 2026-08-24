@@ -54,6 +54,27 @@ describe("newsletter content renderer", () => {
     expect(result.text).toContain("Odjava:");
   });
 
+  it("uses the same blue branded shell and connected logo as transactional emails", async () => {
+    const { renderNewsletterCampaign } = await import("@/lib/newsletter/content");
+    const result = await renderNewsletterCampaign({
+      subject: "Nova ponuda",
+      baseUrl: "https://shop.example",
+      content: [
+        { id: "heading", type: "heading", text: "Izdvajamo za vas" },
+        { id: "button", type: "button", label: "Pogledaj", href: "/akcija" },
+      ],
+    });
+
+    expect(result.html).toContain("background:#F2F6F8");
+    expect(result.html).toContain("border-top:5px solid #123F5A");
+    expect(result.html).toContain('src="https://shop.example/documents/garantni-list-logo.jpeg"');
+    expect(result.html).toContain('href="https://shop.example"');
+    expect(result.html.indexOf("garantni-list-logo.jpeg")).toBeLessThan(
+      result.html.indexOf("Izdvajamo za vas"),
+    );
+    expect(result.html).toContain('bgcolor="#123F5A"');
+  });
+
   it("uses real product routes and warns when a requested SKU is unavailable", async () => {
     const { renderNewsletterCampaign } = await import("@/lib/newsletter/content");
     const result = await renderNewsletterCampaign({
@@ -102,7 +123,7 @@ describe("newsletter content renderer", () => {
     expect(result.html).toContain("1.499 RSD");
     expect(result.html).toContain("2.856 RSD");
     expect(result.text).toContain("1.499 RSD");
-    expect(result.html).toContain(">1.499 RSD</span><span style=\"color:#8A8178;text-decoration:line-through;margin-left:7px;\">2.856 RSD</span>");
+    expect(result.html).toContain(">1.499 RSD</span><span style=\"color:#5F6F78;text-decoration:line-through;margin-left:7px;\">2.856 RSD</span>");
   });
 
   it("does not advertise an expired action price", async () => {

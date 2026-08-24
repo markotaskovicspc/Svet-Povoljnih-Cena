@@ -64,6 +64,16 @@ type RenderOptions = {
   baseUrl?: string;
 };
 
+const EMAIL_COLORS = {
+  blue: "#123F5A",
+  blueSoft: "#EAF4F7",
+  ink: "#172B36",
+  muted: "#5F6F78",
+  line: "#DCE6EA",
+  page: "#F2F6F8",
+  white: "#FFFFFF",
+} as const;
+
 export async function renderNewsletterCampaign(options: RenderOptions) {
   const blocks = newsletterContentSchema.parse(options.content);
   const baseUrl = options.baseUrl ?? BRAND.url;
@@ -169,21 +179,21 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
   const body = blocks.map((block) => {
     switch (block.type) {
       case "heading":
-        return `<h2 style="font-family:Georgia,serif;font-size:28px;line-height:1.2;margin:0 0 16px;color:#1A1714;">${escapeHtml(block.text)}</h2>`;
+        return `<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin:0 0 16px;color:${EMAIL_COLORS.ink};">${escapeHtml(block.text)}</h2>`;
       case "text":
-        return `<p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.65;margin:0 0 20px;color:#3B342D;">${escapeHtml(block.text).replace(/\n/g, "<br>")}</p>`;
+        return `<p style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0 0 20px;color:${EMAIL_COLORS.muted};">${escapeHtml(block.text).replace(/\n/g, "<br>")}</p>`;
       case "image": {
-        const image = `<img src="${escapeAttr(absoluteUrl(block.url, baseUrl))}" alt="${escapeAttr(block.alt)}" width="600" style="display:block;width:100%;height:auto;border:0;border-radius:14px;margin:0 0 22px;">`;
+        const image = `<img src="${escapeAttr(absoluteUrl(block.url, baseUrl))}" alt="${escapeAttr(block.alt)}" width="592" style="display:block;width:100%;height:auto;border:0;border-radius:8px;margin:0 0 22px;">`;
         return block.href
           ? `<a href="${escapeAttr(absoluteUrl(block.href, baseUrl))}" style="text-decoration:none;">${image}</a>`
           : image;
       }
       case "button":
-        return `<p style="margin:0 0 24px;"><a href="${escapeAttr(absoluteUrl(block.href, baseUrl))}" style="display:inline-block;background:#1A1714;color:#FAF7F2;padding:13px 24px;border-radius:999px;font-family:Arial,sans-serif;font-size:14px;font-weight:700;text-decoration:none;">${escapeHtml(block.label)}</a></p>`;
+        return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td bgcolor="${EMAIL_COLORS.blue}" style="background:${EMAIL_COLORS.blue};border-radius:7px;"><a href="${escapeAttr(absoluteUrl(block.href, baseUrl))}" style="display:inline-block;color:${EMAIL_COLORS.white};padding:13px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;line-height:1.2;text-decoration:none;">${escapeHtml(block.label)}</a></td></tr></table>`;
       case "divider":
-        return `<hr style="border:0;border-top:1px solid #E8E0D2;margin:26px 0;">`;
+        return `<hr style="border:0;border-top:1px solid ${EMAIL_COLORS.line};margin:26px 0;">`;
       case "voucher":
-        return `<div style="border:1px dashed #6B4423;background:#FAF7F2;border-radius:14px;padding:20px;margin:0 0 22px;text-align:center;"><p style="font:12px Arial,sans-serif;text-transform:uppercase;letter-spacing:.12em;color:#6B6259;margin:0 0 8px;">Kod za popust</p><p style="font:700 24px monospace;color:#1A1714;margin:0 0 8px;">${escapeHtml(block.code)}</p>${block.text ? `<p style="font:13px Arial,sans-serif;color:#6B6259;margin:0;">${escapeHtml(block.text)}</p>` : ""}</div>`;
+        return `<div style="border:1px dashed ${EMAIL_COLORS.blue};background:${EMAIL_COLORS.blueSoft};border-radius:8px;padding:20px;margin:0 0 22px;text-align:center;"><p style="font:700 11px Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:.12em;color:${EMAIL_COLORS.blue};margin:0 0 8px;">Kod za popust</p><p style="font:700 24px monospace;color:${EMAIL_COLORS.ink};margin:0 0 8px;">${escapeHtml(block.code)}</p>${block.text ? `<p style="font:13px Arial,Helvetica,sans-serif;color:${EMAIL_COLORS.muted};margin:0;">${escapeHtml(block.text)}</p>` : ""}</div>`;
       case "products": {
         const cards = block.skus.flatMap((sku) => {
           const product = bySku.get(sku);
@@ -204,16 +214,16 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
             product.sizeLabel,
           );
           const oldPrice = price.effective < price.full
-            ? `<span style="color:#8A8178;text-decoration:line-through;margin-left:7px;">${escapeHtml(formatRsd(price.full))}</span>`
+            ? `<span style="color:${EMAIL_COLORS.muted};text-decoration:line-through;margin-left:7px;">${escapeHtml(formatRsd(price.full))}</span>`
             : "";
-          return [`<td width="50%" valign="top" style="padding:8px;"><a href="${escapeAttr(href)}" style="color:#1A1714;text-decoration:none;">${imageUrl ? `<img src="${escapeAttr(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeAttr(media?.alt ?? displayName)}" width="260" style="display:block;width:100%;height:auto;border-radius:12px;border:0;margin-bottom:10px;">` : ""}<span style="display:block;font:700 14px Arial,sans-serif;line-height:1.35;margin-bottom:7px;">${escapeHtml(displayName)}</span><span style="font:700 14px Arial,sans-serif;color:#6B4423;">${escapeHtml(formatRsd(price.effective))}</span>${oldPrice}</a></td>`];
+          return [`<td width="50%" valign="top" style="padding:8px;"><a href="${escapeAttr(href)}" style="color:${EMAIL_COLORS.ink};text-decoration:none;">${imageUrl ? `<img src="${escapeAttr(absoluteUrl(imageUrl, baseUrl))}" alt="${escapeAttr(media?.alt ?? displayName)}" width="260" style="display:block;width:100%;height:auto;border-radius:8px;border:0;margin-bottom:10px;">` : ""}<span style="display:block;font:700 14px Arial,Helvetica,sans-serif;line-height:1.35;margin-bottom:7px;">${escapeHtml(displayName)}</span><span style="font:700 14px Arial,Helvetica,sans-serif;color:${EMAIL_COLORS.blue};">${escapeHtml(formatRsd(price.effective))}</span>${oldPrice}</a></td>`];
         });
         if (!cards.length) return "";
         const rows: string[] = [];
         for (let i = 0; i < cards.length; i += 2) {
           rows.push(`<tr>${cards[i]}${cards[i + 1] ?? '<td width="50%"></td>'}</tr>`);
         }
-        return `${block.title ? `<h2 style="font-family:Georgia,serif;font-size:23px;margin:0 0 10px;">${escapeHtml(block.title)}</h2>` : ""}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 -8px 22px;">${rows.join("")}</table>`;
+        return `${block.title ? `<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:23px;line-height:1.3;color:${EMAIL_COLORS.ink};margin:0 0 10px;">${escapeHtml(block.title)}</h2>` : ""}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 -8px 22px;">${rows.join("")}</table>`;
       }
     }
   }).join("");
@@ -221,7 +231,8 @@ export async function renderNewsletterCampaign(options: RenderOptions) {
   if (!body.trim()) warnings.push("Kampanja nema vidljiv sadržaj.");
   const unsubscribeUrl = options.unsubscribeUrl ?? "{{{RESEND_UNSUBSCRIBE_URL}}}";
   const preview = escapeHtml(options.previewText?.trim() || options.subject);
-  const html = `<!doctype html><html lang="sr-Latn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>${escapeHtml(options.subject)}</title></head><body style="margin:0;background:#FAF7F2;color:#1A1714;"><span style="display:none!important;max-height:0;overflow:hidden;opacity:0;">${preview}</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FAF7F2;"><tr><td style="padding:28px 12px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:624px;margin:0 auto;"><tr><td style="padding:0 10px 20px;font-family:Georgia,serif;font-size:24px;">${escapeHtml(BRAND.name)}</td></tr><tr><td style="background:#fff;border-radius:18px;padding:30px;">${body}</td></tr><tr><td style="padding:20px 10px;font:11px/1.6 Arial,sans-serif;color:#6B6259;">Ovu poruku primate jer ste dali saglasnost za promotivne mejlove.<br><a href="${escapeAttr(unsubscribeUrl)}" style="color:#6B4423;">Odjavite se ili promenite podešavanja</a><br>${escapeHtml(BRAND.legalName)} · Beograd, Srbija · <a href="${escapeAttr(baseUrl)}" style="color:#6B4423;">${escapeHtml(BRAND.domain)}</a></td></tr></table></td></tr></table></body></html>`;
+  const logoUrl = absoluteUrl("/documents/garantni-list-logo.jpeg", baseUrl);
+  const html = `<!doctype html><html lang="sr-Latn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>${escapeHtml(options.subject)}</title></head><body style="margin:0;background:${EMAIL_COLORS.page};color:${EMAIL_COLORS.ink};font-family:Arial,Helvetica,sans-serif;"><span style="display:none!important;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;line-height:1px;">${preview}</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:${EMAIL_COLORS.page};"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;border-collapse:separate;background:${EMAIL_COLORS.white};border-top:5px solid ${EMAIL_COLORS.blue};border-radius:12px;box-shadow:0 8px 24px rgba(18,63,90,.10);"><tr><td style="padding:28px 24px 18px;"><a href="${escapeAttr(baseUrl)}" style="display:inline-block;text-decoration:none;"><img src="${escapeAttr(logoUrl)}" alt="${escapeAttr(BRAND.name)}" width="220" height="36" style="display:block;width:220px;max-width:78%;height:auto;border:0;"></a></td></tr><tr><td style="padding:8px 24px 32px;">${body}</td></tr></table><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;border-collapse:collapse;"><tr><td align="center" style="padding:18px 12px 0;font:11px/1.6 Arial,Helvetica,sans-serif;color:${EMAIL_COLORS.muted};">Ovu poruku primate jer se vaša adresa nalazi na listi kontakata.<br><a href="${escapeAttr(unsubscribeUrl)}" style="color:${EMAIL_COLORS.blue};text-decoration:underline;">Odjavite se ili promenite podešavanja</a><br>${escapeHtml(BRAND.legalName)} · Beograd, Srbija<br><a href="${escapeAttr(baseUrl)}" style="color:${EMAIL_COLORS.blue};text-decoration:underline;">${escapeHtml(BRAND.domain)}</a></td></tr></table></td></tr></table></body></html>`;
   const text = blocks.map((block) => {
     switch (block.type) {
       case "heading":

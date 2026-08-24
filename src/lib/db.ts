@@ -1,5 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { attachDatabasePool } from "@vercel/functions";
 import { Pool } from "pg";
 
@@ -129,6 +129,27 @@ export function getDatabaseConnectionString() {
     process.env.POSTGRES_PRISMA_URL,
     process.env.POSTGRES_URL,
   ].find((value) => value?.trim());
+}
+
+export function getDatabaseSchemaName() {
+  const connectionString = getDatabaseConnectionString();
+  if (!connectionString) return "public";
+  try {
+    const schema = new URL(connectionString).searchParams.get("schema")?.trim();
+    return schema && /^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)
+      ? schema
+      : "public";
+  } catch {
+    return "public";
+  }
+}
+
+export function databaseIdentifier(name: string): Prisma.Sql {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Unsafe database identifier: ${name}`);
+  }
+  const schema = getDatabaseSchemaName();
+  return Prisma.raw(`"${schema}"."${name}"`);
 }
 
 export function hasDatabaseConnection() {

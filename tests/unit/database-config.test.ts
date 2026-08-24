@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  databaseIdentifier,
   getDatabaseConnectionString,
   getDatabaseIdleTimeoutMillis,
   getDatabasePoolMax,
+  getDatabaseSchemaName,
 } from "@/lib/db";
 
 const ENV_KEYS = [
@@ -61,5 +63,16 @@ describe("database runtime configuration", () => {
 
     process.env.DATABASE_IDLE_TIMEOUT_MS = "2500";
     expect(getDatabaseIdleTimeoutMillis()).toBe(2_500);
+  });
+
+  it("qualifies raw SQL identifiers with the configured isolated schema", () => {
+    process.env.DATABASE_URL =
+      "postgresql://db.example:5432/postgres?schema=newsletter_e2e_123";
+
+    expect(getDatabaseSchemaName()).toBe("newsletter_e2e_123");
+    expect((databaseIdentifier("MarketingContact") as unknown as { sql: string }).sql)
+      .toBe('"newsletter_e2e_123"."MarketingContact"');
+    expect(() => databaseIdentifier('MarketingContact"; DROP SCHEMA public'))
+      .toThrow("Unsafe database identifier");
   });
 });

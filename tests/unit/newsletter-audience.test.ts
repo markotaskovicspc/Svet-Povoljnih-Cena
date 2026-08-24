@@ -13,6 +13,7 @@ const profile: AudienceProfile = {
   lastName: "Anić",
   language: "sr-Latn",
   source: "footer",
+  tags: ["Sajam avgust 2026", "VIP kupci"],
   subscribedAt: new Date("2026-01-15T10:00:00Z"),
   registered: true,
   cities: ["Beograd"],
@@ -98,6 +99,58 @@ describe("newsletter audience matcher", () => {
     expect(matchesAudienceFilter(profile, filter("equals", "SKU-1"))).toBe(true);
     expect(matchesAudienceFilter(profile, filter("equals", "SKU"))).toBe(false);
     expect(matchesAudienceFilter(profile, filter("contains", "SKU"))).toBe(true);
+  });
+
+  it("matches imported contact-list tags", () => {
+    expect(matchesAudienceFilter(profile, {
+      ...emptyAudienceFilter(),
+      groups: [{
+        id: "list",
+        logic: "AND",
+        rules: [{
+          id: "tag",
+          field: "tag",
+          operator: "equals",
+          value: "Sajam avgust 2026",
+        }],
+      }],
+    })).toBe(true);
+  });
+
+  it("unions multiple selected audiences without duplicating the matching logic", () => {
+    expect(matchesAudienceFilter(profile, {
+      ...emptyAudienceFilter(),
+      selectedAudiences: [
+        {
+          id: "nis",
+          name: "Niš",
+          filter: {
+            logic: "AND",
+            groups: [{
+              id: "city",
+              logic: "AND",
+              rules: [{ id: "nis", field: "city", operator: "equals", value: "Niš" }],
+            }],
+            manualContactIds: [],
+            excludeCampaignIds: [],
+          },
+        },
+        {
+          id: "vip",
+          name: "VIP kupci",
+          filter: {
+            logic: "AND",
+            groups: [{
+              id: "tag",
+              logic: "AND",
+              rules: [{ id: "vip", field: "tag", operator: "equals", value: "VIP kupci" }],
+            }],
+            manualContactIds: [],
+            excludeCampaignIds: [],
+          },
+        },
+      ],
+    })).toBe(true);
   });
 
   it("rejects blank values and invalid field/operator combinations", () => {

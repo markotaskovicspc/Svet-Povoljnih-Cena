@@ -296,17 +296,28 @@ export async function marketingContactMigrationPreview() {
 async function sendNewsletterOptInEmail(args: { email: string; token: string }) {
   const cfg = getEmailConfig();
   const confirmUrl = `${cfg.baseUrl}/newsletter/potvrdi?token=${encodeURIComponent(args.token)}`;
-  const html = `<!doctype html><html lang="sr-Latn"><body style="margin:0;background:#FAF7F2;padding:32px 16px;font-family:Arial,sans-serif;color:#1A1714;"><div style="max-width:560px;margin:0 auto;background:white;border-radius:18px;padding:32px;"><h1 style="font-family:Georgia,serif;font-size:28px;margin:0 0 12px;">Potvrdite newsletter prijavu</h1><p style="font-size:15px;line-height:1.6;margin:0 0 22px;">Kliknite na dugme da potvrdite da želite akcije, kupone i najbolje ponude iz ${BRAND.name}.</p><a href="${escapeAttr(confirmUrl)}" style="display:inline-block;background:#1A1714;color:#FAF7F2;border-radius:999px;padding:13px 24px;text-decoration:none;font-weight:700;">Potvrdi prijavu</a><p style="font-size:12px;line-height:1.5;color:#6B6259;margin:22px 0 0;">Link važi 24 sata. Ako niste tražili prijavu, ignorišite ovu poruku.</p></div></body></html>`;
+  const content = renderNewsletterOptInEmail(confirmUrl, cfg.baseUrl);
   return trackedDispatch({
     kind: "newsletter_opt_in",
     from: cfg.marketingFrom,
     to: args.email,
     subject: `Potvrdite newsletter prijavu — ${BRAND.name}`,
-    html,
-    text: `Potvrdite newsletter prijavu: ${confirmUrl}\n\nLink važi 24 sata.`,
+    html: content.html,
+    text: content.text,
     tags: { kind: "newsletter_opt_in" },
     idempotencyKey: `newsletter-opt-in:${digest(args.token)}`,
   });
+}
+
+export function renderNewsletterOptInEmail(confirmUrl: string, baseUrl: string = BRAND.url) {
+  const safeConfirmUrl = escapeAttr(confirmUrl);
+  const safeBaseUrl = escapeAttr(baseUrl);
+  const logoUrl = escapeAttr(`${baseUrl.replace(/\/$/, "")}/documents/garantni-list-logo.jpeg`);
+  const html = `<!doctype html><html lang="sr-Latn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>Potvrdite newsletter prijavu</title></head><body style="margin:0;background:#F2F6F8;color:#172B36;font-family:Arial,Helvetica,sans-serif;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#F2F6F8;"><tr><td align="center" style="padding:28px 12px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;border-collapse:separate;background:#FFFFFF;border-top:5px solid #123F5A;border-radius:12px;box-shadow:0 8px 24px rgba(18,63,90,.10);"><tr><td style="padding:28px 24px 18px;"><a href="${safeBaseUrl}" style="display:inline-block;text-decoration:none;"><img src="${logoUrl}" alt="${escapeAttr(BRAND.name)}" width="220" height="36" style="display:block;width:220px;max-width:78%;height:auto;border:0;"></a></td></tr><tr><td style="padding:8px 24px 32px;"><h1 style="font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin:0 0 16px;color:#172B36;">Potvrdite newsletter prijavu</h1><p style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;margin:0 0 22px;color:#5F6F78;">Kliknite na dugme da potvrdite da želite akcije, kupone i najbolje ponude iz ${escapeAttr(BRAND.name)}.</p><table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px;"><tr><td bgcolor="#123F5A" style="background:#123F5A;border-radius:7px;"><a href="${safeConfirmUrl}" style="display:inline-block;color:#FFFFFF;padding:13px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;line-height:1.2;text-decoration:none;">Potvrdi prijavu</a></td></tr></table><p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5F6F78;margin:0;">Link važi 24 sata. Ako niste tražili prijavu, ignorišite ovu poruku.</p></td></tr></table><p style="max-width:640px;margin:18px auto 0;text-align:center;font:11px/1.6 Arial,Helvetica,sans-serif;color:#5F6F78;">${escapeAttr(BRAND.legalName)} · Beograd, Srbija<br><a href="${safeBaseUrl}" style="color:#123F5A;text-decoration:underline;">${escapeAttr(BRAND.domain)}</a></p></td></tr></table></body></html>`;
+  return {
+    html,
+    text: `Potvrdite newsletter prijavu: ${confirmUrl}\n\nLink važi 24 sata. Ako niste tražili prijavu, ignorišite ovu poruku.`,
+  };
 }
 
 async function syncMarketingContact(

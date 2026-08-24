@@ -7,3 +7,4 @@
 "svet akcija/Product photos/115[0-1]/**" filter=lfs diff=lfs merge=lfs -text
 "svet akcija/Product photos/116[0-9]/**" filter=lfs diff=lfs merge=lfs -text
 "svet akcija/Product photos/117[0-3]/**" filter=lfs diff=lfs merge=lfs -text
+*.pdf binary

@@ -16,6 +16,7 @@ type Filter = {
 
 const fields = [
   ["source", "Izvor prijave"],
+  ["tag", "Uvezena lista"],
   ["subscribedAt", "Datum prijave"],
   ["registered", "Ima nalog"],
   ["city", "Grad kupovine"],
@@ -104,6 +105,15 @@ export function NewsletterAudienceBuilder({
     setFilter((current) => ({
       ...current,
       groups: current.groups.map((group) => group.id === groupId ? mutate(group) : group),
+    }));
+  }
+
+  function toggleManualContact(contactId: string, checked: boolean) {
+    setFilter((current) => ({
+      ...current,
+      manualContactIds: checked
+        ? Array.from(new Set([...current.manualContactIds, contactId]))
+        : current.manualContactIds.filter((id) => id !== contactId),
     }));
   }
 
@@ -246,19 +256,24 @@ export function NewsletterAudienceBuilder({
       <details className="rounded-xl border border-border/70 p-4">
         <summary className="cursor-pointer text-sm font-medium">Ručni izbor i isključenja</summary>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="space-y-1.5 text-sm">
+          <div className="space-y-1.5 text-sm">
             <span className="text-xs uppercase tracking-[0.12em] text-ink-500">Samo izabrani kontakti</span>
-            <select
-              multiple
-              size={Math.min(8, Math.max(3, contacts.length))}
-              value={filter.manualContactIds}
-              onChange={(event) => setFilter((current) => ({ ...current, manualContactIds: Array.from(event.target.selectedOptions, (option) => option.value) }))}
-              className="w-full rounded-lg border border-input bg-surface p-2 text-sm"
-            >
-              {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.email}</option>)}
-            </select>
+            <span className="block max-h-56 space-y-1 overflow-y-auto rounded-lg border border-input bg-surface p-2">
+              {contacts.map((contact) => (
+                <label key={contact.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-muted-bg/60">
+                  <input
+                    type="checkbox"
+                    checked={filter.manualContactIds.includes(contact.id)}
+                    onChange={(event) => toggleManualContact(contact.id, event.target.checked)}
+                    className="size-4 accent-[#123f5a]"
+                  />
+                  <span className="font-mono text-xs">{contact.email}</span>
+                </label>
+              ))}
+              {!contacts.length ? <span className="block px-2 py-1 text-xs text-ink-500">Nema aktivnih kontakata.</span> : null}
+            </span>
             <span className="block text-xs text-ink-500">Ako ništa nije izabrano, pravila važe nad svim aktivnim kontaktima.</span>
-          </label>
+          </div>
           <label className="space-y-1.5 text-sm">
             <span className="text-xs uppercase tracking-[0.12em] text-ink-500">Isključi primaoce prethodnih kampanja</span>
             <select

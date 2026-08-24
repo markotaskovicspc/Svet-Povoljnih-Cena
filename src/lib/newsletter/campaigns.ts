@@ -23,6 +23,7 @@ import {
 } from "@/lib/email/resend-broadcasts";
 import {
   audienceFilterJson,
+  combineNewsletterAudiences,
   emptyAudienceFilter,
   newsletterAudienceFilterSchema,
   resolveNewsletterAudience,
@@ -47,8 +48,9 @@ export const saveCampaignSchema = z.object({
   fromName: z.string().trim().max(120).optional().default(""),
   fromEmail: z.union([z.literal(""), z.email()]).optional().default(""),
   replyTo: z.union([z.literal(""), z.email()]).optional().default(""),
-  audienceId: z.string().optional().default(""),
+  audienceIds: z.array(z.string().min(1)).max(20).default([]),
   audienceMode: z.enum(["DYNAMIC", "FIXED"]).default("DYNAMIC"),
+  includeContactsWithoutConsent: z.boolean().default(false),
   topicKey: z.string().trim().min(1).max(60).default("promotions"),
   content: newsletterContentSchema,
 });
@@ -101,10 +103,16 @@ export async function saveNewsletterCampaign(
   if (!editableStatuses.has(current.status)) {
     throw new Error("Zakazana ili poslata kampanja ne može da se menja. Otkažite je ili napravite kopiju.");
   }
-  const audience = input.audienceId
-    ? await db.newsletterAudience.findUnique({ where: { id: input.audienceId } })
-    : null;
-  if (input.audienceId && !audience) throw new Error("Izabrana publika ne postoji.");
+  const audienceIds = Array.from(new Set(input.audienceIds));
+  const audienceRows = audienceIds.length
+    ? await db.newsletterAudience.findMany({ where: { id: { in: audienceIds } } })
+    : [];
+  if (audienceRows.length !== audienceIds.length) {
+    throw new Error("Jedna od izabranih publika više ne postoji.");
+  }
+  const audienceById = new Map(audienceRows.map((audience) => [audience.id, audience]));
+  const audiences = audienceIds.map((id) => audienceById.get(id)!);
+  const audienceFilter = combineNewsletterAudiences(audiences);
   const rendered = await renderNewsletterCampaign({
     subject: input.subject,
     previewText: input.previewText,
@@ -128,8 +136,10 @@ export async function saveNewsletterCampaign(
         fromName: input.fromName || null,
         fromEmail: input.fromEmail || null,
         replyTo: input.replyTo || null,
-        audienceId: audience?.id ?? null,
+        audienceId: audiences.length === 1 ? audiences[0]!.id : null,
         audienceMode: input.audienceMode,
+        includeContactsWithoutConsent: input.includeContactsWithoutConsent,
+        audienceFilterSnapshot: audienceFilterJson(audienceFilter),
         topicKey: input.topicKey,
         status: current.status === "IN_REVIEW" ? "DRAFT" : current.status,
         approvedAt: null,
@@ -146,7 +156,8 @@ export async function saveNewsletterCampaign(
         content: input.content as Prisma.InputJsonValue,
         html: rendered.html,
         text: rendered.text,
-        audienceFilter: audience?.filter as Prisma.InputJsonValue | undefined,
+        audienceFilter: audienceFilterJson(audienceFilter),
+        includeContactsWithoutConsent: input.includeContactsWithoutConsent,
         createdById: actorId,
       },
     }),
@@ -215,7 +226,9 @@ export async function scheduleNewsletterCampaign(
   const filter = newsletterAudienceFilterSchema.parse(
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
-  const resolved = await resolveNewsletterAudience(filter);
+  const resolved = await resolveNewsletterAudience(filter, {
+    includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
+  });
   if (requiresSecondApprover(campaign, resolved.recipients.length)) {
     await reopenCampaignReview(campaignId, resolved.recipients.length, resolved.breakdown);
     throw new Error(
@@ -263,9 +276,28 @@ export async function cancelNewsletterCampaign(campaignId: string, actorId: stri
       throw new Error(`Provider nije potvrdio otkazivanje: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
-  await db.newsletterCampaign.update({
-    where: { id: campaignId },
-    data: { status: "CANCELLED", cancelledAt: new Date(), updatedById: actorId },
+  const cancelledAt = new Date();
+  await db.$transaction(async (tx) => {
+    const cancelled = await tx.newsletterCampaign.updateMany({
+      where: { id: campaignId, status: { in: ["APPROVED", "SCHEDULED"] } },
+      data: { status: "CANCELLED", cancelledAt, updatedById: actorId },
+    });
+    if (cancelled.count !== 1) {
+      throw new Error("Kampanju je u međuvremenu preuzeo sistem za slanje i više ne može da se otkaže.");
+    }
+    await tx.backgroundJob.updateMany({
+      where: {
+        idempotencyKey: `newsletter-send:${campaignId}`,
+        status: { in: ["QUEUED", "RETRY"] },
+      },
+      data: {
+        status: "COMPLETED",
+        payload: {},
+        lockedAt: null,
+        completedAt: cancelledAt,
+        lastError: "campaign_cancelled",
+      },
+    });
   });
 }
 
@@ -330,6 +362,8 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
       replyTo: source.replyTo,
       audienceId: source.audienceId,
       audienceMode: source.audienceMode,
+      includeContactsWithoutConsent: source.includeContactsWithoutConsent,
+      audienceFilterSnapshot: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
       topicKey: source.topicKey,
       createdById: actorId,
       updatedById: actorId,
@@ -342,6 +376,7 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
           html: rendered.html,
           text: rendered.text,
           audienceFilter: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
+          includeContactsWithoutConsent: source.includeContactsWithoutConsent,
           createdById: actorId,
         },
       },
@@ -400,7 +435,9 @@ export async function preflightNewsletterCampaign(campaignId: string, requirePro
   const filter = newsletterAudienceFilterSchema.parse(
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
-  if (!campaign.audienceId) errors.push("Izaberite publiku kampanje.");
+  if (!campaign.audienceId && !filter.selectedAudiences.length) {
+    errors.push("Izaberite bar jednu publiku kampanje.");
+  }
   const rendered = await renderNewsletterCampaign({
     subject: campaign.subject,
     previewText: campaign.previewText,
@@ -415,7 +452,14 @@ export async function preflightNewsletterCampaign(campaignId: string, requirePro
   }
   if (!campaign.subject.trim()) errors.push("Naslov poruke je obavezan.");
   if (!rendered.blocks.length) errors.push("Kampanja nema sadržaj.");
-  const resolved = await resolveNewsletterAudience(filter);
+  const resolved = await resolveNewsletterAudience(filter, {
+    includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
+  });
+  if (resolved.breakdown.matchedWithoutConsent) {
+    warnings.push(
+      `Uključeno je ${resolved.breakdown.matchedWithoutConsent.toLocaleString("sr-Latn-RS")} kontakata bez zabeležene saglasnosti.`,
+    );
+  }
   if (!resolved.recipients.length) errors.push("Publika nema nijednog podobnog primaoca.");
   const cfg = getEmailConfig();
   if (requireProvider && process.env.NODE_ENV === "production") {
@@ -496,14 +540,19 @@ export async function sendNewsletterCampaign(campaignId: string) {
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
   if (campaign.audienceMode === "DYNAMIC" || !(await db.newsletterCampaignRecipient.count({ where: { campaignId } }))) {
-    const resolved = await resolveNewsletterAudience(filter);
+    const resolved = await resolveNewsletterAudience(filter, {
+      includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
+    });
     await replaceCampaignRecipients(campaignId, resolved.recipients);
     await db.newsletterCampaign.update({
       where: { id: campaignId },
       data: { recipients: resolved.recipients.length, audienceBreakdown: resolved.breakdown },
     });
   }
-  const recipients = await finalEligibleRecipients(campaignId);
+  const recipients = await finalEligibleRecipients(
+    campaignId,
+    campaign.includeContactsWithoutConsent,
+  );
   if (!recipients.length) throw new Error("Nema podobnih primalaca u trenutku slanja.");
   if (requiresSecondApprover(campaign, recipients.length)) {
     await reopenCampaignReview(campaignId, recipients.length);
@@ -552,6 +601,7 @@ export async function sendNewsletterCampaign(campaignId: string) {
   const segmentId = await prepareCleanCampaignSegment(campaign);
   const providerOptOuts: string[] = [];
   for (const recipient of recipients) {
+    const withoutConsent = recipient.contact?.status === "PENDING";
     const sync = await syncResendContact({
       email: recipient.email,
       firstName: recipient.firstName,
@@ -559,6 +609,7 @@ export async function sendNewsletterCampaign(campaignId: string) {
       unsubscribed: false,
       promotionalAudience: true,
       subscriptionIntent: "preserve",
+      preferenceScope: withoutConsent ? "global-only" : "promotions",
       source: "campaign",
     });
     if (!sync.ok) throw new Error(sync.error);
@@ -592,7 +643,9 @@ export async function sendNewsletterCampaign(campaignId: string) {
     text: rendered.text,
     from: marketingSender(campaign, cfg.marketingFrom),
     replyTo: campaign.replyTo ?? cfg.replyTo,
-    topicId: cfg.promotionsTopicId,
+    topicId: recipients.some((recipient) => recipient.contact?.status === "PENDING")
+      ? null
+      : cfg.promotionsTopicId,
   });
   await db.newsletterCampaign.update({
     where: { id: campaignId },
@@ -773,7 +826,7 @@ export async function refreshCampaignStats(campaignId: string) {
 
 async function replaceCampaignRecipients(
   campaignId: string,
-  recipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null; language: string }>,
+  recipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null; language: string; status: "ACTIVE" | "PENDING" }>,
 ) {
   await db.$transaction(async (tx) => {
     await tx.newsletterCampaignRecipient.deleteMany({ where: { campaignId, status: "QUEUED" } });
@@ -786,6 +839,7 @@ async function replaceCampaignRecipients(
           firstName: recipient.firstName,
           lastName: recipient.lastName,
           language: recipient.language,
+          consentStatusAtSelection: recipient.status,
         })),
         skipDuplicates: true,
       });
@@ -793,7 +847,10 @@ async function replaceCampaignRecipients(
   });
 }
 
-async function finalEligibleRecipients(campaignId: string) {
+async function finalEligibleRecipients(
+  campaignId: string,
+  includeContactsWithoutConsent: boolean,
+) {
   const rows = await db.newsletterCampaignRecipient.findMany({
     where: {
       campaignId,
@@ -801,18 +858,20 @@ async function finalEligibleRecipients(campaignId: string) {
     },
     include: { contact: true },
   });
-  const inactive = rows.filter((row) => row.contact?.status !== "ACTIVE");
+  const isAllowedStatus = (status: string | undefined) =>
+    status === "ACTIVE" || (includeContactsWithoutConsent && status === "PENDING");
+  const inactive = rows.filter((row) => !isAllowedStatus(row.contact?.status));
   if (inactive.length) {
     await db.newsletterCampaignRecipient.updateMany({
       where: { id: { in: inactive.map((row) => row.id) } },
       data: {
         status: "UNSUBSCRIBED",
-        failureReason: "not_active_before_send",
+        failureReason: "not_eligible_before_send",
         unsubscribedAt: new Date(),
       },
     });
   }
-  const active = rows.filter((row) => row.contact?.status === "ACTIVE");
+  const active = rows.filter((row) => isAllowedStatus(row.contact?.status));
   const suppressed = new Set((await db.emailSuppression.findMany({
     where: { email: { in: active.map((row) => row.email) } },
     select: { email: true },

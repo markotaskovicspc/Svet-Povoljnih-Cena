@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { NewsletterCampaignStatus, NewsletterRecipientStatus } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
+import { selectedNewsletterAudiences } from "@/lib/newsletter/audience";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -91,12 +93,22 @@ export default async function NewsletterCampaignPage({
   const actorName = new Map(actors.map((actor) => [actor.id, [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email]));
   const editable = campaign.status === "DRAFT" || campaign.status === "IN_REVIEW";
   const cfg = getEmailConfig();
+  const snapshotAudiences = selectedNewsletterAudiences(campaign.audienceFilterSnapshot);
+  const selectedAudiences = snapshotAudiences.length
+    ? snapshotAudiences
+    : campaign.audience
+      ? [{ id: campaign.audience.id, name: campaign.audience.name }]
+      : [];
+  const selectedAudienceIds = new Set(selectedAudiences.map((audience) => audience.id));
+  const selectedAudienceLabel = selectedAudiences.length
+    ? selectedAudiences.map((audience) => audience.name).join(", ")
+    : "publika nije izabrana";
 
   return (
     <>
       <PageHeader
         title={campaign.title}
-        description={`${campaignLabel[campaign.status]} · verzija ${campaign.versions[0]?.version ?? 1}${campaign.audience ? ` · ${campaign.audience.name}` : " · publika nije izabrana"}`}
+        description={`${campaignLabel[campaign.status]} · verzija ${campaign.versions[0]?.version ?? 1} · ${selectedAudienceLabel}${campaign.includeContactsWithoutConsent ? " · uključeni kontakti bez saglasnosti" : ""}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/newsletter", label: "Newsletter" },
@@ -113,6 +125,12 @@ export default async function NewsletterCampaignPage({
         {campaign.failureReason ? (
           <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <strong>Slanje nije završeno:</strong> {campaign.failureReason}
+          </div>
+        ) : null}
+        {campaign.includeContactsWithoutConsent ? (
+          <div role="alert" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            <strong>Upozorenje:</strong> ova kampanja može uključiti kontakte bez zabeležene saglasnosti.
+            Izričito odjavljene, potisnute i provider opt-out adrese ostaju isključene.
           </div>
         ) : null}
 
@@ -135,23 +153,75 @@ export default async function NewsletterCampaignPage({
               testId="newsletter-campaign-editor"
             >
               <input type="hidden" name="id" value={campaign.id} />
+              <input type="hidden" name="topicKey" value="promotions" />
               <div className="grid gap-4 lg:grid-cols-2">
                 <Field label="Interni naziv"><Input name="title" required maxLength={160} defaultValue={campaign.title} /></Field>
                 <Field label="Naslov mejla"><Input name="subject" required maxLength={200} defaultValue={campaign.subject} /></Field>
                 <Field label="Preview tekst"><Input name="previewText" maxLength={240} defaultValue={campaign.previewText ?? ""} /></Field>
-                <Field label="Publika">
-                  <select key={`audience:${campaign.updatedAt.getTime()}`} name="audienceId" required defaultValue={campaign.audienceId ?? ""} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
-                    <option value="">Izaberite publiku</option>
-                    {audiences.map((audience) => <option key={audience.id} value={audience.id}>{audience.name}{typeof audience.estimatedCount === "number" ? ` (${audience.estimatedCount})` : ""}</option>)}
-                  </select>
-                </Field>
                 <Field label="Način publike" hint="Dinamička se preračunava neposredno pre slanja; fiksna se zamrzava pri zakazivanju.">
                   <select key={`audience-mode:${campaign.updatedAt.getTime()}`} name="audienceMode" defaultValue={campaign.audienceMode} className="h-8 rounded-lg border border-input bg-surface px-2 text-sm">
-                    <option value="DYNAMIC">Dinamička</option>
-                    <option value="FIXED">Fiksna lista</option>
+                    <option value="DYNAMIC">Dinamička — osveži kontakte pre slanja</option>
+                    <option value="FIXED">Fiksna — zamrzni listu pri zakazivanju</option>
                   </select>
                 </Field>
-                <Field label="Tema saglasnosti"><Input name="topicKey" defaultValue={campaign.topicKey} readOnly /></Field>
+                <Field
+                  label="Publike"
+                  hint="Označite jednu ili više. Kontakt koji pripada u više označenih publika dobiće poruku samo jednom."
+                  className="lg:col-span-2"
+                >
+                  <div
+                    key={`audiences:${campaign.updatedAt.getTime()}`}
+                    role="group"
+                    aria-label="Izbor publika"
+                    className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-border/70 bg-muted-bg/30 p-3 sm:grid-cols-2"
+                  >
+                    {audiences.map((audience) => (
+                      <label key={audience.id} className="flex cursor-pointer items-start gap-3 rounded-lg bg-surface px-3 py-2 text-sm shadow-sm">
+                        <input
+                          type="checkbox"
+                          name="audienceIds"
+                          value={audience.id}
+                          defaultChecked={selectedAudienceIds.has(audience.id)}
+                          className="mt-0.5 size-4 accent-[#123f5a]"
+                        />
+                        <span>
+                          <strong className="font-medium text-ink-900">{audience.name}</strong>
+                          <span className="block text-xs text-ink-500">
+                            {typeof audience.estimatedCount === "number"
+                              ? `do ${audience.estimatedCount.toLocaleString("sr-Latn-RS")} kontakata`
+                              : "broj još nije izračunat"}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    {!audiences.length ? (
+                      <p className="text-sm text-ink-500">Još nema sačuvanih publika.</p>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-xs text-ink-500">
+                    Imaš svoj spisak? <Link href="/admin/newsletter?view=contacts" className="font-medium text-walnut hover:underline">Uvezi CSV/XLSX</Link>
+                    {" "}ili <Link href="/admin/newsletter?view=audiences" className="font-medium text-walnut hover:underline">napravi novi segment</Link>.
+                  </p>
+                </Field>
+                <Field label="Dozvola kontakata" className="lg:col-span-2">
+                  <label
+                    key={`missing-consent:${campaign.updatedAt.getTime()}`}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink-900"
+                  >
+                    <input
+                      type="checkbox"
+                      name="includeContactsWithoutConsent"
+                      defaultChecked={campaign.includeContactsWithoutConsent}
+                      className="mt-0.5 size-4 accent-[#123f5a]"
+                    />
+                    <span>
+                      <strong>Uključi kontakte bez zabeležene saglasnosti</strong>
+                      <span className="mt-1 block text-xs leading-5 text-ink-600">
+                        Ako je označeno, kontakti na čekanju iz izabranih publika mogu dobiti ovu kampanju uz upozorenje pre slanja. Njihov status saglasnosti se ne menja. Izričite odjave, potiskivanja i provider opt-out se uvek poštuju.
+                      </span>
+                    </span>
+                  </label>
+                </Field>
               </div>
               <details className="rounded-xl border border-border/70 p-4">
                 <summary className="cursor-pointer text-sm font-medium">Pošiljalac i reply-to (opciono)</summary>
@@ -258,6 +328,7 @@ function WorkflowCard({
     scheduledAt: Date | null;
     sentAt: Date | null;
     audienceBreakdown: unknown;
+    includeContactsWithoutConsent: boolean;
   };
   currentAdminId: string;
 }) {
@@ -275,7 +346,14 @@ function WorkflowCard({
         {campaign.status === "DRAFT" ? (
           <AdminActionForm action={submitNewsletterReviewAction}>
             <input type="hidden" name="id" value={campaign.id} />
-            <SubmitButton pendingLabel="Proveravam publiku i sadržaj…">Pošalji na proveru</SubmitButton>
+            <SubmitButton
+              pendingLabel="Proveravam publiku i sadržaj…"
+              confirm={campaign.includeContactsWithoutConsent
+                ? "Kampanja je podešena da uključi kontakte bez zabeležene saglasnosti. Nastaviti na proveru?"
+                : undefined}
+            >
+              Pošalji na proveru
+            </SubmitButton>
           </AdminActionForm>
         ) : null}
         {campaign.status === "IN_REVIEW" ? (

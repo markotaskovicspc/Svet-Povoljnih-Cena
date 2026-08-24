@@ -3,7 +3,10 @@ import type { MarketingContactStatus, NewsletterCampaignStatus } from "@prisma/c
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
-import { emptyAudienceFilter } from "@/lib/newsletter/audience";
+import {
+  emptyAudienceFilter,
+  selectedNewsletterAudiences,
+} from "@/lib/newsletter/audience";
 import { marketingContactMigrationPreview } from "@/lib/newsletter/contacts";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
@@ -164,7 +167,7 @@ async function CampaignsView({
           id: campaign.id,
           cells: {
             campaign: <div><Link href={`/admin/newsletter/kampanje/${campaign.id}`} className="font-medium text-walnut hover:underline">{campaign.title}</Link><p className="max-w-md truncate text-xs text-ink-500">{campaign.subject}</p></div>,
-            audience: <span>{campaign.audience?.name ?? "—"}<br /><span className="text-xs text-ink-500">{campaign.audienceMode === "FIXED" ? "fiksna lista" : "dinamička"}</span></span>,
+            audience: <span>{campaignAudienceNames(campaign)}<br /><span className="text-xs text-ink-500">{campaign.audienceMode === "FIXED" ? "fiksna lista" : "dinamička"}</span></span>,
             status: <StatusPill status={campaign.status} label={campaignLabel[campaign.status]} />,
             schedule: campaign.sentAt ? formatDate(campaign.sentAt) : campaign.scheduledAt ? formatDate(campaign.scheduledAt) : "—",
             results: <span className="text-xs">{campaign.delivered ?? 0} isporučeno · {campaign.opened ?? 0} otvoreno · {campaign.clicked ?? 0} klik</span>,
@@ -228,12 +231,12 @@ async function ContactsView({ q }: { q: string }) {
   return (
     <>
       <Card>
-        <CardTitle description="Prvo proverite fajl bez upisa. Sistem nikada ne pretpostavlja saglasnost: samo red sa izričitom vrednošću da/yes/true/1 u koloni consent postaje aktivan; svi ostali ostaju na čekanju i ne ulaze u kampanje. Ranija odjava ili potiskivanje uvek imaju prednost.">
+        <CardTitle description="Prvo proverite fajl bez upisa. Samo red sa izričitom vrednošću da/yes/true/1 u koloni consent postaje aktivan; svi ostali ostaju evidentirani bez zabeležene saglasnosti. U nacrtu ih možete uključiti uz jasno upozorenje. Ranija odjava ili potiskivanje uvek imaju prednost.">
           Uvoz kontakata iz CSV/XLSX
         </CardTitle>
         <div className="mb-4 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <strong>Važno:</strong> stara baza bez dokaza saglasnosti može da se uveze radi evidencije,
-          ali ti kontakti neće primati newsletter dok sami ne potvrde prijavu.
+          <strong>Važno:</strong> stara baza bez dokaza saglasnosti može da se uveze.
+          Ti kontakti se u nacrtu uključuju posebnom opcijom uz upozorenje; izričite odjave i potiskivanja nikada se ne zaobilaze.
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <AdminActionForm
@@ -259,15 +262,20 @@ async function ContactsView({ q }: { q: string }) {
           </AdminActionForm>
           <AdminActionForm
             action={importNewsletterContactsAction}
-            className="rounded-lg border border-border p-4"
+            className="space-y-3 rounded-lg border border-border p-4"
           >
+            <Field
+              label="Naziv liste / publike"
+              hint="Na primer: Sajam avgust 2026. Posle uvoza ova lista će se automatski pojaviti među publikama u nacrtu."
+            >
+              <Input name="listName" required maxLength={150} placeholder="Sajam avgust 2026" />
+            </Field>
             <Field label="CSV ili XLSX fajl za upis" hint="Za veliku bazu koristite isti fajl koji ste prethodno proverili.">
               <Input name="contactsFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
             </Field>
-            <label className="mt-3 flex items-start gap-2 text-sm text-ink-700">
-              <input name="consentPolicyAccepted" type="checkbox" required className="mt-1" />
-              <span>Razumem da samo redovi sa izričitom saglasnošću postaju aktivni; ostali ne smeju da dobiju kampanju.</span>
-            </label>
+            <div className="mt-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+              Redovi bez izričite saglasnosti biće uvezeni sa statusom „bez zabeležene saglasnosti“. Njih kasnije možete uključiti u pojedinačnu kampanju uz upozorenje, bez menjanja tog statusa.
+            </div>
             <SubmitButton
               className="mt-3"
               pendingLabel="Uvozim…"
@@ -284,8 +292,8 @@ async function ContactsView({ q }: { q: string }) {
         </CardTitle>
         <ol className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5">
           {[
-            ["1", "Kontakti", "Uvezite i proverite saglasnosti; kampanje koriste samo aktivne kontakte."],
-            ["2", "Publika", "Sačuvajte segment i proverite procenjeni broj primalaca."],
+            ["1", "Kontakti", "Dajte listi naziv i uvezite CSV/XLSX; publika od uvezenih kontakata pravi se automatski."],
+            ["2", "Publika", "U nacrtu ček-boksovima spojite jednu ili više lista i segmenata."],
             ["3", "Kampanja", "Napravite nacrt, sadržaj i test poruku na internu adresu."],
             ["4", "Provera", "Pošaljite na odobrenje; za veliku publiku važi kontrola drugog administratora."],
             ["5", "Slanje", "Zakažite termin i posle pratite isporuku, otvaranja, klikove i odjave."],
@@ -308,6 +316,7 @@ async function ContactsView({ q }: { q: string }) {
         columns={[
           { key: "email", label: "Kontakt" },
           { key: "source", label: "Izvor" },
+          { key: "lists", label: "Liste" },
           { key: "consent", label: "Saglasnost" },
           { key: "dates", label: "Datumi" },
           { key: "action", label: "" },
@@ -317,6 +326,7 @@ async function ContactsView({ q }: { q: string }) {
           cells: {
             email: <div><span className="font-mono text-xs">{contact.email}</span><p className="text-xs text-ink-500">{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "bez imena"}</p></div>,
             source: contact.source ?? "—",
+            lists: contact.tags?.length ? <span className="text-xs">{contact.tags.join(", ")}</span> : "—",
             consent: <div><StatusPill status={contact.status} label={contactLabel[contact.status]} /><p className="mt-1 text-[11px] text-ink-500">{contact.consentEvents[0] ? `${contact.consentEvents[0].type} · ${contact.consentEvents[0].source}` : "bez događaja"}</p></div>,
             dates: <span className="text-xs">Prijava: {contact.subscribedAt ? formatDate(contact.subscribedAt) : "—"}<br />Odjava: {contact.unsubscribedAt ? formatDate(contact.unsubscribedAt) : "—"}</span>,
             action: contact.status === "ACTIVE" || contact.status === "PENDING" ? (
@@ -375,7 +385,7 @@ async function SettingsView({ contactsCount }: { contactsCount: Record<string, n
           <dt>Email provider</dt><dd><Ready value={cfg.provider === "resend"}>{cfg.provider}</Ready></dd>
           <dt>API ključ</dt><dd><Ready value={Boolean(cfg.apiKey)} /></dd>
           <dt>Marketing pošiljalac</dt><dd><Ready value={Boolean(cfg.marketingFrom)} /></dd>
-          <dt>Promotions topic</dt><dd><Ready value={Boolean(cfg.promotionsTopicId)} /></dd>
+          <dt>Resend dozvola za promotivne poruke</dt><dd><Ready value={Boolean(cfg.promotionsTopicId)} /></dd>
           <dt>Resend webhook potpis</dt><dd><Ready value={Boolean(cfg.resendWebhookSecret)} /></dd>
           <dt>Unsubscribe potpis</dt><dd><Ready value={Boolean(cfg.unsubscribeSecret)} /></dd>
         </dl>
@@ -410,6 +420,16 @@ function StatusPill({ status, label }: { status: string; label: string }) {
         ? "bg-warning/15 text-warning"
         : "bg-muted-bg text-ink-700";
   return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", tone)}>{label}</span>;
+}
+
+function campaignAudienceNames(campaign: {
+  audience: { name: string } | null;
+  audienceFilterSnapshot: unknown;
+}) {
+  const selected = selectedNewsletterAudiences(campaign.audienceFilterSnapshot);
+  return selected.length
+    ? selected.map((audience) => audience.name).join(", ")
+    : campaign.audience?.name ?? "—";
 }
 
 function Ready({ value, children }: { value: boolean; children?: React.ReactNode }) {

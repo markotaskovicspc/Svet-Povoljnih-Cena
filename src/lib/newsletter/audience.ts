@@ -2,10 +2,11 @@ import "server-only";
 
 import { OrderStatus, Prisma, type MarketingContact } from "@prisma/client";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { databaseIdentifier, db } from "@/lib/db";
 
 export const audienceFieldSchema = z.enum([
   "source",
+  "tag",
   "subscribedAt",
   "registered",
   "city",
@@ -75,11 +76,21 @@ export const audienceGroupSchema = z.object({
   rules: z.array(audienceRuleSchema).max(20).default([]),
 });
 
-export const newsletterAudienceFilterSchema = z.object({
+const savedAudienceFilterSchema = z.object({
   logic: z.enum(["AND", "OR"]).default("AND"),
   groups: z.array(audienceGroupSchema).max(10).default([]),
   manualContactIds: z.array(z.string().min(1)).max(10_000).default([]),
   excludeCampaignIds: z.array(z.string().min(1)).max(100).default([]),
+});
+
+const selectedAudienceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(160),
+  filter: savedAudienceFilterSchema,
+});
+
+export const newsletterAudienceFilterSchema = savedAudienceFilterSchema.extend({
+  selectedAudiences: z.array(selectedAudienceSchema).max(20).default([]),
 });
 
 export type NewsletterAudienceFilter = z.infer<typeof newsletterAudienceFilterSchema>;
@@ -92,6 +103,7 @@ export type AudienceProfile = {
   lastName: string | null;
   language: string;
   source: string | null;
+  tags: string[];
   subscribedAt: Date | null;
   registered: boolean;
   cities: string[];
@@ -109,19 +121,28 @@ export type AudienceProfile = {
 export type AudienceRecipient = Pick<
   MarketingContact,
   "id" | "email" | "firstName" | "lastName" | "language"
->;
+> & { status: "ACTIVE" | "PENDING" };
+
+type ResolveNewsletterAudienceOptions = {
+  includeContactsWithoutConsent?: boolean;
+};
 
 export function matchesAudienceFilter(profile: AudienceProfile, rawFilter: unknown) {
   const filter = newsletterAudienceFilterSchema.parse(rawFilter ?? {});
-  if (filter.manualContactIds.length && !filter.manualContactIds.includes(profile.contactId)) {
-    return false;
+  if (filter.selectedAudiences.length) {
+    if (!matchesAudienceBoundaries(profile, filter)) return false;
+    return filter.selectedAudiences.some((audience) =>
+      matchesSavedAudienceFilter(profile, audience.filter),
+    );
   }
-  if (
-    filter.excludeCampaignIds.length &&
-    filter.excludeCampaignIds.some((id) => profile.receivedCampaignIds.includes(id))
-  ) {
-    return false;
-  }
+  return matchesSavedAudienceFilter(profile, filter);
+}
+
+function matchesSavedAudienceFilter(
+  profile: AudienceProfile,
+  filter: z.infer<typeof savedAudienceFilterSchema>,
+) {
+  if (!matchesAudienceBoundaries(profile, filter)) return false;
   if (!filter.groups.length) return true;
   const groupResults = filter.groups.map((group) => {
     if (!group.rules.length) return true;
@@ -131,17 +152,43 @@ export function matchesAudienceFilter(profile: AudienceProfile, rawFilter: unkno
   return filter.logic === "AND" ? groupResults.every(Boolean) : groupResults.some(Boolean);
 }
 
+function matchesAudienceBoundaries(
+  profile: AudienceProfile,
+  filter: z.infer<typeof savedAudienceFilterSchema>,
+) {
+  if (filter.manualContactIds.length && !filter.manualContactIds.includes(profile.contactId)) {
+    return false;
+  }
+  if (
+    filter.excludeCampaignIds.length &&
+    filter.excludeCampaignIds.some((id) => profile.receivedCampaignIds.includes(id))
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export async function resolveNewsletterAudience(
   rawFilter: unknown,
+  options: ResolveNewsletterAudienceOptions = {},
   limit = maximumAudienceContacts(),
 ) {
   const filter = newsletterAudienceFilterSchema.parse(rawFilter ?? {});
-  const fields = new Set(filter.groups.flatMap((group) => group.rules.map((rule) => rule.field)));
+  const savedFilters = [
+    filter,
+    ...filter.selectedAudiences.map((audience) => audience.filter),
+  ];
+  const fields = new Set(
+    savedFilters.flatMap((savedFilter) =>
+      savedFilter.groups.flatMap((group) => group.rules.map((rule) => rule.field)),
+    ),
+  );
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 250_000);
   const contacts = await db.marketingContact.findMany({
     where: {
-      status: "ACTIVE",
-      subscribedAt: { not: null },
+      ...(options.includeContactsWithoutConsent
+        ? { status: { in: ["ACTIVE" as const, "PENDING" as const] } }
+        : { status: "ACTIVE" as const, subscribedAt: { not: null } }),
       ...(filter.manualContactIds.length ? { id: { in: filter.manualContactIds } } : {}),
     },
     take: safeLimit + 1,
@@ -149,7 +196,7 @@ export async function resolveNewsletterAudience(
   });
   if (contacts.length > safeLimit) {
     throw new Error(
-      `Publika prelazi bezbedni limit od ${safeLimit.toLocaleString("sr-Latn-RS")} aktivnih kontakata. Sužite filter pre slanja.`,
+      `Publika prelazi bezbedni limit od ${safeLimit.toLocaleString("sr-Latn-RS")} kontakata. Sužite filter pre slanja.`,
     );
   }
   const userIds = unique(contacts.map((contact) => contact.userId).filter(isString));
@@ -157,12 +204,16 @@ export async function resolveNewsletterAudience(
   const needsCity = fields.has("city");
   const needsVoucher = fields.has("voucher");
   const needsProducts = fields.has("purchasedSku") || fields.has("purchasedCategory");
+  const orderTable = databaseIdentifier("Order");
+  const orderItemTable = databaseIdentifier("OrderItem");
   const engagementCampaignIds = unique([
-    ...filter.excludeCampaignIds,
-    ...filter.groups.flatMap((group) => group.rules
-      .filter((rule) => rule.field === "openedCampaign" || rule.field === "clickedCampaign")
-      .map((rule) => String(rule.value ?? "").trim())
-      .filter(Boolean)),
+    ...savedFilters.flatMap((savedFilter) => savedFilter.excludeCampaignIds),
+    ...savedFilters.flatMap((savedFilter) => savedFilter.groups.flatMap((group) =>
+      group.rules
+        .filter((rule) => rule.field === "openedCampaign" || rule.field === "clickedCampaign")
+        .map((rule) => String(rule.value ?? "").trim())
+        .filter(Boolean),
+    )),
   ]);
   const validOrderWhere: Prisma.OrderWhereInput = {
     userId: { in: userIds },
@@ -193,8 +244,8 @@ export async function resolveNewsletterAudience(
     userIds.length && needsProducts
       ? db.$queryRaw<Array<{ userId: string; sku: string; categoryPath: string | null }>>(Prisma.sql`
           SELECT DISTINCT o."userId" AS "userId", oi."sku", oi."categoryPath"
-          FROM "OrderItem" oi
-          JOIN "Order" o ON o."id" = oi."orderId"
+          FROM ${orderItemTable} oi
+          JOIN ${orderTable} o ON o."id" = oi."orderId"
           WHERE o."userId" IN (${Prisma.join(userIds)})
             AND o."status" NOT IN ('KREIRANO', 'OTKAZANO', 'VRACENO')
         `)
@@ -224,8 +275,10 @@ export async function resolveNewsletterAudience(
   const recipients: AudienceRecipient[] = [];
   let excludedSuppressed = 0;
   let excludedRules = 0;
+  let matchedWithoutConsent = 0;
 
   for (const contact of contacts) {
+    if (contact.status !== "ACTIVE" && contact.status !== "PENDING") continue;
     if (suppressed.has(contact.email.toLowerCase())) {
       excludedSuppressed += 1;
       continue;
@@ -243,6 +296,7 @@ export async function resolveNewsletterAudience(
       lastName: contact.lastName,
       language: contact.language,
       source: contact.source,
+      tags: contact.tags,
       subscribedAt: contact.subscribedAt,
       registered: Boolean(contact.userId),
       cities: contact.userId ? cities.get(contact.userId) ?? [] : [],
@@ -266,22 +320,29 @@ export async function resolveNewsletterAudience(
       firstName: contact.firstName,
       lastName: contact.lastName,
       language: contact.language,
+      status: contact.status,
     });
+    if (contact.status === "PENDING") matchedWithoutConsent += 1;
   }
   return {
     filter,
     recipients,
     breakdown: {
-      activeContacts: contacts.length,
+      activeContacts: contacts.filter((contact) => contact.status === "ACTIVE").length,
+      contactsWithoutConsent: contacts.filter((contact) => contact.status === "PENDING").length,
       matched: recipients.length,
+      matchedWithoutConsent,
       excludedSuppressed,
       excludedRules,
     },
   };
 }
 
-export async function previewNewsletterAudience(rawFilter: unknown) {
-  const result = await resolveNewsletterAudience(rawFilter);
+export async function previewNewsletterAudience(
+  rawFilter: unknown,
+  options: ResolveNewsletterAudienceOptions = {},
+) {
+  const result = await resolveNewsletterAudience(rawFilter, options);
   return {
     count: result.recipients.length,
     breakdown: result.breakdown,
@@ -290,7 +351,33 @@ export async function previewNewsletterAudience(rawFilter: unknown) {
 }
 
 export function emptyAudienceFilter(): NewsletterAudienceFilter {
-  return { logic: "AND", groups: [], manualContactIds: [], excludeCampaignIds: [] };
+  return {
+    logic: "AND",
+    groups: [],
+    manualContactIds: [],
+    excludeCampaignIds: [],
+    selectedAudiences: [],
+  };
+}
+
+export function combineNewsletterAudiences(
+  audiences: Array<{ id: string; name: string; filter: unknown }>,
+): NewsletterAudienceFilter {
+  return newsletterAudienceFilterSchema.parse({
+    ...emptyAudienceFilter(),
+    selectedAudiences: audiences.map((audience) => ({
+      id: audience.id,
+      name: audience.name,
+      filter: savedAudienceFilterSchema.parse(audience.filter),
+    })),
+  });
+}
+
+export function selectedNewsletterAudiences(rawFilter: unknown) {
+  const parsed = newsletterAudienceFilterSchema.safeParse(rawFilter ?? {});
+  return parsed.success
+    ? parsed.data.selectedAudiences.map(({ id, name }) => ({ id, name }))
+    : [];
 }
 
 function matchRule(profile: AudienceProfile, rule: AudienceRule) {
@@ -339,6 +426,7 @@ function matchRule(profile: AudienceProfile, rule: AudienceRule) {
 function ruleValue(profile: AudienceProfile, field: z.infer<typeof audienceFieldSchema>) {
   switch (field) {
     case "source": return profile.source ?? "";
+    case "tag": return profile.tags;
     case "subscribedAt": return profile.subscribedAt;
     case "registered": return profile.registered;
     case "city": return profile.cities;
