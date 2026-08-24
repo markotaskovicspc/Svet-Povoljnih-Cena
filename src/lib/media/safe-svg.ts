@@ -28,6 +28,75 @@ function reject(message: string): never {
   throw new SvgValidationError(message);
 }
 
+function stripDoctypeDeclarations(source: string, expectedCount: number) {
+  if (expectedCount === 0) return source;
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const markupStart = source.indexOf("<", cursor);
+    if (markupStart < 0) break;
+
+    if (source.startsWith("<!--", markupStart)) {
+      const commentEnd = source.indexOf("-->", markupStart + 4);
+      if (commentEnd < 0) break;
+      cursor = commentEnd + 3;
+      continue;
+    }
+    if (source.startsWith("<![CDATA[", markupStart)) {
+      const cdataEnd = source.indexOf("]]>", markupStart + 9);
+      if (cdataEnd < 0) break;
+      cursor = cdataEnd + 3;
+      continue;
+    }
+    if (source.startsWith("<?", markupStart)) {
+      const instructionEnd = source.indexOf("?>", markupStart + 2);
+      if (instructionEnd < 0) break;
+      cursor = instructionEnd + 2;
+      continue;
+    }
+    if (!source.startsWith("<!DOCTYPE", markupStart)) {
+      cursor = markupStart + 1;
+      continue;
+    }
+
+    let quote: '"' | "'" | null = null;
+    let subsetDepth = 0;
+    let declarationEnd = -1;
+    for (let index = markupStart + 9; index < source.length; index += 1) {
+      const character = source[index];
+      if (quote) {
+        if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === "[") {
+        subsetDepth += 1;
+      } else if (character === "]" && subsetDepth > 0) {
+        subsetDepth -= 1;
+      } else if (character === ">" && subsetDepth === 0) {
+        declarationEnd = index + 1;
+        break;
+      }
+    }
+    if (declarationEnd < 0) reject("Fajl nije ispravan SVG dokument.");
+    ranges.push({ start: markupStart, end: declarationEnd });
+    cursor = declarationEnd;
+  }
+
+  if (ranges.length !== expectedCount) {
+    reject("Fajl nije ispravan SVG dokument.");
+  }
+  let sanitized = "";
+  let sourceOffset = 0;
+  for (const range of ranges) {
+    sanitized += source.slice(sourceOffset, range.start);
+    sourceOffset = range.end;
+  }
+  return sanitized + source.slice(sourceOffset);
+}
+
 function validateEmbeddedRaster(value: string) {
   const match = value.match(EMBEDDED_RASTER);
   if (!match) {
@@ -123,7 +192,9 @@ function validateElement(tag: SaxesTagNS) {
 /**
  * SVG is executable markup, so accepting the MIME type alone is not safe.
  * Self-contained vector artwork and embedded raster images are supported;
- * scripts, event handlers, embedded HTML and external resources are rejected.
+ * harmless document type declarations are removed, while scripts, event
+ * handlers, embedded HTML, entity references and external resources are
+ * rejected.
  */
 export function validateSafeSvgBytes(input: ArrayBuffer | Uint8Array) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
@@ -138,10 +209,11 @@ export function validateSafeSvgBytes(input: ArrayBuffer | Uint8Array) {
   let rootSeen = false;
   let styleDepth = 0;
   let styleText = "";
+  let doctypeCount = 0;
   const parser = new SaxesParser({ xmlns: true });
 
   parser.on("doctype", () => {
-    reject("SVG ne sme da sadrži spoljne deklaracije.");
+    doctypeCount += 1;
   });
   parser.on("processinginstruction", ({ target }) => {
     if (target.toLowerCase() === "xml-stylesheet") {
@@ -181,5 +253,10 @@ export function validateSafeSvgBytes(input: ArrayBuffer | Uint8Array) {
     throw new Error("Fajl nije ispravan SVG dokument.");
   }
   if (!rootSeen) throw new Error("Fajl nije ispravan SVG dokument.");
-  return normalized;
+  if (doctypeCount === 0) return normalized;
+
+  const sanitized = stripDoctypeDeclarations(normalized, doctypeCount).trim();
+  // Validate the exact markup that callers will persist. Besides guarding the
+  // declaration scanner, this guarantees that no DTD-only entity survives.
+  return validateSafeSvgBytes(new TextEncoder().encode(sanitized));
 }

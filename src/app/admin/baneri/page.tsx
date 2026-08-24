@@ -157,8 +157,7 @@ async function persistBannerImage(
   let contentType = "image/webp";
 
   if (sourceExtension === "svg") {
-    validateSafeSvgBytes(input);
-    output = input;
+    output = Buffer.from(validateSafeSvgBytes(input));
     outputExtension = "svg";
     contentType = "image/svg+xml";
   } else try {

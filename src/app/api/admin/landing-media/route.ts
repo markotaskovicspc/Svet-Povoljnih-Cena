@@ -61,10 +61,17 @@ export async function POST(request: Request) {
     if (file.size > MAX_BYTES) throw new Error("Slika ne sme biti veća od 6 MB.");
     const extension = MIME_EXTENSIONS[file.type as keyof typeof MIME_EXTENSIONS];
     if (!extension) throw new Error("Podržani formati su JPG, PNG, WebP i SVG.");
-    const input = Buffer.from(await file.arrayBuffer());
-    const metadata = extension === "svg"
-      ? (validateSafeSvgBytes(input), { width: null, height: null })
-      : await sharp(input, { failOn: "error", limitInputPixels: MAX_PIXELS }).metadata();
+    let input = Buffer.from(await file.arrayBuffer());
+    let metadata: { width?: number | null; height?: number | null };
+    if (extension === "svg") {
+      input = Buffer.from(validateSafeSvgBytes(input));
+      metadata = { width: null, height: null };
+    } else {
+      metadata = await sharp(input, {
+        failOn: "error",
+        limitInputPixels: MAX_PIXELS,
+      }).metadata();
+    }
     if (extension !== "svg" && (!metadata.width || !metadata.height || metadata.width * metadata.height > MAX_PIXELS)) {
       throw new Error("Slika ima neispravne ili prevelike dimenzije.");
     }

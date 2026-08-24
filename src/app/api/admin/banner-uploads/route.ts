@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         type: file.type,
         size: bytes.length,
       });
-      validateSafeSvgBytes(bytes);
+      bytes = Buffer.from(validateSafeSvgBytes(bytes));
     } catch (error) {
       if (error instanceof SvgCompanionRequiredError) {
         return noStoreJson(

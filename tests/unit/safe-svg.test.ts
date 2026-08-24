@@ -36,6 +36,38 @@ describe("safe SVG uploads", () => {
     ).toContain("xpacket");
   });
 
+  it("accepts and removes a standard external SVG doctype", () => {
+    const output = validateSafeSvgBytes(
+      bytes(
+        '<?xml version="1.0"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>',
+      ),
+    );
+
+    expect(output).toContain("<path");
+    expect(output).not.toContain("<!DOCTYPE");
+    expect(output).not.toContain("svg11.dtd");
+  });
+
+  it("removes unused internal entity declarations", () => {
+    const output = validateSafeSvgBytes(
+      bytes(
+        '<!DOCTYPE svg [<!ENTITY unused "safe metadata">]><svg xmlns="http://www.w3.org/2000/svg"/>',
+      ),
+    );
+
+    expect(output).toBe('<svg xmlns="http://www.w3.org/2000/svg"/>');
+  });
+
+  it("rejects custom entity references instead of resolving them", () => {
+    expect(() =>
+      validateSafeSvgBytes(
+        bytes(
+          '<!DOCTYPE svg [<!ENTITY external SYSTEM "file:///etc/passwd">]><svg xmlns="http://www.w3.org/2000/svg">&external;</svg>',
+        ),
+      ),
+    ).toThrow("Fajl nije ispravan SVG dokument.");
+  });
+
   it("still rejects stylesheet processing instructions", () => {
     expect(() =>
       validateSafeSvgBytes(
@@ -68,7 +100,6 @@ describe("safe SVG uploads", () => {
     '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
     '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
     '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>HTML</div></foreignObject></svg>',
-    '<!DOCTYPE svg><svg xmlns="http://www.w3.org/2000/svg"/>',
   ])("rejects active or externally loaded markup", (source) => {
     expect(() => validateSafeSvgBytes(bytes(source))).toThrow();
   });

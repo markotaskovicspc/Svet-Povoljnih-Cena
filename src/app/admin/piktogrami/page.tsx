@@ -47,8 +47,8 @@ function formatMobileShortcutCount(count: number) {
 
 async function uploadPictogramIcon(code: string, file: File) {
   const extension = validatePictogramIconFile(file);
-  const bytes = Buffer.from(await file.arrayBuffer());
-  if (extension === "svg") validateSafeSvgBytes(bytes);
+  let bytes = Buffer.from(await file.arrayBuffer());
+  if (extension === "svg") bytes = Buffer.from(validateSafeSvgBytes(bytes));
   const key = `${PICTOGRAM_ICON_PREFIX}${code.toLowerCase()}-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
   const { error } = await storage.upload(key, bytes, {

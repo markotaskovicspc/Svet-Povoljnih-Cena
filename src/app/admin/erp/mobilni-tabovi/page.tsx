@@ -14,6 +14,7 @@ import {
   MOBILE_SHORTCUT_ICON_PREFIX,
   validateMobileShortcutIconUpload,
 } from "@/lib/mobile-shortcuts/icon-file";
+import { validateSafeSvgBytes } from "@/lib/media/safe-svg";
 import {
   landingPageIsLive,
   resolveMobileTabDestination,
@@ -99,8 +100,9 @@ type AdminMobileShortcutRow = {
 };
 
 async function uploadShortcutIcon(position: number, file: File) {
-  const bytes = Buffer.from(await file.arrayBuffer());
+  let bytes = Buffer.from(await file.arrayBuffer());
   const extension = validateMobileShortcutIconUpload(file, bytes);
+  if (extension === "svg") bytes = Buffer.from(validateSafeSvgBytes(bytes));
   const key = `${MOBILE_SHORTCUT_ICON_PREFIX}slot-${position}-${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
   const storage = createAdminClient().storage.from(getProductMediaBucket());
   const { error } = await storage.upload(key, bytes, {
