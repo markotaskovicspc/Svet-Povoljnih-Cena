@@ -21,6 +21,11 @@ describe("supplier purchase-order email", () => {
     expect(email.html).toContain("porudzbenica-13-26.pdf");
     expect(email.html).toContain("Please kindly confirm receipt of our new order.");
     expect(email.html).toContain("The complete order request is attached");
+    expect(email.html).toContain("background-color:#F2F6F8");
+    expect(email.html).toContain("max-width:640px");
+    expect(email.html).toContain("border-top:5px solid #123F5A");
+    expect(email.html).toContain("box-shadow:0 8px 24px rgba(18,63,90,0.10)");
+    expect(email.html).not.toContain("background-color:#251c17");
     expect(email.html).not.toContain("undefined");
     expect(email.html).not.toContain("<script");
   });

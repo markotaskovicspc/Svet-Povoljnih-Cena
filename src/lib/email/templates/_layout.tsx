@@ -15,13 +15,21 @@ export interface EmailLayoutProps {
   preview: string;
   children: ReactNode;
   footerNote?: string;
+  footer?: ReactNode;
+  lang?: string;
 }
 
 /** Table-based, inline-only shell that remains stable in Gmail and Outlook. */
-export function EmailLayout({ preview, children, footerNote }: EmailLayoutProps) {
+export function EmailLayout({
+  preview,
+  children,
+  footerNote,
+  footer,
+  lang = "sr-Latn",
+}: EmailLayoutProps) {
   return (
     <table
-      lang="sr-Latn"
+      lang={lang}
       role="presentation"
       cellPadding={0}
       cellSpacing={0}
@@ -108,17 +116,21 @@ export function EmailLayout({ preview, children, footerNote }: EmailLayoutProps)
                       lineHeight: 1.6,
                     }}
                   >
-                    {footerNote ??
-                      "Dobili ste ovu poruku jer ste izvršili akciju na sajtu svetpovoljnihcena.rs."}
-                    <br />
-                    {BRAND.legalName} · Beograd, Srbija
-                    <br />
-                    <a
-                      href={BRAND.url}
-                      style={{ color: COLORS.blue, textDecoration: "underline" }}
-                    >
-                      {BRAND.domain}
-                    </a>
+                    {footer ?? (
+                      <>
+                        {footerNote ??
+                          "Dobili ste ovu poruku jer ste izvršili akciju na sajtu svetpovoljnihcena.rs."}
+                        <br />
+                        {BRAND.legalName} · Beograd, Srbija
+                        <br />
+                        <a
+                          href={BRAND.url}
+                          style={{ color: COLORS.blue, textDecoration: "underline" }}
+                        >
+                          {BRAND.domain}
+                        </a>
+                      </>
+                    )}
                   </td>
                 </tr>
               </tbody>
