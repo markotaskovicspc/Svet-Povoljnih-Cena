@@ -52,7 +52,6 @@ import {
   sendReclamationReceipt,
   sendReclamationStatusChanged,
 } from "@/lib/email/send";
-import { buildWithdrawalFormPageSvgs } from "@/lib/email/pdf";
 
 const success = { ok: true as const, id: "resend-message-id", provider: "resend" as const };
 
@@ -247,30 +246,6 @@ describe("all transactional Resend send flows", () => {
         writeFile(
           `${process.env.ORDER_EMAIL_SAMPLE_DIR}/order-confirmation.txt`,
           previewInput.text,
-        ),
-        writeFile(
-          `${process.env.ORDER_EMAIL_SAMPLE_DIR}/withdrawal-preview.svg`,
-          buildWithdrawalFormPageSvgs({
-            number: previewOrder.id,
-            createdAt: new Date(previewOrder.createdAt),
-            items: previewOrder.items.map((item) => ({
-              sku: item.sku,
-              name: item.name,
-              qty: item.qty,
-              unitPriceSale: item.unitPriceSale,
-              assemblyPrice: item.assemblyPrice ?? null,
-            })),
-            subtotal: previewOrder.subtotal,
-            shipping: previewOrder.shipping,
-            assemblyTotal: previewOrder.assemblyTotal,
-            voucherCode: previewOrder.voucherCode ?? null,
-            voucherDiscount: previewOrder.voucherDiscount ?? null,
-            firstPurchaseDiscount: previewOrder.firstPurchaseDiscount ?? null,
-            savedCardDiscount: previewOrder.savedCardDiscount ?? null,
-            total: previewOrder.total,
-            paymentMethod: previewOrder.paymentMethod,
-            shipping_address: previewOrder.shippingAddress,
-          })[0]!,
         ),
         ...previewInput.attachments.map((attachment: { filename: string; content: string }) =>
           writeFile(

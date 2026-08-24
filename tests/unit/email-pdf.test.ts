@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildInvoicePdf,
   buildWithdrawalFormPdf,
-  buildWithdrawalFormPageSvgs,
   type InvoiceOrderInput,
 } from "@/lib/email/pdf";
 
@@ -40,20 +39,16 @@ describe("customer PDF documents", () => {
     expect(bytes.length).toBeGreaterThan(20_000);
   });
 
-  it("renders a branded withdrawal form with explicit item checkboxes", async () => {
-    const bytes = await buildWithdrawalFormPdf(order);
+  it("numbers each withdrawal item so the buyer can circle it", () => {
+    const bytes = buildWithdrawalFormPdf(order);
     const pdf = bytes.toString("binary");
-    const svg = buildWithdrawalFormPageSvgs(order).join("\n");
 
-    expect(pdf).toContain("/Subtype /Image");
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
     expect(pdf).toContain("/MediaBox [0 0 595 842]");
-    expect(bytes.length).toBeGreaterThan(20_000);
-    expect(svg).toContain("Stavite X u prazno polje");
-    expect(svg).toContain('class="checkbox"');
-    expect(svg).toContain("Stolica");
-    expect(svg).toContain("SKU-1");
-    expect(svg).not.toContain("Zaokružite");
-    expect(svg).not.toMatch(/>\s*\([1-9]\)\s*</);
+    expect(pdf).toContain("Zaokruzite redni broj artikla");
+    expect(pdf).toContain("\\(1\\) Stolica \\(SKU-1\\)");
+    expect(pdf).toContain("\\(2\\) Sto \\(SKU-2\\)");
+    expect(pdf).not.toContain("\\(   \\)");
   });
 
   it("formats order dates in the Belgrade business timezone", () => {
@@ -62,6 +57,8 @@ describe("customer PDF documents", () => {
       createdAt: new Date("2026-08-20T22:30:00.000Z"),
     };
 
-    expect(buildWithdrawalFormPageSvgs(lateOrder)[0]).toContain("21.08.2026.");
+    expect(buildWithdrawalFormPdf(lateOrder).toString("binary")).toContain(
+      "Datum porudzbine: 21.08.2026.",
+    );
   });
 });

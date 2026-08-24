@@ -118,7 +118,7 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   pageCount: number;
 }) {
   const tableX = 145;
-  const tableY = 500;
+  const tableY = 586;
   const tableWidth = 950;
   const headerHeight = 38;
   const columns = [380, 260, 210, 100];
@@ -152,45 +152,43 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" width="${PAGE_WIDTH}" height="${PAGE_HEIGHT}" viewBox="0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}">
     <style>
-      text { font-family: Geist, sans-serif; fill: #172b36; }
-      .title { font-size: 40px; font-weight: 800; fill: #123f5a; }
-      .subtitle { font-size: 18px; fill: #5f6f78; }
-      .section { font-size: 23px; font-weight: 800; fill: #123f5a; }
-      .label { font-size: 17px; font-weight: 700; fill: #355c70; }
-      .value { font-size: 16px; fill: #172b36; }
+      text { font-family: Geist, sans-serif; fill: #151f2b; }
+      .title { font-size: 40px; font-weight: 800; fill: #11283f; }
+      .subtitle { font-size: 21px; fill: #30343a; }
+      .section { font-size: 23px; font-weight: 700; fill: #3d78a5; }
+      .label { font-size: 18px; font-weight: 700; fill: #365e84; }
+      .value { font-size: 18px; fill: #101820; }
       .thead { font-size: 16px; font-weight: 700; fill: #365e84; }
       .cell { font-size: 15px; fill: #101820; }
       .body { font-size: 17px; font-weight: 400; fill: #101820; }
-      .body-bold { font-size: 17px; font-weight: 700; fill: #123f5a; }
-      .important { font-size: 16px; font-weight: 700; fill: #123f5a; }
+      .body-bold { font-size: 17px; font-weight: 700; fill: #365e84; }
+      .important { font-size: 16px; font-weight: 700; fill: #294d72; }
       .footer { font-size: 12px; fill: #6a6f75; }
-      .label-bg { fill: #f2f7f9; }
-      .provider-box { fill: #ffffff; stroke: #dce6ea; stroke-width: 1.5; }
-      .header-bg { fill: #eaf4f7; }
-      .row { fill: #ffffff; stroke: #dce6ea; stroke-width: 1; }
-      .rule { stroke: #dce6ea; stroke-width: 1; }
+      .label-bg { fill: #f0f2f6; }
+      .header-bg { fill: #eef1f5; }
+      .row { fill: #ffffff; stroke: #d5dbe2; stroke-width: 1; }
+      .rule { stroke: #d5dbe2; stroke-width: 1; }
     </style>
     <rect width="1240" height="1754" fill="#ffffff"/>
-    <image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>
-    <text x="1095" y="86" text-anchor="end" class="title">GARANTNI LIST</text>
-    <text x="1095" y="122" text-anchor="end" class="subtitle">${xmlEscape(input.number)}</text>
-    <rect x="145" y="165" width="950" height="4" fill="#123f5a"/>
+    <image x="205" y="28" width="830" height="198" preserveAspectRatio="xMidYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>
 
-    <text x="145" y="218" class="section">Podaci o davaocu garancije</text>
-    <rect x="145" y="238" width="950" height="190" rx="8" class="provider-box"/>
-    <rect x="145" y="238" width="290" height="190" rx="8" class="label-bg"/>
-    ${providerRow(278, "Naziv", GUARANTEE_PROVIDER.name)}
-    ${providerRow(322, "Adresa", GUARANTEE_PROVIDER.address)}
-    ${providerRow(366, "PIB", GUARANTEE_PROVIDER.pib)}
-    ${providerRow(410, "Kontakt za reklamacije", GUARANTEE_PROVIDER.reclamationsEmail)}
+    <text x="145" y="275" class="title">GARANTNI LIST</text>
+    <text x="145" y="316" class="subtitle">Komercijalna garancija za robu</text>
 
-    <text x="145" y="480" class="section">Podaci o robi i kupovini</text>
+    <text x="145" y="355" class="section">Podaci o davaocu garancije</text>
+    <rect x="155" y="374" width="280" height="168" class="label-bg"/>
+    ${providerRow(406, "Naziv", GUARANTEE_PROVIDER.name)}
+    ${providerRow(448, "Adresa", GUARANTEE_PROVIDER.address)}
+    ${providerRow(490, "PIB", GUARANTEE_PROVIDER.pib)}
+    ${providerRow(532, "Kontakt za reklamacije", GUARANTEE_PROVIDER.reclamationsEmail)}
+
+    <text x="145" y="570" class="section">Podaci o robi i kupovini</text>
     <rect x="${tableX}" y="${tableY}" width="${tableWidth}" height="${headerHeight}" class="header-bg" stroke="#d5dbe2" stroke-width="1"/>
     ${verticalLines(tableX, tableY, headerHeight, columns)}
-    <text x="155" y="525" class="thead">Naziv proizvoda</text>
-    <text x="535" y="525" class="thead">Tip proizvoda</text>
-    <text x="795" y="525" class="thead">Šifra proizvoda</text>
-    <text x="1045" y="525" text-anchor="middle" class="thead">Količina</text>
+    <text x="155" y="611" class="thead">Naziv proizvoda</text>
+    <text x="535" y="611" class="thead">Tip proizvoda</text>
+    <text x="795" y="611" class="thead">Šifra proizvoda</text>
+    <text x="1045" y="611" text-anchor="middle" class="thead">Količina</text>
     ${itemRows}
 
     <rect x="155" y="${metaY}" width="280" height="84" class="label-bg"/>
