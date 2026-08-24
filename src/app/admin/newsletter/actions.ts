@@ -24,6 +24,10 @@ import {
   submitNewsletterCampaignForReview,
 } from "@/lib/newsletter/campaigns";
 import { withdrawMarketingEmail } from "@/lib/newsletter/contacts";
+import {
+  importNewsletterContacts,
+  previewNewsletterContactImport,
+} from "@/lib/newsletter/contact-import";
 
 const allowed = ["ADS"] as const;
 
@@ -342,6 +346,80 @@ export async function unsubscribeMarketingContactAction(
       return { ok: true as const, entityId: id, message: `${contact.email} je odjavljen.`, diff: { email: contact.email } };
     },
   )(formData);
+}
+
+export async function previewNewsletterContactImportAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  return withAdminState(
+    {
+      allowed,
+      action: "newsletter.contactImport.preview",
+      entity: "MarketingContact",
+    },
+    async (_actorId, formData: FormData) => {
+      const file = formData.get("contactsFile");
+      if (!(file instanceof File) || file.size === 0) {
+        return { ok: false as const, error: "Izaberite CSV ili XLSX fajl." };
+      }
+      const result = await previewNewsletterContactImport(file);
+      return {
+        ok: true as const,
+        message: importSummary("Provera završena, ništa nije upisano.", result),
+        result,
+        diff: { fileName: file.name, ...result },
+      };
+    },
+  )(formData);
+}
+
+export async function importNewsletterContactsAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  return withAdminState(
+    {
+      allowed,
+      action: "newsletter.contactImport.commit",
+      entity: "MarketingContact",
+    },
+    async (actorId, formData: FormData) => {
+      const file = formData.get("contactsFile");
+      const accepted = formData.get("consentPolicyAccepted") === "on";
+      if (!(file instanceof File) || file.size === 0) {
+        return { ok: false as const, error: "Izaberite CSV ili XLSX fajl." };
+      }
+      if (!accepted) {
+        return {
+          ok: false as const,
+          error:
+            "Potvrdite pravilo saglasnosti: samo izričito označeni kontakti postaju aktivni.",
+        };
+      }
+      const result = await importNewsletterContacts(file, actorId);
+      revalidatePath("/admin/newsletter");
+      return {
+        ok: true as const,
+        message: importSummary("Uvoz je završen.", result),
+        result,
+        diff: { fileName: file.name, ...result },
+      };
+    },
+  )(formData);
+}
+
+function importSummary(
+  prefix: string,
+  result: {
+    uniqueValid: number;
+    explicitConsent: number;
+    withoutConsent: number;
+    invalidRows: number;
+    duplicateRows: number;
+  },
+) {
+  return `${prefix} Ispravnih: ${result.uniqueValid}; aktivnih uz izričitu saglasnost: ${result.explicitConsent}; bez dokaza saglasnosti (čekaju potvrdu i ne dobijaju kampanje): ${result.withoutConsent}; neispravnih: ${result.invalidRows}; duplikata u fajlu: ${result.duplicateRows}.`;
 }
 
 async function campaignAction(

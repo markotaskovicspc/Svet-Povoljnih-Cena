@@ -2060,7 +2060,7 @@ async function reclamationRows(take: number): Promise<ErpRow[]> {
   return rows.map((row) => ({
     id: row.id,
     cellHrefs: {
-      number: `/admin/erp/reklamacije-dnevnik?reclamation=${encodeURIComponent(row.id)}#reclamation-${encodeURIComponent(row.id)}`,
+      number: `/admin/erp/reklamacije-dnevnik/${encodeURIComponent(row.id)}`,
     },
     values: {
       number: row.number,

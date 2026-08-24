@@ -47,6 +47,10 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
+const loadOrdersSchema = batchSchema.extend({
+  ordersFrom: z.string().optional(),
+  ordersTo: z.string().optional(),
+});
 const providerSchema = z.enum(["MYGLS", "X_EXPRESS"]);
 const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
 const packageSchema = batchSchema.extend({
@@ -203,11 +207,19 @@ async function loadOrdersAction(
       entity: "PickupBatch",
     },
     async (actorId, actionData: FormData) => {
-      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
+      const parsed = loadOrdersSchema.safeParse(Object.fromEntries(actionData.entries()));
       if (!parsed.success) {
         return { ok: false as const, error: "Nalog nije izabran." };
       }
-      const result = await loadEligibleOrders(parsed.data.batchId, actorId);
+      const from = parseOptionalDay(parsed.data.ordersFrom, false);
+      const toExclusive = parseOptionalDay(parsed.data.ordersTo, true);
+      if (from && toExclusive && from >= toExclusive) {
+        return { ok: false as const, error: "Datum od mora biti pre datuma do." };
+      }
+      const result = await loadEligibleOrders(parsed.data.batchId, actorId, {
+        from,
+        toExclusive,
+      });
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
@@ -405,6 +417,12 @@ export default async function PickupBatchPage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/admin/erp/preuzimanja/${batch.id}/stampa`}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Picking lista i etikete
+            </Link>
             <form action={createAction}>
               <input type="hidden" name="provider" value="X_EXPRESS" />
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
@@ -613,8 +631,14 @@ export default async function PickupBatchPage({
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
-              <AdminActionForm action={loadOrdersAction}>
+              <AdminActionForm action={loadOrdersAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="batchId" value={batch.id} />
+                <Field label="Porudžbine od">
+                  <Input name="ordersFrom" type="date" />
+                </Field>
+                <Field label="Porudžbine do">
+                  <Input name="ordersTo" type="date" />
+                </Field>
                 <SubmitButton pendingLabel="Učitavanje…">
                   Učitaj porudžbine
                 </SubmitButton>
@@ -912,4 +936,17 @@ function isIdResult(value: unknown): value is { id: string } {
     "id" in value &&
     typeof value.id === "string"
   );
+}
+
+function parseOptionalDay(value: string | undefined, nextDay: boolean) {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Period porudžbina nije ispravan.");
+  }
+  const parsed = parseBelgradeDateTimeLocal(`${value}T00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Period porudžbina nije ispravan.");
+  }
+  if (nextDay) parsed.setUTCDate(parsed.getUTCDate() + 1);
+  return parsed;
 }

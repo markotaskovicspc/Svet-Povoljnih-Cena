@@ -335,7 +335,7 @@ async function createShipment(formData: FormData) {
       action: "reclamation.shipmentCreate",
       entity: "Reclamation",
     },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const reclamationId = String(formData.get("id") ?? "");
       const purpose = String(formData.get("purpose") ?? "") as ShipmentPurpose;
       const packageCount = Number(formData.get("packageCount") ?? 1);
@@ -352,6 +352,7 @@ async function createShipment(formData: FormData) {
         reclamationId,
         purpose,
         packageCount,
+        actorId,
       });
       revalidatePath("/admin/erp/reklamacije-dnevnik");
       return {
@@ -372,12 +373,12 @@ async function cancelShipment(formData: FormData) {
       action: "reclamation.shipmentCancel",
       entity: "Shipment",
     },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       if (!shipmentId) {
         return { ok: false as const, error: "Pošiljka nije izabrana." };
       }
-      const shipment = await cancelReclamationShipment(shipmentId);
+      const shipment = await cancelReclamationShipment(shipmentId, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
       return {
         ok: true as const,
@@ -444,10 +445,15 @@ export default async function ReclamationsPage({
           { href: "/admin/erp", label: "ERP" },
           { label: "Dnevnik reklamacija" },
         ]}
-        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><Link href="/api/admin/erp/reklamacije-dnevnik/export" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</Link></div>}
+        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><Link href="/api/admin/erp/reklamacije-dnevnik/export" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</Link></div>}
       />
       <div className="space-y-10 px-8 py-6">
-        <Card>
+        <details className="group rounded-xl border border-border bg-surface">
+          <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-ink-900 marker:hidden">
+            + Ručno evidentiraj reklamaciju
+            <span className="ml-2 text-sm font-normal text-ink-500">Forma je sakrivena dok je ne otvorite.</span>
+          </summary>
+        <Card className="rounded-t-none border-x-0 border-b-0">
           <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Dostupne su samo isporučene porudžbine i preostale količine.">
             Ručni unos reklamacije
           </CardTitle>
@@ -527,6 +533,7 @@ export default async function ReclamationsPage({
             </div>
           </AdminActionForm>
         </Card>
+        </details>
         {erpModule ? (
           <section aria-labelledby="reclamation-grid" className="space-y-3">
             <div>
@@ -592,6 +599,14 @@ export default async function ReclamationsPage({
                       {STATUS_LABELS[reclamation.status]}
                     </span>
                   </div>
+                  <div className="mt-3">
+                    <Link
+                      href={`/admin/erp/reklamacije-dnevnik/${reclamation.id}`}
+                      className="inline-flex h-9 items-center rounded-lg bg-ink-900 px-3 text-sm font-medium text-white hover:bg-walnut"
+                    >
+                      Otvori detalj i obradu
+                    </Link>
+                  </div>
                   <p className="mt-3 max-w-2xl text-sm text-ink-700">
                     {reclamation.description}
                   </p>
@@ -617,7 +632,7 @@ export default async function ReclamationsPage({
                     </div>
                   ) : null}
 
-                  <div className="mt-4 grid gap-4 border-t border-border/60 pt-4 xl:grid-cols-2">
+                  <div className="hidden">
                     <form action={updateReclamationDetails} className="space-y-3">
                       <input type="hidden" name="id" value={reclamation.id} />
                       <div className="grid gap-3 sm:grid-cols-3">
@@ -798,7 +813,7 @@ export default async function ReclamationsPage({
 
                   <form
                     action={updateStatus}
-                    className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[200px_1fr_auto]"
+                    className="hidden"
                   >
                     <input type="hidden" name="id" value={reclamation.id} />
                     <Field label="Novi status">
@@ -823,7 +838,7 @@ export default async function ReclamationsPage({
                   </form>
 
                   {reclamation.events.length > 0 ? (
-                    <details className="mt-3 text-xs text-ink-500">
+                    <details className="hidden">
                       <summary className="cursor-pointer">
                         Istorija statusa ({reclamation.events.length})
                       </summary>

@@ -24,6 +24,7 @@ import {
   deliveryWindowsSchema,
   getDeliveryWindows,
 } from "@/lib/delivery-windows";
+import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -210,6 +211,8 @@ export default async function DeliveryPage() {
     glsDeliveryPoints,
     glsLocations,
     glsRuns,
+    xExpressReadiness,
+    myGlsReadiness,
   ] = await Promise.all([
     db.deliveryPriceRule.findMany({
       orderBy: [{ scope: "asc" }, { updatedAt: "desc" }],
@@ -242,6 +245,8 @@ export default async function DeliveryPage() {
       orderBy: { startedAt: "desc" },
       take: 5,
     }),
+    getPickupPostingAvailability("X_EXPRESS"),
+    getPickupPostingAvailability("MYGLS"),
   ]);
   const deliveryWindows = await getDeliveryWindows();
 
@@ -406,6 +411,11 @@ export default async function DeliveryPage() {
               X Express šifarnici
             </CardTitle>
             <ProviderStatus label="Koristi se za pakete do 60 cm" />
+            <ProviderReadiness
+              ready={xExpressReadiness.available}
+              reason={xExpressReadiness.reason}
+              handoff="Ako nedostaju contractCode, prefiks ili opseg kodova, te vrednosti mora da dodeli X Express podrška; ne koristiti primer AAA/850300000–850599999."
+            />
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="text-sm text-ink-700">
                 <p>
@@ -427,6 +437,11 @@ export default async function DeliveryPage() {
               MyGLS šifarnici
             </CardTitle>
             <ProviderStatus label="Koristi se za pakete preko 60 cm" />
+            <ProviderReadiness
+              ready={myGlsReadiness.available}
+              reason={myGlsReadiness.reason}
+              handoff="Produkcijsko slanje ostaje zaključano dok ugovor, kredencijali i MYGLS_PRODUCTION_ACCEPTED nisu potvrđeni."
+            />
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="text-sm text-ink-700">
                 <p>
@@ -489,6 +504,24 @@ function ProviderStatus({ label }: { label: string }) {
     >
       {label}
     </span>
+  );
+}
+
+function ProviderReadiness({
+  ready,
+  reason,
+  handoff,
+}: {
+  ready: boolean;
+  reason: string | null;
+  handoff: string;
+}) {
+  return (
+    <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${ready ? "border-success/25 bg-success/10 text-success" : "border-warning/25 bg-warning/10 text-warning"}`}>
+      <p className="font-semibold">{ready ? "Spremno za kreiranje pošiljke" : "Spoljna konfiguracija nije završena"}</p>
+      {!ready && reason ? <p className="mt-1">{reason}</p> : null}
+      {!ready ? <p className="mt-1">{handoff}</p> : null}
+    </div>
   );
 }
 

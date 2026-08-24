@@ -87,7 +87,7 @@ test.describe("newsletter admin acceptance", () => {
       await page.getByRole("button", { name: "Prikaži veličinu publike" }).click();
       await acceptanceExpect(page.getByText("2 podobnih kontakata")).toBeVisible();
       await page.getByRole("button", { name: "Sačuvaj publiku" }).click();
-      await acceptanceExpect(page.getByRole("status")).toContainText("Trenutno odgovara 2 kontakata");
+      await acceptanceExpect(page.getByRole("status")).toContainText("Trenutno odgovara 2 kontakta");
       audienceId = (await db.newsletterAudience.findUniqueOrThrow({ where: { name: audienceName }, select: { id: true, estimatedCount: true } })).id;
     });
 

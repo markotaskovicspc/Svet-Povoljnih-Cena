@@ -79,6 +79,7 @@ export function ReclamationOrderFields() {
               }
             }}
             onFocus={() => setFocused(true)}
+            onClick={() => setFocused(true)}
             onBlur={() => window.setTimeout(() => setFocused(false), 120)}
             role="combobox"
             aria-autocomplete="list"

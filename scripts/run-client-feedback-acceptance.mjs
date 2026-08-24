@@ -126,7 +126,9 @@ try {
   });
   runPrisma(["generate", "--schema", "prisma/schema.prisma"], childEnv);
   runPrisma(
-    ["migrate", "deploy", "--schema", "prisma/schema.prisma"],
+    process.env.CLIENT_FEEDBACK_E2E_SCHEMA_MODE === "push"
+      ? ["db", "push", "--schema", "prisma/schema.prisma"]
+      : ["migrate", "deploy", "--schema", "prisma/schema.prisma"],
     childEnv,
   );
   run(

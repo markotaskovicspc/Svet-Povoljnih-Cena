@@ -236,13 +236,20 @@ export default async function AdminDashboard({
         COALESCE(SUM(GREATEST(ws.qty, 0) * COALESCE(p.cogs, 0)), 0)::double precision AS stock_value,
         COALESCE(SUM(
           GREATEST(ws.qty, 0)
-          * COALESCE(
-            p."unitPackWidthCm"
-            * p."unitPackDepthCm"
-            * p."unitPackHeightCm"
-            / 1000000,
-            0
-          )
+          * CASE
+              WHEN p."containerQty" > 0
+                THEN 69.0 / p."containerQty"
+              WHEN p."packQty" > 0
+                AND p."packWidthCm" > 0
+                AND p."packDepthCm" > 0
+                AND p."packHeightCm" > 0
+                THEN p."packWidthCm"
+                  * p."packDepthCm"
+                  * p."packHeightCm"
+                  / 1000000.0
+                  / p."packQty"
+              ELSE 0
+            END
         ), 0)::double precision AS total_volume,
         COALESCE(SUM(
           CASE

@@ -20,6 +20,8 @@ import {
   deleteNewsletterAudienceAction,
   deleteNewsletterTemplateAction,
   saveNewsletterAudienceAction,
+  importNewsletterContactsAction,
+  previewNewsletterContactImportAction,
   unsubscribeMarketingContactAction,
 } from "./actions";
 
@@ -225,6 +227,76 @@ async function ContactsView({ q }: { q: string }) {
   });
   return (
     <>
+      <Card>
+        <CardTitle description="Prvo proverite fajl bez upisa. Sistem nikada ne pretpostavlja saglasnost: samo red sa izričitom vrednošću da/yes/true/1 u koloni consent postaje aktivan; svi ostali ostaju na čekanju i ne ulaze u kampanje. Ranija odjava ili potiskivanje uvek imaju prednost.">
+          Uvoz kontakata iz CSV/XLSX
+        </CardTitle>
+        <div className="mb-4 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <strong>Važno:</strong> stara baza bez dokaza saglasnosti može da se uveze radi evidencije,
+          ali ti kontakti neće primati newsletter dok sami ne potvrde prijavu.
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <AdminActionForm
+            action={previewNewsletterContactImportAction}
+            preserveValues
+            className="rounded-lg border border-border p-4"
+          >
+            <Field label="CSV ili XLSX fajl" hint="Do 20 MB i 100.000 redova. Obavezna kolona: email.">
+              <Input name="contactsFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+            </Field>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <SubmitButton variant="outline" pendingLabel="Proveravam…">
+                Proveri bez upisa
+              </SubmitButton>
+              <a
+                href="data:text/csv;charset=utf-8,email%2Cime%2Cprezime%2Cconsent%2Cdatum_saglasnosti%2Cizvor%0Akupac%40primer.rs%2CAna%2CAni%C4%87%2Cda%2C2026-08-24%2Cstara-baza"
+                download="newsletter-kontakti-sablon.csv"
+                className="text-sm text-walnut underline-offset-4 hover:underline"
+              >
+                Preuzmi CSV šablon
+              </a>
+            </div>
+          </AdminActionForm>
+          <AdminActionForm
+            action={importNewsletterContactsAction}
+            className="rounded-lg border border-border p-4"
+          >
+            <Field label="CSV ili XLSX fajl za upis" hint="Za veliku bazu koristite isti fajl koji ste prethodno proverili.">
+              <Input name="contactsFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+            </Field>
+            <label className="mt-3 flex items-start gap-2 text-sm text-ink-700">
+              <input name="consentPolicyAccepted" type="checkbox" required className="mt-1" />
+              <span>Razumem da samo redovi sa izričitom saglasnošću postaju aktivni; ostali ne smeju da dobiju kampanju.</span>
+            </label>
+            <SubmitButton
+              className="mt-3"
+              pendingLabel="Uvozim…"
+              confirm="Uvesti kontakte? Postojeće odjave i potiskivanja neće biti ponovo aktivirani."
+            >
+              Uvezi kontakte
+            </SubmitButton>
+          </AdminActionForm>
+        </div>
+      </Card>
+      <Card>
+        <CardTitle description="Kratak operativni redosled za svaku novu kampanju.">
+          Kako se koristi Newsletter centar
+        </CardTitle>
+        <ol className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5">
+          {[
+            ["1", "Kontakti", "Uvezite i proverite saglasnosti; kampanje koriste samo aktivne kontakte."],
+            ["2", "Publika", "Sačuvajte segment i proverite procenjeni broj primalaca."],
+            ["3", "Kampanja", "Napravite nacrt, sadržaj i test poruku na internu adresu."],
+            ["4", "Provera", "Pošaljite na odobrenje; za veliku publiku važi kontrola drugog administratora."],
+            ["5", "Slanje", "Zakažite termin i posle pratite isporuku, otvaranja, klikove i odjave."],
+          ].map(([step, title, description]) => (
+            <li key={step} className="rounded-lg bg-muted-bg/60 p-3">
+              <p className="font-semibold text-ink-900">{step}. {title}</p>
+              <p className="mt-1 text-ink-600">{description}</p>
+            </li>
+          ))}
+        </ol>
+      </Card>
       <Card>
         <form className="flex items-end gap-3" method="get">
           <input type="hidden" name="view" value="contacts" />

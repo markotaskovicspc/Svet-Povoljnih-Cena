@@ -80,6 +80,7 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/checkouti", label: "Checkouti", allowed: O },
       { href: "/admin/erp/reklamacije-dnevnik", label: "Reklamacije", allowed: O },
+      { href: "/admin/erp/povrati", label: "Povrati", allowed: O },
       { href: "/admin/xml-import", label: "XML feed", allowed: O },
       { href: "/admin/sistem", label: "Monitoring i backup", allowed: O },
     ],
