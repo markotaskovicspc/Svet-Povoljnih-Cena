@@ -2,6 +2,7 @@ import {
   getSystemContentPage,
   isFunctionalContentPageSlug,
 } from "./system-pages";
+import { defaultContactPageWidgetData } from "./contact-page";
 
 export function getFunctionalContentPageInitialization(
   slug: string,
@@ -20,6 +21,8 @@ export function getFunctionalContentPageInitialization(
     bodyMarkdown: definition.bodyMarkdown,
     seoTitle: definition.seoTitle,
     seoDescription: definition.seoDescription,
+    widgetData:
+      definition.slug === "kontakt" ? defaultContactPageWidgetData() : undefined,
     footerVisible: definition.footerVisible,
     footerLabel: definition.footerLabel,
     footerColumn: definition.footerColumn,

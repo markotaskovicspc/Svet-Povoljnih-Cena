@@ -9,6 +9,7 @@ import { ContentPageEditor } from "@/components/admin/content-page-editor";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
+import { resolveContactPageWidgetData } from "@/lib/cms/contact-page";
 import {
   archiveContentPageAction,
   deleteContentPageDraftAction,
@@ -94,6 +95,10 @@ export default async function EditContentPage({
             bodyMarkdown: page.bodyMarkdown,
             seoTitle: page.seoTitle,
             seoDescription: page.seoDescription,
+            widgetData:
+              page.slug === "kontakt"
+                ? resolveContactPageWidgetData(page.widgetData)
+                : null,
             footerVisible: page.footerVisible,
             footerLabel: page.footerLabel,
             footerColumn: page.footerColumn,

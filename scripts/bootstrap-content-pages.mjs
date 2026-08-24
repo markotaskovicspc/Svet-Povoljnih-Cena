@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { config as loadEnv } from "dotenv";
 import { SYSTEM_CONTENT_PAGES } from "../src/lib/cms/system-pages.ts";
+import { defaultContactPageWidgetData } from "../src/lib/cms/contact-page-defaults.ts";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -42,6 +43,10 @@ const db = new PrismaClient({
 
 try {
   for (const definition of SYSTEM_CONTENT_PAGES) {
+    const defaultWidgetData =
+      definition.slug === "kontakt"
+        ? defaultContactPageWidgetData()
+        : undefined;
     await db.$transaction(async (tx) => {
       const existing = await tx.contentPage.findUnique({
         where: { slug: definition.slug },
@@ -64,6 +69,7 @@ try {
             bodyMarkdown: definition.bodyMarkdown,
             seoTitle: definition.seoTitle,
             seoDescription: definition.seoDescription,
+            widgetData: defaultWidgetData,
             footerVisible: definition.footerVisible,
             footerLabel: definition.footerLabel,
             footerColumn: definition.footerColumn,
@@ -82,6 +88,7 @@ try {
             bodyMarkdown: definition.bodyMarkdown,
             seoTitle: definition.seoTitle,
             seoDescription: definition.seoDescription,
+            widgetData: defaultWidgetData,
             footerVisible: definition.footerVisible,
             footerLabel: definition.footerLabel,
             footerColumn: definition.footerColumn,
@@ -100,6 +107,8 @@ try {
       }
 
       const needsInitialFooterDefaults = existing.footerColumn === null;
+      const needsInitialWidgetData =
+        Boolean(defaultWidgetData) && existing.widgetData === null;
       const nextVersion = existing._count.revisions + 1;
       const commonPageUpdate = {
         systemKey: definition.systemKey,
@@ -117,6 +126,9 @@ try {
         footerOrder: needsInitialFooterDefaults
           ? definition.footerOrder
           : existing.footerOrder,
+        ...(needsInitialWidgetData
+          ? { widgetData: defaultWidgetData }
+          : {}),
       };
 
       if (existing.publishedRevisionId && needsInitialFooterDefaults) {
@@ -131,6 +143,7 @@ try {
             bodyMarkdown: existing.bodyMarkdown,
             seoTitle: existing.seoTitle ?? definition.seoTitle,
             seoDescription: existing.seoDescription ?? definition.seoDescription,
+            widgetData: existing.widgetData ?? defaultWidgetData,
             footerVisible: definition.footerVisible,
             footerLabel: definition.footerLabel,
             footerColumn: definition.footerColumn,
@@ -165,6 +178,7 @@ try {
             bodyMarkdown: definition.bodyMarkdown,
             seoTitle: definition.seoTitle,
             seoDescription: definition.seoDescription,
+            widgetData: defaultWidgetData,
             footerVisible: definition.footerVisible,
             footerLabel: definition.footerLabel,
             footerColumn: definition.footerColumn,

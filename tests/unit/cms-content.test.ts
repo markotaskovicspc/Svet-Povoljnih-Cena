@@ -13,6 +13,11 @@ import {
 } from "@/lib/cms/constants";
 import { getFunctionalContentPageInitialization } from "@/lib/cms/functional-page-initialization";
 import {
+  contactPageWidgetSchema,
+  defaultContactPageWidgetData,
+  resolveContactPageWidgetData,
+} from "@/lib/cms/contact-page";
+import {
   getFunctionalContentPage,
   getPublishedContentPage,
 } from "@/lib/cms/pages";
@@ -109,6 +114,39 @@ describe("CMS Markdown safety", () => {
     expect(
       getFunctionalContentPageInitialization("ne-postoji", "admin-1"),
     ).toBeNull();
+  });
+
+  it("keeps contact cards in the same versioned CMS snapshot", () => {
+    const initialization = getFunctionalContentPageInitialization(
+      "kontakt",
+      "admin-1",
+    );
+
+    expect(initialization?.page.widgetData).toEqual(
+      defaultContactPageWidgetData(),
+    );
+    expect(initialization?.revision.widgetData).toEqual(
+      initialization?.page.widgetData,
+    );
+    expect(
+      resolveContactPageWidgetData(initialization?.revision.widgetData)
+        .channels,
+    ).toHaveLength(4);
+  });
+
+  it("validates active contact cards and falls back from malformed CMS data", () => {
+    const defaults = defaultContactPageWidgetData();
+    const invalid = {
+      ...defaults,
+      channels: defaults.channels.map((channel) =>
+        channel.id === "email"
+          ? { ...channel, value: "nije-adresa" }
+          : channel,
+      ),
+    };
+
+    expect(contactPageWidgetSchema.safeParse(invalid).success).toBe(false);
+    expect(resolveContactPageWidgetData(invalid)).toEqual(defaults);
   });
 
   it("accepts supported content, stable anchors and safe links", () => {
@@ -277,5 +315,17 @@ describe("CMS publication state", () => {
     expect(migration).toContain(
       '"published" = "published" AND "kind" = \'SYSTEM\'',
     );
+
+    const widgetMigration = await readFile(
+      path.join(
+        process.cwd(),
+        "prisma/migrations/0075_content_page_widget_data/migration.sql",
+      ),
+      "utf8",
+    );
+    expect(widgetMigration).toContain(
+      'ALTER TABLE "ContentPageRevision"',
+    );
+    expect(widgetMigration).toContain('ADD COLUMN "widgetData" JSONB');
   });
 });

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { withAdminState } from "@/lib/admin";
@@ -11,6 +12,11 @@ import {
   validateContentSlug,
 } from "@/lib/cms/constants";
 import { getFunctionalContentPageInitialization } from "@/lib/cms/functional-page-initialization";
+import {
+  CONTACT_CHANNEL_IDS,
+  contactPageWidgetSchema,
+  type ContactPageWidgetData,
+} from "@/lib/cms/contact-page";
 import { validateCmsMarkdown } from "@/lib/cms/markdown";
 import { isFunctionalContentPageSlug } from "@/lib/cms/system-pages";
 
@@ -25,6 +31,7 @@ const contentPageInputSchema = z
     bodyMarkdown: z.string().trim().min(1).max(60_000),
     seoTitle: z.string().trim().max(160).optional().nullable(),
     seoDescription: z.string().trim().max(500).optional().nullable(),
+    widgetData: contactPageWidgetSchema.nullable(),
     footerVisible: z.boolean(),
     footerLabel: z.string().trim().max(120).optional().nullable(),
     footerColumn: z.enum(["COMPANY", "TERMS"]).optional().nullable(),
@@ -54,9 +61,24 @@ function formValue(formData: FormData, key: string) {
 }
 
 function parseContentPageInput(formData: FormData) {
+  const slug = normalizeContentSlug(String(formData.get("slug") ?? ""));
+  const widgetData =
+    slug === "kontakt"
+      ? {
+          version: 1 as const,
+          channels: CONTACT_CHANNEL_IDS.map((id) => ({
+            id,
+            enabled: formData.get(`contact-${id}-enabled`) === "on",
+            label: String(formData.get(`contact-${id}-label`) ?? ""),
+            value: String(formData.get(`contact-${id}-value`) ?? ""),
+            note: String(formData.get(`contact-${id}-note`) ?? ""),
+          })),
+        }
+      : null;
+
   return contentPageInputSchema.safeParse({
     id: formValue(formData, "id"),
-    slug: normalizeContentSlug(String(formData.get("slug") ?? "")),
+    slug,
     eyebrow: formValue(formData, "eyebrow"),
     heroNote: formValue(formData, "heroNote"),
     title: String(formData.get("title") ?? ""),
@@ -64,12 +86,19 @@ function parseContentPageInput(formData: FormData) {
     bodyMarkdown: String(formData.get("bodyMarkdown") ?? ""),
     seoTitle: formValue(formData, "seoTitle"),
     seoDescription: formValue(formData, "seoDescription"),
+    widgetData,
     footerVisible: formData.get("footerVisible") === "on",
     footerLabel: formValue(formData, "footerLabel"),
     footerColumn: formValue(formData, "footerColumn"),
     footerOrder: formValue(formData, "footerOrder"),
     intent: formValue(formData, "intent") ?? "save",
   });
+}
+
+function prismaWidgetData(value: ContactPageWidgetData | Prisma.JsonValue | null) {
+  return value === null
+    ? Prisma.DbNull
+    : (value as Prisma.InputJsonValue);
 }
 
 function refreshContentPaths(slug: string, refreshFooter: boolean) {
@@ -224,6 +253,7 @@ export async function saveContentPageAction(
                 bodyMarkdown: input.bodyMarkdown,
                 seoTitle: input.seoTitle || null,
                 seoDescription: input.seoDescription || null,
+                widgetData: prismaWidgetData(input.widgetData),
                 footerVisible: input.footerVisible,
                 footerLabel: input.footerLabel || null,
                 footerColumn: input.footerVisible ? input.footerColumn : null,
@@ -247,6 +277,7 @@ export async function saveContentPageAction(
             bodyMarkdown: input.bodyMarkdown,
             seoTitle: input.seoTitle || null,
             seoDescription: input.seoDescription || null,
+            widgetData: prismaWidgetData(input.widgetData),
             footerVisible: input.footerVisible,
             footerLabel: input.footerLabel || null,
             footerColumn: input.footerVisible ? input.footerColumn : null,
@@ -265,6 +296,7 @@ export async function saveContentPageAction(
             bodyMarkdown: input.bodyMarkdown,
             seoTitle: input.seoTitle || null,
             seoDescription: input.seoDescription || null,
+            widgetData: prismaWidgetData(input.widgetData),
             footerVisible: input.footerVisible,
             footerLabel: input.footerLabel || null,
             footerColumn: input.footerVisible ? input.footerColumn : null,
@@ -298,6 +330,7 @@ export async function saveContentPageAction(
           footerLabel: input.footerLabel,
           footerColumn: input.footerColumn,
           footerOrder: input.footerOrder,
+          widgetData: input.widgetData,
         },
       };
     },
@@ -343,6 +376,7 @@ export async function restoreContentRevisionAction(
             bodyMarkdown: source.bodyMarkdown,
             seoTitle: source.seoTitle,
             seoDescription: source.seoDescription,
+            widgetData: prismaWidgetData(source.widgetData),
             footerVisible: source.footerVisible,
             footerLabel: source.footerLabel,
             footerColumn: source.footerColumn,
@@ -360,6 +394,7 @@ export async function restoreContentRevisionAction(
             bodyMarkdown: source.bodyMarkdown,
             seoTitle: source.seoTitle,
             seoDescription: source.seoDescription,
+            widgetData: prismaWidgetData(source.widgetData),
             footerVisible: source.footerVisible,
             footerLabel: source.footerLabel,
             footerColumn: source.footerColumn,

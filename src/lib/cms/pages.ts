@@ -1,7 +1,8 @@
 import "server-only";
 import { cache } from "react";
-import type { ContentPageTemplate } from "@prisma/client";
+import type { ContentPageTemplate, Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { defaultContactPageWidgetData } from "./contact-page";
 import {
   getSystemContentPage,
   isFunctionalContentPageSlug,
@@ -21,6 +22,7 @@ export type CmsPageSnapshot = {
   bodyMarkdown: string;
   seoTitle: string | null;
   seoDescription: string | null;
+  widgetData: Prisma.JsonValue | null;
   footerVisible: boolean;
   footerLabel: string | null;
   footerColumn: "COMPANY" | "TERMS" | null;
@@ -43,6 +45,8 @@ function definitionSnapshot(
     bodyMarkdown: definition.bodyMarkdown,
     seoTitle: definition.seoTitle,
     seoDescription: definition.seoDescription,
+    widgetData:
+      definition.slug === "kontakt" ? defaultContactPageWidgetData() : null,
     footerVisible: definition.footerVisible,
     footerLabel: definition.footerLabel,
     footerColumn: definition.footerColumn,
@@ -85,6 +89,7 @@ export const getPublishedContentPage = cache(async (slug: string) => {
             bodyMarkdown: true,
             seoTitle: true,
             seoDescription: true,
+            widgetData: true,
             footerVisible: true,
             footerLabel: true,
             footerColumn: true,

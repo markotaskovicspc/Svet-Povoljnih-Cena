@@ -7,6 +7,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { CmsMarkdown } from "@/components/content/cms-markdown";
+import { ContactChannels } from "@/components/content/contact-channels";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +16,10 @@ import {
   contentPreviewPath,
 } from "@/lib/cms/constants";
 import { validateCmsMarkdown } from "@/lib/cms/markdown";
+import type {
+  ContactChannel,
+  ContactPageWidgetData,
+} from "@/lib/cms/contact-page";
 
 type ContentPageEditorValues = {
   id?: string;
@@ -28,6 +33,7 @@ type ContentPageEditorValues = {
   bodyMarkdown: string;
   seoTitle: string | null;
   seoDescription: string | null;
+  widgetData: ContactPageWidgetData | null;
   footerVisible: boolean;
   footerLabel: string | null;
   footerColumn: "COMPANY" | "TERMS" | null;
@@ -64,6 +70,7 @@ export function ContentPageEditor({
   const [bodyMarkdown, setBodyMarkdown] = useState(values.bodyMarkdown);
   const [seoTitle, setSeoTitle] = useState(values.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(values.seoDescription ?? "");
+  const [widgetData, setWidgetData] = useState(values.widgetData);
   const [footerVisible, setFooterVisible] = useState(values.footerVisible);
   const issues = useMemo(() => validateCmsMarkdown(bodyMarkdown), [bodyMarkdown]);
 
@@ -80,6 +87,22 @@ export function ContentPageEditor({
       const cursor = start + before.length + selected.length + after.length;
       textarea.setSelectionRange(cursor, cursor);
     });
+  };
+
+  const updateContactChannel = (
+    id: ContactChannel["id"],
+    patch: Partial<Omit<ContactChannel, "id">>,
+  ) => {
+    setWidgetData((current) =>
+      current
+        ? {
+            ...current,
+            channels: current.channels.map((channel) =>
+              channel.id === id ? { ...channel, ...patch } : channel,
+            ),
+          }
+        : current,
+    );
   };
 
   return (
@@ -142,6 +165,86 @@ export function ContentPageEditor({
               </Field>
             </div>
           </section>
+
+          {widgetData ? (
+            <section className="rounded-2xl border border-border/60 bg-surface p-6 shadow-sm">
+              <h2 className="font-display text-xl text-ink-900">Kontakt kartice</h2>
+              <p className="mt-1 text-sm text-ink-500">
+                Menjajte četiri kartice prikazane iznad glavnog sadržaja kontakt strane.
+                Link se automatski pravi kao e-pošta ili Google Maps adresa.
+              </p>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {widgetData.channels.map((channel) => (
+                  <div
+                    key={channel.id}
+                    className="rounded-xl border border-border/60 bg-muted-bg/25 p-4"
+                  >
+                    <label className="flex items-center gap-2 text-sm font-medium text-ink-900">
+                      <input
+                        type="checkbox"
+                        name={`contact-${channel.id}-enabled`}
+                        checked={channel.enabled}
+                        onChange={(event) =>
+                          updateContactChannel(channel.id, {
+                            enabled: event.target.checked,
+                          })
+                        }
+                        className="size-4 accent-walnut"
+                      />
+                      Prikaži karticu
+                    </label>
+                    <div className="mt-4 space-y-3">
+                      <Field label="Naziv kartice">
+                        <Input
+                          name={`contact-${channel.id}-label`}
+                          value={channel.label}
+                          onChange={(event) =>
+                            updateContactChannel(channel.id, {
+                              label: event.target.value,
+                            })
+                          }
+                          maxLength={80}
+                        />
+                      </Field>
+                      <Field
+                        label="Glavna vrednost"
+                        hint={
+                          channel.id === "email"
+                            ? "Adresa e-pošte"
+                            : "Adresa koja se otvara u Google Maps"
+                        }
+                      >
+                        <Input
+                          name={`contact-${channel.id}-value`}
+                          type={channel.id === "email" ? "email" : "text"}
+                          value={channel.value}
+                          onChange={(event) =>
+                            updateContactChannel(channel.id, {
+                              value: event.target.value,
+                            })
+                          }
+                          maxLength={300}
+                        />
+                      </Field>
+                      <Field label="Napomena">
+                        <Textarea
+                          name={`contact-${channel.id}-note`}
+                          rows={2}
+                          value={channel.note}
+                          onChange={(event) =>
+                            updateContactChannel(channel.id, {
+                              note: event.target.value,
+                            })
+                          }
+                          maxLength={500}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="rounded-2xl border border-border/60 bg-surface p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -263,6 +366,11 @@ export function ContentPageEditor({
                 {heroNote ? <p className="mt-4 font-mono text-[10px] tracking-wide text-ink-500 uppercase">{heroNote}</p> : null}
               </div>
               <div className="pointer-events-none px-6 py-8 text-sm text-ink-700 [&_p]:mt-3 [&_p]:leading-relaxed [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-5">
+                {widgetData ? (
+                  <div className="mb-8">
+                    <ContactChannels data={widgetData} />
+                  </div>
+                ) : null}
                 <CmsMarkdown markdown={bodyMarkdown} template={values.template} />
               </div>
             </div>

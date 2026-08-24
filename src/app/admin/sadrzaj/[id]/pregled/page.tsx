@@ -2,8 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminAction } from "@/lib/admin";
-import { CmsContentPage } from "@/components/content/cms-content-page";
+import {
+  CmsContentPage,
+  CmsFunctionalPage,
+} from "@/components/content/cms-content-page";
+import { ContactChannels } from "@/components/content/contact-channels";
 import { buttonVariants } from "@/components/ui/button";
+import { resolveContactPageWidgetData } from "@/lib/cms/contact-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -20,6 +25,25 @@ export default async function ContentPagePreview({
   const { id } = await params;
   const page = await db.contentPage.findUnique({ where: { id } });
   if (!page) notFound();
+  const snapshot = {
+    id: page.id,
+    slug: page.slug,
+    kind: page.kind,
+    template: page.template,
+    eyebrow: page.eyebrow,
+    heroNote: page.heroNote,
+    title: page.title,
+    lead: page.lead,
+    bodyMarkdown: page.bodyMarkdown,
+    seoTitle: page.seoTitle,
+    seoDescription: page.seoDescription,
+    widgetData: page.widgetData,
+    footerVisible: page.footerVisible,
+    footerLabel: page.footerLabel,
+    footerColumn: page.footerColumn,
+    footerOrder: page.footerOrder,
+    updatedAt: page.updatedAt,
+  };
   return (
     <div className="pb-12">
       <div className="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b border-border bg-ink-900 px-6 py-3 text-white">
@@ -29,27 +53,18 @@ export default async function ContentPagePreview({
           Nazad na uređivanje
         </Link>
       </div>
-      <CmsContentPage
-        page={{
-          id: page.id,
-          slug: page.slug,
-          kind: page.kind,
-          template: page.template,
-          eyebrow: page.eyebrow,
-          heroNote: page.heroNote,
-          title: page.title,
-          lead: page.lead,
-          bodyMarkdown: page.bodyMarkdown,
-          seoTitle: page.seoTitle,
-          seoDescription: page.seoDescription,
-          footerVisible: page.footerVisible,
-          footerLabel: page.footerLabel,
-          footerColumn: page.footerColumn,
-          footerOrder: page.footerOrder,
-          updatedAt: page.updatedAt,
-        }}
-        parentTrail={page.slug === "reklamacije" ? [{ label: "Servis za kupce", href: "/servis" }] : []}
-      />
+      {page.slug === "kontakt" ? (
+        <CmsFunctionalPage page={snapshot} widgetPosition="before">
+          <ContactChannels
+            data={resolveContactPageWidgetData(page.widgetData)}
+          />
+        </CmsFunctionalPage>
+      ) : (
+        <CmsContentPage
+          page={snapshot}
+          parentTrail={page.slug === "reklamacije" ? [{ label: "Servis za kupce", href: "/servis" }] : []}
+        />
+      )}
     </div>
   );
 }

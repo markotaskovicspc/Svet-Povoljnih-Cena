@@ -35,6 +35,7 @@ export default async function NewContentPage() {
             bodyMarkdown: "## Nova sekcija {#nova-sekcija}\n\nUnesite tekst stranice.",
             seoTitle: null,
             seoDescription: null,
+            widgetData: null,
             footerVisible: false,
             footerLabel: null,
             footerColumn: null,

@@ -3582,6 +3582,7 @@ model ContentPage {
   bodyMarkdown        String               @db.Text
   seoTitle            String?
   seoDescription      String?              @db.Text
+  widgetData          Json?
   footerVisible       Boolean              @default(false)
   footerLabel         String?
   footerColumn        ContentFooterColumn?
@@ -3613,6 +3614,7 @@ model ContentPageRevision {
   bodyMarkdown   String               @db.Text
   seoTitle       String?
   seoDescription String?              @db.Text
+  widgetData     Json?
   footerVisible  Boolean              @default(false)
   footerLabel    String?
   footerColumn   ContentFooterColumn?

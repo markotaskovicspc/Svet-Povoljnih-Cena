@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, type ContentPage } from "@prisma/client";
+import { Prisma, PrismaClient, type ContentPage } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 test.describe("functional public page CMS acceptance", () => {
@@ -15,6 +15,9 @@ test.describe("functional public page CMS acceptance", () => {
   const adminPassword = `QaFunctional!${runId}x`;
   const editedTitle = `QA kontakt ${runId}`;
   const editedBody = `QA CMS sadržaj ${runId}`;
+  const editedEmailLabel = `QA e-pošta ${runId}`;
+  const editedEmail = `qa-${runId}@example.com`;
+  const editedEmailNote = `QA napomena kontakt kartice ${runId}`;
   let db: PrismaClient;
   let adminId = "";
   let original: ContentPage;
@@ -54,6 +57,10 @@ test.describe("functional public page CMS acceptance", () => {
           bodyMarkdown: original.bodyMarkdown,
           seoTitle: original.seoTitle,
           seoDescription: original.seoDescription,
+          widgetData:
+            original.widgetData === null
+              ? Prisma.DbNull
+              : (original.widgetData as Prisma.InputJsonValue),
           footerVisible: original.footerVisible,
           footerLabel: original.footerLabel,
           footerColumn: original.footerColumn,
@@ -97,9 +104,15 @@ test.describe("functional public page CMS acceptance", () => {
     await expect(page).toHaveURL(/\/admin\/sadrzaj\/[^/?#]+$/);
     await expect(page.getByText("Uređujete tekst i SEO funkcionalne stranice.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Arhiviraj stranicu" })).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Kontakt kartice" }),
+    ).toBeVisible();
 
     await page.getByLabel("Naslov", { exact: true }).fill(editedTitle);
     await page.locator('textarea[name="bodyMarkdown"]').fill(editedBody);
+    await page.locator('input[name="contact-email-label"]').fill(editedEmailLabel);
+    await page.locator('input[name="contact-email-value"]').fill(editedEmail);
+    await page.locator('textarea[name="contact-email-note"]').fill(editedEmailNote);
     await page.getByRole("button", { name: "Sačuvaj nacrt" }).click();
     await expect(page.getByText("Nacrt je sačuvan.")).toBeVisible();
 
@@ -110,7 +123,13 @@ test.describe("functional public page CMS acceptance", () => {
     await page.goto("/kontakt", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { level: 1, name: editedTitle })).toBeVisible();
     await expect(page.getByText(editedBody, { exact: true })).toBeVisible();
-    await expect(page.getByText("E-pošta", { exact: true })).toBeVisible();
+    await expect(page.getByText(editedEmailLabel, { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: editedEmail })).toHaveAttribute(
+      "href",
+      `mailto:${editedEmail}`,
+    );
+    await expect(page.getByText(editedEmailNote, { exact: true })).toBeVisible();
+    await expect(page.getByText("Sedište trgovca", { exact: true })).toBeVisible();
   });
 
   async function login(page: Page) {
