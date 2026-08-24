@@ -425,7 +425,7 @@ export default async function AdminDashboard({
 
         <Card>
           <CardTitle
-            description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina = stanje × Š × D × V pakovanja pojedinačnog artikla ÷ 1.000.000. Paletna mesta = zbir zaokruženog naviše odnosa stanje ÷ komada na paleti, zasebno po SKU-u.`}
+            description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina koristi 69 m³ ÷ komada u kontejneru; ako taj podatak ne postoji, koristi Š × D × V transportnog pakovanja ÷ 1.000.000 ÷ komada u paketu. Dimenzije pojedinačnog pakovanja se ne koriste. Paletna mesta = zbir zaokruženog naviše odnosa stanje ÷ komada na paleti, zasebno po SKU-u.`}
           >
             Zalihe za magacin
           </CardTitle>
