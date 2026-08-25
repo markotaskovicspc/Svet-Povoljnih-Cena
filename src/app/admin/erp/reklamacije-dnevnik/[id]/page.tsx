@@ -15,6 +15,7 @@ import {
   createReclamationShipment,
   saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
+import { queueReclamationReplacement } from "@/lib/admin/pickup-batch.server";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
@@ -66,6 +67,7 @@ function refresh(id: string) {
   revalidatePath(`/admin/erp/reklamacije-dnevnik/${id}`);
   revalidatePath("/admin/erp/reklamacije-dnevnik");
   revalidatePath("/admin/erp/povrati");
+  revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/nalog/reklamacije");
 }
 
@@ -73,7 +75,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.detailsUpdate", entity: "Reclamation" },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
       const resolutionRaw = String(formData.get("resolution") ?? "");
@@ -95,8 +97,15 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
         where: { id },
         data: { decision, resolution, respondedAt, adminNote, resolutionNote },
       });
+      const queue = await queueReclamationReplacement(id, actorId);
       refresh(id);
-      return { ok: true as const, entityId: id, message: "Odluka i način rešavanja su sačuvani." };
+      return {
+        ok: true as const,
+        entityId: id,
+        message: queue.queued
+          ? "Odluka je sačuvana, a zamena je dodata u odgovarajući picking nalog."
+          : "Odluka i način rešavanja su sačuvani.",
+      };
     },
   )(formData);
 }
@@ -105,7 +114,7 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");
       const status = String(formData.get("warehouseStatus") ?? "") as ReclamationWarehouseStatus;
@@ -113,8 +122,36 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
         return { ok: false as const, error: "Izaberite magacin i status pripreme." };
       }
       await saveReclamationWarehouse({ reclamationId: id, warehouseId, status });
+      const queue = await queueReclamationReplacement(id, actorId);
       refresh(id);
-      return { ok: true as const, entityId: id, message: "Magacinski zadatak je sačuvan." };
+      return {
+        ok: true as const,
+        entityId: id,
+        message: queue.queued
+          ? "Magacinski zadatak je sačuvan, a zamena je u picking nalogu."
+          : "Magacinski zadatak je sačuvan.",
+      };
+    },
+  )(formData);
+}
+
+async function queueReplacementAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "reclamation.replacementQueue", entity: "Reclamation" },
+    async (actorId, formData: FormData) => {
+      const id = String(formData.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
+      const result = await queueReclamationReplacement(id, actorId);
+      if (!result.queued) return { ok: false as const, error: result.reason };
+      refresh(id);
+      return {
+        ok: true as const,
+        entityId: id,
+        message: result.alreadyQueued
+          ? "Zamena je već u picking nalogu."
+          : "Zamena je dodata u odgovarajući picking nalog.",
+      };
     },
   )(formData);
 }
@@ -193,6 +230,13 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           orderBy: { createdAt: "desc" },
           include: { events: { orderBy: { occurredAt: "desc" }, take: 10 } },
         },
+        pickupBatchLines: {
+          where: { purpose: "RECLAMATION_REPLACEMENT" },
+          take: 1,
+          include: {
+            batch: { select: { id: true, number: true, provider: true, status: true } },
+          },
+        },
       },
     }),
     db.warehouse.findMany({
@@ -203,6 +247,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
   ]);
   if (!reclamation) notFound();
   const signedPhotos = await signReclamationPhotoUrls(reclamation.photos.map((photo) => photo.url));
+  const replacementPicking = reclamation.pickupBatchLines[0]?.batch ?? null;
 
   return (
     <>
@@ -263,7 +308,64 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           <div className="grid gap-4 lg:grid-cols-2">
             {(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const).map((purpose) => {
               const shipment = reclamation.shipments.find((row) => row.purpose === purpose);
-              return <div key={purpose} className="rounded-lg border border-border p-4"><h3 className="font-semibold">{PURPOSE_LABELS[purpose]}</h3>{shipment ? <div className="mt-2 text-sm"><p>{shipment.provider ?? "Kurir"} · <strong>{shipment.status}</strong>{shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""}</p>{shipment.syncError ? <p className="mt-2 text-destructive">{shipment.syncError}</p> : null}<div className="mt-3 flex flex-wrap gap-2"><a href={`/api/admin/shipments/${shipment.id}/label`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium">Otvori / ponovo štampaj adresnicu</a>{!["DELIVERED", "RETURNED"].includes(shipment.status) ? <AdminActionForm action={cancelShipmentAction}><input type="hidden" name="shipmentId" value={shipment.id} /><input type="hidden" name="reclamationId" value={reclamation.id} /><SubmitButton size="xs" variant="destructive" confirm="Otkazati ovaj kurirski nalog?">Otkaži</SubmitButton></AdminActionForm> : null}</div></div> : <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2"><input type="hidden" name="id" value={reclamation.id} /><input type="hidden" name="purpose" value={purpose} /><Field label="Broj paketa"><input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" /></Field><SubmitButton size="sm" confirm={`Kreirati kurirski nalog: ${PURPOSE_LABELS[purpose]}?`}>Kreiraj nalog</SubmitButton></AdminActionForm>}</div>;
+              return (
+                <div key={purpose} className="rounded-lg border border-border p-4">
+                  <h3 className="font-semibold">{PURPOSE_LABELS[purpose]}</h3>
+                  {shipment ? (
+                    <div className="mt-2 text-sm">
+                      <p>
+                        {shipment.provider ?? "Kurir"} · <strong>{shipment.status}</strong>
+                        {shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""}
+                      </p>
+                      {shipment.syncError ? <p className="mt-2 text-destructive">{shipment.syncError}</p> : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a href={`/api/admin/shipments/${shipment.id}/label`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium">
+                          Otvori / ponovo štampaj adresnicu
+                        </a>
+                        {!["DELIVERED", "RETURNED"].includes(shipment.status) ? (
+                          <AdminActionForm action={cancelShipmentAction}>
+                            <input type="hidden" name="shipmentId" value={shipment.id} />
+                            <input type="hidden" name="reclamationId" value={reclamation.id} />
+                            <SubmitButton size="xs" variant="destructive" confirm="Otkazati ovaj kurirski nalog?">Otkaži</SubmitButton>
+                          </AdminActionForm>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : purpose === "RECLAMATION_REPLACEMENT" ? (
+                    replacementPicking ? (
+                      <div className="mt-3 rounded-lg bg-muted-bg p-3 text-sm">
+                        <p>
+                          Zamena je u {replacementPicking.provider === "MYGLS" ? "MyGLS" : "X Express"} picking nalogu{" "}
+                          <Link href={`/admin/erp/preuzimanja/${replacementPicking.id}`} className="font-semibold text-walnut hover:underline">
+                            {replacementPicking.number}
+                          </Link>.
+                        </p>
+                        <p className="mt-1 text-xs text-ink-500">
+                          Adresnica i izdavanje zalihe kreiraju se knjiženjem tog naloga. Status magacina pre toga mora biti „Spremno“.
+                        </p>
+                      </div>
+                    ) : (
+                      <AdminActionForm action={queueReplacementAction} className="mt-3">
+                        <input type="hidden" name="id" value={reclamation.id} />
+                        <SubmitButton size="sm" confirm="Dodati zamenu u zajednički picking nalog odgovarajućeg kurira?">
+                          Dodaj u picking listu
+                        </SubmitButton>
+                      </AdminActionForm>
+                    )
+                  ) : (
+                    <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="id" value={reclamation.id} />
+                      <input type="hidden" name="purpose" value={purpose} />
+                      <Field label="Broj paketa">
+                        <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
+                      </Field>
+                      <SubmitButton size="sm" confirm={`Kreirati kurirski nalog: ${PURPOSE_LABELS[purpose]}?`}>
+                        Kreiraj nalog
+                      </SubmitButton>
+                    </AdminActionForm>
+                  )}
+                </div>
+              );
             })}
           </div>
         </Card>

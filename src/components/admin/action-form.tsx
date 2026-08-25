@@ -61,6 +61,8 @@ export function AdminActionForm({
   id,
   preserveValues = false,
   refreshOnSuccess = false,
+  successPopupUrl,
+  popupWindowName,
   testId,
 }: {
   action: AdminFormAction;
@@ -69,6 +71,8 @@ export function AdminActionForm({
   id?: string;
   preserveValues?: boolean;
   refreshOnSuccess?: boolean;
+  successPopupUrl?: string;
+  popupWindowName?: string;
   testId?: string;
 }) {
   const router = useRouter();
@@ -80,6 +84,8 @@ export function AdminActionForm({
   const [validationFocusRequest, setValidationFocusRequest] = useState(0);
   const refreshedState = useRef(state);
   const messageRef = useRef<HTMLParagraphElement>(null);
+  const successPopupRef = useRef<Window | null>(null);
+  const popupHandledState = useRef(state);
   const message = clientValidationMessage || state.message;
   const messageIsSuccess = !clientValidationMessage && Boolean(state.message) && state.ok;
   const hasMessage = Boolean(message);
@@ -90,6 +96,19 @@ export function AdminActionForm({
     window.dispatchEvent(new Event("spc:erp-grid-refresh"));
     router.refresh();
   }, [refreshOnSuccess, router, state]);
+
+  useEffect(() => {
+    if (!successPopupUrl || popupHandledState.current === state) return;
+    popupHandledState.current = state;
+    const popup = successPopupRef.current;
+    successPopupRef.current = null;
+    if (!popup) return;
+    if (state.ok) {
+      popup.location.assign(successPopupUrl);
+    } else {
+      popup.close();
+    }
+  }, [state, successPopupUrl]);
 
   useEffect(() => {
     if (!state.message) return;
@@ -113,6 +132,18 @@ export function AdminActionForm({
       className={className}
       id={id}
       data-testid={testId}
+      onSubmit={() => {
+        if (!successPopupUrl) return;
+        const popup = window.open(
+          "about:blank",
+          popupWindowName ?? "admin-action-print",
+        );
+        if (!popup) return;
+        popup.document.title = "Priprema štampe…";
+        popup.document.body.innerHTML =
+          '<p style="font:16px system-ui;padding:24px">Priprema dokumenta za štampu…</p>';
+        successPopupRef.current = popup;
+      }}
       onReset={
         preserveValues
           ? (event) => {

@@ -1,6 +1,10 @@
 import "server-only";
 
-import { Prisma, type PickupBatchStatus } from "@prisma/client";
+import {
+  Prisma,
+  type PickupBatchStatus,
+  type ShipmentPurpose,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   createShipmentForOrder,
@@ -15,6 +19,11 @@ import {
   type PhysicalPackage,
 } from "@/lib/courier/packages";
 import { resolveCourierProvider } from "@/lib/courier/routing";
+import {
+  readShipmentAssignment,
+  sameShipmentAssignment,
+  splitAmountByWeights,
+} from "@/lib/courier/shipment-assignment";
 import {
   getMyGlsConfig,
   MYGLS_PROVIDER,
@@ -34,6 +43,7 @@ import {
   validateMyGlsPickupWindow,
   validateXExpressPickupWindow,
 } from "@/lib/admin/pickup-batch";
+import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -189,15 +199,29 @@ export async function savePickupPackage(
   const [pkg] = provider === "MYGLS"
     ? requireCompleteMyGlsPackages([rawPackage])
     : requireCompletePhysicalPackages([rawPackage]);
-  const largestSide = Math.max(pkg.widthCm, pkg.depthCm, pkg.heightCm);
-  if (provider === "X_EXPRESS" && largestSide > 60) {
+  const packageRoute = resolveCourierProvider({
+    shippingMethod: "KURIR",
+    items: [{
+      withAssembly: false,
+      qty: 1,
+      packQty: 1,
+      packWidthCm: pkg.widthCm,
+      packDepthCm: pkg.depthCm,
+      packHeightCm: pkg.heightCm,
+      packGrossWeightKg: pkg.weightKg,
+    }],
+  });
+  if (packageRoute.kind !== "single") {
+    throw new Error("Paket nema kompletne mere za automatski izbor kurira.");
+  }
+  if (provider === "X_EXPRESS" && packageRoute.provider !== "X_EXPRESS") {
     throw new Error(
-      "Paket sa stranicom preko 60 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
+      "Paket preko 30 kg ili sa stranicom preko 60 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
     );
   }
-  if (provider === "MYGLS" && largestSide <= 60) {
+  if (provider === "MYGLS" && packageRoute.provider !== "MYGLS") {
     throw new Error(
-      "Paket do 60 cm na svakoj strani pripada X Express nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
+      "Paket do 30 kg i 60 cm na svakoj strani pripada X Express nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
     );
   }
   return db.pickupBatchLine.update({
@@ -214,6 +238,7 @@ export async function savePickupPackage(
 export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
+  period: { from?: Date | null; toExclusive?: Date | null } = {},
 ) {
   return db.$transaction(async (tx) => {
     await lockBatch(tx, batchId);
@@ -229,6 +254,8 @@ export async function loadEligibleOrders(
       },
     });
     assertEditableBatch(batch);
+    const provider = normalizeProvider(batch.provider) ??
+      (await getSelectedSmallParcelProvider());
 
     const dc = await findDcWarehouse(tx);
     if (!dc) {
@@ -240,8 +267,21 @@ export async function loadEligibleOrders(
     const candidates = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT orders."id"
       FROM "Order" AS orders
-      WHERE orders."status" = 'KREIRANO'
+      WHERE (
+          orders."status" = 'KREIRANO'
+          OR (
+            orders."status" = 'U_PRIPREMI'
+            AND EXISTS (
+              SELECT 1
+              FROM "PickupBatchLine" AS existing_lines
+              WHERE existing_lines."orderId" = orders."id"
+                AND existing_lines."purpose" = 'ORDER_DELIVERY'
+            )
+          )
+        )
         AND orders."shippingMethod" = 'KURIR'
+        ${period.from ? Prisma.sql`AND orders."createdAt" >= ${period.from}` : Prisma.empty}
+        ${period.toExclusive ? Prisma.sql`AND orders."createdAt" < ${period.toExclusive}` : Prisma.empty}
         AND NOT EXISTS (
           SELECT 1
           FROM "FiscalReceipt" AS legacy_fiscal
@@ -281,7 +321,11 @@ export async function loadEligibleOrders(
         AND NOT EXISTS (
           SELECT 1
           FROM "PickupBatchLine" AS pickup_lines
+          INNER JOIN "PickupBatch" AS existing_batches
+            ON existing_batches."id" = pickup_lines."batchId"
           WHERE pickup_lines."orderId" = orders."id"
+            AND pickup_lines."purpose" = 'ORDER_DELIVERY'
+            AND existing_batches."provider" = ${provider}
         )
       ORDER BY orders."number" ASC
       FOR UPDATE OF orders SKIP LOCKED
@@ -295,6 +339,7 @@ export async function loadEligibleOrders(
         candidateCount: 0,
         skippedOtherProviderCount: 0,
         skippedMixedCount: 0,
+        splitMixedCount: 0,
         skippedInvalidDimensionsCount: 0,
         loadedMyGlsHardLimitCount: 0,
         loadedMyGlsOversizeSurchargeCount: 0,
@@ -332,14 +377,19 @@ export async function loadEligibleOrders(
       },
       orderBy: [{ orderId: "asc" }, { sku: "asc" }, { id: "asc" }],
     });
-    const provider = normalizeProvider(batch.provider) ??
-      (await getSelectedSmallParcelProvider());
     let skippedOtherProviderCount = 0;
-    let skippedMixedCount = 0;
+    const skippedMixedCount = 0;
+    let splitMixedCount = 0;
     let skippedInvalidDimensionsCount = 0;
     let loadedMyGlsHardLimitCount = 0;
     let loadedMyGlsOversizeSurchargeCount = 0;
-    const packages: Array<PhysicalPackage & { orderId: string }> = [];
+    const packages: Array<
+      PhysicalPackage & {
+        orderId: string;
+        lineGroupKey: string;
+        quantity: number;
+      }
+    > = [];
     const loadedOrderIds: string[] = [];
     for (const orderId of orderIds) {
       const orderItems = items.filter((item) => item.orderId === orderId);
@@ -375,15 +425,15 @@ export async function loadEligibleOrders(
         skippedInvalidDimensionsCount += 1;
         continue;
       }
-      if (routing.kind === "mixed") {
-        skippedMixedCount += 1;
-        continue;
-      }
-      if (routing.provider !== provider) {
+      const selectedItems = orderItems.filter(
+        (item) => courierProviderForItem(item) === provider,
+      );
+      if (!selectedItems.length) {
         skippedOtherProviderCount += 1;
         continue;
       }
-      const orderPackages = derivePhysicalPackages(orderItems);
+      if (routing.kind === "mixed") splitMixedCount += 1;
+      const orderPackages = derivePhysicalPackages(selectedItems);
       if (
         provider === "MYGLS" &&
         orderPackages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
@@ -397,7 +447,17 @@ export async function loadEligibleOrders(
         loadedMyGlsOversizeSurchargeCount += 1;
       }
       loadedOrderIds.push(orderId);
-      packages.push(...orderPackages.map((pkg) => ({ ...pkg, orderId })));
+      const quantityByItem = new Map(
+        selectedItems.map((item) => [item.id, item.qty]),
+      );
+      packages.push(
+        ...orderPackages.map((pkg) => ({
+          ...pkg,
+          orderId,
+          lineGroupKey: `order:${orderId}:${provider}`,
+          quantity: quantityByItem.get(pkg.orderItemId ?? "") ?? 1,
+        })),
+      );
     }
     if (!loadedOrderIds.length) {
       return {
@@ -406,6 +466,7 @@ export async function loadEligibleOrders(
         candidateCount: orderIds.length,
         skippedOtherProviderCount,
         skippedMixedCount,
+        splitMixedCount,
         skippedInvalidDimensionsCount,
         loadedMyGlsHardLimitCount,
         loadedMyGlsOversizeSurchargeCount,
@@ -416,6 +477,9 @@ export async function loadEligibleOrders(
         batchId,
         orderId: pkg.orderId,
         orderItemId: pkg.orderItemId,
+        purpose: "ORDER_DELIVERY",
+        lineGroupKey: pkg.lineGroupKey,
+        quantity: pkg.quantity,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -431,7 +495,7 @@ export async function loadEligibleOrders(
       data: loadedOrderIds.map((orderId) => ({
         orderId,
         status: "U_PRIPREMI" as const,
-        note: `Porudžbina učitana u nalog za preuzimanje ${batch.number}.`,
+        note: `Porudžbina učitana u ${providerLabel(provider)} nalog za preuzimanje ${batch.number}.`,
         actorId,
       })),
     });
@@ -441,11 +505,188 @@ export async function loadEligibleOrders(
       candidateCount: orderIds.length,
       skippedOtherProviderCount,
       skippedMixedCount,
+      splitMixedCount,
       skippedInvalidDimensionsCount,
       loadedMyGlsHardLimitCount,
       loadedMyGlsOversizeSurchargeCount,
     };
   }, TRANSACTION_OPTIONS);
+}
+
+export async function queueReclamationReplacement(
+  reclamationId: string,
+  actorId: string,
+) {
+  const reclamation = await db.reclamation.findUnique({
+    where: { id: reclamationId },
+    select: {
+      id: true,
+      number: true,
+      orderId: true,
+      orderItemId: true,
+      quantity: true,
+      decision: true,
+      resolution: true,
+      warehouseId: true,
+      warehouseStatus: true,
+      orderItem: {
+        select: {
+          id: true,
+          name: true,
+          qty: true,
+          withAssembly: true,
+          product: {
+            select: {
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              packGrossWeightKg: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              grossWeightKg: true,
+              weightKg: true,
+            },
+          },
+        },
+      },
+      shipments: {
+        where: {
+          purpose: "RECLAMATION_REPLACEMENT",
+          status: { not: "FAILED" },
+        },
+        select: { id: true },
+        take: 1,
+      },
+      pickupBatchLines: {
+        where: { purpose: "RECLAMATION_REPLACEMENT" },
+        select: { batchId: true },
+        take: 1,
+      },
+    },
+  });
+  if (!reclamation) throw new Error("Reklamacija nije pronađena.");
+  if (
+    reclamation.decision !== "PRIHVACENA" ||
+    !["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ||
+    !reclamation.warehouseId
+  ) {
+    return { queued: false as const, reason: "Čeka prihvaćenu odluku, zamenu i izabrani magacin." };
+  }
+  if (reclamation.shipments.length) {
+    return { queued: false as const, reason: "Kurirski nalog za zamenu već postoji." };
+  }
+  if (reclamation.pickupBatchLines[0]) {
+    return {
+      queued: true as const,
+      alreadyQueued: true as const,
+      batchId: reclamation.pickupBatchLines[0].batchId,
+      provider: null,
+    };
+  }
+  if (!reclamation.orderItem) {
+    return { queued: false as const, reason: "Reklamacija nema vezanu stavku porudžbine." };
+  }
+
+  const sourceItem = {
+    id: reclamation.orderItem.id,
+    name: reclamation.orderItem.name,
+    qty: reclamation.quantity,
+    withAssembly: reclamation.orderItem.withAssembly,
+    product: reclamation.orderItem.product,
+  };
+  const routing = resolveCourierProvider({
+    shippingMethod: "KURIR",
+    items: [courierRouteItem(sourceItem)],
+  });
+  if (routing.kind !== "single") {
+    return {
+      queued: false as const,
+      reason: "Zamena nema kompletne dimenzije paketa za automatski izbor kurira.",
+    };
+  }
+  const provider = routing.provider;
+  const packages = derivePhysicalPackages([sourceItem]);
+  if (
+    provider === "MYGLS" &&
+    packages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
+  ) {
+    return {
+      queued: false as const,
+      reason: "Paket zamene prelazi MyGLS ograničenja i zahteva ručnu obradu.",
+    };
+  }
+
+  const existingDraftBatch = await db.pickupBatch.findFirst({
+    where: {
+      provider,
+      status: "DRAFT",
+      labelsCreationStartedAt: null,
+      labelsCreatedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, number: true },
+  });
+  const batch = existingDraftBatch ?? (await createPickupBatch(provider));
+  const lineGroupKey = `reclamation:${reclamation.id}`;
+  const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`reclamation-picking:${reclamation.id}`}))::text AS "lock"`;
+    await lockBatch(tx, batch.id);
+    const existing = await tx.pickupBatchLine.findFirst({
+      where: { reclamationId: reclamation.id, purpose: "RECLAMATION_REPLACEMENT" },
+      select: { batchId: true },
+    });
+    if (existing) return { batchId: existing.batchId, lineCount: 0 };
+    await tx.pickupBatchLine.createMany({
+      data: packages.map((pkg) => ({
+        batchId: batch.id,
+        orderId: reclamation.orderId,
+        orderItemId: pkg.orderItemId,
+        reclamationId: reclamation.id,
+        purpose: "RECLAMATION_REPLACEMENT",
+        lineGroupKey,
+        quantity: reclamation.quantity,
+        packageNo: pkg.packageNo,
+        weightKg: pkg.weightKg,
+        widthCm: pkg.widthCm,
+        depthCm: pkg.depthCm,
+        heightCm: pkg.heightCm,
+      })),
+    });
+    await tx.reclamation.update({
+      where: { id: reclamation.id },
+      data: {
+        warehouseStatus:
+          reclamation.warehouseStatus === "READY"
+            ? "READY"
+            : "REQUESTED",
+        warehouseRequestedAt: new Date(),
+      },
+    });
+    await tx.reclamationStatusEvent.create({
+      data: {
+        reclamationId: reclamation.id,
+        status: "U_OBRADI",
+        actorId,
+        note: `Zamena je dodata u ${providerLabel(provider)} picking nalog ${batch.number}.`,
+      },
+    });
+    await tx.reclamation.updateMany({
+      where: { id: reclamation.id, status: "PRIMLJENO" },
+      data: { status: "U_OBRADI" },
+    });
+    return { batchId: batch.id, lineCount: packages.length };
+  }, TRANSACTION_OPTIONS);
+  return {
+    queued: true as const,
+    alreadyQueued: result.lineCount === 0,
+    batchId: result.batchId,
+    provider,
+  };
 }
 
 export async function removeOrderFromPickupBatch(
@@ -468,12 +709,53 @@ export async function removeOrderFromPickupBatch(
     });
     assertEditableBatch(batch);
     const removed = await tx.pickupBatchLine.deleteMany({
-      where: { batchId, orderId },
+      where: { batchId, orderId, purpose: "ORDER_DELIVERY" },
     });
     if (!removed.count) {
       throw new Error("Porudžbina nije pronađena u ovom nalogu.");
     }
     await restoreOrderIfNoLongerLoaded(tx, orderId, actorId, batch.number);
+    return { removedLineCount: removed.count };
+  }, TRANSACTION_OPTIONS);
+}
+
+export async function removePickupGroupFromBatch(
+  batchId: string,
+  lineGroupKey: string,
+  actorId: string,
+) {
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const batch = await tx.pickupBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        id: true,
+        status: true,
+        number: true,
+        labelsCreationStartedAt: true,
+        labelsCreatedAt: true,
+      },
+    });
+    assertEditableBatch(batch);
+    const lines = await tx.pickupBatchLine.findMany({
+      where: { batchId, lineGroupKey },
+      select: { id: true, orderId: true, purpose: true, reclamationId: true },
+    });
+    if (!lines.length) throw new Error("Picking grupa nije pronađena u ovom nalogu.");
+    await lockOrders(tx, Array.from(new Set(lines.map((line) => line.orderId))));
+    const removed = await tx.pickupBatchLine.deleteMany({
+      where: { batchId, lineGroupKey },
+    });
+    const orderIds = Array.from(
+      new Set(
+        lines
+          .filter((line) => line.purpose === "ORDER_DELIVERY")
+          .map((line) => line.orderId),
+      ),
+    );
+    for (const orderId of orderIds) {
+      await restoreOrderIfNoLongerLoaded(tx, orderId, actorId, batch.number);
+    }
     return { removedLineCount: removed.count };
   }, TRANSACTION_OPTIONS);
 }
@@ -489,7 +771,7 @@ export async function deletePickupBatches(
     const batches = await tx.pickupBatch.findMany({
       where: { id: { in: uniqueIds } },
       include: {
-        lines: { select: { orderId: true } },
+        lines: { select: { orderId: true, purpose: true } },
       },
     });
     if (batches.length !== uniqueIds.length) {
@@ -497,7 +779,13 @@ export async function deletePickupBatches(
     }
     for (const batch of batches) assertEditableBatch(batch);
     const orderIds = Array.from(
-      new Set(batches.flatMap((batch) => batch.lines.map((line) => line.orderId))),
+      new Set(
+        batches.flatMap((batch) =>
+          batch.lines
+            .filter((line) => line.purpose === "ORDER_DELIVERY")
+            .map((line) => line.orderId),
+        ),
+      ),
     ).sort();
     await lockOrders(tx, orderIds);
     const deleted = await tx.pickupBatch.deleteMany({
@@ -509,7 +797,10 @@ export async function deletePickupBatches(
         orderId,
         actorId,
         batches.find((batch) =>
-          batch.lines.some((line) => line.orderId === orderId),
+          batch.lines.some(
+            (line) =>
+              line.orderId === orderId && line.purpose === "ORDER_DELIVERY",
+          ),
         )?.number ?? "obrisan nalog",
       );
     }
@@ -594,14 +885,14 @@ async function postPickupBatch(batchId: string, actorId: string) {
     if (!batch.pickupDate) {
       throw new Error("Datum preuzimanja je obavezan pre knjiženja naloga.");
     }
-    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
-    if (!orderIds.length) {
-      throw new Error("Nalog nema nijednu porudžbinu za preuzimanje.");
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) {
+      throw new Error("Nalog nema nijednu picking grupu za preuzimanje.");
     }
 
     const shipmentIds: string[] = [];
-    for (const orderId of orderIds) {
-      const packageLines = batch.lines.filter((line) => line.orderId === orderId);
+    for (const group of workGroups) {
+      const packageLines = group.lines;
       const packages = requireCompletePhysicalPackages(
         packageLines.map((line) => ({
           packageNo: line.packageNo,
@@ -622,14 +913,29 @@ async function postPickupBatch(batchId: string, actorId: string) {
           "X Express nalog sadrži paket sa stranicom preko 60 cm; prebacite porudžbinu u MyGLS nalog.",
         );
       }
-      const shipment = await createShipmentForOrder(orderId, {
-        packageCount: packages.length,
-        packages,
-        provider: "X_EXPRESS",
-      });
+      const shipment = group.purpose === "RECLAMATION_REPLACEMENT"
+        ? await createReclamationShipment({
+            reclamationId: requiredReclamationId(group),
+            purpose: "RECLAMATION_REPLACEMENT",
+            packageCount: packages.length,
+            packages,
+            provider: "X_EXPRESS",
+            fromPickupBatch: true,
+            actorId,
+          })
+        : await createShipmentForOrder(group.orderId, {
+            packageCount: packages.length,
+            packages,
+            provider: "X_EXPRESS",
+            orderItemIds: orderItemIdsForGroup(group),
+            codAmount: await pickupAssignmentCodAmount(
+              group.orderId,
+              "X_EXPRESS",
+            ),
+          });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
-          `Porudžbina ${orderId} nije uspešno najavljena X Express-u.`,
+          `Picking grupa ${group.lineGroupKey} nije uspešno najavljena X Express-u.`,
         );
       }
       shipmentIds.push(shipment.id);
@@ -648,8 +954,9 @@ async function postPickupBatch(batchId: string, actorId: string) {
       if (!completed.count) {
         throw new Error("Status naloga promenjen je tokom knjiženja.");
       }
+      const ordinaryOrderIds = ordinaryOrderIdsForGroups(workGroups);
       await tx.orderStatusEvent.createMany({
-        data: orderIds.map((orderId) => ({
+        data: ordinaryOrderIds.map((orderId) => ({
           orderId,
           status: "U_PRIPREMI" as const,
           note: `Nalog za preuzimanje ${batch.number} proknjižen i poslat X Express-u.`,
@@ -679,12 +986,12 @@ async function createMyGlsLabelsForPickupBatch(
     select: {
       labelsCreationStartedAt: true,
       labelsCreatedAt: true,
-      lines: { select: { orderId: true } },
+      lines: { select: { lineGroupKey: true } },
     },
   });
   if (existing?.labelsCreatedAt) {
     return {
-      shipmentCount: new Set(existing.lines.map((line) => line.orderId)).size,
+      shipmentCount: new Set(existing.lines.map((line) => line.lineGroupKey)).size,
       shipmentIds: [] as string[],
     };
   }
@@ -734,8 +1041,8 @@ async function createMyGlsLabelsForPickupBatch(
     validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
       requireLeadTime: priorMyGlsPickupCount === 0,
     });
-    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
-    if (!orderIds.length) {
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
     }
 
@@ -748,8 +1055,8 @@ async function createMyGlsLabelsForPickupBatch(
     });
 
     const shipmentIds: string[] = [];
-    for (const orderId of orderIds) {
-      const packageLines = batch.lines.filter((line) => line.orderId === orderId);
+    for (const group of workGroups) {
+      const packageLines = group.lines;
       const packages = requireCompleteMyGlsPackages(
         packageLines.map((line) => ({
           packageNo: line.packageNo,
@@ -762,15 +1069,28 @@ async function createMyGlsLabelsForPickupBatch(
         })),
       );
       providerAttempted = true;
-      const shipment = await createShipmentForOrder(orderId, {
-        pickupDate: batch.pickupDate,
-        packages,
-        packageCount: packages.length,
-        provider: "MYGLS",
-      });
+      const shipment = group.purpose === "RECLAMATION_REPLACEMENT"
+        ? await createReclamationShipment({
+            reclamationId: requiredReclamationId(group),
+            purpose: "RECLAMATION_REPLACEMENT",
+            pickupDate: batch.pickupDate,
+            packages,
+            packageCount: packages.length,
+            provider: "MYGLS",
+            fromPickupBatch: true,
+            actorId,
+          })
+        : await createShipmentForOrder(group.orderId, {
+            pickupDate: batch.pickupDate,
+            packages,
+            packageCount: packages.length,
+            provider: "MYGLS",
+            orderItemIds: orderItemIdsForGroup(group),
+            codAmount: await pickupAssignmentCodAmount(group.orderId, "MYGLS"),
+          });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
-          `Porudžbina ${orderId} nema uspešno kreiranu MyGLS adresnicu.`,
+          `Picking grupa ${group.lineGroupKey} nema uspešno kreiranu MyGLS adresnicu.`,
         );
       }
       shipmentIds.push(shipment.id);
@@ -790,8 +1110,9 @@ async function createMyGlsLabelsForPickupBatch(
       if (!completed.count) {
         throw new Error("Status naloga promenjen je tokom kreiranja adresnica.");
       }
+      const ordinaryOrderIds = ordinaryOrderIdsForGroups(workGroups);
       await tx.orderStatusEvent.createMany({
-        data: orderIds.map((orderId) => ({
+        data: ordinaryOrderIds.map((orderId) => ({
           orderId,
           status: "U_PRIPREMI" as const,
           note: `MyGLS adresnica je kreirana za nalog ${batch.number}; prikup još nije najavljen.`,
@@ -830,7 +1151,17 @@ export async function confirmMyGlsPickupAnnouncement(
     await lockBatch(tx, batchId);
     const batch = await tx.pickupBatch.findUnique({
       where: { id: batchId },
-      include: { lines: { select: { orderId: true } } },
+      include: {
+        lines: {
+          select: {
+            orderId: true,
+            lineGroupKey: true,
+            purpose: true,
+            reclamationId: true,
+            orderItemId: true,
+          },
+        },
+      },
     });
     if (!batch) throw new Error("Nalog za preuzimanje ne postoji.");
     if (normalizeProvider(batch.provider) !== "MYGLS") {
@@ -856,23 +1187,50 @@ export async function confirmMyGlsPickupAnnouncement(
     validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
       requireLeadTime: priorMyGlsPickupCount === 0,
     });
-    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
-    if (!orderIds.length) throw new Error("Nalog nema pakete za preuzimanje.");
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) throw new Error("Nalog nema pakete za preuzimanje.");
+    const orderIds = ordinaryOrderIdsForGroups(workGroups);
 
     const shipments = await tx.shipment.findMany({
       where: {
-        orderId: { in: orderIds },
         provider: MYGLS_PROVIDER,
-        purpose: "ORDER_DELIVERY",
         status: { not: "FAILED" },
+        OR: [
+          ...(orderIds.length
+            ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
+            : []),
+          ...workGroups
+            .filter((group) => group.purpose === "RECLAMATION_REPLACEMENT")
+            .map((group) => ({
+              reclamationId: requiredReclamationId(group),
+              purpose: "RECLAMATION_REPLACEMENT" as const,
+            })),
+        ],
       },
-      select: { orderId: true },
+      select: {
+        orderId: true,
+        reclamationId: true,
+        purpose: true,
+        rawCreateResponse: true,
+      },
     });
-    const shipmentOrders = new Set(shipments.map((shipment) => shipment.orderId));
-    const missing = orderIds.filter((orderId) => !shipmentOrders.has(orderId));
+    const missing = workGroups.filter((group) =>
+      group.purpose === "RECLAMATION_REPLACEMENT"
+        ? !shipments.some(
+            (shipment) =>
+              shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+              shipment.reclamationId === group.reclamationId,
+          )
+        : !shipments.some(
+            (shipment) =>
+              shipment.purpose === "ORDER_DELIVERY" &&
+              shipment.orderId === group.orderId &&
+              samePickupAssignment(shipment.rawCreateResponse, group),
+          ),
+    );
     if (missing.length) {
       throw new Error(
-        `Nedostaje uspešna MyGLS adresnica za ${missing.length} porudžbina.`,
+        `Nedostaje uspešna MyGLS adresnica za ${missing.length} picking grupa.`,
       );
     }
 
@@ -898,7 +1256,7 @@ export async function confirmMyGlsPickupAnnouncement(
         actorId,
       })),
     });
-    return { orderCount: orderIds.length, bookedAt };
+    return { orderCount: workGroups.length, bookedAt };
   }, TRANSACTION_OPTIONS);
 }
 
@@ -922,7 +1280,9 @@ async function restoreOrderIfNoLongerLoaded(
   actorId: string,
   batchNumber: string,
 ) {
-  const remaining = await tx.pickupBatchLine.count({ where: { orderId } });
+  const remaining = await tx.pickupBatchLine.count({
+    where: { orderId, purpose: "ORDER_DELIVERY" },
+  });
   if (remaining) return false;
   const updated = await tx.order.updateMany({
     where: { id: orderId, status: "U_PRIPREMI" },
@@ -989,6 +1349,199 @@ function normalizeProvider(value: string | null | undefined): SmallParcelProvide
   if (normalized === "MYGLS") return "MYGLS";
   if (normalized === "X_EXPRESS" || normalized === "XPRESS") return "X_EXPRESS";
   return null;
+}
+
+type PickupWorkLine = {
+  lineGroupKey: string;
+  orderId: string;
+  orderItemId: string | null;
+  reclamationId: string | null;
+  purpose: ShipmentPurpose;
+};
+
+type PickupWorkGroup<T extends PickupWorkLine = PickupWorkLine> = {
+  lineGroupKey: string;
+  orderId: string;
+  reclamationId: string | null;
+  purpose: ShipmentPurpose;
+  lines: T[];
+};
+
+function pickupWorkGroups<T extends PickupWorkLine>(lines: readonly T[]) {
+  const groups = new Map<string, PickupWorkGroup<T>>();
+  for (const line of lines) {
+    const current = groups.get(line.lineGroupKey);
+    if (current) {
+      if (
+        current.orderId !== line.orderId ||
+        current.purpose !== line.purpose ||
+        current.reclamationId !== line.reclamationId
+      ) {
+        throw new Error(
+          `Picking grupa ${line.lineGroupKey} sadrži neusaglašene redove.`,
+        );
+      }
+      current.lines.push(line);
+      continue;
+    }
+    groups.set(line.lineGroupKey, {
+      lineGroupKey: line.lineGroupKey,
+      orderId: line.orderId,
+      reclamationId: line.reclamationId,
+      purpose: line.purpose,
+      lines: [line],
+    });
+  }
+  return [...groups.values()];
+}
+
+function orderItemIdsForGroup(group: PickupWorkGroup) {
+  return Array.from(
+    new Set(
+      group.lines
+        .map((line) => line.orderItemId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+}
+
+function ordinaryOrderIdsForGroups(groups: readonly PickupWorkGroup[]) {
+  return Array.from(
+    new Set(
+      groups
+        .filter((group) => group.purpose === "ORDER_DELIVERY")
+        .map((group) => group.orderId),
+    ),
+  );
+}
+
+function requiredReclamationId(group: PickupWorkGroup) {
+  if (!group.reclamationId) {
+    throw new Error(`Picking grupa ${group.lineGroupKey} nema reklamaciju.`);
+  }
+  return group.reclamationId;
+}
+
+function samePickupAssignment(raw: unknown, group: PickupWorkGroup) {
+  const itemIds = orderItemIdsForGroup(group);
+  if (!itemIds.length) return false;
+  const assignment = readShipmentAssignment(raw);
+  return assignment == null || sameShipmentAssignment(raw, itemIds);
+}
+
+function courierRouteItem(item: {
+  qty: number;
+  withAssembly: boolean;
+  product?: {
+    packQty?: number | null;
+    packWidthCm?: unknown;
+    packDepthCm?: unknown;
+    packHeightCm?: unknown;
+    unitPackWidthCm?: unknown;
+    unitPackDepthCm?: unknown;
+    unitPackHeightCm?: unknown;
+    widthCm?: unknown;
+    depthCm?: unknown;
+    heightCm?: unknown;
+    packGrossWeightKg?: unknown;
+    grossWeightKg?: unknown;
+    weightKg?: unknown;
+  } | null;
+}) {
+  return {
+    withAssembly: item.withAssembly,
+    qty: item.qty,
+    packQty: item.product?.packQty,
+    packWidthCm: numberOrNull(
+      item.product?.packWidthCm ??
+        item.product?.unitPackWidthCm ??
+        item.product?.widthCm,
+    ),
+    packDepthCm: numberOrNull(
+      item.product?.packDepthCm ??
+        item.product?.unitPackDepthCm ??
+        item.product?.depthCm,
+    ),
+    packHeightCm: numberOrNull(
+      item.product?.packHeightCm ??
+        item.product?.unitPackHeightCm ??
+        item.product?.heightCm,
+    ),
+    packGrossWeightKg: numberOrNull(
+      item.product?.packGrossWeightKg ??
+        item.product?.grossWeightKg ??
+        item.product?.weightKg,
+    ),
+  };
+}
+
+function courierProviderForItem(
+  item: Parameters<typeof courierRouteItem>[0],
+): SmallParcelProvider | null {
+  const routing = resolveCourierProvider({
+    shippingMethod: "KURIR",
+    items: [courierRouteItem(item)],
+  });
+  return routing.kind === "single" ? routing.provider : null;
+}
+
+function providerLabel(provider: SmallParcelProvider) {
+  return provider === "MYGLS" ? "MyGLS" : "X Express";
+}
+
+async function pickupAssignmentCodAmount(
+  orderId: string,
+  provider: SmallParcelProvider,
+) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      total: true,
+      items: {
+        select: {
+          qty: true,
+          unitPriceSale: true,
+          assemblyPrice: true,
+          withAssembly: true,
+          product: {
+            select: {
+              packQty: true,
+              packWidthCm: true,
+              packDepthCm: true,
+              packHeightCm: true,
+              unitPackWidthCm: true,
+              unitPackDepthCm: true,
+              unitPackHeightCm: true,
+              widthCm: true,
+              depthCm: true,
+              heightCm: true,
+              packGrossWeightKg: true,
+              grossWeightKg: true,
+              weightKg: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!order) throw new Error("Porudžbina za obračun otkupnine ne postoji.");
+  const weights = new Map<SmallParcelProvider, number>();
+  for (const item of order.items) {
+    const itemProvider = courierProviderForItem(item);
+    if (!itemProvider) {
+      throw new Error(
+        "Otkupnina ne može da se podeli jer jedna stavka nema kompletne dimenzije.",
+      );
+    }
+    const lineValue =
+      Number(item.unitPriceSale) * item.qty +
+      (item.withAssembly ? Number(item.assemblyPrice ?? 0) * item.qty : 0);
+    weights.set(itemProvider, (weights.get(itemProvider) ?? 0) + lineValue);
+  }
+  const ordered = (["X_EXPRESS", "MYGLS"] as const)
+    .filter((key) => weights.has(key))
+    .map((key) => ({ key, weight: weights.get(key) ?? 0 }));
+  return splitAmountByWeights(Number(order.total), ordered).get(provider) ?? 0;
 }
 
 function numberOrNull(value: unknown) {

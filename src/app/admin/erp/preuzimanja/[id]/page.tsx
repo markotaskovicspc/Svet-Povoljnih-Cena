@@ -19,7 +19,7 @@ import {
   getPickupPostingAvailability,
   loadEligibleOrders,
   postPickupBatches,
-  removeOrderFromPickupBatch,
+  removePickupGroupFromBatch,
   savePickupPackage,
   savePickupWindow,
 } from "@/lib/admin/pickup-batch.server";
@@ -51,8 +51,12 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
+const loadOrdersSchema = batchSchema.extend({
+  ordersFrom: z.string().optional(),
+  ordersTo: z.string().optional(),
+});
 const providerSchema = z.enum(["MYGLS", "X_EXPRESS"]);
-const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
+const removeGroupSchema = batchSchema.extend({ lineGroupKey: z.string().min(1) });
 const packageSchema = batchSchema.extend({
   lineId: z.string().min(1),
   weightKg: z.coerce.number().positive().max(1000),
@@ -207,11 +211,21 @@ async function loadOrdersAction(
       entity: "PickupBatch",
     },
     async (actorId, actionData: FormData) => {
-      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
+      const parsed = loadOrdersSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
       if (!parsed.success) {
-        return { ok: false as const, error: "Nalog nije izabran." };
+        return { ok: false as const, error: "Nalog ili period nisu ispravni." };
       }
-      const result = await loadEligibleOrders(parsed.data.batchId, actorId);
+      const from = parseOptionalDay(parsed.data.ordersFrom, false);
+      const toExclusive = parseOptionalDay(parsed.data.ordersTo, true);
+      if (from && toExclusive && from >= toExclusive) {
+        return { ok: false as const, error: "Datum od mora biti pre datuma do." };
+      }
+      const result = await loadEligibleOrders(parsed.data.batchId, actorId, {
+        from,
+        toExclusive,
+      });
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
@@ -223,7 +237,7 @@ async function loadOrdersAction(
   )(formData);
 }
 
-async function removeOrderAction(
+async function removeGroupAction(
   _state: AdminActionState,
   formData: FormData,
 ) {
@@ -235,15 +249,15 @@ async function removeOrderAction(
       entity: "PickupBatchLine",
     },
     async (actorId, actionData: FormData) => {
-      const parsed = removeOrderSchema.safeParse(
+      const parsed = removeGroupSchema.safeParse(
         Object.fromEntries(actionData.entries()),
       );
       if (!parsed.success) {
-        return { ok: false as const, error: "Porudžbina nije izabrana." };
+        return { ok: false as const, error: "Picking grupa nije izabrana." };
       }
-      const result = await removeOrderFromPickupBatch(
+      const result = await removePickupGroupFromBatch(
         parsed.data.batchId,
-        parsed.data.orderId,
+        parsed.data.lineGroupKey,
         actorId,
       );
       revalidatePickupPaths(parsed.data.batchId);
@@ -251,7 +265,7 @@ async function removeOrderAction(
         ok: true as const,
         entityId: parsed.data.batchId,
         diff: result,
-        message: `Porudžbina je uklonjena; obrisano redova: ${result.removedLineCount}. Status je vraćen u Kreirano.`,
+        message: `Picking grupa je uklonjena; obrisano paketa: ${result.removedLineCount}.`,
       };
     },
   )(formData);
@@ -337,6 +351,13 @@ export default async function PickupBatchPage({
       lines: {
         include: {
           order: { select: { id: true, number: true, status: true } },
+          reclamation: {
+            select: {
+              number: true,
+              warehouseStatus: true,
+              warehouse: { select: { code: true, name: true } },
+            },
+          },
           orderItem: {
             include: {
               product: {
@@ -382,29 +403,37 @@ export default async function PickupBatchPage({
           numeric: true,
         }),
     );
+  const pickingGroups = aggregatePickupGroups(rows);
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
   const invalidPackageCount = myGls
     ? rows.filter((row) => hasKnownMyGlsHardLimitViolation(row)).length
     : 0;
-  const postingBlockReason = pickupPostingBlockReason({
-    configurationIssue: batch.labelsCreationStartedAt
-      ? batch.configurationIssue
-      : null,
-    providerReason: posting.reason,
-    provider: posting.provider,
-    rowCount: rows.length,
-    pickupStartSet: Boolean(batch.pickupDate),
-    pickupEndSet: Boolean(batch.pickupWindowEnd),
-    completePackageCount,
-    invalidPackageCount,
-  });
+  const unreadyReplacementCount = pickingGroups.filter(
+    (group) =>
+      group.purpose === "RECLAMATION_REPLACEMENT" &&
+      group.warehouseStatus !== "READY",
+  ).length;
+  const postingBlockReason = unreadyReplacementCount
+    ? `${unreadyReplacementCount} zamena još nema status magacina „Spremno“. Otvorite reklamaciju i završite pripremu pre knjiženja.`
+    : pickupPostingBlockReason({
+        configurationIssue: batch.labelsCreationStartedAt
+          ? batch.configurationIssue
+          : null,
+        providerReason: posting.reason,
+        provider: posting.provider,
+        rowCount: rows.length,
+        pickupStartSet: Boolean(batch.pickupDate),
+        pickupEndSet: Boolean(batch.pickupWindowEnd),
+        completePackageCount,
+        invalidPackageCount,
+      });
   const postingReasonId = "pickup-posting-block-reason";
 
   return (
     <>
       <PageHeader
         title={`Nalog za preuzimanje ${batch.number}`}
-        description={`${PICKUP_BATCH_STATUS_LABEL[batch.status]} · ${rows.length} redova`}
+        description={`${PICKUP_BATCH_STATUS_LABEL[batch.status]} · ${pickingGroups.length} picking grupa · ${rows.length} paketa`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -472,7 +501,11 @@ export default async function PickupBatchPage({
                 Obriši
               </SubmitButton>
             </AdminActionForm>
-            <AdminActionForm action={postAction}>
+            <AdminActionForm
+              action={postAction}
+              successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?autoprint=1`}
+              popupWindowName={`pickup-print-${batch.id}`}
+            >
               <input type="hidden" name="batchId" value={batch.id} />
               <SubmitButton
                 variant="outline"
@@ -482,6 +515,7 @@ export default async function PickupBatchPage({
                   !batch.pickupDate ||
                   !batch.pickupWindowEnd ||
                   !posting.available ||
+                  unreadyReplacementCount > 0 ||
                   completePackageCount !== rows.length ||
                   invalidPackageCount > 0
                 }
@@ -489,7 +523,7 @@ export default async function PickupBatchPage({
                 confirm={
                   myGls
                     ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
-                    : "Proknjižiti nalog i poslati po jednu najavu za svaku porudžbinu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
+                    : "Proknjižiti nalog i poslati po jednu najavu za svaku picking grupu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
                 }
                 title={postingBlockReason ?? undefined}
                 aria-describedby={postingBlockReason ? postingReasonId : undefined}
@@ -630,108 +664,130 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se sve nefiskalizovane, još neučitane cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite i nepotpune porudžbine se preskaču. MyGLS paketi volumetrijske dimenzije preko 300 cm pripadaju II kategoriji i mogu imati doplatu, ali to ne blokira kreiranje adresnice.`}>
-              Porudžbine za preuzimanje
+            <CardTitle description={`Učitavaju se nefiskalizovane DC stavke iz izabranog perioda koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovita porudžbina automatski se deli između dva odvojena naloga, a zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
+              Zajednička picking lista
             </CardTitle>
             {editing ? (
               <AdminActionForm
                 action={loadOrdersAction}
                 preserveValues
-                className="flex items-end"
+                className="flex flex-wrap items-end gap-2"
               >
                 <input type="hidden" name="batchId" value={batch.id} />
+                <Field label="Porudžbine od">
+                  <Input name="ordersFrom" type="date" />
+                </Field>
+                <Field label="Porudžbine do">
+                  <Input name="ordersTo" type="date" />
+                </Field>
                 <SubmitButton pendingLabel="Učitavanje…">
-                  Učitaj sve nefiskalizovane
+                  Učitaj porudžbine
                 </SubmitButton>
               </AdminActionForm>
             ) : null}
           </div>
 
-          {rows.length ? (
+          {pickingGroups.length ? (
             <div className="overflow-x-auto">
-              <table className="min-w-[2200px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
-                    <th className="px-3 py-3">Broj porudžbine</th>
-                    <th className="px-3 py-3">Bar kod</th>
-                    <th className="px-3 py-3">Šifra artikla</th>
-                    <th className="px-3 py-3">Kolekcija</th>
-                    <th className="px-3 py-3">Kratki opis artikla</th>
-                    <th className="px-3 py-3">Kratki naziv artikla</th>
-                    <th className="px-3 py-3">Atribut 1</th>
-                    <th className="px-3 py-3">Atribut 2</th>
-                    <th className="px-3 py-3">Atribut 3</th>
-                    <th className="px-3 py-3">Atribut 4</th>
-                    <th className="px-3 py-3">Boja 1</th>
-                    <th className="px-3 py-3">Boja 2</th>
-                    <th className="px-3 py-3">Paket / stvarne mere</th>
-                    <th className="px-3 py-3 text-right">Količina</th>
+                    <th className="px-3 py-3">Izvor</th>
+                    <th className="px-3 py-3">Artikli za picking</th>
+                    <th className="px-3 py-3 text-right">Paketa</th>
+                    <th className="px-3 py-3">Stvarne mere paketa</th>
                     {editing ? <th className="px-3 py-3">Komanda</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {rows.map((row) => (
-                    <tr key={row.lineId}>
-                      <td className="px-3 py-3 font-medium">
-                        <Link
-                          href={`/admin/erp/prodajni-nalozi/${row.orderId}`}
-                          className="text-walnut hover:underline"
-                        >
-                          {row.orderNumber}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-3">{display(row.barcode)}</td>
-                      <td className="px-3 py-3 font-medium">{display(row.sku)}</td>
-                      <td className="px-3 py-3">{display(row.collection)}</td>
-                      <td className="max-w-72 px-3 py-3">{display(row.shortDescription)}</td>
-                      <td className="px-3 py-3">{display(row.shortName)}</td>
-                      <td className="px-3 py-3">{display(row.attribute1)}</td>
-                      <td className="px-3 py-3">{display(row.attribute2)}</td>
-                      <td className="px-3 py-3">{display(row.attribute3)}</td>
-                      <td className="px-3 py-3">{display(row.attribute4)}</td>
-                      <td className="px-3 py-3">{display(row.color1)}</td>
-                      <td className="px-3 py-3">{display(row.color2)}</td>
+                  {pickingGroups.map((group) => (
+                    <tr key={group.lineGroupKey} className="align-top">
                       <td className="px-3 py-3">
-                        <div>
-                          {editing ? (
-                            <AdminActionForm action={savePackageAction} className="flex min-w-[500px] items-end gap-2">
-                              <input type="hidden" name="batchId" value={batch.id} />
-                              <input type="hidden" name="lineId" value={row.lineId} />
-                              <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
-                              <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
-                              <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
-                              <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
-                              <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj mere</SubmitButton>
-                            </AdminActionForm>
-                          ) : (
-                            <span className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
-                              #{row.packageNo} · {formatPackageMeasurements(row)}
-                            </span>
-                          )}
-                          {myGls && hasKnownMyGlsHardLimitViolation(row) ? (
-                            <p className="mt-1 max-w-[500px] text-xs text-warning">
-                              Stvarne mere prelaze MyGLS granicu od 40 kg ili 200 cm. Ispravite mere pre kreiranja adresnice.
-                            </p>
-                          ) : myGls && hasKnownMyGlsOversizeSurcharge(row) ? (
-                            <p className="mt-1 max-w-[500px] text-xs text-ink-500">
-                              II kategorija — volumetrijska dimenzija je preko 300 cm; MyGLS može obračunati doplatu. Adresnica nije blokirana.
-                            </p>
-                          ) : null}
-                        </div>
+                        <Link
+                          href={
+                            group.reclamationId
+                              ? `/admin/erp/reklamacije-dnevnik/${group.reclamationId}`
+                              : `/admin/erp/prodajni-nalozi/${group.orderId}`
+                          }
+                          className="font-medium text-walnut hover:underline"
+                        >
+                          {group.sourceLabel}
+                        </Link>
+                        <p className="mt-1 text-xs text-ink-500">
+                          {group.purpose === "RECLAMATION_REPLACEMENT"
+                            ? `Zamena · ${group.warehouseLabel ?? "magacin nije izabran"}`
+                            : "Isporuka porudžbine"}
+                        </p>
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
+                      <td className="px-3 py-3">
+                        <ul className="space-y-2">
+                          {group.items.map((item) => (
+                            <li key={item.key}>
+                              <span className="font-mono font-semibold">{display(item.sku)}</span>{" "}
+                              <span>{display(item.name)}</span>{" "}
+                              <strong className="whitespace-nowrap">× {item.quantity}</strong>
+                              <p className="text-xs text-ink-500">
+                                {[item.barcode, item.collection, item.description, item.attributes]
+                                  .filter(Boolean)
+                                  .join(" · ") || "Bez dodatnih podataka"}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="px-3 py-3 text-right text-lg font-semibold tabular-nums">
+                        {group.rows.length}
+                      </td>
+                      <td className="px-3 py-3">
+                        <details open={group.rows.some((row) => !row.measurementsComplete)}>
+                          <summary className="cursor-pointer font-medium">
+                            {group.completePackageCount}/{group.rows.length} kompletno
+                          </summary>
+                          <div className="mt-2 space-y-3">
+                            {group.rows.map((row) => (
+                              <div key={row.lineId}>
+                                {editing ? (
+                                  <AdminActionForm action={savePackageAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
+                                    <input type="hidden" name="batchId" value={batch.id} />
+                                    <input type="hidden" name="lineId" value={row.lineId} />
+                                    <span className="pb-1 text-xs font-semibold">#{row.packageNo}</span>
+                                    <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
+                                    <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
+                                    <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
+                                    <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
+                                    <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj</SubmitButton>
+                                  </AdminActionForm>
+                                ) : (
+                                  <p className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
+                                    #{row.packageNo} · {formatPackageMeasurements(row)}
+                                  </p>
+                                )}
+                                {myGls && hasKnownMyGlsHardLimitViolation(row) ? (
+                                  <p className="mt-1 text-xs text-warning">
+                                    Stvarne mere prelaze MyGLS granicu od 40 kg ili 200 cm. Ispravite mere pre kreiranja adresnice.
+                                  </p>
+                                ) : myGls && hasKnownMyGlsOversizeSurcharge(row) ? (
+                                  <p className="mt-1 text-xs text-ink-500">
+                                    II kategorija — volumetrijska dimenzija je preko 300 cm; MyGLS može obračunati doplatu.
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      </td>
                       {editing ? (
                         <td className="px-3 py-3">
-                          <AdminActionForm action={removeOrderAction}>
+                          <AdminActionForm action={removeGroupAction}>
                             <input type="hidden" name="batchId" value={batch.id} />
-                            <input type="hidden" name="orderId" value={row.orderId} />
+                            <input type="hidden" name="lineGroupKey" value={group.lineGroupKey} />
                             <SubmitButton
                               size="sm"
                               variant="destructive"
                               pendingLabel="Uklanjanje…"
-                              confirm={`Ukloniti porudžbinu ${row.orderNumber} iz naloga? Svi njeni redovi biće uklonjeni, a status vraćen u Kreirano.`}
+                              confirm={`Ukloniti ${group.sourceLabel} iz ovog ${myGls ? "MyGLS" : "X Express"} naloga?`}
                             >
-                              Ukloni porudžbinu
+                              Ukloni grupu
                             </SubmitButton>
                           </AdminActionForm>
                         </td>
@@ -746,9 +802,9 @@ export default async function PickupBatchPage({
               <p>Nalog još nema učitanih porudžbina.</p>
               <p className="mt-1 text-xs">
                 {editing
-                  ? "Kliknite „Učitaj sve nefiskalizovane“. Biće dodate samo neučitane kurirske porudžbine čiji su svi redovi u podrazumevanom DC magacinu i koje još nisu fiskalizovane."
+                  ? "Kliknite „Učitaj porudžbine“. Biće dodate neučitane, nefiskalizovane DC stavke iz izabranog perioda koje pripadaju ovom kuriru; mešovite porudžbine dele se po kuriru."
                   : editable
-                    ? "Kliknite „Uredi“, pa „Učitaj sve nefiskalizovane“."
+                    ? "Kliknite „Uredi“, pa „Učitaj porudžbine“."
                     : "Ovaj nalog više nije moguće dopunjavati."}
               </p>
             </div>
@@ -769,12 +825,22 @@ export default async function PickupBatchPage({
 function pickupLineRow(line: {
   id: string;
   orderId: string;
+  orderItemId: string | null;
+  reclamationId: string | null;
+  purpose: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
+  lineGroupKey: string;
+  quantity: number | null;
   packageNo: number;
   weightKg: unknown;
   widthCm: unknown;
   depthCm: unknown;
   heightCm: unknown;
   order: { id: string; number: string };
+  reclamation: {
+    number: string;
+    warehouseStatus: string;
+    warehouse: { code: string; name: string } | null;
+  } | null;
   orderItem: {
     sku: string;
     qty: number;
@@ -811,6 +877,15 @@ function pickupLineRow(line: {
   const heightCm = measureNumber(line.heightCm);
   return {
     lineId: line.id,
+    lineGroupKey: line.lineGroupKey,
+    purpose: line.purpose,
+    reclamationId: line.reclamationId,
+    reclamationNumber: line.reclamation?.number ?? null,
+    warehouseStatus: line.reclamation?.warehouseStatus ?? null,
+    warehouseLabel: line.reclamation?.warehouse
+      ? `${line.reclamation.warehouse.code} · ${line.reclamation.warehouse.name}`
+      : null,
+    orderItemId: line.orderItemId,
     orderId: line.order.id,
     orderNumber: line.order.number,
     barcode: product?.barcode ?? "",
@@ -825,7 +900,7 @@ function pickupLineRow(line: {
     attribute4: product?.attribute4 ?? item?.attribute4 ?? "",
     color1: product?.colorPrimary ?? item?.color1 ?? "",
     color2: product?.colorSecondary ?? item?.color2 ?? "",
-    qty: item?.qty ?? 0,
+    qty: line.quantity ?? item?.qty ?? 0,
     packageNo: line.packageNo,
     weightKg,
     widthCm,
@@ -835,6 +910,86 @@ function pickupLineRow(line: {
       (value) => value != null && value > 0,
     ),
   };
+}
+
+function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
+  const groups = new Map<
+    string,
+    {
+      lineGroupKey: string;
+      orderId: string;
+      orderNumber: string;
+      reclamationId: string | null;
+      purpose: ReturnType<typeof pickupLineRow>["purpose"];
+      sourceLabel: string;
+      warehouseLabel: string | null;
+      warehouseStatus: string | null;
+      rows: ReturnType<typeof pickupLineRow>[];
+    }
+  >();
+  for (const row of rows) {
+    const group = groups.get(row.lineGroupKey) ?? {
+      lineGroupKey: row.lineGroupKey,
+      orderId: row.orderId,
+      orderNumber: row.orderNumber,
+      reclamationId: row.reclamationId,
+      purpose: row.purpose,
+      sourceLabel:
+        row.purpose === "RECLAMATION_REPLACEMENT"
+          ? `Zamena · ${row.reclamationNumber ?? row.orderNumber}`
+          : row.orderNumber,
+      warehouseLabel: row.warehouseLabel,
+      warehouseStatus: row.warehouseStatus,
+      rows: [],
+    };
+    group.rows.push(row);
+    groups.set(row.lineGroupKey, group);
+  }
+  return [...groups.values()].map((group) => {
+    const items = new Map<
+      string,
+      {
+        key: string;
+        sku: string;
+        name: string;
+        quantity: number;
+        barcode: string;
+        collection: string;
+        description: string;
+        attributes: string;
+      }
+    >();
+    for (const row of group.rows) {
+      const key = row.orderItemId ?? `package:${row.lineId}`;
+      if (items.has(key)) continue;
+      items.set(key, {
+        key,
+        sku: row.sku,
+        name: row.shortName,
+        quantity: row.qty,
+        barcode: row.barcode,
+        collection: row.collection,
+        description: row.shortDescription,
+        attributes: [
+          row.attribute1,
+          row.attribute2,
+          row.attribute3,
+          row.attribute4,
+          row.color1,
+          row.color2,
+        ]
+          .filter(Boolean)
+          .join(" / "),
+      });
+    }
+    return {
+      ...group,
+      rows: group.rows.sort((left, right) => left.packageNo - right.packageNo),
+      items: [...items.values()],
+      completePackageCount: group.rows.filter((row) => row.measurementsComplete)
+        .length,
+    };
+  });
 }
 
 function formatDate(value: Date) {
@@ -912,6 +1067,19 @@ function display(value: string) {
   return value || "—";
 }
 
+function parseOptionalDay(value: string | undefined, endExclusive: boolean) {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Period porudžbina nije ispravan.");
+  }
+  const parsed = parseBelgradeDateTimeLocal(`${value}T00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Period porudžbina nije ispravan.");
+  }
+  if (endExclusive) parsed.setUTCDate(parsed.getUTCDate() + 1);
+  return parsed;
+}
+
 function pickupLoadMessage(
   result: Awaited<ReturnType<typeof loadEligibleOrders>>,
 ) {
@@ -919,15 +1087,12 @@ function pickupLoadMessage(
     result.skippedOtherProviderCount
       ? `${result.skippedOtherProviderCount} za drugog kurira`
       : null,
-    result.skippedMixedCount
-      ? `${result.skippedMixedCount} mešovitih`
-      : null,
     result.skippedInvalidDimensionsCount
       ? `${result.skippedInvalidDimensionsCount} bez kompletne težine ili dimenzija`
       : null,
   ].filter(Boolean);
   const loaded = result.lineCount
-    ? `Učitano redova: ${result.lineCount} iz ${result.orderCount} porudžbina.`
+    ? `Učitano paketa: ${result.lineCount} iz ${result.orderCount} porudžbina.${result.splitMixedCount ? ` Podeljeno mešovitih porudžbina: ${result.splitMixedCount}.` : ""}`
     : "Nema novih porudžbina koje odgovaraju ovom kuriru i pravilima DC rezervacije.";
   const correction = result.loadedMyGlsHardLimitCount
     ? `Za ${result.loadedMyGlsHardLimitCount} učitanih MyGLS porudžbina unesite stvarne transportne mere unutar granice od 40 kg i 200 cm.`

@@ -97,13 +97,13 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1600px] md:grid-cols-[260px_1fr]">
-        <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-border/60 bg-surface md:block">
+    <div className="min-h-screen bg-canvas print:min-h-0 print:bg-white">
+      <div className="mx-auto grid min-h-screen w-full max-w-[1600px] md:grid-cols-[260px_1fr] print:block print:min-h-0 print:max-w-none">
+        <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-border/60 bg-surface md:block print:hidden">
           <AdminSidebar nav={nav} availableNav={availableNavWithViews} />
         </aside>
-        <div className="flex min-w-0 flex-col">
-          <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8">
+        <div className="flex min-w-0 flex-col print:block">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8 print:hidden">
             <div className="flex min-w-0 items-center gap-2">
               <div className="md:hidden">
                 <AdminMobileNav nav={nav} availableNav={availableNavWithViews} />

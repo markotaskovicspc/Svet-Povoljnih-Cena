@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib/admin";
 import { receiveReclamationReturn } from "@/lib/admin/reclamation-fulfillment.server";
+import { filterReturnWarehouses } from "@/lib/admin/return-warehouse";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
@@ -60,7 +61,7 @@ async function receiveReturnAction(
 
 export default async function ReturnsPage() {
   await requireAdminAction(["OPS"]);
-  const [reclamations, warehouses, movements] = await Promise.all([
+  const [reclamations, warehouseCandidates, movements] = await Promise.all([
     db.reclamation.findMany({
       where: { shipments: { some: { purpose: "RECLAMATION_RETURN" } } },
       orderBy: { createdAt: "desc" },
@@ -79,13 +80,14 @@ export default async function ReturnsPage() {
     db.warehouse.findMany({
       where: { active: true, isDefault: false },
       orderBy: [{ code: "asc" }],
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, active: true, isDefault: true },
     }),
     db.stockMovement.findMany({
       where: { idempotencyKey: { startsWith: "reclamation-return:" } },
       select: { idempotencyKey: true, createdAt: true, warehouse: { select: { code: true, name: true } } },
     }),
   ]);
+  const warehouses = filterReturnWarehouses(warehouseCandidates);
   const receiptByReclamation = new Map(
     movements.map((movement) => [
       movement.idempotencyKey?.slice("reclamation-return:".length),
@@ -169,7 +171,7 @@ export default async function ReturnsPage() {
                           <AdminActionForm action={receiveReturnAction} className="flex items-end gap-2">
                             <input type="hidden" name="reclamationId" value={reclamation.id} />
                             <Field label="Magacin oštećene robe">
-                              <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses.find((warehouse) => /ostec|ošteć|povrat|damage/i.test(`${warehouse.code} ${warehouse.name}`))?.id ?? ""}>
+                              <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses[0]?.id ?? ""}>
                                 <option value="" disabled>Izaberite</option>
                                 {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
                               </select>

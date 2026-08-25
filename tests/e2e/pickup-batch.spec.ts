@@ -48,6 +48,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
   const productIds: string[] = [];
   const orderIds: string[] = [];
   const batchIds: string[] = [];
+  const reclamationIds: string[] = [];
+  const extraWarehouseIds: string[] = [];
   let eligibleOrderId = "";
   let firstBatchId = "";
   let firstBatchNumber = "";
@@ -240,11 +242,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
       }
-      const postCommand = page.getByRole("button", {
+      const overviewPost = page.getByRole("button", {
         name: /^(Proknjiži|Kreiraj adresnice)$/,
       });
-      await expect(postCommand).toBeVisible();
-      await expect(postCommand).toBeDisabled();
+      await expect(overviewPost).toBeVisible();
+      await expect(overviewPost).toBeDisabled();
       for (const header of [
         "Status",
         "Broj naloga",
@@ -326,10 +328,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "aria-describedby",
         "pickup-posting-block-reason",
       );
-      await expect(blockReason).toContainText(
-        "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina",
-      );
-      await expect(page.getByText("Kliknite „Učitaj sve nefiskalizovane“.", { exact: false })).toBeVisible();
+      await expect(blockReason).toContainText("Učitajte bar jednu");
+      await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
       const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
       const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
       await page.getByLabel("Početak preuzimanja").fill(pickupStart.toISOString().slice(0, 16));
@@ -351,11 +351,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
       await page
-        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
+        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Učitano redova: 5 iz 1 porudžbina",
+          hasText: "Učitano paketa: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
       const [batch, orders] = await Promise.all([
@@ -400,56 +400,49 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe(1);
     });
 
-    await test.step("svih 13 kolona se popunjava i redovi su sortirani po šifri", async () => {
+    await test.step("kompaktna picking grupa čuva sve operativne podatke bez ponavljanja količine po paketu", async () => {
       for (const header of [
-        "Broj porudžbine",
-        "Bar kod",
-        "Šifra artikla",
-        "Kolekcija",
-        "Kratki opis artikla",
-        "Kratki naziv artikla",
-        "Atribut 1",
-        "Atribut 2",
-        "Atribut 3",
-        "Atribut 4",
-        "Boja 1",
-        "Boja 2",
-        "Količina",
+        "Izvor",
+        "Artikli za picking",
+        "Paketa",
+        "Stvarne mere paketa",
       ]) {
         await expect(
           page.getByRole("columnheader", { name: header, exact: true }),
         ).toBeVisible();
       }
       const rows = page.locator("tbody tr");
-      await expect(rows).toHaveCount(5);
-      await expect(rows.nth(0)).toContainText(fixture.skuA);
-      await expect(rows.nth(3)).toContainText(fixture.skuZ);
-      await expect(rows.nth(0)).toContainText(fixture.collection);
-      await expect(rows.nth(0)).toContainText(`Kratki A ${runId}`);
-      await expect(rows.nth(0)).toContainText(`Opis A ${runId}`);
-      await expect(rows.nth(0)).toContainText("A-A1");
-      await expect(rows.nth(0)).toContainText("A-A4");
-      await expect(rows.nth(0)).toContainText("Plava");
-      await expect(rows.nth(0)).toContainText("Bela");
-      await expect(rows.nth(0)).toContainText("3");
+      await expect(rows).toHaveCount(1);
+      await expect(rows.first()).toContainText(fixture.skuA);
+      await expect(rows.first()).toContainText(fixture.skuZ);
+      await expect(rows.first()).toContainText(fixture.collection);
+      await expect(rows.first()).toContainText(`Kratki A ${runId}`);
+      await expect(rows.first()).toContainText(`Opis A ${runId}`);
+      await expect(rows.first()).toContainText("A-A1");
+      await expect(rows.first()).toContainText("A-A4");
+      await expect(rows.first()).toContainText("Plava");
+      await expect(rows.first()).toContainText("Bela");
+      await expect(rows.first()).toContainText("× 3");
     });
 
     await test.step("cele dimenzije paketa prolaze HTML validaciju i čuvaju se", async () => {
       const firstRow = page.locator("tbody tr").first();
-      const lineId = await firstRow.locator('input[name="lineId"]').getAttribute("value");
+      await firstRow.locator("summary").click();
+      const packageForm = firstRow.locator('form:has(input[name="lineId"])').first();
+      const lineId = await packageForm.locator('input[name="lineId"]').getAttribute("value");
       expect(lineId).toBeTruthy();
-      await firstRow.getByLabel("kg", { exact: true }).fill("1.25");
-      await firstRow.getByLabel("Š", { exact: true }).fill("70");
-      await firstRow.getByLabel("D", { exact: true }).fill("20");
-      await firstRow.getByLabel("V", { exact: true }).fill("30");
+      await packageForm.getByLabel("kg", { exact: true }).fill("1.25");
+      await packageForm.getByLabel("Š", { exact: true }).fill("70");
+      await packageForm.getByLabel("D", { exact: true }).fill("20");
+      await packageForm.getByLabel("V", { exact: true }).fill("30");
       await expect(
-        firstRow.locator('input[type="number"]:invalid'),
+        packageForm.locator('input[type="number"]:invalid'),
       ).toHaveCount(0);
-      await firstRow
-        .getByRole("button", { name: "Sačuvaj mere", exact: true })
+      await packageForm
+        .getByRole("button", { name: "Sačuvaj", exact: true })
         .click();
       await expect(
-        firstRow.getByRole("status").filter({
+        packageForm.getByRole("status").filter({
           hasText: "Stvarne mere paketa su sačuvane",
         }),
       ).toBeVisible();
@@ -484,7 +477,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         }),
       ).toHaveCount(1);
       await page
-        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
+        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
@@ -553,10 +546,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(page.getByLabel("Početak preuzimanja")).toBeDisabled();
       await expect(
-        page.getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true }),
+        page.getByRole("button", { name: "Učitaj porudžbine", exact: true }),
       ).toHaveCount(0);
       await expect(
-        page.getByText("Kliknite „Uredi“, pa „Učitaj sve nefiskalizovane“.", {
+        page.getByText("Kliknite „Uredi“, pa „Učitaj porudžbine“.", {
           exact: true,
         }),
       ).toBeVisible();
@@ -602,6 +595,25 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       batchIds.splice(batchIds.indexOf(secondBatchId), 1);
     });
 
+    await test.step("ceo dokument za štampu poziva print automatski i skriva admin okvir", async () => {
+      await page.addInitScript(() => {
+        window.print = () => {
+          document.documentElement.dataset.qaPrintCalled = "yes";
+        };
+      });
+      await page.goto(
+        `/admin/erp/preuzimanja/${firstBatchId}/stampa?autoprint=1`,
+        { waitUntil: "domcontentloaded" },
+      );
+      await expect(page.getByRole("heading", { name: "Zbirna picking lista" })).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("data-qa-print-called", "yes");
+      await expect(page.locator("article")).toHaveCount(5);
+      await page.emulateMedia({ media: "print" });
+      await expect(page.locator("aside")).toBeHidden();
+      await expect(page.getByText("Prijavljen kao", { exact: false })).toBeHidden();
+      await page.emulateMedia({ media: "screen" });
+    });
+
     await test.step("uklanjanje porudžbine briše sve njene redove i vraća Kreirano", async () => {
       await page.goto(`/admin/erp/preuzimanja/${firstBatchId}?mode=edit`, {
         waitUntil: "domcontentloaded",
@@ -609,7 +621,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await acceptConfirmation(
         page,
         page
-          .getByRole("button", { name: "Ukloni porudžbinu", exact: true })
+          .getByRole("button", { name: "Ukloni grupu", exact: true })
           .first(),
       );
       await expect
@@ -638,11 +650,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("ponovno učitavanje radi, a brisanje iz pregleda opet vraća status", async () => {
       await page
-        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
+        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
-          hasText: "Učitano redova: 5 iz 1 porudžbina",
+          hasText: "Učitano paketa: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
       await page.goto("/admin/erp/preuzimanja", {
@@ -670,6 +682,184 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe("KREIRANO");
     });
 
+    await test.step("mešovita porudžbina se deli u odvojene MyGLS i X Express picking grupe", async () => {
+      await db.order.update({
+        where: { id: eligibleOrderId },
+        data: { status: "POTVRDJENO" },
+      });
+      const largeProduct = await db.product.findFirstOrThrow({
+        where: { sku: fixture.skuZ },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          shortName: true,
+          shortDescription: true,
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          colorPrimary: true,
+          colorSecondary: true,
+        },
+      });
+      const smallProduct = await createProduct({
+        sku: `QA-PICKUP-SMALL-${runId}`.slice(0, 90),
+        slug: `qa-pickup-small-${runId}`,
+        barcode: `864${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`,
+        shortName: `Mali paket ${runId}`,
+        shortDescription: `X Express paket ${runId}`,
+        attribute1: "S-A1",
+        attribute2: "S-A2",
+        attribute3: "S-A3",
+        attribute4: "S-A4",
+        colorPrimary: "Bela",
+        colorSecondary: "Siva",
+        packWidthCm: 40,
+      });
+      productIds.push(smallProduct.id);
+      const mixedOrder = await createOrder({
+        number: `QA-PICKUP-MIXED-${runId}`,
+        status: "KREIRANO",
+        shippingMethod: "KURIR",
+        lines: [
+          { product: largeProduct, warehouseId: dcWarehouseId, qty: 1 },
+          { product: smallProduct, warehouseId: dcWarehouseId, qty: 1 },
+        ],
+      });
+      orderIds.push(mixedOrder.id);
+
+      await page.goto("/admin/erp/preuzimanja", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Novi", exact: true }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Kurirska služba").selectOption("MYGLS");
+      await dialog.getByRole("button", { name: "Novi", exact: true }).click();
+      await expect(page).toHaveURL(
+        /\/admin\/erp\/preuzimanja\/[^/?]+\?mode=edit$/,
+      );
+      const myGlsBatchId = pickupBatchIdFromUrl(page.url());
+      batchIds.push(myGlsBatchId);
+      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText(
+        "Podeljeno mešovitih porudžbina: 1",
+      );
+
+      await page.getByRole("button", { name: "Novi X Express", exact: true }).click();
+      await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
+        myGlsBatchId,
+      );
+      await expect(page).toHaveURL(/\?mode=edit$/);
+      const xExpressBatchId = pickupBatchIdFromUrl(page.url());
+      batchIds.push(xExpressBatchId);
+      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText(
+        "Podeljeno mešovitih porudžbina: 1",
+      );
+
+      const [myGlsLines, xExpressLines] = await Promise.all([
+        db.pickupBatchLine.findMany({ where: { batchId: myGlsBatchId } }),
+        db.pickupBatchLine.findMany({ where: { batchId: xExpressBatchId } }),
+      ]);
+      expect(myGlsLines).toHaveLength(1);
+      expect(xExpressLines).toHaveLength(1);
+      expect(myGlsLines[0]?.orderId).toBe(mixedOrder.id);
+      expect(xExpressLines[0]?.orderId).toBe(mixedOrder.id);
+      expect(myGlsLines[0]?.orderItemId).not.toBe(xExpressLines[0]?.orderItemId);
+      expect(myGlsLines[0]?.lineGroupKey).toBe(
+        `order:${mixedOrder.id}:MYGLS`,
+      );
+      expect(xExpressLines[0]?.lineGroupKey).toBe(
+        `order:${mixedOrder.id}:X_EXPRESS`,
+      );
+
+      const largeItem = await db.orderItem.findFirstOrThrow({
+        where: { orderId: mixedOrder.id, productId: largeProduct.id },
+      });
+      const reclamation = await db.reclamation.create({
+        data: {
+          number: `R-QA-${runId}`,
+          orderId: mixedOrder.id,
+          orderItemId: largeItem.id,
+          productId: largeProduct.id,
+          sku: largeProduct.sku,
+          quantity: 1,
+          customerFirst: "QA",
+          customerLast: "Povrat",
+          customerEmail: `qa.return.${runId}@example.invalid`,
+          description: "QA provera zamene i prijema povrata.",
+          notifyVia: "EMAIL",
+          decision: "PRIHVACENA",
+          resolution: "ZAMENA_ARTIKLA",
+          warehouseId: dcWarehouseId,
+          warehouseStatus: "READY",
+        },
+      });
+      reclamationIds.push(reclamation.id);
+
+      await page.goto(`/admin/erp/reklamacije-dnevnik/${reclamation.id}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await acceptConfirmation(
+        page,
+        page.getByRole("button", { name: "Dodaj u picking listu", exact: true }),
+      );
+      await expect(page.getByText(/Zamena je u MyGLS picking nalogu/)).toBeVisible();
+      const replacementLine = await db.pickupBatchLine.findFirstOrThrow({
+        where: {
+          reclamationId: reclamation.id,
+          purpose: "RECLAMATION_REPLACEMENT",
+        },
+      });
+      expect(replacementLine.batchId).toBe(myGlsBatchId);
+      expect(
+        await db.shipment.count({
+          where: {
+            reclamationId: reclamation.id,
+            purpose: "RECLAMATION_REPLACEMENT",
+          },
+        }),
+      ).toBe(0);
+
+      const returnWarehouse = await db.warehouse.create({
+        data: {
+          code: `QA-POVRAT-${runId}`.slice(0, 30),
+          name: `Magacin oštećene robe ${runId}`,
+          active: true,
+        },
+      });
+      extraWarehouseIds.push(returnWarehouse.id);
+      await db.shipment.create({
+        data: {
+          orderId: mixedOrder.id,
+          reclamationId: reclamation.id,
+          service: "COURIER_SMALL",
+          purpose: "RECLAMATION_RETURN",
+          provider: "X_EXPRESS",
+          status: "DELIVERED",
+          packageCount: 1,
+        },
+      });
+      await page.goto("/admin/erp/povrati", { waitUntil: "domcontentloaded" });
+      const returnRow = page.getByRole("row").filter({
+        has: page.getByText(reclamation.number, { exact: true }),
+      });
+      const warehouseSelect = returnRow.getByLabel("Magacin oštećene robe");
+      await expect(warehouseSelect.getByRole("option", { name: /Magacin oštećene robe/ })).toHaveCount(1);
+      await expect(warehouseSelect.getByRole("option", { name: /QA drugi magacin/ })).toHaveCount(0);
+      await expect(warehouseSelect.locator("option:not([disabled])")).toHaveCount(1);
+      await warehouseSelect.selectOption(returnWarehouse.id);
+      await acceptConfirmation(
+        page,
+        returnRow.getByRole("button", { name: "Primi i proknjiži", exact: true }),
+      );
+      await expect(returnRow).toContainText("Proknjiženo");
+      expect(
+        await db.stockMovement.count({
+          where: { idempotencyKey: `reclamation-return:${reclamation.id}` },
+        }),
+      ).toBe(1);
+    });
+
     expect(pageErrors).toEqual([]);
   });
 
@@ -685,6 +875,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     attribute4: string;
     colorPrimary: string;
     colorSecondary: string;
+    packWidthCm?: number;
   }) {
     return db.product.create({
       data: {
@@ -693,7 +884,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         description: input.shortDescription,
         fullPrice: 1_000,
         collectionId,
-        packWidthCm: 70,
+        packWidthCm: input.packWidthCm ?? 70,
         packDepthCm: 20,
         packHeightCm: 20,
         packGrossWeightKg: 1.25,
@@ -786,6 +977,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         where: { id: { in: Array.from(new Set(batchIds)) } },
       });
     }
+    if (reclamationIds.length) {
+      await db.reclamation.deleteMany({
+        where: { id: { in: reclamationIds } },
+      });
+    }
     if (orderIds.length) {
       await db.fiscalReceipt.deleteMany({
         where: { orderId: { in: orderIds } },
@@ -798,13 +994,15 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     if (collectionId) {
       await db.collection.deleteMany({ where: { id: collectionId } });
     }
-    if (createdDcWarehouse || otherWarehouseId) {
+    if (createdDcWarehouse || otherWarehouseId || extraWarehouseIds.length) {
       await db.warehouse.deleteMany({
         where: {
           id: {
-            in: [createdDcWarehouse ? dcWarehouseId : "", otherWarehouseId].filter(
-              Boolean,
-            ),
+            in: [
+              createdDcWarehouse ? dcWarehouseId : "",
+              otherWarehouseId,
+              ...extraWarehouseIds,
+            ].filter(Boolean),
           },
         },
       });

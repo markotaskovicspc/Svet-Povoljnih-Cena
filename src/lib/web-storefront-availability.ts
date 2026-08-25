@@ -320,7 +320,7 @@ export function storefrontPublicationBlockers(
       (product.supplierStock ?? 0) < RABALUX_PUBLIC_STOCK_THRESHOLD
     ) {
       reasons.push(
-        `Rabalux artikal ima manje od ${RABALUX_PUBLIC_STOCK_THRESHOLD} komada u Srbiji`,
+        `Rabalux artikal ima ${RABALUX_PUBLIC_STOCK_THRESHOLD - 1} ili manje komada u Srbiji`,
       );
     }
     if (!hasRabaluxStockObservation(product.lastSupplierStockSyncAt)) {

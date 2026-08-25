@@ -25,7 +25,7 @@ describe("Rabalux customer availability", () => {
     });
   });
 
-  it("requires raw Serbia stock to be at least 3", () => {
+  it("keeps 3 and below hidden and requires raw Serbia stock to be at least 4", () => {
     const input = {
       warehouseStock: 0,
       supplierReservedStock: 0,
@@ -39,13 +39,18 @@ describe("Rabalux customer availability", () => {
       source: "NONE",
     });
     expect(resolveRabaluxAvailability({ ...input, supplierStock: 3 })).toMatchObject({
-      sellableStock: 2,
+      sellableStock: 0,
+      supplierEligible: false,
+      source: "NONE",
+    });
+    expect(resolveRabaluxAvailability({ ...input, supplierStock: 4 })).toMatchObject({
+      sellableStock: 3,
       supplierEligible: true,
       source: "SUPPLIER",
     });
   });
 
-  it("does not let DC stock override the weekly 3-unit threshold", () => {
+  it("does not let DC stock override the weekly public threshold", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,

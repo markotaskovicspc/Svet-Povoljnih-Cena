@@ -189,6 +189,7 @@ describe("X Express shipment persistence", () => {
           create: [1, 2].map((packageNo) => ({
             orderId,
             orderItemId: item.id,
+            lineGroupKey: `order:${orderId}:X_EXPRESS`,
             packageNo,
             weightKg: 3,
             widthCm: 50,

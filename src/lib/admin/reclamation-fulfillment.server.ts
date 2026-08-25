@@ -8,8 +8,13 @@ import { StockMovementKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { createShipmentForOrder } from "@/lib/courier/registry";
+import type { PhysicalPackage } from "@/lib/courier/packages";
 import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
-import { MYGLS_PROVIDER } from "@/lib/mygls/config";
+import {
+  MYGLS_PROVIDER,
+  type SmallParcelProvider,
+} from "@/lib/mygls/config";
+import { isReturnWarehouse } from "@/lib/admin/return-warehouse";
 
 const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
@@ -42,6 +47,10 @@ export async function createReclamationShipment(args: {
   reclamationId: string;
   purpose: ShipmentPurpose;
   packageCount?: number;
+  packages?: readonly PhysicalPackage[];
+  pickupDate?: Date;
+  provider?: SmallParcelProvider;
+  fromPickupBatch?: boolean;
   actorId?: string | null;
 }) {
   if (!RECLAMATION_PURPOSES.includes(args.purpose)) {
@@ -65,6 +74,11 @@ export async function createReclamationShipment(args: {
           quantity: true,
           warehouseId: true,
           warehouseStatus: true,
+          pickupBatchLines: {
+            where: { purpose: args.purpose },
+            select: { batchId: true },
+            take: 1,
+          },
           shipments: {
             where: { purpose: args.purpose },
             orderBy: { createdAt: "desc" },
@@ -93,6 +107,17 @@ export async function createReclamationShipment(args: {
       ) {
         throw new Error("Zamena mora imati status „Spremno” pre predaje kuriru.");
       }
+      if (args.purpose === "RECLAMATION_REPLACEMENT") {
+        const queued = Boolean(reclamation.pickupBatchLines[0]);
+        if (queued && !args.fromPickupBatch) {
+          throw new Error(
+            "Zamena je u picking nalogu i mora se poslati knjiženjem tog naloga.",
+          );
+        }
+        if (!queued && args.fromPickupBatch) {
+          throw new Error("Zamena više nije povezana sa picking nalogom.");
+        }
+      }
 
       if (
         args.purpose === "RECLAMATION_REPLACEMENT" &&
@@ -119,6 +144,10 @@ export async function createReclamationShipment(args: {
         purpose: args.purpose,
         reclamationId: reclamation.id,
         packageCount: args.packageCount,
+        packages: args.packages,
+        pickupDate: args.pickupDate,
+        provider: args.provider,
+        codAmount: 0,
       });
       await tx.reclamation.update({
         where: { id: reclamation.id },
@@ -241,10 +270,16 @@ export async function receiveReclamationReturn(args: {
       throw new Error("Reklamacija nema vezan artikal i ne može da se proknjiži na lager.");
     }
     const warehouse = await tx.warehouse.findFirst({
-      where: { id: args.warehouseId, active: true, isDefault: false },
-      select: { id: true, code: true, name: true },
+      where: { id: args.warehouseId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        active: true,
+        isDefault: true,
+      },
     });
-    if (!warehouse) {
+    if (!warehouse || !isReturnWarehouse(warehouse)) {
       throw new Error("Izaberite aktivan magacin oštećene/povratne robe, ne glavni DC.");
     }
     const represented = await tx.warehouseStock.findFirst({

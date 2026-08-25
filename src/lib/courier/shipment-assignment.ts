@@ -62,3 +62,40 @@ export function sameShipmentAssignment(
     existing.orderItemIds.every((id, index) => id === requested[index])
   );
 }
+
+/**
+ * Splits one order total between provider-specific item groups without ever
+ * charging the order total twice. The final group receives the rounding
+ * remainder, so all returned amounts always add up to the original total.
+ */
+export function splitAmountByWeights(
+  total: number,
+  orderedGroups: readonly { key: string; weight: number }[],
+) {
+  const normalizedTotal = money(total);
+  const groups = orderedGroups.map((group) => ({
+    key: group.key,
+    weight: Math.max(0, Number.isFinite(group.weight) ? group.weight : 0),
+  }));
+  const result = new Map<string, number>();
+  if (!groups.length) return result;
+  const totalWeight = groups.reduce((sum, group) => sum + group.weight, 0);
+  let allocated = 0;
+  groups.forEach((group, index) => {
+    const amount =
+      index === groups.length - 1
+        ? money(normalizedTotal - allocated)
+        : money(
+            totalWeight > 0
+              ? (normalizedTotal * group.weight) / totalWeight
+              : normalizedTotal / groups.length,
+          );
+    allocated = money(allocated + amount);
+    result.set(group.key, amount);
+  });
+  return result;
+}
+
+function money(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}

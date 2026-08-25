@@ -42,6 +42,7 @@ import {
 } from "@/lib/api/reclamations";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { ReclamationOrderFields } from "@/components/admin/reclamation-order-search";
+import { queueReclamationReplacement } from "@/lib/admin/pickup-batch.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -256,7 +257,7 @@ async function updateReclamationDetails(formData: FormData) {
       action: "reclamation.detailsUpdate",
       entity: "Reclamation",
     },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
       const resolutionRaw = String(formData.get("resolution") ?? "");
@@ -283,7 +284,9 @@ async function updateReclamationDetails(formData: FormData) {
         where: { id },
         data: { decision, resolution, respondedAt, adminNote, resolutionNote },
       });
+      await queueReclamationReplacement(id, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
+      revalidatePath("/admin/erp/preuzimanja");
       return {
         ok: true as const,
         entityId: id,
@@ -302,7 +305,7 @@ async function updateWarehouse(formData: FormData) {
       action: "reclamation.warehouseUpdate",
       entity: "Reclamation",
     },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const reclamationId = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");
       const status = String(
@@ -316,7 +319,9 @@ async function updateWarehouse(formData: FormData) {
         return { ok: false as const, error: "Izaberite magacin i status pripreme." };
       }
       await saveReclamationWarehouse({ reclamationId, warehouseId, status });
+      await queueReclamationReplacement(reclamationId, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
+      revalidatePath("/admin/erp/preuzimanja");
       return {
         ok: true as const,
         entityId: reclamationId,
@@ -348,17 +353,31 @@ async function createShipment(formData: FormData) {
       ) {
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
-      const shipment = await createReclamationShipment({
-        reclamationId,
-        purpose,
-        packageCount,
-        actorId,
-      });
+      const shipment = purpose === "RECLAMATION_REPLACEMENT"
+        ? null
+        : await createReclamationShipment({
+            reclamationId,
+            purpose,
+            packageCount,
+            actorId,
+          });
+      const queued = purpose === "RECLAMATION_REPLACEMENT"
+        ? await queueReclamationReplacement(reclamationId, actorId)
+        : null;
+      if (queued && !queued.queued) {
+        return { ok: false as const, error: queued.reason };
+      }
       revalidatePath("/admin/erp/reklamacije-dnevnik");
+      revalidatePath("/admin/erp/preuzimanja");
       return {
         ok: true as const,
         entityId: reclamationId,
-        diff: { purpose, packageCount, shipmentId: shipment.id },
+        diff: {
+          purpose,
+          packageCount,
+          shipmentId: shipment?.id,
+          pickupBatchId: queued?.batchId,
+        },
       };
     },
   )(formData);
@@ -797,7 +816,7 @@ export default async function ReclamationsPage({
                                   >
                                     {purpose === "RECLAMATION_RETURN"
                                       ? "Kreiraj povrat"
-                                      : "Pošalji zamenu"}
+                                      : "Dodaj zamenu u picking"}
                                   </SubmitButton>
                                 </form>
                               );

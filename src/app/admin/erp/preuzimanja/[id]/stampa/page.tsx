@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { PrintPageButton } from "@/components/admin/print-page-button";
+import { AutoPrintOnLoad } from "@/components/admin/auto-print-on-load";
+import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -15,14 +17,14 @@ export default async function PickupBatchPrintPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<{ section?: string; autoprint?: string }>;
 }) {
   await requireAdminAction(["OPS"]);
-  const { id } = await params;
-  const requestedSection = (await searchParams).section;
-  const section = requestedSection === "labels" ? "labels" : "picking";
-  const showPicking = section === "picking";
-  const showLabels = section === "labels";
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const section = query.section === "labels" ? "labels" : "picking";
+  const printAll = query.autoprint === "1";
+  const showPicking = printAll || section === "picking";
+  const showLabels = printAll || section === "labels";
   const batch = await db.pickupBatch.findUnique({
     where: { id },
     include: {
@@ -30,6 +32,12 @@ export default async function PickupBatchPrintPage({
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         include: {
           order: { select: { id: true, number: true } },
+          reclamation: {
+            select: {
+              number: true,
+              warehouse: { select: { code: true, name: true } },
+            },
+          },
           orderItem: {
             select: {
               id: true,
@@ -46,26 +54,45 @@ export default async function PickupBatchPrintPage({
   if (!batch) notFound();
 
   const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
-  const shipmentRows = orderIds.length
+  const reclamationIds = batch.lines
+    .map((line) => line.reclamationId)
+    .filter((id): id is string => Boolean(id));
+  const shipmentRows = orderIds.length || reclamationIds.length
     ? await db.shipment.findMany({
         where: {
-          orderId: { in: orderIds },
-          purpose: "ORDER_DELIVERY",
           provider: batch.provider,
           status: { not: "FAILED" },
+          OR: [
+            ...(orderIds.length
+              ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
+              : []),
+            ...(reclamationIds.length
+              ? [{
+                  reclamationId: { in: reclamationIds },
+                  purpose: "RECLAMATION_REPLACEMENT" as const,
+                }]
+              : []),
+          ],
         },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
           orderId: true,
+          reclamationId: true,
+          purpose: true,
           trackingNo: true,
           provider: true,
+          rawCreateResponse: true,
         },
       })
     : [];
-  const shipments = Array.from(
-    new Map(shipmentRows.map((shipment) => [shipment.orderId, shipment])).values(),
-  );
+  const shipments = batch.lines.reduce<typeof shipmentRows>((matched, line) => {
+    if (matched.some((shipment) => shipment.id === shipmentForLine(shipmentRows, line)?.id)) {
+      return matched;
+    }
+    const shipment = shipmentForLine(shipmentRows, line);
+    return shipment ? [...matched, shipment] : matched;
+  }, []);
   const picking = aggregatePicking(batch.lines);
   const packageLabels = batch.lines.map((line) => ({
     ...line,
@@ -74,6 +101,7 @@ export default async function PickupBatchPrintPage({
 
   return (
     <main className="mx-auto max-w-[1200px] space-y-8 bg-white p-6 text-black print:max-w-none print:p-0">
+      {query.autoprint === "1" ? <AutoPrintOnLoad /> : null}
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Link
           href={`/admin/erp/preuzimanja/${batch.id}`}
@@ -149,7 +177,7 @@ export default async function PickupBatchPrintPage({
           {shipments.length ? (
             <ul className="mt-2 flex flex-wrap gap-2">
               {shipments.map((shipment) => {
-                const order = batch.lines.find((line) => line.orderId === shipment.orderId)?.order;
+                const line = batch.lines.find((candidate) => shipmentMatchesLine(shipment, candidate));
                 return (
                   <li key={shipment.id}>
                     <a
@@ -162,7 +190,7 @@ export default async function PickupBatchPrintPage({
                         {providerLabelAction(shipment.provider)}
                       </span>
                       <span>
-                        {order?.number ?? shipment.orderId} · {shipment.trackingNo ?? "broj još nije dodeljen"}
+                        {sourceLabel(line)} · {shipment.trackingNo ?? "broj još nije dodeljen"}
                       </span>
                       <span className="text-xs text-black/65">
                         {providerLabelFormat(shipment.provider)}
@@ -181,7 +209,7 @@ export default async function PickupBatchPrintPage({
         </header>
       </section> : null}
 
-      {showLabels ? <section aria-labelledby="internal-package-labels-title">
+      {showLabels ? <section aria-labelledby="internal-package-labels-title" className="print:break-before-page">
         <header className="mb-5">
           <h2 id="internal-package-labels-title" className="text-2xl font-bold">
             Interne magacinske etikete
@@ -203,11 +231,18 @@ export default async function PickupBatchPrintPage({
                     <p className="text-xs font-bold uppercase tracking-[0.12em]">
                       Interna magacinska etiketa
                     </p>
-                    <p className="mt-1 font-mono text-lg font-bold">{line.order.number}</p>
+                    <p className="mt-1 font-mono text-lg font-bold">{sourceLabel(line)}</p>
+                    {line.reclamation?.warehouse ? (
+                      <p className="text-xs">
+                        {line.reclamation.warehouse.code} · {line.reclamation.warehouse.name}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="text-right">
                     <p className="text-xs">Paket</p>
-                    <p className="text-3xl font-black">{line.packageNo}/{packageCountForOrder(batch.lines, line.orderId)}</p>
+                    <p className="text-3xl font-black">
+                      {line.packageNo}/{packageCountForGroup(batch.lines, line.lineGroupKey)}
+                    </p>
                   </div>
                 </div>
                 <p className="mt-5 font-mono text-2xl font-black">{line.orderItem?.sku ?? "—"}</p>
@@ -229,8 +264,17 @@ export default async function PickupBatchPrintPage({
 type PrintLine = {
   id: string;
   orderId: string;
+  orderItemId: string | null;
+  reclamationId: string | null;
+  purpose: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
+  lineGroupKey: string;
+  quantity: number | null;
   packageNo: number;
   order: { id: string; number: string };
+  reclamation: {
+    number: string;
+    warehouse: { code: string; name: string } | null;
+  } | null;
   orderItem: {
     id: string;
     sku: string;
@@ -247,7 +291,7 @@ function aggregatePicking(lines: PrintLine[]) {
     qty: number;
     packageCount: number;
     orders: Set<string>;
-    orderItems: Set<string>;
+    logicalItems: Set<string>;
   }>();
   for (const line of lines) {
     if (!line.orderItem) continue;
@@ -257,13 +301,14 @@ function aggregatePicking(lines: PrintLine[]) {
       qty: 0,
       packageCount: 0,
       orders: new Set<string>(),
-      orderItems: new Set<string>(),
+      logicalItems: new Set<string>(),
     };
     row.packageCount += 1;
-    row.orders.add(line.order.number);
-    if (!row.orderItems.has(line.orderItem.id)) {
-      row.orderItems.add(line.orderItem.id);
-      row.qty += line.orderItem.qty;
+    row.orders.add(sourceLabel(line));
+    const logicalItem = `${line.lineGroupKey}:${line.orderItem.id}`;
+    if (!row.logicalItems.has(logicalItem)) {
+      row.logicalItems.add(logicalItem);
+      row.qty += line.quantity ?? line.orderItem.qty;
     }
     rows.set(row.sku, row);
   }
@@ -276,15 +321,58 @@ function quantityInPackage(lines: PrintLine[], target: PrintLine) {
   const item = target.orderItem;
   if (!item) return 0;
   const itemLines = lines
-    .filter((line) => line.orderItem?.id === item.id)
+    .filter(
+      (line) =>
+        line.lineGroupKey === target.lineGroupKey &&
+        line.orderItem?.id === item.id,
+    )
     .sort((left, right) => left.packageNo - right.packageNo);
   const index = itemLines.findIndex((line) => line.id === target.id);
   const packQty = Math.max(1, item.product?.packQty ?? 1);
-  return Math.max(0, Math.min(packQty, item.qty - index * packQty));
+  const quantity = target.quantity ?? item.qty;
+  return Math.max(0, Math.min(packQty, quantity - index * packQty));
 }
 
-function packageCountForOrder(lines: PrintLine[], orderId: string) {
-  return lines.filter((line) => line.orderId === orderId).length;
+function packageCountForGroup(lines: PrintLine[], lineGroupKey: string) {
+  return lines.filter((line) => line.lineGroupKey === lineGroupKey).length;
+}
+
+function sourceLabel(line: Pick<PrintLine, "order" | "reclamation" | "purpose"> | undefined) {
+  if (!line) return "Nepoznata pošiljka";
+  return line.purpose === "RECLAMATION_REPLACEMENT"
+    ? `Zamena · ${line.reclamation?.number ?? line.order.number}`
+    : line.order.number;
+}
+
+function shipmentMatchesLine(
+  shipment: {
+    orderId: string;
+    reclamationId: string | null;
+    purpose: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
+    rawCreateResponse: unknown;
+  },
+  line: Pick<PrintLine, "orderId" | "orderItemId" | "reclamationId" | "purpose">,
+) {
+  if (line.purpose === "RECLAMATION_REPLACEMENT") {
+    return (
+      shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+      shipment.reclamationId === line.reclamationId
+    );
+  }
+  const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+  return (
+    shipment.purpose === "ORDER_DELIVERY" &&
+    shipment.orderId === line.orderId &&
+    (assignment == null ||
+      Boolean(line.orderItemId && assignment.orderItemIds.includes(line.orderItemId)))
+  );
+}
+
+function shipmentForLine<T extends Parameters<typeof shipmentMatchesLine>[0]>(
+  shipments: readonly T[],
+  line: Parameters<typeof shipmentMatchesLine>[1],
+) {
+  return shipments.find((shipment) => shipmentMatchesLine(shipment, line));
 }
 
 function providerLabel(provider: string | null) {

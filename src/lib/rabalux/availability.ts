@@ -1,6 +1,6 @@
 export const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
-/** Minimum Serbia XLSX quantity required for web purchasing. */
-export const RABALUX_PUBLIC_STOCK_THRESHOLD = 3;
+/** Minimum Serbia XLSX quantity required for web purchasing; 3 and below stay hidden. */
+export const RABALUX_PUBLIC_STOCK_THRESHOLD = 4;
 /** Customer-facing delivery promise for supplier-stock Rabalux items. */
 export const RABALUX_DELIVERY_WINDOW = { min: 1, max: 2 } as const;
 
@@ -88,7 +88,7 @@ export function resolveRabaluxAvailability(input: {
   const supplier = resolveRabaluxSupplierStock(input);
   // Rabalux web purchasing follows the weekly Serbia report exclusively.
   // ERP/DC quantities remain observable for administration, but they cannot
-  // make a row with 0-2 supplier units purchasable.
+  // make a row with 0-3 supplier units purchasable.
   const supplierAvailable = supplier.sellableStock;
   const sellableStock = supplierAvailable;
   const source: StockAvailabilitySource =

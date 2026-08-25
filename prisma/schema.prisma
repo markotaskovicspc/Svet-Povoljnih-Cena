@@ -2795,23 +2795,35 @@ model PickupBatch {
 }
 
 model PickupBatchLine {
-  id          String   @id @default(cuid())
-  batchId     String
-  orderId     String
-  orderItemId String?
-  packageNo   Int      @default(1)
-  weightKg    Decimal? @db.Decimal(10, 3)
-  widthCm     Decimal? @db.Decimal(8, 2)
-  depthCm     Decimal? @db.Decimal(8, 2)
-  heightCm    Decimal? @db.Decimal(8, 2)
+  id            String          @id @default(cuid())
+  batchId       String
+  orderId       String
+  orderItemId   String?
+  reclamationId String?
+  purpose       ShipmentPurpose @default(ORDER_DELIVERY)
+  /// Stable logical unit inside a batch. Mixed orders use one provider-specific
+  /// order group; replacements use their reclamation ID.
+  lineGroupKey  String
+  /// Quantity represented by this logical picking line. Null keeps legacy
+  /// order rows compatible and falls back to OrderItem.qty.
+  quantity      Int?
+  packageNo     Int             @default(1)
+  weightKg      Decimal?        @db.Decimal(10, 3)
+  widthCm       Decimal?        @db.Decimal(8, 2)
+  depthCm       Decimal?        @db.Decimal(8, 2)
+  heightCm      Decimal?        @db.Decimal(8, 2)
 
-  batch     PickupBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItem OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  batch       PickupBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  reclamation Reclamation? @relation(fields: [reclamationId], references: [id], onDelete: Cascade)
 
-  @@unique([batchId, orderId, packageNo])
+  @@unique([batchId, lineGroupKey, packageNo])
+  @@unique([reclamationId, packageNo])
   @@index([orderId])
   @@index([orderItemId])
+  @@index([reclamationId])
+  @@index([purpose, orderId])
 }
 
 model PartnerApiClient {
@@ -3150,14 +3162,15 @@ model Reclamation {
   createdAt                 DateTime                   @default(now())
   resolvedAt                DateTime?
 
-  order     Order                    @relation(fields: [orderId], references: [id])
-  orderItem OrderItem?               @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  product   Product?                 @relation(fields: [productId], references: [id])
-  user      User?                    @relation(fields: [userId], references: [id])
-  warehouse Warehouse?               @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  photos    ReclamationPhoto[]
-  events    ReclamationStatusEvent[]
-  shipments Shipment[]
+  order            Order                    @relation(fields: [orderId], references: [id])
+  orderItem        OrderItem?               @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  product          Product?                 @relation(fields: [productId], references: [id])
+  user             User?                    @relation(fields: [userId], references: [id])
+  warehouse        Warehouse?               @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  photos           ReclamationPhoto[]
+  events           ReclamationStatusEvent[]
+  shipments        Shipment[]
+  pickupBatchLines PickupBatchLine[]
 
   @@index([orderId])
   @@index([userId])
