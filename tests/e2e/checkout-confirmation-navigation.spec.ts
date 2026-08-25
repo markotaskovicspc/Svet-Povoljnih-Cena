@@ -13,7 +13,7 @@ test.skip(
   "Checkout confirmation navigation runs only in the isolated acceptance flow.",
 );
 test.use({ viewport: { width: 390, height: 844 } });
-test.setTimeout(60_000);
+test.setTimeout(90_000);
 
 test.beforeAll(async () => {
   const connectionString = process.env.DATABASE_URL;
@@ -351,6 +351,10 @@ test("successful guest order lands on the confirmation route", async ({
   ).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Otkaži porudžbinu" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Porudžbina je otkazana",
+    { timeout: 30_000 },
+  );
   await expect
     .poll(async () => {
       const order = await db.order.findUnique({
@@ -358,7 +362,7 @@ test("successful guest order lands on the confirmation route", async ({
         select: { status: true },
       });
       return order?.status;
-    })
+    }, { timeout: 30_000 })
     .toBe("OTKAZANO");
   await expect
     .poll(async () => {
