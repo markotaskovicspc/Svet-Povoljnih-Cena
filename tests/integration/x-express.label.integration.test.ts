@@ -23,6 +23,32 @@ describe("X Express label rendering", () => {
       providerRouteCode: "SM-5",
       providerRouteName: "Šabac",
       rawCreateResponse: {
+        labelData: {
+          version: 1,
+          source: "X_EXPRESS_API_PAYLOAD",
+          reference: "758bb513-499d-4ab1-8697-5e747602f222",
+          sender: {
+            name: "Svet povoljnih cena",
+            contactName: "DC magacin",
+            phone: "381641234567",
+            streetName: "Vojvođanska",
+            streetNumber: "401",
+            city: "Beograd - Surčin",
+            postalCode: "11271",
+          },
+          recipient: {
+            name: "Petar Petrović",
+            phone: "381642223344",
+            streetName: "Severna transferzala",
+            streetNumber: "bb",
+            city: "Šabac",
+            postalCode: "15000",
+          },
+          content: "Stolica, Sto",
+          servicePayerId: 1,
+          serviceTypeId: 1,
+          codAmount: 12_345.67,
+        },
         packages: [
           { Code: "AAA0850300001", Mass: 1.8, Content: "Stolica" },
           { Code: "AAA0850300002", Mass: 2.2, Content: "Sto" },
@@ -69,6 +95,7 @@ describe("X Express label rendering", () => {
     }
     await expect(page.locator(".stamp").count()).resolves.toBe(2);
     await expect(page.locator(".stamp").first().isVisible()).resolves.toBe(true);
+    await expect(page.locator(".screen-note").isVisible()).resolves.toBe(true);
     await page.close();
   });
 });

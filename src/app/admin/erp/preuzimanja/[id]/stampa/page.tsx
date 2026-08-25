@@ -123,9 +123,10 @@ export default async function PickupBatchPrintPage({
         <header>
           <h2 className="text-2xl font-bold">Kurirske adresnice</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6">
-            Kurirska adresnica se štampa isključivo u formatu kurirske službe.
-            Naši podaci o pošiljaocu, broj porudžbine i sadržaj paketa prosleđeni su
-            kuriru prilikom kreiranja pošiljke i već su uključeni u adresnicu.
+            MyGLS adresnica je originalni PDF koji vraća MyGLS, u A4 2×2 formatu
+            podešenom na našem nalogu. X Express API ne vraća PDF; za njega ERP
+            pravi transportnu etiketu iz neizmenjenih podataka koje je X Express
+            prihvatio pri kreiranju naloga.
           </p>
           {shipments.length ? (
             <ul className="mt-2 flex flex-wrap gap-2">
@@ -140,7 +141,7 @@ export default async function PickupBatchPrintPage({
                       className="inline-flex flex-col rounded-lg border border-black bg-white px-3 py-2 text-sm"
                     >
                       <span className="font-bold">
-                        Otvori {providerLabel(shipment.provider)} adresnicu
+                        {providerLabelAction(shipment.provider)}
                       </span>
                       <span>
                         {order?.number ?? shipment.orderId} · {shipment.trackingNo ?? "broj još nije dodeljen"}
@@ -274,10 +275,18 @@ function providerLabel(provider: string | null) {
 
 function providerLabelFormat(provider: string | null) {
   return provider === "MYGLS"
-    ? "Originalni PDF koji je generisao MyGLS"
+    ? "Originalni MyGLS PDF · A4 2×2"
     : provider === "X_EXPRESS"
-      ? "Format i podaci koje zahteva X Express"
+      ? "ERP etiketa 95×138 mm · podaci prihvaćeni kroz X Express API"
       : "Format kurirske službe";
+}
+
+function providerLabelAction(provider: string | null) {
+  return provider === "MYGLS"
+    ? "Otvori zvaničnu MyGLS adresnicu"
+    : provider === "X_EXPRESS"
+      ? "Otvori X Express ERP etiketu"
+      : `Otvori ${providerLabel(provider)} adresnicu`;
 }
 
 function formatDateTime(value: Date | null) {

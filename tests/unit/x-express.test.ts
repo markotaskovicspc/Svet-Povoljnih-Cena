@@ -15,6 +15,7 @@ import {
   splitXExpressStreet,
 } from "@/lib/x-express/payload";
 import {
+  buildXExpressLabelData,
   encodeXExpressCode128,
   renderXExpressLabelsHtml,
 } from "@/lib/x-express/labels";
@@ -446,7 +447,26 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(inferXExpressShipmentStatus("LOST", "Izgubljena")).toBe("FAILED");
   });
 
-  it("renders 95x138 labels with carrier, full recipient address, route and package mass", () => {
+  it("renders 95x138 ERP labels from the exact payload accepted by X Express", () => {
+    const labelPayload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "758bb513-499d-4ab1-8697-5e747602f222",
+      trackingCodes: ["AAA0850300001", "AAA0850300002"],
+      order: { ...order, shipCompanyName: "Petrović enterijer DOO" },
+      townId: 791113,
+      officialStreetName: "Bulevar oslobođenja",
+      packageMasses: [1.8, 2.2],
+    });
+    const labelData = buildXExpressLabelData({
+      payload: labelPayload,
+      pickupTown: {
+        name: "Beograd",
+        displayName: "Beograd - Surčin",
+        postalCode: "11271",
+      },
+      deliveryCity: "Novi Sad",
+      deliveryPostalCode: "21000",
+    });
     const html = renderXExpressLabelsHtml({
       id: "758bb513-499d-4ab1-8697-5e747602f222",
       trackingNo: "AAA0850300001",
@@ -455,6 +475,7 @@ describe("X Express codes, label and webhook envelope", () => {
       providerRouteCode: "VS-2",
       providerRouteName: null,
       rawCreateResponse: {
+        labelData,
         packages: [
           { Code: "AAA0850300001", Mass: 1.8, Content: "Stolica" },
           { Code: "AAA0850300002", Mass: 2.2, Content: "Sto" },
@@ -469,22 +490,26 @@ describe("X Express codes, label and webhook envelope", () => {
         shipLastName: "Petrović",
         shipCompanyName: "Petrović enterijer DOO",
         shipPhone: "0642223344",
-        shipStreet: "Bulevar oslobođenja 10A",
-        shipCity: "Novi Sad",
-        shipPostalCode: "21000",
+        shipStreet: "Naknadno promenjena adresa 99",
+        shipCity: "Promenjen grad",
+        shipPostalCode: "99999",
         notes: "Pozvati",
         items: [{ name: "Stolica", qty: 1 }],
       },
     });
     expect(html).toContain("width: 95mm; height: 138mm");
-    expect(html).toContain("X EXPRESS DOO BEOGRAD");
+    expect(html).toContain("X EXPRESS · ERP TRANSPORTNA ETIKETA");
+    expect(html).toContain("X Express ne vraća PDF adresnicu kroz API");
+    expect(html).toContain("Vojvođanska 401, 11271 Beograd - Surčin");
     expect(html).toContain("Petrović enterijer DOO");
     expect(html).toContain("Bulevar oslobođenja 10A");
+    expect(html).not.toContain("Naknadno promenjena adresa 99");
     expect(html).toContain("VS-2");
     expect(html).toContain("1/2");
     expect(html).toContain("2/2");
     expect(html).toContain("1,8 kg");
     expect(html).toContain("2,2 kg");
+    expect(html).toContain("12.346 RSD");
   });
 
   it("requires exact webhook authentication, contract and schema", () => {

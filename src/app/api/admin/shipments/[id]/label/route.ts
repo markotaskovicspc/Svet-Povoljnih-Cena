@@ -39,12 +39,25 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
   if (shipment.provider === X_EXPRESS_PROVIDER) {
+    if (shipment.status === "FAILED" || !shipment.providerShipmentId || !shipment.trackingNo) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "x_express_label_unavailable",
+          message: "X Express etiketa je dostupna tek nakon uspešno prihvaćenog API naloga.",
+        },
+        { status: 409 },
+      );
+    }
     const html = renderXExpressLabelsHtml(shipment);
     return new NextResponse(html, {
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "content-disposition": `inline; filename="x-express-${shipment.trackingNo ?? id}.html"`,
+        "content-disposition": `inline; filename="x-express-erp-${shipment.trackingNo}.html"`,
         "cache-control": "private, no-store",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "x-courier-label-source": "erp-x-express-api-data",
       },
     });
   }
@@ -58,6 +71,8 @@ export async function GET(
       "content-type": shipment.labelMimeType ?? "application/pdf",
       "content-disposition": `inline; filename="mygls-${shipment.trackingNo ?? id}.pdf"`,
       "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+      "x-courier-label-source": "mygls-provider-pdf",
     },
   });
 }

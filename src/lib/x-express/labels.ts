@@ -4,6 +4,7 @@ import { Prisma, type PaymentMethod } from "@prisma/client";
 import { num } from "@/lib/api/_helpers";
 import { formatDateTime, formatRsd } from "@/lib/format";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import type { XExpressCreateOrderPayload } from "./types";
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312",
@@ -47,6 +48,73 @@ type XExpressLabelShipment = {
   };
 };
 
+export type XExpressLabelData = {
+  version: 1;
+  source: "X_EXPRESS_API_PAYLOAD";
+  reference: string;
+  sender: {
+    name: string;
+    contactName: string;
+    phone: string;
+    streetName: string;
+    streetNumber: string;
+    city: string;
+    postalCode: string;
+  };
+  recipient: {
+    name: string;
+    phone: string;
+    streetName: string;
+    streetNumber: string;
+    city: string;
+    postalCode: string;
+  };
+  content: string;
+  servicePayerId: number;
+  serviceTypeId: number;
+  codAmount: number;
+};
+
+export function buildXExpressLabelData(args: {
+  payload: XExpressCreateOrderPayload;
+  pickupTown?: { name: string; displayName?: string | null; postalCode?: string | null } | null;
+  deliveryCity: string;
+  deliveryPostalCode: string;
+}): XExpressLabelData {
+  const pickup = args.payload.Waypoints.find((waypoint) => waypoint.WaypointType === "PICKUP");
+  const delivery = args.payload.Waypoints.find((waypoint) => waypoint.WaypointType === "DELIVERY");
+  if (!pickup || !delivery) {
+    throw new Error("X Express API zahtev nema pickup i delivery podatke za etiketu.");
+  }
+  const codAmount = args.payload.Options?.find((option) => option.OptionTypeId === 2)?.Data.Amount ?? 0;
+  return {
+    version: 1,
+    source: "X_EXPRESS_API_PAYLOAD",
+    reference: args.payload.Reference,
+    sender: {
+      name: args.payload.Sender.Name,
+      contactName: pickup.Contact.Name,
+      phone: pickup.Contact.Phone,
+      streetName: pickup.Address.StreetName,
+      streetNumber: pickup.Address.StreetNumber,
+      city: args.pickupTown?.displayName || args.pickupTown?.name || `Mesto ${pickup.Address.TownId}`,
+      postalCode: args.pickupTown?.postalCode || "",
+    },
+    recipient: {
+      name: args.payload.Recipient.Name,
+      phone: args.payload.Recipient.Phone,
+      streetName: delivery.Address.StreetName,
+      streetNumber: delivery.Address.StreetNumber,
+      city: args.deliveryCity,
+      postalCode: args.deliveryPostalCode,
+    },
+    content: args.payload.Content,
+    servicePayerId: args.payload.ServicePayerId,
+    serviceTypeId: args.payload.TypeId,
+    codAmount,
+  };
+}
+
 export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
   const trackingCodes = readTrackingCodes(shipment);
   const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
@@ -63,9 +131,10 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
     @page { size: A4; margin: 9mm; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f5f5f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
+    .screen-note { max-width: 195mm; margin: 5mm auto; border: 1px solid #111; background: #fff; padding: 3mm; font-size: 12px; line-height: 1.35; }
     .sheet { display: grid; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; gap: 6mm 5mm; align-items: start; justify-content: center; padding: 0; }
     .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; display: flex; flex-direction: column; }
-    .topline { text-align: center; font-size: 7px; line-height: 1.1; font-weight: 700; margin-bottom: 1.5mm; }
+    .topline { border: 1.5px solid #000; padding: 1.2mm; text-align: center; font-size: 8px; line-height: 1.1; font-weight: 800; margin-bottom: 1.5mm; letter-spacing: .04em; }
     .sender { border: 1px solid #ddd; padding: 1.5mm; min-height: 14mm; font-size: 8px; line-height: 1.08; overflow-wrap: anywhere; }
     .barcode { margin: 2mm 0 1mm; text-align: center; }
     .barcode svg { width: 100%; height: 21mm; display: block; }
@@ -77,11 +146,12 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
     .pkg { font-size: 28px; line-height: 1; font-weight: 900; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 2.5mm; font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; }
     .note { margin-top: 2mm; font-size: 8.5px; line-height: 1.15; white-space: pre-wrap; }
-    .stamp { margin-top: auto; text-align: center; font-size: 8px; line-height: 1; font-weight: 700; }
-    @media print { body { background: white; } .sheet { gap: 0; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; } .label { break-inside: avoid; } }
+    .stamp { margin-top: auto; display: flex; justify-content: space-between; gap: 2mm; border-top: 1px solid #000; padding-top: 1.2mm; font-size: 7px; line-height: 1.1; font-weight: 700; }
+    @media print { body { background: white; } .screen-note { display: none; } .sheet { gap: 0; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; } .label { break-inside: avoid; } }
   </style>
 </head>
 <body>
+  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> Ove transportne etikete generiše ERP isključivo iz podataka koje je X Express prihvatio pri kreiranju naloga. Ne menjajte podatke ručno posle kreiranja pošiljke.</aside>
   <main class="sheet">
     ${codes.map((code, index) => renderLabel(shipment, code, index + 1, count)).join("")}
   </main>
@@ -96,13 +166,17 @@ function renderLabel(
   count: number,
 ) {
   const order = shipment.order;
+  const labelData = readLabelData(shipment.rawCreateResponse);
   const recipientName =
-    order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`.trim();
+    labelData?.recipient.name ||
+    order.shipCompanyName ||
+    `${order.shipFirstName} ${order.shipLastName}`.trim();
   const cod = isCod(order.paymentMethod);
   const route = shipment.providerRouteCode ?? shipment.providerRouteName ?? "REON";
   const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);
   const content =
     packageData?.content ??
+    labelData?.content ??
     (order.items
       .map((item) => item.name)
       .filter(Boolean)
@@ -110,20 +184,69 @@ function renderLabel(
       .join(", ")
       .slice(0, 80) || "Roba");
   const note = truncateLabelText(order.notes?.trim() || "", 120);
+  const sender = labelData?.sender;
+  const recipient = labelData?.recipient;
+  const senderAddress = sender
+    ? `${sender.streetName} ${sender.streetNumber}, ${joinPostalCity(sender.postalCode, sender.city)}`
+    : MERCHANT_LEGAL_INFO.shortAddress;
+  const recipientAddress = recipient
+    ? `${recipient.streetName} ${recipient.streetNumber}`
+    : order.shipStreet;
+  const recipientPostalCity = recipient
+    ? joinPostalCity(recipient.postalCode, recipient.city)
+    : `${order.shipPostalCode} ${order.shipCity}`;
+  const codAmount = labelData?.codAmount ?? (cod ? num(order.total) : 0);
+  const reference = labelData?.reference ?? shipment.id;
+  const payer = labelData ? `ID ${labelData.servicePayerId}` : "nalogodavac";
+  const serviceType = labelData ? `ID ${labelData.serviceTypeId}` : "—";
   return `<section class="label">
-    <div class="topline">X EXPRESS DOO BEOGRAD · Đorđa Ognjanovića 16, Beograd · 011 443 44 44</div>
-    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
+    <div class="topline">X EXPRESS · ERP TRANSPORTNA ETIKETA</div>
+    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(sender?.name ?? MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(senderAddress)}<br />Kontakt: ${escapeHtml(sender?.contactName ?? MERCHANT_LEGAL_INFO.name)} · ${escapeHtml(sender?.phone ?? MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
-    <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)},<br />${escapeHtml(order.shipStreet)}<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>
+    <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)}<br />${escapeHtml(recipientAddress)}<br />${escapeHtml(recipientPostalCity)}<br />${escapeHtml(recipient?.phone ?? order.shipPhone)}</strong></div>
     <div class="route"><span class="route-code">${escapeHtml(route)}</span><span class="pkg">${index}/${count}</span></div>
     <div class="meta">
-      <div><strong>Referenca:</strong> ${escapeHtml(shipment.id)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
-      <div><strong>Uslugu plaća:</strong> nalogodavac - virman<br /><strong>Otkupnina:</strong> ${cod ? escapeHtml(formatRsd(num(order.total))) : "0 RSD"}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
+      <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
+      <div><strong>Uslugu plaća:</strong> ${escapeHtml(payer)}<br /><strong>Vrsta usluge:</strong> ${escapeHtml(serviceType)}<br /><strong>Otkupnina:</strong> ${escapeHtml(formatRsd(codAmount))}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
     </div>
     <div class="note"><strong>Napomena:</strong><br />${escapeHtml(note)}</div>
-    <div class="stamp">vreme štampe: ${escapeHtml(formatDateTime(new Date()))}</div>
+    <div class="stamp"><span>Izvor: X Express API podaci</span><span>štampa: ${escapeHtml(formatDateTime(new Date()))}</span></div>
   </section>`;
+}
+
+function readLabelData(raw: Prisma.JsonValue | null): XExpressLabelData | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const value = raw.labelData;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const sender = value.sender;
+  const recipient = value.recipient;
+  if (
+    value.version !== 1 ||
+    value.source !== "X_EXPRESS_API_PAYLOAD" ||
+    typeof value.reference !== "string" ||
+    !isLabelParty(sender, true) ||
+    !isLabelParty(recipient, false) ||
+    typeof value.content !== "string" ||
+    typeof value.servicePayerId !== "number" ||
+    typeof value.serviceTypeId !== "number" ||
+    typeof value.codAmount !== "number"
+  ) {
+    return null;
+  }
+  return value as XExpressLabelData;
+}
+
+function isLabelParty(value: unknown, sender: boolean) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const required = ["name", "phone", "streetName", "streetNumber", "city", "postalCode"];
+  if (sender) required.push("contactName");
+  return required.every((key) => typeof record[key] === "string");
+}
+
+function joinPostalCity(postalCode: string, city: string) {
+  return [postalCode.trim(), city.trim()].filter(Boolean).join(" ");
 }
 
 function readTrackingCodes(shipment: XExpressLabelShipment) {

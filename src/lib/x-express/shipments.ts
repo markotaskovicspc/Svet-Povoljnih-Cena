@@ -20,6 +20,7 @@ import {
   buildXExpressCreateOrderPayload,
   isXExpressCashOnDelivery,
 } from "./payload";
+import { buildXExpressLabelData } from "./labels";
 import {
   normalizeOrderItemIds,
   sameShipmentAssignment,
@@ -193,6 +194,12 @@ export async function createXExpressShipmentForOrder(
         select: { name: true },
       })
     : null;
+  const pickupTown = cfg.pickup.townId
+    ? await db.xExpressTown.findUnique({
+        where: { id: cfg.pickup.townId },
+        select: { name: true, displayName: true, postalCode: true },
+      })
+    : null;
 
   try {
     const townId = order.shipXExpressTownId ?? Number(location?.code);
@@ -226,6 +233,12 @@ export async function createXExpressShipmentForOrder(
       createOrder: providerResult.raw,
       reference: shipmentId,
       packages: payload.Packages,
+      labelData: buildXExpressLabelData({
+        payload,
+        pickupTown,
+        deliveryCity: location?.name ?? order.shipCity,
+        deliveryPostalCode: location?.postalCode ?? order.shipPostalCode,
+      }),
     }, {
       orderItemIds: assignmentOrderItemIds,
       codAmount,
