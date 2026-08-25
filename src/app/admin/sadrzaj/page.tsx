@@ -28,6 +28,11 @@ function statusClass(status: string) {
 const FUNCTIONAL_PUBLIC_PAGES = [
   { title: "Kontakt", slug: "kontakt", manageHref: null },
   { title: "Servis", slug: "servis", manageHref: null },
+  {
+    title: "Reklamacije",
+    slug: "reklamacije",
+    manageHref: "/admin/erp/reklamacije-dnevnik",
+  },
   { title: "Komentari", slug: "komentari", manageHref: "/admin/komentari" },
   {
     title: "Podešavanja kolačića",

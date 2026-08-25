@@ -24,6 +24,12 @@ import {
   deliveryWindowsSchema,
   getDeliveryWindows,
 } from "@/lib/delivery-windows";
+import {
+  DELIVERY_TARIFF_SETTING_KEY,
+  deliveryTariffSettingsSchema,
+  getDeliveryTariffSettings,
+  type DeliveryTariffSettings,
+} from "@/lib/delivery-tariff-settings";
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 
 export const dynamic = "force-dynamic";
@@ -32,24 +38,62 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const ruleSchema = z.object({
-  id: z.string().optional().nullable(),
-  scope: z.nativeEnum(DeliveryScope).default("GLOBAL"),
-  categoryId: z.string().optional().nullable(),
-  productId: z.string().optional().nullable(),
-  cityId: z.string().optional().nullable(),
-  courierPrice: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
-  truckPrice: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
-  assemblyPrice: z
-    .union([z.coerce.number().nonnegative(), z.literal("").transform(() => null)])
-    .nullable()
-    .optional(),
+const optionalDeliveryPriceSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? null : value,
+  z.coerce.number().nonnegative().nullable().optional(),
+);
+
+const ruleSchema = z
+  .object({
+    id: z.string().optional().nullable(),
+    scope: z.nativeEnum(DeliveryScope).default("GLOBAL"),
+    categoryId: z.string().optional().nullable(),
+    productId: z.string().optional().nullable(),
+    cityId: z.string().optional().nullable(),
+    courierPrice: optionalDeliveryPriceSchema,
+    truckPrice: optionalDeliveryPriceSchema,
+    assemblyPrice: optionalDeliveryPriceSchema,
+  })
+  .superRefine((value, context) => {
+    if (value.scope === "CATEGORY" && !value.categoryId) {
+      context.addIssue({
+        code: "custom",
+        path: ["categoryId"],
+        message: "Izaberite kategoriju.",
+      });
+    }
+    if (value.scope === "PRODUCT" && !value.productId) {
+      context.addIssue({
+        code: "custom",
+        path: ["productId"],
+        message: "Unesite ID proizvoda.",
+      });
+    }
+    if (
+      value.courierPrice == null &&
+      value.truckPrice == null &&
+      value.assemblyPrice == null
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["truckPrice"],
+        message: "Unesite najmanje jednu cenu.",
+      });
+    }
+  });
+
+const citySchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Unesite naziv grada.")
+    .max(120, "Naziv grada je predugačak."),
+  postalCode: z
+    .string()
+    .trim()
+    .regex(/^\d{5}$/, "Poštanski broj mora imati 5 cifara."),
+  truckEnabled: z.boolean(),
 });
 
 async function updateDeliveryWindows(
@@ -103,6 +147,67 @@ async function updateDeliveryWindows(
   )(formData);
 }
 
+async function updateDeliveryTariff(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "delivery.tariff.update",
+      entity: "AdminSetting",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = deliveryTariffSettingsSchema.safeParse({
+        category1: tariffCategoryFormValues(actionData, "category1"),
+        category2: tariffCategoryFormValues(actionData, "category2"),
+      });
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error:
+            parsed.error.issues[0]?.message ??
+            "Cene kurirske dostave nisu ispravne.",
+        };
+      }
+
+      await db.adminSetting.upsert({
+        where: { key: DELIVERY_TARIFF_SETTING_KEY },
+        create: {
+          key: DELIVERY_TARIFF_SETTING_KEY,
+          value: parsed.data,
+          updatedBy: actorId,
+        },
+        update: { value: parsed.data, updatedBy: actorId },
+      });
+      updateTag(DELIVERY_TARIFF_SETTING_KEY);
+      revalidatePath("/admin/dostava");
+      revalidatePath("/checkout/podaci");
+      return {
+        ok: true as const,
+        entityId: DELIVERY_TARIFF_SETTING_KEY,
+        diff: parsed.data,
+        message: "Kurirski cenovnik je sačuvan.",
+      };
+    },
+  )(formData);
+}
+
+function tariffCategoryFormValues(
+  formData: FormData,
+  prefix: "category1" | "category2",
+) {
+  return {
+    upTo5Kg: formData.get(`${prefix}UpTo5Kg`),
+    upTo10Kg: formData.get(`${prefix}UpTo10Kg`),
+    upTo20Kg: formData.get(`${prefix}UpTo20Kg`),
+    upTo30Kg: formData.get(`${prefix}UpTo30Kg`),
+    upTo50Kg: formData.get(`${prefix}UpTo50Kg`),
+  };
+}
+
 async function upsertRule(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -121,8 +226,21 @@ async function upsertRule(_state: AdminActionState, formData: FormData) {
           truckPrice: d.truckPrice ?? null,
           assemblyPrice: d.assemblyPrice ?? null,
         };
-        const saved = d.id
-          ? await db.deliveryPriceRule.update({ where: { id: d.id }, data })
+        const existing = d.id
+          ? null
+          : await db.deliveryPriceRule.findFirst({
+              where: {
+                scope: data.scope,
+                categoryId: data.categoryId,
+                productId: data.productId,
+                cityId: data.cityId,
+              },
+              orderBy: { updatedAt: "desc" },
+              select: { id: true },
+            });
+        const ruleId = d.id ?? existing?.id;
+        const saved = ruleId
+          ? await db.deliveryPriceRule.update({ where: { id: ruleId }, data })
           : await db.deliveryPriceRule.create({ data });
         revalidatePath("/admin/dostava");
         revalidatePath("/checkout/podaci");
@@ -130,9 +248,58 @@ async function upsertRule(_state: AdminActionState, formData: FormData) {
           ok: true as const,
           entityId: saved.id,
           diff: data,
-          message: "Pravilo dostave je sačuvano.",
+          message: "Cena dostave je sačuvana.",
         };
       },
+  )(formData);
+}
+
+async function createCity(_state: AdminActionState, formData: FormData) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "delivery.city.create",
+      entity: "DeliveryCity",
+    },
+    async (_actorId, actionData: FormData) => {
+      const parsed = citySchema.safeParse({
+        name: actionData.get("name"),
+        postalCode: actionData.get("postalCode"),
+        truckEnabled: actionData.get("truckEnabled") === "1",
+      });
+      if (!parsed.success) {
+        return {
+          ok: false as const,
+          error:
+            parsed.error.issues[0]?.message ??
+            "Podaci o gradu nisu ispravni.",
+        };
+      }
+
+      const duplicate = await db.deliveryCity.findFirst({
+        where: { name: { equals: parsed.data.name, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        return {
+          ok: false as const,
+          error:
+            "Grad već postoji. Dostupnost kamiona promenite u tabeli ispod.",
+        };
+      }
+
+      const city = await db.deliveryCity.create({ data: parsed.data });
+      revalidatePath("/admin/dostava");
+      revalidatePath("/checkout/podaci");
+      return {
+        ok: true as const,
+        entityId: city.id,
+        diff: parsed.data,
+        message: "Grad je dodat u pravila dostave.",
+      };
+    },
   )(formData);
 }
 
@@ -248,7 +415,10 @@ export default async function DeliveryPage() {
     getPickupPostingAvailability("X_EXPRESS"),
     getPickupPostingAvailability("MYGLS"),
   ]);
-  const deliveryWindows = await getDeliveryWindows();
+  const [deliveryWindows, deliveryTariffSettings] = await Promise.all([
+    getDeliveryWindows(),
+    getDeliveryTariffSettings(),
+  ]);
 
   return (
     <>
@@ -282,6 +452,32 @@ export default async function DeliveryPage() {
           </AdminActionForm>
           <p className="mt-3 text-xs text-ink-500">
             Kupcu se prikazuje samo rok isporuke, bez oznake dobavljača i bez tačne dobavljačke količine.
+          </p>
+        </Card>
+        <Card>
+          <CardTitle description="Ove cene checkout primenjuje po zbirnoj težini svake kategorije. Izmena važi odmah nakon čuvanja.">
+            Kurirski cenovnik
+          </CardTitle>
+          <AdminActionForm action={updateDeliveryTariff} className="mt-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DeliveryTariffCategoryFields
+                category={1}
+                values={deliveryTariffSettings.category1}
+              />
+              <DeliveryTariffCategoryFields
+                category={2}
+                values={deliveryTariffSettings.category2}
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <SubmitButton pendingLabel="Čuvanje…">
+                Sačuvaj kurirske cene
+              </SubmitButton>
+            </div>
+          </AdminActionForm>
+          <p className="mt-3 text-xs text-ink-500">
+            Preko 50 kg checkout koristi kamionsku dostavu. Njenu cenu menjate
+            pravilom GLOBAL / Svi gradovi u odeljku ispod.
           </p>
         </Card>
         <Card>
@@ -326,9 +522,18 @@ export default async function DeliveryPage() {
                         ? `${r.product?.sku ?? "—"}`
                         : "—",
                   city: r.city?.name ?? "Svi",
-                  courier: r.courierPrice ? formatRsd(num(r.courierPrice)) : "—",
-                  truck: r.truckPrice ? formatRsd(num(r.truckPrice)) : "—",
-                  assembly: r.assemblyPrice ? formatRsd(num(r.assemblyPrice)) : "—",
+                  courier:
+                    r.courierPrice != null
+                      ? formatRsd(num(r.courierPrice))
+                      : "—",
+                  truck:
+                    r.truckPrice != null
+                      ? formatRsd(num(r.truckPrice))
+                      : "—",
+                  assembly:
+                    r.assemblyPrice != null
+                      ? formatRsd(num(r.assemblyPrice))
+                      : "—",
                   actions: (
                     <form action={removeRule}>
                       <input type="hidden" name="id" value={r.id} />
@@ -343,7 +548,9 @@ export default async function DeliveryPage() {
             />
           </Card>
           <Card>
-            <CardTitle>Novo pravilo</CardTitle>
+            <CardTitle description="Ako pravilo za isti opseg, cilj i grad već postoji, njegova cena će biti promenjena.">
+              Dodaj ili promeni cenu
+            </CardTitle>
             <AdminActionForm action={upsertRule} className="space-y-3">
               <Field label="Opseg">
                 <select
@@ -386,7 +593,7 @@ export default async function DeliveryPage() {
                 </select>
               </Field>
               <div className="grid grid-cols-3 gap-2">
-                <Field label="Kurir">
+                <Field label="Kurir (rezervna cena)">
                   <Input name="courierPrice" type="number" min={0} />
                 </Field>
                 <Field label="Kamion">
@@ -397,7 +604,7 @@ export default async function DeliveryPage() {
                 </Field>
               </div>
               <div className="flex justify-end">
-                <SubmitButton>Dodaj</SubmitButton>
+                <SubmitButton>Sačuvaj cenu</SubmitButton>
               </div>
             </AdminActionForm>
           </Card>
@@ -458,39 +665,75 @@ export default async function DeliveryPage() {
         </div>
 
         <Card>
-          <CardTitle description="Toggle za kamionsku isporuku po gradu.">
-            Gradovi
+          <CardTitle description="Dodajte grad, a zatim uključite ili isključite kamionsku isporuku bez izmene koda.">
+            Gradovi za kamionsku isporuku
           </CardTitle>
-          <DataTable
-            columns={[
-              { key: "name", label: "Grad" },
-              { key: "postal", label: "Poštanski" },
-              { key: "truck", label: "Kamion" },
-              { key: "actions", label: "" },
-            ]}
-            rows={cities.map((c) => ({
-              id: c.id,
-              cells: {
-                name: c.name,
-                postal: c.postalCode ?? "—",
-                truck: c.truckEnabled ? "✓" : "—",
-                actions: (
-                  <AdminActionForm action={toggleTruck}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <input
-                      type="hidden"
-                      name="enabled"
-                      value={c.truckEnabled ? "0" : "1"}
-                    />
-                    <SubmitButton variant="outline" size="xs">
-                      {c.truckEnabled ? "Isključi" : "Uključi"} kamion
-                    </SubmitButton>
-                  </AdminActionForm>
-                ),
-              },
-            }))}
-            empty="Nema gradova u bazi."
-          />
+          <AdminActionForm
+            action={createCity}
+            className="mt-4 flex flex-wrap items-end gap-3"
+          >
+            <Field label="Grad">
+              <Input
+                name="name"
+                placeholder="npr. Sombor"
+                maxLength={120}
+                required
+              />
+            </Field>
+            <Field label="Poštanski broj">
+              <Input
+                name="postalCode"
+                inputMode="numeric"
+                pattern="[0-9]{5}"
+                placeholder="25000"
+                maxLength={5}
+                required
+              />
+            </Field>
+            <label className="flex h-8 items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                name="truckEnabled"
+                value="1"
+                className="size-4 rounded border-input"
+                defaultChecked
+              />
+              Odmah uključi kamion
+            </label>
+            <SubmitButton pendingLabel="Dodavanje…">Dodaj grad</SubmitButton>
+          </AdminActionForm>
+          <div className="mt-5">
+            <DataTable
+              columns={[
+                { key: "name", label: "Grad" },
+                { key: "postal", label: "Poštanski" },
+                { key: "truck", label: "Kamion" },
+                { key: "actions", label: "" },
+              ]}
+              rows={cities.map((c) => ({
+                id: c.id,
+                cells: {
+                  name: c.name,
+                  postal: c.postalCode ?? "—",
+                  truck: c.truckEnabled ? "✓" : "—",
+                  actions: (
+                    <AdminActionForm action={toggleTruck}>
+                      <input type="hidden" name="id" value={c.id} />
+                      <input
+                        type="hidden"
+                        name="enabled"
+                        value={c.truckEnabled ? "0" : "1"}
+                      />
+                      <SubmitButton variant="outline" size="xs">
+                        {c.truckEnabled ? "Isključi" : "Uključi"} kamion
+                      </SubmitButton>
+                    </AdminActionForm>
+                  ),
+                },
+              }))}
+              empty="Nema gradova u bazi."
+            />
+          </div>
         </Card>
       </div>
     </>
@@ -504,6 +747,46 @@ function ProviderStatus({ label }: { label: string }) {
     >
       {label}
     </span>
+  );
+}
+
+const DELIVERY_TARIFF_FIELDS = [
+  { key: "upTo5Kg", suffix: "UpTo5Kg", label: "Do 5 kg" },
+  { key: "upTo10Kg", suffix: "UpTo10Kg", label: "Do 10 kg" },
+  { key: "upTo20Kg", suffix: "UpTo20Kg", label: "Do 20 kg" },
+  { key: "upTo30Kg", suffix: "UpTo30Kg", label: "Do 30 kg" },
+  { key: "upTo50Kg", suffix: "UpTo50Kg", label: "Do 50 kg" },
+] as const;
+
+function DeliveryTariffCategoryFields({
+  category,
+  values,
+}: {
+  category: 1 | 2;
+  values: DeliveryTariffSettings["category1"];
+}) {
+  const prefix = category === 1 ? "category1" : "category2";
+  return (
+    <fieldset className="rounded-lg border border-border p-4">
+      <legend className="px-1 text-sm font-semibold">
+        Kategorija {category === 1 ? "I" : "II"}
+      </legend>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {DELIVERY_TARIFF_FIELDS.map((field) => (
+          <Field key={field.key} label={field.label}>
+            <Input
+              name={`${prefix}${field.suffix}`}
+              type="number"
+              min={0}
+              max={1_000_000}
+              step={1}
+              defaultValue={values[field.key]}
+              required
+            />
+          </Field>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

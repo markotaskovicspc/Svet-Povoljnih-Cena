@@ -23,6 +23,7 @@ import type {
 
 type ContentPageEditorValues = {
   id?: string;
+  revisionId: string | null;
   slug: string;
   kind: "SYSTEM" | "CUSTOM";
   template: "STANDARD" | "FAQ";
@@ -60,6 +61,24 @@ export function ContentPageEditor({
   values: ContentPageEditorValues;
   previewHref?: string;
 }) {
+  return (
+    <AdminActionForm action={action} className="space-y-6">
+      <ContentPageEditorFields
+        key={values.revisionId ?? `new-${values.id ?? "page"}`}
+        values={values}
+        previewHref={previewHref}
+      />
+    </AdminActionForm>
+  );
+}
+
+function ContentPageEditorFields({
+  values,
+  previewHref,
+}: {
+  values: ContentPageEditorValues;
+  previewHref?: string;
+}) {
   const clientReady = useClientReady();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [slug, setSlug] = useState(values.slug);
@@ -72,6 +91,15 @@ export function ContentPageEditor({
   const [seoDescription, setSeoDescription] = useState(values.seoDescription ?? "");
   const [widgetData, setWidgetData] = useState(values.widgetData);
   const [footerVisible, setFooterVisible] = useState(values.footerVisible);
+  const [footerLabel, setFooterLabel] = useState(
+    values.footerLabel ?? values.title.replace(/[.]$/, ""),
+  );
+  const [footerColumn, setFooterColumn] = useState<"COMPANY" | "TERMS">(
+    values.footerColumn ?? "COMPANY",
+  );
+  const [footerOrder, setFooterOrder] = useState(
+    String(values.footerOrder ?? 100),
+  );
   const issues = useMemo(() => validateCmsMarkdown(bodyMarkdown), [bodyMarkdown]);
 
   const insertMarkdown = (before: string, after = "", placeholder = "tekst") => {
@@ -106,8 +134,7 @@ export function ContentPageEditor({
   };
 
   return (
-    <AdminActionForm action={action} className="space-y-6">
-      <fieldset className="contents" disabled={!clientReady}>
+    <fieldset className="contents" disabled={!clientReady}>
       {values.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.82fr)]">
         <div className="space-y-6">
@@ -332,12 +359,19 @@ export function ContentPageEditor({
             {footerVisible ? (
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
                 <Field label="Naziv linka">
-                  <Input name="footerLabel" defaultValue={values.footerLabel ?? values.title.replace(/[.]$/, "")} />
+                  <Input
+                    name="footerLabel"
+                    value={footerLabel}
+                    onChange={(event) => setFooterLabel(event.target.value)}
+                  />
                 </Field>
                 <Field label="Kolona">
                   <select
                     name="footerColumn"
-                    defaultValue={values.footerColumn ?? "COMPANY"}
+                    value={footerColumn}
+                    onChange={(event) =>
+                      setFooterColumn(event.target.value as "COMPANY" | "TERMS")
+                    }
                     className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                   >
                     {CONTENT_FOOTER_COLUMNS.map((column) => (
@@ -346,7 +380,14 @@ export function ContentPageEditor({
                   </select>
                 </Field>
                 <Field label="Redosled">
-                  <Input name="footerOrder" type="number" min={0} max={9999} defaultValue={values.footerOrder ?? 100} />
+                  <Input
+                    name="footerOrder"
+                    type="number"
+                    min={0}
+                    max={9999}
+                    value={footerOrder}
+                    onChange={(event) => setFooterOrder(event.target.value)}
+                  />
                 </Field>
               </div>
             ) : null}
@@ -405,7 +446,6 @@ export function ContentPageEditor({
           Čuvanje nacrta ne menja javni sajt.
         </p>
       </div>
-      </fieldset>
-    </AdminActionForm>
+    </fieldset>
   );
 }

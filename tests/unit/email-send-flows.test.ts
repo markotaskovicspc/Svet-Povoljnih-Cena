@@ -137,10 +137,7 @@ describe("all transactional Resend send flows", () => {
     expect(input).toMatchObject({
       kind: "order_confirmation",
       to: "delivered@resend.dev",
-      bcc: [
-        "office@svetpovoljnihcena.rs",
-        "porudzbine@svetpovoljnihcena.rs",
-      ],
+      bcc: "porudzbine@svetpovoljnihcena.rs",
       idempotencyKey: `order-conf:${order.id}`,
     });
     expect(input.html).toContain("Test proizvod");

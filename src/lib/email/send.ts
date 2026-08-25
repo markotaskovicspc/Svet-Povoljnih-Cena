@@ -41,25 +41,6 @@ import { buildEmailUnsubscribeUrl } from "./unsubscribe";
 const NULL: DispatchResult = { ok: true, id: "noop", provider: "none" };
 const ORDER_CONFIRMATION_BCC = "porudzbine@svetpovoljnihcena.rs";
 
-function orderConfirmationBcc(configuredBcc: string | null): string[] {
-  const recipients = configuredBcc
-    ? configuredBcc
-        .split(/[,;]/)
-        .map((address) => address.trim())
-        .filter(Boolean)
-    : [];
-
-  if (
-    !recipients.some(
-      (address) => address.toLowerCase() === ORDER_CONFIRMATION_BCC,
-    )
-  ) {
-    recipients.push(ORDER_CONFIRMATION_BCC);
-  }
-
-  return recipients;
-}
-
 export async function sendOrderConfirmation(args: {
   order: Order;
   to: string;
@@ -114,7 +95,10 @@ export async function sendOrderConfirmation(args: {
     subject: `Porudžbina ${args.order.id} — potvrda`,
     html,
     text,
-    bcc: orderConfirmationBcc(cfg.orderBcc),
+    // Confirmation copies belong only in the dedicated orders inbox. The
+    // generic order BCC can be an alias for the same mailbox, which would make
+    // the provider deliver two copies of one message.
+    bcc: ORDER_CONFIRMATION_BCC,
     attachments,
     tags: { kind: "order_confirmation", order: args.order.id },
     metadata: {

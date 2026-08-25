@@ -25,6 +25,7 @@ export default async function NewContentPage() {
         <ContentPageEditor
           action={saveContentPageAction}
           values={{
+            revisionId: null,
             slug: "",
             kind: "CUSTOM",
             template: "STANDARD",

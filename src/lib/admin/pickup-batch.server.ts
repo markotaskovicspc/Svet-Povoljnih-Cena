@@ -8,6 +8,7 @@ import {
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
+  hasKnownMyGlsLimitViolation,
   requireCompletePhysicalPackages,
   requireCompleteMyGlsPackages,
   type PhysicalPackage,
@@ -285,7 +286,7 @@ export async function loadEligibleOrders(
         skippedOtherProviderCount: 0,
         skippedMixedCount: 0,
         skippedInvalidDimensionsCount: 0,
-        skippedOversizedCount: 0,
+        loadedMyGlsLimitViolationCount: 0,
       };
     }
 
@@ -325,7 +326,7 @@ export async function loadEligibleOrders(
     let skippedOtherProviderCount = 0;
     let skippedMixedCount = 0;
     let skippedInvalidDimensionsCount = 0;
-    let skippedOversizedCount = 0;
+    let loadedMyGlsLimitViolationCount = 0;
     const packages: Array<PhysicalPackage & { orderId: string }> = [];
     const loadedOrderIds: string[] = [];
     for (const orderId of orderIds) {
@@ -375,8 +376,7 @@ export async function loadEligibleOrders(
         provider === "MYGLS" &&
         orderPackages.some((pkg) => hasKnownMyGlsLimitViolation(pkg))
       ) {
-        skippedOversizedCount += 1;
-        continue;
+        loadedMyGlsLimitViolationCount += 1;
       }
       loadedOrderIds.push(orderId);
       packages.push(...orderPackages.map((pkg) => ({ ...pkg, orderId })));
@@ -389,7 +389,7 @@ export async function loadEligibleOrders(
         skippedOtherProviderCount,
         skippedMixedCount,
         skippedInvalidDimensionsCount,
-        skippedOversizedCount,
+        loadedMyGlsLimitViolationCount,
       };
     }
     await tx.pickupBatchLine.createMany({
@@ -423,7 +423,7 @@ export async function loadEligibleOrders(
       skippedOtherProviderCount,
       skippedMixedCount,
       skippedInvalidDimensionsCount,
-      skippedOversizedCount,
+      loadedMyGlsLimitViolationCount,
     };
   }, TRANSACTION_OPTIONS);
 }
@@ -974,22 +974,6 @@ function normalizeProvider(value: string | null | undefined): SmallParcelProvide
 function numberOrNull(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
-}
-
-function hasKnownMyGlsLimitViolation(pkg: PhysicalPackage) {
-  const weightKg = numberOrNull(pkg.weightKg);
-  const dimensions = [
-    numberOrNull(pkg.widthCm),
-    numberOrNull(pkg.depthCm),
-    numberOrNull(pkg.heightCm),
-  ];
-  if (weightKg != null && weightKg > 40) return true;
-  if (dimensions.some((value) => value == null)) return false;
-  const complete = dimensions as number[];
-  const longest = Math.max(...complete);
-  const girth =
-    longest + 2 * (complete.reduce((sum, value) => sum + value, 0) - longest);
-  return longest > 200 || girth > 300;
 }
 
 function isRetryableCreateError(error: unknown) {

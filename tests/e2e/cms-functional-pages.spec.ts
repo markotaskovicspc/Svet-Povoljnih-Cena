@@ -3,24 +3,30 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient, type ContentPage } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+const FUNCTIONAL_SLUGS = [
+  "kontakt",
+  "servis",
+  "reklamacije",
+  "komentari",
+  "podesavanja-kolacica",
+] as const;
+
 test.describe("functional public page CMS acceptance", () => {
   test.skip(
     process.env.E2E_CMS_FUNCTIONAL_PAGES !== "1",
     "Set E2E_CMS_FUNCTIONAL_PAGES=1 with an isolated E2E_DATABASE_URL.",
   );
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
 
   const runId = `${Date.now()}-${process.pid}`;
   const adminEmail = `qa.functional-content.${runId}@example.invalid`;
   const adminPassword = `QaFunctional!${runId}x`;
-  const editedTitle = `QA kontakt ${runId}`;
-  const editedBody = `QA CMS sadržaj ${runId}`;
   const editedEmailLabel = `QA e-pošta ${runId}`;
   const editedEmail = `qa-${runId}@example.com`;
   const editedEmailNote = `QA napomena kontakt kartice ${runId}`;
   let db: PrismaClient;
   let adminId = "";
-  let original: ContentPage;
+  let originals: ContentPage[] = [];
 
   test.beforeAll(async () => {
     db = createDatabaseClient();
@@ -36,14 +42,15 @@ test.describe("functional public page CMS acceptance", () => {
       select: { id: true },
     });
     adminId = admin.id;
-    original = await db.contentPage.findUniqueOrThrow({
-      where: { slug: "kontakt" },
+    originals = await db.contentPage.findMany({
+      where: { slug: { in: [...FUNCTIONAL_SLUGS] } },
     });
+    expect(originals).toHaveLength(FUNCTIONAL_SLUGS.length);
   });
 
   test.afterAll(async () => {
     if (!db) return;
-    if (original) {
+    for (const original of originals) {
       await db.contentPage.update({
         where: { id: original.id },
         data: {
@@ -88,49 +95,116 @@ test.describe("functional public page CMS acceptance", () => {
   }) => {
     await login(page);
 
-    for (const slug of [
-      "kontakt",
-      "servis",
-      "komentari",
-      "podesavanja-kolacica",
-    ]) {
+    for (const slug of FUNCTIONAL_SLUGS) {
       const row = page.getByRole("row").filter({ hasText: `/${slug}` });
       await expect(row).toHaveCount(1);
       await expect(row.getByRole("link", { name: "Izmeni" })).toBeVisible();
     }
 
-    const contactRow = page.getByRole("row").filter({ hasText: "/kontakt" });
-    await contactRow.getByRole("link", { name: "Izmeni" }).click();
-    await expect(page).toHaveURL(/\/admin\/sadrzaj\/[^/?#]+$/);
-    await expect(page.getByText("Uređujete tekst i SEO funkcionalne stranice.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Arhiviraj stranicu" })).toHaveCount(0);
-    await expect(
-      page.getByRole("heading", { name: "Kontakt kartice" }),
-    ).toBeVisible();
+    for (const slug of FUNCTIONAL_SLUGS) {
+      await page.goto("/admin/sadrzaj", { waitUntil: "domcontentloaded" });
+      const row = page.getByRole("row").filter({ hasText: `/${slug}` });
+      await row.getByRole("link", { name: "Izmeni" }).click();
+      await expect(page).toHaveURL(/\/admin\/sadrzaj\/[^/?#]+$/);
+      await expect(
+        page.getByText("Uređujete tekst i SEO funkcionalne stranice."),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Arhiviraj stranicu" }),
+      ).toHaveCount(0);
 
-    await page.getByLabel("Naslov", { exact: true }).fill(editedTitle);
-    await page.locator('textarea[name="bodyMarkdown"]').fill(editedBody);
-    await page.locator('input[name="contact-email-label"]').fill(editedEmailLabel);
-    await page.locator('input[name="contact-email-value"]').fill(editedEmail);
-    await page.locator('textarea[name="contact-email-note"]').fill(editedEmailNote);
-    await page.getByRole("button", { name: "Sačuvaj nacrt" }).click();
-    await expect(page.getByText("Nacrt je sačuvan.")).toBeVisible();
+      const editedTitle = `QA ${slug} ${runId}`;
+      const editedBody = `QA CMS sadržaj ${slug} ${runId}`;
+      await page.getByLabel("Naslov", { exact: true }).fill(editedTitle);
+      await page.locator('textarea[name="bodyMarkdown"]').fill(editedBody);
 
-    page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Objavi", exact: true }).click();
-    await expect(page.getByText("Stranica je objavljena.")).toBeVisible();
+      if (slug === "kontakt") {
+        await expect(
+          page.getByRole("heading", { name: "Kontakt kartice" }),
+        ).toBeVisible();
+        await page
+          .locator('input[name="contact-email-label"]')
+          .fill(editedEmailLabel);
+        await page
+          .locator('input[name="contact-email-value"]')
+          .fill(editedEmail);
+        await page
+          .locator('textarea[name="contact-email-note"]')
+          .fill(editedEmailNote);
+      }
 
-    await page.goto("/kontakt", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { level: 1, name: editedTitle })).toBeVisible();
-    await expect(page.getByText(editedBody, { exact: true })).toBeVisible();
-    await expect(page.getByText(editedEmailLabel, { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: editedEmail })).toHaveAttribute(
-      "href",
-      `mailto:${editedEmail}`,
-    );
-    await expect(page.getByText(editedEmailNote, { exact: true })).toBeVisible();
-    await expect(page.getByText("Sedište trgovca", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Sačuvaj nacrt" }).click();
+      await expect(page.getByText("Nacrt je sačuvan.")).toBeVisible();
+
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByLabel("Naslov", { exact: true })).toHaveValue(
+        editedTitle,
+      );
+      await expect(page.locator('textarea[name="bodyMarkdown"]')).toHaveValue(
+        editedBody,
+      );
+
+      const editUrl = page.url();
+      const previewHref = await page
+        .getByRole("link", { name: "Pregledaj" })
+        .getAttribute("href");
+      expect(previewHref).toBeTruthy();
+      await page.goto(previewHref!, { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByRole("heading", { level: 1, name: editedTitle }),
+      ).toBeVisible();
+      await expect(page.getByText(editedBody, { exact: true })).toBeVisible();
+      await page.goto(editUrl, { waitUntil: "domcontentloaded" });
+
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Objavi", exact: true }).click();
+      await expect(page.getByText("Stranica je objavljena.")).toBeVisible();
+
+      await page.goto(`/${slug}`, { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByRole("heading", { level: 1, name: editedTitle }),
+      ).toBeVisible();
+      await expect(page.getByText(editedBody, { exact: true })).toBeVisible();
+      await expectFunctionalWidget(page, slug);
+    }
   });
+
+  async function expectFunctionalWidget(
+    page: Page,
+    slug: (typeof FUNCTIONAL_SLUGS)[number],
+  ) {
+    if (slug === "kontakt") {
+      await expect(page.getByText(editedEmailLabel, { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: editedEmail })).toHaveAttribute(
+        "href",
+        `mailto:${editedEmail}`,
+      );
+      await expect(page.getByText(editedEmailNote, { exact: true })).toBeVisible();
+      await expect(page.getByText("Sedište trgovca", { exact: true })).toBeVisible();
+      return;
+    }
+    if (slug === "servis") {
+      await expect(
+        page.getByRole("link", { name: "Reklamacije", exact: true }),
+      ).toBeVisible();
+      return;
+    }
+    if (slug === "reklamacije") {
+      await expect(
+        page.getByRole("button", { name: "Pošalji bezbedan link" }),
+      ).toBeVisible();
+      return;
+    }
+    if (slug === "komentari") {
+      await expect(
+        page.getByRole("button", { name: "Pošalji poruku" }),
+      ).toBeVisible();
+      return;
+    }
+    await expect(
+      page.getByRole("button", { name: "Dozvoli analitiku" }),
+    ).toBeVisible();
+  }
 
   async function login(page: Page) {
     await page.goto("/admin/prijava?callbackUrl=%2Fadmin%2Fsadrzaj", {

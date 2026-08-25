@@ -45,6 +45,28 @@ export type PackageSourceItem = {
 };
 
 /**
+ * Returns true only when the known measurements already exceed a MyGLS
+ * provider limit. Incomplete measurements are left for explicit operator
+ * entry and are not treated as a limit violation here.
+ */
+export function hasKnownMyGlsLimitViolation(pkg: PhysicalPackage) {
+  const weightKg = positiveNumber(pkg.weightKg);
+  const dimensions = [
+    positiveNumber(pkg.widthCm),
+    positiveNumber(pkg.depthCm),
+    positiveNumber(pkg.heightCm),
+  ];
+  if (weightKg != null && weightKg > MAX_MYGLS_PACKAGE_WEIGHT_KG) return true;
+  if (dimensions.some((value) => value == null)) return false;
+
+  const complete = dimensions as number[];
+  const longest = Math.max(...complete);
+  const girth =
+    longest + 2 * (complete.reduce((sum, value) => sum + value, 0) - longest);
+  return longest > MAX_MYGLS_PACKAGE_SIDE_CM || girth > MAX_MYGLS_PACKAGE_GIRTH_CM;
+}
+
+/**
  * Expands order lines into physical packages. Catalogue pack measurements are
  * copied when present; missing values intentionally remain null so an operator
  * must enter real measurements before a provider request can be sent.

@@ -44,6 +44,7 @@ export function pickupPostingBlockReason({
   pickupStartSet,
   pickupEndSet,
   completePackageCount,
+  invalidPackageCount = 0,
 }: {
   configurationIssue?: string | null;
   providerReason?: string | null;
@@ -52,6 +53,7 @@ export function pickupPostingBlockReason({
   pickupStartSet: boolean;
   pickupEndSet: boolean;
   completePackageCount: number;
+  invalidPackageCount?: number;
 }) {
   return (
     configurationIssue ??
@@ -66,7 +68,9 @@ export function pickupPostingBlockReason({
             : "Unesite kraj termina preuzimanja."
           : completePackageCount !== rowCount
             ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
-            : null)
+            : invalidPackageCount > 0
+              ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu, stranicu ili obim. Unesite stvarne transportne mere u dozvoljenim granicama."
+              : null)
   );
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   derivePhysicalPackages,
+  hasKnownMyGlsLimitViolation,
   requireCompleteMyGlsPackages,
 } from "@/lib/courier/packages";
 
@@ -78,5 +79,26 @@ describe("physical courier packages", () => {
     expect(() =>
       requireCompleteMyGlsPackages([{ ...base, widthCm: 100, depthCm: 60, heightCm: 60 }]),
     ).toThrow("300 cm");
+  });
+
+  it("recognizes known MyGLS limit violations without rejecting missing measurements", () => {
+    expect(
+      hasKnownMyGlsLimitViolation({
+        packageNo: 1,
+        weightKg: 39,
+        widthCm: 190,
+        depthCm: 120,
+        heightCm: 90,
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownMyGlsLimitViolation({
+        packageNo: 1,
+        weightKg: 10,
+        widthCm: 100,
+        depthCm: null,
+        heightCm: 40,
+      }),
+    ).toBe(false);
   });
 });

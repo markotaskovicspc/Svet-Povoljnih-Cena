@@ -25,6 +25,10 @@ import {
   calculatePublishedDeliveryTariffQuote,
   productDeliveryCategory,
 } from "@/lib/delivery-tariff";
+import {
+  deliveryTariffRatesFromSettings,
+  getDeliveryTariffSettings,
+} from "@/lib/delivery-tariff-settings";
 import { effectiveUnitPrice } from "@/lib/pricing";
 import {
   getActivePricingRules,
@@ -165,7 +169,14 @@ export async function resolveDeliveryQuote({
   const normalizedCity = normalizeCity(city);
   const skus = [...new Set(lines.map((line) => line.sku).filter(Boolean))];
 
-  const [cityCount, cityRow, products, truckCities, activePricingRules] = await Promise.all([
+  const [
+    cityCount,
+    cityRow,
+    products,
+    truckCities,
+    activePricingRules,
+    deliveryTariffSettings,
+  ] = await Promise.all([
     db.deliveryCity.count(),
     normalizedCity
       ? db.deliveryCity.findFirst({
@@ -242,6 +253,7 @@ export async function resolveDeliveryQuote({
       select: { name: true },
     }),
     getActivePricingRules(),
+    getDeliveryTariffSettings(),
   ]);
 
   const productIds = products.map((product) => product.id);
@@ -362,7 +374,10 @@ export async function resolveDeliveryQuote({
         });
   const publishedTariff =
     lines.length && publishedTariffLines.length === lines.length
-      ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, { loggedIn })
+      ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, {
+          loggedIn,
+          rates: deliveryTariffRatesFromSettings(deliveryTariffSettings),
+        })
       : null;
   const resolvedDelivery = resolveDeliveryMethodQuote({
     publishedTariff,

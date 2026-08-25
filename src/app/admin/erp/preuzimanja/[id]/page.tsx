@@ -32,6 +32,7 @@ import {
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
+import { hasKnownMyGlsLimitViolation } from "@/lib/courier/packages";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -391,6 +392,9 @@ export default async function PickupBatchPage({
         }),
     );
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
+  const invalidPackageCount = myGls
+    ? rows.filter((row) => hasKnownMyGlsLimitViolation(row)).length
+    : 0;
   const postingBlockReason = pickupPostingBlockReason({
     configurationIssue: batch.labelsCreationStartedAt
       ? batch.configurationIssue
@@ -401,6 +405,7 @@ export default async function PickupBatchPage({
     pickupStartSet: Boolean(batch.pickupDate),
     pickupEndSet: Boolean(batch.pickupWindowEnd),
     completePackageCount,
+    invalidPackageCount,
   });
   const postingReasonId = "pickup-posting-block-reason";
 
@@ -627,7 +632,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču.`}>
+            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču. MyGLS porudžbine sa kataloškim merama preko limita ostaju vidljive, ali zahtevaju unos stvarnih transportnih mera pre kreiranja adresnice.`}>
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
@@ -695,21 +700,28 @@ export default async function PickupBatchPage({
                       <td className="px-3 py-3">{display(row.color1)}</td>
                       <td className="px-3 py-3">{display(row.color2)}</td>
                       <td className="px-3 py-3">
-                        {editing ? (
-                          <AdminActionForm action={savePackageAction} className="flex min-w-[500px] items-end gap-2">
-                            <input type="hidden" name="batchId" value={batch.id} />
-                            <input type="hidden" name="lineId" value={row.lineId} />
-                            <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
-                            <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
-                            <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
-                            <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
-                            <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj mere</SubmitButton>
-                          </AdminActionForm>
-                        ) : (
-                          <span className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
-                            #{row.packageNo} · {formatPackageMeasurements(row)}
-                          </span>
-                        )}
+                        <div>
+                          {editing ? (
+                            <AdminActionForm action={savePackageAction} className="flex min-w-[500px] items-end gap-2">
+                              <input type="hidden" name="batchId" value={batch.id} />
+                              <input type="hidden" name="lineId" value={row.lineId} />
+                              <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
+                              <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
+                              <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
+                              <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
+                              <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj mere</SubmitButton>
+                            </AdminActionForm>
+                          ) : (
+                            <span className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
+                              #{row.packageNo} · {formatPackageMeasurements(row)}
+                            </span>
+                          )}
+                          {myGls && hasKnownMyGlsLimitViolation(row) ? (
+                            <p className="mt-1 max-w-[500px] text-xs text-warning">
+                              Kataloške mere prelaze MyGLS granice. Unesite stvarne transportne mere pre kreiranja adresnice.
+                            </p>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
                       {editing ? (
@@ -917,14 +929,20 @@ function pickupLoadMessage(
     result.skippedInvalidDimensionsCount
       ? `${result.skippedInvalidDimensionsCount} bez kompletne težine ili dimenzija`
       : null,
-    result.skippedOversizedCount
-      ? `${result.skippedOversizedCount} preko MyGLS ograničenja`
-      : null,
   ].filter(Boolean);
   const loaded = result.lineCount
     ? `Učitano redova: ${result.lineCount} iz ${result.orderCount} porudžbina.`
     : "Nema novih porudžbina koje odgovaraju ovom kuriru i pravilima DC rezervacije.";
-  return skipped.length ? `${loaded} Preskočeno: ${skipped.join(", ")}.` : loaded;
+  const correction = result.loadedMyGlsLimitViolationCount
+    ? `Za ${result.loadedMyGlsLimitViolationCount} učitanih MyGLS porudžbina unesite stvarne transportne mere u dozvoljenim granicama.`
+    : null;
+  return [
+    loaded,
+    skipped.length ? `Preskočeno: ${skipped.join(", ")}.` : null,
+    correction,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function revalidatePickupPaths(batchId: string) {

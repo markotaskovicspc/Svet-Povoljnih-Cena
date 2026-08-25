@@ -19,6 +19,11 @@ export type DeliveryTariffProduct = {
 
 export type DeliveryCategory = 1 | 2;
 
+export type DeliveryTariffRates = Record<
+  DeliveryCategory,
+  readonly (readonly [weightLimitKg: number, priceRsd: number])[]
+>;
+
 export type PublishedDeliveryCategoryTotal = {
   weightKg: number;
   subtotal: number;
@@ -43,10 +48,10 @@ export type PublishedDeliveryTariffQuote = {
   issue: DeliveryTariffIssue | null;
 };
 
-const RATES = {
+export const DEFAULT_DELIVERY_TARIFF_RATES = {
   1: [[5, 299], [10, 399], [20, 599], [30, 899], [50, 999]],
   2: [[5, 699], [10, 799], [20, 999], [30, 1_299], [50, 1_399]],
-} as const;
+} as const satisfies DeliveryTariffRates;
 
 export function packageVolumetricDimension(dimensions: readonly number[]) {
   const [longest, middle, shortest] = [...dimensions].sort((a, b) => b - a);
@@ -81,15 +86,19 @@ export function productDeliveryCategory(
   ]);
 }
 
-export function deliveryRate(category: 1 | 2, weightKg: number) {
+export function deliveryRate(
+  category: DeliveryCategory,
+  weightKg: number,
+  rates: DeliveryTariffRates = DEFAULT_DELIVERY_TARIFF_RATES,
+) {
   if (!Number.isFinite(weightKg) || weightKg <= 0) return null;
-  return RATES[category].find(([limit]) => weightKg <= limit)?.[1] ?? null;
+  return rates[category].find(([limit]) => weightKg <= limit)?.[1] ?? null;
 }
 
 /** Published tariff. Above 50 kg returns null so an explicit admin rule wins. */
 export function calculatePublishedDeliveryTariff(
   products: DeliveryTariffProduct[],
-  options: { loggedIn: boolean },
+  options: { loggedIn: boolean; rates?: DeliveryTariffRates },
 ) {
   const quote = calculatePublishedDeliveryTariffQuote(products, options);
   if (quote.total == null || !quote.categories) return null;
@@ -108,7 +117,7 @@ export function calculatePublishedDeliveryTariff(
  */
 export function calculatePublishedDeliveryTariffQuote(
   products: DeliveryTariffProduct[],
-  options: { loggedIn: boolean },
+  options: { loggedIn: boolean; rates?: DeliveryTariffRates },
 ): PublishedDeliveryTariffQuote {
   const totals = {
     1: { weightKg: 0, subtotal: 0 },
@@ -130,8 +139,14 @@ export function calculatePublishedDeliveryTariffQuote(
     totals[category].subtotal += product.unitPrice * product.qty;
   }
 
-  const categoryOneRate = totals[1].weightKg > 0 ? deliveryRate(1, totals[1].weightKg) : 0;
-  const categoryTwoRate = totals[2].weightKg > 0 ? deliveryRate(2, totals[2].weightKg) : 0;
+  const categoryOneRate =
+    totals[1].weightKg > 0
+      ? deliveryRate(1, totals[1].weightKg, options.rates)
+      : 0;
+  const categoryTwoRate =
+    totals[2].weightKg > 0
+      ? deliveryRate(2, totals[2].weightKg, options.rates)
+      : 0;
   const categoryOnePrice =
     options.loggedIn && totals[1].subtotal > FREE_CATEGORY_ONE_THRESHOLD_RSD
       ? 0

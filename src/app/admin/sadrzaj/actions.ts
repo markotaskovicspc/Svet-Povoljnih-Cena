@@ -101,8 +101,16 @@ function prismaWidgetData(value: ContactPageWidgetData | Prisma.JsonValue | null
     : (value as Prisma.InputJsonValue);
 }
 
-function refreshContentPaths(slug: string, refreshFooter: boolean) {
+function refreshContentPaths(
+  slug: string,
+  refreshFooter: boolean,
+  pageId?: string,
+) {
   revalidatePath("/admin/sadrzaj");
+  if (pageId) {
+    revalidatePath(`/admin/sadrzaj/${pageId}`);
+    revalidatePath(`/admin/sadrzaj/${pageId}/pregled`);
+  }
   revalidatePath(`/${slug}`);
   revalidatePath("/sitemap.xml");
   if (refreshFooter && slug === "uslovi-isporuke") {
@@ -163,7 +171,11 @@ export async function initializeFunctionalContentPageAction(
         return { ...page, created: true };
       });
 
-      refreshContentPaths(initialized.slug, initialized.created);
+      refreshContentPaths(
+        initialized.slug,
+        initialized.created,
+        initialized.id,
+      );
       return {
         ok: true as const,
         entityId: initialized.id,
@@ -314,7 +326,7 @@ export async function saveContentPageAction(
         });
       });
 
-      refreshContentPaths(saved.slug, input.intent === "publish");
+      refreshContentPaths(saved.slug, input.intent === "publish", saved.id);
       return {
         ok: true as const,
         entityId: saved.id,
@@ -405,7 +417,7 @@ export async function restoreContentRevisionAction(
         });
       });
       if (!restored) return { ok: false as const, error: "Verzija nije pronađena." };
-      refreshContentPaths(restored.slug, false);
+      refreshContentPaths(restored.slug, false, restored.id);
       return {
         ok: true as const,
         entityId: restored.id,
@@ -437,7 +449,7 @@ export async function archiveContentPageAction(
         where: { id },
         data: { archivedAt: new Date(), published: false },
       });
-      refreshContentPaths(page.slug, true);
+      refreshContentPaths(page.slug, true, id);
       return {
         ok: true as const,
         entityId: id,
@@ -459,7 +471,7 @@ export async function unarchiveContentPageAction(
       const page = await db.contentPage.findUnique({ where: { id } });
       if (!page) return { ok: false as const, error: "Stranica nije pronađena." };
       await db.contentPage.update({ where: { id }, data: { archivedAt: null } });
-      refreshContentPaths(page.slug, false);
+      refreshContentPaths(page.slug, false, id);
       return {
         ok: true as const,
         entityId: id,

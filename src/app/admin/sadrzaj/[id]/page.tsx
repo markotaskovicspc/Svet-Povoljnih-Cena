@@ -85,6 +85,7 @@ export default async function EditContentPage({
           previewHref={`/admin/sadrzaj/${page.id}/pregled`}
           values={{
             id: page.id,
+            revisionId: page.draftRevisionId,
             slug: page.slug,
             kind: page.kind,
             template: page.template,

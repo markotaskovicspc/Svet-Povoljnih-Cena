@@ -67,6 +67,29 @@ describe("confirmed client rules", () => {
     expect(deliveryRate(2, 50.001)).toBeNull();
   });
 
+  it("uses administrator-configured category prices", () => {
+    const rates = {
+      1: [[5, 111], [10, 222], [20, 333], [30, 444], [50, 555]],
+      2: [[5, 666], [10, 777], [20, 888], [30, 999], [50, 1_111]],
+    } as const;
+    const tariff = calculatePublishedDeliveryTariff(
+      [
+        {
+          qty: 2,
+          unitPrice: 1_100,
+          unitPackWidthCm: 50,
+          unitPackDepthCm: 40,
+          unitPackHeightCm: 30,
+          grossWeightKg: 4,
+        },
+      ],
+      { loggedIn: false, rates },
+    );
+
+    expect(deliveryRate(1, 5.001, rates)).toBe(222);
+    expect(tariff?.total).toBe(222);
+  });
+
   it("grants free category-I delivery only above the 2,000 RSD threshold", () => {
     const product = {
       qty: 1,

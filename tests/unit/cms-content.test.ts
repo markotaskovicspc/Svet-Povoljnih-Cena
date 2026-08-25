@@ -72,6 +72,7 @@ describe("CMS Markdown safety", () => {
       "komentari",
       "kontakt",
       "podesavanja-kolacica",
+      "reklamacije",
       "servis",
     ]);
     for (const slug of FUNCTIONAL_CONTENT_PAGE_SLUGS) {

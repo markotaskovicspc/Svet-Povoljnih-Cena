@@ -115,6 +115,9 @@ describe("ERP module 13 pickup batches", () => {
     expect(
       pickupPostingBlockReason({ ...readyMyGls, completePackageCount: 0 }),
     ).toContain("stvarnu težinu");
+    expect(
+      pickupPostingBlockReason({ ...readyMyGls, invalidPackageCount: 1 }),
+    ).toContain("prelazi dozvoljenu");
     expect(pickupPostingBlockReason(readyMyGls)).toBeNull();
   });
 

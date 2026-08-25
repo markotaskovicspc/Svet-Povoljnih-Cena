@@ -94,6 +94,7 @@ Pišite nam preko [kontakt strane](/kontakt), ili otvorite zahtev u [Servisu za 
   {
     systemKey: "reklamacije",
     slug: "reklamacije",
+    functional: true,
     template: "STANDARD",
     eyebrow: "Posle kupovine",
     heroNote: null,
