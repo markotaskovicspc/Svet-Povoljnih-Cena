@@ -104,6 +104,8 @@ type BadiReceiptResponse = {
   [key: string]: unknown;
 };
 
+type BadiReceiptPayload = BadiReceiptResponse | BadiReceiptResponse[];
+
 type BadiError = {
   ok: false;
   status: number;
@@ -219,7 +221,7 @@ export async function fiscalizeWithBadi(
         ...(badi.clientId ? { clientId: badi.clientId } : {}),
       };
 
-  let result: BadiResult<BadiReceiptResponse>;
+  let result: BadiResult<BadiReceiptPayload>;
   if (transactionType === "REFUND") {
     if (!input.originalReceiptNumber) {
       return {
@@ -237,7 +239,7 @@ export async function fiscalizeWithBadi(
     }
     // Register products first so refund items can carry the NUMERIC sku too.
     const providerSkus = await ensureBadiProducts(input.lines);
-    result = await badiRequest<BadiReceiptResponse>(
+    result = await badiRequest<BadiReceiptPayload>(
       `/fiscalization/receipts/${encodeURIComponent(input.originalReceiptNumber)}/refund`,
       {
         method: "POST",
@@ -271,7 +273,7 @@ export async function fiscalizeWithBadi(
       })),
       receiptDelivery: RECEIPT_DELIVERY,
     });
-    result = await badiRequest<BadiReceiptResponse>("/fiscalization/receipts", {
+    result = await badiRequest<BadiReceiptPayload>("/fiscalization/receipts", {
       method: "POST",
       vpfr: true,
       body: buildBody(providerSkus),
@@ -280,7 +282,7 @@ export async function fiscalizeWithBadi(
       // The local sync record may be stale (product deleted in badi's
       // dashboard) — force a re-registration and retry exactly once.
       providerSkus = await ensureBadiProducts(input.lines, { force: true });
-      result = await badiRequest<BadiReceiptResponse>("/fiscalization/receipts", {
+      result = await badiRequest<BadiReceiptPayload>("/fiscalization/receipts", {
         method: "POST",
         vpfr: true,
         body: buildBody(providerSkus),
@@ -292,8 +294,26 @@ export async function fiscalizeWithBadi(
     return { ok: false, provider: "badi", error: result.error };
   }
 
-  const receipt = result.data;
-  if (!receipt.invoiceNumber) {
+  // Badi's refund endpoint returns an array even when it issues a single
+  // receipt, while ordinary sale fiscalization returns a receipt object.
+  // Accept both documented shapes, but fail closed if a response contains
+  // multiple fiscal receipts so we never attach the wrong legal document.
+  const receipts = Array.isArray(result.data) ? result.data : [result.data];
+  const fiscalReceipts = receipts.filter(
+    (candidate) =>
+      typeof candidate?.invoiceNumber === "string" &&
+      candidate.invoiceNumber.trim(),
+  );
+  if (fiscalReceipts.length > 1) {
+    return {
+      ok: false,
+      provider: "badi",
+      error: "fiscal:badi odgovor sadrži više fiskalnih računa; potrebna je ručna provera.",
+    };
+  }
+
+  const receipt = fiscalReceipts[0];
+  if (!receipt?.invoiceNumber) {
     return {
       ok: false,
       provider: "badi",

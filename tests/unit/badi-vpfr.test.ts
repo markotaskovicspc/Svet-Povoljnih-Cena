@@ -100,6 +100,54 @@ describe("badi VPFR transport", () => {
     expect(JSON.parse(String(init?.body))).not.toHaveProperty("clientId");
   });
 
+  it("accepts the documented refund response array", async () => {
+    process.env.BADI_API_KEY = "api-key";
+    process.env.BADI_API_SECRET = "api-secret";
+    process.env.BADI_BASE_URL = "https://badi.example.test/v2";
+    process.env.BADI_STORE_ID = "store-id";
+    process.env.BADI_CASHIER_ID = "cashier-id";
+    process.env.BADI_FISCAL_MODE = "vpfr";
+    process.env.BADI_VPFR_PFX = fakePfxBase64();
+    process.env.BADI_VPFR_PASSWORD = "certificate-password";
+    process.env.BADI_VPFR_PAC = "ABC123";
+    __resetFiscalConfig();
+
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify([{
+        invoiceNumber: "STORE-CASHIER-2",
+        verificationUrl: "https://suf.example.test/refund",
+        sdcDateTime: "2026-08-25T17:40:46.000Z",
+        totalAmount: 100,
+      }]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await fiscalizeWithBadi({
+      invoiceRef: "refund:ORDER-1",
+      transactionType: "REFUND",
+      originalReceiptNumber: "STORE-CASHIER-1",
+      buyerId: "10:115085587",
+      total: 100,
+      paymentMethod: "CASH",
+      lines: [{ sku: "1001", name: "Test", qty: 1, unitPrice: 100 }],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      receipt: { receiptNumber: "STORE-CASHIER-2" },
+    });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://badi.example.test/v2/fiscalization/receipts/STORE-CASHIER-1/refund");
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      storeId: "store-id",
+      cashierId: "cashier-id",
+      buyerId: "10:115085587",
+      payments: { cash: 100 },
+      items: [{ sku: 1001, quantity: 1 }],
+    });
+  });
+
   it("surfaces nested BADI error messages without leaking provider stacks", async () => {
     process.env.BADI_API_KEY = "api-key";
     process.env.BADI_API_SECRET = "api-secret";
