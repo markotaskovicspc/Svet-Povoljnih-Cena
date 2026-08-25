@@ -5,16 +5,20 @@ import { envValue } from "@/lib/env";
 /**
  * Phase 4D — central email configuration.
  *
- * Provider is selected via `EMAIL_PROVIDER` (`resend` | `postmark` | `none`).
+ * Provider is selected via `EMAIL_PROVIDER`
+ * (`ses` | `resend` | `postmark` | `none`).
  * In development the default is `none`, which makes `dispatch()` log to
  * stdout and return success without contacting any external service.
  */
 
-export type EmailProvider = "resend" | "postmark" | "none";
+export type EmailProvider = "ses" | "resend" | "postmark" | "none";
 
 export interface EmailConfig {
   provider: EmailProvider;
   apiKey: string | null;
+  sesRegion: string;
+  sesConfigurationSet: string | null;
+  sesCredentialsConfigured: boolean;
   from: string;
   marketingFrom: string;
   replyTo: string | null;
@@ -47,7 +51,10 @@ export function getEmailConfig(): EmailConfig {
     "none") as EmailProvider;
   cached = {
     provider:
-      provider === "resend" || provider === "postmark" || provider === "none"
+      provider === "ses" ||
+      provider === "resend" ||
+      provider === "postmark" ||
+      provider === "none"
         ? provider
         : "none",
     apiKey:
@@ -56,6 +63,15 @@ export function getEmailConfig(): EmailConfig {
         : provider === "postmark"
           ? envValue("POSTMARK_SERVER_TOKEN")
           : null,
+    sesRegion:
+      envValue("SES_REGION") ?? envValue("AWS_REGION") ?? "eu-central-1",
+    sesConfigurationSet: envValue("SES_CONFIGURATION_SET"),
+    sesCredentialsConfigured: Boolean(
+      envValue("AWS_ROLE_ARN") ||
+      (envValue("AWS_ACCESS_KEY_ID") && envValue("AWS_SECRET_ACCESS_KEY")) ||
+      envValue("AWS_CONTAINER_CREDENTIALS_FULL_URI") ||
+      envValue("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"),
+    ),
     from:
       envValue("EMAIL_FROM") ??
       `${BRAND.name} <no-reply@svetpovoljnihcena.rs>`,

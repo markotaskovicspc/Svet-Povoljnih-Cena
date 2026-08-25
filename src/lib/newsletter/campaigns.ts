@@ -8,7 +8,9 @@ import {
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
+import { dispatchSesBulk } from "@/lib/email/ses";
 import { trackedDispatch } from "@/lib/email/tracking";
+import { buildEmailUnsubscribeUrl } from "@/lib/email/unsubscribe";
 import { syncResendContact } from "@/lib/email/resend-marketing";
 import { withdrawMarketingEmail } from "./contacts";
 import {
@@ -463,8 +465,15 @@ export async function preflightNewsletterCampaign(campaignId: string, requirePro
   if (!resolved.recipients.length) errors.push("Publika nema nijednog podobnog primaoca.");
   const cfg = getEmailConfig();
   if (requireProvider && process.env.NODE_ENV === "production") {
-    if (cfg.provider !== "resend" || !cfg.apiKey) errors.push("Resend nije konfigurisan.");
-    if (!cfg.promotionsTopicId) errors.push("Resend promotions topic nije konfigurisan.");
+    if (cfg.provider === "ses") {
+      if (!cfg.sesCredentialsConfigured) errors.push("Amazon SES pristup nije konfigurisan.");
+      if (!cfg.sesRegion) errors.push("Amazon SES region nije konfigurisan.");
+    } else if (cfg.provider === "resend") {
+      if (!cfg.apiKey) errors.push("Resend nije konfigurisan.");
+      if (!cfg.promotionsTopicId) errors.push("Resend promotions topic nije konfigurisan.");
+    } else {
+      errors.push("Produkcijski email provider nije konfigurisan.");
+    }
     if (!cfg.marketingFrom) errors.push("Marketing pošiljalac nije konfigurisan.");
   }
   return {
@@ -539,7 +548,10 @@ export async function sendNewsletterCampaign(campaignId: string) {
   const filter = newsletterAudienceFilterSchema.parse(
     campaign.audienceFilterSnapshot ?? campaign.audience?.filter ?? emptyAudienceFilter(),
   );
-  if (campaign.audienceMode === "DYNAMIC" || !(await db.newsletterCampaignRecipient.count({ where: { campaignId } }))) {
+  if (
+    (campaign.audienceMode === "DYNAMIC" && campaign.status === "PREPARING") ||
+    !(await db.newsletterCampaignRecipient.count({ where: { campaignId } }))
+  ) {
     const resolved = await resolveNewsletterAudience(filter, {
       includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
     });
@@ -549,23 +561,46 @@ export async function sendNewsletterCampaign(campaignId: string) {
       data: { recipients: resolved.recipients.length, audienceBreakdown: resolved.breakdown },
     });
   }
-  const recipients = await finalEligibleRecipients(
-    campaignId,
-    campaign.includeContactsWithoutConsent,
-  );
-  if (!recipients.length) throw new Error("Nema podobnih primalaca u trenutku slanja.");
-  if (requiresSecondApprover(campaign, recipients.length)) {
-    await reopenCampaignReview(campaignId, recipients.length);
+  const cfg = getEmailConfig();
+  const selectedRecipientCount = await db.newsletterCampaignRecipient.count({
+    where: { campaignId },
+  });
+  if (requiresSecondApprover(campaign, selectedRecipientCount)) {
+    await reopenCampaignReview(campaignId, selectedRecipientCount);
     return {
       ok: false as const,
       approvalRequired: true as const,
-      recipients: recipients.length,
+      recipients: selectedRecipientCount,
     };
+  }
+  const recipients = await finalEligibleRecipients(
+    campaignId,
+    campaign.includeContactsWithoutConsent,
+    cfg.provider === "ses" ? sesNewsletterBatchSize() : undefined,
+  );
+  if (!recipients.length) {
+    const queued = await db.newsletterCampaignRecipient.count({
+      where: { campaignId, status: "QUEUED" },
+    });
+    if (cfg.provider === "ses" && queued) {
+      await enqueueSesNewsletterContinuation(campaignId, `eligible-${queued}`);
+      return {
+        ok: true as const,
+        partial: true as const,
+        recipients: 0,
+        remaining: queued,
+      };
+    }
+    if (cfg.provider === "ses") {
+      return finalizeSesNewsletterCampaign(campaignId);
+    }
+    throw new Error("Nema podobnih primalaca u trenutku slanja.");
   }
   const rendered = await renderNewsletterCampaign({
     subject: campaign.subject,
     previewText: campaign.previewText,
     content: campaign.content,
+    unsubscribeUrl: cfg.provider === "ses" ? "{{unsubscribeUrl}}" : undefined,
   });
   const productWarnings = rendered.warnings.filter((warning) =>
     warning.includes("izostavljen"),
@@ -573,7 +608,6 @@ export async function sendNewsletterCampaign(campaignId: string) {
   if (productWarnings.length) {
     throw new Error(`Preflight proizvoda nije prošao: ${productWarnings.join(" ")}`);
   }
-  const cfg = getEmailConfig();
   if (cfg.provider === "none") {
     if (process.env.NODE_ENV === "production") {
       throw new Error("EMAIL_PROVIDER=none nije dozvoljen za production newsletter slanje.");
@@ -590,7 +624,13 @@ export async function sendNewsletterCampaign(campaignId: string) {
     ]);
     return { ok: true as const, simulated: true as const, recipients: recipients.length };
   }
-  if (!cfg.apiKey) throw new Error("Resend API ključ nije konfigurisan.");
+  if (cfg.provider === "ses") {
+    if (!cfg.sesCredentialsConfigured) {
+      throw new Error("Amazon SES pristup nije konfigurisan.");
+    }
+    return sendSesNewsletterBatch({ campaign, recipients, rendered, cfg });
+  }
+  if (!cfg.apiKey) throw new Error("Email provider pristup nije konfigurisan.");
   if (cfg.provider !== "resend") throw new Error("Newsletter Broadcast slanje zahteva Resend provider.");
   if (!cfg.promotionsTopicId) throw new Error("RESEND_TOPIC_PROMOTIONS_ID nije konfigurisan.");
 
@@ -850,6 +890,7 @@ async function replaceCampaignRecipients(
 async function finalEligibleRecipients(
   campaignId: string,
   includeContactsWithoutConsent: boolean,
+  limit?: number,
 ) {
   const rows = await db.newsletterCampaignRecipient.findMany({
     where: {
@@ -857,6 +898,8 @@ async function finalEligibleRecipients(
       status: "QUEUED",
     },
     include: { contact: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    ...(limit ? { take: limit } : {}),
   });
   const isAllowedStatus = (status: string | undefined) =>
     status === "ACTIVE" || (includeContactsWithoutConsent && status === "PENDING");
@@ -885,6 +928,176 @@ async function finalEligibleRecipients(
     });
   }
   return eligible;
+}
+
+async function sendSesNewsletterBatch(args: {
+  campaign: {
+    id: string;
+    subject: string;
+    fromName: string | null;
+    fromEmail: string | null;
+    replyTo: string | null;
+  };
+  recipients: Awaited<ReturnType<typeof finalEligibleRecipients>>;
+  rendered: Awaited<ReturnType<typeof renderNewsletterCampaign>>;
+  cfg: ReturnType<typeof getEmailConfig>;
+}) {
+  await db.newsletterCampaign.update({
+    where: { id: args.campaign.id },
+    data: { status: "SENDING", failureReason: null },
+  });
+
+  const result = await dispatchSesBulk(
+    {
+      from: marketingSender(args.campaign, args.cfg.marketingFrom),
+      replyTo: args.campaign.replyTo ?? args.cfg.replyTo,
+      subject: args.campaign.subject,
+      html: args.rendered.html,
+      text: args.rendered.text,
+      recipients: args.recipients.map((recipient) => ({
+        email: recipient.email,
+        templateData: {
+          unsubscribeUrl: buildEmailUnsubscribeUrl({
+            purpose: "newsletter",
+            email: recipient.email,
+          }),
+        },
+      })),
+      tags: { kind: "newsletter", campaign: args.campaign.id },
+    },
+    {
+      region: args.cfg.sesRegion,
+      configurationSet: args.cfg.sesConfigurationSet,
+    },
+  );
+  if (!result.ok) throw new Error(result.error);
+
+  const recipientByEmail = new Map(
+    args.recipients.map((recipient) => [recipient.email.toLowerCase(), recipient]),
+  );
+  const retryable: string[] = [];
+  const now = new Date();
+  await db.$transaction(
+    result.results.map((providerResult) => {
+      const recipient = recipientByEmail.get(providerResult.email.toLowerCase());
+      if (!recipient) {
+        throw new Error("Amazon SES je vratio rezultat za nepoznatog primaoca.");
+      }
+      if (providerResult.ok) {
+        return db.newsletterCampaignRecipient.update({
+          where: { id: recipient.id },
+          data: {
+            status: "SENT",
+            providerMessageId: providerResult.id,
+            sentAt: now,
+            failureReason: null,
+          },
+        });
+      }
+      if (isRetryableSesRecipientError(providerResult.error)) {
+        retryable.push(providerResult.error ?? "ses:retryable_failure");
+        return db.newsletterCampaignRecipient.update({
+          where: { id: recipient.id },
+          data: {
+            status: "QUEUED",
+            failureReason: (providerResult.error ?? "ses:retryable_failure").slice(0, 4_000),
+          },
+        });
+      }
+      return db.newsletterCampaignRecipient.update({
+        where: { id: recipient.id },
+        data: {
+          status: "FAILED",
+          failureReason: (providerResult.error ?? "ses:permanent_failure").slice(0, 4_000),
+        },
+      });
+    }),
+  );
+
+  await refreshCampaignStats(args.campaign.id);
+  if (retryable.length) {
+    throw new Error(
+      `Amazon SES privremeno nije prihvatio ${retryable.length} poruka: ${retryable[0]}`,
+    );
+  }
+
+  const remaining = await db.newsletterCampaignRecipient.count({
+    where: { campaignId: args.campaign.id, status: "QUEUED" },
+  });
+  if (remaining) {
+    await enqueueSesNewsletterContinuation(
+      args.campaign.id,
+      args.recipients.at(-1)?.id ?? `remaining-${remaining}`,
+    );
+    return {
+      ok: true as const,
+      partial: true as const,
+      recipients: result.results.filter((item) => item.ok).length,
+      remaining,
+    };
+  }
+
+  return finalizeSesNewsletterCampaign(args.campaign.id);
+}
+
+async function enqueueSesNewsletterContinuation(campaignId: string, cursor: string) {
+  const idempotencyKey = `newsletter-send:${campaignId}:after:${cursor}`.slice(0, 200);
+  await db.backgroundJob.upsert({
+    where: { idempotencyKey },
+    create: {
+      kind: "NEWSLETTER_CAMPAIGN_SEND",
+      payload: { campaignId },
+      idempotencyKey,
+      maxAttempts: 8,
+    },
+    update: {},
+  });
+}
+
+async function finalizeSesNewsletterCampaign(campaignId: string) {
+  await refreshCampaignStats(campaignId);
+  const [failed, accepted] = await Promise.all([
+    db.newsletterCampaignRecipient.count({
+      where: {
+        campaignId,
+        status: { in: ["FAILED", "BOUNCED", "COMPLAINED"] },
+      },
+    }),
+    db.newsletterCampaignRecipient.count({
+      where: {
+        campaignId,
+        status: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] },
+      },
+    }),
+  ]);
+  const now = new Date();
+  await db.newsletterCampaign.update({
+    where: { id: campaignId },
+    data: {
+      status: failed ? "PARTIAL_FAILED" : "SENT",
+      sentAt: now,
+      failureReason: failed ? `${failed} SES poruka nije prihvaćeno.` : null,
+    },
+  });
+  return {
+    ok: failed === 0,
+    partial: failed > 0,
+    recipients: accepted,
+    failed,
+  } as const;
+}
+
+function isRetryableSesRecipientError(error: string | null) {
+  return Boolean(error && [
+    "ACCOUNT_THROTTLED",
+    "ACCOUNT_DAILY_QUOTA_EXCEEDED",
+    "TRANSIENT_FAILURE",
+  ].some((code) => error.includes(`ses:${code}`)));
+}
+
+function sesNewsletterBatchSize() {
+  const value = Number.parseInt(process.env.SES_NEWSLETTER_BATCH_SIZE ?? "", 10);
+  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 50) : 50;
 }
 
 async function markCampaignAccepted(campaignId: string) {

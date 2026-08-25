@@ -8,22 +8,23 @@ import {
 describe("admin system status", () => {
   it("treats placeholders and disabled production gates as missing", () => {
     const readiness = getIntegrationReadiness({
-      EMAIL_PROVIDER: "resend",
-      RESEND_API_KEY: "GET_FROM_RESEND",
-      RESEND_WEBHOOK_SECRET: "CHANGE_ME",
+      EMAIL_PROVIDER: "ses",
+      SES_REGION: "GET_FROM_AWS",
+      AWS_ROLE_ARN: "CHANGE_ME",
       EMAIL_FROM: "prodavnica@svetpovoljnihcena.rs",
       EMAIL_REPLY_TO: "podrska@svetpovoljnihcena.rs",
       MYGLS_ENABLED: "true",
       MYGLS_ENV: "production",
       MYGLS_PRODUCTION_ACCEPTED: "false",
     });
-    const resend = readiness.find((item) => item.id === "resend");
+    const ses = readiness.find((item) => item.id === "ses");
     const mygls = readiness.find((item) => item.id === "mygls");
 
-    expect(resend?.ready).toBe(false);
-    expect(resend?.missing).toEqual([
-      "RESEND_API_KEY",
-      "RESEND_WEBHOOK_SECRET",
+    expect(ses?.ready).toBe(false);
+    expect(ses?.missing).toEqual([
+      "SES_REGION",
+      "AWS_ROLE_ARN",
+      "EMAIL_MARKETING_FROM",
     ]);
     expect(mygls?.missing).toContain("MYGLS_PRODUCTION_ACCEPTED");
   });
@@ -60,19 +61,20 @@ describe("admin system status", () => {
     expect(readiness.find((item) => item.id === "badi")?.ready).toBe(true);
   });
 
-  it("reports a complete Resend setup without exposing secret values", () => {
-    const secret = "re_secret_that_must_not_be_rendered";
-    const resend = getIntegrationReadiness({
-      EMAIL_PROVIDER: "resend",
-      RESEND_API_KEY: secret,
-      RESEND_WEBHOOK_SECRET: "whsec_real",
+  it("reports a complete SES setup without exposing environment values", () => {
+    const roleArn = "arn:aws:iam::123456789012:role/ses-production";
+    const ses = getIntegrationReadiness({
+      EMAIL_PROVIDER: "ses",
+      SES_REGION: "eu-central-1",
+      AWS_ROLE_ARN: roleArn,
       EMAIL_FROM: "prodavnica@svetpovoljnihcena.rs",
+      EMAIL_MARKETING_FROM: "ponude@svetpovoljnihcena.rs",
       EMAIL_REPLY_TO: "podrska@svetpovoljnihcena.rs",
-    }).find((item) => item.id === "resend");
+    }).find((item) => item.id === "ses");
 
-    expect(resend?.ready).toBe(true);
-    expect(resend?.missing).toEqual([]);
-    expect(JSON.stringify(resend)).not.toContain(secret);
+    expect(ses?.ready).toBe(true);
+    expect(ses?.missing).toEqual([]);
+    expect(JSON.stringify(ses)).not.toContain(roleArn);
   });
 
   it("accepts the Rabalux stock API key without exposing it", () => {

@@ -115,7 +115,7 @@ export async function trackedDispatch(
 }
 
 export interface ProviderEventInput {
-  provider: "resend" | "postmark";
+  provider: "ses" | "resend" | "postmark";
   eventId: string;
   type: string;
   payload: Prisma.InputJsonValue;
@@ -197,7 +197,12 @@ function recipientsToString(to: string | string[]) {
 }
 
 function normalizeProvider(provider: string, fallback: EmailProvider): ProviderName {
-  if (provider === "resend" || provider === "postmark" || provider === "none") {
+  if (
+    provider === "ses" ||
+    provider === "resend" ||
+    provider === "postmark" ||
+    provider === "none"
+  ) {
     return provider;
   }
   return fallback;

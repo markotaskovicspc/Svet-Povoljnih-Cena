@@ -76,7 +76,22 @@ if (enabled("ENFORCE_WEB_AUTO_AVAILABILITY")) {
 }
 
 const emailProvider = (value("EMAIL_PROVIDER") ?? "none").toLowerCase();
-if (emailProvider === "resend") {
+if (emailProvider === "ses") {
+  requireNames("Amazon SES", [
+    "EMAIL_FROM",
+    "EMAIL_MARKETING_FROM",
+    "EMAIL_REPLY_TO",
+  ]);
+  if (!value("AWS_ROLE_ARN") && !(value("AWS_ACCESS_KEY_ID") && value("AWS_SECRET_ACCESS_KEY"))) {
+    errors.push("Amazon SES: AWS_ROLE_ARN or an AWS access key pair is required");
+  }
+  requireOneOf("Amazon SES", ["SES_REGION", "AWS_REGION"]);
+  if ((value("SES_REGION") ?? value("AWS_REGION")) !== "eu-central-1") {
+    errors.push("Amazon SES region must be eu-central-1 for this project");
+  }
+  if ((value("EMAIL_FROM") ?? "").includes("example.com")) errors.push("EMAIL_FROM still uses example.com");
+  if ((value("EMAIL_MARKETING_FROM") ?? "").includes("example.com")) errors.push("EMAIL_MARKETING_FROM still uses example.com");
+} else if (emailProvider === "resend") {
   requireNames("Resend", [
     "RESEND_API_KEY",
     "RESEND_WEBHOOK_SECRET",

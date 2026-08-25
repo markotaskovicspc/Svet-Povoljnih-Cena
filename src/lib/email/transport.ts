@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { getEmailConfig } from "./config";
+import { dispatchSes } from "./ses";
 
 /**
  * Phase 4D — provider-agnostic dispatcher.
@@ -35,14 +36,16 @@ export interface DispatchInput {
   idempotencyKey?: string;
 }
 
+export type DispatchProvider = "ses" | "resend" | "postmark" | "none";
+
 export type DispatchResult =
-  | { ok: true; id: string; provider: "resend" | "postmark" | "none" }
-  | { ok: false; error: string; provider: "resend" | "postmark" | "none" };
+  | { ok: true; id: string; provider: DispatchProvider }
+  | { ok: false; error: string; provider: DispatchProvider };
 
 export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
   const cfg = getEmailConfig();
 
-  if (cfg.provider === "none" || !cfg.apiKey) {
+  if (cfg.provider === "none") {
     // Dev / preview — print a one-line summary so the trigger is visible
     // in logs without leaking the full body.
     const to = Array.isArray(input.to) ? input.to.join(",") : input.to;
@@ -50,6 +53,30 @@ export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
       `[email:dev] to=${to} subject=${JSON.stringify(input.subject)} bytes=${input.html.length}`,
     );
     return { ok: true, id: `dev-${randomUUID()}`, provider: "none" };
+  }
+
+  if (cfg.provider === "ses") {
+    if (!cfg.sesCredentialsConfigured) {
+      return {
+        ok: false,
+        error: "ses:missing_config aws_credentials",
+        provider: "ses",
+      };
+    }
+    return dispatchSes(input, {
+      region: cfg.sesRegion,
+      configurationSet: cfg.sesConfigurationSet,
+      from: cfg.from,
+      replyTo: cfg.replyTo,
+    });
+  }
+
+  if (!cfg.apiKey) {
+    return {
+      ok: false,
+      error: `${cfg.provider}:missing_config credentials`,
+      provider: cfg.provider,
+    };
   }
 
   try {
