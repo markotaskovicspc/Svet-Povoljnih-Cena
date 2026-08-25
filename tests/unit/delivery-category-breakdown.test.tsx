@@ -62,19 +62,28 @@ describe("delivery category breakdown", () => {
     expect(html).toContain("699 RSD");
   });
 
-  it("explains an unpriced overweight category", () => {
+  it("shows the extended category-II price above 50 kg", () => {
+    const quote = calculatePublishedDeliveryTariffQuote(
+      [
+        {
+          qty: 1,
+          unitPrice: 33_000,
+          unitPackWidthCm: 180,
+          unitPackDepthCm: 100,
+          unitPackHeightCm: 20,
+          grossWeightKg: 67,
+        },
+      ],
+      { loggedIn: false },
+    );
     const html = renderToStaticMarkup(
       <dl>
-        <DeliveryCategoryBreakdown
-          breakdown={{
-            1: { weightKg: 0, subtotal: 0, price: 0 },
-            2: { weightKg: 67, subtotal: 33_000, price: null },
-          }}
-        />
+        <DeliveryCategoryBreakdown breakdown={quote.categories} />
       </dl>,
     );
 
+    expect(quote.total).toBe(1_699);
     expect(html).toContain("II kategorija (67 kg)");
-    expect(html).toContain("Nije obračunato");
+    expect(html).toContain("1.699 RSD");
   });
 });

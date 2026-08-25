@@ -199,13 +199,24 @@ function tariffCategoryFormValues(
   formData: FormData,
   prefix: "category1" | "category2",
 ) {
-  return {
+  const baseValues = {
     upTo5Kg: formData.get(`${prefix}UpTo5Kg`),
     upTo10Kg: formData.get(`${prefix}UpTo10Kg`),
     upTo20Kg: formData.get(`${prefix}UpTo20Kg`),
     upTo30Kg: formData.get(`${prefix}UpTo30Kg`),
-    upTo50Kg: formData.get(`${prefix}UpTo50Kg`),
   };
+  return prefix === "category1"
+    ? {
+        ...baseValues,
+        over30Kg: formData.get("category1Over30Kg"),
+      }
+    : {
+        ...baseValues,
+        upTo50Kg: formData.get("category2UpTo50Kg"),
+        upTo70Kg: formData.get("category2UpTo70Kg"),
+        upTo100Kg: formData.get("category2UpTo100Kg"),
+        over100Kg: formData.get("category2Over100Kg"),
+      };
 }
 
 async function upsertRule(_state: AdminActionState, formData: FormData) {
@@ -751,29 +762,73 @@ function ProviderStatus({ label }: { label: string }) {
   );
 }
 
-const DELIVERY_TARIFF_FIELDS = [
+const CATEGORY_ONE_TARIFF_FIELDS = [
+  { key: "upTo5Kg", suffix: "UpTo5Kg", label: "Do 5 kg" },
+  { key: "upTo10Kg", suffix: "UpTo10Kg", label: "Do 10 kg" },
+  { key: "upTo20Kg", suffix: "UpTo20Kg", label: "Do 20 kg" },
+  { key: "upTo30Kg", suffix: "UpTo30Kg", label: "Do 30 kg" },
+  { key: "over30Kg", suffix: "Over30Kg", label: "Preko 30 kg" },
+] as const;
+
+const CATEGORY_TWO_TARIFF_FIELDS = [
   { key: "upTo5Kg", suffix: "UpTo5Kg", label: "Do 5 kg" },
   { key: "upTo10Kg", suffix: "UpTo10Kg", label: "Do 10 kg" },
   { key: "upTo20Kg", suffix: "UpTo20Kg", label: "Do 20 kg" },
   { key: "upTo30Kg", suffix: "UpTo30Kg", label: "Do 30 kg" },
   { key: "upTo50Kg", suffix: "UpTo50Kg", label: "Do 50 kg" },
+  { key: "upTo70Kg", suffix: "UpTo70Kg", label: "Do 70 kg" },
+  { key: "upTo100Kg", suffix: "UpTo100Kg", label: "Do 100 kg" },
+  { key: "over100Kg", suffix: "Over100Kg", label: "Preko 100 kg" },
 ] as const;
 
-function DeliveryTariffCategoryFields({
-  category,
+type DeliveryTariffCategoryFieldsProps =
+  | { category: 1; values: DeliveryTariffSettings["category1"] }
+  | { category: 2; values: DeliveryTariffSettings["category2"] };
+
+function DeliveryTariffCategoryFields(
+  props: DeliveryTariffCategoryFieldsProps,
+) {
+  if (props.category === 1) {
+    return (
+      <DeliveryTariffFieldset
+        categoryLabel="I"
+        prefix="category1"
+        fields={CATEGORY_ONE_TARIFF_FIELDS}
+        values={props.values}
+      />
+    );
+  }
+  return (
+    <DeliveryTariffFieldset
+      categoryLabel="II"
+      prefix="category2"
+      fields={CATEGORY_TWO_TARIFF_FIELDS}
+      values={props.values}
+    />
+  );
+}
+
+function DeliveryTariffFieldset<
+  Key extends string,
+  Values extends Record<Key, number>,
+>({
+  categoryLabel,
+  prefix,
+  fields,
   values,
 }: {
-  category: 1 | 2;
-  values: DeliveryTariffSettings["category1"];
+  categoryLabel: "I" | "II";
+  prefix: "category1" | "category2";
+  fields: readonly { key: Key; suffix: string; label: string }[];
+  values: Values;
 }) {
-  const prefix = category === 1 ? "category1" : "category2";
   return (
     <fieldset className="rounded-lg border border-border p-4">
       <legend className="px-1 text-sm font-semibold">
-        Kategorija {category === 1 ? "I" : "II"}
+        Kategorija {categoryLabel}
       </legend>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {DELIVERY_TARIFF_FIELDS.map((field) => (
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {fields.map((field) => (
           <Field key={field.key} label={field.label}>
             <Input
               name={`${prefix}${field.suffix}`}

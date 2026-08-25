@@ -38,7 +38,7 @@ export type PublishedDeliveryCategoryBreakdown = Record<
 export type DeliveryTariffIssue =
   | "MISSING_PACKAGE_DIMENSIONS"
   | "MISSING_WEIGHT"
-  | "WEIGHT_ABOVE_50_KG";
+  | "WEIGHT_OUTSIDE_TARIFF";
 
 export type PublishedDeliveryTariffQuote = {
   total: number | null;
@@ -49,8 +49,23 @@ export type PublishedDeliveryTariffQuote = {
 };
 
 export const DEFAULT_DELIVERY_TARIFF_RATES = {
-  1: [[5, 299], [10, 399], [20, 599], [30, 899], [50, 999]],
-  2: [[5, 699], [10, 799], [20, 999], [30, 1_299], [50, 1_399]],
+  1: [
+    [5, 299],
+    [10, 399],
+    [20, 599],
+    [30, 899],
+    [Number.POSITIVE_INFINITY, 999],
+  ],
+  2: [
+    [5, 699],
+    [10, 799],
+    [20, 999],
+    [30, 1_299],
+    [50, 1_499],
+    [70, 1_699],
+    [100, 1_899],
+    [Number.POSITIVE_INFINITY, 2_099],
+  ],
 } as const satisfies DeliveryTariffRates;
 
 export function packageVolumetricDimension(dimensions: readonly number[]) {
@@ -95,7 +110,7 @@ export function deliveryRate(
   return rates[category].find(([limit]) => weightKg <= limit)?.[1] ?? null;
 }
 
-/** Published tariff. Above 50 kg returns null so an explicit admin rule wins. */
+/** Published tariff for the complete supported weight range. */
 export function calculatePublishedDeliveryTariff(
   products: DeliveryTariffProduct[],
   options: { loggedIn: boolean; rates?: DeliveryTariffRates },
@@ -111,9 +126,9 @@ export function calculatePublishedDeliveryTariff(
 }
 
 /**
- * Detailed tariff result used by checkout. Unlike the legacy nullable helper,
- * it preserves category weights when the published table ends at 50 kg so the
- * UI can explain why it must not invent a delivery price.
+ * Detailed tariff result used by checkout. It preserves category weights if a
+ * caller supplies an incomplete custom tariff, so the UI can explain why a
+ * delivery price could not be calculated.
  */
 export function calculatePublishedDeliveryTariffQuote(
   products: DeliveryTariffProduct[],
@@ -160,7 +175,7 @@ export function calculatePublishedDeliveryTariffQuote(
         1: { ...totals[1], price: categoryOnePrice },
         2: { ...totals[2], price: categoryTwoRate },
       },
-      issue: "WEIGHT_ABOVE_50_KG",
+      issue: "WEIGHT_OUTSIDE_TARIFF",
     };
   }
   return {
@@ -175,7 +190,9 @@ export function calculatePublishedDeliveryTariffQuote(
   };
 }
 
-function unavailableTariff(issue: Exclude<DeliveryTariffIssue, "WEIGHT_ABOVE_50_KG">) {
+function unavailableTariff(
+  issue: Exclude<DeliveryTariffIssue, "WEIGHT_OUTSIDE_TARIFF">,
+) {
   return {
     total: null,
     categoryOnePrice: null,

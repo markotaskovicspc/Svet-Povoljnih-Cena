@@ -49,7 +49,6 @@ export type CheckoutDeliveryQuote = {
   pricingIssue:
     | DeliveryTariffIssue
     | "NO_CONFIGURED_PRICE"
-    | "TRUCK_UNAVAILABLE_FOR_CITY"
     | null;
   /** Server-resolved public delivery category for each requested cart line. */
   deliveryCategoriesBySku: Partial<Record<SKU, DeliveryCategory>>;
@@ -121,8 +120,8 @@ export function resolveDeliveryMethodQuote({
   | "pricingIssue"
   | "deliveryCategoryBreakdown"
 > {
-  const requiresTruck = publishedTariff?.issue === "WEIGHT_ABOVE_50_KG";
-  const courierPrice = requiresTruck
+  const hasUnpricedWeight = publishedTariff?.issue === "WEIGHT_OUTSIDE_TARIFF";
+  const courierPrice = hasUnpricedWeight
     ? null
     : (publishedTariff?.total ??
       configuredCourierPrice ??
@@ -139,9 +138,7 @@ export function resolveDeliveryMethodQuote({
     pricingIssue:
       recommendedMethod != null
         ? null
-        : requiresTruck && TRUCK_DELIVERY_ENABLED && !truckAvailable
-          ? "TRUCK_UNAVAILABLE_FOR_CITY"
-          : (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE"),
+        : (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE"),
     // A configured flat delivery price covers the complete cart. Category
     // prices are meaningful only when the published table itself resolved.
     deliveryCategoryBreakdown:

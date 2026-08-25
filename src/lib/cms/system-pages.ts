@@ -222,7 +222,7 @@ Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupa
 
 Za prijavljene kupce, dostava artikala I kategorije je besplatna kada njihov zbir prelazi 2.000 RSD.
 
-**I kategorija — paketi čija je volumetrijska dimenzija manja od 300 cm:**
+**I kategorija (standardni paketi) — paketi čija je volumetrijska dimenzija manja od 300 cm:**
 
 Težina od\tTežina do\tCena
 
@@ -230,9 +230,9 @@ Težina od\tTežina do\tCena
        5\t  10\t399 rsd
       10\t  20\t599 rsd
       20\t  30\t899 rsd
-      30      50\t999 rsd
+      30       +\t999 rsd
 
-**II kategorija — paketi čija je volumetrijska dimenzija veća od 300 cm:**
+**II kategorija (gabaritni paketi) — paketi čija je volumetrijska dimenzija veća od 300 cm:**
 
 Težina od\tTežina do\tCena
 
@@ -240,7 +240,10 @@ Težina od\tTežina do\tCena
        5\t  10\t799 rsd
       10\t  20\t999 rsd
       20\t  30\t1299 rsd
-      30      50\t1399 rsd
+      30      50\t1499 rsd
+      50      70\t1699 rsd
+      70     100\t1899 rsd
+     100       +\t2099 rsd
 
 Volumetrijska dimenzija se računa kao najduža stranica + 2 × druga stranica + 2 × treća stranica.
 

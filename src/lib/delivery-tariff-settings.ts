@@ -16,17 +16,27 @@ const priceSchema = z.preprocess(
     .max(1_000_000, "Cena je previsoka."),
 );
 
-const categorySchema = z.object({
+const baseCategorySchema = z.object({
   upTo5Kg: priceSchema,
   upTo10Kg: priceSchema,
   upTo20Kg: priceSchema,
   upTo30Kg: priceSchema,
+});
+
+const categoryOneSchema = baseCategorySchema.extend({
+  over30Kg: priceSchema,
+});
+
+const categoryTwoSchema = baseCategorySchema.extend({
   upTo50Kg: priceSchema,
+  upTo70Kg: priceSchema,
+  upTo100Kg: priceSchema,
+  over100Kg: priceSchema,
 });
 
 export const deliveryTariffSettingsSchema = z.object({
-  category1: categorySchema,
-  category2: categorySchema,
+  category1: categoryOneSchema,
+  category2: categoryTwoSchema,
 });
 
 export type DeliveryTariffSettings = z.infer<
@@ -39,14 +49,17 @@ export const DEFAULT_DELIVERY_TARIFF_SETTINGS: DeliveryTariffSettings = {
     upTo10Kg: 399,
     upTo20Kg: 599,
     upTo30Kg: 899,
-    upTo50Kg: 999,
+    over30Kg: 999,
   },
   category2: {
     upTo5Kg: 699,
     upTo10Kg: 799,
     upTo20Kg: 999,
     upTo30Kg: 1_299,
-    upTo50Kg: 1_399,
+    upTo50Kg: 1_499,
+    upTo70Kg: 1_699,
+    upTo100Kg: 1_899,
+    over100Kg: 2_099,
   },
 };
 
@@ -79,7 +92,7 @@ export function deliveryTariffRatesFromSettings(
       [10, settings.category1.upTo10Kg],
       [20, settings.category1.upTo20Kg],
       [30, settings.category1.upTo30Kg],
-      [50, settings.category1.upTo50Kg],
+      [Number.POSITIVE_INFINITY, settings.category1.over30Kg],
     ],
     2: [
       [5, settings.category2.upTo5Kg],
@@ -87,6 +100,9 @@ export function deliveryTariffRatesFromSettings(
       [20, settings.category2.upTo20Kg],
       [30, settings.category2.upTo30Kg],
       [50, settings.category2.upTo50Kg],
+      [70, settings.category2.upTo70Kg],
+      [100, settings.category2.upTo100Kg],
+      [Number.POSITIVE_INFINITY, settings.category2.over100Kg],
     ],
   };
 }

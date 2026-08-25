@@ -63,14 +63,34 @@ describe("confirmed client rules", () => {
   it("keeps the published weight boundaries inclusive at their upper limit", () => {
     expect(deliveryRate(1, 5)).toBe(299);
     expect(deliveryRate(1, 5.001)).toBe(399);
-    expect(deliveryRate(2, 50)).toBe(1_399);
-    expect(deliveryRate(2, 50.001)).toBeNull();
+    expect(deliveryRate(1, 30)).toBe(899);
+    expect(deliveryRate(1, 30.001)).toBe(999);
+    expect(deliveryRate(1, 1_000)).toBe(999);
+    expect(deliveryRate(2, 50)).toBe(1_499);
+    expect(deliveryRate(2, 50.001)).toBe(1_699);
+    expect(deliveryRate(2, 70)).toBe(1_699);
+    expect(deliveryRate(2, 70.001)).toBe(1_899);
+    expect(deliveryRate(2, 100)).toBe(1_899);
+    expect(deliveryRate(2, 100.001)).toBe(2_099);
   });
 
   it("uses administrator-configured category prices", () => {
     const rates = {
-      1: [[5, 111], [10, 222], [20, 333], [30, 444], [50, 555]],
-      2: [[5, 666], [10, 777], [20, 888], [30, 999], [50, 1_111]],
+      1: [
+        [5, 111],
+        [10, 222],
+        [20, 333],
+        [30, 444],
+        [Number.POSITIVE_INFINITY, 555],
+      ],
+      2: [
+        [5, 666],
+        [10, 777],
+        [20, 888],
+        [30, 999],
+        [50, 1_111],
+        [Number.POSITIVE_INFINITY, 1_222],
+      ],
     } as const;
     const tariff = calculatePublishedDeliveryTariff(
       [
@@ -109,18 +129,49 @@ describe("confirmed client rules", () => {
     ).toBe(0);
   });
 
-  it("returns no invented tariff above the published 50 kg ceiling", () => {
-    expect(calculatePublishedDeliveryTariff([{
-      qty: 1,
-      unitPrice: 5_000,
-      unitPackWidthCm: 70,
-      unitPackDepthCm: 40,
-      unitPackHeightCm: 30,
-      packGrossWeightKg: 51,
-    }], { loggedIn: true })).toBeNull();
+  it("charges the open-ended category-I rate above 30 kg", () => {
+    expect(
+      calculatePublishedDeliveryTariff(
+        [
+          {
+            qty: 1,
+            unitPrice: 5_000,
+            unitPackWidthCm: 70,
+            unitPackDepthCm: 40,
+            unitPackHeightCm: 30,
+            packGrossWeightKg: 51,
+          },
+        ],
+        { loggedIn: false },
+      )?.total,
+    ).toBe(999);
   });
 
-  it("keeps the overweight category visible without inventing a fallback price", () => {
+  it("charges the extended category-II rate above 100 kg", () => {
+    const quote = calculatePublishedDeliveryTariffQuote(
+      [
+        {
+          qty: 1,
+          unitPrice: 10_000,
+          unitPackWidthCm: 180,
+          unitPackDepthCm: 100,
+          unitPackHeightCm: 20,
+          grossWeightKg: 101,
+        },
+      ],
+      { loggedIn: true },
+    );
+
+    expect(quote).toMatchObject({
+      total: 2_099,
+      issue: null,
+      categories: {
+        2: { weightKg: 101, subtotal: 10_000, price: 2_099 },
+      },
+    });
+  });
+
+  it("flags a custom tariff that does not cover the requested weight", () => {
     const quote = calculatePublishedDeliveryTariffQuote(
       [
         {
@@ -132,12 +183,18 @@ describe("confirmed client rules", () => {
           grossWeightKg: 51,
         },
       ],
-      { loggedIn: true },
+      {
+        loggedIn: false,
+        rates: {
+          1: [[50, 999]],
+          2: [[50, 1_499]],
+        },
+      },
     );
 
     expect(quote).toMatchObject({
       total: null,
-      issue: "WEIGHT_ABOVE_50_KG",
+      issue: "WEIGHT_OUTSIDE_TARIFF",
       categories: {
         2: { weightKg: 51, subtotal: 10_000, price: null },
       },

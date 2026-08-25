@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveDeliveryMethodQuote } from "@/lib/checkout/config-shared";
 
 describe("delivery method quote", () => {
-  it("uses the published courier tariff when the cart is within 50 kg", () => {
+  it("uses the published courier tariff", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
@@ -26,49 +26,42 @@ describe("delivery method quote", () => {
     });
   });
 
-  it("does not invent a truck tariff above the published 50 kg ceiling", () => {
+  it("uses the extended courier tariff above the old 50 kg ceiling", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
-          total: null,
+          total: 2_298,
           categoryOnePrice: 399,
-          categoryTwoPrice: null,
+          categoryTwoPrice: 1_899,
           categories: {
             1: { weightKg: 7.6, subtotal: 4_722, price: 399 },
-            2: { weightKg: 82, subtotal: 36_997, price: null },
+            2: { weightKg: 82, subtotal: 36_997, price: 1_899 },
           },
-          issue: "WEIGHT_ABOVE_50_KG",
+          issue: null,
         },
         configuredCourierPrice: null,
         configuredTruckPrice: null,
         truckAvailable: true,
       }),
-    ).toEqual({
-      prices: { kurir: null, kamion: null },
-      recommendedMethod: null,
-      pricingIssue: "WEIGHT_ABOVE_50_KG",
-      deliveryCategoryBreakdown: null,
+    ).toMatchObject({
+      prices: { kurir: 2_298, kamion: null },
+      recommendedMethod: "kurir",
+      pricingIssue: null,
     });
   });
 
   it("keeps truck delivery disabled even when an old admin price exists", () => {
     expect(
       resolveDeliveryMethodQuote({
-        publishedTariff: {
-          total: null,
-          categoryOnePrice: null,
-          categoryTwoPrice: null,
-          categories: null,
-          issue: "WEIGHT_ABOVE_50_KG",
-        },
-        configuredCourierPrice: null,
+        publishedTariff: null,
+        configuredCourierPrice: 990,
         configuredTruckPrice: 5_490,
         truckAvailable: true,
       }).prices.kamion,
     ).toBeNull();
   });
 
-  it("keeps the published overweight issue while truck delivery is disabled", () => {
+  it("keeps an incomplete custom-tariff issue while truck delivery is disabled", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
@@ -76,7 +69,7 @@ describe("delivery method quote", () => {
           categoryOnePrice: null,
           categoryTwoPrice: null,
           categories: null,
-          issue: "WEIGHT_ABOVE_50_KG",
+          issue: "WEIGHT_OUTSIDE_TARIFF",
         },
         configuredCourierPrice: null,
         configuredTruckPrice: null,
@@ -85,7 +78,7 @@ describe("delivery method quote", () => {
     ).toMatchObject({
       prices: { kurir: null, kamion: null },
       recommendedMethod: null,
-      pricingIssue: "WEIGHT_ABOVE_50_KG",
+      pricingIssue: "WEIGHT_OUTSIDE_TARIFF",
     });
   });
 
