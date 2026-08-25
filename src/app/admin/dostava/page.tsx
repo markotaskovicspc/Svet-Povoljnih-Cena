@@ -285,21 +285,21 @@ export default async function DeliveryPage() {
           </p>
         </Card>
         <Card>
-          <CardTitle description="Obe službe su u upotrebi; kurir se određuje iz mera svakog fizičkog paketa.">
+          <CardTitle description="Obe službe su u upotrebi; kurir se određuje iz težine i dimenzija svakog fizičkog paketa.">
             Automatski izbor kurira
           </CardTitle>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-lg border border-border p-3">
               <p className="font-semibold">X Express</p>
-              <p className="mt-1 text-ink-600">Svaka strana paketa je do 60 cm.</p>
+              <p className="mt-1 text-ink-600">Paket je do 30 kg i svaka strana je do 60 cm.</p>
             </div>
             <div className="rounded-lg border border-border p-3">
               <p className="font-semibold">MyGLS</p>
-              <p className="mt-1 text-ink-600">Bar jedna strana paketa je preko 60 cm, uz MyGLS ograničenja.</p>
+              <p className="mt-1 text-ink-600">Paket je preko 30 kg ili je bar jedna strana preko 60 cm, uz MyGLS ograničenja.</p>
             </div>
           </div>
           <p className="mt-3 text-xs text-ink-500">
-            Nepotpune mere, prekoračena ograničenja i porudžbine koje mešaju oba kurira ne šalju se automatski.
+            Nepotpune mere ili težina, prekoračena ograničenja i porudžbine koje mešaju oba kurira ne šalju se automatski.
           </p>
         </Card>
 
@@ -436,7 +436,7 @@ export default async function DeliveryPage() {
             >
               MyGLS šifarnici
             </CardTitle>
-            <ProviderStatus label="Koristi se za pakete preko 60 cm" />
+            <ProviderStatus label="Koristi se za pakete preko 30 kg ili 60 cm" />
             <ProviderReadiness
               ready={myGlsReadiness.available}
               reason={myGlsReadiness.reason}
@@ -446,7 +446,7 @@ export default async function DeliveryPage() {
               <div className="text-sm text-ink-700">
                 <p>
                   MyGLS keš sadrži paket shopove/lockere i lokacije za Srbiju.
-                  Koristi se za pakete koji po dimenzijama pripadaju MyGLS-u.
+                  Koristi se za pakete koji po težini ili dimenzijama pripadaju MyGLS-u.
                 </p>
                 <SyncRunList runs={glsRuns} />
               </div>

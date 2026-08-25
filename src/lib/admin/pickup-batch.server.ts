@@ -351,6 +351,11 @@ export async function loadEligibleOrders(
               item.product?.unitPackHeightCm ??
               item.product?.heightCm,
           ),
+          packGrossWeightKg: numberOrNull(
+            item.product?.packGrossWeightKg ??
+              item.product?.grossWeightKg ??
+              item.product?.weightKg,
+          ),
         })),
       });
       if (routing.kind === "invalid_dimensions") {

@@ -828,12 +828,15 @@ export async function WebOrderDetail({ id }: { id: string }) {
               packWidthCm: true,
               packDepthCm: true,
               packHeightCm: true,
+              packGrossWeightKg: true,
               unitPackWidthCm: true,
               unitPackDepthCm: true,
               unitPackHeightCm: true,
               widthCm: true,
               depthCm: true,
               heightCm: true,
+              grossWeightKg: true,
+              weightKg: true,
             },
           },
         },
@@ -887,6 +890,12 @@ export async function WebOrderDetail({ id }: { id: string }) {
         item.product?.packHeightCm ??
           item.product?.unitPackHeightCm ??
           item.product?.heightCm ??
+          0,
+      ),
+      packGrossWeightKg: Number(
+        item.product?.packGrossWeightKg ??
+          item.product?.grossWeightKg ??
+          item.product?.weightKg ??
           0,
       ),
     })),

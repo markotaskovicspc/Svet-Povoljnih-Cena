@@ -1419,7 +1419,7 @@ function deliveryPricingMessage(
 ) {
   switch (issue) {
     case "WEIGHT_ABOVE_50_KG":
-      return "Ukupna težina jedne kategorije prelazi 50 kg, a kamionska isporuka trenutno nema podešenu cenu.";
+      return "Ukupna težina jedne kategorije prelazi 50 kg, a u cenovniku nema automatske cene za tu pošiljku. Kontaktirajte podršku pre poručivanja.";
     case "TRUCK_UNAVAILABLE_FOR_CITY":
       return "Za korpu preko 50 kg potrebna je kamionska isporuka, koja trenutno nije dostupna u unetom gradu.";
     case "MISSING_PACKAGE_DIMENSIONS":

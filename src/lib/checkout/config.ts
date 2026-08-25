@@ -16,6 +16,7 @@ import {
   DEFAULT_PAYMENT_METHOD_CONFIG,
   DEFAULT_TRUCK_CITY_NAMES,
   resolveDeliveryMethodQuote,
+  TRUCK_DELIVERY_ENABLED,
   type CheckoutConfig,
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
@@ -295,14 +296,17 @@ export async function resolveDeliveryQuote({
   ) as Partial<Record<SKU, number>>;
   const fallbackTruckCities = [...DEFAULT_TRUCK_CITY_NAMES];
   const databaseTruckCities = truckCities.map((row) => row.name);
-  const effectiveTruckCities = databaseTruckCities.length
-    ? databaseTruckCities
-    : fallbackTruckCities;
+  const effectiveTruckCities = TRUCK_DELIVERY_ENABLED
+    ? databaseTruckCities.length
+      ? databaseTruckCities
+      : fallbackTruckCities
+    : [];
   const truckAvailable =
-    !normalizedCity ||
-    (cityRow
-      ? cityRow.truckEnabled
-      : cityCount === 0 && fallbackTruckCities.some((name) => normalizeCity(name) === normalizedCity));
+    TRUCK_DELIVERY_ENABLED &&
+    (!normalizedCity ||
+      (cityRow
+        ? cityRow.truckEnabled
+        : cityCount === 0 && fallbackTruckCities.some((name) => normalizeCity(name) === normalizedCity)));
 
   const publishedTariffLines = lines.flatMap((line) => {
           const product = productBySku.get(line.sku);

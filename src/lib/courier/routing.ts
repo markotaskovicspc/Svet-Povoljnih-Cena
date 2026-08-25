@@ -27,6 +27,9 @@ export type CourierRoutingResolution =
   | { kind: "mixed" }
   | { kind: "invalid_dimensions" };
 
+export const X_EXPRESS_MAX_PACKAGE_WEIGHT_KG = 30;
+export const X_EXPRESS_MAX_PACKAGE_SIDE_CM = 60;
+
 function expandedPackages(order: PackageRouteInput) {
   return order.items.flatMap((item) => {
     const packageCount = Math.max(
@@ -38,16 +41,18 @@ function expandedPackages(order: PackageRouteInput) {
       item.packDepthCm ?? 0,
       item.packHeightCm ?? 0,
     );
-    const bulky = largestDimension > 60;
+    const bulky =
+      largestDimension > X_EXPRESS_MAX_PACKAGE_SIDE_CM ||
+      (item.packGrossWeightKg ?? 0) > X_EXPRESS_MAX_PACKAGE_WEIGHT_KG;
     return Array.from({ length: packageCount }, () => ({ bulky }));
   });
 }
 
 /**
  * Resolves the launch routing rule for an order or a selected set of lines.
- * Automatic routing is deliberately blocked when a catalogue dimension is
- * missing: treating an unknown side as zero could send a large parcel to the
- * wrong courier.
+ * Automatic routing is deliberately blocked when a catalogue dimension or
+ * package weight is missing: treating unknown measurements as zero could send
+ * a large parcel to the wrong courier.
  */
 export function resolveCourierProvider(
   order: PackageRouteInput,
@@ -59,11 +64,19 @@ export function resolveCourierProvider(
       item.packDepthCm,
       item.packHeightCm,
     ].map(Number);
-    if (dimensions.some((value) => !Number.isFinite(value) || value <= 0)) {
+    const weightKg = Number(item.packGrossWeightKg);
+    if (
+      dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
+      !Number.isFinite(weightKg) ||
+      weightKg <= 0
+    ) {
       return { kind: "invalid_dimensions" };
     }
     providers.add(
-      Math.max(...dimensions) > 60 ? "MYGLS" : "X_EXPRESS",
+      Math.max(...dimensions) > X_EXPRESS_MAX_PACKAGE_SIDE_CM ||
+        weightKg > X_EXPRESS_MAX_PACKAGE_WEIGHT_KG
+        ? "MYGLS"
+        : "X_EXPRESS",
     );
   }
   if (!providers.size) return { kind: "invalid_dimensions" };
@@ -73,8 +86,8 @@ export function resolveCourierProvider(
 
 /**
  * Document routing:
- * - packages at or below 60 cm on every side go through X Express;
- * - packages with any side over 60 cm go through GLS;
+ * - packages at or below 30 kg and 60 cm on every side go through X Express;
+ * - packages over 30 kg or with any side over 60 cm go through MyGLS;
  * The legacy shipping-method value does not override the package dimensions.
  * Labels are numbered independently per courier (1/N, 2/N, ...).
  */

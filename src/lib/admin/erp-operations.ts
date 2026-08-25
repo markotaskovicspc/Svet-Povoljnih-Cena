@@ -550,7 +550,7 @@ export const operationalErpModules: ErpModule[] = [
         label: "Novi",
         tone: "primary",
         action: "pickup.create",
-        description: "Izaberite kurira; porudžbine će se zatim učitati samo ako njihove dimenzije odgovaraju tom kuriru.",
+        description: "Izaberite kurira; porudžbine će se zatim učitati samo ako njihova težina i dimenzije odgovaraju tom kuriru.",
         fields: [
           {
             key: "provider",

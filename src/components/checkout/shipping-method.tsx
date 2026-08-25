@@ -6,7 +6,10 @@ import { Loader2, MapPin, PackageOpen, Search, Truck, Wrench } from "lucide-reac
 import { motion } from "framer-motion";
 import { useCart } from "@/lib/hooks/use-cart";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
-import { ASSEMBLY_ENABLED } from "@/lib/checkout/config-shared";
+import {
+  ASSEMBLY_ENABLED,
+  TRUCK_DELIVERY_ENABLED,
+} from "@/lib/checkout/config-shared";
 import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CheckoutDeliveryPoint, CheckoutFormData } from "./checkout-flow";
@@ -60,12 +63,12 @@ export function ShippingMethodStep({
             checked={method === "kamion"}
             {...register("shippingMethod")}
           />
-        ) : (
+        ) : TRUCK_DELIVERY_ENABLED ? (
           <div className="bg-muted-bg ring-border/60 rounded-2xl p-4 text-xs text-ink-500 ring-1">
             Kamionska isporuka u vašem gradu trenutno nije dostupna. Promenite
             grad u koraku „Podaci za isporuku” za druge opcije.
           </div>
-        )}
+        ) : null}
       </fieldset>
 
       {glsDeliveryPointsEnabled && method === "kurir" ? (

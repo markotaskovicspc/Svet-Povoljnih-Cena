@@ -204,13 +204,18 @@ export async function createShipmentForOrder(
           item.product?.heightCm ??
           0,
       ),
-      packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
+      packGrossWeightKg: Number(
+        item.product?.packGrossWeightKg ??
+          item.product?.grossWeightKg ??
+          item.product?.weightKg ??
+          0,
+      ),
     })),
   } as const;
   const routing = resolveCourierProvider(routeInput);
   if (routing.kind === "invalid_dimensions") {
     throw new CourierConfigError(
-      "Automatski izbor kurira zahteva širinu, dužinu i visinu svakog paketa u šifarniku artikala.",
+      "Automatski izbor kurira zahteva težinu, širinu, dužinu i visinu svakog paketa u šifarniku artikala.",
     );
   }
   if (routing.kind === "mixed") {
@@ -220,7 +225,7 @@ export async function createShipmentForOrder(
   }
   if (options.provider && options.provider !== routing.provider) {
     throw new CourierConfigError(
-      `Izabrani kurir ne odgovara dimenzijama paketa; porudžbina pripada ${routing.provider === "MYGLS" ? "MyGLS" : "X Express"} nalogu.`,
+      `Izabrani kurir ne odgovara težini i dimenzijama paketa; porudžbina pripada ${routing.provider === "MYGLS" ? "MyGLS" : "X Express"} nalogu.`,
     );
   }
   const service = routeService(routeInput);

@@ -627,7 +627,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnim dimenzijama pripadaju kuriru ${myGls ? "MyGLS (bar jedna stranica preko 60 cm)" : "X Express (svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču.`}>
+            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču.`}>
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
@@ -915,7 +915,7 @@ function pickupLoadMessage(
       ? `${result.skippedMixedCount} mešovitih`
       : null,
     result.skippedInvalidDimensionsCount
-      ? `${result.skippedInvalidDimensionsCount} bez kompletnih dimenzija`
+      ? `${result.skippedInvalidDimensionsCount} bez kompletne težine ili dimenzija`
       : null,
     result.skippedOversizedCount
       ? `${result.skippedOversizedCount} preko MyGLS ograničenja`

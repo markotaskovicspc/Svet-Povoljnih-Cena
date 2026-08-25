@@ -20,13 +20,13 @@ describe("delivery method quote", () => {
         truckAvailable: true,
       }),
     ).toMatchObject({
-      prices: { kurir: 1_098, kamion: 4_990 },
+      prices: { kurir: 1_098, kamion: null },
       recommendedMethod: "kurir",
       pricingIssue: null,
     });
   });
 
-  it("uses the documented 4,990 RSD truck fallback above 50 kg", () => {
+  it("does not invent a truck tariff above the published 50 kg ceiling", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
@@ -44,14 +44,14 @@ describe("delivery method quote", () => {
         truckAvailable: true,
       }),
     ).toEqual({
-      prices: { kurir: null, kamion: 4_990 },
-      recommendedMethod: "kamion",
-      pricingIssue: null,
+      prices: { kurir: null, kamion: null },
+      recommendedMethod: null,
+      pricingIssue: "WEIGHT_ABOVE_50_KG",
       deliveryCategoryBreakdown: null,
     });
   });
 
-  it("uses an explicit admin truck price before the fixed fallback", () => {
+  it("keeps truck delivery disabled even when an old admin price exists", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
@@ -65,10 +65,10 @@ describe("delivery method quote", () => {
         configuredTruckPrice: 5_490,
         truckAvailable: true,
       }).prices.kamion,
-    ).toBe(5_490);
+    ).toBeNull();
   });
 
-  it("blocks an overweight cart when truck delivery is unavailable for the city", () => {
+  it("keeps the published overweight issue while truck delivery is disabled", () => {
     expect(
       resolveDeliveryMethodQuote({
         publishedTariff: {
@@ -85,7 +85,7 @@ describe("delivery method quote", () => {
     ).toMatchObject({
       prices: { kurir: null, kamion: null },
       recommendedMethod: null,
-      pricingIssue: "TRUCK_UNAVAILABLE_FOR_CITY",
+      pricingIssue: "WEIGHT_ABOVE_50_KG",
     });
   });
 
@@ -104,7 +104,7 @@ describe("delivery method quote", () => {
         truckAvailable: true,
       }),
     ).toMatchObject({
-      prices: { kurir: 990, kamion: 4_990 },
+      prices: { kurir: 990, kamion: null },
       recommendedMethod: "kurir",
       pricingIssue: null,
     });

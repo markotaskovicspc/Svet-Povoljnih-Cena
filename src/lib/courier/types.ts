@@ -5,7 +5,7 @@ import type { ShipmentService, ShipmentStatus } from "@prisma/client";
  *
  * Two services are integrated:
  *
- *   COURIER_SMALL  — parcel courier for boxable items (≤ 30 kg, ≤ 1.2 m).
+ *   COURIER_SMALL  — parcel courier for boxable items (≤ 30 kg, every side ≤ 60 cm).
  *                    Real provider in v1: X Express.
  *   COURIER_BULKY  — kamionska isporuka for furniture (krevet, ormar, …).
  *                    Real provider in v1: in-house dispatch + sub-contractor

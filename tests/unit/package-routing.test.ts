@@ -23,13 +23,19 @@ describe("package routing", () => {
     ).toBe("COURIER_SMALL");
   });
 
-  it("routes by the 60 cm dimension rule, regardless of weight", () => {
+  it("routes packages over 30 kg or 60 cm through MyGLS", () => {
     expect(
       routeService({
         shippingMethod: "KURIR",
-        items: [{ withAssembly: false, packGrossWeightKg: 30.01 }],
+        items: [{
+          withAssembly: false,
+          packWidthCm: 30,
+          packDepthCm: 20,
+          packHeightCm: 10,
+          packGrossWeightKg: 30.01,
+        }],
       }),
-    ).toBe("COURIER_SMALL");
+    ).toBe("COURIER_BULKY");
     expect(
       routeService({
         shippingMethod: "KURIR",
@@ -37,6 +43,9 @@ describe("package routing", () => {
           {
             withAssembly: false,
             packWidthCm: 60.01,
+            packDepthCm: 20,
+            packHeightCm: 10,
+            packGrossWeightKg: 12,
           },
         ],
       }),
@@ -47,8 +56,8 @@ describe("package routing", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
-        { withAssembly: false, packWidthCm: 70 },
-        { withAssembly: false, packWidthCm: 30 },
+        { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
+        { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
       ],
     });
     expect(plan.map((item) => [item.courier, item.label])).toEqual([
@@ -67,6 +76,7 @@ describe("package routing", () => {
             packWidthCm: 60,
             packDepthCm: 40,
             packHeightCm: 30,
+            packGrossWeightKg: 30,
           },
         ],
       }),
@@ -80,6 +90,21 @@ describe("package routing", () => {
             packWidthCm: 60.01,
             packDepthCm: 40,
             packHeightCm: 30,
+            packGrossWeightKg: 12,
+          },
+        ],
+      }),
+    ).toEqual({ kind: "single", provider: "MYGLS" });
+    expect(
+      resolveCourierProvider({
+        shippingMethod: "KURIR",
+        items: [
+          {
+            withAssembly: false,
+            packWidthCm: 60,
+            packDepthCm: 40,
+            packHeightCm: 30,
+            packGrossWeightKg: 30.01,
           },
         ],
       }),
@@ -92,13 +117,27 @@ describe("package routing", () => {
     ).toEqual({ kind: "invalid_dimensions" });
   });
 
+  it("requires complete dimensions and package weight", () => {
+    expect(
+      resolveCourierProvider({
+        shippingMethod: "KURIR",
+        items: [{
+          withAssembly: false,
+          packWidthCm: 30,
+          packDepthCm: 20,
+          packHeightCm: 10,
+        }],
+      }),
+    ).toEqual({ kind: "invalid_dimensions" });
+  });
+
   it("marks an order that needs both couriers as mixed", () => {
     expect(
       resolveCourierProvider({
         shippingMethod: "KURIR",
         items: [
-          { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 20 },
-          { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 20 },
+          { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
+          { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
         ],
       }),
     ).toEqual({ kind: "mixed" });
@@ -108,8 +147,8 @@ describe("package routing", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
-        { withAssembly: false, packWidthCm: 70 },
-        { withAssembly: false, qty: 2, packQty: 1, packWidthCm: 30 },
+        { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
+        { withAssembly: false, qty: 2, packQty: 1, packWidthCm: 30, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
       ],
     });
     expect(plan.map((item) => [item.courier, item.label])).toEqual([

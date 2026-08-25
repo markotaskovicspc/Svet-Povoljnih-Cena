@@ -6,13 +6,14 @@ import type {
   PublishedDeliveryTariffQuote,
 } from "@/lib/delivery-tariff";
 
-export const SHIPPING_PRICES: Record<ShippingMethod, number> = {
+export const SHIPPING_PRICES: Record<ShippingMethod, number | null> = {
   kurir: 990,
-  kamion: 4990,
+  kamion: null,
 };
 
 export const ASSEMBLY_PRICE_DEFAULT = 2990;
 export const ASSEMBLY_ENABLED = false;
+export const TRUCK_DELIVERY_ENABLED = false;
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   ips: "Raiffeisen IPS",
@@ -99,8 +100,8 @@ export const DEFAULT_DELIVERY_QUOTE: CheckoutDeliveryQuote = {
   deliveryCategoryBreakdown: null,
   assemblyPrice: ASSEMBLY_ENABLED ? ASSEMBLY_PRICE_DEFAULT : 0,
   assemblyPricesBySku: {},
-  truckAvailable: true,
-  truckCities: [...DEFAULT_TRUCK_CITY_NAMES],
+  truckAvailable: false,
+  truckCities: [],
 };
 
 export function resolveDeliveryMethodQuote({
@@ -126,8 +127,8 @@ export function resolveDeliveryMethodQuote({
     : (publishedTariff?.total ??
       configuredCourierPrice ??
       SHIPPING_PRICES.kurir);
-  const truckPrice = truckAvailable
-    ? (configuredTruckPrice ?? SHIPPING_PRICES.kamion)
+  const truckPrice = TRUCK_DELIVERY_ENABLED && truckAvailable
+    ? configuredTruckPrice
     : null;
   const recommendedMethod =
     courierPrice != null ? "kurir" : truckPrice != null ? "kamion" : null;
@@ -138,10 +139,10 @@ export function resolveDeliveryMethodQuote({
     pricingIssue:
       recommendedMethod != null
         ? null
-        : requiresTruck && !truckAvailable
+        : requiresTruck && TRUCK_DELIVERY_ENABLED && !truckAvailable
           ? "TRUCK_UNAVAILABLE_FOR_CITY"
           : (publishedTariff?.issue ?? "NO_CONFIGURED_PRICE"),
-    // A flat truck or courier fallback covers the complete cart. Category
+    // A configured flat delivery price covers the complete cart. Category
     // prices are meaningful only when the published table itself resolved.
     deliveryCategoryBreakdown:
       publishedTariff?.total != null ? publishedTariff.categories : null,
