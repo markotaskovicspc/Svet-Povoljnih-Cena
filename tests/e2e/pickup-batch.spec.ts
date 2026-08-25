@@ -222,15 +222,16 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "Novi",
         "Uredi",
         "Obriši",
-        "Proknjiži",
       ]) {
         await expect(
           page.getByRole("button", { name: command, exact: true }),
         ).toBeVisible();
       }
-      await expect(
-        page.getByRole("button", { name: "Proknjiži", exact: true }),
-      ).toBeDisabled();
+      const postCommand = page.getByRole("button", {
+        name: /^(Proknjiži|Kreiraj adresnice)$/,
+      });
+      await expect(postCommand).toBeVisible();
+      await expect(postCommand).toBeDisabled();
       for (const header of ["Status", "Broj naloga", "Datum naloga"]) {
         await expect(
           page.getByRole("columnheader").filter({
@@ -303,7 +304,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "aria-describedby",
         "pickup-posting-block-reason",
       );
-      await expect(blockReason).toContainText("MyGLS integracija nije uključena");
+      await expect(blockReason).toContainText(
+        "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina",
+      );
       await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
       const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
       const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
@@ -325,6 +328,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     });
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
+      const ordersFrom = page.getByLabel("Porudžbine od");
+      const ordersTo = page.getByLabel("Porudžbine do");
+      await ordersFrom.fill("2000-01-01");
+      await ordersTo.fill("2099-12-31");
       await page
         .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
@@ -333,6 +340,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           hasText: "Učitano redova: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
+      await expect(ordersFrom).toHaveValue("2000-01-01");
+      await expect(ordersTo).toHaveValue("2099-12-31");
       const [batch, orders] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({
           where: { id: firstBatchId },

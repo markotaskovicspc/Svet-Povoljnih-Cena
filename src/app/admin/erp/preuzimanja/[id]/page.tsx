@@ -631,7 +631,11 @@ export default async function PickupBatchPage({
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
-              <AdminActionForm action={loadOrdersAction} className="flex flex-wrap items-end gap-2">
+              <AdminActionForm
+                action={loadOrdersAction}
+                preserveValues
+                className="flex flex-wrap items-end gap-2"
+              >
                 <input type="hidden" name="batchId" value={batch.id} />
                 <Field label="Porudžbine od">
                   <Input name="ordersFrom" type="date" />
