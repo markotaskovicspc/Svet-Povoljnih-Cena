@@ -158,7 +158,7 @@ function AddressFieldset({
           <Field
             label="Naziv"
             required
-            className="col-span-2 lg:col-span-6"
+            className="lg:col-span-3"
             error={showError("companyName")}
             {...register(`${prefix}.companyName` as const, {
               required: "Obavezno za pravno lice",
@@ -168,6 +168,7 @@ function AddressFieldset({
           <Field
             label="PIB"
             required
+            className="lg:col-span-3"
             placeholder="123456789"
             inputMode="numeric"
             maxLength={9}

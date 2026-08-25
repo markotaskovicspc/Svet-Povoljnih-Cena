@@ -89,7 +89,16 @@ describe("obračun prodajne stavke", () => {
   });
 });
 
-describe("validacija ručne VP/INO porudžbine", () => {
+describe("validacija ručne MP/VP/INO porudžbine", () => {
+  it("prihvata MP kanal", () => {
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        channel: "MP",
+      }).success,
+    ).toBe(true);
+  });
+
   it("prihvata kompletnu VP porudžbinu", () => {
     expect(manualSalesOrderInputSchema.safeParse(validInput).success).toBe(true);
   });
@@ -189,7 +198,8 @@ describe("validacija ručne VP/INO porudžbine", () => {
     }
   });
 
-  it("numeracija koristi odvojene VP i INO prefikse", () => {
+  it("numeracija koristi odvojene MP, VP i INO prefikse", () => {
+    expect(manualOrderNumberPrefix("MP")).toBe("MP");
     expect(manualOrderNumberPrefix("VP")).toBe("VP");
     expect(manualOrderNumberPrefix("INO")).toBe("INO");
   });

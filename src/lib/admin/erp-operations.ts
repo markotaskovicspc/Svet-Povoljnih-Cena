@@ -403,7 +403,7 @@ export const operationalErpModules: ErpModule[] = [
     number: "15",
     title: "Pregled porudžbina",
     description:
-      "Jedinstven pregled WEB, Ananas, VP i INO porudžbina — jedan red za svaku šifru artikla.",
+      "Jedinstven pregled WEB, Ananas, MP, VP i INO porudžbina — jedan red za svaku šifru artikla.",
     status: "ready",
     commands: [
       {
@@ -423,13 +423,15 @@ export const operationalErpModules: ErpModule[] = [
         action: "sales-order.delete",
         needsSelection: true,
         confirm:
-          "Obrisati izabrane neobrađene VP/INO porudžbine? WEB, Ananas, plaćene i dokumentovane porudžbine ne mogu da se obrišu.",
+          "Obrisati izabrane neobrađene MP/VP/INO porudžbine? WEB, Ananas, plaćene i dokumentovane porudžbine ne mogu da se obrišu.",
       },
     ],
     detailHrefBase: "/admin/erp/prodajni-nalozi",
     columns: [
       text("number", "Broj porudžbine"),
-      status("channel", "Kanal", ["WEB", "ANANAS", "VP", "INO"]),
+      date("orderDate", "Datum porudžbine"),
+      date("fiscalizedAt", "Datum fiskalizacije"),
+      status("channel", "Kanal", ["WEB", "ANANAS", "MP", "VP", "INO"]),
       text("customer", "Ime i prezime kupca / firma"),
       text("pib", "PIB"),
       text("priceList", "Cenovnik"),
@@ -596,6 +598,7 @@ export const operationalErpModules: ErpModule[] = [
         "Otkazan",
       ]),
       text("number", "Broj naloga"),
+      text("provider", "Kurirska služba"),
       date("createdAt", "Datum naloga"),
       date("pickupDate", "Datum preuzimanja"),
       number("packages", "Broj redova"),
@@ -1520,10 +1523,11 @@ async function salesOrderRows(
           },
         },
       },
-      fiscal: { select: { id: true } },
+      fiscal: { select: { id: true, fiscalizedAt: true } },
       fiscalDocuments: {
         where: { kind: "SALE", status: "ISSUED" },
-        select: { id: true },
+        select: { id: true, issuedAt: true },
+        orderBy: { issuedAt: "asc" },
       },
       invoices: {
         where: { status: { not: "CANCELLED" } },
@@ -1541,6 +1545,10 @@ async function salesOrderRows(
       [order.shipFirstName, order.shipLastName].filter(Boolean).join(" ");
     const common = {
       number: order.number,
+      orderDate: dateTime(order.createdAt),
+      fiscalizedAt: dateTime(
+        order.fiscalDocuments[0]?.issuedAt ?? order.fiscal?.fiscalizedAt ?? null,
+      ),
       channel: order.channel,
       customer,
       pib: order.shipPib,
@@ -1682,6 +1690,12 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
     id: row.id,
     values: {
       number: row.number,
+      provider:
+        row.provider === "MYGLS"
+          ? "MyGLS"
+          : row.provider === "X_EXPRESS"
+            ? "X Express"
+            : row.provider,
       status: PICKUP_BATCH_STATUS_LABEL[row.status],
       packages: row._count.lines,
       createdAt: dateTime(row.createdAt),

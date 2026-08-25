@@ -51,10 +51,6 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
-const loadOrdersSchema = batchSchema.extend({
-  ordersFrom: z.string().optional(),
-  ordersTo: z.string().optional(),
-});
 const providerSchema = z.enum(["MYGLS", "X_EXPRESS"]);
 const removeOrderSchema = batchSchema.extend({ orderId: z.string().min(1) });
 const packageSchema = batchSchema.extend({
@@ -211,19 +207,11 @@ async function loadOrdersAction(
       entity: "PickupBatch",
     },
     async (actorId, actionData: FormData) => {
-      const parsed = loadOrdersSchema.safeParse(Object.fromEntries(actionData.entries()));
+      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
       if (!parsed.success) {
         return { ok: false as const, error: "Nalog nije izabran." };
       }
-      const from = parseOptionalDay(parsed.data.ordersFrom, false);
-      const toExclusive = parseOptionalDay(parsed.data.ordersTo, true);
-      if (from && toExclusive && from >= toExclusive) {
-        return { ok: false as const, error: "Datum od mora biti pre datuma do." };
-      }
-      const result = await loadEligibleOrders(parsed.data.batchId, actorId, {
-        from,
-        toExclusive,
-      });
+      const result = await loadEligibleOrders(parsed.data.batchId, actorId);
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
@@ -426,10 +414,16 @@ export default async function PickupBatchPage({
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
-              href={`/admin/erp/preuzimanja/${batch.id}/stampa`}
+              href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=picking`}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
-              Picking lista, adresnice i interne etikete
+              Samostalna picking lista
+            </Link>
+            <Link
+              href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Etikete i kurirske adresnice
             </Link>
             <form action={createAction}>
               <input type="hidden" name="provider" value="X_EXPRESS" />
@@ -636,24 +630,18 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču. MyGLS paketi volumetrijske dimenzije preko 300 cm pripadaju II kategoriji i mogu imati doplatu, ali to ne blokira kreiranje adresnice.`}>
+            <CardTitle description={`Učitavaju se sve nefiskalizovane, još neučitane cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite i nepotpune porudžbine se preskaču. MyGLS paketi volumetrijske dimenzije preko 300 cm pripadaju II kategoriji i mogu imati doplatu, ali to ne blokira kreiranje adresnice.`}>
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
               <AdminActionForm
                 action={loadOrdersAction}
                 preserveValues
-                className="flex flex-wrap items-end gap-2"
+                className="flex items-end"
               >
                 <input type="hidden" name="batchId" value={batch.id} />
-                <Field label="Porudžbine od">
-                  <Input name="ordersFrom" type="date" />
-                </Field>
-                <Field label="Porudžbine do">
-                  <Input name="ordersTo" type="date" />
-                </Field>
                 <SubmitButton pendingLabel="Učitavanje…">
-                  Učitaj porudžbine
+                  Učitaj sve nefiskalizovane
                 </SubmitButton>
               </AdminActionForm>
             ) : null}
@@ -758,9 +746,9 @@ export default async function PickupBatchPage({
               <p>Nalog još nema učitanih porudžbina.</p>
               <p className="mt-1 text-xs">
                 {editing
-                  ? "Kliknite „Učitaj porudžbine“. Biće dodate samo nove kurirske porudžbine čiji su svi redovi u podrazumevanom DC magacinu."
+                  ? "Kliknite „Učitaj sve nefiskalizovane“. Biće dodate samo neučitane kurirske porudžbine čiji su svi redovi u podrazumevanom DC magacinu i koje još nisu fiskalizovane."
                   : editable
-                    ? "Kliknite „Uredi“, pa „Učitaj porudžbine“."
+                    ? "Kliknite „Uredi“, pa „Učitaj sve nefiskalizovane“."
                     : "Ovaj nalog više nije moguće dopunjavati."}
               </p>
             </div>
@@ -970,17 +958,4 @@ function isIdResult(value: unknown): value is { id: string } {
     "id" in value &&
     typeof value.id === "string"
   );
-}
-
-function parseOptionalDay(value: string | undefined, nextDay: boolean) {
-  if (!value) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error("Period porudžbina nije ispravan.");
-  }
-  const parsed = parseBelgradeDateTimeLocal(`${value}T00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("Period porudžbina nije ispravan.");
-  }
-  if (nextDay) parsed.setUTCDate(parsed.getUTCDate() + 1);
-  return parsed;
 }

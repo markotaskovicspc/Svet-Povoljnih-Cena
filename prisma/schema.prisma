@@ -1188,6 +1188,7 @@ enum OrderStatus {
 enum SalesChannel {
   WEB
   ANANAS
+  MP
   VP
   INO
 }

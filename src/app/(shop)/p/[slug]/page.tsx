@@ -29,6 +29,8 @@ import { getPublishedContentPage } from "@/lib/cms/pages";
 import { getSystemContentPage } from "@/lib/cms/system-pages";
 import { resolveProductPdpLayout } from "@/lib/product-pdp-layout";
 import { deliveryCategory } from "@/lib/delivery-tariff";
+import { getProductAvailability } from "@/lib/product-availability";
+import { BRAND } from "@/lib/brand";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -67,9 +69,27 @@ export async function generateMetadata({
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Proizvod nije pronađen" };
   const price = lowestPublicDisplayedUnitPrice(product);
+  const description =
+    product.shortDescription ?? stripHtml(product.description).slice(0, 160);
+  const canonical = `/p/${product.slug}`;
   return {
     title: `${product.name} — ${formatRsd(price.effective)}`,
-    description: product.shortDescription ?? product.description.slice(0, 160),
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title: product.name,
+      description,
+      type: "website",
+      url: canonical,
+      ...(product.media.images.length
+        ? {
+            images: product.media.images.map((image) => ({
+              url: image.pdpUrl ?? image.url,
+              alt: image.alt ?? product.name,
+            })),
+          }
+        : {}),
+    },
   };
 }
 
@@ -82,6 +102,37 @@ export default async function ProductPage({ params }: RouteProps) {
   if (!catalogProduct) notFound();
   const product: Product = catalogProduct;
   const publicPrice = effectiveUnitPrice(product);
+  const availability = getProductAvailability(product);
+  const productStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description:
+      product.shortDescription ?? stripHtml(product.description).slice(0, 500),
+    sku: product.sku,
+    ...(product.media.images.length
+      ? {
+          image: product.media.images.map(
+            (image) => image.pdpUrl ?? image.url,
+          ),
+        }
+      : {}),
+    url: `${BRAND.url}/p/${product.slug}`,
+    offers: {
+      "@type": "Offer",
+      url: `${BRAND.url}/p/${product.slug}`,
+      priceCurrency: "RSD",
+      price: publicPrice.effective.toFixed(2),
+      availability: availability.canAddToCart
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+      itemCondition: "https://schema.org/NewCondition",
+      seller: {
+        "@type": "OnlineStore",
+        name: BRAND.name,
+      },
+    },
+  };
   const standardDeliveryTermsMarkdown =
     publishedDeliveryTerms?.bodyMarkdown ??
     getSystemContentPage(DELIVERY_TERMS_SLUG)?.bodyMarkdown;
@@ -139,6 +190,12 @@ export default async function ProductPage({ params }: RouteProps) {
 
   return (
     <article className="bg-canvas pb-32 md:pb-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productStructuredData).replace(/</g, "\\u003c"),
+        }}
+      />
       <ProductViewAnalytics
         productId={product.id}
         item={{

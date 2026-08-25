@@ -214,7 +214,6 @@ export async function savePickupPackage(
 export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
-  period: { from?: Date | null; toExclusive?: Date | null } = {},
 ) {
   return db.$transaction(async (tx) => {
     await lockBatch(tx, batchId);
@@ -243,8 +242,18 @@ export async function loadEligibleOrders(
       FROM "Order" AS orders
       WHERE orders."status" = 'KREIRANO'
         AND orders."shippingMethod" = 'KURIR'
-        ${period.from ? Prisma.sql`AND orders."createdAt" >= ${period.from}` : Prisma.empty}
-        ${period.toExclusive ? Prisma.sql`AND orders."createdAt" < ${period.toExclusive}` : Prisma.empty}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "FiscalReceipt" AS legacy_fiscal
+          WHERE legacy_fiscal."orderId" = orders."id"
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "FiscalDocument" AS fiscal_documents
+          WHERE fiscal_documents."orderId" = orders."id"
+            AND fiscal_documents."kind" = 'SALE'
+            AND fiscal_documents."status" = 'ISSUED'
+        )
         AND EXISTS (
           SELECT 1
           FROM "OrderItem" AS items

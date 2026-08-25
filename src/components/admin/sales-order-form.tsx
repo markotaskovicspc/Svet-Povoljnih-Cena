@@ -43,6 +43,7 @@ function emptyProduct(): SalesOrderProductData {
   return {
     productId: "",
     sku: "",
+    name: "",
     articleStatus: "",
     supplier: "",
     supplierId: null,
@@ -95,6 +96,7 @@ function money(value: number, currency: string) {
 
 function metadataFields(line: EditableLine) {
   return [
+    ["Pun naziv", line.name],
     ["Dobavljač", line.supplier],
     ["Status artikla", line.articleStatus],
     ["Kategorija", line.category],
@@ -121,12 +123,15 @@ export function SalesOrderForm({
   options: SalesOrderFormOptions;
   detail?: SalesOrderDetail | null;
   readOnly?: boolean;
-  initialChannel?: "VP" | "INO";
+  initialChannel?: "MP" | "VP" | "INO";
 }) {
   const clientReady = useClientReady();
-  const [channel, setChannel] = useState<"WEB" | "ANANAS" | "VP" | "INO">(
+  const [channel, setChannel] = useState<
+    "WEB" | "ANANAS" | "MP" | "VP" | "INO"
+  >(
     detail?.channel === "WEB" ||
       detail?.channel === "ANANAS" ||
+      detail?.channel === "MP" ||
       detail?.channel === "INO" ||
       detail?.channel === "VP"
       ? detail.channel
@@ -347,7 +352,7 @@ export function SalesOrderForm({
     if (!detail || deleting) return;
     if (
       !window.confirm(
-        `Obrisati porudžbinu ${detail.number}? Ova akcija je dozvoljena samo za neobrađenu i neplaćenu VP/INO porudžbinu.`,
+        `Obrisati porudžbinu ${detail.number}? Ova akcija je dozvoljena samo za neobrađenu i neplaćenu MP/VP/INO porudžbinu.`,
       )
     ) {
       return;
@@ -404,7 +409,7 @@ export function SalesOrderForm({
       {readOnly && detail && !detail.canEdit ? (
         <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
           Ova porudžbina je samo za pregled: WEB/Ananas porudžbine i već
-          dokumentovane, poslate ili završene VP/INO porudžbine ne menjaju se
+          dokumentovane, poslate ili završene MP/VP/INO porudžbine ne menjaju se
           kroz ručni obrazac.
         </p>
       ) : null}
@@ -426,7 +431,13 @@ export function SalesOrderForm({
               value={channel}
               disabled={readOnly || Boolean(detail)}
               onChange={(event) =>
-                setChannel(event.target.value === "INO" ? "INO" : "VP")
+                setChannel(
+                  event.target.value === "INO"
+                    ? "INO"
+                    : event.target.value === "MP"
+                      ? "MP"
+                      : "VP",
+                )
               }
               className="h-9 rounded-lg border border-input bg-surface px-3 text-sm disabled:opacity-60"
               aria-label="Vrsta porudžbine"
@@ -434,6 +445,7 @@ export function SalesOrderForm({
               {channel === "WEB" || channel === "ANANAS" ? (
                 <option value={channel}>{channel}</option>
               ) : null}
+              <option value="MP">MP · maloprodaja</option>
               <option value="VP">VP · veleprodaja</option>
               <option value="INO">INO · izvoz</option>
             </select>
@@ -578,10 +590,17 @@ export function SalesOrderForm({
                 className="rounded-xl border border-border/70 p-4"
               >
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h3 className="font-medium text-ink-900">
-                    Red {index + 1}
-                    {line.shortName ? ` · ${line.shortName}` : ""}
-                  </h3>
+                  <div>
+                    <h3 className="font-medium text-ink-900">
+                      Red {index + 1}
+                      {line.name ? ` · ${line.name}` : ""}
+                    </h3>
+                    {line.shortName && line.shortName !== line.name ? (
+                      <p className="text-xs text-ink-500">
+                        Kratki naziv: {line.shortName}
+                      </p>
+                    ) : null}
+                  </div>
                   {!readOnly && lines.length > 1 ? (
                     <Button
                       type="button"

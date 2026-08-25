@@ -24,9 +24,10 @@ describe("ERP module 13 pickup batches", () => {
       "Obriši",
       "Proknjiži",
     ]);
-    expect(definition?.columns.slice(0, 3).map((column) => column.label)).toEqual([
+    expect(definition?.columns.slice(0, 4).map((column) => column.label)).toEqual([
       "Status",
       "Broj naloga",
+      "Kurirska služba",
       "Datum naloga",
     ]);
     expect(definition?.detailHrefBase).toBe("/admin/erp/preuzimanja");

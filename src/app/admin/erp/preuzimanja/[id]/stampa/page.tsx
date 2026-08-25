@@ -12,11 +12,17 @@ export const metadata = {
 
 export default async function PickupBatchPrintPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ section?: string }>;
 }) {
   await requireAdminAction(["OPS"]);
   const { id } = await params;
+  const requestedSection = (await searchParams).section;
+  const section = requestedSection === "labels" ? "labels" : "picking";
+  const showPicking = section === "picking";
+  const showLabels = section === "labels";
   const batch = await db.pickupBatch.findUnique({
     where: { id },
     include: {
@@ -75,10 +81,22 @@ export default async function PickupBatchPrintPage({
         >
           ← Nazad na nalog
         </Link>
-        <PrintPageButton label="Štampaj picking listu i interne etikete" />
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=${
+              showPicking ? "labels" : "picking"
+            }`}
+            className="inline-flex h-9 items-center rounded-lg border border-black bg-white px-3 text-sm font-medium"
+          >
+            {showPicking ? "Otvori etikete i adresnice" : "Otvori picking listu"}
+          </Link>
+          <PrintPageButton
+            label={showPicking ? "Štampaj picking listu" : "Štampaj interne etikete"}
+          />
+        </div>
       </div>
 
-      <section className="break-after-page">
+      {showPicking ? <section>
         <header className="border-b-2 border-black pb-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em]">Svet povoljnih cena · magacin</p>
           <h1 className="mt-1 text-3xl font-bold">Zbirna picking lista</h1>
@@ -117,9 +135,9 @@ export default async function PickupBatchPrintPage({
           <p className="border-t border-black pt-2">Pripremio</p>
           <p className="border-t border-black pt-2">Kontrolisao</p>
         </div>
-      </section>
+      </section> : null}
 
-      <section className="rounded-xl border border-black/20 bg-stone-50 p-5 print:hidden">
+      {showLabels ? <section className="rounded-xl border border-black/20 bg-stone-50 p-5 print:hidden">
         <header>
           <h2 className="text-2xl font-bold">Kurirske adresnice</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6">
@@ -161,9 +179,9 @@ export default async function PickupBatchPrintPage({
             </p>
           )}
         </header>
-      </section>
+      </section> : null}
 
-      <section aria-labelledby="internal-package-labels-title">
+      {showLabels ? <section aria-labelledby="internal-package-labels-title">
         <header className="mb-5">
           <h2 id="internal-package-labels-title" className="text-2xl font-bold">
             Interne magacinske etikete
@@ -203,7 +221,7 @@ export default async function PickupBatchPrintPage({
             </article>
           ))}
         </div>
-      </section>
+      </section> : null}
     </main>
   );
 }

@@ -51,12 +51,23 @@ export default async function SalesOrderDetailPage({
           { label: detail.number },
         ]}
         actions={
-          <Link
-            href="/admin/erp/prodajni-nalozi"
-            className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
-          >
-            Nazad na pregled
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {detail.channel !== "ANANAS" ? (
+              <Link
+                href={`/admin/erp/prodajni-nalozi/${detail.id}/stampa`}
+                target="_blank"
+                className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                Štampaj predračun
+              </Link>
+            ) : null}
+            <Link
+              href="/admin/erp/prodajni-nalozi"
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Nazad na pregled
+            </Link>
+          </div>
         }
       />
       <div className="px-4 py-6 md:px-8">

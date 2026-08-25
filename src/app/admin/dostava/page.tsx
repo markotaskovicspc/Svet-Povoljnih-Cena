@@ -476,8 +476,9 @@ export default async function DeliveryPage() {
             </div>
           </AdminActionForm>
           <p className="mt-3 text-xs text-ink-500">
-            Preko 50 kg checkout koristi kamionsku dostavu. Njenu cenu menjate
-            pravilom GLOBAL / Svi gradovi u odeljku ispod.
+            Kamionska dostava je sistemski isključena i kupcu se ne prikazuje.
+            Sačuvane kamionske vrednosti ostaju samo za buduću odluku o ponovnom
+            uključivanju.
           </p>
         </Card>
         <Card>

@@ -24,7 +24,11 @@ import {
   type ManualSalesOrderInput,
 } from "@/lib/admin/sales-order";
 
-const MANUAL_CHANNELS: SalesChannel[] = [SalesChannel.VP, SalesChannel.INO];
+const MANUAL_CHANNELS: SalesChannel[] = [
+  SalesChannel.MP,
+  SalesChannel.VP,
+  SalesChannel.INO,
+];
 const EDITABLE_STATUSES: OrderStatus[] = [
   "KREIRANO",
   "POTVRDJENO",
@@ -152,6 +156,7 @@ export type SalesOrderFormOptions = {
 export type SalesOrderProductData = {
   productId: string;
   sku: string;
+  name: string;
   articleStatus: string;
   supplier: string;
   supplierId: string | null;
@@ -208,6 +213,7 @@ function numberValue(value: Prisma.Decimal | number | null | undefined) {
 function productNames(product: LoadedProduct) {
   const leaf = product.categories[0]?.category ?? null;
   return {
+    name: product.name,
     supplier: product.supplier?.name ?? "",
     category: leaf?.parent?.name ?? leaf?.name ?? "",
     group: product.group?.name ?? "",
@@ -534,7 +540,7 @@ function snapshotLine(
 
 async function nextManualOrderNumber(
   tx: Prisma.TransactionClient,
-  channel: "VP" | "INO",
+  channel: "MP" | "VP" | "INO",
 ) {
   const year = new Date().getFullYear();
   const lockKey = `manual-sales-order:${channel}:${year}`;
@@ -889,7 +895,7 @@ function ensureEditableOrder(order: {
   supplierFulfillments: Array<{ sentAt: Date | null }>;
 }) {
   if (!MANUAL_CHANNELS.includes(order.channel)) {
-    throw new Error("WEB i Ananas porudžbine se ne menjaju kroz ručni VP/INO obrazac.");
+    throw new Error("WEB i Ananas porudžbine se ne menjaju kroz ručni MP/VP/INO obrazac.");
   }
   if (!EDITABLE_STATUSES.includes(order.status)) {
     throw new Error("Porudžbina u ovom statusu više nije dostupna za izmenu.");
@@ -1185,6 +1191,7 @@ export async function getSalesOrderDetail(
       lines.push({
         productId: item.productId ?? "",
         sku: item.sku,
+        name: item.name,
         articleStatus: "",
         supplierId: null,
         supplier: item.supplierName ?? "",

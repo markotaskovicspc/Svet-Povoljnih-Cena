@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { HeroCarousel } from "@/components/home/hero-carousel";
 import { ShortcutStrip } from "@/components/home/shortcut-strip";
 import { SectionRail } from "@/components/home/section-rail";
@@ -10,15 +11,36 @@ import {
 import { getHomeLayout } from "@/lib/storefront/homepage";
 import { HomeSectionSlotKey } from "@prisma/client";
 import { BRAND } from "@/lib/brand";
+import { HOME_SEO_DESCRIPTION, HOME_SEO_TITLE } from "@/lib/seo";
 
 export const revalidate = 60;
 
+export const metadata: Metadata = {
+  title: { absolute: HOME_SEO_TITLE },
+  description: HOME_SEO_DESCRIPTION,
+  alternates: { canonical: "/" },
+};
+
 const websiteStructuredData = {
   "@context": "https://schema.org",
-  "@type": "WebSite",
-  name: BRAND.name,
-  alternateName: ["Svet povoljnih cena", "svetpovoljnihcena.rs"],
-  url: `${BRAND.url}/`,
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${BRAND.url}/#website`,
+      name: BRAND.name,
+      alternateName: ["Svet povoljnih cena", "svetpovoljnihcena.rs"],
+      url: `${BRAND.url}/`,
+      publisher: { "@id": `${BRAND.url}/#organization` },
+    },
+    {
+      "@type": "OnlineStore",
+      "@id": `${BRAND.url}/#organization`,
+      name: BRAND.name,
+      legalName: BRAND.legalName,
+      url: `${BRAND.url}/`,
+      logo: `${BRAND.url}/icon.svg`,
+    },
+  ],
 };
 
 export default async function Home() {

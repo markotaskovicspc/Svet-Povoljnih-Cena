@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { BRAND } from "@/lib/brand";
+import { HOME_SEO_DESCRIPTION, HOME_SEO_TITLE } from "@/lib/seo";
 
 const fontSans = Inter({
   variable: "--font-inter",
@@ -12,17 +13,21 @@ const fontSans = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default:
-      "Svet povoljnih cena – mesto gde su dobre ponude dostupne svima!",
+    default: HOME_SEO_TITLE,
     template: `%s · ${BRAND.name}`,
   },
-  description:
-    "Dobrodošli na platformu koja iskustvo kupovine čini jednostavnim, sigurnim i bez stresa, uz produženu garanciju i kratke rokove isporuke.",
+  description: HOME_SEO_DESCRIPTION,
   metadataBase: new URL(BRAND.url),
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
+  },
   openGraph: {
+    title: HOME_SEO_TITLE,
+    description: HOME_SEO_DESCRIPTION,
     siteName: BRAND.name,
     type: "website",
     locale: "sr_RS",
+    url: "/",
   },
 };
 

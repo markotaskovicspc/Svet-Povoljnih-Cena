@@ -13,7 +13,7 @@ loadEnv();
 
 const expect = baseExpect.configure({ timeout: 30_000 });
 
-test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
+test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
   test.skip(
     process.env.E2E_SALES_ORDERS !== "1",
     "Set E2E_SALES_ORDERS=1 to run the isolated sales-order suite.",
@@ -427,6 +427,8 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       }
       for (const header of [
         "Broj porudžbine",
+        "Datum porudžbine",
+        "Datum fiskalizacije",
         "Ime i prezime kupca / firma",
         "PIB",
         "Cenovnik",
@@ -557,6 +559,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
       await expect(
         page.getByText(`QA DC kratki ${runId}`, { exact: true }),
       ).toBeVisible();
+      await expect(
+        page.getByText(`QA DC artikal ${runId}`, { exact: true }),
+      ).toBeVisible();
       await expect(page.getByLabel("MP cena red 1")).toHaveValue("1200");
       await expect(page.getByLabel("Magacin red 1")).toHaveValue(
         dcWarehouseId,
@@ -587,6 +592,9 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
         page.getByRole("heading", {
           name: /Porudžbina VP-\d{4}-\d{5}/,
         }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Štampaj predračun", exact: true }),
       ).toBeVisible();
     });
 
@@ -666,6 +674,13 @@ test.describe("ERP pregled i ručne VP/INO porudžbine", () => {
         }),
       ).toHaveCount(1);
       await expect(page.getByLabel("Šifra artikla red 1")).toBeDisabled();
+      const printResponse = await page.request.get(
+        `/admin/erp/prodajni-nalozi/${orderId}/stampa`,
+      );
+      expect(printResponse.status()).toBe(200);
+      const printHtml = await printResponse.text();
+      expect(printHtml).toContain("PREDRAČUN");
+      expect(printHtml).toContain(`QA DC artikal ${runId}`);
       await page.getByRole("link", { name: "Uredi", exact: true }).click();
       await expect(page).toHaveURL(/mode=edit/);
       await expect(

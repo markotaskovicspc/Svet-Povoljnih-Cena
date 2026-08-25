@@ -22,7 +22,7 @@ export default async function NewSalesOrderPage({
     <>
       <PageHeader
         title="Nova porudžbina"
-        description="Ručni unos veleprodajne ili izvozne porudžbine sa automatskim kupcem, cenom, matičnim podacima artikla i pravilom magacina."
+        description="Ručni unos maloprodajne, veleprodajne ili izvozne porudžbine sa automatskim kupcem, cenom, matičnim podacima artikla i pravilom magacina."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -44,7 +44,13 @@ export default async function NewSalesOrderPage({
       <div className="px-4 py-6 md:px-8">
         <SalesOrderForm
           options={options}
-          initialChannel={search.channel === "INO" ? "INO" : "VP"}
+          initialChannel={
+            search.channel === "INO"
+              ? "INO"
+              : search.channel === "MP"
+                ? "MP"
+                : "VP"
+          }
         />
       </div>
     </>

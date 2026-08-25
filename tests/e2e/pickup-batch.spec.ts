@@ -32,6 +32,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     wrongStatusOrder: `QA-PICKUP-STATUS-${runId}`,
     wrongWarehouseOrder: `QA-PICKUP-WH-${runId}`,
     truckOrder: `QA-PICKUP-TRUCK-${runId}`,
+    fiscalizedOrder: `QA-PICKUP-FISCAL-${runId}`,
     skuA: `QA-PICKUP-A-${runId}`.slice(0, 90),
     skuZ: `QA-PICKUP-Z-${runId}`.slice(0, 90),
     skuOther: `QA-PICKUP-O-${runId}`.slice(0, 90),
@@ -179,7 +180,19 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       shippingMethod: "KAMION",
       lines: [{ product: products[2]!, warehouseId: dcWarehouseId, qty: 1 }],
     });
-    orderIds.push(wrongStatus.id, wrongWarehouse.id, truck.id);
+    const fiscalized = await createOrder({
+      number: fixture.fiscalizedOrder,
+      status: "KREIRANO",
+      shippingMethod: "KURIR",
+      lines: [{ product: products[2]!, warehouseId: dcWarehouseId, qty: 1 }],
+    });
+    await db.fiscalReceipt.create({
+      data: {
+        orderId: fiscalized.id,
+        receiptNumber: `QA-PICKUP-RCPT-${runId}`,
+      },
+    });
+    orderIds.push(wrongStatus.id, wrongWarehouse.id, truck.id, fiscalized.id);
   });
 
   test.afterAll(async () => {
@@ -232,7 +245,12 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       });
       await expect(postCommand).toBeVisible();
       await expect(postCommand).toBeDisabled();
-      for (const header of ["Status", "Broj naloga", "Datum naloga"]) {
+      for (const header of [
+        "Status",
+        "Broj naloga",
+        "Kurirska služba",
+        "Datum naloga",
+      ]) {
         await expect(
           page.getByRole("columnheader").filter({
             has: page.getByRole("button", { name: header, exact: true }),
@@ -246,8 +264,12 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(
         page.getByRole("heading", { name: "Automatski izbor kurira" }),
       ).toBeVisible();
-      await expect(page.getByText("Svaka strana paketa je do 60 cm.")).toBeVisible();
-      await expect(page.getByText(/Bar jedna strana paketa je preko 60 cm/)).toBeVisible();
+      await expect(
+        page.getByText("Paket je do 30 kg i svaka strana je do 60 cm."),
+      ).toBeVisible();
+      await expect(
+        page.getByText(/bar jedna strana preko 60 cm/),
+      ).toBeVisible();
       await expect(page.getByLabel("Kurirska služba")).toHaveCount(0);
       await page.goto("/admin/erp/preuzimanja", {
         waitUntil: "domcontentloaded",
@@ -307,7 +329,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(blockReason).toContainText(
         "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina",
       );
-      await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
+      await expect(page.getByText("Kliknite „Učitaj sve nefiskalizovane“.", { exact: false })).toBeVisible();
       const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
       const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
       await page.getByLabel("Početak preuzimanja").fill(pickupStart.toISOString().slice(0, 16));
@@ -328,20 +350,14 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     });
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
-      const ordersFrom = page.getByLabel("Porudžbine od");
-      const ordersTo = page.getByLabel("Porudžbine do");
-      await ordersFrom.fill("2000-01-01");
-      await ordersTo.fill("2099-12-31");
       await page
-        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
+        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
           hasText: "Učitano redova: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
-      await expect(ordersFrom).toHaveValue("2000-01-01");
-      await expect(ordersTo).toHaveValue("2099-12-31");
       const [batch, orders] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({
           where: { id: firstBatchId },
@@ -369,6 +385,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe("KREIRANO");
       expect(
         orders.find((order) => order.number === fixture.truckOrder)?.status,
+      ).toBe("KREIRANO");
+      expect(
+        orders.find((order) => order.number === fixture.fiscalizedOrder)?.status,
       ).toBe("KREIRANO");
       expect(
         await db.orderStatusEvent.count({
@@ -465,7 +484,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         }),
       ).toHaveCount(1);
       await page
-        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
+        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
@@ -502,6 +521,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         undefined,
         "Status",
         "Broj naloga",
+        "Kurirska služba",
         "Datum naloga",
         "Datum preuzimanja",
         "Broj redova",
@@ -533,10 +553,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(page.getByLabel("Početak preuzimanja")).toBeDisabled();
       await expect(
-        page.getByRole("button", { name: "Učitaj porudžbine", exact: true }),
+        page.getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true }),
       ).toHaveCount(0);
       await expect(
-        page.getByText("Kliknite „Uredi“, pa „Učitaj porudžbine“.", {
+        page.getByText("Kliknite „Uredi“, pa „Učitaj sve nefiskalizovane“.", {
           exact: true,
         }),
       ).toBeVisible();
@@ -618,7 +638,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("ponovno učitavanje radi, a brisanje iz pregleda opet vraća status", async () => {
       await page
-        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
+        .getByRole("button", { name: "Učitaj sve nefiskalizovane", exact: true })
         .click();
       await expect(
         page.getByRole("status").filter({
@@ -767,6 +787,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       });
     }
     if (orderIds.length) {
+      await db.fiscalReceipt.deleteMany({
+        where: { orderId: { in: orderIds } },
+      });
       await db.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (productIds.length) {

@@ -28,7 +28,7 @@ const manualSalesOrderLineSchema = z.object({
 
 export const manualSalesOrderInputSchema = z
   .object({
-    channel: z.enum(["VP", "INO"]),
+    channel: z.enum(["MP", "VP", "INO"]),
     customerId: z.string().trim().min(1, "Kupac je obavezan."),
     priceListId: z.string().trim().min(1, "Cenovnik je obavezan."),
     status: z.enum(MANUAL_SALES_ORDER_STATUSES).default("KREIRANO"),
@@ -108,6 +108,6 @@ export function calculateSalesLineTotals(
   };
 }
 
-export function manualOrderNumberPrefix(channel: "VP" | "INO") {
+export function manualOrderNumberPrefix(channel: "MP" | "VP" | "INO") {
   return channel;
 }
