@@ -540,7 +540,7 @@ describe("X Express codes, label and webhook envelope", () => {
     };
     const html = renderXExpressLabelsHtml(shipment);
     expect(html).toContain("width: 95mm; height: 138mm");
-    expect(html).toContain("X EXPRESS · ERP TRANSPORTNA ETIKETA");
+    expect(html).toContain("X EXPRESS · KURIRSKA ADRESNICA");
     expect(html).toContain("X Express ne vraća PDF adresnicu kroz API");
     expect(html).toContain("Vojvođanska 401, 11271 Beograd - Surčin");
     expect(html).toContain("Petrović enterijer DOO");

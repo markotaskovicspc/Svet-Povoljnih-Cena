@@ -283,13 +283,13 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const createDialog = page.getByRole("dialog");
       await expect(
         createDialog.getByRole("option", {
-          name: "X Express — sve stranice do 60 cm",
+          name: "X Express — svi paketi do 30 kg i 60 cm",
           exact: true,
         }),
       ).toBeAttached();
       await expect(
         createDialog.getByRole("option", {
-          name: "MyGLS — bar jedna stranica preko 60 cm",
+          name: "MyGLS — veći ili mešoviti paketi",
           exact: true,
         }),
       ).toBeAttached();
@@ -317,6 +317,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       });
       await expect(heading).toHaveCount(1);
       await expect(heading).toBeVisible();
+      await expect(page.getByRole("button", { name: "Novi X Express" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Novi MyGLS" })).toHaveCount(0);
       await expect(page.getByText("Datum naloga", { exact: true })).toBeVisible();
       const postButton = page.getByRole("button", {
         name: "Kreiraj adresnice",
@@ -350,6 +352,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     });
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
+      await expect(page.getByLabel("Porudžbine od")).toHaveCount(0);
+      await expect(page.getByLabel("Porudžbine do")).toHaveCount(0);
       await page
         .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
@@ -460,9 +464,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         where: { id: eligibleOrderId },
         data: { status: "KREIRANO" },
       });
-      await page
-        .getByRole("button", { name: "Novi nalog — MyGLS", exact: true })
-        .click();
+      await page.goto("/admin/erp/preuzimanja", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Novi", exact: true }).click();
+      const createDialog = page.getByRole("dialog");
+      await createDialog.getByLabel("Kurirska služba").selectOption("MYGLS");
+      await createDialog.getByRole("button", { name: "Novi", exact: true }).click();
       await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
         firstBatchId,
       );
@@ -597,7 +603,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       batchIds.splice(batchIds.indexOf(secondBatchId), 1);
     });
 
-    await test.step("ceo dokument za štampu poziva print automatski i skriva admin okvir", async () => {
+    await test.step("picking dokument se štampa bez internih etiketa i prikazuje samo kurirske adresnice", async () => {
       await page.addInitScript(() => {
         window.print = () => {
           document.documentElement.dataset.qaPrintCalled = "yes";
@@ -613,7 +619,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         `/admin/erp/preuzimanja/${firstBatchId}/stampa?section=picking&autoprint=1`,
       );
       await expect(
-        page.getByRole("link", { name: "Kurirske etikete", exact: true }),
+        page.getByRole("link", { name: "Kurirske adresnice", exact: true }),
       ).toHaveAttribute(
         "href",
         `/api/admin/erp/preuzimanja/${firstBatchId}/labels`,
@@ -702,7 +708,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe("KREIRANO");
     });
 
-    await test.step("mešovita porudžbina se deli u odvojene MyGLS i X Express picking grupe", async () => {
+    await test.step("porudžbina sa različitim paketima ostaje cela u MyGLS picking grupi", async () => {
       await db.order.update({
         where: { id: eligibleOrderId },
         data: { status: "POTVRDJENO" },
@@ -761,38 +767,21 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       batchIds.push(myGlsBatchId);
       await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
       await expect(page.getByRole("status")).toContainText(
-        "Podeljeno mešovitih porudžbina: 1",
+        "Učitano paketa: 2 iz 1 porudžbina",
       );
-
-      await page
-        .getByRole("button", { name: "Novi nalog — X Express", exact: true })
-        .click();
-      await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
-        myGlsBatchId,
+      const myGlsLines = await db.pickupBatchLine.findMany({
+        where: { batchId: myGlsBatchId },
+      });
+      expect(myGlsLines).toHaveLength(2);
+      expect(new Set(myGlsLines.map((line) => line.orderId))).toEqual(
+        new Set([mixedOrder.id]),
       );
-      await expect(page).toHaveURL(/\?mode=edit$/);
-      const xExpressBatchId = pickupBatchIdFromUrl(page.url());
-      batchIds.push(xExpressBatchId);
-      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText(
-        "Podeljeno mešovitih porudžbina: 1",
-      );
-
-      const [myGlsLines, xExpressLines] = await Promise.all([
-        db.pickupBatchLine.findMany({ where: { batchId: myGlsBatchId } }),
-        db.pickupBatchLine.findMany({ where: { batchId: xExpressBatchId } }),
-      ]);
-      expect(myGlsLines).toHaveLength(1);
-      expect(xExpressLines).toHaveLength(1);
-      expect(myGlsLines[0]?.orderId).toBe(mixedOrder.id);
-      expect(xExpressLines[0]?.orderId).toBe(mixedOrder.id);
-      expect(myGlsLines[0]?.orderItemId).not.toBe(xExpressLines[0]?.orderItemId);
-      expect(myGlsLines[0]?.lineGroupKey).toBe(
-        `order:${mixedOrder.id}:MYGLS`,
-      );
-      expect(xExpressLines[0]?.lineGroupKey).toBe(
-        `order:${mixedOrder.id}:X_EXPRESS`,
-      );
+      expect(new Set(myGlsLines.map((line) => line.orderItemId)).size).toBe(2);
+      expect(
+        new Set(myGlsLines.map((line) => line.lineGroupKey)),
+      ).toEqual(new Set([`order:${mixedOrder.id}:MYGLS`]));
+      await expect(page.locator("tbody tr").first()).toContainText(largeProduct.sku);
+      await expect(page.locator("tbody tr").first()).toContainText(smallProduct.sku);
 
       const largeItem = await db.orderItem.findFirstOrThrow({
         where: { orderId: mixedOrder.id, productId: largeProduct.id },

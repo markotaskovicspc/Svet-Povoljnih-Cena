@@ -220,11 +220,6 @@ export async function savePickupPackage(
       "Paket preko 30 kg ili sa stranicom preko 60 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
     );
   }
-  if (provider === "MYGLS" && packageRoute.provider !== "MYGLS") {
-    throw new Error(
-      "Paket do 30 kg i 60 cm na svakoj strani pripada X Express nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
-    );
-  }
   return db.pickupBatchLine.update({
     where: { id: line.id },
     data: {
@@ -239,7 +234,6 @@ export async function savePickupPackage(
 export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
-  period: { from?: Date | null; toExclusive?: Date | null } = {},
 ) {
   return db.$transaction(async (tx) => {
     await lockBatch(tx, batchId);
@@ -281,8 +275,6 @@ export async function loadEligibleOrders(
           )
         )
         AND orders."shippingMethod" = 'KURIR'
-        ${period.from ? Prisma.sql`AND orders."createdAt" >= ${period.from}` : Prisma.empty}
-        ${period.toExclusive ? Prisma.sql`AND orders."createdAt" < ${period.toExclusive}` : Prisma.empty}
         AND NOT EXISTS (
           SELECT 1
           FROM "FiscalReceipt" AS legacy_fiscal
@@ -322,15 +314,11 @@ export async function loadEligibleOrders(
         AND NOT EXISTS (
           SELECT 1
           FROM "PickupBatchLine" AS pickup_lines
-          INNER JOIN "PickupBatch" AS existing_batches
-            ON existing_batches."id" = pickup_lines."batchId"
           WHERE pickup_lines."orderId" = orders."id"
             AND pickup_lines."purpose" = 'ORDER_DELIVERY'
-            AND existing_batches."provider" = ${provider}
         )
       ORDER BY orders."number" ASC
       FOR UPDATE OF orders SKIP LOCKED
-      LIMIT 2000
     `);
     const orderIds = candidates.map((row) => row.id);
     if (!orderIds.length) {
@@ -339,8 +327,6 @@ export async function loadEligibleOrders(
         lineCount: 0,
         candidateCount: 0,
         skippedOtherProviderCount: 0,
-        skippedMixedCount: 0,
-        splitMixedCount: 0,
         skippedInvalidDimensionsCount: 0,
         loadedMyGlsHardLimitCount: 0,
         loadedMyGlsOversizeSurchargeCount: 0,
@@ -379,8 +365,6 @@ export async function loadEligibleOrders(
       orderBy: [{ orderId: "asc" }, { sku: "asc" }, { id: "asc" }],
     });
     let skippedOtherProviderCount = 0;
-    const skippedMixedCount = 0;
-    let splitMixedCount = 0;
     let skippedInvalidDimensionsCount = 0;
     let loadedMyGlsHardLimitCount = 0;
     let loadedMyGlsOversizeSurchargeCount = 0;
@@ -394,47 +378,27 @@ export async function loadEligibleOrders(
     const loadedOrderIds: string[] = [];
     for (const orderId of orderIds) {
       const orderItems = items.filter((item) => item.orderId === orderId);
+      const orderPackages = derivePhysicalPackages(orderItems);
       const routing = resolveCourierProvider({
         shippingMethod: "KURIR",
-        items: orderItems.map((item) => ({
-          withAssembly: item.withAssembly,
-          qty: item.qty,
-          packQty: item.product?.packQty,
-          packWidthCm: numberOrNull(
-            item.product?.packWidthCm ??
-              item.product?.unitPackWidthCm ??
-              item.product?.widthCm,
-          ),
-          packDepthCm: numberOrNull(
-            item.product?.packDepthCm ??
-              item.product?.unitPackDepthCm ??
-              item.product?.depthCm,
-          ),
-          packHeightCm: numberOrNull(
-            item.product?.packHeightCm ??
-              item.product?.unitPackHeightCm ??
-              item.product?.heightCm,
-          ),
-          packGrossWeightKg: numberOrNull(
-            item.product?.packGrossWeightKg ??
-              item.product?.grossWeightKg ??
-              item.product?.weightKg,
-          ),
+        items: orderPackages.map((pkg) => ({
+          withAssembly: false,
+          qty: 1,
+          packQty: 1,
+          packWidthCm: pkg.widthCm,
+          packDepthCm: pkg.depthCm,
+          packHeightCm: pkg.heightCm,
+          packGrossWeightKg: pkg.weightKg,
         })),
       });
       if (routing.kind === "invalid_dimensions") {
         skippedInvalidDimensionsCount += 1;
         continue;
       }
-      const selectedItems = orderItems.filter(
-        (item) => courierProviderForItem(item) === provider,
-      );
-      if (!selectedItems.length) {
+      if (routing.provider !== provider) {
         skippedOtherProviderCount += 1;
         continue;
       }
-      if (routing.kind === "mixed") splitMixedCount += 1;
-      const orderPackages = derivePhysicalPackages(selectedItems);
       if (
         provider === "MYGLS" &&
         orderPackages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
@@ -449,7 +413,7 @@ export async function loadEligibleOrders(
       }
       loadedOrderIds.push(orderId);
       const quantityByItem = new Map(
-        selectedItems.map((item) => [item.id, item.qty]),
+        orderItems.map((item) => [item.id, item.qty]),
       );
       packages.push(
         ...orderPackages.map((pkg) => ({
@@ -466,8 +430,6 @@ export async function loadEligibleOrders(
         lineCount: 0,
         candidateCount: orderIds.length,
         skippedOtherProviderCount,
-        skippedMixedCount,
-        splitMixedCount,
         skippedInvalidDimensionsCount,
         loadedMyGlsHardLimitCount,
         loadedMyGlsOversizeSurchargeCount,
@@ -505,8 +467,6 @@ export async function loadEligibleOrders(
       lineCount: packages.length,
       candidateCount: orderIds.length,
       skippedOtherProviderCount,
-      skippedMixedCount,
-      splitMixedCount,
       skippedInvalidDimensionsCount,
       loadedMyGlsHardLimitCount,
       loadedMyGlsOversizeSurchargeCount,
@@ -932,6 +892,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
             codAmount: await pickupAssignmentCodAmount(
               group.orderId,
               "X_EXPRESS",
+              orderItemIdsForGroup(group),
             ),
           });
       if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
@@ -1087,7 +1048,11 @@ async function createMyGlsLabelsForPickupBatch(
             packageCount: packages.length,
             provider: "MYGLS",
             orderItemIds: orderItemIdsForGroup(group),
-            codAmount: await pickupAssignmentCodAmount(group.orderId, "MYGLS"),
+            codAmount: await pickupAssignmentCodAmount(
+              group.orderId,
+              "MYGLS",
+              orderItemIdsForGroup(group),
+            ),
           });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
@@ -1457,25 +1422,25 @@ function courierRouteItem(item: {
     withAssembly: item.withAssembly,
     qty: item.qty,
     packQty: item.product?.packQty,
-    packWidthCm: numberOrNull(
-      item.product?.packWidthCm ??
-        item.product?.unitPackWidthCm ??
-        item.product?.widthCm,
+    packWidthCm: firstPositiveNumber(
+      item.product?.packWidthCm,
+      item.product?.unitPackWidthCm,
+      item.product?.widthCm,
     ),
-    packDepthCm: numberOrNull(
-      item.product?.packDepthCm ??
-        item.product?.unitPackDepthCm ??
-        item.product?.depthCm,
+    packDepthCm: firstPositiveNumber(
+      item.product?.packDepthCm,
+      item.product?.unitPackDepthCm,
+      item.product?.depthCm,
     ),
-    packHeightCm: numberOrNull(
-      item.product?.packHeightCm ??
-        item.product?.unitPackHeightCm ??
-        item.product?.heightCm,
+    packHeightCm: firstPositiveNumber(
+      item.product?.packHeightCm,
+      item.product?.unitPackHeightCm,
+      item.product?.heightCm,
     ),
-    packGrossWeightKg: numberOrNull(
-      item.product?.packGrossWeightKg ??
-        item.product?.grossWeightKg ??
-        item.product?.weightKg,
+    packGrossWeightKg: firstPositiveNumber(
+      item.product?.packGrossWeightKg,
+      item.product?.grossWeightKg,
+      item.product?.weightKg,
     ),
   };
 }
@@ -1497,6 +1462,7 @@ function providerLabel(provider: SmallParcelProvider) {
 async function pickupAssignmentCodAmount(
   orderId: string,
   provider: SmallParcelProvider,
+  assignedOrderItemIds: readonly string[],
 ) {
   const order = await db.order.findUnique({
     where: { id: orderId },
@@ -1504,6 +1470,7 @@ async function pickupAssignmentCodAmount(
       total: true,
       items: {
         select: {
+          id: true,
           qty: true,
           unitPriceSale: true,
           assemblyPrice: true,
@@ -1530,6 +1497,13 @@ async function pickupAssignmentCodAmount(
     },
   });
   if (!order) throw new Error("Porudžbina za obračun otkupnine ne postoji.");
+  const assigned = new Set(assignedOrderItemIds);
+  if (
+    order.items.length > 0 &&
+    order.items.every((item) => assigned.has(item.id))
+  ) {
+    return Number(order.total);
+  }
   const weights = new Map<SmallParcelProvider, number>();
   for (const item of order.items) {
     const itemProvider = courierProviderForItem(item);
@@ -1549,9 +1523,12 @@ async function pickupAssignmentCodAmount(
   return splitAmountByWeights(Number(order.total), ordered).get(provider) ?? 0;
 }
 
-function numberOrNull(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : null;
+function firstPositiveNumber(...values: unknown[]) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return null;
 }
 
 function isRetryableCreateError(error: unknown) {

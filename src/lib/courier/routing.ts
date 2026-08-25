@@ -24,7 +24,6 @@ export type RoutedPackage = {
 
 export type CourierRoutingResolution =
   | { kind: "single"; provider: "MYGLS" | "X_EXPRESS" }
-  | { kind: "mixed" }
   | { kind: "invalid_dimensions" };
 
 export const X_EXPRESS_MAX_PACKAGE_WEIGHT_KG = 30;
@@ -49,7 +48,9 @@ function expandedPackages(order: PackageRouteInput) {
 }
 
 /**
- * Resolves the launch routing rule for an order or a selected set of lines.
+ * Resolves one provider for an order or a selected set of lines. If any
+ * physical package exceeds the X Express weight or dimension limit, the whole
+ * set stays together on MyGLS so one order has one picking list and one COD.
  * Automatic routing is deliberately blocked when a catalogue dimension or
  * package weight is missing: treating unknown measurements as zero could send
  * a large parcel to the wrong courier.
@@ -57,7 +58,7 @@ function expandedPackages(order: PackageRouteInput) {
 export function resolveCourierProvider(
   order: PackageRouteInput,
 ): CourierRoutingResolution {
-  const providers = new Set<"MYGLS" | "X_EXPRESS">();
+  let requiresMyGls = false;
   for (const item of order.items) {
     const dimensions = [
       item.packWidthCm,
@@ -72,30 +73,34 @@ export function resolveCourierProvider(
     ) {
       return { kind: "invalid_dimensions" };
     }
-    providers.add(
+    if (
       Math.max(...dimensions) > X_EXPRESS_MAX_PACKAGE_SIDE_CM ||
-        weightKg > X_EXPRESS_MAX_PACKAGE_WEIGHT_KG
-        ? "MYGLS"
-        : "X_EXPRESS",
-    );
+      weightKg > X_EXPRESS_MAX_PACKAGE_WEIGHT_KG
+    ) {
+      requiresMyGls = true;
+    }
   }
-  if (!providers.size) return { kind: "invalid_dimensions" };
-  if (providers.size > 1) return { kind: "mixed" };
-  return { kind: "single", provider: [...providers][0]! };
+  if (!order.items.length) return { kind: "invalid_dimensions" };
+  return {
+    kind: "single",
+    provider: requiresMyGls ? "MYGLS" : "X_EXPRESS",
+  };
 }
 
 /**
  * Document routing:
  * - packages at or below 30 kg and 60 cm on every side go through X Express;
- * - packages over 30 kg or with any side over 60 cm go through MyGLS;
+ * - if any package is over 30 kg or has a side over 60 cm, every package in
+ *   the order goes through MyGLS;
  * The legacy shipping-method value does not override the package dimensions.
- * Labels are numbered independently per courier (1/N, 2/N, ...).
+ * Labels are numbered once for the selected courier (1/N, 2/N, ...).
  */
 export function routePackages(order: PackageRouteInput): RoutedPackage[] {
   const packages = expandedPackages(order);
-  const couriers = packages.map(
-    (item): PackageCourier => (item.bulky ? "GLS" : "X_EXPRESS"),
-  );
+  const selectedCourier: PackageCourier = packages.some((item) => item.bulky)
+    ? "GLS"
+    : "X_EXPRESS";
+  const couriers = packages.map(() => selectedCourier);
   const totals = couriers.reduce<Record<PackageCourier, number>>(
     (counts, courier) => ({ ...counts, [courier]: counts[courier] + 1 }),
     { GLS: 0, X_EXPRESS: 0 },

@@ -52,7 +52,7 @@ describe("package routing", () => {
     ).toBe("COURIER_BULKY");
   });
 
-  it("keeps a small package on X Express even beside a GLS package", () => {
+  it("keeps every package together on MyGLS when one package is bulky", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
@@ -61,8 +61,8 @@ describe("package routing", () => {
       ],
     });
     expect(plan.map((item) => [item.courier, item.label])).toEqual([
-      ["GLS", "1/1"],
-      ["X_EXPRESS", "1/1"],
+      ["GLS", "1/2"],
+      ["GLS", "2/2"],
     ]);
   });
 
@@ -131,7 +131,7 @@ describe("package routing", () => {
     ).toEqual({ kind: "invalid_dimensions" });
   });
 
-  it("marks an order that needs both couriers as mixed", () => {
+  it("routes an order with different package sizes entirely to MyGLS", () => {
     expect(
       resolveCourierProvider({
         shippingMethod: "KURIR",
@@ -140,10 +140,10 @@ describe("package routing", () => {
           { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
         ],
       }),
-    ).toEqual({ kind: "mixed" });
+    ).toEqual({ kind: "single", provider: "MYGLS" });
   });
 
-  it("splits two small packages from bulky packages and numbers per courier", () => {
+  it("numbers all packages once for the selected courier", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
@@ -152,9 +152,9 @@ describe("package routing", () => {
       ],
     });
     expect(plan.map((item) => [item.courier, item.label])).toEqual([
-      ["GLS", "1/1"],
-      ["X_EXPRESS", "1/2"],
-      ["X_EXPRESS", "2/2"],
+      ["GLS", "1/3"],
+      ["GLS", "2/3"],
+      ["GLS", "3/3"],
     ]);
   });
 });

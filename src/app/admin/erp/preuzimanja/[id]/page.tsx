@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
 import {
-  createPickupBatch,
   confirmMyGlsPickupAnnouncement,
   deletePickupBatches,
   getPickupPostingAvailability,
@@ -51,11 +50,6 @@ const saveDateSchema = z.object({
 });
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
-const loadOrdersSchema = batchSchema.extend({
-  ordersFrom: z.string().optional(),
-  ordersTo: z.string().optional(),
-});
-const providerSchema = z.enum(["MYGLS", "X_EXPRESS"]);
 const removeGroupSchema = batchSchema.extend({ lineGroupKey: z.string().min(1) });
 const packageSchema = batchSchema.extend({
   lineId: z.string().min(1),
@@ -68,31 +62,6 @@ const bookingSchema = batchSchema.extend({
   channel: z.enum(MYGLS_BOOKING_CHANNELS),
   reference: z.string().trim().min(1).max(120),
 });
-
-async function createAction(formData: FormData) {
-  "use server";
-  const provider = providerSchema.safeParse(formData.get("provider"));
-  if (!provider.success) return;
-  const state = await withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "pickup-batch.create",
-      entity: "PickupBatch",
-    },
-    async () => {
-      const batch = await createPickupBatch(provider.data);
-      return {
-        ok: true as const,
-        entityId: batch.id,
-        message: `Nalog ${batch.number} je kreiran.`,
-        result: { id: batch.id },
-      };
-    },
-  )();
-  if (state.ok && isIdResult(state.result)) {
-    redirect(`/admin/erp/preuzimanja/${state.result.id}?mode=edit`);
-  }
-}
 
 async function saveDateAction(
   _state: AdminActionState,
@@ -211,21 +180,13 @@ async function loadOrdersAction(
       entity: "PickupBatch",
     },
     async (actorId, actionData: FormData) => {
-      const parsed = loadOrdersSchema.safeParse(
+      const parsed = batchSchema.safeParse(
         Object.fromEntries(actionData.entries()),
       );
       if (!parsed.success) {
-        return { ok: false as const, error: "Nalog ili period nisu ispravni." };
+        return { ok: false as const, error: "Nalog nije izabran." };
       }
-      const from = parseOptionalDay(parsed.data.ordersFrom, false);
-      const toExclusive = parseOptionalDay(parsed.data.ordersTo, true);
-      if (from && toExclusive && from >= toExclusive) {
-        return { ok: false as const, error: "Datum od mora biti pre datuma do." };
-      }
-      const result = await loadEligibleOrders(parsed.data.batchId, actorId, {
-        from,
-        toExclusive,
-      });
+      const result = await loadEligibleOrders(parsed.data.batchId, actorId);
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
@@ -454,20 +415,8 @@ export default async function PickupBatchPage({
               rel="noreferrer"
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
-              Kurirske etikete
+              Kurirske adresnice
             </Link>
-            <form action={createAction}>
-              <input type="hidden" name="provider" value="X_EXPRESS" />
-              <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi nalog — X Express
-              </SubmitButton>
-            </form>
-            <form action={createAction}>
-              <input type="hidden" name="provider" value="MYGLS" />
-              <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi nalog — MyGLS
-              </SubmitButton>
-            </form>
             {editable ? (
               editing ? (
                 <Link
@@ -505,7 +454,7 @@ export default async function PickupBatchPage({
             </AdminActionForm>
             <AdminActionForm
               action={postAction}
-              successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?autoprint=1`}
+              successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
               popupWindowName={`pickup-print-${batch.id}`}
             >
               <input type="hidden" name="batchId" value={batch.id} />
@@ -578,20 +527,14 @@ export default async function PickupBatchPage({
               </p>
             </div>
           </div>
-          <p className="mb-4 rounded-lg border border-border bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">
-            „Novi nalog — X Express“ i „Novi nalog — MyGLS“ otvaraju novi,
-            odvojen i prazan nalog za izabranog kurira. Ne dodaju etiketu ovom
-            nalogu; kurirske etikete se kreiraju tek kada se učitaju i pripreme
-            paketi u odgovarajućem nalogu.
-          </p>
           <div className="mb-4 rounded-lg border border-border px-3 py-3 text-sm text-ink-700">
             <p className="font-semibold">
               {myGls ? "Redosled za MyGLS" : "Redosled za X Express"}
             </p>
             <p className="mt-1 leading-6">
               {myGls
-                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske etikete“ otvorite jedan zajednički MyGLS PDF i odštampajte sve etikete. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
-                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske etikete“ otvorite zajednički dokument i odštampajte sve X Express etikete."}
+                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske adresnice“ otvorite jedan zajednički MyGLS PDF i odštampajte sve adresnice. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
+                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske adresnice“ otvorite zajednički dokument i odštampajte sve X Express adresnice."}
             </p>
           </div>
           <p className="mb-3 text-sm text-ink-600">
@@ -628,8 +571,8 @@ export default async function PickupBatchPage({
           </AdminActionForm>
           {myGls && batch.labelsCreatedAt ? (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              MyGLS adresnice su kreirane. Sada otvorite „Kurirske etikete“,
-              odštampajte sve etikete iz zajedničkog zvaničnog PDF-a, najavite
+              MyGLS adresnice su kreirane. Sada otvorite „Kurirske adresnice“,
+              odštampajte sve adresnice iz zajedničkog zvaničnog PDF-a, najavite
               dolazak kurira MyGLS-u i zatim ispod potvrdite kanal i dobijenu
               referencu.
             </p>
@@ -695,22 +638,15 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se nefiskalizovane DC stavke iz izabranog perioda koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovita porudžbina automatski se deli između dva odvojena naloga, a zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
+            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg, bar jedna stranica preko 60 cm ili porudžbina sa različitim veličinama paketa)" : "X Express (svi paketi do 30 kg i do 60 cm po svakoj strani)"}. Cela porudžbina ostaje u jednom nalogu, pa picking lista prikazuje sve njene artikle. Zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
               Zajednička picking lista
             </CardTitle>
             {editing ? (
               <AdminActionForm
                 action={loadOrdersAction}
-                preserveValues
-                className="flex flex-wrap items-end gap-2"
+                className="flex items-end"
               >
                 <input type="hidden" name="batchId" value={batch.id} />
-                <Field label="Porudžbine od">
-                  <Input name="ordersFrom" type="date" />
-                </Field>
-                <Field label="Porudžbine do">
-                  <Input name="ordersTo" type="date" />
-                </Field>
                 <SubmitButton pendingLabel="Učitavanje…">
                   Učitaj porudžbine
                 </SubmitButton>
@@ -833,7 +769,7 @@ export default async function PickupBatchPage({
               <p>Nalog još nema učitanih porudžbina.</p>
               <p className="mt-1 text-xs">
                 {editing
-                  ? "Kliknite „Učitaj porudžbine“. Biće dodate neučitane, nefiskalizovane DC stavke iz izabranog perioda koje pripadaju ovom kuriru; mešovite porudžbine dele se po kuriru."
+                  ? "Kliknite „Učitaj porudžbine“. Biće dodate sve neučitane, nefiskalizovane DC porudžbine koje pripadaju ovom kuriru; porudžbina sa različitim veličinama paketa ide cela MyGLS-u."
                   : editable
                     ? "Kliknite „Uredi“, pa „Učitaj porudžbine“."
                     : "Ovaj nalog više nije moguće dopunjavati."}
@@ -1098,19 +1034,6 @@ function display(value: string) {
   return value || "—";
 }
 
-function parseOptionalDay(value: string | undefined, endExclusive: boolean) {
-  if (!value) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error("Period porudžbina nije ispravan.");
-  }
-  const parsed = parseBelgradeDateTimeLocal(`${value}T00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("Period porudžbina nije ispravan.");
-  }
-  if (endExclusive) parsed.setUTCDate(parsed.getUTCDate() + 1);
-  return parsed;
-}
-
 function pickupLoadMessage(
   result: Awaited<ReturnType<typeof loadEligibleOrders>>,
 ) {
@@ -1123,7 +1046,7 @@ function pickupLoadMessage(
       : null,
   ].filter(Boolean);
   const loaded = result.lineCount
-    ? `Učitano paketa: ${result.lineCount} iz ${result.orderCount} porudžbina.${result.splitMixedCount ? ` Podeljeno mešovitih porudžbina: ${result.splitMixedCount}.` : ""}`
+    ? `Učitano paketa: ${result.lineCount} iz ${result.orderCount} porudžbina.`
     : "Nema novih porudžbina koje odgovaraju ovom kuriru i pravilima DC rezervacije.";
   const correction = result.loadedMyGlsHardLimitCount
     ? `Za ${result.loadedMyGlsHardLimitCount} učitanih MyGLS porudžbina unesite stvarne transportne mere unutar granice od 40 kg i 200 cm.`
@@ -1145,13 +1068,4 @@ function revalidatePickupPaths(batchId: string) {
   revalidatePath(`/admin/erp/preuzimanja/${batchId}`);
   revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/admin/erp/prodajni-nalozi");
-}
-
-function isIdResult(value: unknown): value is { id: string } {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "id" in value &&
-    typeof value.id === "string"
-  );
 }

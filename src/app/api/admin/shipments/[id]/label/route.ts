@@ -44,7 +44,7 @@ export async function GET(
         {
           ok: false,
           error: "x_express_label_unavailable",
-          message: "X Express etiketa je dostupna tek nakon uspešno prihvaćenog API naloga.",
+          message: "X Express adresnica je dostupna tek nakon uspešno prihvaćenog API naloga.",
         },
         { status: 409 },
       );
@@ -53,7 +53,7 @@ export async function GET(
     return new NextResponse(html, {
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "content-disposition": `inline; filename="x-express-erp-${shipment.trackingNo}.html"`,
+        "content-disposition": `inline; filename="x-express-adresnica-${shipment.trackingNo}.html"`,
         "cache-control": "private, no-store",
         "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'",
         "x-content-type-options": "nosniff",

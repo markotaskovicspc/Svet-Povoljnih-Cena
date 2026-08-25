@@ -552,7 +552,7 @@ export const operationalErpModules: ErpModule[] = [
         label: "Novi",
         tone: "primary",
         action: "pickup.create",
-        description: "Izaberite kurira; porudžbine će se zatim učitati samo ako njihova težina i dimenzije odgovaraju tom kuriru.",
+        description: "Izaberite kurira; X Express preuzima porudžbine čiji su svi paketi do 30 kg i 60 cm, dok MyGLS preuzima veće i porudžbine sa različitim veličinama paketa.",
         fields: [
           {
             key: "provider",
@@ -561,8 +561,8 @@ export const operationalErpModules: ErpModule[] = [
             required: true,
             options: ["X_EXPRESS", "MYGLS"],
             valueLabels: {
-              X_EXPRESS: "X Express — sve stranice do 60 cm",
-              MYGLS: "MyGLS — bar jedna stranica preko 60 cm",
+              X_EXPRESS: "X Express — svi paketi do 30 kg i 60 cm",
+              MYGLS: "MyGLS — veći ili mešoviti paketi",
             },
           },
         ],

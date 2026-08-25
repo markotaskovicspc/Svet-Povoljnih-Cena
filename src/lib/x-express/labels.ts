@@ -135,7 +135,7 @@ export function renderXExpressBatchLabelsHtml(
 <html lang="sr-Latn">
 <head>
   <meta charset="utf-8" />
-  <title>X Express etikete ${escapeHtml(title)}</title>
+  <title>X Express adresnice ${escapeHtml(title)}</title>
   <style>
     @page { size: A4; margin: 9mm; }
     * { box-sizing: border-box; }
@@ -160,7 +160,7 @@ export function renderXExpressBatchLabelsHtml(
   </style>
 </head>
 <body>
-  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> Ove transportne etikete generiše ERP isključivo iz podataka koje je X Express prihvatio pri kreiranju naloga. Ne menjajte podatke ručno posle kreiranja pošiljke.</aside>
+  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> Ove kurirske adresnice generiše ERP isključivo iz podataka koje je X Express prihvatio pri kreiranju naloga. Ne menjajte podatke ručno posle kreiranja pošiljke.</aside>
   <main class="sheet">
     ${labels.join("")}
   </main>
@@ -219,7 +219,7 @@ function renderLabel(
   const payer = labelData ? `ID ${labelData.servicePayerId}` : "nalogodavac";
   const serviceType = labelData ? `ID ${labelData.serviceTypeId}` : "—";
   return `<section class="label">
-    <div class="topline">X EXPRESS · ERP TRANSPORTNA ETIKETA</div>
+    <div class="topline">X EXPRESS · KURIRSKA ADRESNICA</div>
     <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(sender?.name ?? MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(senderAddress)}<br />Kontakt: ${escapeHtml(sender?.contactName ?? MERCHANT_LEGAL_INFO.name)} · ${escapeHtml(sender?.phone ?? MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>

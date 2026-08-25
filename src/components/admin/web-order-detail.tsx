@@ -11,6 +11,7 @@ import {
   syncCourierShipmentById,
 } from "@/lib/courier";
 import { resolveCourierProvider } from "@/lib/courier/routing";
+import { derivePhysicalPackages } from "@/lib/courier/packages";
 import {
   normalizeOrderItemIds,
   readShipmentAssignment,
@@ -868,36 +869,24 @@ export async function WebOrderDetail({ id }: { id: string }) {
     },
   });
   if (!order) notFound();
+  const courierPackages = derivePhysicalPackages(
+    order.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      qty: item.qty,
+      product: item.product,
+    })),
+  );
   const courierRouting = resolveCourierProvider({
     shippingMethod: order.shippingMethod,
-    items: order.items.map((item) => ({
-      withAssembly: item.withAssembly,
-      qty: item.qty,
-      packQty: item.product?.packQty,
-      packWidthCm: Number(
-        item.product?.packWidthCm ??
-          item.product?.unitPackWidthCm ??
-          item.product?.widthCm ??
-          0,
-      ),
-      packDepthCm: Number(
-        item.product?.packDepthCm ??
-          item.product?.unitPackDepthCm ??
-          item.product?.depthCm ??
-          0,
-      ),
-      packHeightCm: Number(
-        item.product?.packHeightCm ??
-          item.product?.unitPackHeightCm ??
-          item.product?.heightCm ??
-          0,
-      ),
-      packGrossWeightKg: Number(
-        item.product?.packGrossWeightKg ??
-          item.product?.grossWeightKg ??
-          item.product?.weightKg ??
-          0,
-      ),
+    items: courierPackages.map((pkg) => ({
+      withAssembly: false,
+      qty: 1,
+      packQty: 1,
+      packWidthCm: pkg.widthCm,
+      packDepthCm: pkg.depthCm,
+      packHeightCm: pkg.heightCm,
+      packGrossWeightKg: pkg.weightKg,
     })),
   });
   const automaticProvider =

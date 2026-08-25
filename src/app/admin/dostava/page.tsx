@@ -507,7 +507,7 @@ export default async function DeliveryPage() {
             </div>
           </div>
           <p className="mt-3 text-xs text-ink-500">
-            Nepotpune mere ili težina, prekoračena ograničenja i porudžbine koje mešaju oba kurira ne šalju se automatski.
+            Ako porudžbina sadrži i male i velike pakete, cela ide MyGLS-u kako bi picking lista sadržala sve artikle, a kupac dobio jednu pošiljku i jednu otkupninu. Nepotpune mere ili težina i prekoračena ograničenja ne šalju se automatski.
           </p>
         </Card>
 

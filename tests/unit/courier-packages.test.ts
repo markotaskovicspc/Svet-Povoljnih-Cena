@@ -67,6 +67,32 @@ describe("physical courier packages", () => {
     });
   });
 
+  it("treats zero transport measures as missing and uses individual packaging", () => {
+    const [pkg] = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Lampa",
+        qty: 1,
+        product: {
+          packGrossWeightKg: 0,
+          packWidthCm: 0,
+          packDepthCm: 0,
+          packHeightCm: 0,
+          grossWeightKg: 2,
+          unitPackWidthCm: 44,
+          unitPackDepthCm: 35,
+          unitPackHeightCm: 59,
+        },
+      },
+    ]);
+    expect(pkg).toMatchObject({
+      weightKg: 2,
+      widthCm: 44,
+      depthCm: 35,
+      heightCm: 59,
+    });
+  });
+
   it("enforces hard GLS weight and side limits without blocking surcharge dimensions", () => {
     const base = {
       packageNo: 1,

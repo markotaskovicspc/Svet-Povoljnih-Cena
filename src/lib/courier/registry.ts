@@ -180,47 +180,30 @@ export async function createShipmentForOrder(
     );
   }
 
+  const derivedPackages = derivePhysicalPackages(
+    shipmentItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      qty: item.qty,
+      product: item.product,
+    })),
+  );
   const routeInput = {
     shippingMethod: order.shippingMethod,
-    items: shipmentItems.map((item) => ({
-      withAssembly: item.withAssembly,
-      qty: item.qty,
-      packQty: item.product?.packQty,
-      packWidthCm: Number(
-        item.product?.packWidthCm ??
-          item.product?.unitPackWidthCm ??
-          item.product?.widthCm ??
-          0,
-      ),
-      packDepthCm: Number(
-        item.product?.packDepthCm ??
-          item.product?.unitPackDepthCm ??
-          item.product?.depthCm ??
-          0,
-      ),
-      packHeightCm: Number(
-        item.product?.packHeightCm ??
-          item.product?.unitPackHeightCm ??
-          item.product?.heightCm ??
-          0,
-      ),
-      packGrossWeightKg: Number(
-        item.product?.packGrossWeightKg ??
-          item.product?.grossWeightKg ??
-          item.product?.weightKg ??
-          0,
-      ),
+    items: derivedPackages.map((pkg) => ({
+      withAssembly: false,
+      qty: 1,
+      packQty: 1,
+      packWidthCm: pkg.widthCm,
+      packDepthCm: pkg.depthCm,
+      packHeightCm: pkg.heightCm,
+      packGrossWeightKg: pkg.weightKg,
     })),
   } as const;
   const routing = resolveCourierProvider(routeInput);
   if (routing.kind === "invalid_dimensions") {
     throw new CourierConfigError(
       "Automatski izbor kurira zahteva težinu, širinu, dužinu i visinu svakog paketa u šifarniku artikala.",
-    );
-  }
-  if (routing.kind === "mixed") {
-    throw new CourierConfigError(
-      "Porudžbina sadrži X Express i MyGLS pakete. Učitajte je kroz naloge za preuzimanje da bi se stavke automatski podelile po kuriru.",
     );
   }
   if (options.provider && options.provider !== routing.provider) {
@@ -240,23 +223,8 @@ export async function createShipmentForOrder(
               requestedOrderItemIds.includes(pkg.orderItemId),
           )
         : null) ??
-      derivePhysicalPackages(
-        shipmentItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          qty: item.qty,
-          product: item.product,
-        })),
-      );
-    const derivedPackageCount = shipmentItems.reduce(
-      (sum, item) =>
-        sum +
-        Math.max(
-          1,
-          Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1)),
-        ),
-      0,
-    );
+      derivedPackages;
+    const derivedPackageCount = derivedPackages.length;
     return selectedProvider === "MYGLS"
       ? createMyGlsShipmentForOrder(order.id, {
           purpose,
@@ -282,16 +250,7 @@ export async function createShipmentForOrder(
   }
 
   if (routing.provider === "MYGLS") {
-    const packages =
-      options.packages ??
-      derivePhysicalPackages(
-        shipmentItems.map((item) => ({
-          id: item.id,
-          name: item.name,
-          qty: item.qty,
-          product: item.product,
-        })),
-      );
+    const packages = options.packages ?? derivedPackages;
     return createMyGlsShipmentForOrder(order.id, {
       purpose,
       reclamationId: reclamation?.id,

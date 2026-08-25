@@ -67,7 +67,7 @@ export default async function PickupBatchPrintPage({
             rel="noreferrer"
             className="inline-flex h-9 items-center rounded-lg border border-black bg-white px-3 text-sm font-medium"
           >
-            Otvori sve kurirske etikete
+            Otvori sve kurirske adresnice
           </Link>
           <PrintPageButton label="Štampaj picking listu" />
         </div>
