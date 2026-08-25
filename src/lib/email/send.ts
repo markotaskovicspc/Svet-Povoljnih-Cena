@@ -577,6 +577,19 @@ function orderToPdfInput(order: Order) {
       street: order.shippingAddress.street,
       postalCode: order.shippingAddress.postalCode,
       city: order.shippingAddress.city,
+      companyName: order.shippingAddress.companyName,
+      pib: order.shippingAddress.pib,
     },
+    billing_address: order.billingAddress
+      ? {
+          firstName: order.billingAddress.firstName,
+          lastName: order.billingAddress.lastName,
+          street: order.billingAddress.street,
+          postalCode: order.billingAddress.postalCode,
+          city: order.billingAddress.city,
+          companyName: order.billingAddress.companyName,
+          pib: order.billingAddress.pib,
+        }
+      : undefined,
   };
 }

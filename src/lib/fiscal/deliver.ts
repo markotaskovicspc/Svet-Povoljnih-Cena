@@ -68,6 +68,7 @@ export async function issueAndDeliverFiscalReceipt(
   }
 
   const cfg = getFiscalConfig();
+  const buyerAddress = loaded.order.billingAddress ?? loaded.order.shippingAddress;
   const attachments = await Promise.all(receiptDocuments.map(async (document) => {
     // Prefer the provider-issued official PDF (QR + Tax Authority
     // signature); the locally rendered slip is the fallback.
@@ -95,15 +96,13 @@ export async function issueAndDeliverFiscalReceipt(
         tin: cfg.tin,
         locationId: cfg.locationId,
       },
-      buyer: loaded.order.billingAddress
-        ? {
-            name:
-              loaded.order.billingAddress.companyName ??
-              `${loaded.order.billingAddress.firstName} ${loaded.order.billingAddress.lastName}`,
-            tin: loaded.order.billingAddress.pib,
-            address: `${loaded.order.billingAddress.street}, ${loaded.order.billingAddress.postalCode} ${loaded.order.billingAddress.city}`,
-          }
-        : undefined,
+      buyer: {
+        name:
+          buyerAddress.companyName ??
+          `${buyerAddress.firstName} ${buyerAddress.lastName}`,
+        tin: buyerAddress.pib,
+        address: `${buyerAddress.street}, ${buyerAddress.postalCode} ${buyerAddress.city}`,
+      },
       items: document.lines.map((line) => ({
         sku: line.sku,
         name: line.shortName,

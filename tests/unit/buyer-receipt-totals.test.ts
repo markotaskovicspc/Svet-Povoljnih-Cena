@@ -37,6 +37,14 @@ const order = {
   shipCity: "Beograd",
   shipCompanyName: null,
   shipPib: null,
+  billingSameAsShipping: true,
+  billFirstName: null,
+  billLastName: null,
+  billStreet: null,
+  billPostalCode: null,
+  billCity: null,
+  billCompanyName: null,
+  billPib: null,
   items: [
     {
       sku: "SKU-1",
@@ -74,6 +82,30 @@ describe("buyer receipt totals", () => {
       firstPurchaseDiscount: 150,
       savedCardDiscount: 50,
       total: 2_790,
+    });
+  });
+
+  it("prefers the legal billing identity for a business buyer", () => {
+    const pdfInput = orderToPdfInput({
+      ...order,
+      billingSameAsShipping: false,
+      billFirstName: "Milan",
+      billLastName: "Jovanović",
+      billStreet: "Poslovna 12",
+      billPostalCode: "21000",
+      billCity: "Novi Sad",
+      billCompanyName: "Kupac d.o.o.",
+      billPib: "109876543",
+    } as never);
+
+    expect(pdfInput.billing_address).toEqual({
+      firstName: "Milan",
+      lastName: "Jovanović",
+      street: "Poslovna 12",
+      postalCode: "21000",
+      city: "Novi Sad",
+      companyName: "Kupac d.o.o.",
+      pib: "109876543",
     });
   });
 });

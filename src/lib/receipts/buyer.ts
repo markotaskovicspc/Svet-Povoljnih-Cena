@@ -198,7 +198,21 @@ export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
       street: order.shipStreet,
       postalCode: order.shipPostalCode,
       city: order.shipCity,
+      companyName: order.shipCompanyName,
+      pib: order.shipPib,
     },
+    billing_address:
+      !order.billingSameAsShipping && order.billFirstName
+        ? {
+            firstName: order.billFirstName,
+            lastName: order.billLastName ?? "",
+            street: order.billStreet ?? "",
+            postalCode: order.billPostalCode ?? "",
+            city: order.billCity ?? "",
+            companyName: order.billCompanyName,
+            pib: order.billPib,
+          }
+        : undefined,
   };
 }
 

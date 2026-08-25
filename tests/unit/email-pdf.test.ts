@@ -1,7 +1,9 @@
+import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildInvoicePdf,
   buildWithdrawalFormPdf,
+  invoiceBuyerLines,
   type InvoiceOrderInput,
 } from "@/lib/email/pdf";
 
@@ -30,13 +32,29 @@ const order: InvoiceOrderInput = {
   },
 };
 
+const businessOrder: InvoiceOrderInput = {
+  ...order,
+  billing_address: {
+    firstName: "Milan",
+    lastName: "Jovanović",
+    companyName: "Kupac d.o.o.",
+    pib: "109876543",
+    street: "Poslovna 12",
+    postalCode: "21000",
+    city: "Novi Sad",
+  },
+};
+
 describe("customer PDF documents", () => {
   it("renders the styled pro-forma as a branded A4 image PDF", async () => {
-    const bytes = await buildInvoicePdf(order);
+    const bytes = await buildInvoicePdf(businessOrder);
     const pdf = bytes.toString("binary");
     expect(pdf).toContain("/Subtype /Image");
     expect(pdf).toContain("/MediaBox [0 0 595 842]");
     expect(bytes.length).toBeGreaterThan(20_000);
+    if (process.env.INVOICE_PDF_SAMPLE_PATH) {
+      writeFileSync(process.env.INVOICE_PDF_SAMPLE_PATH, bytes);
+    }
   });
 
   it("numbers each withdrawal item so the buyer can circle it", () => {
@@ -60,5 +78,16 @@ describe("customer PDF documents", () => {
     expect(buildWithdrawalFormPdf(lateOrder).toString("binary")).toContain(
       "Datum porudzbine: 21.08.2026.",
     );
+  });
+
+  it("renders the billing company and its PIB as the buyer", () => {
+    expect(
+      invoiceBuyerLines(businessOrder),
+    ).toEqual([
+      "Kupac d.o.o.",
+      "PIB: 109876543",
+      "Kontakt: Milan Jovanović",
+      "Poslovna 12, 21000 Novi Sad",
+    ]);
   });
 });

@@ -215,6 +215,16 @@ function transliterate(s: string): string {
   return out.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, "?");
 }
 
+export interface InvoiceAddressInput {
+  firstName: string;
+  lastName: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  companyName?: string | null;
+  pib?: string | null;
+}
+
 interface InvoiceOrderInput {
   number: string;
   createdAt: Date;
@@ -228,7 +238,8 @@ interface InvoiceOrderInput {
   savedCardDiscount?: number | null;
   total: number;
   paymentMethod: string;
-  shipping_address: { firstName: string; lastName: string; street: string; postalCode: string; city: string };
+  shipping_address: InvoiceAddressInput;
+  billing_address?: InvoiceAddressInput | null;
 }
 
 type InvoiceLine = {
@@ -411,11 +422,33 @@ function invoicePageSvg(
     <text x="92" y="242" class="partyLabel">PRODAVAC</text>
     ${partyText(92, 274, [MERCHANT_LEGAL_INFO.name, `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`, MERCHANT_LEGAL_INFO.shortAddress, `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`])}
     <text x="642" y="242" class="partyLabel">KUPAC</text>
-    ${partyText(642, 274, [`${order.shipping_address.firstName} ${order.shipping_address.lastName}`, `${order.shipping_address.street},`, `${order.shipping_address.postalCode} ${order.shipping_address.city}`])}
+    ${partyText(642, 274, invoiceBuyerLines(order))}
     ${header}${rows}${totals}
     <text x="70" y="1690" class="footer">${xmlEscapePdf(MERCHANT_LEGAL_INFO.name)} · PIB ${xmlEscapePdf(MERCHANT_LEGAL_INFO.pib)}</text>
     <text x="1170" y="1690" text-anchor="end" class="footer">Strana ${pageIndex + 1}/${pageCount}</text>
   </svg>`;
+}
+
+export function invoiceBuyerLines(order: InvoiceOrderInput) {
+  const buyer = order.billing_address ?? order.shipping_address;
+  const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
+  const companyName = buyer.companyName?.trim();
+  const pib = buyer.pib?.trim();
+
+  if (companyName || pib) {
+    return [
+      companyName || contactName,
+      pib ? `PIB: ${pib}` : "",
+      companyName && contactName ? `Kontakt: ${contactName}` : "",
+      `${buyer.street}, ${buyer.postalCode} ${buyer.city}`,
+    ].filter(Boolean);
+  }
+
+  return [
+    contactName,
+    `${buyer.street},`,
+    `${buyer.postalCode} ${buyer.city}`,
+  ];
 }
 
 function partyText(x: number, y: number, values: string[]) {
