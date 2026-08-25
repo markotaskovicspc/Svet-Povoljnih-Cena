@@ -116,7 +116,7 @@ describe("X Express official API contract", () => {
     expect(getXExpressConfig().apiKey).toBe("");
   });
 
-  it("accepts the confirmed first code and rejects the invalid earlier code", () => {
+  it("accepts the confirmed first code and normalizes the legacy earlier start", () => {
     const env = {
       X_EXPRESS_ENABLED: "true",
       X_EXPRESS_ENV: "test",
@@ -142,9 +142,7 @@ describe("X Express official API contract", () => {
     expect(requireXExpressShipmentConfig().codeRangeStart).toBe(850300001);
 
     vi.stubEnv("X_EXPRESS_CODE_RANGE_START", "850300000");
-    expect(() => requireXExpressShipmentConfig()).toThrow(
-      /AAA0850300000.*AAA0850300001/,
-    );
+    expect(requireXExpressShipmentConfig().codeRangeStart).toBe(850300001);
   });
 
   it("builds the exact PascalCase address-check request", () => {

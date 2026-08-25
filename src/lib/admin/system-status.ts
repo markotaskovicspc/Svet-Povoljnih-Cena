@@ -218,14 +218,7 @@ export function getIntegrationReadiness(
         present("X_EXPRESS_CREATE_ORDER_PATH"),
         present("X_EXPRESS_WEBHOOK_API_KEY"),
         present("X_EXPRESS_CODE_PREFIX"),
-        {
-          name: "X_EXPRESS_CODE_RANGE_START",
-          valid: (value) =>
-            !(
-              normalized(env.X_EXPRESS_CODE_PREFIX) === "AAA" &&
-              value === "850300000"
-            ),
-        },
+        present("X_EXPRESS_CODE_RANGE_START"),
         present("X_EXPRESS_CODE_RANGE_END"),
         present("X_EXPRESS_PICKUP_NAME"),
         present("X_EXPRESS_PICKUP_TOWN_ID"),

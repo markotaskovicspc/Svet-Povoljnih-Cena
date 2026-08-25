@@ -85,6 +85,12 @@ export function getXExpressConfig(): XExpressConfig {
   const env = trim(process.env.X_EXPRESS_ENV).toLowerCase() === "production"
     ? "production"
     : "test";
+  const codePrefix = trim(process.env.X_EXPRESS_CODE_PREFIX) || "AAA";
+  const configuredRangeStart = int(process.env.X_EXPRESS_CODE_RANGE_START);
+  const codeRangeStart =
+    codePrefix === "AAA" && configuredRangeStart === 850300000
+      ? 850300001
+      : configuredRangeStart;
   return {
     enabled:
       bool(process.env.X_EXPRESS_ENABLED) &&
@@ -100,8 +106,8 @@ export function getXExpressConfig(): XExpressConfig {
       trim(process.env.X_EXPRESS_WEBHOOK_API_KEY) ||
       trim(process.env.X_EXPRESS_WEBHOOK_SECRET),
     contractCode: trim(process.env.X_EXPRESS_CONTRACT_CODE),
-    codePrefix: trim(process.env.X_EXPRESS_CODE_PREFIX) || "AAA",
-    codeRangeStart: int(process.env.X_EXPRESS_CODE_RANGE_START),
+    codePrefix,
+    codeRangeStart,
     codeRangeEnd: int(process.env.X_EXPRESS_CODE_RANGE_END),
     statusCronSecret: trim(process.env.X_EXPRESS_STATUS_CRON_SECRET),
     servicePayerId: int(process.env.X_EXPRESS_SERVICE_PAYER_ID) ?? 1,
@@ -175,14 +181,6 @@ export function requireXExpressShipmentConfig(cashOnDelivery = false) {
   }
   if (!/^[A-Z]{3}$/.test(cfg.codePrefix)) {
     throw new XExpressConfigError("X Express code prefix mora imati tačno tri velika slova.");
-  }
-  if (
-    cfg.codePrefix === "AAA" &&
-    cfg.codeRangeStart === 850300000
-  ) {
-    throw new XExpressConfigError(
-      "X Express kod AAA0850300000 nije važeći. Prvi potvrđeni kod je AAA0850300001.",
-    );
   }
   if (![1, 2, 3, 4].includes(cfg.servicePayerId)) {
     throw new XExpressConfigError("X Express ServicePayerId mora biti 1, 2, 3 ili 4.");

@@ -120,12 +120,12 @@ describe("admin system status", () => {
     expect(testAccount?.ready).toBe(true);
     expect(testAccount?.missing).not.toContain("X_EXPRESS_PRODUCTION_ACCEPTED");
 
-    const invalidFirstCode = getIntegrationReadiness({
+    const legacyFirstCode = getIntegrationReadiness({
       ...env,
       X_EXPRESS_CODE_RANGE_START: "850300000",
     }).find((item) => item.id === "x-express");
-    expect(invalidFirstCode?.ready).toBe(false);
-    expect(invalidFirstCode?.missing).toContain("X_EXPRESS_CODE_RANGE_START");
+    expect(legacyFirstCode?.ready).toBe(true);
+    expect(legacyFirstCode?.missing).not.toContain("X_EXPRESS_CODE_RANGE_START");
 
     const production = getIntegrationReadiness({
       ...env,
