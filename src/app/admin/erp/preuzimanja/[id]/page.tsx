@@ -429,7 +429,7 @@ export default async function PickupBatchPage({
               href={`/admin/erp/preuzimanja/${batch.id}/stampa`}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
-              Picking lista i etikete
+              Picking lista, adresnice i interne etikete
             </Link>
             <form action={createAction}>
               <input type="hidden" name="provider" value="X_EXPRESS" />

@@ -24,6 +24,7 @@ export async function GET(
           paymentMethod: true,
           shipFirstName: true,
           shipLastName: true,
+          shipCompanyName: true,
           shipPhone: true,
           shipStreet: true,
           shipCity: true,

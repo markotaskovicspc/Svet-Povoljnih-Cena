@@ -467,6 +467,7 @@ describe("X Express codes, label and webhook envelope", () => {
         paymentMethod: "POUZECE_GOTOVINA",
         shipFirstName: "Petar",
         shipLastName: "Petrović",
+        shipCompanyName: "Petrović enterijer DOO",
         shipPhone: "0642223344",
         shipStreet: "Bulevar oslobođenja 10A",
         shipCity: "Novi Sad",
@@ -477,6 +478,7 @@ describe("X Express codes, label and webhook envelope", () => {
     });
     expect(html).toContain("width: 95mm; height: 138mm");
     expect(html).toContain("X EXPRESS DOO BEOGRAD");
+    expect(html).toContain("Petrović enterijer DOO");
     expect(html).toContain("Bulevar oslobođenja 10A");
     expect(html).toContain("VS-2");
     expect(html).toContain("1/2");

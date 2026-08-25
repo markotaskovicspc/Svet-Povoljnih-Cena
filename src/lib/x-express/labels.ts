@@ -37,6 +37,7 @@ type XExpressLabelShipment = {
     paymentMethod: PaymentMethod;
     shipFirstName: string;
     shipLastName: string;
+    shipCompanyName?: string | null;
     shipPhone: string;
     shipStreet: string;
     shipCity: string;
@@ -95,6 +96,8 @@ function renderLabel(
   count: number,
 ) {
   const order = shipment.order;
+  const recipientName =
+    order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`.trim();
   const cod = isCod(order.paymentMethod);
   const route = shipment.providerRouteCode ?? shipment.providerRouteName ?? "REON";
   const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);
@@ -112,7 +115,7 @@ function renderLabel(
     <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
-    <div class="recipient">Primalac:<strong>${escapeHtml(`${order.shipFirstName} ${order.shipLastName}`.trim())},<br />${escapeHtml(order.shipStreet)}<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>
+    <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)},<br />${escapeHtml(order.shipStreet)}<br />${escapeHtml(`${order.shipPostalCode} ${order.shipCity}`)}<br />${escapeHtml(order.shipPhone)}</strong></div>
     <div class="route"><span class="route-code">${escapeHtml(route)}</span><span class="pkg">${index}/${count}</span></div>
     <div class="meta">
       <div><strong>Referenca:</strong> ${escapeHtml(shipment.id)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
