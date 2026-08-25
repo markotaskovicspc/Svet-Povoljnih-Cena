@@ -5,8 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  ChevronLeft,
-  ChevronRight,
   Home,
   Menu,
   User2,
@@ -31,10 +29,9 @@ import { BRAND } from "@/lib/brand";
 import type { Tab } from "@/types";
 import { InstantSearch } from "./instant-search";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
-import { getCategoryMenuAction } from "./category-menu-action";
-import { getCategoryMenuImage } from "./category-menu-image";
 import { customerLoginHref } from "@/lib/auth/customer-callback";
 import { CategoryMenuGrid } from "./category-menu-grid";
+import { MobileCategoryLevel } from "./mobile-category-level";
 
 interface Crumb {
   label: string;
@@ -186,30 +183,6 @@ export function MobileNav({
           </div>
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-            {stack.length > 1 ? (
-              <div className="shrink-0 border-b border-border">
-                <button
-                  type="button"
-                  onClick={back}
-                  aria-label="Nazad"
-                  className="flex min-h-13 w-full items-center gap-3 py-3 pr-4 pl-[4.35rem] text-left text-sm font-semibold whitespace-nowrap text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-                >
-                  <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                  <span>Povratak na glavni meni</span>
-                </button>
-              </div>
-            ) : null}
-
-            {current.href ? (
-              <Link
-                href={current.href}
-                onClick={close}
-                aria-label={`Pogledaj sve iz kategorije ${current.label}`}
-                className="flex min-h-14 shrink-0 items-center border-b border-border py-4 pr-4 pl-[6.1rem] text-[15px] font-semibold text-ink-900 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
-              >
-                Pogledaj sve
-              </Link>
-            ) : null}
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={stack.length + ":" + current.label}
@@ -221,7 +194,7 @@ export function MobileNav({
                   "min-h-0 flex-1",
                   stack.length === 1
                     ? "flex flex-col overflow-y-auto overscroll-contain"
-                    : "overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+                    : "flex flex-col overflow-hidden",
                 )}
               >
                 {stack.length === 1 ? (
@@ -264,80 +237,18 @@ export function MobileNav({
                 ) : null}
 
                 {stack.length !== 1 ? (
-                  <ul className="divide-y divide-border">
-                    {current.nodes.map((node) => {
-                      const isActive = pathname === node.href;
-                      const opensSubmenu =
-                        getCategoryMenuAction(node) === "submenu";
-                      const categoryImageUrl = getCategoryMenuImage(node);
-                      return (
-                        <li
-                          key={node.href}
-                          className="min-h-18 transition hover:bg-muted-bg"
-                        >
-                          {opensSubmenu ? (
-                            <button
-                              type="button"
-                              onClick={() => enter(node)}
-                              className={cn(
-                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-left text-[clamp(12px,3.6vw,15px)] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                                isActive && "font-semibold text-brand-blue",
-                              )}
-                            >
-                              <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-                                <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
-                                  <Image
-                                    src={categoryImageUrl}
-                                    alt=""
-                                    fill
-                                    sizes="70px"
-                                    className="object-cover"
-                                  />
-                                </span>
-                                <span className="min-w-0 truncate whitespace-nowrap">
-                                  {node.label}
-                                </span>
-                              </span>
-                              <ChevronRight
-                                className="size-4 shrink-0 text-ink-500"
-                                aria-hidden
-                              />
-                            </button>
-                          ) : (
-                            <Link
-                              href={node.href}
-                              onClick={close}
-                              className={cn(
-                                "flex min-h-18 w-full min-w-0 items-center justify-between gap-3 px-4 py-2.5 text-[clamp(12px,3.6vw,15px)] leading-snug font-medium text-ink-900 transition focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
-                                isActive && "font-semibold text-brand-blue",
-                              )}
-                            >
-                              <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-                                <span className="relative h-12 w-[4.35rem] shrink-0 overflow-hidden rounded-md bg-muted-bg ring-1 ring-border/60">
-                                  <Image
-                                    src={categoryImageUrl}
-                                    alt=""
-                                    fill
-                                    sizes="70px"
-                                    className="object-cover"
-                                  />
-                                </span>
-                                <span className="min-w-0 truncate whitespace-nowrap">
-                                  {node.label}
-                                </span>
-                              </span>
-                              <ChevronRight
-                                className="size-4 shrink-0 text-ink-300"
-                                aria-hidden
-                              />
-                            </Link>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <MobileCategoryLevel
+                    category={{
+                      label: current.label,
+                      href: current.href!,
+                      children: current.nodes,
+                    }}
+                    pathname={pathname}
+                    onBack={back}
+                    onEnter={enter}
+                    onNavigate={close}
+                  />
                 ) : null}
-
               </motion.div>
             </AnimatePresence>
           </div>
