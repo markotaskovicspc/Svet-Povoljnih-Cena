@@ -449,7 +449,9 @@ export default async function PickupBatchPage({
               Samostalna picking lista
             </Link>
             <Link
-              href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+              href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
               Kurirske etikete
@@ -588,8 +590,8 @@ export default async function PickupBatchPage({
             </p>
             <p className="mt-1 leading-6">
               {myGls
-                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske etikete“ otvorite i odštampajte svaki zvanični MyGLS PDF. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
-                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske etikete“ otvorite i odštampajte svaku X Express etiketu."}
+                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske etikete“ otvorite jedan zajednički MyGLS PDF i odštampajte sve etikete. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
+                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske etikete“ otvorite zajednički dokument i odštampajte sve X Express etikete."}
             </p>
           </div>
           <p className="mb-3 text-sm text-ink-600">
@@ -627,8 +629,9 @@ export default async function PickupBatchPage({
           {myGls && batch.labelsCreatedAt ? (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
               MyGLS adresnice su kreirane. Sada otvorite „Kurirske etikete“,
-              odštampajte svaki zvanični PDF, najavite dolazak kurira MyGLS-u i
-              zatim ispod potvrdite kanal i dobijenu referencu.
+              odštampajte sve etikete iz zajedničkog zvaničnog PDF-a, najavite
+              dolazak kurira MyGLS-u i zatim ispod potvrdite kanal i dobijenu
+              referencu.
             </p>
           ) : postingBlockReason ? (
             <p

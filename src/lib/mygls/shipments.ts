@@ -12,7 +12,7 @@ import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled } from "./config";
 import { MyGlsClient, bytesFromMyGls } from "./client";
 import { uploadMyGlsLabelPdf } from "./labels";
-import { buildMyGlsParcelForOrder, isMyGlsCashOnDelivery } from "./payload";
+import { buildMyGlsParcelsForOrder, isMyGlsCashOnDelivery } from "./payload";
 import {
   normalizeOrderItemIds,
   sameShipmentAssignment,
@@ -125,7 +125,7 @@ export async function createMyGlsShipmentForOrder(
   }
 
   const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
-  const parcel = buildMyGlsParcelForOrder({
+  const parcelList = buildMyGlsParcelsForOrder({
     cfg,
     order: { ...order, total: codAmount, items: shipmentItems },
     pickupDate: options.pickupDate,
@@ -134,7 +134,7 @@ export async function createMyGlsShipmentForOrder(
   });
 
   try {
-    const response = await new MyGlsClient(cfg).printLabels({ parcelList: [parcel] });
+    const response = await new MyGlsClient(cfg).printLabels({ parcelList });
     const printData = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
     const first = printData[0] ?? {};
     const parcelIds = printData.map((item) => item.ParcelId).filter(isNumber);
@@ -151,7 +151,7 @@ export async function createMyGlsShipmentForOrder(
 
     const data = {
       provider: MYGLS_PROVIDER,
-      packageCount: parcel.Count,
+      packageCount: parcelList.reduce((sum, parcel) => sum + parcel.Count, 0),
       purpose,
       reclamationId: reclamation?.id ?? null,
       reclamationQty: reclamation?.quantity ?? null,

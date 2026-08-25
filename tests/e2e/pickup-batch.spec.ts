@@ -612,6 +612,12 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "href",
         `/admin/erp/preuzimanja/${firstBatchId}/stampa?section=picking&autoprint=1`,
       );
+      await expect(
+        page.getByRole("link", { name: "Kurirske etikete", exact: true }),
+      ).toHaveAttribute(
+        "href",
+        `/api/admin/erp/preuzimanja/${firstBatchId}/labels`,
+      );
       await page.goto(
         `/admin/erp/preuzimanja/${firstBatchId}/stampa?autoprint=1`,
         { waitUntil: "domcontentloaded" },

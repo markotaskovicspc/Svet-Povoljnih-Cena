@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MyGlsConfig } from "@/lib/mygls/config";
-import { buildMyGlsParcelForOrder } from "@/lib/mygls/payload";
+import {
+  buildMyGlsParcelForOrder,
+  buildMyGlsParcelsForOrder,
+} from "@/lib/mygls/payload";
 
 const config: MyGlsConfig = {
   enabled: true,
@@ -139,7 +142,7 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.ServiceList).toBeUndefined();
   });
 
-  it("keeps the exact product name on each individual provider label", () => {
+  it("keeps the exact product name on each physical-package property", () => {
     const contents = ["Ergo Lux", "Urban Seat", "Clean Box"];
     const parcel = buildMyGlsParcelForOrder({
       cfg: config,
@@ -158,6 +161,68 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.ParcelPropertyList?.map((pkg) => pkg.Content)).toEqual(
       contents,
     );
+  });
+
+  it("creates separate provider labels with one exact product name per order item", () => {
+    const labelParcels = buildMyGlsParcelsForOrder({
+      cfg: config,
+      order: {
+        ...order,
+        items: [
+          { name: "Trpezarijski sto HOME STYLE", qty: 1 },
+          { name: "Trpezarijski set URBAN", qty: 1 },
+        ],
+      },
+      packages: [
+        {
+          ...packages[0]!,
+          packageNo: 1,
+          orderItemId: "item-home-style",
+          content: "Trpezarijski sto HOME STYLE",
+        },
+        {
+          ...packages[1]!,
+          packageNo: 2,
+          orderItemId: "item-urban",
+          content: "Trpezarijski set URBAN",
+        },
+      ],
+    });
+
+    expect(labelParcels).toHaveLength(2);
+    expect(labelParcels.map((parcel) => parcel.Content)).toEqual([
+      "Trpezarijski sto HOME STYLE",
+      "Trpezarijski set URBAN",
+    ]);
+    expect(labelParcels.map((parcel) => parcel.Count)).toEqual([1, 1]);
+    expect(
+      labelParcels.map((parcel) =>
+        parcel.ParcelPropertyList?.map((property) => property.Content),
+      ),
+    ).toEqual([
+      ["Trpezarijski sto HOME STYLE"],
+      ["Trpezarijski set URBAN"],
+    ]);
+    expect(labelParcels.map((parcel) => parcel.CODAmount)).toEqual([12_000, 0]);
+    expect(labelParcels.map((parcel) => parcel.CODReference)).toEqual([
+      "SPC-2026-000001",
+      undefined,
+    ]);
+  });
+
+  it("keeps multiple boxes of the same item in one numbered MyGLS parcel", () => {
+    const labelParcels = buildMyGlsParcelsForOrder({
+      cfg: config,
+      order,
+      packages,
+    });
+
+    expect(labelParcels).toHaveLength(1);
+    expect(labelParcels[0]).toMatchObject({
+      Count: 2,
+      Content: "Stolica",
+      CODAmount: 12_000,
+    });
   });
 
   it("blocks incomplete measurements before any provider call", () => {

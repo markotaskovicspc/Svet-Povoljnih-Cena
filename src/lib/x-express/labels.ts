@@ -23,7 +23,7 @@ const CODE128_PATTERNS = [
   "211214", "211232", "2331112",
 ] as const;
 
-type XExpressLabelShipment = {
+export type XExpressLabelShipment = {
   id: string;
   trackingNo: string | null;
   packageCount: number;
@@ -116,17 +116,26 @@ export function buildXExpressLabelData(args: {
 }
 
 export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
-  const trackingCodes = readTrackingCodes(shipment);
-  const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
-  const codes = Array.from({ length: count }, (_, index) => {
-    return trackingCodes[index] ?? trackingCodes[0] ?? shipment.trackingNo ?? shipment.order.number;
+  return renderXExpressBatchLabelsHtml([shipment], {
+    title: shipment.order.number,
   });
+}
+
+export function renderXExpressBatchLabelsHtml(
+  shipments: readonly XExpressLabelShipment[],
+  options: { title?: string; autoPrint?: boolean } = {},
+) {
+  if (!shipments.length) {
+    throw new Error("Nema X Express etiketa za štampu.");
+  }
+  const title = options.title ?? shipments.map((shipment) => shipment.order.number).join(", ");
+  const labels = shipments.flatMap(renderShipmentLabels);
 
   return `<!doctype html>
 <html lang="sr-Latn">
 <head>
   <meta charset="utf-8" />
-  <title>X Express etikete ${escapeHtml(shipment.order.number)}</title>
+  <title>X Express etikete ${escapeHtml(title)}</title>
   <style>
     @page { size: A4; margin: 9mm; }
     * { box-sizing: border-box; }
@@ -153,10 +162,20 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
 <body>
   <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> Ove transportne etikete generiše ERP isključivo iz podataka koje je X Express prihvatio pri kreiranju naloga. Ne menjajte podatke ručno posle kreiranja pošiljke.</aside>
   <main class="sheet">
-    ${codes.map((code, index) => renderLabel(shipment, code, index + 1, count)).join("")}
+    ${labels.join("")}
   </main>
+  ${options.autoPrint ? "<script>window.addEventListener('load', () => window.print());</script>" : ""}
 </body>
 </html>`;
+}
+
+function renderShipmentLabels(shipment: XExpressLabelShipment) {
+  const trackingCodes = readTrackingCodes(shipment);
+  const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
+  const codes = Array.from({ length: count }, (_, index) => {
+    return trackingCodes[index] ?? trackingCodes[0] ?? shipment.trackingNo ?? shipment.order.number;
+  });
+  return codes.map((code, index) => renderLabel(shipment, code, index + 1, count));
 }
 
 function renderLabel(

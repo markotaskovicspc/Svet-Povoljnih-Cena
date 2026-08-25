@@ -17,6 +17,7 @@ import {
 import {
   buildXExpressLabelData,
   encodeXExpressCode128,
+  renderXExpressBatchLabelsHtml,
   renderXExpressLabelsHtml,
 } from "@/lib/x-express/labels";
 import {
@@ -507,7 +508,7 @@ describe("X Express codes, label and webhook envelope", () => {
       deliveryCity: "Novi Sad",
       deliveryPostalCode: "21000",
     });
-    const html = renderXExpressLabelsHtml({
+    const shipment = {
       id: "758bb513-499d-4ab1-8697-5e747602f222",
       trackingNo: "AAA0850300001",
       packageCount: 2,
@@ -536,7 +537,8 @@ describe("X Express codes, label and webhook envelope", () => {
         notes: "Pozvati",
         items: [{ name: "Stolica", qty: 1 }],
       },
-    });
+    };
+    const html = renderXExpressLabelsHtml(shipment);
     expect(html).toContain("width: 95mm; height: 138mm");
     expect(html).toContain("X EXPRESS · ERP TRANSPORTNA ETIKETA");
     expect(html).toContain("X Express ne vraća PDF adresnicu kroz API");
@@ -550,6 +552,25 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(html).toContain("1,8 kg");
     expect(html).toContain("2,2 kg");
     expect(html).toContain("12.346 RSD");
+
+    const batchHtml = renderXExpressBatchLabelsHtml(
+      [
+        shipment,
+        {
+          ...shipment,
+          id: "shipment-2",
+          trackingNo: "AAA0850300003",
+          packageCount: 1,
+          providerParcelNumbers: ["AAA0850300003"],
+          order: { ...shipment.order, number: "WEB-2026-0002" },
+        },
+      ],
+      { title: "PRE-2026-0002", autoPrint: true },
+    );
+    expect(batchHtml.match(/<!doctype html>/g)).toHaveLength(1);
+    expect(batchHtml.match(/<section class="label">/g)).toHaveLength(3);
+    expect(batchHtml).toContain("X Express etikete PRE-2026-0002");
+    expect(batchHtml).toContain("window.print()");
   });
 
   it("requires exact webhook authentication, contract and schema", () => {
