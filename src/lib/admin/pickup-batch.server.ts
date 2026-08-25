@@ -31,6 +31,7 @@ import {
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
+import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
 import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
@@ -781,6 +782,138 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
     shipmentCount += result.shipmentCount;
   }
   return { posted, shipmentCount };
+}
+
+export async function recreateMyGlsLabelsForPickupBatch(
+  batchId: string,
+  actorId: string,
+) {
+  const claimed = await db.pickupBatch.updateMany({
+    where: {
+      id: batchId,
+      provider: MYGLS_PROVIDER,
+      status: "DRAFT",
+      labelsCreatedAt: { not: null },
+      externalBookedAt: null,
+    },
+    data: { status: "POSTING", configurationIssue: null },
+  });
+  if (!claimed.count) {
+    throw new Error(
+      "MyGLS adresnice mogu ponovo da se kreiraju samo za novi nalog koji još nije najavljen kuriru.",
+    );
+  }
+
+  try {
+    const batch = await db.pickupBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        provider: true,
+        status: true,
+        labelsCreatedAt: true,
+        externalBookedAt: true,
+        lines: {
+          select: {
+            lineGroupKey: true,
+            orderId: true,
+            orderItemId: true,
+            reclamationId: true,
+            purpose: true,
+          },
+        },
+      },
+    });
+    if (
+      !batch ||
+      batch.status !== "POSTING" ||
+      normalizeProvider(batch.provider) !== "MYGLS" ||
+      !batch.labelsCreatedAt ||
+      batch.externalBookedAt
+    ) {
+      throw new Error("MyGLS nalog nije dostupan za ponovno kreiranje adresnica.");
+    }
+
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) {
+      throw new Error("Nalog nema nijednu MyGLS picking grupu.");
+    }
+    const orderIds = ordinaryOrderIdsForGroups(workGroups);
+    const shipments = await db.shipment.findMany({
+      where: {
+        provider: MYGLS_PROVIDER,
+        OR: [
+          ...(orderIds.length
+            ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
+            : []),
+          ...workGroups
+            .filter((group) => group.purpose === "RECLAMATION_REPLACEMENT")
+            .map((group) => ({
+              reclamationId: requiredReclamationId(group),
+              purpose: "RECLAMATION_REPLACEMENT" as const,
+            })),
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        orderId: true,
+        reclamationId: true,
+        purpose: true,
+        rawCreateResponse: true,
+      },
+    });
+    const shipmentIds = new Set<string>();
+    for (const group of workGroups) {
+      const shipment = shipments.find((candidate) =>
+        group.purpose === "RECLAMATION_REPLACEMENT"
+          ? candidate.purpose === "RECLAMATION_REPLACEMENT" &&
+            candidate.reclamationId === group.reclamationId
+          : candidate.purpose === "ORDER_DELIVERY" &&
+            candidate.orderId === group.orderId &&
+            samePickupAssignment(candidate.rawCreateResponse, group),
+      );
+      if (!shipment) {
+        throw new Error(
+          `Picking grupa ${group.lineGroupKey} nema postojeću MyGLS adresnicu za zamenu.`,
+        );
+      }
+      shipmentIds.add(shipment.id);
+    }
+
+    for (const shipmentId of shipmentIds) {
+      await deleteMyGlsLabelsForShipment(shipmentId);
+    }
+
+    const reset = await db.pickupBatch.updateMany({
+      where: {
+        id: batchId,
+        status: "POSTING",
+        externalBookedAt: null,
+      },
+      data: {
+        status: "DRAFT",
+        labelsCreationStartedAt: null,
+        labelsCreatedAt: null,
+        labelsCreatedById: null,
+        configurationIssue: null,
+      },
+    });
+    if (!reset.count) {
+      throw new Error("Status naloga promenjen je tokom zamene MyGLS adresnica.");
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Ponovno kreiranje MyGLS adresnica nije uspelo.";
+    await db.pickupBatch.updateMany({
+      where: { id: batchId, status: "POSTING" },
+      data: { status: "DRAFT", configurationIssue: message },
+    });
+    throw error;
+  }
+
+  return createMyGlsLabelsForPickupBatch(batchId, actorId);
 }
 
 async function postPickupBatch(batchId: string, actorId: string) {

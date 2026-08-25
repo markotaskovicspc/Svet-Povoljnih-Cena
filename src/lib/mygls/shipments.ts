@@ -231,10 +231,20 @@ export async function createMyGlsShipmentForOrder(
 export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
   const shipment = await db.shipment.findUnique({
     where: { id: shipmentId },
-    select: { id: true, orderId: true, provider: true, providerParcelId: true, providerParcelIds: true },
+    select: {
+      id: true,
+      orderId: true,
+      provider: true,
+      providerParcelId: true,
+      providerParcelIds: true,
+      syncError: true,
+    },
   });
   if (!shipment || shipment.provider !== MYGLS_PROVIDER) {
     throw new MyGlsConfigError("MyGLS pošiljka nije pronađena.");
+  }
+  if (shipment.syncError === "MyGLS etiketa obrisana.") {
+    return { alreadyDeleted: true };
   }
   const parcelIds = parcelIdList(shipment);
   if (!parcelIds.length) throw new MyGlsConfigError("MyGLS parcel ID nije sačuvan.");

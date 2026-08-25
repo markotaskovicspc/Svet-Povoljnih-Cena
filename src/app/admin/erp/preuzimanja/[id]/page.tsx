@@ -18,11 +18,13 @@ import {
   getPickupPostingAvailability,
   loadEligibleOrders,
   postPickupBatches,
+  recreateMyGlsLabelsForPickupBatch,
   removePickupGroupFromBatch,
   savePickupPackage,
   savePickupWindow,
 } from "@/lib/admin/pickup-batch.server";
 import {
+  canRecreateMyGlsLabels,
   formatBelgradeDateTimeLocal,
   isPickupBatchEditable,
   MYGLS_BOOKING_CHANNEL_LABEL,
@@ -297,6 +299,37 @@ async function postAction(
   )(formData);
 }
 
+async function recreateLabelsAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.labels.recreate",
+      entity: "PickupBatch",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) {
+        return { ok: false as const, error: "Nalog nije izabran." };
+      }
+      const result = await recreateMyGlsLabelsForPickupBatch(
+        parsed.data.batchId,
+        actorId,
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.batchId,
+        diff: result,
+        message: `MyGLS adresnice su ponovo kreirane za ${result.shipmentCount} porudžbina.`,
+      };
+    },
+  )(formData);
+}
+
 export default async function PickupBatchPage({
   params,
   searchParams,
@@ -351,6 +384,7 @@ export default async function PickupBatchPage({
   const canPost =
     isPickupBatchEditable(batch.status) &&
     (myGls ? !batch.labelsCreatedAt : editable);
+  const canRecreateLabels = canRecreateMyGlsLabels(batch);
   const editing = query.mode === "edit" && editable;
   const rows = batch.lines
     .map((line) => pickupLineRow(line))
@@ -452,36 +486,53 @@ export default async function PickupBatchPage({
                 Obriši
               </SubmitButton>
             </AdminActionForm>
-            <AdminActionForm
-              action={postAction}
-              successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
-              popupWindowName={`pickup-print-${batch.id}`}
-            >
-              <input type="hidden" name="batchId" value={batch.id} />
-              <SubmitButton
-                variant="outline"
-                disabled={
-                  !canPost ||
-                  !rows.length ||
-                  !batch.pickupDate ||
-                  !batch.pickupWindowEnd ||
-                  !posting.available ||
-                  unreadyReplacementCount > 0 ||
-                  completePackageCount !== rows.length ||
-                  invalidPackageCount > 0
-                }
-                pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
-                confirm={
-                  myGls
-                    ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
-                    : "Proknjižiti nalog i poslati po jednu najavu za svaku picking grupu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
-                }
-                title={postingBlockReason ?? undefined}
-                aria-describedby={postingBlockReason ? postingReasonId : undefined}
+            {canRecreateLabels ? (
+              <AdminActionForm
+                action={recreateLabelsAction}
+                successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+                popupWindowName={`pickup-print-${batch.id}`}
               >
-                {myGls ? "Kreiraj adresnice" : "Proknjiži"}
-              </SubmitButton>
-            </AdminActionForm>
+                <input type="hidden" name="batchId" value={batch.id} />
+                <SubmitButton
+                  variant="outline"
+                  pendingLabel="Ponovno kreiranje…"
+                  confirm="Poništiti postojeće MyGLS adresnice i kreirati nove sa odvojenim sadržajem po artiklu? Brojevi paketa će se promeniti. Ovo je dozvoljeno samo pre najave dolaska kurira."
+                >
+                  Ponovo kreiraj adresnice
+                </SubmitButton>
+              </AdminActionForm>
+            ) : (
+              <AdminActionForm
+                action={postAction}
+                successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+                popupWindowName={`pickup-print-${batch.id}`}
+              >
+                <input type="hidden" name="batchId" value={batch.id} />
+                <SubmitButton
+                  variant="outline"
+                  disabled={
+                    !canPost ||
+                    !rows.length ||
+                    !batch.pickupDate ||
+                    !batch.pickupWindowEnd ||
+                    !posting.available ||
+                    unreadyReplacementCount > 0 ||
+                    completePackageCount !== rows.length ||
+                    invalidPackageCount > 0
+                  }
+                  pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
+                  confirm={
+                    myGls
+                      ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
+                      : "Proknjižiti nalog i poslati po jednu najavu za svaku picking grupu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
+                  }
+                  title={postingBlockReason ?? undefined}
+                  aria-describedby={postingBlockReason ? postingReasonId : undefined}
+                >
+                  {myGls ? "Kreiraj adresnice" : "Proknjiži"}
+                </SubmitButton>
+              </AdminActionForm>
+            )}
           </div>
         }
       />

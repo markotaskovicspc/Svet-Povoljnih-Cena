@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
+  canRecreateMyGlsLabels,
   isPickupBatchEditable,
   formatBelgradeDateTimeLocal,
   nextPickupBatchNumber,
@@ -70,6 +71,26 @@ describe("ERP module 13 pickup batches", () => {
     expect(isPickupBatchEditable("CANCELLED")).toBe(false);
     expect(PICKUP_BATCH_STATUS_LABEL.DRAFT).toBe("Novi");
     expect(PICKUP_BATCH_STATUS_LABEL.POSTING).toBe("Slanje kuriru");
+  });
+
+  it("allows MyGLS label recreation only before the pickup is announced", () => {
+    const ready = {
+      provider: "MYGLS",
+      status: "DRAFT" as const,
+      labelsCreatedAt: new Date("2026-08-25T16:41:42.328Z"),
+      externalBookedAt: null,
+    };
+
+    expect(canRecreateMyGlsLabels(ready)).toBe(true);
+    expect(canRecreateMyGlsLabels({ ...ready, provider: "X_EXPRESS" })).toBe(false);
+    expect(canRecreateMyGlsLabels({ ...ready, status: "BOOKED" })).toBe(false);
+    expect(canRecreateMyGlsLabels({ ...ready, labelsCreatedAt: null })).toBe(false);
+    expect(
+      canRecreateMyGlsLabels({
+        ...ready,
+        externalBookedAt: new Date("2026-08-25T18:00:00.000Z"),
+      }),
+    ).toBe(false);
   });
 
   it("explains every reason why posting is unavailable in workflow order", () => {

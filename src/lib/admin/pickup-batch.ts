@@ -36,6 +36,25 @@ export function isPickupBatchEditable(status: PickupBatchStatus) {
   return status === "DRAFT";
 }
 
+export function canRecreateMyGlsLabels({
+  provider,
+  status,
+  labelsCreatedAt,
+  externalBookedAt,
+}: {
+  provider?: string | null;
+  status: PickupBatchStatus;
+  labelsCreatedAt?: Date | null;
+  externalBookedAt?: Date | null;
+}) {
+  return (
+    provider?.trim().toUpperCase() === "MYGLS" &&
+    status === "DRAFT" &&
+    Boolean(labelsCreatedAt) &&
+    !externalBookedAt
+  );
+}
+
 export function pickupPostingBlockReason({
   configurationIssue,
   providerReason,
