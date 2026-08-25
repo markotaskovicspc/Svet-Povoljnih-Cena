@@ -460,7 +460,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         where: { id: eligibleOrderId },
         data: { status: "KREIRANO" },
       });
-      await page.getByRole("button", { name: "Novi MyGLS", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Novi nalog — MyGLS", exact: true })
+        .click();
       await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
         firstBatchId,
       );
@@ -601,13 +603,25 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           document.documentElement.dataset.qaPrintCalled = "yes";
         };
       });
+      await page.goto(`/admin/erp/preuzimanja/${firstBatchId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByRole("link", { name: "Samostalna picking lista", exact: true }),
+      ).toHaveAttribute(
+        "href",
+        `/admin/erp/preuzimanja/${firstBatchId}/stampa?section=picking&autoprint=1`,
+      );
       await page.goto(
         `/admin/erp/preuzimanja/${firstBatchId}/stampa?autoprint=1`,
         { waitUntil: "domcontentloaded" },
       );
       await expect(page.getByRole("heading", { name: "Zbirna picking lista" })).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("data-qa-print-called", "yes");
-      await expect(page.locator("article")).toHaveCount(5);
+      await expect(page.getByText(`Kratki Z ${runId}`, { exact: true })).toBeVisible();
+      await expect(page.getByText(`Kratki A ${runId}`, { exact: true })).toBeVisible();
+      await expect(page.getByText("Interne magacinske etikete", { exact: true })).toHaveCount(0);
+      await expect(page.locator("article")).toHaveCount(0);
       await page.emulateMedia({ media: "print" });
       await expect(page.locator("aside")).toBeHidden();
       await expect(page.getByText("Prijavljen kao", { exact: false })).toBeHidden();
@@ -744,7 +758,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "Podeljeno mešovitih porudžbina: 1",
       );
 
-      await page.getByRole("button", { name: "Novi X Express", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Novi nalog — X Express", exact: true })
+        .click();
       await expect.poll(() => pickupBatchIdFromUrl(page.url())).not.toBe(
         myGlsBatchId,
       );

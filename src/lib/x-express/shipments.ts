@@ -7,6 +7,7 @@ import {
   type ShipmentPurpose,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import type { PhysicalPackage } from "@/lib/courier/packages";
 import {
   X_EXPRESS_PROVIDER,
   XExpressConfigError,
@@ -33,6 +34,7 @@ export async function createXExpressShipmentForOrder(
   orderId: string,
   options: {
     packageCount?: number;
+    packages?: readonly PhysicalPackage[];
     purpose?: ShipmentPurpose;
     reclamationId?: string;
     orderItemIds?: string[];
@@ -40,7 +42,13 @@ export async function createXExpressShipmentForOrder(
     packageMasses?: number[];
   } = {},
 ) {
-  const packageCount = Math.max(1, Math.min(99, Math.trunc(options.packageCount ?? 1)));
+  const packageCount = Math.max(
+    1,
+    Math.min(
+      99,
+      Math.trunc(options.packages?.length ?? options.packageCount ?? 1),
+    ),
+  );
   const purpose = options.purpose ?? "ORDER_DELIVERY";
   if (purpose === "RECLAMATION_RETURN") {
     throw new XExpressConfigError(
@@ -224,7 +232,10 @@ export async function createXExpressShipmentForOrder(
       order: { ...order, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
-      packageMasses: options.packageMasses,
+      packageMasses:
+        options.packages?.map((pkg) => Number(pkg.weightKg ?? 0)) ??
+        options.packageMasses,
+      packageContents: options.packages?.map((pkg) => pkg.content ?? ""),
     });
     const providerResult = await client.createOrder(payload);
     const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;

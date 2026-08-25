@@ -113,6 +113,7 @@ export function buildXExpressCreateOrderPayload(args: {
   officialStreetName?: string | null;
   purpose?: ShipmentPurpose;
   packageMasses?: number[];
+  packageContents?: string[];
 }): XExpressCreateOrderPayload {
   const { cfg, order } = args;
   const purpose = args.purpose ?? "ORDER_DELIVERY";
@@ -182,6 +183,10 @@ export function buildXExpressCreateOrderPayload(args: {
     suppliedMasses.every((mass) => Number.isFinite(mass) && mass > 0)
       ? suppliedMasses.map((mass) => round(mass, 3))
       : distributePackageMasses(order.items, args.trackingCodes.length);
+  const suppliedContents =
+    args.packageContents?.length === args.trackingCodes.length
+      ? args.packageContents
+      : null;
   const returnAddress: XExpressAddress = {
     Name: pickupAddress.Name,
     TownId: pickupAddress.TownId,
@@ -247,7 +252,11 @@ export function buildXExpressCreateOrderPayload(args: {
     Packages: args.trackingCodes.map((code, index) => ({
       Code: code,
       Mass: masses[index]!,
-      Content: content,
+      Content: providerContent(
+        suppliedContents?.[index] ?? content,
+        50,
+        content,
+      ),
     })),
   };
 }

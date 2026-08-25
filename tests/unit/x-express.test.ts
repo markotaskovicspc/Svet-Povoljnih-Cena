@@ -246,6 +246,35 @@ describe("X Express official API contract", () => {
     expect(payload.Packages.map((pkg) => pkg.Mass)).toEqual([1.25, 2.5]);
   });
 
+  it("keeps the exact product name on each individual package", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "758bb513-499d-4ab1-8697-5e747602f222",
+      trackingCodes: [
+        "AAA0850300001",
+        "AAA0850300002",
+        "AAA0850300003",
+      ],
+      packageMasses: [1, 2, 3],
+      packageContents: ["Ergo Lux", "Urban Seat", "Clean Box"],
+      order: {
+        ...order,
+        items: [
+          { ...order.items[0]!, name: "Ergo Lux", qty: 1 },
+          { ...order.items[0]!, name: "Urban Seat", qty: 1 },
+          { ...order.items[0]!, name: "Clean Box", qty: 1 },
+        ],
+      },
+      townId: 791113,
+    });
+
+    expect(payload.Packages.map((pkg) => pkg.Content)).toEqual([
+      "Ergo Lux",
+      "Urban Seat",
+      "Clean Box",
+    ]);
+  });
+
   it("blocks reclamation pickup until exact customer coordinates are available", () => {
     expect(() =>
       buildXExpressCreateOrderPayload({

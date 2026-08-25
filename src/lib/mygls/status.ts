@@ -1,6 +1,8 @@
 import type { OrderStatus, ShipmentStatus } from "@prisma/client";
 
 const DIRECT_STATUS: Record<string, ShipmentStatus> = {
+  "51": "CREATED",
+  "52": "CREATED",
   "1": "PICKED_UP",
   "2": "IN_TRANSIT",
   "3": "IN_TRANSIT",
@@ -50,6 +52,9 @@ export function inferMyGlsShipmentStatus(
   if (direct) return direct;
 
   const text = normalize(`${codeText} ${label ?? ""}`);
+  if (/(data sent|cod data sent|announced|registered|kreiran|najavljen)/.test(text)) {
+    return "CREATED";
+  }
   if (/(delivered|isporuc|urucen)/.test(text)) return "DELIVERED";
   if (/(return|returned|vracen|refused|odbij)/.test(text)) return "RETURNED";
   if (/(absent|failed|wrong|incomplete|problem|damaged|gresk|neuspes)/.test(text)) {

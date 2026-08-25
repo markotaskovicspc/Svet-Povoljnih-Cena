@@ -1,7 +1,26 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMyGlsConfig, MyGlsConfigError } from "./config";
+
+/**
+ * A provider PDF remains printable when a status-sync mapping failed, as long
+ * as the PDF exists and the row has no real provider/deletion error.
+ */
+export function usableMyGlsLabelWhere(): Prisma.ShipmentWhereInput {
+  return {
+    OR: [
+      { status: { not: "FAILED" } },
+      {
+        status: "FAILED",
+        providerStatusCode: { in: ["51", "52"] },
+        labelObjectKey: { not: null },
+        syncError: null,
+      },
+    ],
+  };
+}
 
 export function adminShipmentLabelPath(shipmentId: string) {
   return `/api/admin/shipments/${encodeURIComponent(shipmentId)}/label`;

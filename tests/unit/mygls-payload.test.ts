@@ -139,6 +139,27 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.ServiceList).toBeUndefined();
   });
 
+  it("keeps the exact product name on each individual provider label", () => {
+    const contents = ["Ergo Lux", "Urban Seat", "Clean Box"];
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order: {
+        ...order,
+        items: contents.map((name) => ({ name, qty: 1 })),
+      },
+      packages: contents.map((content, index) => ({
+        ...packages[0]!,
+        packageNo: index + 1,
+        orderItemId: `item-${index + 1}`,
+        content,
+      })),
+    });
+
+    expect(parcel.ParcelPropertyList?.map((pkg) => pkg.Content)).toEqual(
+      contents,
+    );
+  });
+
   it("blocks incomplete measurements before any provider call", () => {
     expect(() =>
       buildMyGlsParcelForOrder({

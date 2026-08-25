@@ -443,7 +443,7 @@ export default async function PickupBatchPage({
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
-              href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=picking`}
+              href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=picking&autoprint=1`}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
               Samostalna picking lista
@@ -452,18 +452,18 @@ export default async function PickupBatchPage({
               href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
-              Etikete i kurirske adresnice
+              Kurirske etikete
             </Link>
             <form action={createAction}>
               <input type="hidden" name="provider" value="X_EXPRESS" />
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi X Express
+                Novi nalog — X Express
               </SubmitButton>
             </form>
             <form action={createAction}>
               <input type="hidden" name="provider" value="MYGLS" />
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
-                Novi MyGLS
+                Novi nalog — MyGLS
               </SubmitButton>
             </form>
             {editable ? (
@@ -576,10 +576,32 @@ export default async function PickupBatchPage({
               </p>
             </div>
           </div>
+          <p className="mb-4 rounded-lg border border-border bg-muted-bg/40 px-3 py-2 text-sm text-ink-600">
+            „Novi nalog — X Express“ i „Novi nalog — MyGLS“ otvaraju novi,
+            odvojen i prazan nalog za izabranog kurira. Ne dodaju etiketu ovom
+            nalogu; kurirske etikete se kreiraju tek kada se učitaju i pripreme
+            paketi u odgovarajućem nalogu.
+          </p>
+          <div className="mb-4 rounded-lg border border-border px-3 py-3 text-sm text-ink-700">
+            <p className="font-semibold">
+              {myGls ? "Redosled za MyGLS" : "Redosled za X Express"}
+            </p>
+            <p className="mt-1 leading-6">
+              {myGls
+                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske etikete“ otvorite i odštampajte svaki zvanični MyGLS PDF. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
+                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske etikete“ otvorite i odštampajte svaku X Express etiketu."}
+            </p>
+          </div>
+          <p className="mb-3 text-sm text-ink-600">
+            <strong>Početak preuzimanja</strong> je najranije vreme kada su svi
+            paketi spremni i kurir sme da dođe. <strong>Kraj preuzimanja</strong>{" "}
+            je najkasnije vreme do kog kurir može da dođe. To nije termin
+            isporuke kupcu.
+          </p>
           <AdminActionForm action={saveDateAction}>
             <fieldset disabled={!editing} className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_auto] md:items-end">
               <input type="hidden" name="batchId" value={batch.id} />
-              <Field label="Početak preuzimanja" hint={myGls ? "Za prvi prikup: najmanje 24 sata od trenutka najave." : "Najmanje 1 sat od trenutka najave."}>
+              <Field label="Početak preuzimanja" hint={myGls ? "Najraniji dolazak kurira; za prvi prikup najmanje 24 sata od najave." : "Najraniji dolazak kurira; najmanje 1 sat od najave."}>
                 <Input
                   name="pickupStart"
                   type="datetime-local"
@@ -587,7 +609,7 @@ export default async function PickupBatchPage({
                   defaultValue={formatBelgradeDateTimeLocal(batch.pickupDate)}
                 />
               </Field>
-              <Field label="Kraj preuzimanja" hint={myGls ? "Prozor mora trajati najmanje 2 sata." : undefined}>
+              <Field label="Kraj preuzimanja" hint={myGls ? "Najkasniji dolazak kurira; period mora trajati najmanje 2 sata." : "Najkasniji dolazak kurira u ovom terminu."}>
                 <Input
                   name="pickupEnd"
                   type="datetime-local"
@@ -602,7 +624,13 @@ export default async function PickupBatchPage({
               ) : null}
             </fieldset>
           </AdminActionForm>
-          {postingBlockReason ? (
+          {myGls && batch.labelsCreatedAt ? (
+            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
+              MyGLS adresnice su kreirane. Sada otvorite „Kurirske etikete“,
+              odštampajte svaki zvanični PDF, najavite dolazak kurira MyGLS-u i
+              zatim ispod potvrdite kanal i dobijenu referencu.
+            </p>
+          ) : postingBlockReason ? (
             <p
               id={postingReasonId}
               className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
@@ -893,7 +921,7 @@ function pickupLineRow(line: {
     collection: product?.collection?.name ?? item?.collectionName ?? "",
     shortDescription:
       product?.shortDescription ?? item?.shortDescriptionSnapshot ?? "",
-    shortName: product?.shortName ?? item?.shortNameSnapshot ?? item?.name ?? "",
+    shortName: item?.name ?? "",
     attribute1: product?.attribute1 ?? item?.attribute1 ?? "",
     attribute2: product?.attribute2 ?? item?.attribute2 ?? "",
     attribute3: product?.attribute3 ?? item?.attribute3 ?? "",

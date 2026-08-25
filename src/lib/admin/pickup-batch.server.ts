@@ -30,6 +30,7 @@ import {
   requireMyGlsEnabled,
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
+import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
 import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
@@ -1194,17 +1195,21 @@ export async function confirmMyGlsPickupAnnouncement(
     const shipments = await tx.shipment.findMany({
       where: {
         provider: MYGLS_PROVIDER,
-        status: { not: "FAILED" },
-        OR: [
-          ...(orderIds.length
-            ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
-            : []),
-          ...workGroups
-            .filter((group) => group.purpose === "RECLAMATION_REPLACEMENT")
-            .map((group) => ({
-              reclamationId: requiredReclamationId(group),
-              purpose: "RECLAMATION_REPLACEMENT" as const,
-            })),
+        AND: [
+          usableMyGlsLabelWhere(),
+          {
+            OR: [
+              ...(orderIds.length
+                ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
+                : []),
+              ...workGroups
+                .filter((group) => group.purpose === "RECLAMATION_REPLACEMENT")
+                .map((group) => ({
+                  reclamationId: requiredReclamationId(group),
+                  purpose: "RECLAMATION_REPLACEMENT" as const,
+                })),
+            ],
+          },
         ],
       },
       select: {

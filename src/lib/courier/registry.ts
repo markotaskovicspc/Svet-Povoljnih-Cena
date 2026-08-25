@@ -273,7 +273,7 @@ export async function createShipmentForOrder(
         })
       : createXExpressShipmentForOrder(order.id, {
           packageCount: options.packageCount ?? derivedPackageCount,
-          packageMasses: packages.map((pkg) => Number(pkg.weightKg ?? 0)),
+          packages,
           purpose,
           reclamationId: reclamation?.id,
           orderItemIds: requestedOrderItemIds,

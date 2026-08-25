@@ -150,7 +150,15 @@ export async function syncMyGlsShipmentStatuses(limit = 100) {
         provider: MYGLS_PROVIDER,
         service: "COURIER_SMALL",
         trackingNo: { not: null },
-        status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] },
+        OR: [
+          { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
+          {
+            status: "FAILED",
+            providerStatusCode: { in: ["51", "52"] },
+            syncError: null,
+            labelObjectKey: { not: null },
+          },
+        ],
       },
       orderBy: [{ lastStatusSyncAt: "asc" }, { updatedAt: "asc" }],
       take: Math.max(1, Math.min(limit, 500)),
@@ -208,6 +216,9 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
       trackingNo: true,
       provider: true,
       providerParcelNumbers: true,
+      status: true,
+      syncError: true,
+      labelObjectKey: true,
     },
   });
   if (!shipment?.trackingNo || shipment.provider !== MYGLS_PROVIDER) {
@@ -246,6 +257,26 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
         );
       }
     }
+  }
+
+  const latestEvent = [...events].sort(
+    (left, right) =>
+      (left.occurredAt?.getTime() ?? 0) -
+      (right.occurredAt?.getTime() ?? 0),
+  ).at(-1);
+  if (
+    shipment.status === "FAILED" &&
+    shipment.syncError == null &&
+    shipment.labelObjectKey &&
+    latestEvent &&
+    latestEvent.status !== "FAILED"
+  ) {
+    const corrected = await applyShipmentEvent("COURIER_SMALL", {
+      ...latestEvent,
+      providerEventId: `${latestEvent.providerEventId}:status-map-v2`,
+      message: `${latestEvent.message ?? "MyGLS status"} · ispravljeno mapiranje`,
+    });
+    if (corrected) results.push(corrected);
   }
 
   await db.shipment.update({
