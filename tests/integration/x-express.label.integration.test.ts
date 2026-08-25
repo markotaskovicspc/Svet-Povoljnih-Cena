@@ -14,7 +14,7 @@ afterAll(async () => {
 });
 
 describe("X Express label rendering", () => {
-  it.fails("renders two 95x138 mm labels without clipped content", async () => {
+  it("renders two 95x138 mm labels without clipped content", async () => {
     const html = renderXExpressLabelsHtml({
       id: "758bb513-499d-4ab1-8697-5e747602f222",
       trackingNo: "AAA0850300001",
@@ -67,6 +67,8 @@ describe("X Express label rendering", () => {
       expect(label.horizontalOverflow).toBeLessThanOrEqual(0);
       expect(label.verticalOverflow).toBeLessThanOrEqual(0);
     }
+    await expect(page.locator(".stamp").count()).resolves.toBe(2);
+    await expect(page.locator(".stamp").first().isVisible()).resolves.toBe(true);
     await page.close();
   });
 });

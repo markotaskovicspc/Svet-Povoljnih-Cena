@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import { XExpressClient } from "@/lib/x-express/client";
 import { formatXExpressTrackingCode } from "@/lib/x-express/code";
 import { requireXExpressShipmentConfig } from "@/lib/x-express/config";
-import { normalizeXExpressPhone } from "@/lib/x-express/payload";
+import {
+  buildXExpressCreateOrderPayload,
+  normalizeXExpressPhone,
+} from "@/lib/x-express/payload";
 import type { XExpressCreateOrderPayload } from "@/lib/x-express/types";
 
 loadEnv({ path: ".env.local" });
@@ -156,6 +159,48 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
     expect(created.trackingNo).toBe(codes[0]);
     expect(created.providerShipmentId).toBe(created.requestGuid);
   });
+
+  it.skipIf(process.env.X_EXPRESS_LIVE_COD_TEST !== "1")(
+    "accepts the production COD option contract on the provider test profile",
+    async () => {
+    const cfg = requireXExpressShipmentConfig(true);
+    const client = new XExpressClient({ ...cfg, enabled: true });
+    const code = formatXExpressTrackingCode(
+      cfg.codePrefix,
+      cfg.codeRangeStart!,
+    );
+    const payload = buildXExpressCreateOrderPayload({
+      cfg,
+      reference: randomUUID(),
+      trackingCodes: [code],
+      townId: cfg.pickup.townId!,
+      officialStreetName: cfg.pickup.streetName,
+      packageMasses: [1],
+      order: {
+        total: 1,
+        paymentMethod: "POUZECE_GOTOVINA",
+        shipFirstName: "Codex",
+        shipLastName: "COD QA",
+        shipPhone: cfg.pickup.contactPhone,
+        shipStreet: `${cfg.pickup.streetName} ${cfg.pickup.streetNumber}`,
+        guestEmail: null,
+        notes: "Provider test profile only",
+        items: [{ name: "API COD acceptance test", qty: 1 }],
+      },
+    });
+    expect(payload.Options).toHaveLength(1);
+    expect(payload.Options?.[0]).toMatchObject({
+      OptionTypeId: 2,
+      Data: { Amount: 1 },
+    });
+
+    const created = await client.createOrder(payload);
+    expect(created.requestGuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(created.trackingNo).toBe(code);
+    },
+  );
 
   it("rejects malformed package codes and the wrong contract", async () => {
     const cfg = requireXExpressShipmentConfig();

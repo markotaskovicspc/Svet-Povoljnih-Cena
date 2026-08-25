@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { syncXExpressDictionaries } from "@/lib/x-express/sync";
+import { GET as getXExpressLocations } from "@/app/api/x-express/locations/route";
 
 describe.skipIf(process.env.X_EXPRESS_LIVE_TEST !== "1")(
   "X Express live dictionary persistence",
@@ -52,6 +53,22 @@ describe.skipIf(process.env.X_EXPRESS_LIVE_TEST !== "1")(
         }),
       };
       expect(countsAfterSecond).toEqual(countsAfterFirst);
+
+      const postalResponse = await getXExpressLocations(
+        new Request("https://example.invalid/api/x-express/locations?q=15000&limit=8"),
+      );
+      expect(postalResponse.status).toBe(200);
+      const postalBody = (await postalResponse.json()) as {
+        items: Array<{ townId: number; name: string; postalCode: string }>;
+      };
+      expect(postalBody.items.length).toBeGreaterThan(8);
+      expect(postalBody.items).toContainEqual(
+        expect.objectContaining({
+          townId: 746606,
+          name: "Šabac",
+          postalCode: "15000",
+        }),
+      );
 
       const runs = await db.courierSyncRun.findMany({
         where: { provider: "X_EXPRESS", startedAt: { gte: startedAt } },

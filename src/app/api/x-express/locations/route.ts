@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   if (q.length < 2) return NextResponse.json({ items: [] });
 
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 8) || 8, 1), 20);
-  const exactItems = await db.xExpressTown.findMany({
+  const exactNameItems = await db.xExpressTown.findMany({
     where: {
       active: true,
       name: { equals: q, mode: "insensitive" },
@@ -25,6 +25,26 @@ export async function GET(req: Request) {
       municipalityId: true,
     },
   });
+  const exactPostalItems = /^\d{5}$/.test(q)
+    ? await db.xExpressTown.findMany({
+        where: {
+          active: true,
+          postalCode: { equals: q },
+        },
+        orderBy: [{ priority: "asc" }, { name: "asc" }],
+        // A postal code can legitimately belong to many X Express towns.
+        // Returning only the autocomplete's default eight results can hide
+        // the municipality seat (for example Šabac for 15000).
+        take: 100,
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          postalCode: true,
+          municipalityId: true,
+        },
+      })
+    : [];
   const items = await db.xExpressTown.findMany({
     where: {
       active: true,
@@ -45,7 +65,13 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({
-    items: (exactItems.length ? exactItems : items).map((item) => ({
+    items: (
+      exactNameItems.length
+        ? exactNameItems
+        : exactPostalItems.length
+          ? exactPostalItems
+          : items
+    ).map((item) => ({
       code: String(item.id),
       townId: item.id,
       municipalityId: item.municipalityId,

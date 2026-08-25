@@ -237,7 +237,7 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     });
     if (result) {
       results.push(result);
-      if (result.eventCreated) {
+      if (result.eventCreated && result.stateApplied) {
         await notifyShipmentSideEffects(
           result.orderId,
           result.status,
@@ -248,11 +248,9 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     }
   }
 
-  const latest = events.at(-1);
   await db.shipment.update({
     where: { id: shipment.id },
     data: {
-      providerStatusCode: latest?.providerStatusCode ?? undefined,
       lastStatusSyncAt: new Date(),
       syncError: null,
     },

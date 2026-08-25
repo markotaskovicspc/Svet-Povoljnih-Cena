@@ -212,7 +212,6 @@ async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
     data: {
       providerOrderId: event.orderCode ?? undefined,
       providerShipmentId: event.referenceGuid ?? undefined,
-      providerStatusCode: event.statusCode,
       syncError: null,
     },
   });
@@ -228,7 +227,7 @@ async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
   if (!result) {
     throw new Error(`Pošiljka ${shipment.trackingNo} nije pronađena za X Express webhook.`);
   }
-  if (result.eventCreated) {
+  if (result.eventCreated && result.stateApplied) {
     await notifyShipmentSideEffects(result);
   }
 

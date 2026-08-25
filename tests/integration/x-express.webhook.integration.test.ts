@@ -193,7 +193,7 @@ describe("X Express webhook persistence", () => {
     expect(shipment.deliveredAt).not.toBeNull();
   });
 
-  it.fails("does not regress a delivered shipment when an older event arrives late", async () => {
+  it("does not regress a delivered shipment when an older event arrives late", async () => {
     const lateOlder = webhookEvent(
       "REQUEST_RECEIVED",
       new Date("2026-08-25T07:59:00.000Z"),
@@ -214,12 +214,31 @@ describe("X Express webhook persistence", () => {
 
     const shipment = await db.shipment.findUniqueOrThrow({
       where: { id: shipmentId },
-      select: { status: true, order: { select: { status: true } } },
+      select: {
+        status: true,
+        providerStatusCode: true,
+        lastStatusEventAt: true,
+        order: { select: { status: true } },
+        events: {
+          where: { providerEventId: lateOlder.NotifyId },
+          select: { status: true, occurredAt: true },
+        },
+      },
     });
-    expect(shipment).toEqual({
+    expect(shipment).toMatchObject({
       status: "DELIVERED",
+      providerStatusCode: "DELIVERED",
       order: { status: "ISPORUCENO" },
+      events: [
+        {
+          status: "CREATED",
+          occurredAt: new Date("2026-08-25T07:59:00.000Z"),
+        },
+      ],
     });
+    expect(shipment.lastStatusEventAt).toEqual(
+      new Date("2026-08-25T08:02:00.000Z"),
+    );
   });
 
   it("fails closed on an unknown provider status", async () => {

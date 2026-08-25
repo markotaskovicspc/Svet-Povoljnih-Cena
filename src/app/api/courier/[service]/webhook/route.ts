@@ -75,7 +75,12 @@ export async function POST(
   }
 
   // Phase 4D — let the customer know about the new shipment status.
-  if (result.eventCreated && result.customerEmail && result.orderStatus) {
+  if (
+    result.eventCreated &&
+    result.stateApplied &&
+    result.customerEmail &&
+    result.orderStatus
+  ) {
     await enqueueBackgroundJob({
       kind: "ORDER_STATUS_EMAIL",
       payload: { orderId: result.orderId, status: result.orderStatus },
@@ -86,7 +91,7 @@ export async function POST(
   // Phase 4F — warehouse pickup is the legal trigger for the fiscal
   // receipt (Zakon o fiskalizaciji). Fire-and-forget so a transient
   // gateway error doesn't break the shipment webhook.
-  if (result.eventCreated && result.status === "PICKED_UP") {
+  if (result.eventCreated && result.stateApplied && result.status === "PICKED_UP") {
     await enqueueBackgroundJob({
       kind: "FISCAL_RECEIPT",
       payload: { orderId: result.orderId },

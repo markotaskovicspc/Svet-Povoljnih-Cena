@@ -391,6 +391,7 @@ export interface ApplyEventResult {
   customerEmail: string | null;
   customerPhone: string | null;
   eventCreated: boolean;
+  stateApplied: boolean;
 }
 
 /**
@@ -430,6 +431,7 @@ export async function applyShipmentEvent(
       ? await getSelectedSmallParcelProvider()
       : null;
   let eventCreated = false;
+  let stateApplied = false;
 
   await db.$transaction(async (tx) => {
     if (event.providerEventId) {
@@ -463,8 +465,14 @@ export async function applyShipmentEvent(
     });
     eventCreated = true;
 
-    await tx.shipment.update({
-      where: { id: shipment.id },
+    const stateClaim = await tx.shipment.updateMany({
+      where: {
+        id: shipment.id,
+        OR: [
+          { lastStatusEventAt: null },
+          { lastStatusEventAt: { lte: occurredAt } },
+        ],
+      },
       data: {
         provider:
           shipment.provider ??
@@ -475,6 +483,7 @@ export async function applyShipmentEvent(
             : undefined),
         status: event.status,
         providerStatusCode: event.providerStatusCode ?? shipment.providerStatusCode,
+        lastStatusEventAt: occurredAt,
         lastStatusSyncAt: new Date(),
         syncError: null,
         shippedAt:
@@ -483,6 +492,8 @@ export async function applyShipmentEvent(
           event.status === "DELIVERED" ? occurredAt : shipment.deliveredAt ?? undefined,
       },
     });
+    if (stateClaim.count === 0) return;
+    stateApplied = true;
 
     if (
       shipment.purpose === "ORDER_DELIVERY" &&
@@ -563,6 +574,7 @@ export async function applyShipmentEvent(
 
   if (
     eventCreated &&
+    stateApplied &&
     shipment.provider === MYGLS_PROVIDER &&
     ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
       event.status,
@@ -574,11 +586,12 @@ export async function applyShipmentEvent(
   return {
     shipmentId: shipment.id,
     orderId: shipment.orderId,
-    status: event.status,
-    orderStatus: appliedOrderStatus,
+    status: stateApplied ? event.status : shipment.status,
+    orderStatus: stateApplied ? appliedOrderStatus : null,
     customerEmail: shipment.order.user?.email ?? shipment.order.guestEmail ?? null,
     customerPhone: shipment.order.user?.phone ?? shipment.order.shipPhone ?? null,
     eventCreated,
+    stateApplied,
   };
 }
 

@@ -64,19 +64,19 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
     body { margin: 0; background: #f5f5f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
     .sheet { display: grid; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; gap: 6mm 5mm; align-items: start; justify-content: center; padding: 0; }
     .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; display: flex; flex-direction: column; }
-    .topline { text-align: center; font-size: 8px; font-weight: 700; margin-bottom: 2mm; }
-    .sender { border: 1px solid #ddd; padding: 2mm; min-height: 15mm; font-size: 11px; line-height: 1.2; }
-    .barcode { margin: 3mm 0 1mm; text-align: center; }
-    .barcode svg { width: 100%; height: 24mm; display: block; }
-    .code { text-align: center; font-size: 22px; line-height: 1; font-weight: 800; letter-spacing: 0; }
-    .recipient { border: 1px solid #ddd; min-height: 38mm; margin-top: 3mm; padding: 3mm; font-size: 22px; line-height: 1.2; }
-    .recipient strong { display: block; font-size: 23px; }
-    .route { display: flex; align-items: baseline; justify-content: space-between; gap: 4mm; margin-top: 3mm; }
-    .route-code { font-size: 34px; line-height: 1; font-weight: 900; }
-    .pkg { font-size: 30px; line-height: 1; font-weight: 900; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 4mm; font-size: 10px; line-height: 1.25; }
-    .note { margin-top: 3mm; font-size: 10px; line-height: 1.25; white-space: pre-wrap; }
-    .stamp { margin-top: auto; text-align: center; font-size: 9px; font-weight: 700; }
+    .topline { text-align: center; font-size: 7px; line-height: 1.1; font-weight: 700; margin-bottom: 1.5mm; }
+    .sender { border: 1px solid #ddd; padding: 1.5mm; min-height: 14mm; font-size: 8px; line-height: 1.08; overflow-wrap: anywhere; }
+    .barcode { margin: 2mm 0 1mm; text-align: center; }
+    .barcode svg { width: 100%; height: 21mm; display: block; }
+    .code { text-align: center; font-size: 20px; line-height: 1; font-weight: 800; letter-spacing: 0; }
+    .recipient { border: 1px solid #ddd; min-height: 32mm; margin-top: 2mm; padding: 2mm; font-size: 16px; line-height: 1.1; overflow-wrap: anywhere; }
+    .recipient strong { display: block; font-size: 18px; line-height: 1.1; }
+    .route { display: flex; align-items: baseline; justify-content: space-between; gap: 3mm; margin-top: 2mm; }
+    .route-code { font-size: 30px; line-height: 1; font-weight: 900; }
+    .pkg { font-size: 28px; line-height: 1; font-weight: 900; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 2.5mm; font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; }
+    .note { margin-top: 2mm; font-size: 8.5px; line-height: 1.15; white-space: pre-wrap; }
+    .stamp { margin-top: auto; text-align: center; font-size: 8px; line-height: 1; font-weight: 700; }
     @media print { body { background: white; } .sheet { gap: 0; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; } .label { break-inside: avoid; } }
   </style>
 </head>
@@ -106,7 +106,7 @@ function renderLabel(
       .slice(0, 2)
       .join(", ")
       .slice(0, 80) || "Roba");
-  const note = order.notes?.trim() || "";
+  const note = truncateLabelText(order.notes?.trim() || "", 120);
   return `<section class="label">
     <div class="topline">X EXPRESS DOO BEOGRAD · Đorđa Ognjanovića 16, Beograd · 011 443 44 44</div>
     <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.shortAddress)}<br />${escapeHtml(MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
@@ -212,6 +212,11 @@ function formatMass(value: number | null | undefined) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3,
   }).format(value)} kg`;
+}
+
+function truncateLabelText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
 function escapeHtml(value: string) {

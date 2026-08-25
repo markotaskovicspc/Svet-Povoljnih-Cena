@@ -1516,6 +1516,7 @@ model Shipment {
   providerParcelIds     Json?
   providerParcelNumbers Json?
   lastStatusSyncAt      DateTime?
+  lastStatusEventAt     DateTime?
   rawCreateResponse     Json?
   syncError             String?         @db.Text
   labelObjectKey        String?
@@ -1535,6 +1536,7 @@ model Shipment {
   @@index([reclamationId, purpose])
   @@index([warehouseId, purpose])
   @@index([provider, status, lastStatusSyncAt])
+  @@index([lastStatusEventAt])
   @@index([providerOrderId])
   @@index([providerShipmentId])
   @@index([trackingNo])
