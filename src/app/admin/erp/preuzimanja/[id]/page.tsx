@@ -32,7 +32,10 @@ import {
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
-import { hasKnownMyGlsLimitViolation } from "@/lib/courier/packages";
+import {
+  hasKnownMyGlsHardLimitViolation,
+  hasKnownMyGlsOversizeSurcharge,
+} from "@/lib/courier/packages";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -393,7 +396,7 @@ export default async function PickupBatchPage({
     );
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
   const invalidPackageCount = myGls
-    ? rows.filter((row) => hasKnownMyGlsLimitViolation(row)).length
+    ? rows.filter((row) => hasKnownMyGlsHardLimitViolation(row)).length
     : 0;
   const postingBlockReason = pickupPostingBlockReason({
     configurationIssue: batch.labelsCreationStartedAt
@@ -485,7 +488,8 @@ export default async function PickupBatchPage({
                   !batch.pickupDate ||
                   !batch.pickupWindowEnd ||
                   !posting.available ||
-                  completePackageCount !== rows.length
+                  completePackageCount !== rows.length ||
+                  invalidPackageCount > 0
                 }
                 pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
                 confirm={
@@ -632,7 +636,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču. MyGLS porudžbine sa kataloškim merama preko limita ostaju vidljive, ali zahtevaju unos stvarnih transportnih mera pre kreiranja adresnice.`}>
+            <CardTitle description={`Učitavaju se samo cele DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (do 30 kg i svaka stranica do 60 cm)"}. Mešovite, nepotpune i već učitane porudžbine se preskaču. MyGLS paketi volumetrijske dimenzije preko 300 cm pripadaju II kategoriji i mogu imati doplatu, ali to ne blokira kreiranje adresnice.`}>
               Porudžbine za preuzimanje
             </CardTitle>
             {editing ? (
@@ -716,9 +720,13 @@ export default async function PickupBatchPage({
                               #{row.packageNo} · {formatPackageMeasurements(row)}
                             </span>
                           )}
-                          {myGls && hasKnownMyGlsLimitViolation(row) ? (
+                          {myGls && hasKnownMyGlsHardLimitViolation(row) ? (
                             <p className="mt-1 max-w-[500px] text-xs text-warning">
-                              Kataloške mere prelaze MyGLS granice. Unesite stvarne transportne mere pre kreiranja adresnice.
+                              Stvarne mere prelaze MyGLS granicu od 40 kg ili 200 cm. Ispravite mere pre kreiranja adresnice.
+                            </p>
+                          ) : myGls && hasKnownMyGlsOversizeSurcharge(row) ? (
+                            <p className="mt-1 max-w-[500px] text-xs text-ink-500">
+                              II kategorija — volumetrijska dimenzija je preko 300 cm; MyGLS može obračunati doplatu. Adresnica nije blokirana.
                             </p>
                           ) : null}
                         </div>
@@ -933,13 +941,17 @@ function pickupLoadMessage(
   const loaded = result.lineCount
     ? `Učitano redova: ${result.lineCount} iz ${result.orderCount} porudžbina.`
     : "Nema novih porudžbina koje odgovaraju ovom kuriru i pravilima DC rezervacije.";
-  const correction = result.loadedMyGlsLimitViolationCount
-    ? `Za ${result.loadedMyGlsLimitViolationCount} učitanih MyGLS porudžbina unesite stvarne transportne mere u dozvoljenim granicama.`
+  const correction = result.loadedMyGlsHardLimitCount
+    ? `Za ${result.loadedMyGlsHardLimitCount} učitanih MyGLS porudžbina unesite stvarne transportne mere unutar granice od 40 kg i 200 cm.`
+    : null;
+  const surcharge = result.loadedMyGlsOversizeSurchargeCount
+    ? `${result.loadedMyGlsOversizeSurchargeCount} učitanih MyGLS porudžbina pripada II kategoriji i može imati doplatu.`
     : null;
   return [
     loaded,
     skipped.length ? `Preskočeno: ${skipped.join(", ")}.` : null,
     correction,
+    surcharge,
   ]
     .filter(Boolean)
     .join(" ");

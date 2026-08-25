@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   derivePhysicalPackages,
-  hasKnownMyGlsLimitViolation,
+  hasKnownMyGlsHardLimitViolation,
+  hasKnownMyGlsOversizeSurcharge,
   requireCompleteMyGlsPackages,
 } from "@/lib/courier/packages";
 
@@ -66,7 +67,7 @@ describe("physical courier packages", () => {
     });
   });
 
-  it("enforces GLS weight, side and girth limits", () => {
+  it("enforces hard GLS weight and side limits without blocking surcharge dimensions", () => {
     const base = {
       packageNo: 1,
       weightKg: 10,
@@ -78,12 +79,21 @@ describe("physical courier packages", () => {
     expect(() => requireCompleteMyGlsPackages([{ ...base, widthCm: 201 }])).toThrow("200 cm");
     expect(() =>
       requireCompleteMyGlsPackages([{ ...base, widthCm: 100, depthCm: 60, heightCm: 60 }]),
-    ).toThrow("300 cm");
+    ).not.toThrow();
   });
 
-  it("recognizes known MyGLS limit violations without rejecting missing measurements", () => {
+  it("separates hard MyGLS limits from the category-II surcharge boundary", () => {
     expect(
-      hasKnownMyGlsLimitViolation({
+      hasKnownMyGlsHardLimitViolation({
+        packageNo: 1,
+        weightKg: 39,
+        widthCm: 190,
+        depthCm: 120,
+        heightCm: 90,
+      }),
+    ).toBe(false);
+    expect(
+      hasKnownMyGlsOversizeSurcharge({
         packageNo: 1,
         weightKg: 39,
         widthCm: 190,
@@ -92,7 +102,25 @@ describe("physical courier packages", () => {
       }),
     ).toBe(true);
     expect(
-      hasKnownMyGlsLimitViolation({
+      hasKnownMyGlsOversizeSurcharge({
+        packageNo: 2,
+        weightKg: 32,
+        widthCm: 72,
+        depthCm: 129,
+        heightCm: 14,
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownMyGlsHardLimitViolation({
+        packageNo: 1,
+        weightKg: 40.1,
+        widthCm: 100,
+        depthCm: 40,
+        heightCm: 20,
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownMyGlsOversizeSurcharge({
         packageNo: 1,
         weightKg: 10,
         widthCm: 100,

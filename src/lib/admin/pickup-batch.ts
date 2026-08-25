@@ -69,7 +69,7 @@ export function pickupPostingBlockReason({
           : completePackageCount !== rowCount
             ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
             : invalidPackageCount > 0
-              ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu, stranicu ili obim. Unesite stvarne transportne mere u dozvoljenim granicama."
+              ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu od 40 kg ili najdužu stranicu od 200 cm. Unesite stvarne transportne mere u dozvoljenim granicama."
               : null)
   );
 }

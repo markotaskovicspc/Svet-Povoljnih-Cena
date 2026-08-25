@@ -8,7 +8,8 @@ import {
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
-  hasKnownMyGlsLimitViolation,
+  hasKnownMyGlsHardLimitViolation,
+  hasKnownMyGlsOversizeSurcharge,
   requireCompletePhysicalPackages,
   requireCompleteMyGlsPackages,
   type PhysicalPackage,
@@ -286,7 +287,8 @@ export async function loadEligibleOrders(
         skippedOtherProviderCount: 0,
         skippedMixedCount: 0,
         skippedInvalidDimensionsCount: 0,
-        loadedMyGlsLimitViolationCount: 0,
+        loadedMyGlsHardLimitCount: 0,
+        loadedMyGlsOversizeSurchargeCount: 0,
       };
     }
 
@@ -326,7 +328,8 @@ export async function loadEligibleOrders(
     let skippedOtherProviderCount = 0;
     let skippedMixedCount = 0;
     let skippedInvalidDimensionsCount = 0;
-    let loadedMyGlsLimitViolationCount = 0;
+    let loadedMyGlsHardLimitCount = 0;
+    let loadedMyGlsOversizeSurchargeCount = 0;
     const packages: Array<PhysicalPackage & { orderId: string }> = [];
     const loadedOrderIds: string[] = [];
     for (const orderId of orderIds) {
@@ -374,9 +377,15 @@ export async function loadEligibleOrders(
       const orderPackages = derivePhysicalPackages(orderItems);
       if (
         provider === "MYGLS" &&
-        orderPackages.some((pkg) => hasKnownMyGlsLimitViolation(pkg))
+        orderPackages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
       ) {
-        loadedMyGlsLimitViolationCount += 1;
+        loadedMyGlsHardLimitCount += 1;
+      }
+      if (
+        provider === "MYGLS" &&
+        orderPackages.some((pkg) => hasKnownMyGlsOversizeSurcharge(pkg))
+      ) {
+        loadedMyGlsOversizeSurchargeCount += 1;
       }
       loadedOrderIds.push(orderId);
       packages.push(...orderPackages.map((pkg) => ({ ...pkg, orderId })));
@@ -389,7 +398,8 @@ export async function loadEligibleOrders(
         skippedOtherProviderCount,
         skippedMixedCount,
         skippedInvalidDimensionsCount,
-        loadedMyGlsLimitViolationCount,
+        loadedMyGlsHardLimitCount,
+        loadedMyGlsOversizeSurchargeCount,
       };
     }
     await tx.pickupBatchLine.createMany({
@@ -423,7 +433,8 @@ export async function loadEligibleOrders(
       skippedOtherProviderCount,
       skippedMixedCount,
       skippedInvalidDimensionsCount,
-      loadedMyGlsLimitViolationCount,
+      loadedMyGlsHardLimitCount,
+      loadedMyGlsOversizeSurchargeCount,
     };
   }, TRANSACTION_OPTIONS);
 }

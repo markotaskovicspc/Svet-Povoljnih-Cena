@@ -1,3 +1,5 @@
+import { packageVolumetricDimension } from "@/lib/delivery-tariff";
+
 export const MAX_COURIER_PACKAGES = 99;
 export const MAX_MYGLS_PACKAGE_WEIGHT_KG = 40;
 export const MAX_MYGLS_PACKAGE_SIDE_CM = 200;
@@ -45,11 +47,11 @@ export type PackageSourceItem = {
 };
 
 /**
- * Returns true only when the known measurements already exceed a MyGLS
- * provider limit. Incomplete measurements are left for explicit operator
- * entry and are not treated as a limit violation here.
+ * Weight above 40 kg and a side above 200 cm are hard MyGLS limits. The
+ * 300 cm volumetric boundary is handled separately because the published
+ * Serbian terms and the merchant tariff allow larger parcels with a surcharge.
  */
-export function hasKnownMyGlsLimitViolation(pkg: PhysicalPackage) {
+export function hasKnownMyGlsHardLimitViolation(pkg: PhysicalPackage) {
   const weightKg = positiveNumber(pkg.weightKg);
   const dimensions = [
     positiveNumber(pkg.widthCm),
@@ -60,10 +62,21 @@ export function hasKnownMyGlsLimitViolation(pkg: PhysicalPackage) {
   if (dimensions.some((value) => value == null)) return false;
 
   const complete = dimensions as number[];
-  const longest = Math.max(...complete);
-  const girth =
-    longest + 2 * (complete.reduce((sum, value) => sum + value, 0) - longest);
-  return longest > MAX_MYGLS_PACKAGE_SIDE_CM || girth > MAX_MYGLS_PACKAGE_GIRTH_CM;
+  return Math.max(...complete) > MAX_MYGLS_PACKAGE_SIDE_CM;
+}
+
+/** Returns true when complete dimensions fall into the surcharge category. */
+export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
+  const dimensions = [
+    positiveNumber(pkg.widthCm),
+    positiveNumber(pkg.depthCm),
+    positiveNumber(pkg.heightCm),
+  ];
+  if (dimensions.some((value) => value == null)) return false;
+  return (
+    packageVolumetricDimension(dimensions as number[]) >
+    MAX_MYGLS_PACKAGE_GIRTH_CM
+  );
 }
 
 /**
@@ -113,7 +126,7 @@ export function derivePhysicalPackages(
   return packages;
 }
 
-/** Validates provider-safe package measurements and returns normalized values. */
+/** Validates provider-safe hard limits and returns normalized values. */
 export function requireCompleteMyGlsPackages(
   packages: readonly PhysicalPackage[],
 ): CompletePhysicalPackage[] {
@@ -157,12 +170,6 @@ export function requireCompleteMyGlsPackages(
     if (longest > MAX_MYGLS_PACKAGE_SIDE_CM) {
       throw new Error(
         `Paket ${packageNo} ima stranicu ${longest} cm; dozvoljeno je najviše ${MAX_MYGLS_PACKAGE_SIDE_CM} cm.`,
-      );
-    }
-    const girth = longest + 2 * (dimensions.reduce((sum, value) => sum + value, 0) - longest);
-    if (girth > MAX_MYGLS_PACKAGE_GIRTH_CM) {
-      throw new Error(
-        `Paket ${packageNo} ima obim sa najdužom stranicom ${girth} cm; dozvoljeno je najviše ${MAX_MYGLS_PACKAGE_GIRTH_CM} cm.`,
       );
     }
     return {
