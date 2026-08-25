@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
   enqueueDueNewsletterCampaigns: vi.fn(),
   expirePartnerReservations: vi.fn(),
-  expireStaleRabaluxWebAvailability: vi.fn(),
+  disableInvalidRabaluxWebAvailability: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -31,7 +31,8 @@ vi.mock("@/lib/newsletter/campaigns", () => ({
 
 vi.mock("@/lib/channel-availability.server", () => ({
   expirePartnerReservations: mocks.expirePartnerReservations,
-  expireStaleRabaluxWebAvailability: mocks.expireStaleRabaluxWebAvailability,
+  disableInvalidRabaluxWebAvailability:
+    mocks.disableInvalidRabaluxWebAvailability,
 }));
 
 describe("background job priority", () => {
@@ -42,8 +43,8 @@ describe("background job priority", () => {
     mocks.enqueueDueNewsletterCampaigns.mockResolvedValue(0);
     mocks.expirePartnerReservations.mockReset();
     mocks.expirePartnerReservations.mockResolvedValue({ released: 0 });
-    mocks.expireStaleRabaluxWebAvailability.mockReset();
-    mocks.expireStaleRabaluxWebAvailability.mockResolvedValue(0);
+    mocks.disableInvalidRabaluxWebAvailability.mockReset();
+    mocks.disableInvalidRabaluxWebAvailability.mockResolvedValue(0);
   });
 
   it("selects customer-facing jobs before bulk Rabalux media", async () => {

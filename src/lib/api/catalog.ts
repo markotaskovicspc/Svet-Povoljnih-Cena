@@ -1314,7 +1314,7 @@ function buildProductListingWhere(
     appendAnd(where, { collection: { is: { slug: input.collectionSlug } } });
   }
   if (input.excludeSku) appendAnd(where, { sku: { not: input.excludeSku } });
-  if (input.inStockOnly) appendAnd(where, storefrontInStockWhere(now));
+  if (input.inStockOnly) appendAnd(where, storefrontInStockWhere());
 
   // Price filters are applied after the shared pricing engine resolves the
   // final public price. SQL fields alone cannot represent action priority,
@@ -1368,7 +1368,7 @@ function buildProductListingWhere(
     });
   }
   if (input.availability?.length) {
-    appendAnd(where, storefrontAvailabilityWhere(input.availability, now));
+    appendAnd(where, storefrontAvailabilityWhere(input.availability));
   }
   for (const [key, values] of Object.entries(input.dynamicFilters ?? {})) {
     const condition = dynamicFilterWhere(key, values);

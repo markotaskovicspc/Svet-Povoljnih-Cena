@@ -5,8 +5,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { redactText } from "@/lib/monitoring";
 import {
+  disableInvalidRabaluxWebAvailability,
   expirePartnerReservations,
-  expireStaleRabaluxWebAvailability,
 } from "@/lib/channel-availability.server";
 
 const schemas = {
@@ -350,7 +350,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
       )),
     );
   }
-  const [, , , , partnerReservations, staleRabaluxProducts] = await Promise.all([
+  const [, , , , partnerReservations, invalidRabaluxProducts] = await Promise.all([
     db.backgroundJob.deleteMany({
       where: { status: "COMPLETED", completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) } },
     }),
@@ -367,7 +367,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
     }),
     db.newsletterOptInToken.deleteMany({ where: { expiresAt: { lt: now } } }),
     expirePartnerReservations(),
-    expireStaleRabaluxWebAvailability(now),
+    disableInvalidRabaluxWebAvailability(),
   ]);
   return {
     selected:
@@ -375,7 +375,7 @@ export async function processPendingBackgroundJobs(limit = 20) {
     completed: results.filter((result) => result.claimed && result.ok).length,
     failed: results.filter((result) => result.claimed && !result.ok).length,
     releasedPartnerReservations: partnerReservations.released,
-    staleRabaluxProducts,
+    invalidRabaluxProducts,
   };
 }
 

@@ -40,7 +40,6 @@ import {
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
   RABALUX_SUPPLIER_SAFETY_STOCK,
-  rabaluxStockFreshAfter,
 } from "@/lib/rabalux/availability";
 import {
   applyRabaluxWeeklyStock,
@@ -567,7 +566,7 @@ type RabaluxStockSummaryRow = {
   withStockSkus: number;
   aboveThresholdSkus: number;
   onlineEligibleSkus: number;
-  staleSkus: number;
+  missingObservationSkus: number;
   rawUnits: number;
   reservedUnits: number;
   onlineSellableUnits: number;
@@ -597,7 +596,6 @@ export default async function XmlImportPage({
   ]);
   const rabalux = suppliers.find((supplier) => supplier.integrationKey === "RABALUX");
   const rabaluxOperational = isRabaluxSupplierOperational(rabalux);
-  const stockFreshAfter = rabaluxStockFreshAfter();
   const [
     pendingProducts,
     mappingConflicts,
@@ -694,19 +692,18 @@ export default async function XmlImportPage({
             ))::int AS "aboveThresholdSkus",
             (COUNT(*) FILTER (
               WHERE "supplierApprovalStatus" = 'APPROVED'
-                AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
+                AND "lastSupplierStockSyncAt" IS NOT NULL
                 AND COALESCE("supplierStock", 0) >= ${RABALUX_PUBLIC_STOCK_THRESHOLD}
             ))::int AS "onlineEligibleSkus",
             (COUNT(*) FILTER (
               WHERE "lastSupplierStockSyncAt" IS NULL
-                 OR "lastSupplierStockSyncAt" < ${stockFreshAfter}
-            ))::int AS "staleSkus",
+            ))::int AS "missingObservationSkus",
             COALESCE(SUM(COALESCE("supplierStock", 0)), 0)::int AS "rawUnits",
             COALESCE(SUM(COALESCE("supplierReservedStock", 0)), 0)::int AS "reservedUnits",
             COALESCE(SUM(
               CASE
                 WHEN "supplierApprovalStatus" = 'APPROVED'
-                  AND "lastSupplierStockSyncAt" >= ${stockFreshAfter}
+                  AND "lastSupplierStockSyncAt" IS NOT NULL
                   AND COALESCE("supplierStock", 0) >= ${RABALUX_PUBLIC_STOCK_THRESHOLD}
                 THEN GREATEST(
                   COALESCE("supplierStock", 0) -
@@ -894,22 +891,22 @@ export default async function XmlImportPage({
                       value={`${rabaluxStockSummary.reservedUnits.toLocaleString("sr-Latn-RS")} kom`}
                     />
                     <DashboardStat
-                      label="Zastareo podatak"
-                      value={rabaluxStockSummary.staleSkus}
+                      label="Bez učitanog lagera"
+                      value={rabaluxStockSummary.missingObservationSkus}
                     />
                   </div>
                   <p className="rounded-lg bg-muted-bg p-3 text-xs text-ink-600">
                     Pravilo je: dobavljač mora imati najmanje{" "}
-                    {RABALUX_PUBLIC_STOCK_THRESHOLD} kom, stanje ne sme biti
-                    starije od 8 dana, a zatim se od količine oduzimaju
+                    {RABALUX_PUBLIC_STOCK_THRESHOLD} kom u poslednjem učitanom
+                    XLSX-u, a zatim se od količine oduzimaju
                     aktivne rezervacije i {RABALUX_SUPPLIER_SAFETY_STOCK}
-                    sigurnosni komad. Kupac i dalje ne vidi tačan broj.
+                    sigurnosni komad. Poslednji XLSX važi dok se ne učita novi;
+                    kupac i dalje ne vidi tačan broj.
                   </p>
-                  {rabaluxStockSummary.staleSkus > 0 ? (
+                  {rabaluxStockSummary.missingObservationSkus > 0 ? (
                     <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-ink-700">
-                      {rabaluxStockSummary.staleSkus} Rabalux SKU ima zastareo ili
-                      nepoznat datum XLSX stanja. Dobavljačko stanje tih artikala
-                      ne ulazi u online kupovinu; učitajte novi nedeljni izveštaj.
+                      {rabaluxStockSummary.missingObservationSkus} Rabalux SKU nema
+                      nijedan učitan XLSX lager i zato ne ulazi u online kupovinu.
                     </p>
                   ) : null}
                 </div>

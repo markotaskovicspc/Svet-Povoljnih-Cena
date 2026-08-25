@@ -1,5 +1,3 @@
-/** Weekly Serbia XLSX is accepted for seven days plus a one-day delivery grace. */
-export const RABALUX_STOCK_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1_000;
 export const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
 /** Minimum Serbia XLSX quantity required for web purchasing. */
 export const RABALUX_PUBLIC_STOCK_THRESHOLD = 3;
@@ -11,7 +9,7 @@ export type StockAvailabilitySource = "DC" | "SUPPLIER" | "MIXED" | "NONE";
 export type RabaluxSupplierStockStatus =
   | "AVAILABLE"
   | "BELOW_THRESHOLD"
-  | "STALE"
+  | "MISSING_OBSERVATION"
   | "PENDING_APPROVAL"
   | "DISABLED";
 
@@ -21,25 +19,18 @@ export const RABALUX_SUPPLIER_STOCK_STATUS_LABELS: Record<
 > = {
   AVAILABLE: "Dostupno",
   BELOW_THRESHOLD: "Ispod praga",
-  STALE: "Zastarelo",
+  MISSING_OBSERVATION: "Nije učitan lager",
   PENDING_APPROVAL: "Čeka odobrenje",
   DISABLED: "Integracija isključena",
 };
 
-export function isRabaluxStockFresh(
+/** The latest successfully applied Serbia XLSX remains authoritative until replaced. */
+export function hasRabaluxStockObservation(
   syncedAt: Date | string | null | undefined,
-  now = new Date(),
 ) {
   if (!syncedAt) return false;
   const timestamp = syncedAt instanceof Date ? syncedAt : new Date(syncedAt);
-  const time = timestamp.getTime();
-  if (!Number.isFinite(time)) return false;
-  const age = now.getTime() - time;
-  return age >= -5 * 60 * 1_000 && age <= RABALUX_STOCK_MAX_AGE_MS;
-}
-
-export function rabaluxStockFreshAfter(now = new Date()) {
-  return new Date(now.getTime() - RABALUX_STOCK_MAX_AGE_MS);
+  return Number.isFinite(timestamp.getTime());
 }
 
 export function resolveRabaluxSupplierStock(input: {
@@ -48,22 +39,24 @@ export function resolveRabaluxSupplierStock(input: {
   lastSupplierStockSyncAt?: Date | string | null;
   supplierOperational: boolean;
   supplierApproved: boolean;
-  now?: Date;
 }) {
   const rawStock = nonnegativeInt(input.supplierStock ?? 0);
   const reservedStock = nonnegativeInt(input.supplierReservedStock ?? 0);
-  const fresh = isRabaluxStockFresh(input.lastSupplierStockSyncAt, input.now);
+  const observed = hasRabaluxStockObservation(input.lastSupplierStockSyncAt);
   const aboveThreshold = rawStock >= RABALUX_PUBLIC_STOCK_THRESHOLD;
   const eligible =
-    input.supplierOperational && input.supplierApproved && fresh && aboveThreshold;
+    input.supplierOperational &&
+    input.supplierApproved &&
+    observed &&
+    aboveThreshold;
   const netAfterSafety = Math.max(
     rawStock - reservedStock - RABALUX_SUPPLIER_SAFETY_STOCK,
     0,
   );
   const status: RabaluxSupplierStockStatus = !input.supplierOperational
     ? "DISABLED"
-    : !fresh
-      ? "STALE"
+    : !observed
+      ? "MISSING_OBSERVATION"
       : !input.supplierApproved
         ? "PENDING_APPROVAL"
         : !aboveThreshold
@@ -76,7 +69,7 @@ export function resolveRabaluxSupplierStock(input: {
     safetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
     netAfterSafety,
     sellableStock: eligible ? netAfterSafety : 0,
-    fresh,
+    observed,
     aboveThreshold,
     eligible,
     status,
@@ -90,7 +83,6 @@ export function resolveRabaluxAvailability(input: {
   lastSupplierStockSyncAt?: Date | string | null;
   supplierOperational: boolean;
   supplierApproved: boolean;
-  now?: Date;
 }) {
   const warehouseStock = nonnegativeInt(input.warehouseStock);
   const supplier = resolveRabaluxSupplierStock(input);
@@ -106,7 +98,7 @@ export function resolveRabaluxAvailability(input: {
     supplierAvailable,
     sellableStock,
     source,
-    supplierFresh: supplier.fresh,
+    supplierObserved: supplier.observed,
     supplierEligible: supplier.eligible,
   };
 }

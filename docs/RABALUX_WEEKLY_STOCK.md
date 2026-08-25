@@ -36,8 +36,9 @@ broj redova naglo padne ili je isti fajl već primenjen.
   недељном XLSX-у; само следећи комплетан XLSX мења allow-list.
 - DC stanje ostaje ERP podatak, ali ne može da zaobiđe Rabalux prag: za web
   kupovinu i dalje su potrebna najmanje 3 komada u nedeljnom XLSX-u.
-- Rabalux stanje važi osam dana. Posle toga dobavljačko stanje se smatra
-  zastarelim i ne ulazi u kupovinu.
+- Poslednji uspešno primenjeni Rabalux XLSX ostaje merodavan dok se ne učita
+  sledeći fajl. Datum izveštaja je informativan i nema automatski rok isteka.
+- Artikal bez ijednog primenjenog XLSX stanja ne ulazi u kupovinu.
 
 Svaka primena pravi `ImportRun`, stavke pre/posle u `SupplierSyncChange` i
 snapshot promene količine. Trajno brisanje proizvoda je označeno kao

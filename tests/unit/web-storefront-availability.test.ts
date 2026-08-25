@@ -143,12 +143,22 @@ describe("web storefront availability rollout", () => {
       availableWebAuto: false,
       dcAvailableQty: 0,
       supplierApprovalStatus: "APPROVED",
-      lastSupplierStockSyncAt: new Date(),
+      lastSupplierStockSyncAt: new Date("2025-01-01T00:00:00.000Z"),
       supplier: { integrationKey: "RABALUX", enabled: true },
     };
 
     expect(isProductAvailableOnWeb({ ...base, supplierStock: 2 })).toBe(false);
     expect(isProductAvailableOnWeb({ ...base, supplierStock: 3 })).toBe(true);
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "true";
+    expect(isProductAvailableOnWeb({ ...base, supplierStock: 3 })).toBe(true);
+    process.env.ENFORCE_WEB_AUTO_AVAILABILITY = "false";
+    expect(
+      isProductAvailableOnWeb({
+        ...base,
+        supplierStock: 3,
+        lastSupplierStockSyncAt: null,
+      }),
+    ).toBe(false);
     expect(
       isProductAvailableOnWeb({
         ...base,
@@ -180,6 +190,9 @@ describe("web storefront availability rollout", () => {
 
     expect(serialized).toContain('"supplierApprovalStatus":"APPROVED"');
     expect(serialized).toContain('"supplierStock":{"gte":3}');
+    expect(serialized).toContain(
+      '"lastSupplierStockSyncAt":{"not":null}',
+    );
     expect(serialized).not.toContain('"supplierStock":{"gt":0}');
     expect(
       storefrontPublicationBlockers({

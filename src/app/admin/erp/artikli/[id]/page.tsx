@@ -1420,7 +1420,6 @@ export default async function ProductDetail({
           lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
           supplierOperational: rabaluxOperational,
           supplierApproved: product.supplierApprovalStatus === "APPROVED",
-          now,
         })
       : null;
   const availability = resolveRabaluxAvailability({
@@ -1430,7 +1429,6 @@ export default async function ProductDetail({
     lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
     supplierOperational: rabaluxOperational,
     supplierApproved: product.supplierApprovalStatus === "APPROVED",
-    now,
   });
   const deliveryWindow = resolveDeliveryWindowForQuantity(
     {

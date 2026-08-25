@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  isRabaluxStockFresh,
+  hasRabaluxStockObservation,
   resolveRabaluxAvailability,
   resolveRabaluxSupplierStock,
 } from "@/lib/rabalux/availability";
 
 describe("Rabalux customer availability", () => {
-  const now = new Date("2026-07-27T12:00:00.000Z");
-
-  it("uses approved fresh Serbia stock with a one-unit buffer", () => {
+  it("uses approved observed Serbia stock with a one-unit buffer", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,
@@ -17,14 +15,13 @@ describe("Rabalux customer availability", () => {
         lastSupplierStockSyncAt: new Date("2026-07-27T11:45:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
-        now,
       }),
     ).toMatchObject({
       warehouseAvailable: 2,
       supplierAvailable: 14,
       sellableStock: 14,
       source: "SUPPLIER",
-      supplierFresh: true,
+      supplierObserved: true,
     });
   });
 
@@ -35,7 +32,6 @@ describe("Rabalux customer availability", () => {
       lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
       supplierOperational: true,
       supplierApproved: true,
-      now,
     };
     expect(resolveRabaluxAvailability({ ...input, supplierStock: 2 })).toMatchObject({
       sellableStock: 0,
@@ -58,7 +54,6 @@ describe("Rabalux customer availability", () => {
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
-        now,
       }),
     ).toMatchObject({
       warehouseAvailable: 2,
@@ -68,22 +63,21 @@ describe("Rabalux customer availability", () => {
     });
   });
 
-  it("fails closed for stale, unapproved or disabled supplier stock", () => {
+  it("fails closed for missing, unapproved or disabled supplier stock", () => {
     const base = {
       warehouseStock: 3,
       supplierStock: 20,
       supplierReservedStock: 0,
-      lastSupplierStockSyncAt: new Date("2026-07-19T11:59:59.000Z"),
+      lastSupplierStockSyncAt: null,
       supplierOperational: true,
       supplierApproved: true,
-      now,
     };
     expect(resolveRabaluxAvailability(base)).toMatchObject({
       warehouseAvailable: 3,
       sellableStock: 0,
       supplierAvailable: 0,
       source: "NONE",
-      supplierFresh: false,
+      supplierObserved: false,
     });
     expect(
       resolveRabaluxAvailability({
@@ -101,13 +95,26 @@ describe("Rabalux customer availability", () => {
     ).toBe(0);
   });
 
-  it("uses an eight-day freshness window for the weekly Serbia XLSX", () => {
+  it("keeps the latest Serbia XLSX valid until another file replaces it", () => {
+    const oldObservation = new Date("2025-07-19T12:00:00.000Z");
+    expect(hasRabaluxStockObservation(oldObservation)).toBe(true);
     expect(
-      isRabaluxStockFresh(new Date("2026-07-19T12:00:00.000Z"), now),
-    ).toBe(true);
-    expect(
-      isRabaluxStockFresh(new Date("2026-07-19T11:59:59.999Z"), now),
-    ).toBe(false);
+      resolveRabaluxAvailability({
+        warehouseStock: 0,
+        supplierStock: 20,
+        supplierReservedStock: 0,
+        lastSupplierStockSyncAt: oldObservation,
+        supplierOperational: true,
+        supplierApproved: true,
+      }),
+    ).toMatchObject({
+      supplierObserved: true,
+      supplierEligible: true,
+      sellableStock: 19,
+      source: "SUPPLIER",
+    });
+    expect(hasRabaluxStockObservation(null)).toBe(false);
+    expect(hasRabaluxStockObservation("not-a-date")).toBe(false);
   });
 
   it("keeps exact supplier stock separate from the quantity allowed for sale", () => {
@@ -118,7 +125,6 @@ describe("Rabalux customer availability", () => {
         lastSupplierStockSyncAt: new Date("2026-07-27T11:45:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
-        now,
       }),
     ).toMatchObject({
       rawStock: 18,
@@ -130,7 +136,7 @@ describe("Rabalux customer availability", () => {
     });
   });
 
-  it("still reports the exact stock when stale or below the public threshold", () => {
+  it("still reports the exact stock when unobserved or below the public threshold", () => {
     expect(
       resolveRabaluxSupplierStock({
         supplierStock: 2,
@@ -138,7 +144,6 @@ describe("Rabalux customer availability", () => {
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
-        now,
       }),
     ).toMatchObject({
       rawStock: 2,
@@ -150,11 +155,14 @@ describe("Rabalux customer availability", () => {
       resolveRabaluxSupplierStock({
         supplierStock: 25,
         supplierReservedStock: 0,
-        lastSupplierStockSyncAt: new Date("2026-07-19T11:00:00.000Z"),
+        lastSupplierStockSyncAt: null,
         supplierOperational: true,
         supplierApproved: true,
-        now,
       }),
-    ).toMatchObject({ rawStock: 25, sellableStock: 0, status: "STALE" });
+    ).toMatchObject({
+      rawStock: 25,
+      sellableStock: 0,
+      status: "MISSING_OBSERVATION",
+    });
   });
 });

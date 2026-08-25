@@ -6,10 +6,7 @@ import {
   CHANNEL_SAFETY_STOCK,
   resolveChannelAvailability,
 } from "@/lib/channel-availability";
-import {
-  rabaluxStockFreshAfter,
-  resolveRabaluxAvailability,
-} from "@/lib/rabalux/availability";
+import { resolveRabaluxAvailability } from "@/lib/rabalux/availability";
 import {
   isRabaluxEnabled,
   isRabaluxSupplierOperational,
@@ -152,12 +149,11 @@ export async function syncProductChannelAvailability(
   };
 }
 
-export async function expireStaleRabaluxWebAvailability(now = new Date()) {
-  const staleWhere = isRabaluxEnabled()
+export async function disableInvalidRabaluxWebAvailability() {
+  const invalidWhere = isRabaluxEnabled()
     ? {
         OR: [
           { lastSupplierStockSyncAt: null },
-          { lastSupplierStockSyncAt: { lt: rabaluxStockFreshAfter(now) } },
           { supplierApprovalStatus: null },
           { supplierApprovalStatus: { not: "APPROVED" as const } },
           { supplier: { is: { integrationKey: "RABALUX", enabled: false } } },
@@ -169,7 +165,7 @@ export async function expireStaleRabaluxWebAvailability(now = new Date()) {
       deletedAt: null,
       availableWebAuto: true,
       supplier: { is: { integrationKey: "RABALUX" } },
-      ...staleWhere,
+      ...invalidWhere,
     },
     data: { availableWebAuto: false },
   });

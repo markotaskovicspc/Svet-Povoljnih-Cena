@@ -30,7 +30,7 @@ import {
 import { omitSupplierProductNewnessUpdates } from "@/lib/product-newness";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
-  isRabaluxStockFresh,
+  hasRabaluxStockObservation,
   resolveRabaluxAvailability,
 } from "./availability";
 import {
@@ -2012,7 +2012,6 @@ async function reconcileMissingStockProducts(args: {
           lastSupplierStockSyncAt: product.lastSupplierStockSyncAt,
           supplierOperational: true,
           supplierApproved: product.supplierApprovalStatus === "APPROVED",
-          now,
         });
         await db.$transaction(async (tx) => {
           if (shouldZero && (product.supplierStock ?? 0) !== 0) {
@@ -2114,7 +2113,7 @@ async function rabaluxVisibilityCounters(supplierId: string) {
       else if (
         product.supplierApprovalStatus === "APPROVED" &&
         (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
-        isRabaluxStockFresh(product.lastSupplierStockSyncAt)
+        hasRabaluxStockObservation(product.lastSupplierStockSyncAt)
       ) {
         counts.visibleDueToSupplier++;
       } else counts.hiddenByPolicy++;

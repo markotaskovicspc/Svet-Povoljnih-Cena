@@ -8,9 +8,8 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 const RABALUX_INTEGRATION_KEY = "RABALUX";
-const RABALUX_PUBLIC_STOCK_THRESHOLD = 10;
+const RABALUX_PUBLIC_STOCK_THRESHOLD = 3;
 const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
-const RABALUX_STOCK_MAX_AGE_MS = 30 * 60 * 1_000;
 const connectionString = getConnectionString();
 const missingStorageSchemaRequested =
   process.env.RUNTIME_READINESS_ALLOW_MISSING_STORAGE_SCHEMA === "true";
@@ -181,7 +180,7 @@ try {
       (sum, item) => sum + item.qty,
       0,
     );
-    const availability = checkoutAvailability(product, now);
+    const availability = checkoutAvailability(product);
     if (!product.availableWebManual) publicationBlockers.push("web_manual_disabled");
     if (enabledEnv("ENFORCE_WEB_AUTO_AVAILABILITY") && !product.availableWebAuto) {
       publicationBlockers.push("web_auto_disabled");
@@ -328,7 +327,7 @@ try {
     policy: {
       rabaluxEnabled: enabledEnv("RABALUX_ENABLED"),
       webAutoAvailabilityEnforced: enabledEnv("ENFORCE_WEB_AUTO_AVAILABILITY"),
-      rabaluxStockMaxAgeMinutes: RABALUX_STOCK_MAX_AGE_MS / 60_000,
+      rabaluxStockPolicy: "LATEST_XLSX_UNTIL_REPLACED",
       rabaluxSafetyStock: RABALUX_SUPPLIER_SAFETY_STOCK,
     },
     database: {
@@ -391,7 +390,7 @@ function countValues(rows, key) {
   return counts;
 }
 
-function checkoutAvailability(product, now) {
+function checkoutAvailability(product) {
   if (product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY) {
     const sellableStock = nonnegativeInt(product.stock);
     return {
@@ -401,44 +400,37 @@ function checkoutAvailability(product, now) {
     };
   }
 
-  const warehouseStock = nonnegativeInt(product.dcAvailableQty);
   const supplierStock = nonnegativeInt(product.supplierStock ?? 0);
   const reservedStock = nonnegativeInt(product.supplierReservedStock ?? 0);
-  const supplierFresh = isFreshSupplierStock(product.lastSupplierStockSyncAt, now);
+  const supplierObserved = hasSupplierStockObservation(
+    product.lastSupplierStockSyncAt,
+  );
   const supplierEligible =
     enabledEnv("RABALUX_ENABLED") &&
     product.supplier.enabled &&
     product.supplierApprovalStatus === "APPROVED" &&
     supplierStock >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
-    supplierFresh;
+    supplierObserved;
   const supplierAvailable = supplierEligible
     ? Math.max(
         supplierStock - reservedStock - RABALUX_SUPPLIER_SAFETY_STOCK,
         0,
       )
     : 0;
-  const sellableStock = warehouseStock + supplierAvailable;
-  const source =
-    warehouseStock > 0 && supplierAvailable > 0
-      ? "MIXED"
-      : warehouseStock > 0
-        ? "DC"
-        : supplierAvailable > 0
-          ? "SUPPLIER"
-          : "NONE";
+  const sellableStock = supplierAvailable;
+  const source = supplierAvailable > 0 ? "SUPPLIER" : "NONE";
 
   return {
     sellableStock,
     source,
-    publicationEligible: warehouseStock > 0 || supplierEligible,
+    publicationEligible: supplierEligible,
   };
 }
 
-function isFreshSupplierStock(value, now) {
+function hasSupplierStockObservation(value) {
   if (!value) return false;
   const timestamp = value instanceof Date ? value : new Date(value);
-  const age = now.getTime() - timestamp.getTime();
-  return Number.isFinite(age) && age >= -5 * 60 * 1_000 && age <= RABALUX_STOCK_MAX_AGE_MS;
+  return Number.isFinite(timestamp.getTime());
 }
 
 function enabledEnv(name) {

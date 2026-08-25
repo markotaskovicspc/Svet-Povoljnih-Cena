@@ -3,8 +3,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
-  isRabaluxStockFresh,
-  rabaluxStockFreshAfter,
+  hasRabaluxStockObservation,
 } from "@/lib/rabalux/availability";
 import {
   RABALUX_INTEGRATION_KEY,
@@ -71,11 +70,11 @@ function nonRabaluxSupplierWhere(): Prisma.ProductWhereInput {
   };
 }
 
-function rabaluxSupplierStockWhere(now: Date): Prisma.ProductWhereInput {
+function rabaluxSupplierStockWhere(): Prisma.ProductWhereInput {
   return {
     supplierStock: { gte: RABALUX_PUBLIC_STOCK_THRESHOLD },
     supplierApprovalStatus: "APPROVED",
-    lastSupplierStockSyncAt: { gte: rabaluxStockFreshAfter(now) },
+    lastSupplierStockSyncAt: { not: null },
   };
 }
 
@@ -87,7 +86,7 @@ function rabaluxSupplierWhere(): Prisma.ProductWhereInput {
   };
 }
 
-function rabaluxUnavailableStockWhere(now: Date): Prisma.ProductWhereInput {
+function rabaluxUnavailableStockWhere(): Prisma.ProductWhereInput {
   if (!isRabaluxEnabled()) return rabaluxSupplierWhere();
   return {
     AND: [
@@ -100,7 +99,6 @@ function rabaluxUnavailableStockWhere(now: Date): Prisma.ProductWhereInput {
           { supplierStock: null },
           { supplierStock: { lt: RABALUX_PUBLIC_STOCK_THRESHOLD } },
           { lastSupplierStockSyncAt: null },
-          { lastSupplierStockSyncAt: { lt: rabaluxStockFreshAfter(now) } },
         ],
       },
     ],
@@ -108,7 +106,7 @@ function rabaluxUnavailableStockWhere(now: Date): Prisma.ProductWhereInput {
 }
 
 /** Database predicate that mirrors the stock exposed by catalog DTOs. */
-export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInput {
+export function storefrontInStockWhere(): Prisma.ProductWhereInput {
   const buckets: Prisma.ProductWhereInput[] = [
     {
       AND: [nonRabaluxSupplierWhere(), { dcAvailableQty: { gt: 0 } }],
@@ -119,7 +117,7 @@ export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInp
       AND: [
         rabaluxSupplierWhere(),
         { supplier: { is: { enabled: true } } },
-        rabaluxSupplierStockWhere(now),
+        rabaluxSupplierStockWhere(),
       ],
     });
   }
@@ -133,7 +131,6 @@ export function storefrontInStockWhere(now = new Date()): Prisma.ProductWhereInp
  */
 export function storefrontAvailabilityWhere(
   selected: StorefrontAvailability[],
-  now = new Date(),
 ): Prisma.ProductWhereInput {
   const buckets: Prisma.ProductWhereInput[] = [];
   const ordinaryOutOfStock: Prisma.ProductWhereInput = {
@@ -141,7 +138,7 @@ export function storefrontAvailabilityWhere(
   };
 
   if (selected.includes("in-stock")) {
-    buckets.push(storefrontInStockWhere(now));
+    buckets.push(storefrontInStockWhere());
   }
   if (selected.includes("incoming")) {
     buckets.push({
@@ -153,7 +150,7 @@ export function storefrontAvailabilityWhere(
       {
         AND: [ordinaryOutOfStock, { incomingStock: { lte: 0 } }],
       },
-      rabaluxUnavailableStockWhere(now),
+      rabaluxUnavailableStockWhere(),
     );
   }
 
@@ -237,6 +234,7 @@ export function webStorefrontProductWhere(): Prisma.ProductWhereInput {
               {
                 supplierStock: { gte: RABALUX_PUBLIC_STOCK_THRESHOLD },
               },
+              { lastSupplierStockSyncAt: { not: null } },
               { supplier: { is: { enabled: true } } },
             ],
           },
@@ -251,12 +249,16 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
   const enforceAutomaticAvailability = isWebAutoAvailabilityEnforced();
   const isOrdinaryProduct =
     product.supplier?.integrationKey !== RABALUX_INTEGRATION_KEY;
+  const isRabaluxProduct = !isOrdinaryProduct;
   const isOrdinarySp = isOrdinaryProduct && product.articleStatus === "SP";
   const generallyAvailable =
     !product.deletedAt &&
     product.isActive &&
     product.availableWebManual &&
-    (!enforceAutomaticAvailability || product.availableWebAuto || isOrdinarySp);
+    (!enforceAutomaticAvailability ||
+      product.availableWebAuto ||
+      isOrdinarySp ||
+      isRabaluxProduct);
   if (!generallyAvailable) return false;
   const dcAvailable = product.dcAvailableQty ?? product.stock ?? 0;
   if (isOrdinaryProduct) {
@@ -270,7 +272,7 @@ export function isProductAvailableOnWeb(product: WebAvailabilityProduct) {
       isRabaluxEnabled() &&
       product.supplierApprovalStatus === "APPROVED" &&
       (product.supplierStock ?? 0) >= RABALUX_PUBLIC_STOCK_THRESHOLD &&
-      isRabaluxStockFresh(product.lastSupplierStockSyncAt),
+      hasRabaluxStockObservation(product.lastSupplierStockSyncAt),
   );
 }
 
@@ -320,6 +322,9 @@ export function storefrontPublicationBlockers(
       reasons.push(
         `Rabalux artikal ima manje od ${RABALUX_PUBLIC_STOCK_THRESHOLD} komada u Srbiji`,
       );
+    }
+    if (!hasRabaluxStockObservation(product.lastSupplierStockSyncAt)) {
+      reasons.push("Nije učitan Rabalux XLSX lager");
     }
   }
 
