@@ -621,7 +621,7 @@ export default async function DeliveryPage() {
             <ProviderReadiness
               ready={xExpressReadiness.available}
               reason={xExpressReadiness.reason}
-              handoff="Ako nedostaju contractCode, prefiks ili opseg kodova, te vrednosti mora da dodeli X Express podrška; ne koristiti primer AAA/850300000–850599999."
+              handoff="X Express je potvrdio da je prvi važeći kod AAA0850300001; kod AAA0850300000 se preskače."
             />
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="text-sm text-ink-700">

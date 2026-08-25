@@ -99,11 +99,11 @@ describe("admin system status", () => {
       X_EXPRESS_API_USER: "user",
       X_EXPRESS_API_KEY: "secret",
       X_EXPRESS_CONTRACT_CODE: "U000328",
-      X_EXPRESS_CODE_PREFIX: "QAX",
+      X_EXPRESS_CODE_PREFIX: "AAA",
       X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
       X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
       X_EXPRESS_WEBHOOK_API_KEY: "webhook-secret",
-      X_EXPRESS_CODE_RANGE_START: "850300000",
+      X_EXPRESS_CODE_RANGE_START: "850300001",
       X_EXPRESS_CODE_RANGE_END: "850599999",
       X_EXPRESS_PICKUP_NAME: "DC",
       X_EXPRESS_PICKUP_TOWN_ID: "746606",
@@ -120,12 +120,12 @@ describe("admin system status", () => {
     expect(testAccount?.ready).toBe(true);
     expect(testAccount?.missing).not.toContain("X_EXPRESS_PRODUCTION_ACCEPTED");
 
-    const placeholderRange = getIntegrationReadiness({
+    const invalidFirstCode = getIntegrationReadiness({
       ...env,
-      X_EXPRESS_CODE_PREFIX: "AAA",
+      X_EXPRESS_CODE_RANGE_START: "850300000",
     }).find((item) => item.id === "x-express");
-    expect(placeholderRange?.ready).toBe(false);
-    expect(placeholderRange?.missing).toContain("X_EXPRESS_CODE_PREFIX");
+    expect(invalidFirstCode?.ready).toBe(false);
+    expect(invalidFirstCode?.missing).toContain("X_EXPRESS_CODE_RANGE_START");
 
     const production = getIntegrationReadiness({
       ...env,

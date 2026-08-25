@@ -178,11 +178,10 @@ export function requireXExpressShipmentConfig(cashOnDelivery = false) {
   }
   if (
     cfg.codePrefix === "AAA" &&
-    cfg.codeRangeStart === 850300000 &&
-    cfg.codeRangeEnd === 850599999
+    cfg.codeRangeStart === 850300000
   ) {
     throw new XExpressConfigError(
-      "X Express je podešen na primer opsega AAA/850300000–850599999. Zatražite stvarno dodeljeni prefiks i opseg kodova.",
+      "X Express kod AAA0850300000 nije važeći. Prvi potvrđeni kod je AAA0850300001.",
     );
   }
   if (![1, 2, 3, 4].includes(cfg.servicePayerId)) {

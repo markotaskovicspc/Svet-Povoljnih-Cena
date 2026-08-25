@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { XExpressClient } from "@/lib/x-express/client";
 import {
   getXExpressConfig,
+  requireXExpressShipmentConfig,
   type XExpressConfig,
 } from "@/lib/x-express/config";
 import { formatXExpressTrackingCode } from "@/lib/x-express/code";
@@ -34,7 +35,7 @@ const config: XExpressConfig = {
   webhookApiKey: "webhook-key",
   contractCode: "U000328",
   codePrefix: "AAA",
-  codeRangeStart: 850300000,
+  codeRangeStart: 850300001,
   codeRangeEnd: 850599999,
   statusCronSecret: "",
   servicePayerId: 1,
@@ -115,6 +116,37 @@ describe("X Express official API contract", () => {
     expect(getXExpressConfig().apiKey).toBe("");
   });
 
+  it("accepts the confirmed first code and rejects the invalid earlier code", () => {
+    const env = {
+      X_EXPRESS_ENABLED: "true",
+      X_EXPRESS_ENV: "test",
+      X_EXPRESS_BASE_URL: "https://portal.pm.xexpress.rs",
+      X_EXPRESS_API_USER: "api-user",
+      X_EXPRESS_API_KEY: "api-key",
+      X_EXPRESS_CONTRACT_CODE: "U000328",
+      X_EXPRESS_CODE_PREFIX: "AAA",
+      X_EXPRESS_CODE_RANGE_START: "850300001",
+      X_EXPRESS_CODE_RANGE_END: "850599999",
+      X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
+      X_EXPRESS_PICKUP_NAME: "Svet povoljnih cena",
+      X_EXPRESS_PICKUP_TOWN_ID: "746606",
+      X_EXPRESS_PICKUP_STREET_NAME: "Severna transferzala",
+      X_EXPRESS_PICKUP_STREET_NUMBER: "bb",
+      X_EXPRESS_PICKUP_LATITUDE: "44.7735236",
+      X_EXPRESS_PICKUP_LONGITUDE: "19.6805083",
+      X_EXPRESS_PICKUP_CONTACT_NAME: "DC magacin",
+      X_EXPRESS_PICKUP_CONTACT_PHONE: "381641234567",
+    };
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+
+    expect(requireXExpressShipmentConfig().codeRangeStart).toBe(850300001);
+
+    vi.stubEnv("X_EXPRESS_CODE_RANGE_START", "850300000");
+    expect(() => requireXExpressShipmentConfig()).toThrow(
+      /AAA0850300000.*AAA0850300001/,
+    );
+  });
+
   it("builds the exact PascalCase address-check request", () => {
     expect(
       buildXExpressAddressCheckPayload({
@@ -136,7 +168,7 @@ describe("X Express official API contract", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: config,
       reference: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingCodes: ["AAA0850300000", "AAA0850300001"],
+      trackingCodes: ["AAA0850300001", "AAA0850300002"],
       order,
       townId: 791113,
       officialStreetName: "Bulevar oslobođenja",
@@ -187,8 +219,8 @@ describe("X Express official API contract", () => {
       },
     ]);
     expect(payload.Packages).toEqual([
-      { Code: "AAA0850300000", Mass: 1.8, Content: "Stolica" },
       { Code: "AAA0850300001", Mass: 1.8, Content: "Stolica" },
+      { Code: "AAA0850300002", Mass: 1.8, Content: "Stolica" },
     ]);
   });
 
@@ -196,7 +228,7 @@ describe("X Express official API contract", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: config,
       reference: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingCodes: ["AAA0850300000"],
+      trackingCodes: ["AAA0850300001"],
       order: { ...order, paymentMethod: "UPLATA_NA_RACUN" },
       townId: 791113,
     });
@@ -207,7 +239,7 @@ describe("X Express official API contract", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: config,
       reference: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingCodes: ["AAA0850300000", "AAA0850300001"],
+      trackingCodes: ["AAA0850300001", "AAA0850300002"],
       packageMasses: [1.25, 2.5],
       order,
       townId: 791113,
@@ -220,7 +252,7 @@ describe("X Express official API contract", () => {
       buildXExpressCreateOrderPayload({
         cfg: config,
         reference: "reclamation-return-1",
-        trackingCodes: ["AAA0850300000"],
+        trackingCodes: ["AAA0850300001"],
         order,
         townId: 791113,
         officialStreetName: "Bulevar oslobođenja",
@@ -254,7 +286,7 @@ describe("X Express official API contract", () => {
       buildXExpressCreateOrderPayload({
         cfg: { ...config, cod: { ...config.cod, account: "123456" } },
         reference: "order-100",
-        trackingCodes: ["AAA0850300000"],
+        trackingCodes: ["AAA0850300001"],
         order,
         townId: 791113,
       }),
@@ -267,7 +299,7 @@ describe("X Express official API contract", () => {
           cod: { ...config.cod, account: "265-3310310005375-35" },
         },
         reference: "order-101",
-        trackingCodes: ["AAA0850300000"],
+        trackingCodes: ["AAA0850300001"],
         order,
         townId: 791113,
       }),
@@ -288,7 +320,7 @@ describe("X Express official API contract", () => {
         },
       },
       reference: "order#100/1",
-      trackingCodes: ["AAA0850300000"],
+      trackingCodes: ["AAA0850300001"],
       order: {
         ...order,
         shipCompanyName: "Kupac & partner (maloprodaja)",
@@ -336,13 +368,13 @@ describe("X Express official API contract", () => {
     const createPayload = buildXExpressCreateOrderPayload({
       cfg: config,
       reference: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingCodes: ["AAA0850300000"],
+      trackingCodes: ["AAA0850300001"],
       order,
       townId: 791113,
     });
     await expect(client.createOrder(createPayload)).resolves.toMatchObject({
       requestGuid: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingNo: "AAA0850300000",
+      trackingNo: "AAA0850300001",
       providerShipmentId: "758bb513-499d-4ab1-8697-5e747602f222",
       labelUrl: null,
     });
@@ -380,13 +412,13 @@ describe("X Express official API contract", () => {
 
 describe("X Express codes, label and webhook envelope", () => {
   it("pads the assigned 9-digit range to a 13-character package code", () => {
-    expect(formatXExpressTrackingCode("AAA", 850300000)).toBe("AAA0850300000");
-    expect(formatXExpressTrackingCode("AAA", 850300000)).toHaveLength(13);
+    expect(formatXExpressTrackingCode("AAA", 850300001)).toBe("AAA0850300001");
+    expect(formatXExpressTrackingCode("AAA", 850300001)).toHaveLength(13);
   });
 
   it("starts Code-128 in set A and switches numeric suffix to set C", () => {
-    expect(encodeXExpressCode128("AAA0850300000")).toEqual([
-      103, 33, 33, 33, 99, 8, 50, 30, 0, 0,
+    expect(encodeXExpressCode128("AAA0850300001")).toEqual([
+      103, 33, 33, 33, 99, 8, 50, 30, 0, 1,
     ]);
   });
 
@@ -419,15 +451,15 @@ describe("X Express codes, label and webhook envelope", () => {
   it("renders 95x138 labels with carrier, full recipient address, route and package mass", () => {
     const html = renderXExpressLabelsHtml({
       id: "758bb513-499d-4ab1-8697-5e747602f222",
-      trackingNo: "AAA0850300000",
+      trackingNo: "AAA0850300001",
       packageCount: 2,
-      providerParcelNumbers: ["AAA0850300000", "AAA0850300001"],
+      providerParcelNumbers: ["AAA0850300001", "AAA0850300002"],
       providerRouteCode: "VS-2",
       providerRouteName: null,
       rawCreateResponse: {
         packages: [
-          { Code: "AAA0850300000", Mass: 1.8, Content: "Stolica" },
-          { Code: "AAA0850300001", Mass: 2.2, Content: "Sto" },
+          { Code: "AAA0850300001", Mass: 1.8, Content: "Stolica" },
+          { Code: "AAA0850300002", Mass: 2.2, Content: "Sto" },
         ],
       },
       createdAt: new Date("2026-07-26T12:00:00Z"),
