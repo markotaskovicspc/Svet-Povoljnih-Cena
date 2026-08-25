@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CategoryMenuGrid } from "@/components/layout/category-menu-grid";
+import { DesktopCategoryBackRow } from "@/components/layout/desktop-category-back-row";
 import { MobileCategoryLevel } from "@/components/layout/mobile-category-level";
 import type { NavNode } from "@/data/site";
 
@@ -57,6 +58,17 @@ describe("storefront category menu presentation", () => {
     expect(html).toContain('href="/k/namestaj/stolice"');
     expect(html).toContain("h-8 w-11");
     expect(html).toContain("object-contain");
+    expect(html).not.toContain("Povratak na glavni meni");
+  });
+
+  it("uses the selected category name in the desktop drill-down heading", () => {
+    const html = renderToStaticMarkup(
+      <DesktopCategoryBackRow label="Sve za kuću" onBack={vi.fn()} />,
+    );
+
+    expect(html).toContain("Sve za kuću");
+    expect(html).toContain('aria-label="Nazad iz kategorije Sve za kuću"');
+    expect(html).toContain("uppercase");
     expect(html).not.toContain("Povratak na glavni meni");
   });
 });

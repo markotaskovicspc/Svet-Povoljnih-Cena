@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -21,6 +21,7 @@ import { BrandLogo } from "./brand-logo";
 import { getCategoryMenuAction } from "./category-menu-action";
 import { getCategoryMenuImage } from "./category-menu-image";
 import { CategoryMenuGrid } from "./category-menu-grid";
+import { DesktopCategoryBackRow } from "./desktop-category-back-row";
 
 interface Crumb {
   label: string;
@@ -101,16 +102,7 @@ export function DesktopMenu({
           className="min-h-0 flex-1 overflow-y-auto"
         >
           {stack.length > 1 ? (
-            <div className="border-b border-border">
-              <button
-                type="button"
-                onClick={back}
-                className="flex min-h-13 w-full items-center gap-3 py-3 pr-5 pl-[4.6rem] text-left text-sm font-semibold whitespace-nowrap text-brand-blue transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none sm:pr-6 sm:pl-[4.85rem]"
-              >
-                <ChevronLeft className="size-4 shrink-0" aria-hidden />
-                <span>Povratak na glavni meni</span>
-              </button>
-            </div>
+            <DesktopCategoryBackRow label={current.label} onBack={back} />
           ) : null}
 
           {current.href ? (
