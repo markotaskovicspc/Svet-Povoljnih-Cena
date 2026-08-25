@@ -171,7 +171,7 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
     );
     const payload = buildXExpressCreateOrderPayload({
       cfg,
-      reference: randomUUID(),
+      reference: `TEST-COD-NE-ISPORUCIVATI-${randomUUID().slice(0, 8)}`,
       trackingCodes: [code],
       townId: cfg.pickup.townId!,
       officialStreetName: cfg.pickup.streetName,
@@ -179,13 +179,13 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
       order: {
         total: 1,
         paymentMethod: "POUZECE_GOTOVINA",
-        shipFirstName: "Codex",
+        shipFirstName: "TEST NE ISPORUCIVATI",
         shipLastName: "COD QA",
         shipPhone: cfg.pickup.contactPhone,
         shipStreet: `${cfg.pickup.streetName} ${cfg.pickup.streetNumber}`,
         guestEmail: null,
-        notes: "Provider test profile only",
-        items: [{ name: "API COD acceptance test", qty: 1 }],
+        notes: "TEST - NE PREUZIMATI / NE ISPORUCIVATI",
+        items: [{ name: "TEST - NE PREUZIMATI / NE ISPORUCIVATI", qty: 1 }],
       },
     });
     expect(payload.Options).toHaveLength(1);
