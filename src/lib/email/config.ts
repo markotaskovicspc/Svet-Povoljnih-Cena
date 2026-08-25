@@ -23,6 +23,8 @@ export interface EmailConfig {
   /** Inbox addresses parsed from inbound webhook payloads. */
   reclamationsInbox: string;
   commentsInbox: string;
+  /** Internal recipient notified when the storefront contact form is submitted. */
+  commentsNotificationTo: string;
   /** Shared secret for the inbound webhook (`x-webhook-secret` header). */
   inboundSecret: string | null;
   /** Resend webhook signing secret (`svix-*` headers over the raw body). */
@@ -67,6 +69,9 @@ export function getEmailConfig(): EmailConfig {
       envValue("EMAIL_RECLAMATIONS_INBOX") ?? "reklamacije@svetpovoljnihcena.rs",
     commentsInbox:
       envValue("EMAIL_COMMENTS_INBOX") ?? "komentar@svetpovoljnihcena.rs",
+    commentsNotificationTo:
+      envValue("EMAIL_COMMENTS_NOTIFICATION_TO") ??
+      "office@svetpovoljnihcena.rs",
     inboundSecret: envValue("EMAIL_INBOUND_SECRET"),
     resendWebhookSecret: envValue("RESEND_WEBHOOK_SECRET"),
     promotionsTopicId: envValue("RESEND_TOPIC_PROMOTIONS_ID"),

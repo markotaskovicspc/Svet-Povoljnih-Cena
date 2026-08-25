@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { sendCommentNotification } from "@/lib/email/comment-notification";
 
 /**
  * Comments / suggestions form (Phase 3C — item 6).
@@ -17,7 +18,7 @@ export const commentSchema = z.object({
 export type CommentInput = z.infer<typeof commentSchema>;
 
 export async function submitComment(input: CommentInput, userId: string | null) {
-  return db.comment.create({
+  const created = await db.comment.create({
     data: {
       userId,
       name: input.name,
@@ -27,4 +28,26 @@ export async function submitComment(input: CommentInput, userId: string | null) 
     },
     select: { id: true, createdAt: true },
   });
+
+  try {
+    const notification = await sendCommentNotification({
+      id: created.id,
+      name: input.name,
+      email: input.email.toLowerCase(),
+      subject: input.subject,
+      body: input.body,
+    });
+    if (!notification.ok) {
+      console.error(
+        `[comments] email notification failed comment=${created.id}: ${notification.error}`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[comments] email notification failed comment=${created.id}`,
+      error,
+    );
+  }
+
+  return created;
 }
