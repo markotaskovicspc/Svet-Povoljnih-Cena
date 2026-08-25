@@ -569,7 +569,7 @@ describe("X Express codes, label and webhook envelope", () => {
     );
     expect(batchHtml.match(/<!doctype html>/g)).toHaveLength(1);
     expect(batchHtml.match(/<section class="label">/g)).toHaveLength(3);
-    expect(batchHtml).toContain("X Express etikete PRE-2026-0002");
+    expect(batchHtml).toContain("X Express adresnice PRE-2026-0002");
     expect(batchHtml).toContain("window.print()");
   });
 
