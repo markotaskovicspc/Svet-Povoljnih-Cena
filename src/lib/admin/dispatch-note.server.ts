@@ -1294,12 +1294,10 @@ function sefConfiguration() {
   if (!gate.allowed) throw new Error(`eOtpremnica je isključena: ${gate.reason}`);
   const baseUrl =
     envValue("EOTPREMNICA_BASE_URL") ??
-    envValue("SEO_BASE_URL") ??
-    envValue("SEF_BASE_URL");
+    envValue("SEO_BASE_URL");
   const apiKey =
     envValue("EOTPREMNICA_API_KEY") ??
-    envValue("SEO_API_KEY") ??
-    envValue("SEF_API_KEY");
+    envValue("SEO_API_KEY");
   if (!baseUrl || !apiKey) {
     throw new Error(
       "eOtpremnica nije konfigurisana. Nedostaju EOTPREMNICA_BASE_URL i EOTPREMNICA_API_KEY.",

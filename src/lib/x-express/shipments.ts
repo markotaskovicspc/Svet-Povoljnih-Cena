@@ -166,7 +166,9 @@ export async function createXExpressShipmentForOrder(
     }
   }
   const cfg = requireXExpressShipmentConfig(
-    purpose === "ORDER_DELIVERY" && isXExpressCashOnDelivery(order.paymentMethod),
+    purpose === "ORDER_DELIVERY" &&
+      isXExpressCashOnDelivery(order.paymentMethod) &&
+      codAmount > 0,
   );
 
   const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);

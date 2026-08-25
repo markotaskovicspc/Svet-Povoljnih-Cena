@@ -5,6 +5,7 @@ import {
   externalMonitoringIsConnected,
   getIntegrationReadiness,
   getOperationsSnapshot,
+  getSefHealthSnapshot,
   type IntegrationReadiness,
 } from "@/lib/admin/system-status";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,10 @@ function formatCheckedAt(value: string) {
 export default async function SystemStatusPage() {
   await requireAdminAction(["OPS"]);
 
-  const [snapshot] = await Promise.all([getOperationsSnapshot()]);
+  const [snapshot, sefHealth] = await Promise.all([
+    getOperationsSnapshot(),
+    getSefHealthSnapshot(),
+  ]);
   const integrations = getIntegrationReadiness();
   const monitoringConnected = externalMonitoringIsConnected();
   const deployment =
@@ -97,7 +101,7 @@ export default async function SystemStatusPage() {
           <span>Provereno {formatCheckedAt(snapshot.checkedAt)}</span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             label="Baza"
             value={snapshot.database.ok ? "Radi" : "Ne radi"}
@@ -125,6 +129,18 @@ export default async function SystemStatusPage() {
             value="Za povezivanje"
             hint="Slike, računi i dokumenti iz Storage-a"
             tone="warning"
+          />
+          <StatCard
+            label="SEF / eFaktura"
+            value={
+              sefHealth.ok
+                ? "Povezan"
+                : sefHealth.configured
+                  ? "Greška veze"
+                  : "Za povezivanje"
+            }
+            hint={sefHealth.message}
+            tone={sefHealth.ok ? "success" : sefHealth.configured ? "danger" : "warning"}
           />
         </div>
 

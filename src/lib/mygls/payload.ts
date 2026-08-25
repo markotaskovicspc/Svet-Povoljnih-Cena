@@ -60,8 +60,10 @@ export function buildMyGlsParcelForOrder(args: {
   const content = buildContent(order, cfg.defaultContent);
   const packages = completePackages(args.packages);
   const cod =
-    purpose === "ORDER_DELIVERY" && isMyGlsCashOnDelivery(order.paymentMethod);
-  if (order.paymentMethod === "POUZECE_KARTICA" && !cfg.codCardEnabled) {
+    purpose === "ORDER_DELIVERY" &&
+    isMyGlsCashOnDelivery(order.paymentMethod) &&
+    num(order.total) > 0;
+  if (cod && order.paymentMethod === "POUZECE_KARTICA" && !cfg.codCardEnabled) {
     throw new MyGlsConfigError(
       "MyGLS kartično pouzeće nije ugovorno potvrđeno (MYGLS_COD_CARD_ENABLED=false).",
     );

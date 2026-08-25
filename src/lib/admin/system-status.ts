@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { SefApiError, SefClient } from "@/lib/sef/client";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -41,6 +42,12 @@ export type OperationsSnapshot = {
     lastCatalogSuccessAt: string | null;
     lastStockSuccessAt: string | null;
   } | null;
+};
+
+export type SefHealthSnapshot = {
+  configured: boolean;
+  ok: boolean;
+  message: string;
 };
 
 const enabledValues = new Set(["1", "true", "yes", "on"]);
@@ -142,6 +149,8 @@ export function getIntegrationReadiness(
     normalized(env.MYGLS_ENV)?.toLowerCase() === "production";
   const eotpremnicaProduction =
     normalized(env.EOTPREMNICA_ENV)?.toLowerCase() === "production";
+  const sefProduction =
+    normalized(env.SEF_ENV)?.toLowerCase() === "production";
   const badiProduction =
     normalized(env.BADI_ENV)?.toLowerCase() === "production";
 
@@ -245,6 +254,18 @@ export function getIntegrationReadiness(
       ],
     }),
     integration(env, {
+      id: "sef",
+      label: "SEF / eFaktura",
+      description:
+        "Bezbedna API veza za elektronske fakture; ključ se čuva samo kao server secret.",
+      requirements: [
+        enabled("SEF_ENABLED"),
+        present("SEF_ENV"),
+        ...(sefProduction ? [enabled("SEF_PRODUCTION_ACCEPTED")] : []),
+        present("SEF_API_KEY"),
+      ],
+    }),
+    integration(env, {
       id: "ips",
       label: "IPS / banka",
       description: "Plaćanje IPS QR kodom.",
@@ -298,6 +319,34 @@ export function externalMonitoringIsConnected(
       normalized(env.SENTRY_DSN) ||
       normalized(env.MONITORING_DSN),
   );
+}
+
+export async function getSefHealthSnapshot(): Promise<SefHealthSnapshot> {
+  const readiness = getIntegrationReadiness().find((item) => item.id === "sef");
+  if (!readiness?.ready) {
+    return {
+      configured: false,
+      ok: false,
+      message: "Dodajte server-side SEF promenljive da biste pokrenuli proveru.",
+    };
+  }
+  try {
+    const health = await new SefClient().healthCheck();
+    return {
+      configured: true,
+      ok: health.ok,
+      message: `API autentifikacija radi (${health.environment}).`,
+    };
+  } catch (error) {
+    const status = error instanceof SefApiError ? error.status : null;
+    return {
+      configured: true,
+      ok: false,
+      message: status
+        ? `SEF provera nije prošla (HTTP ${status}).`
+        : "SEF trenutno nije dostupan.",
+    };
+  }
 }
 
 export async function getOperationsSnapshot(): Promise<OperationsSnapshot> {

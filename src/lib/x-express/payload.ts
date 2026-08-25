@@ -123,7 +123,9 @@ export function buildXExpressCreateOrderPayload(args: {
     );
   }
   const cod =
-    purpose === "ORDER_DELIVERY" && isXExpressCashOnDelivery(order.paymentMethod);
+    purpose === "ORDER_DELIVERY" &&
+    isXExpressCashOnDelivery(order.paymentMethod) &&
+    num(order.total) > 0;
   const codAccount = cod ? normalizeXExpressAccount(cfg.cod.account) : undefined;
   const recipientName = providerName(
     order.shipCompanyName || `${order.shipFirstName} ${order.shipLastName}`,

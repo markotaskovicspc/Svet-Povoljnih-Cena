@@ -229,6 +229,19 @@ if (enabled("EOTPREMNICA_ENABLED") || enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")
     warnings.push("eOtpremnica is using sandbox; no production document is submitted");
   }
 }
+if (enabled("SEF_ENABLED") || enabled("SEF_PRODUCTION_ACCEPTED")) {
+  const sefEnv = (value("SEF_ENV") ?? "demo").toLowerCase();
+  if (!["demo", "production"].includes(sefEnv)) {
+    errors.push("SEF_ENV must be demo or production");
+  }
+  requireNames("SEF / eFaktura", ["SEF_API_KEY"]);
+  if (sefEnv === "production" && !enabled("SEF_PRODUCTION_ACCEPTED")) {
+    errors.push("SEF production is enabled without SEF_PRODUCTION_ACCEPTED");
+  } else if (sefEnv === "demo") {
+    warnings.push("SEF is using demo; no production eInvoice is submitted");
+  }
+  if (value("SEF_BASE_URL")) publicHttps("SEF_BASE_URL");
+}
 if (enabled("RABALUX_ENABLED")) {
   requireNames("Rabalux", [
     "RABALUX_CATALOG_USER",

@@ -220,7 +220,7 @@ export async function createShipmentForOrder(
   }
   if (routing.kind === "mixed") {
     throw new CourierConfigError(
-      "Porudžbina sadrži i X Express i MyGLS pakete. Mešovite porudžbine se još obrađuju ručno.",
+      "Porudžbina sadrži X Express i MyGLS pakete. Učitajte je kroz naloge za preuzimanje da bi se stavke automatski podelile po kuriru.",
     );
   }
   if (options.provider && options.provider !== routing.provider) {

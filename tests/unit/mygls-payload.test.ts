@@ -195,4 +195,15 @@ describe("MyGLS reclamation payload", () => {
       "FDS",
     ]);
   });
+
+  it("does not add COD to the second half of a split order", () => {
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order: { ...order, total: 0 },
+      packages,
+    });
+
+    expect(parcel.CODAmount).toBe(0);
+    expect(parcel.CODReference).toBeUndefined();
+  });
 });

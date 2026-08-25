@@ -234,6 +234,17 @@ describe("X Express official API contract", () => {
     expect(payload).not.toHaveProperty("Options");
   });
 
+  it("omits COD options from the second half of a split order", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: config,
+      reference: "758bb513-499d-4ab1-8697-5e747602f222",
+      trackingCodes: ["AAA0850300001"],
+      order: { ...order, total: 0 },
+      townId: 791113,
+    });
+    expect(payload).not.toHaveProperty("Options");
+  });
+
   it("uses operator-confirmed package masses when they are supplied", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: config,
