@@ -73,7 +73,7 @@ export default async function PickupBatchPrintPage({
           ) : (
             <span
               aria-disabled="true"
-              title="Prvo na nalogu kliknite „Kreiraj adresnice“."
+              title="Prvo na nalogu kliknite „Kreiraj adresnice i pošalji“."
               className="inline-flex h-9 cursor-not-allowed items-center rounded-lg border border-black/30 bg-black/5 px-3 text-sm font-medium text-black/45"
             >
               Adresnice još nisu kreirane

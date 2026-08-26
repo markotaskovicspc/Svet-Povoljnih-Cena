@@ -10,7 +10,10 @@ import {
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
-import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
+import {
+  announceXExpressShipment,
+  createXExpressShipmentForOrder,
+} from "@/lib/x-express/shipments";
 import { syncXExpressShipmentById } from "@/lib/x-express/sync";
 import {
   MYGLS_PROVIDER,
@@ -215,23 +218,25 @@ export async function createShipmentForOrder(
         : null) ??
       derivedPackages;
     const derivedPackageCount = derivedPackages.length;
-    return selectedProvider === "MYGLS"
-      ? createMyGlsShipmentForOrder(order.id, {
-          purpose,
-          reclamationId: reclamation?.id,
-          pickupDate: options.pickupDate,
-          packages,
-          orderItemIds: requestedOrderItemIds,
-          codAmount: options.codAmount,
-        })
-      : createXExpressShipmentForOrder(order.id, {
-          packageCount: options.packageCount ?? derivedPackageCount,
-          packages,
-          purpose,
-          reclamationId: reclamation?.id,
-          orderItemIds: requestedOrderItemIds,
-          codAmount: options.codAmount,
-        });
+    if (selectedProvider === "MYGLS") {
+      return createMyGlsShipmentForOrder(order.id, {
+        purpose,
+        reclamationId: reclamation?.id,
+        pickupDate: options.pickupDate,
+        packages,
+        orderItemIds: requestedOrderItemIds,
+        codAmount: options.codAmount,
+      });
+    }
+    const shipment = await createXExpressShipmentForOrder(order.id, {
+      packageCount: options.packageCount ?? derivedPackageCount,
+      packages,
+      purpose,
+      reclamationId: reclamation?.id,
+      orderItemIds: requestedOrderItemIds,
+      codAmount: options.codAmount,
+    });
+    return announceXExpressShipment(shipment.id);
   }
 
   if (routing.provider === "MYGLS") {

@@ -582,7 +582,7 @@ export const operationalErpModules: ErpModule[] = [
           "Obrisati izabrane naloge? Učitane porudžbine biće vraćene u status Kreirano.",
       },
       {
-        label: "Proknjiži",
+        label: "Kreiraj adresnice i pošalji",
         tone: "neutral",
         action: "pickup.post",
         needsSelection: true,

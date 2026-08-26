@@ -13,20 +13,15 @@ import { Button } from "@/components/ui/button";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
 import {
-  confirmMyGlsPickupAnnouncement,
   deletePickupBatches,
   getPickupPostingAvailability,
   loadEligibleOrders,
   postPickupBatches,
-  recreateMyGlsLabelsForPickupBatch,
   removePickupGroupFromBatch,
   savePickupPackage,
 } from "@/lib/admin/pickup-batch.server";
 import {
-  canRecreateMyGlsLabels,
   isPickupBatchEditable,
-  MYGLS_BOOKING_CHANNEL_LABEL,
-  MYGLS_BOOKING_CHANNELS,
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
@@ -51,10 +46,6 @@ const packageSchema = batchSchema.extend({
   widthCm: z.coerce.number().positive().max(500),
   depthCm: z.coerce.number().positive().max(500),
   heightCm: z.coerce.number().positive().max(500),
-});
-const bookingSchema = batchSchema.extend({
-  channel: z.enum(MYGLS_BOOKING_CHANNELS),
-  reference: z.string().trim().min(1).max(120),
 });
 
 async function savePackageAction(
@@ -87,41 +78,6 @@ async function savePackageAction(
         ok: true as const,
         entityId: parsed.data.lineId,
         message: "Stvarne mere paketa su sačuvane.",
-      };
-    },
-  )(formData);
-}
-
-async function confirmMyGlsBookingAction(
-  _state: AdminActionState,
-  formData: FormData,
-) {
-  "use server";
-  return withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "pickup-batch.mygls-booking.confirm",
-      entity: "PickupBatch",
-    },
-    async (actorId, actionData: FormData) => {
-      const parsed = bookingSchema.safeParse(Object.fromEntries(actionData.entries()));
-      if (!parsed.success) {
-        return {
-          ok: false as const,
-          error: parsed.error.issues[0]?.message ?? "Podaci GLS najave nisu ispravni.",
-        };
-      }
-      const result = await confirmMyGlsPickupAnnouncement(
-        parsed.data.batchId,
-        actorId,
-        { channel: parsed.data.channel, reference: parsed.data.reference },
-      );
-      revalidatePickupPaths(parsed.data.batchId);
-      return {
-        ok: true as const,
-        entityId: parsed.data.batchId,
-        diff: result,
-        message: `Ručna MyGLS najava je evidentirana za ${result.orderCount} porudžbina.`,
       };
     },
   )(formData);
@@ -236,56 +192,13 @@ async function postAction(
       if (!parsed.success) {
         return { ok: false as const, error: "Nalog nije izabran." };
       }
-      const batch = await db.pickupBatch.findUnique({
-        where: { id: parsed.data.batchId },
-        select: { provider: true, labelsCreatedAt: true },
-      });
-      const availability = await getPickupPostingAvailability(batch?.provider);
-      const wasXExpressPrepared =
-        availability.provider === "X_EXPRESS" && Boolean(batch?.labelsCreatedAt);
       const result = await postPickupBatches([parsed.data.batchId], actorId);
       revalidatePickupPaths(parsed.data.batchId);
       return {
         ok: true as const,
         entityId: parsed.data.batchId,
         diff: result,
-        message:
-          availability.provider === "MYGLS"
-            ? `MyGLS adresnice su kreirane za ${result.shipmentCount} porudžbina. Prikup još nije najavljen.`
-            : wasXExpressPrepared
-              ? `Nalog je proknjižen; X Express je prihvatio ${result.shipmentCount} pošiljki.`
-              : `X Express adresnice su pripremljene za ${result.shipmentCount} picking grupa. Pošiljke još nisu poslate kuriru.`,
-      };
-    },
-  )(formData);
-}
-
-async function recreateLabelsAction(
-  _state: AdminActionState,
-  formData: FormData,
-) {
-  "use server";
-  return withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "pickup-batch.labels.recreate",
-      entity: "PickupBatch",
-    },
-    async (actorId, actionData: FormData) => {
-      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
-      if (!parsed.success) {
-        return { ok: false as const, error: "Nalog nije izabran." };
-      }
-      const result = await recreateMyGlsLabelsForPickupBatch(
-        parsed.data.batchId,
-        actorId,
-      );
-      revalidatePickupPaths(parsed.data.batchId);
-      return {
-        ok: true as const,
-        entityId: parsed.data.batchId,
-        diff: result,
-        message: `MyGLS adresnice su ponovo kreirane za ${result.shipmentCount} porudžbina.`,
+        message: `Nalog je proknjižen; ${result.shipmentCount} pošiljki je uspešno poslato u sistem kurira, a adresnice su spremne za štampu.`,
       };
     },
   )(formData);
@@ -343,9 +256,7 @@ export default async function PickupBatchPage({
   const editable =
     isPickupBatchEditable(batch.status) && !batch.labelsCreationStartedAt;
   const canPost =
-    isPickupBatchEditable(batch.status) &&
-    (myGls ? !batch.labelsCreatedAt : true);
-  const canRecreateLabels = canRecreateMyGlsLabels(batch);
+    isPickupBatchEditable(batch.status);
   const editing = query.mode === "edit" && editable;
   const rows = batch.lines
     .map((line) => pickupLineRow(line))
@@ -416,7 +327,7 @@ export default async function PickupBatchPage({
             ) : (
               <span
                 aria-disabled="true"
-                title="Prvo kliknite „Kreiraj adresnice“."
+                title="Prvo kliknite „Kreiraj adresnice i pošalji“."
                 className="inline-flex h-8 cursor-not-allowed items-center rounded-lg border border-border bg-muted px-2.5 text-sm font-medium text-ink-400 opacity-70"
               >
                 Kurirske adresnice
@@ -457,63 +368,30 @@ export default async function PickupBatchPage({
                 Obriši
               </SubmitButton>
             </AdminActionForm>
-            {canRecreateLabels ? (
-              <AdminActionForm
-                action={recreateLabelsAction}
-                successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
-                popupWindowName={`pickup-print-${batch.id}`}
-              >
-                <input type="hidden" name="batchId" value={batch.id} />
-                <SubmitButton
-                  variant="outline"
-                  pendingLabel="Ponovno kreiranje…"
-                  confirm="Poništiti postojeće MyGLS adresnice i kreirati nove sa odvojenim sadržajem po artiklu? Brojevi paketa će se promeniti. Ovo je dozvoljeno samo pre najave dolaska kurira."
-                >
-                  Ponovo kreiraj adresnice
-                </SubmitButton>
-              </AdminActionForm>
-            ) : (
-              <AdminActionForm
-                action={postAction}
-                successPopupUrl={
-                  myGls || !batch.labelsCreatedAt
-                    ? `/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`
-                    : undefined
+            <AdminActionForm
+              action={postAction}
+              successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+              popupWindowName={`pickup-print-${batch.id}`}
+            >
+              <input type="hidden" name="batchId" value={batch.id} />
+              <SubmitButton
+                variant="outline"
+                disabled={
+                  !canPost ||
+                  !rows.length ||
+                  !posting.available ||
+                  unreadyReplacementCount > 0 ||
+                  completePackageCount !== rows.length ||
+                  invalidPackageCount > 0
                 }
-                popupWindowName={`pickup-print-${batch.id}`}
+                pendingLabel="Slanje kuriru…"
+                confirm={`Kreirati adresnice i odmah poslati sve pošiljke ${myGls ? "MyGLS-u" : "X Express-u"}? Nakon uspešnog API poziva nalog će biti proknjižen.`}
+                title={postingBlockReason ?? undefined}
+                aria-describedby={postingBlockReason ? postingReasonId : undefined}
               >
-                <input type="hidden" name="batchId" value={batch.id} />
-                <SubmitButton
-                  variant="outline"
-                  disabled={
-                    !canPost ||
-                    !rows.length ||
-                    !posting.available ||
-                    unreadyReplacementCount > 0 ||
-                    completePackageCount !== rows.length ||
-                    invalidPackageCount > 0
-                  }
-                  pendingLabel={
-                    myGls || !batch.labelsCreatedAt
-                      ? "Kreiranje adresnica…"
-                      : "Slanje X Express-u…"
-                  }
-                  confirm={
-                    myGls
-                      ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
-                      : batch.labelsCreatedAt
-                        ? "Poslati pripremljene pošiljke X Express-u i proknjižiti nalog? Potvrdite samo ako su sve adresnice već odštampane i zalepljene na odgovarajuće pakete."
-                        : "Pripremiti jedinstvene X Express adresnice za sve pakete? Ovo još NE šalje pošiljke kuriru."
-                  }
-                  title={postingBlockReason ?? undefined}
-                  aria-describedby={postingBlockReason ? postingReasonId : undefined}
-                >
-                  {myGls || !batch.labelsCreatedAt
-                    ? "Kreiraj adresnice"
-                    : "Pošalji X Express-u"}
-                </SubmitButton>
-              </AdminActionForm>
-            )}
+                Kreiraj adresnice i pošalji
+              </SubmitButton>
+            </AdminActionForm>
           </div>
         }
       />
@@ -564,17 +442,17 @@ export default async function PickupBatchPage({
               {myGls ? "Redosled za MyGLS" : "Redosled za X Express"}
             </p>
             <p className="mt-1 leading-6">
-              {myGls
-                ? "1. Učitajte porudžbine i proverite mere. 2. Kliknite „Kreiraj adresnice“. 3. U „Kurirske adresnice“ otvorite jedan zajednički MyGLS PDF i odštampajte sve adresnice. 4. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
-                : "1. Učitajte porudžbine i proverite stvarne mere. 2. Kliknite „Kreiraj adresnice“. 3. Otvorite „Kurirske adresnice“, odštampajte ih i zalepite svaku na njen paket. 4. Tek kada su svi paketi označeni, kliknite „Pošalji X Express-u“."}
+              1. Učitajte porudžbine i proverite stvarne mere. 2. Kliknite
+              „Kreiraj adresnice i pošalji“. 3. Sistem automatski šalje sve
+              pošiljke kuriru i proknjižava nalog. 4. Otvorite „Kurirske
+              adresnice“, odštampajte ih i zalepite na pakete.
             </p>
           </div>
-          {myGls && batch.labelsCreatedAt ? (
+          {batch.status === "BOOKED" ? (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              MyGLS adresnice su kreirane. Sada otvorite „Kurirske adresnice“,
-              odštampajte sve adresnice iz zajedničkog zvaničnog PDF-a, najavite
-              dolazak kurira MyGLS-u i zatim ispod potvrdite kanal i dobijenu
-              referencu.
+              Adresnice su kreirane, pošiljke su automatski poslate kuriru i
+              nalog je proknjižen. Otvorite „Kurirske adresnice“ i odštampajte
+              ih za pakete.
             </p>
           ) : postingBlockReason ? (
             <p
@@ -582,68 +460,16 @@ export default async function PickupBatchPage({
               className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
             >
               <strong>
-                „{myGls || !batch.labelsCreatedAt
-                  ? "Kreiraj adresnice"
-                  : "Pošalji X Express-u"}“ je trenutno zaključan:
+                „Kreiraj adresnice i pošalji“ je trenutno zaključan:
               </strong>{" "}
               {postingBlockReason}
             </p>
-          ) : myGls ? (
-            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              MyGLS je spreman za kreiranje adresnica. Adresnica nije najava
-              dolaska kurira; ručna najava se potvrđuje kao poseban korak ispod.
-            </p>
-          ) : batch.labelsCreatedAt ? (
-            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              X Express adresnice su pripremljene. Otvorite „Kurirske adresnice“,
-              odštampajte ih i zalepite svaku na odgovarajući paket. Tek zatim
-              kliknite „Pošalji X Express-u“.
-            </p>
           ) : (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              X Express je spreman za pripremu adresnica. Kreiranje adresnica ne
-              šalje pošiljke kuriru.
+              {myGls ? "MyGLS" : "X Express"} je spreman. Jedan klik kreira
+              adresnice i odmah šalje sve pošiljke kuriru.
             </p>
           )}
-
-          {myGls && batch.labelsCreatedAt ? (
-            <div className="mt-4 rounded-lg border border-border p-4">
-              <h3 className="font-semibold">Ručna najava MyGLS prikupa</h3>
-              {batch.externalBookedAt ? (
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                  <div><dt className="text-ink-500">Potvrđeno</dt><dd>{formatDateTime(batch.externalBookedAt)}</dd></div>
-                  <div><dt className="text-ink-500">Kanal</dt><dd>{bookingChannelLabel(batch.externalBookingChannel)}</dd></div>
-                  <div><dt className="text-ink-500">Referenca</dt><dd className="font-mono">{batch.externalBookingReference ?? "—"}</dd></div>
-                </dl>
-              ) : (
-                <>
-                  <p className="mt-1 text-sm text-ink-500">
-                    Ovo polje popuniti tek nakon što je GLS stvarno primio najavu
-                    preko portala, emaila, telefona ili dogovorenog stalnog termina.
-                  </p>
-                  <AdminActionForm action={confirmMyGlsBookingAction} className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
-                    <input type="hidden" name="batchId" value={batch.id} />
-                    <Field label="Kanal najave">
-                      <select name="channel" required className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                        {MYGLS_BOOKING_CHANNELS.map((channel) => (
-                          <option key={channel} value={channel}>{MYGLS_BOOKING_CHANNEL_LABEL[channel]}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="GLS referenca / broj potvrde">
-                      <Input name="reference" required maxLength={120} />
-                    </Field>
-                    <SubmitButton
-                      pendingLabel="Evidentiranje…"
-                      confirm="Potvrditi da je GLS zaista primio najavu? Samo kreirana adresnica nije dovoljna."
-                    >
-                      Potvrdi najavu
-                    </SubmitButton>
-                  </AdminActionForm>
-                </>
-              )}
-            </div>
-          ) : null}
         </Card>
 
         <Card>
@@ -986,14 +812,6 @@ function formatDateTime(value: Date) {
     timeStyle: "short",
     timeZone: "Europe/Belgrade",
   }).format(value);
-}
-
-function bookingChannelLabel(value: string | null) {
-  return value && value in MYGLS_BOOKING_CHANNEL_LABEL
-    ? MYGLS_BOOKING_CHANNEL_LABEL[
-        value as keyof typeof MYGLS_BOOKING_CHANNEL_LABEL
-      ]
-    : "—";
 }
 
 function measureNumber(value: unknown) {

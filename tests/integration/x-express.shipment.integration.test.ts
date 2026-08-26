@@ -173,7 +173,7 @@ afterAll(async () => {
 });
 
 describe("X Express shipment persistence", () => {
-  it("prints first, announces second, keeps unique package data and resolves its webhook reference", async () => {
+  it("creates labels and announces in one action, keeps unique package data and resolves its webhook reference", async () => {
     const item = await db.orderItem.findFirstOrThrow({
       where: { orderId },
       select: { id: true },
@@ -203,35 +203,17 @@ describe("X Express shipment persistence", () => {
     await expect(postPickupBatches([batch.id], "integration-test")).resolves.toEqual({
       posted: 1,
       shipmentCount: 1,
-      labelsPrepared: 1,
-      announced: 0,
-    });
-    const prepared = await db.shipment.findFirstOrThrow({
-      where: { orderId, provider: "X_EXPRESS" },
-    });
-    const preparedBatch = await db.pickupBatch.findUniqueOrThrow({
-      where: { id: batch.id },
-    });
-    expect(preparedBatch.status).toBe("DRAFT");
-    expect(preparedBatch.labelsCreatedAt).not.toBeNull();
-    expect(preparedBatch.manifestRef).toBeNull();
-    expect(prepared.providerShipmentId).toBeNull();
-    expect(prepared.providerStatusCode).toBe("LOCAL_PREPARED");
-    expect(requests.filter((request) => request.url === "/api/order/add")).toHaveLength(0);
-
-    await expect(postPickupBatches([batch.id], "integration-test")).resolves.toEqual({
-      posted: 1,
-      shipmentCount: 1,
       labelsPrepared: 0,
       announced: 1,
     });
-    const shipment = await db.shipment.findUniqueOrThrow({
-      where: { id: prepared.id },
+    const shipment = await db.shipment.findFirstOrThrow({
+      where: { orderId, provider: "X_EXPRESS" },
     });
     const postedBatch = await db.pickupBatch.findUniqueOrThrow({
       where: { id: batch.id },
     });
     expect(postedBatch.status).toBe("BOOKED");
+    expect(postedBatch.labelsCreatedAt).not.toBeNull();
     expect(postedBatch.manifestRef).toBe(`XEXPRESS:${batch.number}`);
     expect(postedBatch.configurationIssue).toBeNull();
     expect(shipment.id).toMatch(/^[0-9a-f-]{36}$/i);
@@ -244,6 +226,7 @@ describe("X Express shipment persistence", () => {
       "QAX0850300001",
       "QAX0850300002",
     ]);
+    expect(requests.filter((request) => request.url === "/api/order/add")).toHaveLength(1);
 
     const checkRequest = requests.find(
       (request) => request.url === "/api/order/check-address",

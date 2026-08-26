@@ -4,6 +4,7 @@ export const PICKUP_BATCH_EXTERNAL_BLOCK_REASON =
   "MyGLS produkcijski pozivi su bezbednosno zaključani dok je MYGLS_PRODUCTION_ACCEPTED=false. Nalog i paketi mogu da se pripreme bez slanja GLS-u.";
 
 export const MYGLS_BOOKING_CHANNELS = [
+  "MYGLS_API",
   "MYGLS_PORTAL",
   "EMAIL",
   "PHONE",
@@ -13,6 +14,7 @@ export const MYGLS_BOOKING_CHANNELS = [
 export type MyGlsBookingChannel = (typeof MYGLS_BOOKING_CHANNELS)[number];
 
 export const MYGLS_BOOKING_CHANNEL_LABEL: Record<MyGlsBookingChannel, string> = {
+  MYGLS_API: "MyGLS API",
   MYGLS_PORTAL: "MyGLS portal",
   EMAIL: "Email",
   PHONE: "Telefon",

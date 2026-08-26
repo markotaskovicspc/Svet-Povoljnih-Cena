@@ -67,7 +67,7 @@ export async function getPickupPostingAvailability(
         available: true as const,
         reason: null,
         provider: "MYGLS" as const,
-        mode: "LABELS_THEN_MANUAL_BOOKING" as const,
+        mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
       };
     } catch (error) {
       const cfg = getMyGlsConfig();
@@ -80,7 +80,7 @@ export async function getPickupPostingAvailability(
               ? error.message
               : "MyGLS konfiguracija nije kompletna.",
         provider: "MYGLS" as const,
-        mode: "LABELS_THEN_MANUAL_BOOKING" as const,
+        mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
       };
     }
   }
@@ -736,16 +736,14 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
   const uniqueIds = Array.from(new Set(batchIds));
   let posted = 0;
   let shipmentCount = 0;
-  let labelsPrepared = 0;
   let announced = 0;
   for (const batchId of uniqueIds) {
     const result = await postPickupBatch(batchId, actorId);
     posted += 1;
     shipmentCount += result.shipmentCount;
-    if (result.phase === "LABELS_PREPARED") labelsPrepared += 1;
     if (result.phase === "ANNOUNCED") announced += 1;
   }
-  return { posted, shipmentCount, labelsPrepared, announced };
+  return { posted, shipmentCount, labelsPrepared: 0, announced };
 }
 
 export async function recreateMyGlsLabelsForPickupBatch(
@@ -899,11 +897,14 @@ async function postPickupBatch(batchId: string, actorId: string) {
   }
   if (availability.provider === "MYGLS") {
     const result = await createMyGlsLabelsForPickupBatch(batchId, actorId);
-    return { ...result, phase: "LABELS_PREPARED" as const };
+    await confirmMyGlsPickupAnnouncement(batchId, actorId, {
+      channel: "MYGLS_API",
+      reference: "PrintLabels",
+    });
+    return { ...result, phase: "ANNOUNCED" as const };
   }
   if (!summary.labelsCreatedAt) {
-    const result = await createXExpressLabelsForPickupBatch(batchId, actorId);
-    return { ...result, phase: "LABELS_PREPARED" as const };
+    await createXExpressLabelsForPickupBatch(batchId, actorId);
   }
 
   const stalePosting = new Date(Date.now() - 30 * 60_000);
@@ -1317,7 +1318,7 @@ async function createMyGlsLabelsForPickupBatch(
         data: ordinaryOrderIds.map((orderId) => ({
           orderId,
           status: "U_PRIPREMI" as const,
-          note: `MyGLS adresnica je kreirana za nalog ${batch.number}; prikup još nije najavljen.`,
+          note: `MyGLS adresnica je kreirana za nalog ${batch.number}; pošiljka je automatski poslata u MyGLS sistem.`,
           actorId,
         })),
       });
@@ -1444,7 +1445,10 @@ export async function confirmMyGlsPickupAnnouncement(
       data: orderIds.map((orderId) => ({
         orderId,
         status: "U_PRIPREMI" as const,
-        note: `MyGLS prikup ${batch.number} ručno potvrđen preko ${MYGLS_BOOKING_CHANNEL_LABEL[input.channel]} (ref. ${reference}).`,
+        note:
+          input.channel === "MYGLS_API"
+            ? `MyGLS pošiljke iz naloga ${batch.number} automatski su poslate preko API-ja (ref. ${reference}).`
+            : `MyGLS prikup ${batch.number} potvrđen preko ${MYGLS_BOOKING_CHANNEL_LABEL[input.channel]} (ref. ${reference}).`,
         actorId,
       })),
     });

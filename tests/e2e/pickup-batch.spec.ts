@@ -243,7 +243,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         ).toBeVisible();
       }
       const overviewPost = page.getByRole("button", {
-        name: /^(Proknjiži|Kreiraj adresnice)$/,
+        name: "Kreiraj adresnice i pošalji",
       });
       await expect(overviewPost).toBeVisible();
       await expect(overviewPost).toBeDisabled();
@@ -321,7 +321,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page.getByRole("button", { name: "Novi MyGLS" })).toHaveCount(0);
       await expect(page.getByText("Datum naloga", { exact: true })).toBeVisible();
       const postButton = page.getByRole("button", {
-        name: "Kreiraj adresnice",
+        name: "Kreiraj adresnice i pošalji",
         exact: true,
       });
       const blockReason = page.locator("#pickup-posting-block-reason");
@@ -552,7 +552,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("Prazan nalog ne može da kreira adresnice ni preko direktnog API-ja", async () => {
       await expect(
-        page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
+        page.getByRole("button", {
+          name: "Kreiraj adresnice i pošalji",
+          exact: true,
+        }),
       ).toBeDisabled();
       const response = await page.request.post(
         "/api/admin/erp/preuzimanja/commands",

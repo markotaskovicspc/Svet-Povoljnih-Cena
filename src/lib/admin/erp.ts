@@ -972,8 +972,8 @@ export async function getErpModule(
     .map((command) => ({
     ...command,
     label:
-      pickupAvailability?.provider === "MYGLS" && command.action === "pickup.post"
-        ? "Kreiraj adresnice"
+      pickupAvailability && command.action === "pickup.post"
+        ? "Kreiraj adresnice i pošalji"
         : command.label,
     disabledReason:
       pickupAvailability && command.action === "pickup.post"

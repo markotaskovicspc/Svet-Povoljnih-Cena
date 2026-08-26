@@ -53,7 +53,7 @@ export async function GET(
   }
   if (!batch.labelsCreatedAt) {
     return labelConflict(
-      "Adresnice još nisu kreirane. Vratite se na nalog i kliknite „Kreiraj adresnice“.",
+      "Adresnice još nisu kreirane. Vratite se na nalog i kliknite „Kreiraj adresnice i pošalji“.",
       batch.id,
     );
   }

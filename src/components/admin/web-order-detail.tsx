@@ -311,7 +311,7 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
           diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
           message:
             shipment.provider === X_EXPRESS_PROVIDER
-              ? `X Express adresnica je pripremljena za ${orderItemIds.length} stavki (${shipment.trackingNo ?? "bez koda"}). Odštampajte je i zalepite pre slanja kuriru.`
+              ? `X Express nalog je automatski poslat za ${orderItemIds.length} stavki (${shipment.trackingNo ?? "bez koda"}), a adresnica je spremna za štampu.`
               : `Kurirski nalog je kreiran za ${orderItemIds.length} stavki (${shipment.provider}${
                   shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""
                 }).`,
@@ -1516,10 +1516,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               <SubmitButton
                                 variant="outline"
                                 size="xs"
-                                pendingLabel="Slanje…"
-                                confirm="Poslati X Express-u? Potvrdite samo ako je adresnica odštampana i zalepljena na paket."
+                                pendingLabel="Ponovno slanje…"
+                                confirm="Ponoviti automatsko slanje X Express-u?"
                               >
-                                Pošalji X Express-u
+                                Ponovi automatsko slanje
                               </SubmitButton>
                             </AdminActionForm>
                           ) : null}

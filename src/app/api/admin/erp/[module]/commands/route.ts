@@ -602,7 +602,7 @@ async function postPickupBatchCommand(
 ): Promise<CommandResult> {
   const result = await postPickupBatches(ids, actorId);
   return {
-    message: `Obrađeno naloga: ${result.posted}; kreirano ili poslato pošiljki: ${result.shipmentCount}.`,
+    message: `Obrađeno naloga: ${result.posted}; automatski poslato pošiljki u sistem kurira: ${result.shipmentCount}.`,
   };
 }
 

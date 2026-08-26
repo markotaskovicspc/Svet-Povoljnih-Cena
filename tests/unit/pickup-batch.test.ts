@@ -19,7 +19,7 @@ describe("ERP module 13 pickup batches", () => {
       "Novi",
       "Uredi",
       "Obriši",
-      "Proknjiži",
+      "Kreiraj adresnice i pošalji",
     ]);
     expect(definition?.columns.map((column) => column.label)).toEqual([
       "Status",
@@ -39,7 +39,7 @@ describe("ERP module 13 pickup batches", () => {
   it("keeps only GLS posting blocked while the local workflow is available", () => {
     const definition = getErpModuleDefinition("preuzimanja");
     const post = definition?.commands.find(
-      (command) => command.label === "Proknjiži",
+      (command) => command.label === "Kreiraj adresnice i pošalji",
     );
 
     expect(definition?.status).toBe("blocked_external");
