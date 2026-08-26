@@ -35,6 +35,8 @@ export async function GET(
           reclamationId: true,
           purpose: true,
           lineGroupKey: true,
+          packageNo: true,
+          orderItem: { select: { name: true } },
         },
       },
     },
@@ -66,7 +68,6 @@ export async function GET(
             }
           : {
               status: { not: "FAILED" },
-              providerShipmentId: { not: null },
               trackingNo: { not: null },
             },
         {
@@ -163,10 +164,29 @@ export async function GET(
     });
   }
 
-  const html = renderXExpressBatchLabelsHtml(shipments, {
-    title: batch.number,
-    autoPrint: true,
-  });
+  const packageContentsByShipmentId = Object.fromEntries(
+    shipments.map((shipment) => {
+      const contents = batch.lines
+        .filter((line) => shipmentMatchesLine(shipment, line))
+        .sort((left, right) => left.packageNo - right.packageNo)
+        .map((line) => line.orderItem?.name?.trim() || "Roba");
+      return [shipment.id, contents];
+    }),
+  );
+  let html: string;
+  try {
+    html = renderXExpressBatchLabelsHtml(shipments, {
+      title: batch.number,
+      autoPrint: true,
+      packageContentsByShipmentId,
+    });
+  } catch (error) {
+    return labelConflict(
+      error instanceof Error
+        ? error.message
+        : "X Express adresnice nisu ispravne za štampu.",
+    );
+  }
   return new NextResponse(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",

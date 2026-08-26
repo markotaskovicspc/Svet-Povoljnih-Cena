@@ -20,7 +20,7 @@ describe("X Express label rendering", () => {
       trackingNo: "AAA0850300001",
       packageCount: 2,
       providerParcelNumbers: ["AAA0850300001", "AAA0850300002"],
-      providerRouteCode: "SM-5",
+      providerRouteCode: "SM-GR-05",
       providerRouteName: "Šabac",
       rawCreateResponse: {
         labelData: {
@@ -96,6 +96,18 @@ describe("X Express label rendering", () => {
     await expect(page.locator(".stamp").count()).resolves.toBe(2);
     await expect(page.locator(".stamp").first().isVisible()).resolves.toBe(true);
     await expect(page.locator(".screen-note").isVisible()).resolves.toBe(true);
+    await expect(
+      labels.first().getByText(
+        "X Express doo, Đorđa Ognjanovića 16, Beograd-Čukarica",
+        { exact: true },
+      ).isVisible(),
+    ).resolves.toBe(true);
+    await expect(
+      labels.nth(0).locator(".meta > div").first().textContent(),
+    ).resolves.toMatch(/Sadržaj: Stolica$/);
+    await expect(
+      labels.nth(1).locator(".meta > div").first().textContent(),
+    ).resolves.toMatch(/Sadržaj: Sto$/);
     await page.close();
   });
 });

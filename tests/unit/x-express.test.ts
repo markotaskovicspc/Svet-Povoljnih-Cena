@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { XExpressClient } from "@/lib/x-express/client";
+import {
+  normalizeXExpressRouteCode,
+  XExpressClient,
+} from "@/lib/x-express/client";
 import {
   getXExpressConfig,
   requireXExpressShipmentConfig,
@@ -387,7 +390,7 @@ describe("X Express official API contract", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ area: "VS-2" }), { status: 200 }),
+        new Response(JSON.stringify({ area: "vs-bg-02" }), { status: 200 }),
       )
       .mockResolvedValueOnce(
         new Response(
@@ -403,7 +406,7 @@ describe("X Express official API contract", () => {
     });
     await expect(client.checkAddress(addressPayload)).resolves.toMatchObject({
       valid: true,
-      area: "VS-2",
+      area: "VS-BG-02",
     });
     const createPayload = buildXExpressCreateOrderPayload({
       cfg: config,
@@ -462,6 +465,12 @@ describe("X Express codes, label and webhook envelope", () => {
     ]);
   });
 
+  it("accepts only the documented XX-XX-XX route format", () => {
+    expect(normalizeXExpressRouteCode("ča-ok-54")).toBe("ČA-OK-54");
+    expect(normalizeXExpressRouteCode("VS-2")).toBeNull();
+    expect(normalizeXExpressRouteCode("REON")).toBeNull();
+  });
+
   it("maps official pickup, delivery, PUDO, return and failure statuses", () => {
     expect(inferXExpressShipmentStatus("REQUEST_RECEIVED", "Kreiran zahtev")).toBe(
       "CREATED",
@@ -513,7 +522,7 @@ describe("X Express codes, label and webhook envelope", () => {
       trackingNo: "AAA0850300001",
       packageCount: 2,
       providerParcelNumbers: ["AAA0850300001", "AAA0850300002"],
-      providerRouteCode: "VS-2",
+      providerRouteCode: "VS-BG-02",
       providerRouteName: null,
       rawCreateResponse: {
         labelData,
@@ -526,7 +535,7 @@ describe("X Express codes, label and webhook envelope", () => {
       order: {
         number: "WEB-2026-0001",
         total: 12_345.67,
-        paymentMethod: "POUZECE_GOTOVINA",
+        paymentMethod: "POUZECE_GOTOVINA" as const,
         shipFirstName: "Petar",
         shipLastName: "Petrović",
         shipCompanyName: "Petrović enterijer DOO",
@@ -540,18 +549,30 @@ describe("X Express codes, label and webhook envelope", () => {
     };
     const html = renderXExpressLabelsHtml(shipment);
     expect(html).toContain("width: 95mm; height: 138mm");
-    expect(html).toContain("X EXPRESS · KURIRSKA ADRESNICA");
+    expect(html).toContain(
+      "X Express doo, Đorđa Ognjanovića 16, Beograd-Čukarica",
+    );
     expect(html).toContain("X Express ne vraća PDF adresnicu kroz API");
     expect(html).toContain("Vojvođanska 401, 11271 Beograd - Surčin");
     expect(html).toContain("Petrović enterijer DOO");
     expect(html).toContain("Bulevar oslobođenja 10A");
     expect(html).not.toContain("Naknadno promenjena adresa 99");
-    expect(html).toContain("VS-2");
+    expect(html).toContain("VS-BG-02");
     expect(html).toContain("1/2");
     expect(html).toContain("2/2");
     expect(html).toContain("1,8 kg");
     expect(html).toContain("2,2 kg");
     expect(html).toContain("12.346 RSD");
+    const firstLabel = html.match(
+      /<section class="label">([\s\S]*?)<\/section>/,
+    )?.[1];
+    const secondLabel = html.match(
+      /<section class="label">[\s\S]*?<\/section>\s*<section class="label">([\s\S]*?)<\/section>/,
+    )?.[1];
+    expect(firstLabel).toContain("Sadržaj:</strong> Stolica");
+    expect(firstLabel).not.toContain("Sadržaj:</strong> Sto</div>");
+    expect(secondLabel).toContain("Sadržaj:</strong> Sto");
+    expect(secondLabel).not.toContain("Sadržaj:</strong> Stolica</div>");
 
     const batchHtml = renderXExpressBatchLabelsHtml(
       [
@@ -571,6 +592,80 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(batchHtml.match(/<section class="label">/g)).toHaveLength(3);
     expect(batchHtml).toContain("X Express adresnice PRE-2026-0002");
     expect(batchHtml).toContain("window.print()");
+  });
+
+  it("repairs legacy combined content from the pickup package order", () => {
+    const base = {
+      id: "legacy-shipment",
+      trackingNo: "AAA0850300001",
+      packageCount: 2,
+      providerParcelNumbers: ["AAA0850300001", "AAA0850300002"],
+      providerRouteCode: "BG-NB-12",
+      providerRouteName: null,
+      rawCreateResponse: null,
+      createdAt: new Date("2026-07-26T12:00:00Z"),
+      order: {
+        number: "WEB-LEGACY-1",
+        total: 0,
+        paymentMethod: "UPLATA_NA_RACUN" as const,
+        shipFirstName: "Petar",
+        shipLastName: "Petrović",
+        shipCompanyName: null,
+        shipPhone: "0642223344",
+        shipStreet: "Bulevar oslobođenja 10A",
+        shipCity: "Beograd",
+        shipPostalCode: "11000",
+        notes: null,
+        items: [
+          { name: "Trpezarijski sto HOME STYLE", qty: 1 },
+          { name: "Trpezarijski sto URBANE", qty: 1 },
+        ],
+      },
+    };
+    const html = renderXExpressBatchLabelsHtml([base], {
+      packageContentsByShipmentId: {
+        "legacy-shipment": [
+          "Trpezarijski sto HOME STYLE",
+          "Trpezarijski sto URBANE",
+        ],
+      },
+    });
+    const labels = [...html.matchAll(/<section class="label">([\s\S]*?)<\/section>/g)];
+    expect(labels).toHaveLength(2);
+    expect(labels[0]?.[1]).toContain("Trpezarijski sto HOME STYLE");
+    expect(labels[0]?.[1]).not.toContain("Trpezarijski sto URBANE");
+    expect(labels[1]?.[1]).toContain("Trpezarijski sto URBANE");
+    expect(labels[1]?.[1]).not.toContain("Trpezarijski sto HOME STYLE");
+  });
+
+  it("refuses to duplicate a barcode when one package code is missing", () => {
+    const invalid = {
+      id: "missing-code",
+      trackingNo: "AAA0850300001",
+      packageCount: 2,
+      providerParcelNumbers: ["AAA0850300001"],
+      providerRouteCode: "BG-NB-12",
+      providerRouteName: null,
+      rawCreateResponse: null,
+      createdAt: new Date(),
+      order: {
+        number: "WEB-MISSING-CODE",
+        total: 0,
+        paymentMethod: "UPLATA_NA_RACUN" as const,
+        shipFirstName: "Petar",
+        shipLastName: "Petrović",
+        shipCompanyName: null,
+        shipPhone: "0642223344",
+        shipStreet: "Bulevar oslobođenja 10A",
+        shipCity: "Beograd",
+        shipPostalCode: "11000",
+        notes: null,
+        items: [{ name: "Sto", qty: 1 }],
+      },
+    };
+    expect(() => renderXExpressLabelsHtml(invalid)).toThrow(
+      /nema 2 jedinstvenih kodova/,
+    );
   });
 
   it("requires exact webhook authentication, contract and schema", () => {

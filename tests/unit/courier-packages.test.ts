@@ -3,7 +3,9 @@ import {
   derivePhysicalPackages,
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
+  hasKnownXExpressHardLimitViolation,
   requireCompleteMyGlsPackages,
+  requireCompleteXExpressPackages,
 } from "@/lib/courier/packages";
 
 describe("physical courier packages", () => {
@@ -154,5 +156,24 @@ describe("physical courier packages", () => {
         heightCm: 40,
       }),
     ).toBe(false);
+  });
+
+  it("enforces the published X Express 30 kg and 60 cm package limits", () => {
+    const base = {
+      packageNo: 1,
+      weightKg: 10,
+      widthCm: 40,
+      depthCm: 50,
+      heightCm: 30,
+    };
+
+    expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30.1 }])).toThrow(
+      "30 kg",
+    );
+    expect(() => requireCompleteXExpressPackages([{ ...base, heightCm: 60.1 }])).toThrow(
+      "60 cm",
+    );
+    expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30, heightCm: 60 }])).not.toThrow();
+    expect(hasKnownXExpressHardLimitViolation({ ...base, depthCm: 61 })).toBe(true);
   });
 });

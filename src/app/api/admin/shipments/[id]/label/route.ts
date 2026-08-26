@@ -39,17 +39,32 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
   if (shipment.provider === X_EXPRESS_PROVIDER) {
-    if (shipment.status === "FAILED" || !shipment.providerShipmentId || !shipment.trackingNo) {
+    if (shipment.status === "FAILED" || !shipment.trackingNo) {
       return NextResponse.json(
         {
           ok: false,
           error: "x_express_label_unavailable",
-          message: "X Express adresnica je dostupna tek nakon uspešno prihvaćenog API naloga.",
+          message: "X Express adresnica nije ispravno pripremljena.",
         },
         { status: 409 },
       );
     }
-    const html = renderXExpressLabelsHtml(shipment);
+    let html: string;
+    try {
+      html = renderXExpressLabelsHtml(shipment);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "x_express_label_invalid",
+          message:
+            error instanceof Error
+              ? error.message
+              : "X Express adresnica nije ispravna.",
+        },
+        { status: 409 },
+      );
+    }
     return new NextResponse(html, {
       headers: {
         "content-type": "text/html; charset=utf-8",

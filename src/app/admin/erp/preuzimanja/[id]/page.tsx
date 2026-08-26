@@ -36,6 +36,7 @@ import {
 import {
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
+  hasKnownXExpressHardLimitViolation,
 } from "@/lib/courier/packages";
 import { db } from "@/lib/db";
 
@@ -281,9 +282,11 @@ async function postAction(
       }
       const batch = await db.pickupBatch.findUnique({
         where: { id: parsed.data.batchId },
-        select: { provider: true },
+        select: { provider: true, labelsCreatedAt: true },
       });
       const availability = await getPickupPostingAvailability(batch?.provider);
+      const wasXExpressPrepared =
+        availability.provider === "X_EXPRESS" && Boolean(batch?.labelsCreatedAt);
       const result = await postPickupBatches([parsed.data.batchId], actorId);
       revalidatePickupPaths(parsed.data.batchId);
       return {
@@ -293,7 +296,9 @@ async function postAction(
         message:
           availability.provider === "MYGLS"
             ? `MyGLS adresnice su kreirane za ${result.shipmentCount} porudžbina. Prikup još nije najavljen.`
-            : `Nalog je proknjižen; X Express pošiljki: ${result.shipmentCount}.`,
+            : wasXExpressPrepared
+              ? `Nalog je proknjižen; X Express je prihvatio ${result.shipmentCount} pošiljki.`
+              : `X Express adresnice su pripremljene za ${result.shipmentCount} picking grupa. Pošiljke još nisu poslate kuriru.`,
       };
     },
   )(formData);
@@ -383,7 +388,7 @@ export default async function PickupBatchPage({
     isPickupBatchEditable(batch.status) && !batch.labelsCreationStartedAt;
   const canPost =
     isPickupBatchEditable(batch.status) &&
-    (myGls ? !batch.labelsCreatedAt : editable);
+    (myGls ? !batch.labelsCreatedAt : true);
   const canRecreateLabels = canRecreateMyGlsLabels(batch);
   const editing = query.mode === "edit" && editable;
   const rows = batch.lines
@@ -400,9 +405,11 @@ export default async function PickupBatchPage({
     );
   const pickingGroups = aggregatePickupGroups(rows);
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
-  const invalidPackageCount = myGls
-    ? rows.filter((row) => hasKnownMyGlsHardLimitViolation(row)).length
-    : 0;
+  const invalidPackageCount = rows.filter((row) =>
+    myGls
+      ? hasKnownMyGlsHardLimitViolation(row)
+      : hasKnownXExpressHardLimitViolation(row),
+  ).length;
   const unreadyReplacementCount = pickingGroups.filter(
     (group) =>
       group.purpose === "RECLAMATION_REPLACEMENT" &&
@@ -504,7 +511,11 @@ export default async function PickupBatchPage({
             ) : (
               <AdminActionForm
                 action={postAction}
-                successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
+                successPopupUrl={
+                  myGls || !batch.labelsCreatedAt
+                    ? `/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`
+                    : undefined
+                }
                 popupWindowName={`pickup-print-${batch.id}`}
               >
                 <input type="hidden" name="batchId" value={batch.id} />
@@ -520,16 +531,24 @@ export default async function PickupBatchPage({
                     completePackageCount !== rows.length ||
                     invalidPackageCount > 0
                   }
-                  pendingLabel={myGls ? "Kreiranje adresnica…" : "Knjiženje…"}
+                  pendingLabel={
+                    myGls || !batch.labelsCreatedAt
+                      ? "Kreiranje adresnica…"
+                      : "Slanje X Express-u…"
+                  }
                   confirm={
                     myGls
                       ? "Kreirati MyGLS adresnice za sve pakete? Ovo NE najavljuje dolazak kurira; najava se posle evidentira zasebno."
-                      : "Proknjižiti nalog i poslati po jednu najavu za svaku picking grupu X Express-u? Pošiljke moraju biti spakovane, označene i spremne za preuzimanje."
+                      : batch.labelsCreatedAt
+                        ? "Poslati pripremljene pošiljke X Express-u i proknjižiti nalog? Potvrdite samo ako su sve adresnice već odštampane i zalepljene na odgovarajuće pakete."
+                        : "Pripremiti jedinstvene X Express adresnice za sve pakete? Ovo još NE šalje pošiljke kuriru."
                   }
                   title={postingBlockReason ?? undefined}
                   aria-describedby={postingBlockReason ? postingReasonId : undefined}
                 >
-                  {myGls ? "Kreiraj adresnice" : "Proknjiži"}
+                  {myGls || !batch.labelsCreatedAt
+                    ? "Kreiraj adresnice"
+                    : "Pošalji X Express-u"}
                 </SubmitButton>
               </AdminActionForm>
             )}
@@ -585,7 +604,7 @@ export default async function PickupBatchPage({
             <p className="mt-1 leading-6">
               {myGls
                 ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske adresnice“ otvorite jedan zajednički MyGLS PDF i odštampajte sve adresnice. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
-                : "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Proknjiži“ — time se X Express-u šalju pošiljke i najava preuzimanja. 4. U „Kurirske adresnice“ otvorite zajednički dokument i odštampajte sve X Express adresnice."}
+                : "1. Učitajte porudžbine i proverite stvarne mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. Otvorite „Kurirske adresnice“, odštampajte ih i zalepite svaku na njen paket. 5. Tek kada su svi paketi označeni, kliknite „Pošalji X Express-u“."}
             </p>
           </div>
           <p className="mb-3 text-sm text-ink-600">
@@ -632,7 +651,11 @@ export default async function PickupBatchPage({
               id={postingReasonId}
               className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
             >
-              <strong>„{myGls ? "Kreiraj adresnice" : "Proknjiži"}“ je trenutno zaključan:</strong>{" "}
+              <strong>
+                „{myGls || !batch.labelsCreatedAt
+                  ? "Kreiraj adresnice"
+                  : "Pošalji X Express-u"}“ je trenutno zaključan:
+              </strong>{" "}
               {postingBlockReason}
             </p>
           ) : myGls ? (
@@ -640,10 +663,16 @@ export default async function PickupBatchPage({
               MyGLS je spreman za kreiranje adresnica. Adresnica nije najava
               dolaska kurira; ručna najava se potvrđuje kao poseban korak ispod.
             </p>
+          ) : batch.labelsCreatedAt ? (
+            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
+              X Express adresnice su pripremljene. Otvorite „Kurirske adresnice“,
+              odštampajte ih i zalepite svaku na odgovarajući paket. Tek zatim
+              kliknite „Pošalji X Express-u“.
+            </p>
           ) : (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              X Express je spreman. Proknjiži šalje najavu tek kada su svi paketi
-              spakovani, označeni i spremni za preuzimanje.
+              X Express je spreman za pripremu adresnica. Kreiranje adresnica ne
+              šalje pošiljke kuriru.
             </p>
           )}
 
@@ -769,7 +798,7 @@ export default async function PickupBatchPage({
                                     <input type="hidden" name="batchId" value={batch.id} />
                                     <input type="hidden" name="lineId" value={row.lineId} />
                                     <span className="pb-1 text-xs font-semibold">#{row.packageNo}</span>
-                                    <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 1000} step="0.001" value={row.weightKg} />
+                                    <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 30} step="0.001" value={row.weightKg} />
                                     <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
                                     <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
                                     <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
@@ -787,6 +816,10 @@ export default async function PickupBatchPage({
                                 ) : myGls && hasKnownMyGlsOversizeSurcharge(row) ? (
                                   <p className="mt-1 text-xs text-ink-500">
                                     II kategorija — volumetrijska dimenzija je preko 300 cm; MyGLS može obračunati doplatu.
+                                  </p>
+                                ) : !myGls && hasKnownXExpressHardLimitViolation(row) ? (
+                                  <p className="mt-1 text-xs text-warning">
+                                    Stvarne mere prelaze X Express granicu od 30 kg ili 60 cm. Prebacite porudžbinu u MyGLS nalog.
                                   </p>
                                 ) : null}
                               </div>

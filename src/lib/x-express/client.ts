@@ -104,10 +104,10 @@ export class XExpressClient {
     const path = requireXExpressPath(this.cfg, "checkAddress");
     const raw = await this.request("POST", path, payload);
     const record = unwrapRecord(raw);
-    const area = pickString(record, ["area", "Area"]);
+    const area = normalizeXExpressRouteCode(pickString(record, ["area", "Area"]));
     if (!area) {
       throw new XExpressProviderError(
-        "X Express provera adrese nije vratila reon.",
+        "X Express provera adrese nije vratila reon u formatu XX-XX-XX.",
         pickString(record, ["code", "errorCode"]) ?? undefined,
         redactXExpressSecrets(raw),
       );
@@ -183,6 +183,13 @@ export class XExpressClient {
       clearTimeout(timeout);
     }
   }
+}
+
+export function normalizeXExpressRouteCode(value: string | null | undefined) {
+  const normalized = value?.trim().toUpperCase() ?? "";
+  return /^[A-ZČĆŽŠĐ0-9]{2}(?:-[A-ZČĆŽŠĐ0-9]{2}){2}$/u.test(normalized)
+    ? normalized
+    : null;
 }
 
 function safeJson(raw: string): unknown {

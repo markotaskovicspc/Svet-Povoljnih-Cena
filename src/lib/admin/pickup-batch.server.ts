@@ -15,6 +15,7 @@ import {
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
   requireCompletePhysicalPackages,
+  requireCompleteXExpressPackages,
   requireCompleteMyGlsPackages,
   type PhysicalPackage,
 } from "@/lib/courier/packages";
@@ -36,6 +37,7 @@ import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
 } from "@/lib/x-express/config";
+import { announceXExpressShipment } from "@/lib/x-express/shipments";
 import {
   isPickupBatchEditable,
   type MyGlsBookingChannel,
@@ -90,7 +92,7 @@ export async function getPickupPostingAvailability(
       available: true as const,
       reason: null,
       provider: "X_EXPRESS" as const,
-      mode: "AUTOMATIC_BOOKING" as const,
+      mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
     };
   } catch (error) {
     return {
@@ -100,7 +102,7 @@ export async function getPickupPostingAvailability(
           ? error.message
           : "X Express konfiguracija nije kompletna.",
       provider: "X_EXPRESS" as const,
-      mode: "AUTOMATIC_BOOKING" as const,
+      mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
     };
   }
 }
@@ -776,12 +778,16 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
   const uniqueIds = Array.from(new Set(batchIds));
   let posted = 0;
   let shipmentCount = 0;
+  let labelsPrepared = 0;
+  let announced = 0;
   for (const batchId of uniqueIds) {
     const result = await postPickupBatch(batchId, actorId);
     posted += 1;
     shipmentCount += result.shipmentCount;
+    if (result.phase === "LABELS_PREPARED") labelsPrepared += 1;
+    if (result.phase === "ANNOUNCED") announced += 1;
   }
-  return { posted, shipmentCount };
+  return { posted, shipmentCount, labelsPrepared, announced };
 }
 
 export async function recreateMyGlsLabelsForPickupBatch(
@@ -923,6 +929,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
       provider: true,
       pickupDate: true,
       pickupWindowEnd: true,
+      labelsCreatedAt: true,
     },
   });
   if (!summary) throw new Error("Nalog za preuzimanje ne postoji.");
@@ -941,7 +948,12 @@ async function postPickupBatch(batchId: string, actorId: string) {
     });
   }
   if (availability.provider === "MYGLS") {
-    return createMyGlsLabelsForPickupBatch(batchId, actorId);
+    const result = await createMyGlsLabelsForPickupBatch(batchId, actorId);
+    return { ...result, phase: "LABELS_PREPARED" as const };
+  }
+  if (!summary.labelsCreatedAt) {
+    const result = await createXExpressLabelsForPickupBatch(batchId, actorId);
+    return { ...result, phase: "LABELS_PREPARED" as const };
   }
 
   const stalePosting = new Date(Date.now() - 30 * 60_000);
@@ -984,10 +996,35 @@ async function postPickupBatch(batchId: string, actorId: string) {
       throw new Error("Nalog nema nijednu picking grupu za preuzimanje.");
     }
 
+    const orderIds = ordinaryOrderIdsForGroups(workGroups);
+    const reclamationIds = workGroups
+      .filter((group) => group.purpose === "RECLAMATION_REPLACEMENT")
+      .map(requiredReclamationId);
+    const preparedShipments = await db.shipment.findMany({
+      where: {
+        provider: X_EXPRESS_PROVIDER,
+        status: { not: "FAILED" },
+        OR: [
+          ...(orderIds.length
+            ? [{ orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" as const }]
+            : []),
+          ...(reclamationIds.length
+            ? [
+                {
+                  reclamationId: { in: reclamationIds },
+                  purpose: "RECLAMATION_REPLACEMENT" as const,
+                },
+              ]
+            : []),
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
     const shipmentIds: string[] = [];
     for (const group of workGroups) {
       const packageLines = group.lines;
-      const packages = requireCompletePhysicalPackages(
+      const packages = requireCompleteXExpressPackages(
         packageLines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
@@ -998,39 +1035,23 @@ async function postPickupBatch(batchId: string, actorId: string) {
           heightCm: Number(line.heightCm ?? 0),
         })),
       );
-      if (
-        packages.some(
-          (pkg) => Math.max(pkg.widthCm, pkg.depthCm, pkg.heightCm) > 60,
-        )
-      ) {
+      const prepared = preparedShipments.find((shipment) =>
+        group.purpose === "RECLAMATION_REPLACEMENT"
+          ? shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+            shipment.reclamationId === group.reclamationId
+          : shipment.purpose === "ORDER_DELIVERY" &&
+            shipment.orderId === group.orderId &&
+            samePickupAssignment(shipment.rawCreateResponse, group),
+      );
+      if (!prepared || prepared.packageCount !== packages.length) {
         throw new Error(
-          "X Express nalog sadrži paket sa stranicom preko 60 cm; prebacite porudžbinu u MyGLS nalog.",
+          `Picking grupa ${group.lineGroupKey} nema kompletnu pripremljenu X Express adresnicu.`,
         );
       }
-      const shipment = group.purpose === "RECLAMATION_REPLACEMENT"
-        ? await createReclamationShipment({
-            reclamationId: requiredReclamationId(group),
-            purpose: "RECLAMATION_REPLACEMENT",
-            packageCount: packages.length,
-            packages,
-            provider: "X_EXPRESS",
-            fromPickupBatch: true,
-            actorId,
-          })
-        : await createShipmentForOrder(group.orderId, {
-            packageCount: packages.length,
-            packages,
-            provider: "X_EXPRESS",
-            orderItemIds: orderItemIdsForGroup(group),
-            codAmount: await pickupAssignmentCodAmount(
-              group.orderId,
-              "X_EXPRESS",
-              orderItemIdsForGroup(group),
-            ),
-          });
-      if (shipment.provider !== X_EXPRESS_PROVIDER || shipment.status === "FAILED") {
+      const shipment = await announceXExpressShipment(prepared.id);
+      if (!shipment.providerShipmentId || shipment.status === "FAILED") {
         throw new Error(
-          `Picking grupa ${group.lineGroupKey} nije uspešno najavljena X Express-u.`,
+          `Picking grupa ${group.lineGroupKey} nije uspešno poslata X Express-u.`,
         );
       }
       shipmentIds.push(shipment.id);
@@ -1059,13 +1080,168 @@ async function postPickupBatch(batchId: string, actorId: string) {
         })),
       });
     }, TRANSACTION_OPTIONS);
-    return { shipmentCount: shipmentIds.length, shipmentIds };
+    return {
+      shipmentCount: shipmentIds.length,
+      shipmentIds,
+      phase: "ANNOUNCED" as const,
+    };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Slanje X Express-u nije uspelo.";
     await db.pickupBatch.updateMany({
       where: { id: batchId, status: "POSTING" },
       data: { status: "DRAFT", configurationIssue: message },
+    });
+    throw error;
+  }
+}
+
+async function createXExpressLabelsForPickupBatch(
+  batchId: string,
+  actorId: string,
+) {
+  let preparedCount = 0;
+  const existing = await db.pickupBatch.findUnique({
+    where: { id: batchId },
+    select: {
+      labelsCreatedAt: true,
+      lines: { select: { lineGroupKey: true } },
+    },
+  });
+  if (existing?.labelsCreatedAt) {
+    return {
+      shipmentCount: new Set(existing.lines.map((line) => line.lineGroupKey)).size,
+      shipmentIds: [] as string[],
+    };
+  }
+
+  const claimed = await db.pickupBatch.updateMany({
+    where: { id: batchId, status: "DRAFT", labelsCreatedAt: null },
+    data: { status: "POSTING", configurationIssue: null },
+  });
+  if (!claimed.count) {
+    throw new Error(
+      "Nalog nije nov ili drugi administrator trenutno priprema X Express adresnice.",
+    );
+  }
+
+  try {
+    const batch = await db.pickupBatch.findUnique({
+      where: { id: batchId },
+      include: {
+        lines: {
+          include: { orderItem: { select: { name: true } } },
+          orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
+        },
+      },
+    });
+    if (!batch || batch.status !== "POSTING") {
+      throw new Error("Nalog nije dostupan za pripremu X Express adresnica.");
+    }
+    if (normalizeProvider(batch.provider) !== "X_EXPRESS") {
+      throw new Error("Nalog nije namenjen X Express kuriru.");
+    }
+    if (!batch.pickupDate || !batch.pickupWindowEnd) {
+      throw new Error("Početak i kraj termina preuzimanja su obavezni.");
+    }
+    validateXExpressPickupWindow(batch.pickupDate, batch.pickupWindowEnd);
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) {
+      throw new Error("Nalog nema nijedan paket za X Express adresnicu.");
+    }
+
+    await db.pickupBatch.update({
+      where: { id: batch.id },
+      data: {
+        labelsCreationStartedAt:
+          batch.labelsCreationStartedAt ?? new Date(),
+      },
+    });
+
+    const shipmentIds: string[] = [];
+    for (const group of workGroups) {
+      const packages = requireCompleteXExpressPackages(
+        group.lines.map((line) => ({
+          packageNo: line.packageNo,
+          orderItemId: line.orderItemId,
+          content: line.orderItem?.name,
+          weightKg: Number(line.weightKg ?? 0),
+          widthCm: Number(line.widthCm ?? 0),
+          depthCm: Number(line.depthCm ?? 0),
+          heightCm: Number(line.heightCm ?? 0),
+        })),
+      );
+      const shipment =
+        group.purpose === "RECLAMATION_REPLACEMENT"
+          ? await createReclamationShipment({
+              reclamationId: requiredReclamationId(group),
+              purpose: "RECLAMATION_REPLACEMENT",
+              packageCount: packages.length,
+              packages,
+              provider: "X_EXPRESS",
+              fromPickupBatch: true,
+              actorId,
+            })
+          : await createShipmentForOrder(group.orderId, {
+              packageCount: packages.length,
+              packages,
+              provider: "X_EXPRESS",
+              orderItemIds: orderItemIdsForGroup(group),
+              codAmount: await pickupAssignmentCodAmount(
+                group.orderId,
+                "X_EXPRESS",
+                orderItemIdsForGroup(group),
+              ),
+            });
+      if (
+        shipment.provider !== X_EXPRESS_PROVIDER ||
+        shipment.status === "FAILED" ||
+        !shipment.trackingNo ||
+        !Array.isArray(shipment.providerParcelNumbers) ||
+        shipment.providerParcelNumbers.length !== packages.length
+      ) {
+        throw new Error(
+          `Picking grupa ${group.lineGroupKey} nema kompletnu X Express adresnicu.`,
+        );
+      }
+      preparedCount += 1;
+      shipmentIds.push(shipment.id);
+    }
+
+    await db.$transaction(async (tx) => {
+      await lockBatch(tx, batch.id);
+      const completed = await tx.pickupBatch.updateMany({
+        where: { id: batch.id, status: "POSTING" },
+        data: {
+          status: "DRAFT",
+          labelsCreatedAt: new Date(),
+          labelsCreatedById: actorId,
+          configurationIssue: null,
+        },
+      });
+      if (!completed.count) {
+        throw new Error("Status naloga promenjen je tokom pripreme adresnica.");
+      }
+      await tx.orderStatusEvent.createMany({
+        data: ordinaryOrderIdsForGroups(workGroups).map((orderId) => ({
+          orderId,
+          status: "U_PRIPREMI" as const,
+          note: `X Express adresnice su pripremljene za nalog ${batch.number}; pošiljke još nisu poslate kuriru.`,
+          actorId,
+        })),
+      });
+    }, TRANSACTION_OPTIONS);
+    return { shipmentCount: shipmentIds.length, shipmentIds };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "X Express adresnice nisu pripremljene.";
+    await db.pickupBatch.updateMany({
+      where: { id: batchId, status: "POSTING" },
+      data: {
+        status: "DRAFT",
+        configurationIssue: message,
+        ...(preparedCount === 0 ? { labelsCreationStartedAt: null } : {}),
+      },
     });
     throw error;
   }
@@ -1442,7 +1618,7 @@ function assertEditableBatch(
   }
   if (batch.labelsCreationStartedAt || batch.labelsCreatedAt) {
     throw new Error(
-      "Nalog je zaključan jer je kreiranje MyGLS adresnica već započeto.",
+      "Nalog je zaključan jer je kreiranje kurirskih adresnica već započeto.",
     );
   }
 }

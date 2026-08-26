@@ -23,6 +23,11 @@ const CODE128_PATTERNS = [
   "211214", "211232", "2331112",
 ] as const;
 
+const X_EXPRESS_CARRIER_LINE =
+  "X Express doo, Đorđa Ognjanovića 16, Beograd-Čukarica";
+const X_EXPRESS_TRACKING_CODE = /^[A-Z]{3}\d{10}$/;
+const X_EXPRESS_ROUTE_CODE = /^[A-ZČĆŽŠĐ0-9]{2}(?:-[A-ZČĆŽŠĐ0-9]{2}){2}$/u;
+
 export type XExpressLabelShipment = {
   id: string;
   trackingNo: string | null;
@@ -123,13 +128,22 @@ export function renderXExpressLabelsHtml(shipment: XExpressLabelShipment) {
 
 export function renderXExpressBatchLabelsHtml(
   shipments: readonly XExpressLabelShipment[],
-  options: { title?: string; autoPrint?: boolean } = {},
+  options: {
+    title?: string;
+    autoPrint?: boolean;
+    packageContentsByShipmentId?: Readonly<Record<string, readonly string[]>>;
+  } = {},
 ) {
   if (!shipments.length) {
     throw new Error("Nema X Express etiketa za štampu.");
   }
   const title = options.title ?? shipments.map((shipment) => shipment.order.number).join(", ");
-  const labels = shipments.flatMap(renderShipmentLabels);
+  const labels = shipments.flatMap((shipment) =>
+    renderShipmentLabels(
+      shipment,
+      options.packageContentsByShipmentId?.[shipment.id],
+    ),
+  );
 
   return `<!doctype html>
 <html lang="sr-Latn">
@@ -143,7 +157,7 @@ export function renderXExpressBatchLabelsHtml(
     .screen-note { max-width: 195mm; margin: 5mm auto; border: 1px solid #111; background: #fff; padding: 3mm; font-size: 12px; line-height: 1.35; }
     .sheet { display: grid; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; gap: 6mm 5mm; align-items: start; justify-content: center; padding: 0; }
     .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; display: flex; flex-direction: column; }
-    .topline { border: 1.5px solid #000; padding: 1.2mm; text-align: center; font-size: 8px; line-height: 1.1; font-weight: 800; margin-bottom: 1.5mm; letter-spacing: .04em; }
+    .topline { border: 1.5px solid #000; padding: 1.2mm; text-align: center; font-size: 8px; line-height: 1.1; font-weight: 800; margin-bottom: 1.5mm; }
     .sender { border: 1px solid #ddd; padding: 1.5mm; min-height: 14mm; font-size: 8px; line-height: 1.08; overflow-wrap: anywhere; }
     .barcode { margin: 2mm 0 1mm; text-align: center; }
     .barcode svg { width: 100%; height: 21mm; display: block; }
@@ -160,7 +174,7 @@ export function renderXExpressBatchLabelsHtml(
   </style>
 </head>
 <body>
-  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> Ove kurirske adresnice generiše ERP isključivo iz podataka koje je X Express prihvatio pri kreiranju naloga. Ne menjajte podatke ručno posle kreiranja pošiljke.</aside>
+  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> ERP generiše adresnice po zvaničnoj X Express specifikaciji iz potvrđene adrese i sačuvanog API zahteva. Pakete prvo odštampajte i označite, pa tek onda pošiljke pošaljite X Express-u.</aside>
   <main class="sheet">
     ${labels.join("")}
   </main>
@@ -169,13 +183,35 @@ export function renderXExpressBatchLabelsHtml(
 </html>`;
 }
 
-function renderShipmentLabels(shipment: XExpressLabelShipment) {
+function renderShipmentLabels(
+  shipment: XExpressLabelShipment,
+  packageContents?: readonly string[],
+) {
   const trackingCodes = readTrackingCodes(shipment);
   const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
-  const codes = Array.from({ length: count }, (_, index) => {
-    return trackingCodes[index] ?? trackingCodes[0] ?? shipment.trackingNo ?? shipment.order.number;
-  });
-  return codes.map((code, index) => renderLabel(shipment, code, index + 1, count));
+  if (
+    trackingCodes.length !== count ||
+    new Set(trackingCodes).size !== count ||
+    trackingCodes.some((code) => !X_EXPRESS_TRACKING_CODE.test(code))
+  ) {
+    throw new Error(
+      `X Express pošiljka ${shipment.id} nema ${count} jedinstvenih kodova formata AAA0000000000.`,
+    );
+  }
+  if (packageContents && packageContents.length !== count) {
+    throw new Error(
+      `X Express pošiljka ${shipment.id} nema sadržaj za svih ${count} paketa.`,
+    );
+  }
+  return trackingCodes.map((code, index) =>
+    renderLabel(
+      shipment,
+      code,
+      index + 1,
+      count,
+      packageContents?.[index],
+    ),
+  );
 }
 
 function renderLabel(
@@ -183,6 +219,7 @@ function renderLabel(
   trackingCode: string,
   index: number,
   count: number,
+  packageContentOverride?: string,
 ) {
   const order = shipment.order;
   const labelData = readLabelData(shipment.rawCreateResponse);
@@ -191,11 +228,20 @@ function renderLabel(
     order.shipCompanyName ||
     `${order.shipFirstName} ${order.shipLastName}`.trim();
   const cod = isCod(order.paymentMethod);
-  const route = shipment.providerRouteCode ?? shipment.providerRouteName ?? "REON";
+  const route = (shipment.providerRouteCode ?? shipment.providerRouteName ?? "")
+    .trim()
+    .toUpperCase();
+  if (!X_EXPRESS_ROUTE_CODE.test(route)) {
+    throw new Error(
+      `X Express pošiljka ${shipment.id} nema reon u formatu XX-XX-XX.`,
+    );
+  }
   const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);
   const content =
-    packageData?.content ??
-    labelData?.content ??
+    packageContentOverride?.trim() ||
+    packageData?.content ||
+    legacyPackageContent(order.items, index, count) ||
+    labelData?.content ||
     (order.items
       .map((item) => item.name)
       .filter(Boolean)
@@ -216,10 +262,10 @@ function renderLabel(
     : `${order.shipPostalCode} ${order.shipCity}`;
   const codAmount = labelData?.codAmount ?? (cod ? num(order.total) : 0);
   const reference = labelData?.reference ?? shipment.id;
-  const payer = labelData ? `ID ${labelData.servicePayerId}` : "nalogodavac";
-  const serviceType = labelData ? `ID ${labelData.serviceTypeId}` : "—";
+  const payer = servicePayerLabel(labelData?.servicePayerId);
+  const serviceType = labelData?.serviceTypeId === 1 ? "Isporuka narednog dana" : "—";
   return `<section class="label">
-    <div class="topline">X EXPRESS · KURIRSKA ADRESNICA</div>
+    <div class="topline">${escapeHtml(X_EXPRESS_CARRIER_LINE)}</div>
     <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(sender?.name ?? MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(senderAddress)}<br />Kontakt: ${escapeHtml(sender?.contactName ?? MERCHANT_LEGAL_INFO.name)} · ${escapeHtml(sender?.phone ?? MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
@@ -230,7 +276,7 @@ function renderLabel(
       <div><strong>Uslugu plaća:</strong> ${escapeHtml(payer)}<br /><strong>Vrsta usluge:</strong> ${escapeHtml(serviceType)}<br /><strong>Otkupnina:</strong> ${escapeHtml(formatRsd(codAmount))}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
     </div>
     <div class="note"><strong>Napomena:</strong><br />${escapeHtml(note)}</div>
-    <div class="stamp"><span>Izvor: X Express API podaci</span><span>štampa: ${escapeHtml(formatDateTime(new Date()))}</span></div>
+    <div class="stamp"><span>X Express specifikacija v1.5</span><span>štampa: ${escapeHtml(formatDateTime(new Date()))}</span></div>
   </section>`;
 }
 
@@ -282,12 +328,16 @@ function isCod(method: PaymentMethod) {
 }
 
 function code128Svg(value: string) {
+  if (!X_EXPRESS_TRACKING_CODE.test(value)) {
+    throw new Error(`Neispravan X Express bar-kod: ${value}`);
+  }
   const codes = encodeXExpressCode128(value);
   const checksum = codes.reduce((sum, code, index) => sum + (index === 0 ? code : code * index), 0) % 103;
   const allCodes = [...codes, checksum, 106];
   const modules = allCodes.flatMap((code) => CODE128_PATTERNS[code].split("").map(Number));
-  const width = modules.reduce((sum, module) => sum + module, 0);
-  let x = 0;
+  const quietZone = 10;
+  const width = modules.reduce((sum, module) => sum + module, 0) + quietZone * 2;
+  let x = quietZone;
   let bar = true;
   const rects: string[] = [];
   for (const moduleWidth of modules) {
@@ -296,6 +346,33 @@ function code128Svg(value: string) {
     bar = !bar;
   }
   return `<svg viewBox="0 0 ${width} 60" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(value)} barcode">${rects.join("")}</svg>`;
+}
+
+function legacyPackageContent(
+  items: Array<{ name: string; qty: number }>,
+  index: number,
+  count: number,
+) {
+  const names = items.map((item) => item.name.trim()).filter(Boolean);
+  if (!names.length) return null;
+  if (names.length === 1) return names[0]!;
+  if (names.length === count) return names[index - 1] ?? null;
+  return null;
+}
+
+function servicePayerLabel(value: number | undefined) {
+  switch (value) {
+    case 1:
+      return "Nalogodavac — virman";
+    case 2:
+      return "Pošiljalac — gotovina";
+    case 3:
+      return "Primalac — gotovina";
+    case 4:
+      return "Primalac — virman";
+    default:
+      return "—";
+  }
 }
 
 export function encodeXExpressCode128(value: string) {

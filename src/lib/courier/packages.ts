@@ -1,6 +1,8 @@
 import { packageVolumetricDimension } from "@/lib/delivery-tariff";
 
 export const MAX_COURIER_PACKAGES = 99;
+export const MAX_X_EXPRESS_PACKAGE_WEIGHT_KG = 30;
+export const MAX_X_EXPRESS_PACKAGE_SIDE_CM = 60;
 export const MAX_MYGLS_PACKAGE_WEIGHT_KG = 40;
 export const MAX_MYGLS_PACKAGE_SIDE_CM = 200;
 export const MAX_MYGLS_PACKAGE_GIRTH_CM = 300;
@@ -63,6 +65,20 @@ export function hasKnownMyGlsHardLimitViolation(pkg: PhysicalPackage) {
 
   const complete = dimensions as number[];
   return Math.max(...complete) > MAX_MYGLS_PACKAGE_SIDE_CM;
+}
+
+export function hasKnownXExpressHardLimitViolation(pkg: PhysicalPackage) {
+  const weightKg = positiveNumber(pkg.weightKg);
+  const dimensions = [
+    positiveNumber(pkg.widthCm),
+    positiveNumber(pkg.depthCm),
+    positiveNumber(pkg.heightCm),
+  ];
+  if (weightKg != null && weightKg > MAX_X_EXPRESS_PACKAGE_WEIGHT_KG) {
+    return true;
+  }
+  if (dimensions.some((value) => value == null)) return false;
+  return Math.max(...(dimensions as number[])) > MAX_X_EXPRESS_PACKAGE_SIDE_CM;
 }
 
 /** Returns true when complete dimensions fall into the surcharge category. */
@@ -225,6 +241,26 @@ export function requireCompletePhysicalPackages(
       heightCm: values.heightCm!,
     };
   });
+}
+
+export function requireCompleteXExpressPackages(
+  packages: readonly PhysicalPackage[],
+) {
+  const complete = requireCompletePhysicalPackages(packages);
+  for (const pkg of complete) {
+    if (pkg.weightKg > MAX_X_EXPRESS_PACKAGE_WEIGHT_KG) {
+      throw new Error(
+        `Paket ${pkg.packageNo} ima ${pkg.weightKg} kg; X Express granica je ${MAX_X_EXPRESS_PACKAGE_WEIGHT_KG} kg po paketu.`,
+      );
+    }
+    const longest = Math.max(pkg.widthCm, pkg.depthCm, pkg.heightCm);
+    if (longest > MAX_X_EXPRESS_PACKAGE_SIDE_CM) {
+      throw new Error(
+        `Paket ${pkg.packageNo} ima stranicu ${longest} cm; X Express dozvoljava najviše ${MAX_X_EXPRESS_PACKAGE_SIDE_CM} cm.`,
+      );
+    }
+  }
+  return complete;
 }
 
 function positiveNumber(value: unknown) {

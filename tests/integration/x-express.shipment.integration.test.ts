@@ -41,7 +41,7 @@ beforeAll(async () => {
       res.setHeader("content-type", "application/json");
       if (req.url === "/api/order/check-address") {
         res.statusCode = 200;
-        res.end(JSON.stringify({ area: "SA-1" }));
+        res.end(JSON.stringify({ area: "SA-GR-01" }));
         return;
       }
       if (req.url === "/api/order/add") {
@@ -173,7 +173,7 @@ afterAll(async () => {
 });
 
 describe("X Express shipment persistence", () => {
-  it("posts a pickup batch, creates one idempotent two-package shipment and resolves its webhook reference", async () => {
+  it("prints first, announces second, keeps unique package data and resolves its webhook reference", async () => {
     const item = await db.orderItem.findFirstOrThrow({
       where: { orderId },
       select: { id: true },
@@ -203,9 +203,30 @@ describe("X Express shipment persistence", () => {
     await expect(postPickupBatches([batch.id], "integration-test")).resolves.toEqual({
       posted: 1,
       shipmentCount: 1,
+      labelsPrepared: 1,
+      announced: 0,
     });
-    const shipment = await db.shipment.findFirstOrThrow({
+    const prepared = await db.shipment.findFirstOrThrow({
       where: { orderId, provider: "X_EXPRESS" },
+    });
+    const preparedBatch = await db.pickupBatch.findUniqueOrThrow({
+      where: { id: batch.id },
+    });
+    expect(preparedBatch.status).toBe("DRAFT");
+    expect(preparedBatch.labelsCreatedAt).not.toBeNull();
+    expect(preparedBatch.manifestRef).toBeNull();
+    expect(prepared.providerShipmentId).toBeNull();
+    expect(prepared.providerStatusCode).toBe("LOCAL_PREPARED");
+    expect(requests.filter((request) => request.url === "/api/order/add")).toHaveLength(0);
+
+    await expect(postPickupBatches([batch.id], "integration-test")).resolves.toEqual({
+      posted: 1,
+      shipmentCount: 1,
+      labelsPrepared: 0,
+      announced: 1,
+    });
+    const shipment = await db.shipment.findUniqueOrThrow({
+      where: { id: prepared.id },
     });
     const postedBatch = await db.pickupBatch.findUniqueOrThrow({
       where: { id: batch.id },
@@ -216,7 +237,7 @@ describe("X Express shipment persistence", () => {
     expect(shipment.id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(shipment.provider).toBe("X_EXPRESS");
     expect(shipment.providerShipmentId).toBe(requestGuid);
-    expect(shipment.providerRouteCode).toBe("SA-1");
+    expect(shipment.providerRouteCode).toBe("SA-GR-01");
     expect(shipment.packageCount).toBe(2);
     expect(shipment.trackingNo).toBe("QAX0850300001");
     expect(shipment.providerParcelNumbers).toEqual([

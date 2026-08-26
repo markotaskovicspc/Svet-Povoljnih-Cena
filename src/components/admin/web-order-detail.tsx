@@ -20,6 +20,7 @@ import { issueAndDeliverFiscalReceipt } from "@/lib/fiscal";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
 import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { announceXExpressShipment } from "@/lib/x-express/shipments";
 import {
   deleteMyGlsLabelsForShipment,
   getMyGlsConfig,
@@ -308,12 +309,45 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
           ok: true as const,
           entityId: shipment.id,
           diff: { provider: shipment.provider, trackingNo: shipment.trackingNo },
-          message: `Kurirski nalog je kreiran za ${orderItemIds.length} stavki (${shipment.provider}${
-            shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""
-          }).`,
+          message:
+            shipment.provider === X_EXPRESS_PROVIDER
+              ? `X Express adresnica je pripremljena za ${orderItemIds.length} stavki (${shipment.trackingNo ?? "bez koda"}). Odštampajte je i zalepite pre slanja kuriru.`
+              : `Kurirski nalog je kreiran za ${orderItemIds.length} stavki (${shipment.provider}${
+                  shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""
+                }).`,
         };
       } finally {
         revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
+        revalidatePath("/admin/erp/prodajni-nalozi");
+      }
+    },
+  )(formData);
+}
+
+async function announceXExpressCourierShipment(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.xExpressAnnounce", entity: "Shipment" },
+    async (_actorId, formData: FormData) => {
+      const shipmentId = String(formData.get("shipmentId") ?? "");
+      const orderId = String(formData.get("orderId") ?? "");
+      if (!shipmentId || !orderId) {
+        return { ok: false as const, error: "Nedostaje ID X Express pošiljke." };
+      }
+      try {
+        const shipment = await announceXExpressShipment(shipmentId);
+        return {
+          ok: true as const,
+          entityId: shipment.id,
+          diff: { providerShipmentId: shipment.providerShipmentId },
+          message: "X Express je prihvatio pošiljku.",
+        };
+      } finally {
+        revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
         revalidatePath("/admin/erp/prodajni-nalozi");
       }
     },
@@ -1384,7 +1418,19 @@ export async function WebOrderDetail({ id }: { id: string }) {
                             }
                           />
                           <Row k="Status" v={shipment.status} />
-                          <Row k="Kurir status" v={shipment.providerStatusCode ?? "—"} />
+                          <Row
+                            k="Kurir status"
+                            v={
+                              shipment.providerStatusCode === "LOCAL_PREPARED"
+                                ? "Adresnica pripremljena — nije poslato"
+                                : shipment.providerStatusCode === "LOCAL_ANNOUNCING"
+                                  ? "Slanje u toku"
+                                  : shipment.providerStatusCode ===
+                                      "LOCAL_ANNOUNCEMENT_FAILED"
+                                    ? "Slanje nije uspelo"
+                                    : shipment.providerStatusCode ?? "—"
+                            }
+                          />
                           <Row k="Paketa" v={shipment.packageCount} />
                           <Row
                             k="Stavke"
@@ -1460,7 +1506,27 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           </p>
                         ) : null}
                         <div className="mt-3 flex flex-wrap justify-end gap-2">
-                          {shipment.provider && shipment.trackingNo ? (
+                          {shipment.provider === X_EXPRESS_PROVIDER &&
+                          shipment.trackingNo &&
+                          !shipment.providerShipmentId &&
+                          shipment.status !== "FAILED" ? (
+                            <AdminActionForm action={announceXExpressCourierShipment}>
+                              <input type="hidden" name="shipmentId" value={shipment.id} />
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <SubmitButton
+                                variant="outline"
+                                size="xs"
+                                pendingLabel="Slanje…"
+                                confirm="Poslati X Express-u? Potvrdite samo ako je adresnica odštampana i zalepljena na paket."
+                              >
+                                Pošalji X Express-u
+                              </SubmitButton>
+                            </AdminActionForm>
+                          ) : null}
+                          {shipment.provider &&
+                          shipment.trackingNo &&
+                          (shipment.provider !== X_EXPRESS_PROVIDER ||
+                            Boolean(shipment.providerShipmentId)) ? (
                             <AdminActionForm action={syncCourierShipment}>
                               <input type="hidden" name="shipmentId" value={shipment.id} />
                               <input type="hidden" name="orderId" value={order.id} />

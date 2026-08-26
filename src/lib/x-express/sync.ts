@@ -389,6 +389,7 @@ export async function syncXExpressShipmentStatuses(limit = 100) {
         provider: X_EXPRESS_PROVIDER,
         service: "COURIER_SMALL",
         trackingNo: { not: null },
+        providerShipmentId: { not: null },
         status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] },
       },
       orderBy: [{ lastStatusSyncAt: "asc" }, { updatedAt: "asc" }],
@@ -443,9 +444,18 @@ export async function syncXExpressShipmentById(shipmentId: string) {
   const cfg = requireXExpressEnabled();
   const shipment = await db.shipment.findUnique({
     where: { id: shipmentId },
-    select: { id: true, trackingNo: true, provider: true },
+    select: {
+      id: true,
+      trackingNo: true,
+      provider: true,
+      providerShipmentId: true,
+    },
   });
-  if (!shipment?.trackingNo || shipment.provider !== X_EXPRESS_PROVIDER) {
+  if (
+    !shipment?.trackingNo ||
+    !shipment.providerShipmentId ||
+    shipment.provider !== X_EXPRESS_PROVIDER
+  ) {
     throw new Error("X Express pošiljka nije pronađena.");
   }
   if (!cfg.paths.status) {

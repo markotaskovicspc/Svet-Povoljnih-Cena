@@ -27,6 +27,7 @@ import {
   sameShipmentAssignment,
   withShipmentAssignment,
 } from "@/lib/courier/shipment-assignment";
+import type { XExpressCreateOrderPayload } from "./types";
 
 const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
 
@@ -239,11 +240,14 @@ export async function createXExpressShipmentForOrder(
         options.packageMasses,
       packageContents: options.packages?.map((pkg) => pkg.content ?? ""),
     });
-    const providerResult = await client.createOrder(payload);
-    const labelUrl = providerResult.labelUrl ?? `/api/admin/shipments/${shipmentId}/label`;
+    const labelUrl = `/api/admin/shipments/${shipmentId}/label`;
     const rawCreateResponse = withShipmentAssignment({
       addressCheck: addressCheck.raw,
-      createOrder: providerResult.raw,
+      createOrderPayload: payload,
+      xExpressAnnouncement: {
+        state: "PREPARED",
+        preparedAt: new Date().toISOString(),
+      },
       reference: shipmentId,
       packages: payload.Packages,
       labelData: buildXExpressLabelData({
@@ -262,13 +266,13 @@ export async function createXExpressShipmentForOrder(
       reclamationId: reclamation?.id ?? null,
       reclamationQty: reclamation?.quantity ?? null,
       warehouseId: reclamation?.warehouseId ?? null,
-      providerOrderId: providerResult.providerOrderId ?? null,
-      providerShipmentId: providerResult.providerShipmentId ?? null,
-      trackingNo: providerResult.trackingNo,
+      providerOrderId: null,
+      providerShipmentId: null,
+      trackingNo,
       packageCount,
       labelUrl,
       status: "CREATED" as const,
-      providerStatusCode: providerResult.providerStatusCode ?? null,
+      providerStatusCode: "LOCAL_PREPARED",
       providerParcelNumbers: allocated as Prisma.InputJsonValue,
       providerRouteCode: addressCheck.area,
       providerRouteName: null,
@@ -284,7 +288,8 @@ export async function createXExpressShipmentForOrder(
           events: {
             create: {
               status: "CREATED",
-              message: "X Express nalog kreiran i adresa potvrđena",
+              message:
+                "X Express adresnica pripremljena; pošiljka još nije poslata kuriru",
               raw: rawCreateResponse as unknown as Prisma.InputJsonValue,
             },
           },
@@ -301,7 +306,8 @@ export async function createXExpressShipmentForOrder(
         events: {
           create: {
             status: "CREATED",
-            message: "X Express nalog kreiran i adresa potvrđena",
+            message:
+              "X Express adresnica pripremljena; pošiljka još nije poslata kuriru",
             raw: rawCreateResponse as unknown as Prisma.InputJsonValue,
           },
         },
@@ -332,6 +338,146 @@ export async function createXExpressShipmentForOrder(
     });
     throw err;
   }
+}
+
+export async function announceXExpressShipment(shipmentId: string) {
+  const existing = await db.shipment.findUnique({ where: { id: shipmentId } });
+  if (!existing || existing.provider !== X_EXPRESS_PROVIDER) {
+    throw new XExpressConfigError("Pripremljena X Express pošiljka nije pronađena.");
+  }
+  if (existing.providerShipmentId && existing.status !== "FAILED") {
+    return existing;
+  }
+  if (existing.status === "FAILED") {
+    throw new XExpressConfigError(
+      "Neuspešna X Express priprema nema važeću adresnicu za slanje.",
+    );
+  }
+  const payload = readPreparedCreateOrderPayload(existing.rawCreateResponse);
+  if (!payload) {
+    throw new XExpressConfigError(
+      "X Express adresnica nema sačuvan originalni API zahtev za slanje.",
+    );
+  }
+
+  const claimed = await db.shipment.updateMany({
+    where: {
+      id: shipmentId,
+      provider: X_EXPRESS_PROVIDER,
+      providerShipmentId: null,
+      status: "CREATED",
+      providerStatusCode: {
+        in: ["LOCAL_PREPARED", "LOCAL_ANNOUNCEMENT_FAILED"],
+      },
+    },
+    data: { providerStatusCode: "LOCAL_ANNOUNCING", syncError: null },
+  });
+  if (!claimed.count) {
+    const current = await db.shipment.findUnique({ where: { id: shipmentId } });
+    if (current?.providerShipmentId && current.status !== "FAILED") return current;
+    throw new XExpressConfigError(
+      "X Express pošiljku trenutno šalje drugi administrator. Osvežite stranicu.",
+    );
+  }
+
+  try {
+    const cfg = requireXExpressShipmentConfig(Boolean(payload.Options?.length));
+    const providerResult = await new XExpressClient(cfg).createOrder(payload);
+    const raw = jsonRecord(existing.rawCreateResponse);
+    const announcedAt = new Date().toISOString();
+    return await db.shipment.update({
+      where: { id: shipmentId },
+      data: {
+        providerOrderId: providerResult.providerOrderId ?? null,
+        providerShipmentId: providerResult.providerShipmentId,
+        trackingNo: providerResult.trackingNo,
+        providerStatusCode: providerResult.providerStatusCode ?? null,
+        syncError: null,
+        rawCreateResponse: {
+          ...raw,
+          createOrder: providerResult.raw,
+          xExpressAnnouncement: {
+            state: "ANNOUNCED",
+            announcedAt,
+            requestGuid: providerResult.requestGuid,
+          },
+        } as Prisma.InputJsonValue,
+        events: {
+          create: {
+            status: "CREATED",
+            message: "X Express je prihvatio najavu pošiljke",
+            raw: providerResult.raw as Prisma.InputJsonValue,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Slanje X Express pošiljke nije uspelo.";
+    await db.shipment.updateMany({
+      where: {
+        id: shipmentId,
+        provider: X_EXPRESS_PROVIDER,
+        providerShipmentId: null,
+        providerStatusCode: "LOCAL_ANNOUNCING",
+      },
+      data: {
+        providerStatusCode: "LOCAL_ANNOUNCEMENT_FAILED",
+        syncError: message,
+      },
+    });
+    await db.shipmentEvent.create({
+      data: {
+        shipmentId,
+        status: "CREATED",
+        message: `X Express najava nije poslata: ${message}`,
+        raw:
+          error instanceof XExpressProviderError && error.raw != null
+            ? (error.raw as Prisma.InputJsonValue)
+            : undefined,
+      },
+    });
+    throw error;
+  }
+}
+
+function readPreparedCreateOrderPayload(
+  raw: Prisma.JsonValue | null,
+): XExpressCreateOrderPayload | null {
+  const value = jsonRecord(raw).createOrderPayload;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.ContractCode !== "string" ||
+    typeof record.Reference !== "string" ||
+    !record.Sender ||
+    typeof record.Sender !== "object" ||
+    !record.Recipient ||
+    typeof record.Recipient !== "object" ||
+    !Array.isArray(record.Waypoints) ||
+    !Array.isArray(record.Packages) ||
+    !record.Packages.length ||
+    record.Packages.some((pkg) => {
+      if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return true;
+      const item = pkg as Record<string, unknown>;
+      return (
+        typeof item.Code !== "string" ||
+        !/^[A-Z]{3}\d{10}$/.test(item.Code) ||
+        typeof item.Mass !== "number" ||
+        typeof item.Content !== "string"
+      );
+    })
+  ) {
+    return null;
+  }
+  return value as unknown as XExpressCreateOrderPayload;
+}
+
+function jsonRecord(value: Prisma.JsonValue | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {} as Record<string, Prisma.JsonValue>;
+  }
+  return value as Record<string, Prisma.JsonValue>;
 }
 
 async function findLocationForOrder(
