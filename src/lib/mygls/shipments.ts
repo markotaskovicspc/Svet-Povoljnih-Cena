@@ -187,7 +187,7 @@ export async function createMyGlsShipmentForOrder(
             create: {
               status: "CREATED",
               message: "MyGLS nalog kreiran",
-              raw: sanitizedResponse as Prisma.InputJsonValue,
+              raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
             },
           },
         },
@@ -204,7 +204,7 @@ export async function createMyGlsShipmentForOrder(
           create: {
             status: "CREATED",
             message: "MyGLS nalog kreiran",
-            raw: sanitizedResponse as Prisma.InputJsonValue,
+            raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
           },
         },
       },
