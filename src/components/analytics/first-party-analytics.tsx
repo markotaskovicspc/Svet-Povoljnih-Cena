@@ -14,14 +14,25 @@ import {
   isPurchaseReady,
   type Ga4ItemInput,
 } from "@/lib/analytics/ga4-ecommerce";
+import {
+  buildMetaAddToCartPayload,
+  buildMetaInitiateCheckoutPayload,
+  buildMetaPurchasePayload,
+  buildMetaViewContentPayload,
+  metaPurchaseEventId,
+} from "@/lib/analytics/meta-ecommerce";
+import { recordMetaEvent } from "@/lib/analytics/meta-client";
+import {
+  allowsAnalytics,
+  trackingConsentFromCookieHeader,
+} from "@/lib/analytics/tracking-consent";
 
-const CONSENT_COOKIE = "spc_cookie_consent=analytics";
-const CONSENT_VERSION = "2026-07";
+const CONSENT_VERSION = "2026-08";
 const ANALYTICS_IDENTITY_KEY = "spc_analytics_identity";
 const ANALYTICS_ID_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 
-function hasConsent() {
-  return document.cookie.split(";").some((part) => part.trim() === CONSENT_COOKIE);
+function hasAnalyticsConsent() {
+  return allowsAnalytics(trackingConsentFromCookieHeader(document.cookie));
 }
 
 function rotatingAnonymousId() {
@@ -72,7 +83,7 @@ export type ConsentedAnalyticsContext = {
 };
 
 export function getConsentedAnalyticsContext(): ConsentedAnalyticsContext | undefined {
-  if (typeof window === "undefined" || !hasConsent()) return undefined;
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) return undefined;
   try {
     return {
       anonymousId: rotatingAnonymousId(),
@@ -93,7 +104,7 @@ export function recordFirstPartyEvent(input: {
   value?: number;
   metadata?: Record<string, string | number | boolean | null>;
 }) {
-  if (typeof window === "undefined" || !hasConsent()) return false;
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) return false;
   try {
     const payload = JSON.stringify({
       ...input,
@@ -140,22 +151,30 @@ export function ProductViewAnalytics({
   productId?: string;
   item: Ga4ItemInput;
 }) {
-  const sent = useRef(false);
+  const analyticsSent = useRef(false);
+  const metaSent = useRef(false);
 
   useEffect(() => {
     const record = () => {
-      if (sent.current || !hasConsent()) return;
       const payload = buildViewItemPayload(item);
-      if (productId) {
-        recordFirstPartyEvent({
-          type: "PRODUCT_VIEW",
-          productId,
-          value: payload.value,
-          metadata: { sku: item.sku },
+      if (!analyticsSent.current && hasAnalyticsConsent()) {
+        if (productId) {
+          recordFirstPartyEvent({
+            type: "PRODUCT_VIEW",
+            productId,
+            value: payload.value,
+            metadata: { sku: item.sku },
+          });
+        }
+        queueGa4Event("view_item", payload);
+        analyticsSent.current = true;
+      }
+      if (!metaSent.current) {
+        metaSent.current = recordMetaEvent({
+          name: "ViewContent",
+          customData: buildMetaViewContentPayload(item),
         });
       }
-      queueGa4Event("view_item", payload);
-      sent.current = true;
     };
     record();
     const onConsent = () => window.setTimeout(record, 0);
@@ -169,38 +188,45 @@ export function CheckoutStartedAnalytics() {
   const hydrated = useCart((state) => state.hydrated);
   const lines = useCart((state) => state.lines);
   const voucher = useCheckout((state) => state.voucher);
-  const sent = useRef(false);
+  const analyticsSent = useRef(false);
+  const metaSent = useRef(false);
 
   useEffect(() => {
     if (!hydrated || !lines.length) return;
     const record = () => {
-      if (sent.current || !hasConsent()) return;
-      const payload = buildBeginCheckoutPayload(
-        lines.map((line) => ({
-          sku: line.sku,
-          name: line.name,
-          unitPrice: line.unitPriceSale,
-          fullUnitPrice: line.unitPriceFull,
-          quantity: line.qty,
-          variant: line.variant,
-          familyCode: line.familyCode,
-        })),
-        {
-          coupon: voucher?.code,
-          discount: voucher?.discountRsd,
-        },
-      );
-      recordFirstPartyEvent({
-        type: "CHECKOUT_STARTED",
-        value: payload.value,
-        quantity: lines.reduce((sum, line) => sum + line.qty, 0),
-        metadata: {
-          skuCount: lines.length,
-          coupon: voucher?.code ?? null,
-        },
-      });
-      queueGa4Event("begin_checkout", payload);
-      sent.current = true;
+      const items = lines.map((line) => ({
+        sku: line.sku,
+        name: line.name,
+        unitPrice: line.unitPriceSale,
+        fullUnitPrice: line.unitPriceFull,
+        quantity: line.qty,
+        variant: line.variant,
+        familyCode: line.familyCode,
+      }));
+      const options = {
+        coupon: voucher?.code,
+        discount: voucher?.discountRsd,
+      };
+      if (!analyticsSent.current && hasAnalyticsConsent()) {
+        const payload = buildBeginCheckoutPayload(items, options);
+        recordFirstPartyEvent({
+          type: "CHECKOUT_STARTED",
+          value: payload.value,
+          quantity: lines.reduce((sum, line) => sum + line.qty, 0),
+          metadata: {
+            skuCount: lines.length,
+            coupon: voucher?.code ?? null,
+          },
+        });
+        queueGa4Event("begin_checkout", payload);
+        analyticsSent.current = true;
+      }
+      if (!metaSent.current) {
+        metaSent.current = recordMetaEvent({
+          name: "InitiateCheckout",
+          customData: buildMetaInitiateCheckoutPayload(items, options),
+        });
+      }
     };
     record();
     const onConsent = () => window.setTimeout(record, 0);
@@ -210,31 +236,45 @@ export function CheckoutStartedAnalytics() {
   return null;
 }
 
-export function recordGa4AddToCart(item: Ga4ItemInput) {
-  if (typeof window === "undefined" || !hasConsent()) return false;
-  return queueGa4Event("add_to_cart", buildAddToCartPayload(item));
+export function recordCommerceAddToCart(item: Ga4ItemInput) {
+  if (typeof window === "undefined") return false;
+  const gaQueued = hasAnalyticsConsent()
+    ? queueGa4Event("add_to_cart", buildAddToCartPayload(item))
+    : false;
+  const metaQueued = recordMetaEvent({
+    name: "AddToCart",
+    customData: buildMetaAddToCartPayload(item),
+  });
+  return gaQueued || metaQueued;
 }
 
 export function PurchaseAnalytics({
   order,
+  accessToken,
   paymentStatus,
 }: {
   order: Order;
+  accessToken?: string;
   paymentStatus?: string;
 }) {
-  const sent = useRef(false);
+  const gaSent = useRef(false);
+  const metaSent = useRef(false);
 
   useEffect(() => {
     if (!isPurchaseReady(order, paymentStatus)) return;
     const record = () => {
-      if (sent.current || !hasConsent()) return;
-      sent.current = recordGa4Purchase(order);
+      if (!gaSent.current && hasAnalyticsConsent()) {
+        gaSent.current = recordGa4Purchase(order);
+      }
+      if (!metaSent.current) {
+        metaSent.current = recordMetaPurchase(order, accessToken);
+      }
     };
     record();
     const onConsent = () => window.setTimeout(record, 0);
     window.addEventListener("spc-cookie-consent", onConsent);
     return () => window.removeEventListener("spc-cookie-consent", onConsent);
-  }, [order, paymentStatus]);
+  }, [accessToken, order, paymentStatus]);
 
   return null;
 }
@@ -247,6 +287,7 @@ type Ga4EventName =
 
 const pendingPurchases = new Set<string>();
 const PURCHASE_STORAGE_PREFIX = "spc_ga4_purchase:";
+const META_PURCHASE_STORAGE_PREFIX = "spc_meta_purchase:";
 
 function recordGa4Purchase(order: Order) {
   const storageKey = `${PURCHASE_STORAGE_PREFIX}${order.id}`;
@@ -262,6 +303,20 @@ function recordGa4Purchase(order: Order) {
     onFailed: () => pendingPurchases.delete(order.id),
   });
   if (!queued) pendingPurchases.delete(order.id);
+  return queued;
+}
+
+function recordMetaPurchase(order: Order, accessToken?: string) {
+  const storageKey = `${META_PURCHASE_STORAGE_PREFIX}${order.id}`;
+  if (hasRecordedPurchase(storageKey)) return true;
+  const queued = recordMetaEvent({
+    name: "Purchase",
+    customData: buildMetaPurchasePayload(order),
+    eventId: metaPurchaseEventId(order.id),
+    orderNumber: order.id,
+    orderAccessToken: accessToken,
+  });
+  if (queued) rememberPurchase(storageKey);
   return queued;
 }
 
@@ -286,7 +341,7 @@ function queueGa4Event(
   params: Record<string, unknown>,
   callbacks?: { onSent?: () => void; onFailed?: () => void },
 ) {
-  if (typeof window === "undefined" || !hasConsent()) return false;
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) return false;
   let attempts = 0;
   const send = () => {
     const dataLayer = (window as Window & { dataLayer?: unknown[] }).dataLayer;

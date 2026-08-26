@@ -5,6 +5,10 @@ import {
   checkRateLimitForRequest,
   rateLimitJson,
 } from "@/lib/security/rate-limit";
+import {
+  allowsAnalytics,
+  trackingConsentFromCookieHeader,
+} from "@/lib/analytics/tracking-consent";
 
 const PUBLIC_EVENT_TYPES = new Set<AnalyticsEventType>([
   "PAGE_VIEW",
@@ -14,10 +18,9 @@ const PUBLIC_EVENT_TYPES = new Set<AnalyticsEventType>([
 ]);
 
 function hasAnalyticsConsent(request: Request) {
-  return (request.headers.get("cookie") ?? "")
-    .split(";")
-    .map((part) => part.trim())
-    .includes("spc_cookie_consent=analytics");
+  return allowsAnalytics(
+    trackingConsentFromCookieHeader(request.headers.get("cookie")),
+  );
 }
 
 export async function POST(request: Request) {

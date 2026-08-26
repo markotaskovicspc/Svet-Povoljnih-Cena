@@ -16,7 +16,7 @@ import {
 } from "@/lib/product-availability";
 import {
   recordFirstPartyEvent,
-  recordGa4AddToCart,
+  recordCommerceAddToCart,
 } from "@/components/analytics/first-party-analytics";
 import { deliveryCategory } from "@/lib/delivery-tariff";
 
@@ -107,7 +107,7 @@ export async function commitAddToCart(
     quantity: qty,
     value: sale * qty,
   });
-  recordGa4AddToCart({
+  recordCommerceAddToCart({
     sku: product.sku,
     name: product.name,
     unitPrice: sale,

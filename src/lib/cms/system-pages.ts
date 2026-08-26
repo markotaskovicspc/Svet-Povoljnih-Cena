@@ -322,7 +322,7 @@ Eventualne sporove rešavamo dogovorno. Ako to nije moguće, nadležna su sudska
     slug: "politika-privatnosti",
     template: "STANDARD",
     eyebrow: "GDPR & ZZPL",
-    heroNote: "Poslednje izmene: 30. jun 2026.",
+    heroNote: "Poslednje izmene: 26. avgust 2026.",
     title: "Politika privatnosti.",
     lead:
       "Vaše podatke koristimo isključivo za realizaciju porudžbine, podršku i — ako date pristanak — za informisanje o akcijama.",
@@ -342,12 +342,14 @@ Eventualne sporove rešavamo dogovorno. Ako to nije moguće, nadležna su sudska
 
 - **Izvršenje ugovora** — obrada porudžbine, isporuka, fakturisanje.
 - **Zakonska obaveza** — knjigovodstvo, fiskalizacija.
-- **Pristanak** — newsletter, personalizovane akcije.
+- **Pristanak** — newsletter, analitika i marketinško merenje.
 - **Legitimni interes** — sprečavanje prevara, poboljšanje sajta.
 
 ## Kolačići {#kolacici}
 
-Koristimo nužne kolačiće (sesija, korpa) i — uz vaš pristanak — analitičke kolačiće. Analitika se ne učitava pre pristanka. Pristanak možete promeniti u svakom trenutku na stranici [Podešavanja kolačića](/podesavanja-kolacica) ili kroz podešavanja naloga.
+Koristimo nužne kolačiće (sesija, korpa) i, samo uz vaš izbor, analitičke i marketinške tehnologije. Google Analytics i interna statistika služe merenju korišćenja sajta. Meta Pixel i opcioni Meta Conversions API služe merenju učinka oglasa kroz događaje kao što su pregled stranice i proizvoda, dodavanje u korpu, početak kupovine i kupovina.
+
+Meta marketing se ne učitava i događaji se ne šalju pre izričite marketinške saglasnosti. Kada je odobren, Meta može postaviti identifikatore **_fbp** i **_fbc**; server-side događaj, ako je uključen, koristi isti ID događaja radi sprečavanja duplog brojanja. Ne šaljemo Meta-i podatke o plaćanju niti sadržaj adrese. Saglasnost možete promeniti u svakom trenutku na stranici [Podešavanja kolačića](/podesavanja-kolacica).
 
 ## Društvene prijave {#drustvene-prijave}
 
@@ -510,9 +512,9 @@ Poruka se čuva u našem sistemu za podršku. Za podatke o konkretnoj porudžbin
     title: "Podešavanja kolačića",
     lead: "Saglasnost možete promeniti u svakom trenutku.",
     bodyMarkdown:
-      "Nužni kolačići omogućavaju osnovne funkcije sajta i uvek su aktivni. Analitičke kolačiće uključujemo samo uz vaš pristanak, koji možete promeniti u panelu ispod.",
+      "Nužni kolačići omogućavaju osnovne funkcije sajta i uvek su aktivni. Analitičke i marketinške tehnologije uključujemo nezavisno i samo uz vaš izbor, koji možete promeniti u panelu ispod.",
     seoTitle: "Podešavanja kolačića",
-    seoDescription: "Izaberite da li dozvoljavate analitičke kolačiće.",
+    seoDescription: "Izaberite da li dozvoljavate analitičke i marketinške tehnologije.",
     footerVisible: false,
     footerLabel: "Podešavanja kolačića",
     footerColumn: "TERMS",

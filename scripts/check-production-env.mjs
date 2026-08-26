@@ -75,6 +75,26 @@ if (enabled("ENFORCE_WEB_AUTO_AVAILABILITY")) {
   );
 }
 
+const metaPixelId = value("NEXT_PUBLIC_META_PIXEL_ID");
+const metaCapiToken = value("META_CAPI_TOKEN");
+const metaGraphVersion = value("META_GRAPH_API_VERSION");
+const metaTestEventCode = value("META_CAPI_TEST_EVENT_CODE");
+if (metaPixelId && !/^\d{5,30}$/.test(metaPixelId)) {
+  errors.push("NEXT_PUBLIC_META_PIXEL_ID must contain only the numeric Meta Pixel ID");
+}
+if (metaCapiToken && !metaPixelId) {
+  errors.push("Meta CAPI: NEXT_PUBLIC_META_PIXEL_ID is required when META_CAPI_TOKEN is set");
+}
+if (metaPixelId && !metaCapiToken) {
+  warnings.push("Meta Pixel is enabled without the optional Conversions API token");
+}
+if (metaGraphVersion && !/^v\d+\.\d+$/.test(metaGraphVersion)) {
+  errors.push("META_GRAPH_API_VERSION must look like v24.0");
+}
+if (metaTestEventCode && process.env.VERCEL_ENV === "production") {
+  errors.push("META_CAPI_TEST_EVENT_CODE must be empty in Vercel Production");
+}
+
 const emailProvider = (value("EMAIL_PROVIDER") ?? "none").toLowerCase();
 if (emailProvider === "ses") {
   requireNames("Amazon SES", [

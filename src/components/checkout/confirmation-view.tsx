@@ -59,7 +59,11 @@ export function ConfirmationView({
 
   return (
     <div className="flex flex-col gap-8">
-      <PurchaseAnalytics order={order} paymentStatus={paymentStatus} />
+      <PurchaseAnalytics
+        order={order}
+        accessToken={accessToken}
+        paymentStatus={paymentStatus}
+      />
       <SuccessHero order={order} paymentStatus={paymentStatus} />
       <PaymentNotice status={paymentStatus} message={paymentMessage} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
