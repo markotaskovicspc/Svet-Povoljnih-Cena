@@ -21,15 +21,12 @@ import {
   recreateMyGlsLabelsForPickupBatch,
   removePickupGroupFromBatch,
   savePickupPackage,
-  savePickupWindow,
 } from "@/lib/admin/pickup-batch.server";
 import {
   canRecreateMyGlsLabels,
-  formatBelgradeDateTimeLocal,
   isPickupBatchEditable,
   MYGLS_BOOKING_CHANNEL_LABEL,
   MYGLS_BOOKING_CHANNELS,
-  parseBelgradeDateTimeLocal,
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
@@ -46,12 +43,6 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const saveDateSchema = z.object({
-  batchId: z.string().min(1),
-  pickupStart: z.string().min(1, "Početak preuzimanja je obavezan."),
-  pickupEnd: z.string().min(1, "Kraj preuzimanja je obavezan."),
-});
-
 const batchSchema = z.object({ batchId: z.string().min(1) });
 const removeGroupSchema = batchSchema.extend({ lineGroupKey: z.string().min(1) });
 const packageSchema = batchSchema.extend({
@@ -65,41 +56,6 @@ const bookingSchema = batchSchema.extend({
   channel: z.enum(MYGLS_BOOKING_CHANNELS),
   reference: z.string().trim().min(1).max(120),
 });
-
-async function saveDateAction(
-  _state: AdminActionState,
-  formData: FormData,
-) {
-  "use server";
-  return withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "pickup-batch.date.save",
-      entity: "PickupBatch",
-    },
-    async (_actorId, actionData: FormData) => {
-      const parsed = saveDateSchema.safeParse(
-        Object.fromEntries(actionData.entries()),
-      );
-      if (!parsed.success) {
-        return {
-          ok: false as const,
-          error:
-            parsed.error.issues[0]?.message ?? "Datum preuzimanja nije ispravan.",
-        };
-      }
-      const start = parseBelgradeDateTimeLocal(parsed.data.pickupStart);
-      const end = parseBelgradeDateTimeLocal(parsed.data.pickupEnd);
-      await savePickupWindow(parsed.data.batchId, start, end);
-      revalidatePickupPaths(parsed.data.batchId);
-      return {
-        ok: true as const,
-        entityId: parsed.data.batchId,
-        message: "Termin preuzimanja je sačuvan.",
-      };
-    },
-  )(formData);
-}
 
 async function savePackageAction(
   _state: AdminActionState,
@@ -424,8 +380,6 @@ export default async function PickupBatchPage({
         providerReason: posting.reason,
         provider: posting.provider,
         rowCount: rows.length,
-        pickupStartSet: Boolean(batch.pickupDate),
-        pickupEndSet: Boolean(batch.pickupWindowEnd),
         completePackageCount,
         invalidPackageCount,
       });
@@ -534,8 +488,6 @@ export default async function PickupBatchPage({
                   disabled={
                     !canPost ||
                     !rows.length ||
-                    !batch.pickupDate ||
-                    !batch.pickupWindowEnd ||
                     !posting.available ||
                     unreadyReplacementCount > 0 ||
                     completePackageCount !== rows.length ||
@@ -573,7 +525,7 @@ export default async function PickupBatchPage({
               editing
                 ? "Režim uređivanja je uključen. Svaka izmena se čuva svojim dugmetom; „Završi uređivanje“ samo vraća pregled naloga."
                 : editable
-                  ? "Ovo je pregled naloga. Kliknite „Uredi“ da promenite termin, učitate porudžbine ili unesete mere paketa."
+                  ? "Ovo je pregled naloga. Kliknite „Uredi“ da učitate porudžbine ili unesete mere paketa."
                   : "Nalog je zaključan za izmene jer više nije u statusu Novi."
             }
           >
@@ -613,42 +565,10 @@ export default async function PickupBatchPage({
             </p>
             <p className="mt-1 leading-6">
               {myGls
-                ? "1. Učitajte porudžbine i proverite mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. U „Kurirske adresnice“ otvorite jedan zajednički MyGLS PDF i odštampajte sve adresnice. 5. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
-                : "1. Učitajte porudžbine i proverite stvarne mere. 2. Sačuvajte period kada kurir može da dođe. 3. Kliknite „Kreiraj adresnice“. 4. Otvorite „Kurirske adresnice“, odštampajte ih i zalepite svaku na njen paket. 5. Tek kada su svi paketi označeni, kliknite „Pošalji X Express-u“."}
+                ? "1. Učitajte porudžbine i proverite mere. 2. Kliknite „Kreiraj adresnice“. 3. U „Kurirske adresnice“ otvorite jedan zajednički MyGLS PDF i odštampajte sve adresnice. 4. Najavite prikup MyGLS-u i ovde unesite dobijenu referencu preko „Potvrdi najavu“. Za MyGLS se ne koristi komanda „Proknjiži“."
+                : "1. Učitajte porudžbine i proverite stvarne mere. 2. Kliknite „Kreiraj adresnice“. 3. Otvorite „Kurirske adresnice“, odštampajte ih i zalepite svaku na njen paket. 4. Tek kada su svi paketi označeni, kliknite „Pošalji X Express-u“."}
             </p>
           </div>
-          <p className="mb-3 text-sm text-ink-600">
-            <strong>Početak preuzimanja</strong> je najranije vreme kada su svi
-            paketi spremni i kurir sme da dođe. <strong>Kraj preuzimanja</strong>{" "}
-            je najkasnije vreme do kog kurir može da dođe. To nije termin
-            isporuke kupcu.
-          </p>
-          <AdminActionForm action={saveDateAction}>
-            <fieldset disabled={!editing} className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_auto] md:items-end">
-              <input type="hidden" name="batchId" value={batch.id} />
-              <Field label="Početak preuzimanja" hint={myGls ? "Najraniji dolazak kurira; za prvi prikup najmanje 24 sata od najave." : "Najraniji dolazak kurira; najmanje 1 sat od najave."}>
-                <Input
-                  name="pickupStart"
-                  type="datetime-local"
-                  required
-                  defaultValue={formatBelgradeDateTimeLocal(batch.pickupDate)}
-                />
-              </Field>
-              <Field label="Kraj preuzimanja" hint={myGls ? "Najkasniji dolazak kurira; period mora trajati najmanje 2 sata." : "Najkasniji dolazak kurira u ovom terminu."}>
-                <Input
-                  name="pickupEnd"
-                  type="datetime-local"
-                  required
-                  defaultValue={formatBelgradeDateTimeLocal(batch.pickupWindowEnd)}
-                />
-              </Field>
-              {editing ? (
-                <div>
-                  <SubmitButton pendingLabel="Čuvanje…">Sačuvaj termin</SubmitButton>
-                </div>
-              ) : null}
-            </fieldset>
-          </AdminActionForm>
           {myGls && batch.labelsCreatedAt ? (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
               MyGLS adresnice su kreirane. Sada otvorite „Kurirske adresnice“,

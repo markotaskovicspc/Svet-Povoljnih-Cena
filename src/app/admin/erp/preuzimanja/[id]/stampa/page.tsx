@@ -87,10 +87,9 @@ export default async function PickupBatchPrintPage({
         <header className="border-b-2 border-black pb-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em]">Svet povoljnih cena · magacin</p>
           <h1 className="mt-1 text-3xl font-bold">Zbirna picking lista</h1>
-          <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-4">
+          <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-3">
             <dt>Nalog</dt><dd className="font-bold">{batch.number}</dd>
             <dt>Kurir</dt><dd className="font-bold">{providerLabel(batch.provider)}</dd>
-            <dt>Termin</dt><dd className="font-bold">{formatDateTime(batch.pickupDate)}</dd>
             <dt>Paketa</dt><dd className="font-bold">{batch.lines.length}</dd>
           </dl>
         </header>
@@ -129,14 +128,4 @@ export default async function PickupBatchPrintPage({
 
 function providerLabel(provider: string | null) {
   return provider === "MYGLS" ? "MyGLS" : provider === "X_EXPRESS" ? "X Express" : provider ?? "Kurir";
-}
-
-function formatDateTime(value: Date | null) {
-  return value
-    ? value.toLocaleString("sr-Latn-RS", {
-        timeZone: "Europe/Belgrade",
-        dateStyle: "short",
-        timeStyle: "short",
-      })
-    : "Nije zakazan";
 }

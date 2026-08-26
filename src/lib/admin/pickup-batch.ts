@@ -3,11 +3,6 @@ import type { PickupBatchStatus } from "@prisma/client";
 export const PICKUP_BATCH_EXTERNAL_BLOCK_REASON =
   "MyGLS produkcijski pozivi su bezbednosno zaključani dok je MYGLS_PRODUCTION_ACCEPTED=false. Nalog i paketi mogu da se pripreme bez slanja GLS-u.";
 
-export const MYGLS_PICKUP_MIN_LEAD_MS = 24 * 60 * 60_000;
-export const MYGLS_PICKUP_MIN_WINDOW_MS = 2 * 60 * 60_000;
-export const X_EXPRESS_PICKUP_MIN_LEAD_MS = 60 * 60_000;
-export const PICKUP_TIME_ZONE = "Europe/Belgrade";
-
 export const MYGLS_BOOKING_CHANNELS = [
   "MYGLS_PORTAL",
   "EMAIL",
@@ -60,8 +55,6 @@ export function pickupPostingBlockReason({
   providerReason,
   provider,
   rowCount,
-  pickupStartSet,
-  pickupEndSet,
   completePackageCount,
   invalidPackageCount = 0,
 }: {
@@ -69,8 +62,6 @@ export function pickupPostingBlockReason({
   providerReason?: string | null;
   provider: "MYGLS" | "X_EXPRESS";
   rowCount: number;
-  pickupStartSet: boolean;
-  pickupEndSet: boolean;
   completePackageCount: number;
   invalidPackageCount?: number;
 }) {
@@ -79,81 +70,14 @@ export function pickupPostingBlockReason({
     providerReason ??
     (rowCount === 0
       ? "Učitajte bar jednu odgovarajuću kurirsku porudžbinu iz DC magacina."
-      : !pickupStartSet
-        ? "Unesite i sačuvajte termin preuzimanja."
-        : !pickupEndSet
+      : completePackageCount !== rowCount
+        ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
+        : invalidPackageCount > 0
           ? provider === "MYGLS"
-            ? "Unesite kompletan vremenski prozor preuzimanja."
-            : "Unesite kraj termina preuzimanja."
-          : completePackageCount !== rowCount
-            ? "Unesite stvarnu težinu i sve tri dimenzije za svaki paket."
-              : invalidPackageCount > 0
-              ? provider === "MYGLS"
-                ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu od 40 kg ili najdužu stranicu od 200 cm. Unesite stvarne transportne mere u dozvoljenim granicama."
-                : "Jedan ili više X Express paketa prelazi dozvoljenu težinu od 30 kg ili najdužu stranicu od 60 cm. Prebacite porudžbinu u MyGLS nalog."
-              : null)
+            ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu od 40 kg ili najdužu stranicu od 200 cm. Unesite stvarne transportne mere u dozvoljenim granicama."
+            : "Jedan ili više X Express paketa prelazi dozvoljenu težinu od 30 kg ili najdužu stranicu od 60 cm. Prebacite porudžbinu u MyGLS nalog."
+          : null)
   );
-}
-
-export function validateXExpressPickupWindow(
-  start: Date,
-  end: Date,
-  now = new Date(),
-) {
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error("Termin preuzimanja nije ispravan.");
-  }
-  if (start.getTime() - now.getTime() < X_EXPRESS_PICKUP_MIN_LEAD_MS) {
-    throw new Error("X Express prikup mora biti najavljen najmanje 1 sat unapred.");
-  }
-  if (end <= start) {
-    throw new Error("Kraj termina mora biti posle početka preuzimanja.");
-  }
-  return { start, end };
-}
-
-export function validateMyGlsPickupWindow(
-  start: Date,
-  end: Date,
-  now = new Date(),
-  options: { requireLeadTime?: boolean } = {},
-) {
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error("Termin preuzimanja nije ispravan.");
-  }
-  if (
-    options.requireLeadTime !== false &&
-    start.getTime() - now.getTime() < MYGLS_PICKUP_MIN_LEAD_MS
-  ) {
-    throw new Error(
-      "Prvi MyGLS prikup mora biti najavljen najmanje 24 sata unapred.",
-    );
-  }
-  if (end.getTime() - start.getTime() < MYGLS_PICKUP_MIN_WINDOW_MS) {
-    throw new Error("MyGLS vremenski prozor mora trajati najmanje 2 sata.");
-  }
-  return { start, end };
-}
-
-/** Parses a datetime-local value as a wall-clock time in Europe/Belgrade. */
-export function parseBelgradeDateTimeLocal(value: string) {
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
-  );
-  if (!match) throw new Error("Termin preuzimanja nije ispravan.");
-  const [, y, m, d, h, min, sec = "0"] = match;
-  const wallClockUtc = Date.UTC(+y, +m - 1, +d, +h, +min, +sec);
-  let instant = new Date(wallClockUtc);
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    instant = new Date(wallClockUtc - timeZoneOffsetMs(instant));
-  }
-  return instant;
-}
-
-export function formatBelgradeDateTimeLocal(value: Date | null) {
-  if (!value) return "";
-  const parts = dateParts(value);
-  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
 export function nextPickupBatchNumber(
@@ -167,47 +91,4 @@ export function nextPickupBatchNumber(
     return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
   }, 0);
   return `${prefix}${String(maxSequence + 1).padStart(4, "0")}`;
-}
-
-function timeZoneOffsetMs(date: Date) {
-  const parts = dateParts(date);
-  const representedAsUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
-  return representedAsUtc - Math.floor(date.getTime() / 1000) * 1000;
-}
-
-function dateParts(date: Date) {
-  const values = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: PICKUP_TIME_ZONE,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, Number(part.value)]),
-  );
-  return {
-    year: values.year,
-    month: values.month,
-    day: values.day,
-    hour: values.hour,
-    minute: values.minute,
-    second: values.second,
-  };
-}
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
 }

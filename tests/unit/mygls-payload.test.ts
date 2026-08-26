@@ -121,6 +121,16 @@ describe("MyGLS reclamation payload", () => {
     const parcel = buildMyGlsParcelForOrder({ cfg: config, order, packages });
 
     expect(parcel.Count).toBe(2);
+    expect(parcel.PickupAddress).toMatchObject({
+      Name: "Svet povoljnih cena",
+      Street: "Evropska",
+      HouseNumber: "1",
+      HouseNumberInfo: "bb",
+      City: "Stara Pazova",
+      ContactEmail: "dc@example.invalid",
+    });
+    expect(parcel.PickupAddress).not.toHaveProperty("ContactName");
+    expect(parcel.PickupAddress).not.toHaveProperty("ContactPhone");
     expect(parcel.ParcelPropertyList).toEqual([
       {
         Content: "Stolica",

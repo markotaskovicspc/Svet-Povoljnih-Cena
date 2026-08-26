@@ -600,7 +600,6 @@ export const operationalErpModules: ErpModule[] = [
       text("number", "Broj naloga"),
       text("provider", "Kurirska služba"),
       date("createdAt", "Datum naloga"),
-      date("pickupDate", "Datum preuzimanja"),
       number("packages", "Broj redova"),
     ],
     detailHrefBase: "/admin/erp/preuzimanja",
@@ -1699,7 +1698,6 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
       status: PICKUP_BATCH_STATUS_LABEL[row.status],
       packages: row._count.lines,
       createdAt: dateTime(row.createdAt),
-      pickupDate: dateTime(row.pickupDate),
     },
   }));
 }

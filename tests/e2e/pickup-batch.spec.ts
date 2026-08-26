@@ -332,23 +332,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(blockReason).toContainText("Učitajte bar jednu");
       await expect(page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false })).toBeVisible();
-      const pickupStart = new Date(Date.now() + 72 * 60 * 60_000);
-      const pickupEnd = new Date(pickupStart.getTime() + 2 * 60 * 60_000);
-      await page.getByLabel("Početak preuzimanja").fill(pickupStart.toISOString().slice(0, 16));
-      await page.getByLabel("Kraj preuzimanja").fill(pickupEnd.toISOString().slice(0, 16));
-      await page.getByRole("button", { name: "Sačuvaj termin" }).click();
-      await expect(
-        page.getByRole("status").filter({
-          hasText: "Termin preuzimanja je sačuvan",
-        }),
-      ).toBeVisible();
-      const savedWindow = await db.pickupBatch.findUniqueOrThrow({
-        where: { id: firstBatchId },
-      });
-      expect(savedWindow.pickupDate).not.toBeNull();
-      expect(savedWindow.pickupWindowEnd?.getTime()).toBeGreaterThan(
-        savedWindow.pickupDate!.getTime(),
-      );
+      await expect(page.getByLabel("Početak preuzimanja")).toHaveCount(0);
+      await expect(page.getByLabel("Kraj preuzimanja")).toHaveCount(0);
     });
 
     await test.step("Učitaj bira samo KREIRANO + kurir + DC i menja status", async () => {
@@ -524,7 +509,6 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "Broj naloga",
         "Kurirska služba",
         "Datum naloga",
-        "Datum preuzimanja",
         "Broj redova",
       ]);
 
@@ -552,7 +536,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/preuzimanja/${secondBatchId}$`),
       );
-      await expect(page.getByLabel("Početak preuzimanja")).toBeDisabled();
+      await expect(page.getByLabel("Početak preuzimanja")).toHaveCount(0);
+      await expect(page.getByLabel("Kraj preuzimanja")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: "Učitaj porudžbine", exact: true }),
       ).toHaveCount(0);
@@ -565,7 +550,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page).toHaveURL(/\?mode=edit$/);
     });
 
-    await test.step("Kreiranje adresnica je blokirano i direktni API ne može da zaobiđe obavezni termin", async () => {
+    await test.step("Prazan nalog ne može da kreira adresnice ni preko direktnog API-ja", async () => {
       await expect(
         page.getByRole("button", { name: "Kreiraj adresnice", exact: true }),
       ).toBeDisabled();
@@ -577,7 +562,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toContain(
-        "Početak i kraj termina preuzimanja su obavezni",
+        "Nalog nema nijedan paket za MyGLS adresnicu",
       );
       expect(
         (

@@ -134,16 +134,6 @@ export async function createShipmentForOrder(
           },
         },
       },
-      pickupBatchLines: {
-        where: { batch: { status: { in: ["DRAFT", "BOOKED"] } } },
-        orderBy: { packageNo: "asc" },
-        take: 1,
-        select: {
-          batch: {
-            select: { pickupDate: true, provider: true },
-          },
-        },
-      },
       shipments: {
         where: { purpose, reclamationId: reclamation?.id ?? null },
         orderBy: { createdAt: "desc" },
@@ -229,12 +219,7 @@ export async function createShipmentForOrder(
       ? createMyGlsShipmentForOrder(order.id, {
           purpose,
           reclamationId: reclamation?.id,
-          pickupDate:
-            options.pickupDate ??
-            (order.pickupBatchLines[0]?.batch.provider === MYGLS_PROVIDER ||
-            order.pickupBatchLines[0]?.batch.provider == null
-              ? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined
-              : undefined),
+          pickupDate: options.pickupDate,
           packages,
           orderItemIds: requestedOrderItemIds,
           codAmount: options.codAmount,
@@ -254,8 +239,7 @@ export async function createShipmentForOrder(
     return createMyGlsShipmentForOrder(order.id, {
       purpose,
       reclamationId: reclamation?.id,
-      pickupDate:
-        options.pickupDate ?? order.pickupBatchLines[0]?.batch.pickupDate ?? undefined,
+      pickupDate: options.pickupDate,
       packages,
       orderItemIds: requestedOrderItemIds,
       codAmount: options.codAmount,

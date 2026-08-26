@@ -266,7 +266,7 @@ function renderLabel(
   const serviceType = labelData?.serviceTypeId === 1 ? "Isporuka narednog dana" : "—";
   return `<section class="label">
     <div class="topline">${escapeHtml(X_EXPRESS_CARRIER_LINE)}</div>
-    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(sender?.name ?? MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(senderAddress)}<br />Kontakt: ${escapeHtml(sender?.contactName ?? MERCHANT_LEGAL_INFO.name)} · ${escapeHtml(sender?.phone ?? MERCHANT_LEGAL_INFO.phone ?? MERCHANT_LEGAL_INFO.email)}</div>
+    <div class="sender"><strong>Pošiljalac:</strong><br />${escapeHtml(sender?.name ?? MERCHANT_LEGAL_INFO.name)}<br />${escapeHtml(senderAddress)}</div>
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
     <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)}<br />${escapeHtml(recipientAddress)}<br />${escapeHtml(recipientPostalCity)}<br />${escapeHtml(recipient?.phone ?? order.shipPhone)}</strong></div>

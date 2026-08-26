@@ -3,14 +3,10 @@ import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
   canRecreateMyGlsLabels,
   isPickupBatchEditable,
-  formatBelgradeDateTimeLocal,
   nextPickupBatchNumber,
-  parseBelgradeDateTimeLocal,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
   pickupPostingBlockReason,
-  validateMyGlsPickupWindow,
-  validateXExpressPickupWindow,
 } from "@/lib/admin/pickup-batch";
 
 describe("ERP module 13 pickup batches", () => {
@@ -25,11 +21,12 @@ describe("ERP module 13 pickup batches", () => {
       "Obriši",
       "Proknjiži",
     ]);
-    expect(definition?.columns.slice(0, 4).map((column) => column.label)).toEqual([
+    expect(definition?.columns.map((column) => column.label)).toEqual([
       "Status",
       "Broj naloga",
       "Kurirska služba",
       "Datum naloga",
+      "Broj redova",
     ]);
     expect(definition?.detailHrefBase).toBe("/admin/erp/preuzimanja");
     expect(definition?.commands[0]?.fields?.[0]).toMatchObject({
@@ -97,8 +94,6 @@ describe("ERP module 13 pickup batches", () => {
     const readyXExpress = {
       provider: "X_EXPRESS" as const,
       rowCount: 1,
-      pickupStartSet: true,
-      pickupEndSet: true,
       completePackageCount: 1,
     };
 
@@ -119,9 +114,6 @@ describe("ERP module 13 pickup batches", () => {
       pickupPostingBlockReason({ ...readyXExpress, rowCount: 0 }),
     ).toContain("Učitajte bar jednu");
     expect(
-      pickupPostingBlockReason({ ...readyXExpress, pickupStartSet: false }),
-    ).toContain("sačuvajte termin");
-    expect(
       pickupPostingBlockReason({ ...readyXExpress, completePackageCount: 0 }),
     ).toContain("stvarnu težinu");
     expect(
@@ -135,9 +127,6 @@ describe("ERP module 13 pickup batches", () => {
       completePackageCount: 1,
     };
     expect(
-      pickupPostingBlockReason({ ...readyMyGls, pickupEndSet: false }),
-    ).toContain("kompletan vremenski prozor");
-    expect(
       pickupPostingBlockReason({ ...readyMyGls, completePackageCount: 0 }),
     ).toContain("stvarnu težinu");
     expect(
@@ -146,50 +135,4 @@ describe("ERP module 13 pickup batches", () => {
     expect(pickupPostingBlockReason(readyMyGls)).toBeNull();
   });
 
-  it("enforces X Express one-hour pickup notice", () => {
-    const now = new Date("2026-08-21T06:00:00.000Z");
-    expect(() =>
-      validateXExpressPickupWindow(
-        new Date("2026-08-21T07:00:00.000Z"),
-        new Date("2026-08-21T08:00:00.000Z"),
-        now,
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateXExpressPickupWindow(
-        new Date("2026-08-21T06:59:59.000Z"),
-        new Date("2026-08-21T08:00:00.000Z"),
-        now,
-      ),
-    ).toThrow("najmanje 1 sat");
-  });
-
-  it("parses the Belgrade wall clock and enforces the 24h/2h MyGLS window", () => {
-    const start = parseBelgradeDateTimeLocal("2026-07-31T14:00");
-    const end = parseBelgradeDateTimeLocal("2026-07-31T16:00");
-
-    expect(start.toISOString()).toBe("2026-07-31T12:00:00.000Z");
-    expect(formatBelgradeDateTimeLocal(start)).toBe("2026-07-31T14:00");
-    expect(() =>
-      validateMyGlsPickupWindow(
-        start,
-        end,
-        new Date("2026-07-30T11:59:59.000Z"),
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateMyGlsPickupWindow(
-        start,
-        end,
-        new Date("2026-07-30T12:00:01.000Z"),
-      ),
-    ).toThrow("najmanje 24 sata");
-    expect(() =>
-      validateMyGlsPickupWindow(
-        start,
-        new Date("2026-07-31T13:59:59.000Z"),
-        new Date("2026-07-30T10:00:00.000Z"),
-      ),
-    ).toThrow("najmanje 2 sata");
-  });
 });

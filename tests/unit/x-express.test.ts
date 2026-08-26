@@ -588,6 +588,8 @@ describe("X Express codes, label and webhook envelope", () => {
     );
     expect(html).toContain("X Express ne vraća PDF adresnicu kroz API");
     expect(html).toContain("Vojvođanska 401, 11271 Beograd - Surčin");
+    expect(html).not.toContain("DC magacin");
+    expect(html).not.toContain("381641234567");
     expect(html).toContain("Petrović enterijer DOO");
     expect(html).toContain("Bulevar oslobođenja 10A");
     expect(html).not.toContain("Naknadno promenjena adresa 99");

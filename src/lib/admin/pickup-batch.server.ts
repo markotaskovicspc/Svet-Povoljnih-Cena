@@ -44,8 +44,6 @@ import {
   MYGLS_BOOKING_CHANNEL_LABEL,
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
-  validateMyGlsPickupWindow,
-  validateXExpressPickupWindow,
 } from "@/lib/admin/pickup-batch";
 import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
 
@@ -134,46 +132,6 @@ export async function createPickupBatch(provider: SmallParcelProvider) {
     }
   }
   throw new Error("Broj naloga za preuzimanje nije mogao da se generiše.");
-}
-
-export async function savePickupWindow(
-  batchId: string,
-  pickupDate: Date,
-  pickupWindowEnd: Date,
-) {
-  if (!batchId) throw new Error("Nalog za preuzimanje nije izabran.");
-  const batch = await db.pickupBatch.findUnique({
-    where: { id: batchId },
-    select: {
-      id: true,
-      status: true,
-      provider: true,
-      labelsCreationStartedAt: true,
-      labelsCreatedAt: true,
-    },
-  });
-  assertEditableBatch(batch);
-  const provider = normalizeProvider(batch.provider) ??
-    (await getSelectedSmallParcelProvider());
-  if (provider === "MYGLS") {
-    const priorMyGlsPickupCount = await db.pickupBatch.count({
-      where: {
-        id: { not: batchId },
-        provider: MYGLS_PROVIDER,
-        status: { in: ["BOOKED", "PICKED_UP"] },
-        externalBookedAt: { not: null },
-      },
-    });
-    validateMyGlsPickupWindow(pickupDate, pickupWindowEnd, new Date(), {
-      requireLeadTime: priorMyGlsPickupCount === 0,
-    });
-  } else {
-    validateXExpressPickupWindow(pickupDate, pickupWindowEnd);
-  }
-  return db.pickupBatch.update({
-    where: { id: batchId },
-    data: { pickupDate, pickupWindowEnd },
-  });
 }
 
 export async function savePickupPackage(
@@ -927,18 +885,10 @@ async function postPickupBatch(batchId: string, actorId: string) {
     where: { id: batchId },
     select: {
       provider: true,
-      pickupDate: true,
-      pickupWindowEnd: true,
       labelsCreatedAt: true,
     },
   });
   if (!summary) throw new Error("Nalog za preuzimanje ne postoji.");
-  if (!summary.pickupDate || !summary.pickupWindowEnd) {
-    throw new Error("Početak i kraj termina preuzimanja su obavezni.");
-  }
-  if (normalizeProvider(summary.provider) === "X_EXPRESS") {
-    validateXExpressPickupWindow(summary.pickupDate, summary.pickupWindowEnd);
-  }
   const availability = await getPickupPostingAvailability(summary.provider);
   if (!availability.available) throw new Error(availability.reason);
   if (!summary.provider) {
@@ -987,9 +937,6 @@ async function postPickupBatch(batchId: string, actorId: string) {
     });
     if (!batch || batch.status !== "POSTING") {
       throw new Error("Nalog za preuzimanje nije dostupan za knjiženje.");
-    }
-    if (!batch.pickupDate) {
-      throw new Error("Datum preuzimanja je obavezan pre knjiženja naloga.");
     }
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) {
@@ -1141,10 +1088,6 @@ async function createXExpressLabelsForPickupBatch(
     if (normalizeProvider(batch.provider) !== "X_EXPRESS") {
       throw new Error("Nalog nije namenjen X Express kuriru.");
     }
-    if (!batch.pickupDate || !batch.pickupWindowEnd) {
-      throw new Error("Početak i kraj termina preuzimanja su obavezni.");
-    }
-    validateXExpressPickupWindow(batch.pickupDate, batch.pickupWindowEnd);
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za X Express adresnicu.");
@@ -1298,20 +1241,6 @@ async function createMyGlsLabelsForPickupBatch(
     if (normalizeProvider(batch.provider) !== "MYGLS") {
       throw new Error("Nalog nije namenjen MyGLS kuriru.");
     }
-    if (!batch.pickupDate || !batch.pickupWindowEnd) {
-      throw new Error("Početak i kraj termina preuzimanja su obavezni.");
-    }
-    const priorMyGlsPickupCount = await db.pickupBatch.count({
-      where: {
-        id: { not: batch.id },
-        provider: MYGLS_PROVIDER,
-        status: { in: ["BOOKED", "PICKED_UP"] },
-        externalBookedAt: { not: null },
-      },
-    });
-    validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
-      requireLeadTime: priorMyGlsPickupCount === 0,
-    });
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
@@ -1344,7 +1273,6 @@ async function createMyGlsLabelsForPickupBatch(
         ? await createReclamationShipment({
             reclamationId: requiredReclamationId(group),
             purpose: "RECLAMATION_REPLACEMENT",
-            pickupDate: batch.pickupDate,
             packages,
             packageCount: packages.length,
             provider: "MYGLS",
@@ -1352,7 +1280,6 @@ async function createMyGlsLabelsForPickupBatch(
             actorId,
           })
         : await createShipmentForOrder(group.orderId, {
-            pickupDate: batch.pickupDate,
             packages,
             packageCount: packages.length,
             provider: "MYGLS",
@@ -1448,20 +1375,6 @@ export async function confirmMyGlsPickupAnnouncement(
     if (!batch.labelsCreatedAt) {
       throw new Error("Prvo moraju biti kreirane MyGLS adresnice za sve pakete.");
     }
-    if (!batch.pickupDate || !batch.pickupWindowEnd) {
-      throw new Error("Termin preuzimanja nije kompletan.");
-    }
-    const priorMyGlsPickupCount = await tx.pickupBatch.count({
-      where: {
-        id: { not: batch.id },
-        provider: MYGLS_PROVIDER,
-        status: { in: ["BOOKED", "PICKED_UP"] },
-        externalBookedAt: { not: null },
-      },
-    });
-    validateMyGlsPickupWindow(batch.pickupDate, batch.pickupWindowEnd, new Date(), {
-      requireLeadTime: priorMyGlsPickupCount === 0,
-    });
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) throw new Error("Nalog nema pakete za preuzimanje.");
     const orderIds = ordinaryOrderIdsForGroups(workGroups);

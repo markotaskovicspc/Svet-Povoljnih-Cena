@@ -193,8 +193,9 @@ function addressFromPickup(cfg: MyGlsConfig): MyGlsAddress {
     City: cfg.pickup.city,
     ZipCode: cfg.pickup.postalCode,
     CountryIsoCode: cfg.pickup.country,
-    ContactName: cfg.pickup.contactName,
-    ContactPhone: normalizePhone(cfg.pickup.contactPhone),
+    // Keep a personal contact name and phone off the printed sender block.
+    // MyGLS marks both fields optional; the shared mailbox remains available
+    // for operational contact without exposing an employee on every label.
     ContactEmail: cfg.pickup.contactEmail,
   };
 }
