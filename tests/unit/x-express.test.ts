@@ -29,6 +29,7 @@ import {
   verifyXExpressWebhookHeaders,
 } from "@/lib/x-express/webhook";
 import { inferXExpressShipmentStatus } from "@/lib/x-express/status";
+import { isXExpressAnnouncementPaymentReady } from "@/lib/x-express/payment";
 
 const config: XExpressConfig = {
   enabled: true,
@@ -495,6 +496,37 @@ describe("X Express codes, label and webhook envelope", () => {
       "FAILED",
     );
     expect(inferXExpressShipmentStatus("LOST", "Izgubljena")).toBe("FAILED");
+  });
+
+  it("allows label preparation before payment but blocks only the courier announcement", () => {
+    expect(
+      isXExpressAnnouncementPaymentReady({
+        purpose: "ORDER_DELIVERY",
+        paymentMethod: "UPLATA_NA_RACUN",
+        paymentStatuses: ["PENDING"],
+      }),
+    ).toBe(false);
+    expect(
+      isXExpressAnnouncementPaymentReady({
+        purpose: "ORDER_DELIVERY",
+        paymentMethod: "UPLATA_NA_RACUN",
+        paymentStatuses: ["PAID"],
+      }),
+    ).toBe(true);
+    expect(
+      isXExpressAnnouncementPaymentReady({
+        purpose: "ORDER_DELIVERY",
+        paymentMethod: "POUZECE_GOTOVINA",
+        paymentStatuses: ["PENDING"],
+      }),
+    ).toBe(true);
+    expect(
+      isXExpressAnnouncementPaymentReady({
+        purpose: "RECLAMATION_REPLACEMENT",
+        paymentMethod: "UPLATA_NA_RACUN",
+        paymentStatuses: [],
+      }),
+    ).toBe(true);
   });
 
   it("renders 95x138 ERP labels from the exact payload accepted by X Express", () => {

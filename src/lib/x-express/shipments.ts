@@ -3,7 +3,6 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import {
   Prisma,
-  type PaymentStatus,
   type ShipmentPurpose,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -28,8 +27,7 @@ import {
   withShipmentAssignment,
 } from "@/lib/courier/shipment-assignment";
 import type { XExpressCreateOrderPayload } from "./types";
-
-const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
+import { isXExpressAnnouncementPaymentReady } from "./payment";
 
 export async function createXExpressShipmentForOrder(
   orderId: string,
@@ -158,14 +156,6 @@ export async function createXExpressShipmentForOrder(
     return existing;
   }
 
-  if (purpose === "ORDER_DELIVERY" && !isXExpressCashOnDelivery(order.paymentMethod)) {
-    const paid = order.payments.some((p) => PAID_STATUSES.includes(p.status));
-    if (!paid) {
-      throw new XExpressConfigError(
-        "Prepaid porudžbina mora imati uspešno/autorizovano plaćanje pre slanja kuriru.",
-      );
-    }
-  }
   const cfg = requireXExpressShipmentConfig(
     purpose === "ORDER_DELIVERY" &&
       isXExpressCashOnDelivery(order.paymentMethod) &&
@@ -341,7 +331,18 @@ export async function createXExpressShipmentForOrder(
 }
 
 export async function announceXExpressShipment(shipmentId: string) {
-  const existing = await db.shipment.findUnique({ where: { id: shipmentId } });
+  const existing = await db.shipment.findUnique({
+    where: { id: shipmentId },
+    include: {
+      order: {
+        select: {
+          number: true,
+          paymentMethod: true,
+          payments: { select: { status: true } },
+        },
+      },
+    },
+  });
   if (!existing || existing.provider !== X_EXPRESS_PROVIDER) {
     throw new XExpressConfigError("Pripremljena X Express pošiljka nije pronađena.");
   }
@@ -357,6 +358,17 @@ export async function announceXExpressShipment(shipmentId: string) {
   if (!payload) {
     throw new XExpressConfigError(
       "X Express adresnica nema sačuvan originalni API zahtev za slanje.",
+    );
+  }
+  if (
+    !isXExpressAnnouncementPaymentReady({
+      purpose: existing.purpose,
+      paymentMethod: existing.order.paymentMethod,
+      paymentStatuses: existing.order.payments.map((payment) => payment.status),
+    })
+  ) {
+    throw new XExpressConfigError(
+      `Porudžbina ${existing.order.number} mora imati uspešno/autorizovano plaćanje pre slanja X Express-u. Adresnica ostaje sačuvana.`,
     );
   }
 
