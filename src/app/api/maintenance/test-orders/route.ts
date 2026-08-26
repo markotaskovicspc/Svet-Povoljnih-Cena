@@ -8,6 +8,7 @@ import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
 import { restoreOrderReservations } from "@/lib/order-reservations";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const PRESERVED_ORDER_NUMBER = "VP-2026-00012";
 const DELETE_CONFIRMATION = `DELETE_ALL_EXCEPT_${PRESERVED_ORDER_NUMBER}`;
