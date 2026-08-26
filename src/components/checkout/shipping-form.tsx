@@ -295,6 +295,9 @@ function AddressFieldset({
         error={showError("city")}
         strictRemote={xExpressAddressEnabled}
         minChars={xExpressAddressEnabled ? 2 : 3}
+        postalCode={watch(`${prefix}.postalCode` as const) ?? ""}
+        selectedTownId={watch(`${prefix}.xExpressTownId` as const) ?? null}
+        autoResolveExact={xExpressAddressEnabled}
         onValueChange={(v) => {
           setValue(`${prefix}.city` as const, v, {
             shouldDirty: true,

@@ -44,7 +44,7 @@ export function MobileCategoryLevel({
         href={category.href}
         onClick={onNavigate}
         aria-label={`Pogledaj sve iz kategorije ${category.label}`}
-        className="flex min-h-11 shrink-0 items-center justify-between border-b border-border py-2 pr-3 pl-[3.875rem] text-xs font-semibold text-ink-500 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+        className="flex min-h-11 shrink-0 items-center justify-between border-b border-border py-2 pr-3 pl-[3.875rem] text-[15px] font-semibold text-ink-500 transition hover:bg-muted-bg hover:text-brand-blue focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
       >
         <span>Pogledaj sve</span>
         <ChevronRight className="size-4 shrink-0 text-ink-300" aria-hidden />
@@ -83,7 +83,7 @@ export function MobileCategoryLevel({
                 <button
                   type="button"
                   onClick={() => onEnter(node)}
-                  className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs leading-snug font-semibold text-ink-700 transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
+                  className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[clamp(12px,3.6vw,15px)] leading-snug font-semibold text-ink-700 transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
                 >
                   {rowContent}
                 </button>
@@ -93,7 +93,7 @@ export function MobileCategoryLevel({
                   onClick={onNavigate}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex min-h-11 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs leading-snug font-semibold text-ink-700 transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
+                    "flex min-h-11 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[clamp(12px,3.6vw,15px)] leading-snug font-semibold text-ink-700 transition hover:bg-muted-bg focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none",
                     isActive && "text-brand-blue",
                   )}
                 >

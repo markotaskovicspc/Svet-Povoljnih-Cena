@@ -15,10 +15,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  searchSerbianPlaces,
-  type SerbianPlace,
-} from "@/data/serbian-places";
+import { searchSerbianPlaces, type SerbianPlace } from "@/data/serbian-places";
 
 export type CityAutocompletePlace = SerbianPlace & {
   code?: string;
@@ -42,6 +39,30 @@ export function preferExactCityMatches(
   return exact.length ? exact : items;
 }
 
+export function resolveExactRemoteCity(
+  items: CityAutocompletePlace[],
+  query: string,
+  postalCode?: string,
+) {
+  const normalizedQuery = normalizedPlaceName(query);
+  const exact = items.filter(
+    (item) =>
+      normalizedPlaceName(item.name) === normalizedQuery &&
+      Number.isInteger(item.townId) &&
+      Number(item.townId) > 0,
+  );
+
+  const normalizedPostalCode = postalCode?.trim();
+  if (normalizedPostalCode) {
+    const exactPostal = exact.filter(
+      (item) => item.postalCode.trim() === normalizedPostalCode,
+    );
+    if (exactPostal.length === 1) return exactPostal[0];
+  }
+
+  return exact.length === 1 ? exact[0] : null;
+}
+
 interface CityAutocompleteProps {
   /** Currently typed city value (controlled). */
   value: string;
@@ -61,6 +82,12 @@ interface CityAutocompleteProps {
   /** Minimum chars before suggestions appear (spec: 3). */
   minChars?: number;
   strictRemote?: boolean;
+  /** Existing postal code, used to disambiguate an exact remote city match. */
+  postalCode?: string;
+  /** Existing provider town id; skips automatic resolution when already valid. */
+  selectedTownId?: number | null;
+  /** Resolve a prefilled exact city against the active provider dictionary. */
+  autoResolveExact?: boolean;
   /** Native input id (used for label `htmlFor`). */
   id?: string;
   className?: string;
@@ -75,6 +102,9 @@ export function CityAutocomplete({
   required,
   minChars = 3,
   strictRemote = false,
+  postalCode,
+  selectedTownId,
+  autoResolveExact = false,
   id,
   className,
 }: CityAutocompleteProps) {
@@ -89,6 +119,12 @@ export function CityAutocomplete({
     items: CityAutocompletePlace[];
   }>({ query: "", items: [] });
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoResolveRef = useRef({ onSelect, postalCode, selectedTownId });
+  const lastAutoResolvedKeyRef = useRef("");
+
+  useEffect(() => {
+    autoResolveRef.current = { onSelect, postalCode, selectedTownId };
+  }, [onSelect, postalCode, selectedTownId]);
 
   const suggestions = useMemo<CityAutocompletePlace[]>(() => {
     const q = value.trim();
@@ -98,8 +134,8 @@ export function CityAutocomplete({
         ? remoteSuggestions.items
         : []
       : remoteSuggestions.query === q && remoteSuggestions.items.length
-      ? remoteSuggestions.items
-      : searchSerbianPlaces(value, 8);
+        ? remoteSuggestions.items
+        : searchSerbianPlaces(value, 8);
     return preferExactCityMatches(items, q);
   }, [remoteSuggestions, strictRemote, value, minChars]);
 
@@ -117,10 +153,30 @@ export function CityAutocomplete({
         );
         if (!res.ok) return;
         const json = (await res.json()) as { items?: CityAutocompletePlace[] };
+        const items = (json.items ?? []).filter(
+          (item) => item.name && item.postalCode,
+        );
         setRemoteSuggestions({
           query: q,
-          items: (json.items ?? []).filter((item) => item.name && item.postalCode),
+          items,
         });
+
+        const current = autoResolveRef.current;
+        if (
+          strictRemote &&
+          autoResolveExact &&
+          !(
+            Number.isInteger(current.selectedTownId) &&
+            Number(current.selectedTownId) > 0
+          )
+        ) {
+          const exact = resolveExactRemoteCity(items, q, current.postalCode);
+          const resolutionKey = exact ? `${q}:${exact.townId}` : "";
+          if (exact && lastAutoResolvedKeyRef.current !== resolutionKey) {
+            lastAutoResolvedKeyRef.current = resolutionKey;
+            current.onSelect(exact);
+          }
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setRemoteSuggestions({ query: q, items: [] });
@@ -130,7 +186,7 @@ export function CityAutocomplete({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [value, minChars]);
+  }, [autoResolveExact, minChars, strictRemote, value]);
 
   // Close on outside click.
   useEffect(() => {
@@ -174,7 +230,8 @@ export function CityAutocomplete({
   const boundedActive = suggestions.length
     ? Math.min(active, suggestions.length - 1)
     : 0;
-  const showPanel = open && value.trim().length >= minChars && suggestions.length > 0;
+  const showPanel =
+    open && value.trim().length >= minChars && suggestions.length > 0;
 
   return (
     <label
@@ -246,7 +303,9 @@ export function CityAutocomplete({
                       : "text-ink-700 hover:bg-muted-bg/60",
                   )}
                 >
-                  <span className="truncate">{place.displayName ?? place.name}</span>
+                  <span className="truncate">
+                    {place.displayName ?? place.name}
+                  </span>
                   <span className="font-mono text-[11px] text-ink-500">
                     {place.postalCode}
                   </span>

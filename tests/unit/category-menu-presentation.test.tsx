@@ -58,6 +58,8 @@ describe("storefront category menu presentation", () => {
     expect(html).toContain('href="/k/namestaj/stolice"');
     expect(html).toContain("h-8 w-11");
     expect(html).toContain("object-contain");
+    expect(html).toContain("text-[15px]");
+    expect(html).toContain("text-[clamp(12px,3.6vw,15px)]");
     expect(html).not.toContain("Povratak na glavni meni");
   });
 
