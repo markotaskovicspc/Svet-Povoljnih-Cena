@@ -6,11 +6,14 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const PRESERVED_ORDER_NUMBER = "SPC-2026-000012";
+const PRESERVED_ORDER_NUMBER = "VP-2026-00012";
 
 function authorized(request: Request) {
   const expected = process.env.ADMIN_API_SECRET?.trim();
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const supplied = request.headers
+    .get("authorization")
+    ?.replace(/^Bearer\s+/i, "")
+    .trim();
   if (!expected || !supplied) return false;
   const expectedBytes = Buffer.from(expected);
   const suppliedBytes = Buffer.from(supplied);
@@ -23,6 +26,64 @@ function authorized(request: Request) {
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(request.url);
+
+  if (url.searchParams.get("archive") === "1") {
+    const targetOrders = await db.order.findMany({
+      where: { number: { not: PRESERVED_ORDER_NUMBER } },
+      orderBy: { createdAt: "asc" },
+      include: {
+        items: true,
+        events: true,
+        payments: true,
+        shipments: { include: { events: true } },
+        invoices: true,
+        fiscal: true,
+        fiscalDocuments: {
+          include: {
+            lines: true,
+            paymentRefunds: true,
+            stockMovements: true,
+          },
+        },
+        paymentRefunds: true,
+        stockMovements: true,
+        reclamations: {
+          include: {
+            photos: true,
+            events: true,
+            shipments: { include: { events: true } },
+            pickupBatchLines: true,
+          },
+        },
+        voucherRedemption: true,
+        checkoutSessions: true,
+        dispatchNotes: {
+          include: { items: true, stockMovements: true },
+        },
+        pickupBatchLines: { include: { batch: true } },
+        analyticsEvents: true,
+        supplierFulfillments: { include: { items: true } },
+      },
+    });
+
+    const preservedOrder = await db.order.findUnique({
+      where: { number: PRESERVED_ORDER_NUMBER },
+      select: { id: true, number: true, createdAt: true, status: true },
+    });
+
+    return NextResponse.json(
+      {
+        exportedAt: new Date().toISOString(),
+        preservedOrderNumber: PRESERVED_ORDER_NUMBER,
+        preservedOrder,
+        targetCount: targetOrders.length,
+        targetOrders,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
 
   const orders = await db.order.findMany({
@@ -64,7 +125,12 @@ export async function GET(request: Request) {
       invoices: { select: { kind: true, status: true, emailedAt: true } },
       fiscal: { select: { receiptNumber: true, fiscalizedAt: true } },
       fiscalDocuments: {
-        select: { kind: true, status: true, receiptNumber: true, issuedAt: true },
+        select: {
+          kind: true,
+          status: true,
+          receiptNumber: true,
+          issuedAt: true,
+        },
       },
       stockMovements: { select: { kind: true } },
       reclamations: { select: { number: true, status: true } },
@@ -118,14 +184,16 @@ export async function GET(request: Request) {
           providerStatusCode: shipment.providerStatusCode,
           submitted: Boolean(
             shipment.providerOrderId ||
-              shipment.providerShipmentId ||
-              shipment.trackingNo,
+            shipment.providerShipmentId ||
+            shipment.trackingNo,
           ),
         })),
         invoices: order.invoices,
         fiscal: order.fiscal,
         fiscalDocuments: order.fiscalDocuments,
-        stockMovementKinds: order.stockMovements.map((movement) => movement.kind),
+        stockMovementKinds: order.stockMovements.map(
+          (movement) => movement.kind,
+        ),
         reclamations: order.reclamations,
         dispatchNotes: order.dispatchNotes,
         pickupBatches: Array.from(
