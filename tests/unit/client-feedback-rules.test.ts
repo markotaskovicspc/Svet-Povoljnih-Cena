@@ -27,7 +27,7 @@ describe("confirmed client rules", () => {
     expect(deliveryCategory([60, 40, 30])).toBe(1);
     expect(deliveryCategory([101, 60, 40])).toBe(2);
     expect(packageVolumetricDimension([100, 60, 40])).toBe(300);
-    expect(deliveryCategory([100, 60, 40])).toBeNull();
+    expect(deliveryCategory([100, 60, 40])).toBe(1);
     const product = {
       qty: 2,
       unitPrice: 1_100,
@@ -110,10 +110,10 @@ describe("confirmed client rules", () => {
     expect(tariff?.total).toBe(222);
   });
 
-  it("grants free category-I delivery only above the 2,000 RSD threshold", () => {
+  it("grants free category-I delivery from the 1,999 RSD threshold", () => {
     const product = {
       qty: 1,
-      unitPrice: 2_000,
+      unitPrice: 1_998.99,
       unitPackWidthCm: 50,
       unitPackDepthCm: 40,
       unitPackHeightCm: 30,
@@ -127,15 +127,15 @@ describe("confirmed client rules", () => {
       calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total,
     ).toBe(299);
     expect(
-      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 2_000.01 }], {
+      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 1_999 }], {
         loggedIn: false,
       })?.total,
     ).toBe(0);
     expect(
-      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 2_001 }], {
-        loggedIn: false,
+      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 1_999 }], {
+        loggedIn: true,
       })?.categories[1],
-    ).toEqual({ weightKg: 2, subtotal: 2_001, price: 0 });
+    ).toEqual({ weightKg: 2, subtotal: 1_999, price: 0 });
   });
 
   it("charges the open-ended category-I rate above 30 kg", () => {

@@ -103,8 +103,6 @@ export function ProductUnitPackagingFields({
           <p className="mt-1 text-xs text-ink-500">
             {calculated.category
               ? `Kategorija ${calculated.category === 1 ? "I" : "II"}`
-              : calculated.volumetricDimension === 300
-                ? "Granica od tačno 300 cm ostaje bez automatske kategorije"
               : "Najveća + 2 × druga + 2 × treća dimenzija"}
           </p>
         </Field>

@@ -1,4 +1,4 @@
-export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 2_000;
+export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 1_999;
 /** Customer-favouring checkout estimate when an article has no usable weight data. */
 export const MISSING_UNIT_WEIGHT_FALLBACK_KG = 1;
 
@@ -81,10 +81,7 @@ export function deliveryCategory(dimensions: readonly number[]) {
     return null;
   }
   const volumetricDimension = packageVolumetricDimension(dimensions);
-  // The client explicitly deferred the exact 300 cm boundary. Do not invent
-  // which side owns it: returning null keeps the configured admin fallback.
-  if (volumetricDimension === 300) return null;
-  return volumetricDimension < 300 ? 1 : 2;
+  return volumetricDimension <= 300 ? 1 : 2;
 }
 
 /** Public category is based on the package of one sellable article, not a transport carton. */
@@ -163,7 +160,7 @@ export function calculatePublishedDeliveryTariffQuote(
       ? deliveryRate(2, totals[2].weightKg, options.rates)
       : 0;
   const categoryOnePrice =
-    totals[1].subtotal > FREE_CATEGORY_ONE_THRESHOLD_RSD ? 0 : categoryOneRate;
+    totals[1].subtotal >= FREE_CATEGORY_ONE_THRESHOLD_RSD ? 0 : categoryOneRate;
   if (categoryOneRate == null || categoryTwoRate == null) {
     return {
       total: null,

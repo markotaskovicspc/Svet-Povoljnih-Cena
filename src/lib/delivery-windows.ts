@@ -7,8 +7,8 @@ import { db, hasDatabaseConnection } from "@/lib/db";
 export const DELIVERY_WINDOWS_SETTING_KEY = "delivery.windows";
 
 export const DEFAULT_DELIVERY_WINDOWS = {
-  dc: { min: 3, max: 5 },
-  supplier: { min: 2, max: 3 },
+  dc: { min: 1, max: 2 },
+  supplier: { min: 1, max: 2 },
 } as const;
 
 const windowSchema = z

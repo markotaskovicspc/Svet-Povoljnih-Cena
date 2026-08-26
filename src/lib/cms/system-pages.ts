@@ -214,15 +214,15 @@ Za pitanja o ovim uslovima obratite se na [{{merchant.email}}](mailto:{{merchant
       "Šta očekivati posle porudžbine — od potvrde, preko pripreme, do isporuke.",
     bodyMarkdown: `## Rokovi isporuke {#rokovi}
 
-Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupac zatraži odlaganje isporuke, novi termin dostave biće organizovan u skladu sa njegovim zahtevom. Kurirska služba može kontaktirati kupca pre isporuke radi potvrde termina dostave.
+Standardni rok isporuke iznosi 1–2 radna dana od potvrde porudžbine. Ako kupac zatraži odlaganje isporuke, novi termin dostave biće organizovan u skladu sa njegovim zahtevom. Kurirska služba može kontaktirati kupca pre isporuke radi potvrde termina dostave.
 
 ## Cena isporuke {#tarifa}
 
 **Cena dostave se ne računa za svaki poseban paket, već kao suma svih težina po kategoriji.** Ukupan iznos dostave prikazuje se pre potvrde porudžbine.
 
-Dostava artikala I kategorije je besplatna kada njihov zbir prelazi 2.000 RSD.
+Dostava artikala I kategorije je besplatna kada njihov zbir iznosi najmanje 1.999 RSD.
 
-**I kategorija (standardni paketi) — paketi čija je volumetrijska dimenzija manja od 300 cm:**
+**I kategorija (standardni paketi) — paketi čija je volumetrijska dimenzija do i uključujući 300 cm:**
 
 Težina od\tTežina do\tCena
 

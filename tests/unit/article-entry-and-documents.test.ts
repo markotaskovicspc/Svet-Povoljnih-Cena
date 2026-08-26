@@ -121,18 +121,27 @@ describe("unos artikala", () => {
   });
 
   it("bira DC rok samo kada DC može da ispuni traženu količinu", () => {
+    expect(DEFAULT_DELIVERY_WINDOWS).toEqual({
+      dc: { min: 1, max: 2 },
+      supplier: { min: 1, max: 2 },
+    });
+    const configurableWindows = {
+      dc: { min: 1, max: 2 },
+      supplier: { min: 4, max: 6 },
+    };
+
     expect(
       resolveDeliveryWindowForQuantity(
         { quantity: 2, dcAvailable: 2, supplierAvailable: 8 },
-        DEFAULT_DELIVERY_WINDOWS,
+        configurableWindows,
       ),
-    ).toEqual({ min: 3, max: 5 });
+    ).toEqual({ min: 1, max: 2 });
     expect(
       resolveDeliveryWindowForQuantity(
         { quantity: 3, dcAvailable: 2, supplierAvailable: 8 },
-        DEFAULT_DELIVERY_WINDOWS,
+        configurableWindows,
       ),
-    ).toEqual({ min: 2, max: 3 });
+    ).toEqual({ min: 4, max: 6 });
   });
 });
 
