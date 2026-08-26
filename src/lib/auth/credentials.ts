@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { syncRegisteredCustomer } from "@/lib/customer-master-sync.server";
 
 /**
  * Auxiliary auth flows that don't fit into the Auth.js providers:
@@ -49,30 +50,34 @@ export async function registerCustomer(input: {
   const name =
     [input.firstName, input.lastName].filter(Boolean).join(" ") || null;
 
-  const user = await db.user.upsert({
-    where: { email },
-    create: {
-      email,
-      passwordHash,
-      name,
-      firstName: input.firstName ?? null,
-      lastName: input.lastName ?? null,
-      isBusiness: input.isBusiness ?? false,
-      companyName: input.companyName ?? null,
-      pib: input.pib ?? null,
-      emailVerified: null,
-    },
-    update: {
-      passwordHash,
-      name,
-      firstName: input.firstName ?? null,
-      lastName: input.lastName ?? null,
-      isBusiness: input.isBusiness ?? false,
-      companyName: input.companyName ?? null,
-      pib: input.pib ?? null,
-      deletedAt: null,
-      emailVerified: null,
-    },
+  const user = await db.$transaction(async (tx) => {
+    const registered = await tx.user.upsert({
+      where: { email },
+      create: {
+        email,
+        passwordHash,
+        name,
+        firstName: input.firstName ?? null,
+        lastName: input.lastName ?? null,
+        isBusiness: input.isBusiness ?? false,
+        companyName: input.companyName ?? null,
+        pib: input.pib ?? null,
+        emailVerified: null,
+      },
+      update: {
+        passwordHash,
+        name,
+        firstName: input.firstName ?? null,
+        lastName: input.lastName ?? null,
+        isBusiness: input.isBusiness ?? false,
+        companyName: input.companyName ?? null,
+        pib: input.pib ?? null,
+        deletedAt: null,
+        emailVerified: null,
+      },
+    });
+    await syncRegisteredCustomer(tx, registered.id);
+    return registered;
   });
 
   await db.marketingConsent

@@ -15,7 +15,7 @@ describe("guarantee PDF", () => {
   it("uses the current legal identity from the invoice", () => {
     expect(GUARANTEE_PROVIDER).toEqual({
       name: "SVET POVOLJNIH CENA DOO BEOGRAD (NOVI BEOGRAD)",
-      address: "Vojvođanska 401, 11000 Beograd",
+      address: "Jurija Gagarina 32, 11070 Novi Beograd",
       pib: "115085587",
       reclamationsEmail: "reklamacije@svetpovoljnihcena.rs",
     });

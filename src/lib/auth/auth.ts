@@ -17,6 +17,7 @@ import {
 import { envValue } from "@/lib/env";
 import { checkRateLimit, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
 import { resolveAuthJwtMaxAge } from "@/lib/auth/session-policy";
+import { syncRegisteredCustomer } from "@/lib/customer-master-sync.server";
 
 const customerCredentialsSchema = z.object({
   email: z.string().email(),
@@ -180,10 +181,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { identifier: `phone:${phone}` },
         });
 
-        const user = await db.user.upsert({
-          where: { phone },
-          create: { phone, phoneVerified: new Date() },
-          update: { phoneVerified: new Date(), lastLoginAt: new Date() },
+        const user = await db.$transaction(async (tx) => {
+          const registered = await tx.user.upsert({
+            where: { phone },
+            create: { phone, phoneVerified: new Date() },
+            update: { phoneVerified: new Date(), lastLoginAt: new Date() },
+          });
+          await syncRegisteredCustomer(tx, registered.id);
+          return registered;
         });
 
         return {
@@ -297,6 +302,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: user.id, deletedAt: null },
           data: { lastLoginAt: new Date() },
         });
+        await db.$transaction(async (tx) => {
+          const persisted = await tx.user.count({ where: { id: user.id! } });
+          if (persisted) await syncRegisteredCustomer(tx, user.id!);
+        });
       }
       return true;
     },
@@ -371,6 +380,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // already-verified emails, unlike our own credentials signup.
         await db.user
           .update({ where: { id: user.id }, data: { emailVerified: new Date() } })
+          .catch(() => undefined);
+        await db
+          .$transaction((tx) => syncRegisteredCustomer(tx, user.id!))
           .catch(() => undefined);
       }
     },

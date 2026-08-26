@@ -45,6 +45,7 @@ import {
   webStorefrontProductWhere,
 } from "@/lib/web-storefront-availability";
 import { upsertActiveRetailPrice } from "@/lib/pricing/retail-price-write.server";
+import { webGuestCustomerId } from "@/lib/customer-master-identity";
 
 const PREFIX = "RAB-IT-";
 const testStartedAt = new Date();
@@ -91,6 +92,9 @@ beforeAll(async () => {
     });
     await db.product.deleteMany({ where: { id: { in: oldProductIds } } });
   }
+  await db.customer.deleteMany({
+    where: { email: "integration@example.test", userId: null },
+  });
   await db.category.deleteMany({
     where: { path: "/rabalux-integration-test" },
   });
@@ -162,6 +166,9 @@ afterAll(async () => {
     });
     await db.product.deleteMany({ where: { id: { in: productIds } } });
   }
+  await db.customer.deleteMany({
+    where: { email: "integration@example.test", userId: null },
+  });
   await db.backgroundJob.deleteMany({
     where: {
       createdAt: { gte: testStartedAt },
@@ -939,6 +946,20 @@ describe("Rabalux checkout integration", () => {
     expect(order.supplierFulfillments).toHaveLength(1);
     expect(order.supplierFulfillments[0].items).toHaveLength(2);
     expect(order.supplierFulfillments[0].status).toBe("SENT");
+    expect(order.customerId).toBe(
+      webGuestCustomerId("integration@example.test"),
+    );
+    await expect(
+      db.customer.findUniqueOrThrow({ where: { id: order.customerId! } }),
+    ).resolves.toMatchObject({
+      firstName: "Test",
+      lastName: "Kupac",
+      address: "Test ulica 1",
+      city: "Beograd",
+      postalCode: "11000",
+      phone: "0601234567",
+      email: "integration@example.test",
+    });
     expect(
       await db.analyticsEvent.count({
         where: {

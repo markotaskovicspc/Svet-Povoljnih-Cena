@@ -43,6 +43,7 @@ import {
   pricingRuleInputsForProduct,
 } from "@/lib/pricing/rules";
 import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
+import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -826,6 +827,21 @@ export async function createOrder(
   let created: CreatedOrder & { reusedExisting: boolean };
   try {
     created = await db.$transaction(async (tx) => {
+      const customer = await upsertWebCustomer(tx, {
+        userId,
+        guestEmail: input.guestEmail,
+        address: {
+          firstName: ship.firstName,
+          lastName: ship.lastName,
+          phone: ship.phone,
+          street: ship.street,
+          city: xExpressTown?.name ?? ship.city,
+          postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+          country: ship.country,
+          companyName: shipIsBusiness ? ship.companyName ?? null : null,
+          pib: shipIsBusiness ? ship.pib ?? null : null,
+        },
+      });
       if (input.checkoutSessionId) {
         await ensureCheckoutSessionForOrder({ tx, input, userId, total });
         const existingOrder = await findLockedCheckoutSessionOrder(
@@ -849,6 +865,7 @@ export async function createOrder(
           await tx.order.update({
             where: { id: existingOrder.id },
             data: {
+              customerId: customer.id,
               publicAccessTokenHash: hashOrderAccessToken(accessToken),
               publicAccessTokenCreatedAt: new Date(),
             },
@@ -884,6 +901,7 @@ export async function createOrder(
           publicAccessTokenCreatedAt: new Date(),
           userId,
           guestEmail: userId ? null : input.guestEmail ?? null,
+          customerId: customer.id,
           subtotal: new Prisma.Decimal(subtotal),
           savings: new Prisma.Decimal(savings),
           shipping: new Prisma.Decimal(shippingPrice),

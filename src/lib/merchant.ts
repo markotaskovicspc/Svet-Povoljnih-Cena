@@ -7,8 +7,8 @@ function publicValue(value: string | undefined) {
 
 export const MERCHANT_LEGAL_INFO = {
   name: BRAND.legalName,
-  address: "Vojvođanska 401, 11000 Beograd, Republika Srbija",
-  shortAddress: "Vojvođanska 401, 11000 Beograd",
+  address: "Jurija Gagarina 32, 11070 Novi Beograd, Republika Srbija",
+  shortAddress: "Jurija Gagarina 32, 11070 Novi Beograd",
   pib: "115085587",
   registrationNumber: "22112597",
   activityCode: "4791",

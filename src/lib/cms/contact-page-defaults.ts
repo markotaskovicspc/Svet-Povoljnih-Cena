@@ -14,7 +14,7 @@ export function defaultContactPageWidgetData() {
         id: "merchant" as const,
         enabled: true,
         label: "Sedište trgovca",
-        value: "Vojvođanska 401, 11000 Beograd",
+        value: "Jurija Gagarina 32, 11070 Novi Beograd",
         note: "Ovo nije mesto za preuzimanje bez prethodne potvrde",
       },
       {
