@@ -466,8 +466,9 @@ describe("X Express codes, label and webhook envelope", () => {
     ]);
   });
 
-  it("accepts only the documented XX-XX-XX route format", () => {
+  it("accepts the documented route and the one-digit depot returned by production", () => {
     expect(normalizeXExpressRouteCode("ča-ok-54")).toBe("ČA-OK-54");
+    expect(normalizeXExpressRouteCode(" bg-ze-4 ")).toBe("BG-ZE-4");
     expect(normalizeXExpressRouteCode("VS-2")).toBeNull();
     expect(normalizeXExpressRouteCode("REON")).toBeNull();
   });
@@ -554,7 +555,7 @@ describe("X Express codes, label and webhook envelope", () => {
       trackingNo: "AAA0850300001",
       packageCount: 2,
       providerParcelNumbers: ["AAA0850300001", "AAA0850300002"],
-      providerRouteCode: "VS-BG-02",
+      providerRouteCode: "BG-ZE-4",
       providerRouteName: null,
       rawCreateResponse: {
         labelData,
@@ -589,7 +590,7 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(html).toContain("Petrović enterijer DOO");
     expect(html).toContain("Bulevar oslobođenja 10A");
     expect(html).not.toContain("Naknadno promenjena adresa 99");
-    expect(html).toContain("VS-BG-02");
+    expect(html).toContain("BG-ZE-4");
     expect(html).toContain("1/2");
     expect(html).toContain("2/2");
     expect(html).toContain("1,8 kg");

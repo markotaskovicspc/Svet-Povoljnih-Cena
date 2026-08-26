@@ -5,6 +5,7 @@ import { num } from "@/lib/api/_helpers";
 import { formatDateTime, formatRsd } from "@/lib/format";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import type { XExpressCreateOrderPayload } from "./types";
+import { normalizeXExpressRouteCode } from "./client";
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312",
@@ -26,7 +27,6 @@ const CODE128_PATTERNS = [
 const X_EXPRESS_CARRIER_LINE =
   "X Express doo, Đorđa Ognjanovića 16, Beograd-Čukarica";
 const X_EXPRESS_TRACKING_CODE = /^[A-Z]{3}\d{10}$/;
-const X_EXPRESS_ROUTE_CODE = /^[A-ZČĆŽŠĐ0-9]{2}(?:-[A-ZČĆŽŠĐ0-9]{2}){2}$/u;
 
 export type XExpressLabelShipment = {
   id: string;
@@ -228,12 +228,12 @@ function renderLabel(
     order.shipCompanyName ||
     `${order.shipFirstName} ${order.shipLastName}`.trim();
   const cod = isCod(order.paymentMethod);
-  const route = (shipment.providerRouteCode ?? shipment.providerRouteName ?? "")
-    .trim()
-    .toUpperCase();
-  if (!X_EXPRESS_ROUTE_CODE.test(route)) {
+  const route = normalizeXExpressRouteCode(
+    shipment.providerRouteCode ?? shipment.providerRouteName,
+  );
+  if (!route) {
     throw new Error(
-      `X Express pošiljka ${shipment.id} nema reon u formatu XX-XX-XX.`,
+      `X Express pošiljka ${shipment.id} nema reon u formatu XX-XX-X ili XX-XX-XX.`,
     );
   }
   const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);

@@ -107,7 +107,7 @@ export class XExpressClient {
     const area = normalizeXExpressRouteCode(pickString(record, ["area", "Area"]));
     if (!area) {
       throw new XExpressProviderError(
-        "X Express provera adrese nije vratila reon u formatu XX-XX-XX.",
+        "X Express provera adrese nije vratila reon u formatu XX-XX-X ili XX-XX-XX.",
         pickString(record, ["code", "errorCode"]) ?? undefined,
         redactXExpressSecrets(raw),
       );
@@ -187,7 +187,7 @@ export class XExpressClient {
 
 export function normalizeXExpressRouteCode(value: string | null | undefined) {
   const normalized = value?.trim().toUpperCase() ?? "";
-  return /^[A-ZČĆŽŠĐ0-9]{2}(?:-[A-ZČĆŽŠĐ0-9]{2}){2}$/u.test(normalized)
+  return /^[A-ZČĆŽŠĐ0-9]{2}-[A-ZČĆŽŠĐ0-9]{2}-[A-ZČĆŽŠĐ0-9]{1,2}$/u.test(normalized)
     ? normalized
     : null;
 }
