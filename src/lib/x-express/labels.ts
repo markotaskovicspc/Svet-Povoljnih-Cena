@@ -233,7 +233,7 @@ function renderLabel(
   );
   if (!route) {
     throw new Error(
-      `X Express pošiljka ${shipment.id} nema reon u formatu XX-XX-X ili XX-XX-XX.`,
+      `X Express pošiljka ${shipment.id} nema važeći reon.`,
     );
   }
   const packageData = readPackageData(shipment.rawCreateResponse, trackingCode);

@@ -466,10 +466,11 @@ describe("X Express codes, label and webhook envelope", () => {
     ]);
   });
 
-  it("accepts the documented route and the one-digit depot returned by production", () => {
+  it("accepts documented and production route formats", () => {
     expect(normalizeXExpressRouteCode("ča-ok-54")).toBe("ČA-OK-54");
     expect(normalizeXExpressRouteCode(" bg-ze-4 ")).toBe("BG-ZE-4");
-    expect(normalizeXExpressRouteCode("VS-2")).toBeNull();
+    expect(normalizeXExpressRouteCode("ns-0")).toBe("NS-0");
+    expect(normalizeXExpressRouteCode("VS")).toBeNull();
     expect(normalizeXExpressRouteCode("REON")).toBeNull();
   });
 
