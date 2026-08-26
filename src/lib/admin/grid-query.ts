@@ -33,21 +33,58 @@ export function nextGridSorting(
   return [];
 }
 
-function matches(value: ErpValue, filter: AdminGridFilter) {
+const DATE_ONLY_VALUE = /^\d{4}-\d{2}-\d{2}$/;
+const ADMIN_TIME_ZONE = "Europe/Belgrade";
+
+function dateOnlyInAdminTimeZone(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ADMIN_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(parsed)
+    .reduce<Record<string, string>>((result, part) => {
+      if (part.type !== "literal") result[part.type] = part.value;
+      return result;
+    }, {});
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
+}
+
+function calendarDateComparison(actualText: string, expectedText: string) {
+  if (!DATE_ONLY_VALUE.test(expectedText)) return null;
+  const actualDate = dateOnlyInAdminTimeZone(actualText);
+  if (!actualDate) return null;
+  return actualDate.localeCompare(expectedText);
+}
+
+export function gridValueMatchesFilter(
+  value: ErpValue,
+  filter: AdminGridFilter,
+) {
   const actualText = gridTextValue(value).trim().toLowerCase();
   const expectedText = filter.value.trim().toLowerCase();
   if (!expectedText) return true;
   const actualNumber = Number(actualText.replace(",", "."));
   const expectedNumber = Number(expectedText.replace(",", "."));
+  const dateComparison = calendarDateComparison(actualText, expectedText);
   switch (filter.operator ?? "contains") {
     case "contains":
       return actualText.includes(expectedText);
     case "not_contains":
       return !actualText.includes(expectedText);
     case "equals":
-      return actualText === expectedText;
+      return dateComparison === null
+        ? actualText === expectedText
+        : dateComparison === 0;
     case "not_equals":
-      return actualText !== expectedText;
+      return dateComparison === null
+        ? actualText !== expectedText
+        : dateComparison !== 0;
     case "gt":
       return actualNumber > expectedNumber;
     case "gte":
@@ -57,9 +94,13 @@ function matches(value: ErpValue, filter: AdminGridFilter) {
     case "lte":
       return actualNumber <= expectedNumber;
     case "before":
-      return new Date(actualText).getTime() < new Date(expectedText).getTime();
+      return dateComparison === null
+        ? new Date(actualText).getTime() < new Date(expectedText).getTime()
+        : dateComparison < 0;
     case "after":
-      return new Date(actualText).getTime() > new Date(expectedText).getTime();
+      return dateComparison === null
+        ? new Date(actualText).getTime() > new Date(expectedText).getTime()
+        : dateComparison > 0;
   }
 }
 
@@ -82,7 +123,9 @@ export function filterAndSortGridRows(
     ) {
       return false;
     }
-    return filters.every((filter) => matches(row.values[filter.columnKey], filter));
+    return filters.every((filter) =>
+      gridValueMatchesFilter(row.values[filter.columnKey], filter),
+    );
   });
   if (!sorting.length) return filtered;
   return [...filtered].sort((leftRow, rightRow) => {
@@ -95,7 +138,8 @@ export function filterAndSortGridRows(
         Number.isFinite(numericLeft) && Number.isFinite(numericRight)
           ? numericLeft - numericRight
           : gridTextValue(left).localeCompare(gridTextValue(right), "sr-Latn");
-      if (comparison !== 0) return sort.direction === "asc" ? comparison : -comparison;
+      if (comparison !== 0)
+        return sort.direction === "asc" ? comparison : -comparison;
     }
     return 0;
   });

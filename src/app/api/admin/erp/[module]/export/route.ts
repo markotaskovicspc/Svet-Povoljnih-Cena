@@ -9,13 +9,10 @@ import {
   type ErpValue,
 } from "@/lib/admin/erp";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { gridTextValue, gridValueMatchesFilter } from "@/lib/admin/grid-query";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 
-function textValue(value: ErpValue) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "boolean") return value ? "Da" : "Ne";
-  return String(value);
-}
+const textValue = gridTextValue;
 
 function parseArray<T>(raw: string | null): T[] {
   if (!raw) return [];
@@ -39,38 +36,6 @@ function parseDateRange(search: URLSearchParams) {
   };
 }
 
-function matches(value: ErpValue, filter: AdminGridFilter) {
-  const actualText = textValue(value).trim().toLowerCase();
-  const expectedText = filter.value.trim().toLowerCase();
-  if (!expectedText) return true;
-  const actualNumber = Number(actualText.replace(",", "."));
-  const expectedNumber = Number(expectedText.replace(",", "."));
-  switch (filter.operator) {
-    case "contains":
-      return actualText.includes(expectedText);
-    case "not_contains":
-      return !actualText.includes(expectedText);
-    case "equals":
-      return actualText === expectedText;
-    case "not_equals":
-      return actualText !== expectedText;
-    case "gt":
-      return actualNumber > expectedNumber;
-    case "gte":
-      return actualNumber >= expectedNumber;
-    case "lt":
-      return actualNumber < expectedNumber;
-    case "lte":
-      return actualNumber <= expectedNumber;
-    case "before":
-      return new Date(actualText).getTime() < new Date(expectedText).getTime();
-    case "after":
-      return new Date(actualText).getTime() > new Date(expectedText).getTime();
-    default:
-      return false;
-  }
-}
-
 function filterAndSortRows(
   rows: ErpRow[],
   columnKeys: string[],
@@ -90,7 +55,9 @@ function filterAndSortRows(
     ) {
       return false;
     }
-    return filters.every((filter) => matches(row.values[filter.columnKey], filter));
+    return filters.every((filter) =>
+      gridValueMatchesFilter(row.values[filter.columnKey], filter),
+    );
   });
   if (!sorting.length) return filtered;
   return [...filtered].sort((leftRow, rightRow) => {
@@ -103,7 +70,8 @@ function filterAndSortRows(
         Number.isFinite(numericLeft) && Number.isFinite(numericRight)
           ? numericLeft - numericRight
           : textValue(left).localeCompare(textValue(right), "sr-Latn");
-      if (comparison !== 0) return sort.direction === "asc" ? comparison : -comparison;
+      if (comparison !== 0)
+        return sort.direction === "asc" ? comparison : -comparison;
     }
     return 0;
   });
@@ -126,8 +94,7 @@ export async function GET(
     includeLookupOptions: false,
     query: search.get("q") ?? undefined,
     searchColumn: requestedSearchColumn || undefined,
-    stocktakeArchived:
-      slug === "popisi" && search.get("archive") === "1",
+    stocktakeArchived: slug === "popisi" && search.get("archive") === "1",
     salesOrderFilters:
       slug === "prodajni-nalozi"
         ? {
@@ -146,11 +113,16 @@ export async function GET(
         : undefined,
   });
   if (!erpModule) {
-    return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Nepoznat admin modul." },
+      { status: 404 },
+    );
   }
 
   const requestedColumns = parseArray<string>(search.get("columns"));
-  const knownColumns = new Map(erpModule.columns.map((column) => [column.key, column]));
+  const knownColumns = new Map(
+    erpModule.columns.map((column) => [column.key, column]),
+  );
   const columns = requestedColumns
     .map((key) => knownColumns.get(key))
     .filter((column) => Boolean(column));
@@ -195,14 +167,19 @@ export async function GET(
       Math.max(
         12,
         column.label.length + 2,
-        ...rows.slice(0, 100).map((row) => textValue(row.values[column.key]).length + 2),
+        ...rows
+          .slice(0, 100)
+          .map((row) => textValue(row.values[column.key]).length + 2),
       ),
     ),
   }));
   for (const row of rows) {
     worksheet.addRow(
       Object.fromEntries(
-        exportColumns.map((column) => [column.key, row.values[column.key] ?? ""]),
+        exportColumns.map((column) => [
+          column.key,
+          row.values[column.key] ?? "",
+        ]),
       ),
     );
   }
