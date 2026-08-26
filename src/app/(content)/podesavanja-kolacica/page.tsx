@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CmsFunctionalPage } from "@/components/content/cms-content-page";
 import { CookieSettingsPanel } from "@/components/privacy/cookie-consent";
 import { getGa4MeasurementId } from "@/lib/analytics/config";
+import { getMetaPixelId } from "@/lib/analytics/meta-ecommerce";
 import { getFunctionalContentPage } from "@/lib/cms/pages";
 
 const SLUG = "podesavanja-kolacica";
@@ -18,10 +19,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function CookieSettingsPage() {
   const page = await getFunctionalContentPage(SLUG);
   const gaId = getGa4MeasurementId();
+  const metaPixelId = getMetaPixelId();
   return (
     <CmsFunctionalPage page={page}>
       <div className="not-prose mt-8">
-        <CookieSettingsPanel gaConfigured={Boolean(gaId?.startsWith("G-"))} />
+        <CookieSettingsPanel
+          gaConfigured={Boolean(gaId?.startsWith("G-"))}
+          metaConfigured={Boolean(metaPixelId)}
+        />
       </div>
     </CmsFunctionalPage>
   );

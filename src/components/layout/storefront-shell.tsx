@@ -7,6 +7,7 @@ import { FirstPurchaseCta } from "@/components/layout/first-purchase-cta";
 import { CookieConsent } from "@/components/privacy/cookie-consent";
 import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytics";
 import { getGa4MeasurementId } from "@/lib/analytics/config";
+import { getMetaPixelId } from "@/lib/analytics/meta-ecommerce";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
 import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
 import { getCmsFooterState } from "@/lib/cms/pages";
@@ -16,6 +17,7 @@ import { getMobileSearchContent } from "@/lib/mobile-search/server";
 import { StorefrontStickyHeader } from "@/components/layout/storefront-sticky-header";
 
 const gaId = getGa4MeasurementId();
+const metaPixelId = getMetaPixelId();
 
 function categoryNav(
   nodes: CategoryNode[],
@@ -69,7 +71,7 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
       <FirstPurchaseCta />
       <NewsletterBand />
       <Footer cmsFooter={cmsFooter} />
-      <CookieConsent gaId={gaId} />
+      <CookieConsent gaId={gaId} metaPixelId={metaPixelId} />
       <FirstPartyAnalytics />
     </>
   );

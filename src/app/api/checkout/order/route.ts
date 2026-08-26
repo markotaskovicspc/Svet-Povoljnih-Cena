@@ -7,15 +7,18 @@ import {
   rateLimitJson,
   RATE_LIMITS,
 } from "@/lib/security/rate-limit";
+import {
+  allowsAnalytics,
+  trackingConsentFromCookieHeader,
+} from "@/lib/analytics/tracking-consent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function hasAnalyticsConsent(request: Request) {
-  return (request.headers.get("cookie") ?? "")
-    .split(";")
-    .map((part) => part.trim())
-    .includes("spc_cookie_consent=analytics");
+  return allowsAnalytics(
+    trackingConsentFromCookieHeader(request.headers.get("cookie")),
+  );
 }
 
 export async function POST(req: Request) {
