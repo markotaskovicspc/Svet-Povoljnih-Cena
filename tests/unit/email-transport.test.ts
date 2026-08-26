@@ -163,6 +163,8 @@ describe("Resend transport", () => {
     expect(send).toHaveBeenCalledOnce();
     const command = send.mock.calls[0]?.[0];
     expect(command).toBeInstanceOf(SendEmailCommand);
+    const rawAttachment = command.input.Content?.Simple?.Attachments?.[0]?.RawContent;
+    expect(Buffer.from(rawAttachment ?? [])).toEqual(Buffer.from("pdf-audit"));
     expect(command.input).toMatchObject({
       FromEmailAddress: "Ponude <ponude@svetpovoljnihcena.rs>",
       Destination: { ToAddresses: ["kupac@example.com"] },
@@ -175,6 +177,7 @@ describe("Resend transport", () => {
             expect.objectContaining({
               FileName: "racun.pdf",
               ContentType: "application/pdf",
+              ContentTransferEncoding: "BASE64",
             }),
           ],
         },

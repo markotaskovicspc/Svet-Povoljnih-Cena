@@ -238,6 +238,10 @@ function sesAttachments(attachments?: EmailAttachment[]) {
       FileName: attachment.filename,
       ContentType: attachment.contentType ?? "application/octet-stream",
       ContentDisposition: "ATTACHMENT" as const,
+      // SES otherwise defaults to SEVEN_BIT while assembling the MIME message,
+      // which corrupts binary files such as PDFs even though the SDK correctly
+      // base64-encodes the API request itself.
+      ContentTransferEncoding: "BASE64" as const,
     };
   });
 }
