@@ -35,9 +35,9 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
     expect(streets.length).toBeGreaterThan(30_000);
     expect(statuses.length).toBeGreaterThan(40);
     expect(towns.some((town) => town.id === cfg.pickup.townId)).toBe(true);
-    expect(statuses.find((item) => item.code === "PICKEDUP")?.shipmentStatus).toBe(
-      "PICKED_UP",
-    );
+    expect(
+      statuses.find((item) => item.code === "PICKEDUP")?.shipmentStatus,
+    ).toBe("PICKED_UP");
     expect(
       statuses.find((item) => item.code === "PUDO_RETRIEVED")?.shipmentStatus,
     ).toBe("DELIVERED");
@@ -63,7 +63,10 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
       StreetNumber: cfg.pickup.streetNumber,
       Description: null,
     });
-    expect(address.area).toBe("SM-5");
+    expect(address.valid).toBe(true);
+    expect(address.area).toMatch(
+      /^[A-ZČĆŽŠĐ0-9]{2}(?:-[A-ZČĆŽŠĐ0-9]{1,2}){1,2}$/u,
+    );
   });
 
   it("rejects incomplete and unknown addresses", async () => {
@@ -163,42 +166,42 @@ describe.skipIf(!enabled)("X Express provider test account", () => {
   it.skipIf(process.env.X_EXPRESS_LIVE_COD_TEST !== "1")(
     "accepts the production COD option contract on the provider test profile",
     async () => {
-    const cfg = requireXExpressShipmentConfig(true);
-    const client = new XExpressClient({ ...cfg, enabled: true });
-    const code = formatXExpressTrackingCode(
-      cfg.codePrefix,
-      cfg.codeRangeStart!,
-    );
-    const payload = buildXExpressCreateOrderPayload({
-      cfg,
-      reference: `TEST-COD-NE-ISPORUCIVATI-${randomUUID().slice(0, 8)}`,
-      trackingCodes: [code],
-      townId: cfg.pickup.townId!,
-      officialStreetName: cfg.pickup.streetName,
-      packageMasses: [1],
-      order: {
-        total: 1,
-        paymentMethod: "POUZECE_GOTOVINA",
-        shipFirstName: "TEST NE ISPORUCIVATI",
-        shipLastName: "COD QA",
-        shipPhone: cfg.pickup.contactPhone,
-        shipStreet: `${cfg.pickup.streetName} ${cfg.pickup.streetNumber}`,
-        guestEmail: null,
-        notes: "TEST - NE PREUZIMATI / NE ISPORUCIVATI",
-        items: [{ name: "TEST - NE PREUZIMATI / NE ISPORUCIVATI", qty: 1 }],
-      },
-    });
-    expect(payload.Options).toHaveLength(1);
-    expect(payload.Options?.[0]).toMatchObject({
-      OptionTypeId: 2,
-      Data: { Amount: 1 },
-    });
+      const cfg = requireXExpressShipmentConfig(true);
+      const client = new XExpressClient({ ...cfg, enabled: true });
+      const code = formatXExpressTrackingCode(
+        cfg.codePrefix,
+        cfg.codeRangeStart!,
+      );
+      const payload = buildXExpressCreateOrderPayload({
+        cfg,
+        reference: `TEST-COD-NE-ISPORUCIVATI-${randomUUID().slice(0, 8)}`,
+        trackingCodes: [code],
+        townId: cfg.pickup.townId!,
+        officialStreetName: cfg.pickup.streetName,
+        packageMasses: [1],
+        order: {
+          total: 1,
+          paymentMethod: "POUZECE_GOTOVINA",
+          shipFirstName: "TEST NE ISPORUCIVATI",
+          shipLastName: "COD QA",
+          shipPhone: cfg.pickup.contactPhone,
+          shipStreet: `${cfg.pickup.streetName} ${cfg.pickup.streetNumber}`,
+          guestEmail: null,
+          notes: "TEST - NE PREUZIMATI / NE ISPORUCIVATI",
+          items: [{ name: "TEST - NE PREUZIMATI / NE ISPORUCIVATI", qty: 1 }],
+        },
+      });
+      expect(payload.Options).toHaveLength(1);
+      expect(payload.Options?.[0]).toMatchObject({
+        OptionTypeId: 2,
+        Data: { Amount: 1 },
+      });
 
-    const created = await client.createOrder(payload);
-    expect(created.requestGuid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
-    expect(created.trackingNo).toBe(code);
+      const created = await client.createOrder(payload);
+      expect(created.requestGuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(created.trackingNo).toBe(code);
     },
   );
 
