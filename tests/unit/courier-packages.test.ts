@@ -9,7 +9,7 @@ import {
 } from "@/lib/courier/packages";
 
 describe("physical courier packages", () => {
-  it("expands quantity by catalogue pack quantity and copies real pack measures", () => {
+  it("expands quantity by catalogue pack quantity and copies individual package measures", () => {
     expect(
       derivePhysicalPackages([
         {
@@ -19,9 +19,9 @@ describe("physical courier packages", () => {
           product: {
             packQty: 2,
             packGrossWeightKg: 8,
-            packWidthCm: 40,
-            packDepthCm: 50,
-            packHeightCm: 30,
+            unitPackWidthCm: 40,
+            unitPackDepthCm: 50,
+            unitPackHeightCm: 30,
           },
         },
       ]),
@@ -69,7 +69,7 @@ describe("physical courier packages", () => {
     });
   });
 
-  it("prefers individual article packaging over transport packaging", () => {
+  it("ignores transport packaging when individual article packaging exists", () => {
     const [pkg] = derivePhysicalPackages([
       {
         id: "item-1",
@@ -92,7 +92,30 @@ describe("physical courier packages", () => {
     });
   });
 
-  it("treats zero transport measures as missing and uses individual packaging", () => {
+  it("does not fall back to transport or assembled dimensions", () => {
+    const [pkg] = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Stolica",
+        qty: 1,
+        product: {
+          packWidthCm: 120,
+          packDepthCm: 80,
+          packHeightCm: 50,
+          widthCm: 55,
+          depthCm: 45,
+          heightCm: 90,
+        },
+      },
+    ]);
+    expect(pkg).toMatchObject({
+      widthCm: null,
+      depthCm: null,
+      heightCm: null,
+    });
+  });
+
+  it("uses individual packaging regardless of empty transport measures", () => {
     const [pkg] = derivePhysicalPackages([
       {
         id: "item-1",

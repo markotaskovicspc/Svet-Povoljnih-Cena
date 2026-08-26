@@ -1648,21 +1648,9 @@ function courierRouteItem(item: {
     withAssembly: item.withAssembly,
     qty: item.qty,
     packQty: item.product?.packQty,
-    packWidthCm: firstPositiveNumber(
-      item.product?.unitPackWidthCm,
-      item.product?.packWidthCm,
-      item.product?.widthCm,
-    ),
-    packDepthCm: firstPositiveNumber(
-      item.product?.unitPackDepthCm,
-      item.product?.packDepthCm,
-      item.product?.depthCm,
-    ),
-    packHeightCm: firstPositiveNumber(
-      item.product?.unitPackHeightCm,
-      item.product?.packHeightCm,
-      item.product?.heightCm,
-    ),
+    packWidthCm: firstPositiveNumber(item.product?.unitPackWidthCm),
+    packDepthCm: firstPositiveNumber(item.product?.unitPackDepthCm),
+    packHeightCm: firstPositiveNumber(item.product?.unitPackHeightCm),
     packGrossWeightKg: firstPositiveNumber(
       item.product?.packGrossWeightKg,
       item.product?.grossWeightKg,
