@@ -44,7 +44,7 @@ describe("physical courier packages", () => {
     });
   });
 
-  it("falls back from transport packaging to individual article packaging", () => {
+  it("uses individual article packaging before assembled dimensions", () => {
     const [pkg] = derivePhysicalPackages([
       {
         id: "item-1",
@@ -66,6 +66,29 @@ describe("physical courier packages", () => {
       widthCm: 25,
       depthCm: 15,
       heightCm: 40,
+    });
+  });
+
+  it("prefers individual article packaging over transport packaging", () => {
+    const [pkg] = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Stolica",
+        qty: 1,
+        product: {
+          unitPackWidthCm: 61,
+          unitPackDepthCm: 42,
+          unitPackHeightCm: 19,
+          packWidthCm: 120,
+          packDepthCm: 80,
+          packHeightCm: 50,
+        },
+      },
+    ]);
+    expect(pkg).toMatchObject({
+      widthCm: 61,
+      depthCm: 42,
+      heightCm: 19,
     });
   });
 

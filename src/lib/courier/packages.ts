@@ -96,8 +96,9 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
 }
 
 /**
- * Expands order lines into physical packages. Catalogue pack measurements are
- * copied when present; missing values intentionally remain null so an operator
+ * Expands order lines into physical packages. Individual article packaging is
+ * authoritative for courier dimensions; transport and assembled dimensions
+ * are only fallbacks. Missing values intentionally remain null so an operator
  * must enter real measurements before a provider request can be sent.
  */
 export function derivePhysicalPackages(
@@ -119,16 +120,16 @@ export function derivePhysicalPackages(
           positiveNumber(item.product?.grossWeightKg) ??
           positiveNumber(item.product?.weightKg),
         widthCm:
-          positiveNumber(item.product?.packWidthCm) ??
           positiveNumber(item.product?.unitPackWidthCm) ??
+          positiveNumber(item.product?.packWidthCm) ??
           positiveNumber(item.product?.widthCm),
         depthCm:
-          positiveNumber(item.product?.packDepthCm) ??
           positiveNumber(item.product?.unitPackDepthCm) ??
+          positiveNumber(item.product?.packDepthCm) ??
           positiveNumber(item.product?.depthCm),
         heightCm:
-          positiveNumber(item.product?.packHeightCm) ??
           positiveNumber(item.product?.unitPackHeightCm) ??
+          positiveNumber(item.product?.packHeightCm) ??
           positiveNumber(item.product?.heightCm),
       });
     }

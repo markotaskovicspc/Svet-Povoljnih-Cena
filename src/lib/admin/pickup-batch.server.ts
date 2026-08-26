@@ -1649,18 +1649,18 @@ function courierRouteItem(item: {
     qty: item.qty,
     packQty: item.product?.packQty,
     packWidthCm: firstPositiveNumber(
-      item.product?.packWidthCm,
       item.product?.unitPackWidthCm,
+      item.product?.packWidthCm,
       item.product?.widthCm,
     ),
     packDepthCm: firstPositiveNumber(
-      item.product?.packDepthCm,
       item.product?.unitPackDepthCm,
+      item.product?.packDepthCm,
       item.product?.depthCm,
     ),
     packHeightCm: firstPositiveNumber(
-      item.product?.packHeightCm,
       item.product?.unitPackHeightCm,
+      item.product?.packHeightCm,
       item.product?.heightCm,
     ),
     packGrossWeightKg: firstPositiveNumber(
