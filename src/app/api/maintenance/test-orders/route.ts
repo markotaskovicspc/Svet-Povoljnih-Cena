@@ -6,17 +6,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const TARGET_SUFFIXES = [
-  "26-000042",
-  "26-000043",
-  "26-000044",
-  "26-000045",
-  "26-000046",
-  "26-000047",
-] as const;
-
-const DAY_START = new Date("2026-08-25T22:00:00.000Z");
-const DAY_END = new Date("2026-08-26T22:00:00.000Z");
+const PRESERVED_ORDER_NUMBER = "SPC-2026-000012";
 
 function authorized(request: Request) {
   const expected = process.env.ADMIN_API_SECRET?.trim();
@@ -36,10 +26,6 @@ export async function GET(request: Request) {
   }
 
   const orders = await db.order.findMany({
-    where: {
-      createdAt: { gte: DAY_START, lt: DAY_END },
-      OR: TARGET_SUFFIXES.map((suffix) => ({ number: { endsWith: suffix } })),
-    },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -65,8 +51,11 @@ export async function GET(request: Request) {
       },
       shipments: {
         select: {
+          id: true,
+          provider: true,
           service: true,
           status: true,
+          providerStatusCode: true,
           providerOrderId: true,
           providerShipmentId: true,
           trackingNo: true,
@@ -80,14 +69,26 @@ export async function GET(request: Request) {
       stockMovements: { select: { kind: true } },
       reclamations: { select: { number: true, status: true } },
       dispatchNotes: { select: { number: true, status: true } },
-      pickupBatchLines: { select: { batchId: true } },
+      pickupBatchLines: {
+        select: {
+          batch: {
+            select: {
+              id: true,
+              number: true,
+              status: true,
+              externalBookedAt: true,
+              externalBookingReference: true,
+            },
+          },
+        },
+      },
       supplierFulfillments: { select: { status: true } },
     },
   });
 
   return NextResponse.json(
     {
-      targets: TARGET_SUFFIXES,
+      preservedOrderNumber: PRESERVED_ORDER_NUMBER,
       orders: orders.map((order) => ({
         id: order.id,
         number: order.number,
@@ -110,8 +111,11 @@ export async function GET(request: Request) {
           paidAt: payment.paidAt,
         })),
         shipments: order.shipments.map((shipment) => ({
+          id: shipment.id,
+          provider: shipment.provider,
           service: shipment.service,
           status: shipment.status,
+          providerStatusCode: shipment.providerStatusCode,
           submitted: Boolean(
             shipment.providerOrderId ||
               shipment.providerShipmentId ||
@@ -124,7 +128,17 @@ export async function GET(request: Request) {
         stockMovementKinds: order.stockMovements.map((movement) => movement.kind),
         reclamations: order.reclamations,
         dispatchNotes: order.dispatchNotes,
-        pickupBatchCount: order.pickupBatchLines.length,
+        pickupBatches: Array.from(
+          new Map(
+            order.pickupBatchLines.map((line) => [line.batch.id, line.batch]),
+          ).values(),
+        ).map((batch) => ({
+          number: batch.number,
+          status: batch.status,
+          externallyBooked: Boolean(
+            batch.externalBookedAt || batch.externalBookingReference,
+          ),
+        })),
         supplierFulfillments: order.supplierFulfillments,
       })),
     },
