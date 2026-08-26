@@ -620,10 +620,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(
         page.getByRole("link", { name: "Kurirske adresnice", exact: true }),
-      ).toHaveAttribute(
-        "href",
-        `/api/admin/erp/preuzimanja/${firstBatchId}/labels`,
-      );
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("Kurirske adresnice", { exact: true }).first(),
+      ).toHaveAttribute("aria-disabled", "true");
       await page.goto(
         `/admin/erp/preuzimanja/${firstBatchId}/stampa?autoprint=1`,
         { waitUntil: "domcontentloaded" },

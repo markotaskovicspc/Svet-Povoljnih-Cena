@@ -27,6 +27,7 @@ export async function GET(
       id: true,
       number: true,
       provider: true,
+      labelsCreatedAt: true,
       lines: {
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         select: {
@@ -48,7 +49,13 @@ export async function GET(
     return labelConflict("Nalog nema pakete za štampu.");
   }
   if (batch.provider !== MYGLS_PROVIDER && batch.provider !== X_EXPRESS_PROVIDER) {
-    return labelConflict("Kurirska služba nije podešena na nalogu.");
+    return labelConflict("Kurirska služba nije podešena na nalogu.", batch.id);
+  }
+  if (!batch.labelsCreatedAt) {
+    return labelConflict(
+      "Adresnice još nisu kreirane. Vratite se na nalog i kliknite „Kreiraj adresnice“.",
+      batch.id,
+    );
   }
 
   const orderIds = [...new Set(batch.lines.map((line) => line.orderId))];
@@ -129,7 +136,8 @@ export async function GET(
   ];
   if (missingGroups.length) {
     return labelConflict(
-      `Nedostaju kurirske etikete za ${missingGroups.length} picking grupa.`,
+      `Nedostaju kurirske adresnice za ${missingGroups.length} picking grupa. Ponovite kreiranje adresnica sa naloga.`,
+      batch.id,
     );
   }
   const labelCount = shipments.reduce(
@@ -138,7 +146,8 @@ export async function GET(
   );
   if (labelCount < batch.lines.length) {
     return labelConflict(
-      `Pronađeno je ${labelCount} od ${batch.lines.length} potrebnih kurirskih etiketa.`,
+      `Pronađeno je ${labelCount} od ${batch.lines.length} potrebnih kurirskih adresnica. Ponovite kreiranje sa naloga.`,
+      batch.id,
     );
   }
 
@@ -185,6 +194,7 @@ export async function GET(
       error instanceof Error
         ? error.message
         : "X Express adresnice nisu ispravne za štampu.",
+      batch.id,
     );
   }
   return new NextResponse(html, {
@@ -232,9 +242,57 @@ function shipmentMatchesLine(
   );
 }
 
-function labelConflict(message: string) {
-  return NextResponse.json(
-    { ok: false, error: "courier_labels_unavailable", message },
-    { status: 409 },
-  );
+function labelConflict(message: string, batchId?: string) {
+  const returnHref = batchId
+    ? `/admin/erp/preuzimanja/${encodeURIComponent(batchId)}`
+    : "/admin/erp/preuzimanja";
+  const html = `<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kurirske adresnice nisu spremne</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f5f2ec; color: #1f1b16; font-family: system-ui, sans-serif; padding: 24px; }
+    main { width: min(560px, 100%); border: 1px solid #d7cec2; border-radius: 16px; background: #fff; padding: 28px; box-shadow: 0 16px 48px rgba(47, 38, 27, .08); }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    p { margin: 0; line-height: 1.6; color: #5f5549; }
+    a { display: inline-flex; margin-top: 22px; border-radius: 9px; background: #6f4e37; color: #fff; padding: 10px 14px; font-weight: 700; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Kurirske adresnice nisu spremne</h1>
+    <p>${escapeHtml(message)}</p>
+    <a href="${returnHref}">Vrati se na nalog</a>
+  </main>
+</body>
+</html>`;
+  return new NextResponse(html, {
+    status: 409,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "private, no-store",
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
 }

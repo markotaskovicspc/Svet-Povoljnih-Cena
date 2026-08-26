@@ -450,14 +450,24 @@ export default async function PickupBatchPage({
             >
               Samostalna picking lista
             </Link>
-            <Link
-              href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
-            >
-              Kurirske adresnice
-            </Link>
+            {batch.labelsCreatedAt ? (
+              <Link
+                href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                Kurirske adresnice
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                title="Prvo kliknite „Kreiraj adresnice“."
+                className="inline-flex h-8 cursor-not-allowed items-center rounded-lg border border-border bg-muted px-2.5 text-sm font-medium text-ink-400 opacity-70"
+              >
+                Kurirske adresnice
+              </span>
+            )}
             {editable ? (
               editing ? (
                 <Link

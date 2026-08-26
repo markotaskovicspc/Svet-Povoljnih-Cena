@@ -61,14 +61,24 @@ export default async function PickupBatchPrintPage({
           ← Nazad na nalog
         </Link>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 items-center rounded-lg border border-black bg-white px-3 text-sm font-medium"
-          >
-            Otvori sve kurirske adresnice
-          </Link>
+          {batch.labelsCreatedAt ? (
+            <Link
+              href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center rounded-lg border border-black bg-white px-3 text-sm font-medium"
+            >
+              Otvori sve kurirske adresnice
+            </Link>
+          ) : (
+            <span
+              aria-disabled="true"
+              title="Prvo na nalogu kliknite „Kreiraj adresnice“."
+              className="inline-flex h-9 cursor-not-allowed items-center rounded-lg border border-black/30 bg-black/5 px-3 text-sm font-medium text-black/45"
+            >
+              Adresnice još nisu kreirane
+            </span>
+          )}
           <PrintPageButton label="Štampaj picking listu" />
         </div>
       </div>
