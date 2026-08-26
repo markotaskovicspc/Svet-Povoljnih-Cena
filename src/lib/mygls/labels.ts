@@ -3,6 +3,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMyGlsConfig, MyGlsConfigError } from "./config";
+import { redactMyGlsSenderContactPdf } from "./label-redaction";
 
 /**
  * A provider PDF remains printable when a status-sync mapping failed, as long
@@ -37,10 +38,11 @@ export async function uploadMyGlsLabelPdf(args: {
 
   const cfg = getMyGlsConfig();
   const objectKey = `mygls/${sanitize(args.orderNumber)}/${args.shipmentId}.pdf`;
+  const label = await redactMyGlsSenderContactPdf(args.bytes);
   const client = createAdminClient();
   const { error } = await client.storage
     .from(cfg.labelBucket)
-    .upload(objectKey, args.bytes, {
+    .upload(objectKey, label.bytes, {
       contentType: "application/pdf",
       upsert: true,
     });
@@ -51,6 +53,7 @@ export async function uploadMyGlsLabelPdf(args: {
     objectKey,
     mimeType: "application/pdf",
     labelUrl: adminShipmentLabelPath(args.shipmentId),
+    bytes: label.bytes,
   };
 }
 
@@ -61,7 +64,8 @@ export async function downloadMyGlsLabelPdf(objectKey: string) {
   if (error || !data) {
     throw new MyGlsConfigError(error?.message ?? "MyGLS etiketa nije pronađena.");
   }
-  return Buffer.from(await data.arrayBuffer());
+  const label = await redactMyGlsSenderContactPdf(await data.arrayBuffer());
+  return label.bytes;
 }
 
 function sanitize(value: string) {

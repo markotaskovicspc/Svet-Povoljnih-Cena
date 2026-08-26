@@ -148,6 +148,10 @@ export async function createMyGlsShipmentForOrder(
       orderNumber: order.number,
       bytes: labelBytes,
     });
+    const sanitizedResponse = {
+      ...response,
+      Labels: Array.from(label.bytes),
+    };
 
     const data = {
       provider: MYGLS_PROVIDER,
@@ -167,7 +171,7 @@ export async function createMyGlsShipmentForOrder(
       labelMimeType: label.mimeType,
       status: "CREATED" as const,
       providerStatusCode: null,
-      rawCreateResponse: withShipmentAssignment(response, {
+      rawCreateResponse: withShipmentAssignment(sanitizedResponse, {
         orderItemIds: assignmentOrderItemIds,
         codAmount,
       }) as Prisma.InputJsonValue,
@@ -183,7 +187,7 @@ export async function createMyGlsShipmentForOrder(
             create: {
               status: "CREATED",
               message: "MyGLS nalog kreiran",
-              raw: response as Prisma.InputJsonValue,
+              raw: sanitizedResponse as Prisma.InputJsonValue,
             },
           },
         },
@@ -200,7 +204,7 @@ export async function createMyGlsShipmentForOrder(
           create: {
             status: "CREATED",
             message: "MyGLS nalog kreiran",
-            raw: response as Prisma.InputJsonValue,
+            raw: sanitizedResponse as Prisma.InputJsonValue,
           },
         },
       },
