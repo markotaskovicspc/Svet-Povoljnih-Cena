@@ -23,7 +23,7 @@ describe("confirmed client rules", () => {
     );
   });
 
-  it("calculates the published category, volumetric measure and logged-in free tier", () => {
+  it("calculates the published category, volumetric measure and free tier", () => {
     expect(deliveryCategory([60, 40, 30])).toBe(1);
     expect(deliveryCategory([101, 60, 40])).toBe(2);
     expect(packageVolumetricDimension([100, 60, 40])).toBe(300);
@@ -40,11 +40,11 @@ describe("confirmed client rules", () => {
     const guestTariff = calculatePublishedDeliveryTariff([product], {
       loggedIn: false,
     });
-    expect(guestTariff?.total).toBe(399);
+    expect(guestTariff?.total).toBe(0);
     expect(guestTariff?.categories[1]).toEqual({
       weightKg: 8,
       subtotal: 2_200,
-      price: 399,
+      price: 0,
     });
     expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(0);
   });
@@ -96,7 +96,7 @@ describe("confirmed client rules", () => {
       [
         {
           qty: 2,
-          unitPrice: 1_100,
+          unitPrice: 900,
           unitPackWidthCm: 50,
           unitPackDepthCm: 40,
           unitPackHeightCm: 30,
@@ -120,13 +120,22 @@ describe("confirmed client rules", () => {
       grossWeightKg: 2,
     };
 
-    expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(299);
     expect(
-      calculatePublishedDeliveryTariff(
-        [{ ...product, unitPrice: 2_000.01 }],
-        { loggedIn: true },
-      )?.total,
+      calculatePublishedDeliveryTariff([product], { loggedIn: false })?.total,
+    ).toBe(299);
+    expect(
+      calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total,
+    ).toBe(299);
+    expect(
+      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 2_000.01 }], {
+        loggedIn: false,
+      })?.total,
     ).toBe(0);
+    expect(
+      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 2_001 }], {
+        loggedIn: false,
+      })?.categories[1],
+    ).toEqual({ weightKg: 2, subtotal: 2_001, price: 0 });
   });
 
   it("charges the open-ended category-I rate above 30 kg", () => {
@@ -135,7 +144,7 @@ describe("confirmed client rules", () => {
         [
           {
             qty: 1,
-            unitPrice: 5_000,
+            unitPrice: 1_500,
             unitPackWidthCm: 70,
             unitPackDepthCm: 40,
             unitPackHeightCm: 30,
@@ -243,7 +252,7 @@ describe("confirmed client rules", () => {
       [
         {
           qty: 1,
-          unitPrice: 5_000,
+          unitPrice: 1_500,
           unitPackWidthCm: 50,
           unitPackDepthCm: 40,
           unitPackHeightCm: 30,

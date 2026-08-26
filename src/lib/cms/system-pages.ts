@@ -220,7 +220,7 @@ Standardni rok isporuke iznosi 2–3 radna dana od potvrde porudžbine. Ako kupa
 
 **Cena dostave se ne računa za svaki poseban paket, već kao suma svih težina po kategoriji.** Ukupan iznos dostave prikazuje se pre potvrde porudžbine.
 
-Za prijavljene kupce, dostava artikala I kategorije je besplatna kada njihov zbir prelazi 2.000 RSD.
+Dostava artikala I kategorije je besplatna kada njihov zbir prelazi 2.000 RSD.
 
 **I kategorija (standardni paketi) — paketi čija je volumetrijska dimenzija manja od 300 cm:**
 

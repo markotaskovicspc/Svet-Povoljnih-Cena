@@ -163,9 +163,7 @@ export function calculatePublishedDeliveryTariffQuote(
       ? deliveryRate(2, totals[2].weightKg, options.rates)
       : 0;
   const categoryOnePrice =
-    options.loggedIn && totals[1].subtotal > FREE_CATEGORY_ONE_THRESHOLD_RSD
-      ? 0
-      : categoryOneRate;
+    totals[1].subtotal > FREE_CATEGORY_ONE_THRESHOLD_RSD ? 0 : categoryOneRate;
   if (categoryOneRate == null || categoryTwoRate == null) {
     return {
       total: null,
