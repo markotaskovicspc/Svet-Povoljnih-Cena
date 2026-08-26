@@ -338,6 +338,11 @@ export function CheckoutFlow({
   const selectedDeliveryPrice = deliveryQuote.prices[shippingMethod];
   const deliveryQuoteIsPayable =
     deliveryQuoteIsCurrent && selectedDeliveryPrice != null;
+  const deliveryQuoteDisplayStatus = deliveryQuoteIsCurrent
+    ? "ready"
+    : deliveryQuoteError
+      ? "error"
+      : "loading";
 
   const refreshDeliveryQuote = useCallback(
     async (signal?: AbortSignal) => {
@@ -883,6 +888,7 @@ export function CheckoutFlow({
 
         <OrderSummary
           deliveryQuote={deliveryQuote}
+          deliveryQuoteStatus={deliveryQuoteDisplayStatus}
           paymentMethods={checkoutConfig.paymentMethods}
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}

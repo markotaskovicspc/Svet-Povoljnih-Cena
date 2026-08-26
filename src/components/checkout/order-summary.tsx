@@ -25,6 +25,13 @@ export interface SummaryTotals {
   total: number | null;
 }
 
+export type DeliveryQuoteDisplayStatus = "loading" | "ready" | "error";
+
+const UNRESOLVED_SHIPPING_PRICES: Record<ShippingMethod, number | null> = {
+  kurir: null,
+  kamion: null,
+};
+
 export function computeTotals({
   itemsFull,
   itemsSale,
@@ -59,6 +66,7 @@ export function computeTotals({
 
 interface OrderSummaryProps {
   deliveryQuote: CheckoutDeliveryQuote;
+  deliveryQuoteStatus?: DeliveryQuoteDisplayStatus;
   paymentMethods?: CheckoutPaymentMethodConfig[];
   shippingMethod: ShippingMethod;
   paymentMethod?: PaymentMethod | null;
@@ -73,6 +81,7 @@ interface OrderSummaryProps {
 
 export function OrderSummary({
   deliveryQuote,
+  deliveryQuoteStatus = "ready",
   shippingMethod,
   perItemAssembly,
   cta,
@@ -82,6 +91,7 @@ export function OrderSummary({
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const voucher = useCheckout((s) => s.voucher);
+  const deliveryQuoteReady = deliveryQuoteStatus === "ready";
 
   const itemsFull = lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0);
   const itemsSale = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
@@ -104,7 +114,9 @@ export function OrderSummary({
     shippingMethod,
     assemblyTotal,
     voucherDiscountRsd: voucher?.discountRsd ?? 0,
-    shippingPrices: deliveryQuote.prices,
+    shippingPrices: deliveryQuoteReady
+      ? deliveryQuote.prices
+      : UNRESOLVED_SHIPPING_PRICES,
   });
 
   return (
@@ -177,13 +189,19 @@ export function OrderSummary({
               </span>
             }
             value={
-              totals.shipping == null
-                ? "Nije moguće obračunati"
-                : formatRsd(totals.shipping)
+              deliveryQuoteStatus === "loading"
+                ? "Obračunavam…"
+                : totals.shipping == null
+                  ? "Nije moguće obračunati"
+                  : formatRsd(totals.shipping)
             }
           />
           <DeliveryCategoryBreakdown
-            breakdown={deliveryQuote.deliveryCategoryBreakdown ?? null}
+            breakdown={
+              deliveryQuoteReady
+                ? (deliveryQuote.deliveryCategoryBreakdown ?? null)
+                : null
+            }
           />
           {totals.assembly > 0 ? (
             <Row
