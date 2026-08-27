@@ -246,7 +246,9 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
 
     await page.reload({ waitUntil: "domcontentloaded" });
     const remainingRow = page.locator("tr").filter({ hasText: skus[0] });
-    await expect(remainingRow.getByText("Otkažite nalog")).toBeVisible();
+    await expect(
+      remainingRow.getByRole("button", { name: "Otkaži nalog" }),
+    ).toBeVisible();
     await expect(remainingRow.getByRole("button", { name: "Sačuvaj" })).toHaveCount(0);
 
     const events = await db.orderStatusEvent.findMany({

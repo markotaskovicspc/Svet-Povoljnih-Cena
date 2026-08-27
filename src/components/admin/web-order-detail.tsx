@@ -1319,9 +1319,27 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               </SubmitButton>
                             </AdminActionForm>
                           ) : (
-                            <span className="text-xs text-ink-500">
-                              Otkažite nalog
-                            </span>
+                            <AdminActionForm
+                              action={updateStatus}
+                              refreshOnSuccess
+                              className="flex justify-end"
+                            >
+                              <input type="hidden" name="id" value={order.id} />
+                              <input type="hidden" name="status" value="OTKAZANO" />
+                              <input
+                                type="hidden"
+                                name="note"
+                                value="Cela WEB porudžbina je otkazana umesto uklanjanja poslednje stavke."
+                              />
+                              <SubmitButton
+                                size="xs"
+                                variant="destructive"
+                                pendingLabel="Otkazivanje…"
+                                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervisana roba biće vraćena na lager i kupac će dobiti obaveštenje.`}
+                              >
+                                Otkaži nalog
+                              </SubmitButton>
+                            </AdminActionForm>
                           ),
                       }
                     : {}),
