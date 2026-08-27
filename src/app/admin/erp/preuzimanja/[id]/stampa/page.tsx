@@ -30,10 +30,6 @@ export default async function PickupBatchPrintPage({
       lines: {
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         include: {
-          order: { select: { id: true, number: true } },
-          reclamation: {
-            select: { number: true },
-          },
           orderItem: {
             select: {
               id: true,
@@ -97,7 +93,6 @@ export default async function PickupBatchPrintPage({
           <thead>
             <tr className="border-y-2 border-black text-left">
               <th className="w-12 py-2">✓</th>
-              <th className="py-2">Izvor</th>
               <th className="py-2">Interna šifra</th>
               <th className="py-2">Naziv artikla</th>
               <th className="py-2 text-right">Komada</th>
@@ -108,7 +103,6 @@ export default async function PickupBatchPrintPage({
             {picking.map((row) => (
               <tr key={row.key} className="border-b border-black/30 align-top">
                 <td className="py-3"><span className="inline-block size-5 border border-black" /></td>
-                <td className="py-3">{row.source}</td>
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
                 <td className="py-3">{row.name}</td>
                 <td className="py-3 text-right text-lg font-bold">{row.quantity}</td>
