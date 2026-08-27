@@ -56,6 +56,7 @@ export function verifyXExpressWebhookHeaders(headers: Headers) {
   const keyMatches = Boolean(
     credential &&
       ((cfg.webhookApiKey && credential === cfg.webhookApiKey) ||
+        (cfg.webhookSecret && credential === cfg.webhookSecret) ||
         (cfg.apiKey && credential === cfg.apiKey)),
   );
   return (

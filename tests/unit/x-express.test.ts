@@ -39,6 +39,7 @@ const config: XExpressConfig = {
   apiUser: "api-user",
   apiKey: "api-key",
   webhookApiKey: "webhook-key",
+  webhookSecret: "legacy-webhook-key",
   contractCode: "U000328",
   codePrefix: "AAA",
   codeRangeStart: 850300001,
@@ -731,6 +732,7 @@ describe("X Express codes, label and webhook envelope", () => {
 
   it("requires exact webhook authentication, contract and schema", () => {
     vi.stubEnv("X_EXPRESS_WEBHOOK_API_KEY", "webhook-key");
+    vi.stubEnv("X_EXPRESS_WEBHOOK_SECRET", "legacy-webhook-key");
     vi.stubEnv("X_EXPRESS_API_KEY", "api-key");
     vi.stubEnv("X_EXPRESS_CONTRACT_CODE", "U000328");
     const headers = new Headers({
@@ -742,6 +744,8 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(verifyXExpressWebhookHeaders(headers)).toBe(false);
     headers.set("X-API-Sender", "XExpress");
     headers.set("X-API-Key", "api-key");
+    expect(verifyXExpressWebhookHeaders(headers)).toBe(true);
+    headers.set("X-API-Key", "legacy-webhook-key");
     expect(verifyXExpressWebhookHeaders(headers)).toBe(true);
     headers.set("X-API-Key", "unrecognized-key");
     expect(verifyXExpressWebhookHeaders(headers)).toBe(false);

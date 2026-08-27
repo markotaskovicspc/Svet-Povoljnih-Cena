@@ -23,6 +23,7 @@ export interface XExpressConfig {
   apiUser: string;
   apiKey: string;
   webhookApiKey: string;
+  webhookSecret: string;
   contractCode: string;
   codePrefix: string;
   codeRangeStart: number | null;
@@ -105,6 +106,7 @@ export function getXExpressConfig(): XExpressConfig {
     webhookApiKey:
       trim(process.env.X_EXPRESS_WEBHOOK_API_KEY) ||
       trim(process.env.X_EXPRESS_WEBHOOK_SECRET),
+    webhookSecret: trim(process.env.X_EXPRESS_WEBHOOK_SECRET),
     contractCode: trim(process.env.X_EXPRESS_CONTRACT_CODE),
     codePrefix,
     codeRangeStart,
