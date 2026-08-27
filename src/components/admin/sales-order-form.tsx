@@ -7,7 +7,8 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
-import { Plus, Trash2 } from "lucide-react";
+import { Combobox } from "@base-ui/react/combobox";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -17,6 +18,7 @@ import {
   calculateSalesLineTotals,
 } from "@/lib/admin/sales-order";
 import type {
+  SalesOrderCustomerOption,
   SalesOrderDetail,
   SalesOrderFormLine,
   SalesOrderFormOptions,
@@ -92,6 +94,90 @@ function money(value: number, currency: string) {
   const [whole, fraction] = value.toFixed(2).split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `${grouped},${fraction} ${currency}`;
+}
+
+function customerOptionLabel(customer: SalesOrderCustomerOption) {
+  return `${customer.label}${customer.pib ? ` · PIB ${customer.pib}` : ""}`;
+}
+
+function CustomerCombobox({
+  customers,
+  value,
+  disabled,
+  onValueChange,
+}: {
+  customers: SalesOrderCustomerOption[];
+  value: string;
+  disabled: boolean;
+  onValueChange: (customerId: string) => void;
+}) {
+  const selectedCustomer =
+    customers.find((customer) => customer.id === value) ?? null;
+
+  return (
+    <Combobox.Root
+      items={customers}
+      value={selectedCustomer}
+      onValueChange={(customer) => onValueChange(customer?.id ?? "")}
+      itemToStringLabel={customerOptionLabel}
+      itemToStringValue={(customer) => customer.id}
+      isItemEqualToValue={(customer, selected) => customer.id === selected.id}
+      disabled={disabled}
+      required
+      autoHighlight
+      openOnInputClick
+    >
+      <Combobox.InputGroup className="flex h-9 items-center rounded-lg border border-input bg-surface transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-60">
+        <Combobox.Input
+          aria-label="Kupac"
+          placeholder="Pretražite kupca ili PIB..."
+          className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+        />
+        <Combobox.Trigger
+          aria-label="Otvori listu kupaca"
+          className="flex h-full shrink-0 items-center px-2 text-muted-foreground outline-none"
+        >
+          <ChevronsUpDown className="size-4" aria-hidden="true" />
+        </Combobox.Trigger>
+      </Combobox.InputGroup>
+      <Combobox.Portal>
+        <Combobox.Positioner
+          side="bottom"
+          sideOffset={4}
+          align="start"
+          className="isolate z-50"
+        >
+          <Combobox.Popup className="max-h-(--available-height) w-(--anchor-width) min-w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+            <Combobox.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
+              Nema kupaca za unetu pretragu.
+            </Combobox.Empty>
+            <Combobox.List className="max-h-72 overflow-y-auto p-1 outline-none">
+              {(customer: SalesOrderCustomerOption, index: number) => (
+                <Combobox.Item
+                  key={customer.id}
+                  value={customer}
+                  index={index}
+                  className="group flex cursor-default items-center gap-2 rounded-md px-2 py-2 text-sm outline-none select-none data-highlighted:bg-muted data-highlighted:text-foreground"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{customer.label}</span>
+                    {customer.pib ? (
+                      <span className="block text-xs text-muted-foreground">
+                        PIB {customer.pib}
+                      </span>
+                    ) : null}
+                  </span>
+                  <Combobox.ItemIndicator className="shrink-0 text-foreground">
+                    <Check className="size-4" aria-hidden="true" />
+                  </Combobox.ItemIndicator>
+                </Combobox.Item>
+              )}
+            </Combobox.List>
+          </Combobox.Popup>
+        </Combobox.Positioner>
+      </Combobox.Portal>
+    </Combobox.Root>
+  );
 }
 
 function metadataFields(line: EditableLine) {
@@ -451,22 +537,12 @@ export function SalesOrderForm({
             </select>
           </Field>
           <Field label="Kupac">
-            <select
+            <CustomerCombobox
+              customers={options.customers}
               value={customerId}
               disabled={readOnly}
-              required
-              onChange={(event) => setCustomerId(event.target.value)}
-              className="h-9 rounded-lg border border-input bg-surface px-3 text-sm disabled:opacity-60"
-              aria-label="Kupac"
-            >
-              <option value="">— izaberite kupca —</option>
-              {options.customers.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                  {item.pib ? ` · PIB ${item.pib}` : ""}
-                </option>
-              ))}
-            </select>
+              onValueChange={setCustomerId}
+            />
           </Field>
           <Field label="Cenovnik">
             <select

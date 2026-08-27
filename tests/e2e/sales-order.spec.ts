@@ -581,7 +581,13 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         page.getByRole("heading", { name: "Nova porudžbina" }),
       ).toBeVisible();
       await expect(page.locator('form[data-client-ready="true"]')).toHaveCount(1);
-      await page.getByLabel("Kupac").selectOption(customerId);
+      await page.getByLabel("Kupac").fill(fixture.customerPib);
+      await page
+        .getByRole("option", { name: new RegExp(fixture.customerCompany) })
+        .click();
+      await expect(page.getByLabel("Kupac")).toHaveValue(
+        `${fixture.customerCompany} · PIB ${fixture.customerPib}`,
+      );
       await page.getByLabel("Cenovnik").selectOption(priceListId);
       await expect(
         page.getByText(fixture.customerCompany, { exact: true }),
