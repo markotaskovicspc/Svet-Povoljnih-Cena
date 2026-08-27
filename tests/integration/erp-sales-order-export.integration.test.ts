@@ -53,6 +53,8 @@ describe("sales-order ERP export filters", () => {
     expect(new Set(fixtureRows.map((row) => row.detailId))).toEqual(
       new Set([issuedInsideId, notIssuedId]),
     );
+    expect(fixtureRows[0]?.values.paymentMethod).toBe("Pouzeće — gotovina");
+    expect(fixtureRows[0]?.values.paymentStatus).toBe("Plaća se kuriru");
   });
 
   it("filters by issued fiscal period without introducing a separate download path", async () => {

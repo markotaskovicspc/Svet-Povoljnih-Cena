@@ -135,13 +135,30 @@ function formatValue(value: ErpValue, column: ErpColumn) {
 
 function statusClass(value: ErpValue) {
   const v = textValue(value).toLowerCase();
-  if (["sp", "poslata", "potvrđena", "primljena", "objavljeno"].some((x) => v.includes(x))) {
+  if (["neuspešno", "odbijeno"].some((x) => v.includes(x))) {
+    return "bg-danger/10 text-danger ring-danger/20";
+  }
+  if (
+    [
+      "sp",
+      "poslata",
+      "potvrđena",
+      "primljena",
+      "objavljeno",
+      "plaćeno",
+      "autorizovano",
+    ].some((x) => v.includes(x))
+  ) {
     return "bg-success/10 text-success ring-success/20";
   }
-  if (["dtz", "u obradi", "u pripremi", "predlog"].some((x) => v.includes(x))) {
+  if (
+    ["dtz", "u obradi", "u pripremi", "predlog", "čeka uplatu", "čeka potvrdu"].some(
+      (x) => v.includes(x),
+    )
+  ) {
     return "bg-warning/10 text-warning ring-warning/20";
   }
-  if (["arh", "čeka", "ceka"].some((x) => v.includes(x))) {
+  if (["arh", "čeka", "ceka", "refundirano"].some((x) => v.includes(x))) {
     return "bg-ink-500/10 text-ink-500 ring-ink-500/20";
   }
   return "bg-brand-blue-50 text-brand-blue ring-brand-blue/15";
@@ -214,6 +231,28 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
       );
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(columnOrderVersionKey(moduleSlug), "2");
+      return migrated;
+    }
+    if (
+      moduleSlug === "prodajni-nalozi" &&
+      window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
+        "payment-tracking-v1"
+    ) {
+      const migrated = completeOrder.filter(
+        (key) => key !== "paymentMethod" && key !== "paymentStatus",
+      );
+      const channelIndex = migrated.indexOf("channel");
+      migrated.splice(
+        channelIndex >= 0 ? channelIndex + 1 : 2,
+        0,
+        "paymentMethod",
+        "paymentStatus",
+      );
+      window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
+      window.localStorage.setItem(
+        columnOrderVersionKey(moduleSlug),
+        "payment-tracking-v1",
+      );
       return migrated;
     }
     return completeOrder;

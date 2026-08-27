@@ -242,6 +242,14 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         shipPostalCode: "11000",
         guestEmail: `qa.web.${runId}@example.invalid`,
         termsAcceptedAt: new Date(),
+        payments: {
+          create: {
+            method: "UPLATA_NA_RACUN",
+            provider: "MANUAL",
+            status: "PENDING",
+            amount: 0,
+          },
+        },
       },
       select: { id: true, number: true },
     });
@@ -428,6 +436,10 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       for (const header of [
         "Broj porudžbine",
         "Datum porudžbine",
+        "Kanal",
+        "Način plaćanja",
+        "Status plaćanja",
+        "Status porudžbine",
         "Datum fiskalizacije",
         "Ime i prezime kupca / firma",
         "PIB",
@@ -456,11 +468,9 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         "Ukupno bez PDV-a po šifri",
         "Ukupno sa PDV-om po šifri",
         "Magacin",
-        "Status porudžbine",
         "Fiskalizovano",
         "Fakturisano",
         "Prihvaćeno na SEF-u",
-        "Plaćeno",
       ]) {
         await expect(
           page.getByRole("columnheader").filter({
@@ -468,6 +478,32 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
           }),
         ).toBeVisible();
       }
+
+      const search = page.getByPlaceholder("Brza pretraga po vidljivim kolonama");
+      await search.fill(webOrderNumber);
+      const pendingBankRow = page.getByRole("row").filter({
+        has: page.getByRole("link", { name: webOrderNumber, exact: true }),
+      });
+      await expect(pendingBankRow.getByText("Uplata na račun", { exact: true })).toBeVisible();
+      await expect(pendingBankRow.getByText("Čeka uplatu", { exact: true })).toBeVisible();
+
+      await page.getByLabel("Kolona za novi filter").selectOption("paymentStatus");
+      await page.getByRole("button", { name: "Filter", exact: true }).click();
+      await page.getByLabel("Filter Status plaćanja").selectOption("Čeka uplatu");
+      await expect(pendingBankRow).toBeVisible();
+
+      await db.payment.updateMany({
+        where: { orderId: webOrderId! },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.getByPlaceholder("Brza pretraga po vidljivim kolonama").fill(
+        webOrderNumber,
+      );
+      const paidBankRow = page.getByRole("row").filter({
+        has: page.getByRole("link", { name: webOrderNumber, exact: true }),
+      });
+      await expect(paidBankRow.getByText("Plaćeno", { exact: true })).toBeVisible();
     });
 
     await test.step("API odbija nepostojeću šifru, duplikat i brisanje WEB porudžbine", async () => {
@@ -1024,6 +1060,40 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         )
         .toBe(1);
     });
+  });
+
+  test("praćenje plaćanja ostaje dostupno na uskom ekranu", async ({
+    context,
+    page,
+  }) => {
+    page.setDefaultTimeout(30_000);
+    await context.addCookies([
+      {
+        name: "spc_cookie_consent",
+        value: "essential",
+        url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+      },
+    ]);
+    await login(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/admin/erp/prodajni-nalozi", {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByPlaceholder("Brza pretraga po vidljivim kolonama").fill(
+      webOrderNumber,
+    );
+
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("link", { name: webOrderNumber, exact: true }),
+    });
+    await expect(row.getByText("Uplata na račun", { exact: true })).toBeVisible();
+    await expect(row.getByText("Plaćeno", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Kolona za novi filter")).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      ),
+    ).toBe(true);
   });
 
   async function login(page: Page) {

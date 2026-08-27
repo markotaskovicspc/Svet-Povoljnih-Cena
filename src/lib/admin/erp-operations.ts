@@ -31,6 +31,12 @@ import {
   buildWarehouseStockGridRows,
   WAREHOUSE_GRID_INCOMING_ORDER_STATUSES,
 } from "@/lib/admin/warehouse-stock-grid";
+import {
+  ADMIN_PAYMENT_METHOD_OPTIONS,
+  ADMIN_PAYMENT_STATUS_OPTIONS,
+  adminPaymentMethodLabel,
+  adminPaymentStatusLabel,
+} from "@/lib/payments/admin-display";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -430,8 +436,11 @@ export const operationalErpModules: ErpModule[] = [
     columns: [
       text("number", "Broj porudžbine"),
       date("orderDate", "Datum porudžbine"),
-      date("fiscalizedAt", "Datum fiskalizacije"),
       status("channel", "Kanal", ["WEB", "ANANAS", "MP", "VP", "INO"]),
+      status("paymentMethod", "Način plaćanja", ADMIN_PAYMENT_METHOD_OPTIONS),
+      status("paymentStatus", "Status plaćanja", ADMIN_PAYMENT_STATUS_OPTIONS),
+      status("status", "Status porudžbine"),
+      date("fiscalizedAt", "Datum fiskalizacije"),
       text("customer", "Ime i prezime kupca / firma"),
       text("pib", "PIB"),
       text("priceList", "Cenovnik"),
@@ -459,11 +468,10 @@ export const operationalErpModules: ErpModule[] = [
       money("totalNet", "Ukupno bez PDV-a po šifri"),
       money("totalGross", "Ukupno sa PDV-om po šifri"),
       text("warehouse", "Magacin"),
-      status("status", "Status porudžbine"),
       bool("fiscalized", "Fiskalizovano"),
       bool("invoiced", "Fakturisano"),
       bool("sefAccepted", "Prihvaćeno na SEF-u"),
-      bool("paid", "Plaćeno"),
+      { ...bool("paid", "Plaćeno (Da/Ne)"), defaultVisible: false },
     ],
     rows: emptyRows,
     notes: [
@@ -1533,8 +1541,8 @@ async function salesOrderRows(
         select: { id: true },
       },
       payments: {
-        where: { status: "PAID" },
-        select: { id: true },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
       },
     },
   });
@@ -1549,6 +1557,11 @@ async function salesOrderRows(
         order.fiscalDocuments[0]?.issuedAt ?? order.fiscal?.fiscalizedAt ?? null,
       ),
       channel: order.channel,
+      paymentMethod: adminPaymentMethodLabel(order.paymentMethod),
+      paymentStatus: adminPaymentStatusLabel({
+        paymentMethod: order.paymentMethod,
+        paymentStatuses: order.payments.map((payment) => payment.status),
+      }),
       customer,
       pib: order.shipPib,
       priceList: order.priceList
@@ -1563,7 +1576,7 @@ async function salesOrderRows(
       fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
       invoiced: order.invoices.length > 0,
       sefAccepted: Boolean(order.sefAcceptedAt),
-      paid: order.payments.length > 0,
+      paid: order.payments.some((payment) => payment.status === "PAID"),
     };
     if (!order.items.length) {
       return [
