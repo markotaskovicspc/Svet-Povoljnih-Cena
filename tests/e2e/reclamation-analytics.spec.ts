@@ -477,6 +477,15 @@ test.describe("Admin analitika reklamacija", () => {
       ]) {
         await expect(page.getByText(label, { exact: true })).toBeVisible();
       }
+      const kpiSection = page.locator('section[aria-label="Ključni pokazatelji"]');
+      await expect(kpiSection).toBeVisible();
+      await expect(
+        kpiSection.getByText("Trenutni broj poseta", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        kpiSection.getByText("Prosečan dnevni broj poseta", { exact: true }),
+      ).toBeVisible();
+      await expect(kpiSection.getByRole("heading", { name: "Zalihe za magacin" })).toHaveCount(0);
       await expect(page.getByRole("heading", { name: "Zalihe za magacin" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Top proizvodi" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Niske zalihe" })).toBeVisible();

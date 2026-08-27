@@ -404,24 +404,32 @@ export default async function AdminDashboard({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · ${warehouseLabel}`} />
-          <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
-          <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
-          <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
-        </div>
+        <section aria-label="Ključni pokazatelji" className="space-y-8">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
+            <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
+            <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
+          </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Reklamacije u periodu" value={String(reclamationCount)} hint={`${reclamationsPeriod.label} · ${warehouseLabel}`} tone={reclamationCount > 0 ? "warning" : "default"} />
-          <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
-          <StatCard
-            label="Zauzeta paletna mesta"
-            value={visiblePallets.occupied.toLocaleString("sr-Latn-RS")}
-            hint={`${visiblePallets.missingSkuCount} SKU bez podatka kom/paleta · ${warehouseLabel}`}
-            tone={visiblePallets.missingSkuCount > 0 ? "warning" : "default"}
-          />
-          <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${formatVolume(incoming.total_volume)} · ${warehouseLabel}`} />
-        </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Reklamacije u periodu" value={String(reclamationCount)} hint={`${reclamationsPeriod.label} · ${warehouseLabel}`} tone={reclamationCount > 0 ? "warning" : "default"} />
+            <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
+            <StatCard
+              label="Zauzeta paletna mesta"
+              value={visiblePallets.occupied.toLocaleString("sr-Latn-RS")}
+              hint={`${visiblePallets.missingSkuCount} SKU bez podatka kom/paleta · ${warehouseLabel}`}
+              tone={visiblePallets.missingSkuCount > 0 ? "warning" : "default"}
+            />
+            <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${formatVolume(incoming.total_volume)} · ${warehouseLabel}`} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
+            <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
+            <StatCard label="Prosečan dnevni broj poseta" value={visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} hint="Poslednjih 30 kalendarskih dana, uključujući dane bez poseta" />
+          </div>
+        </section>
 
         <Card>
           <CardTitle
@@ -454,12 +462,6 @@ export default async function AdminDashboard({
             empty="Nema aktivnih magacina."
           />
         </Card>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
-          <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
-          <StatCard label="Prosečan dnevni broj poseta" value={visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} hint="Poslednjih 30 kalendarskih dana, uključujući dane bez poseta" />
-        </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
