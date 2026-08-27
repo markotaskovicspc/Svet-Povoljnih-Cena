@@ -626,8 +626,33 @@ describe("X Express codes, label and webhook envelope", () => {
     );
     expect(batchHtml.match(/<!doctype html>/g)).toHaveLength(1);
     expect(batchHtml.match(/<section class="label">/g)).toHaveLength(3);
+    expect(batchHtml.match(/<main class="sheet"/g)).toHaveLength(1);
     expect(batchHtml).toContain("X Express adresnice PRE-2026-0002");
     expect(batchHtml).toContain("window.print()");
+
+    const fiveLabelHtml = renderXExpressBatchLabelsHtml([
+      {
+        ...shipment,
+        packageCount: 5,
+        providerParcelNumbers: [
+          "AAA0850300001",
+          "AAA0850300002",
+          "AAA0850300003",
+          "AAA0850300004",
+          "AAA0850300005",
+        ],
+      },
+    ]);
+    const sheets = [
+      ...fiveLabelHtml.matchAll(
+        /<main class="sheet" data-sheet="\d+">([\s\S]*?)<\/main>/g,
+      ),
+    ];
+    expect(sheets).toHaveLength(2);
+    expect(sheets[0]?.[1].match(/<section class="label">/g)).toHaveLength(4);
+    expect(sheets[1]?.[1].match(/<section class="label">/g)).toHaveLength(1);
+    expect(fiveLabelHtml).toContain("@page { size: A4 portrait; margin: 0; }");
+    expect(fiveLabelHtml).toContain("page-break-after: always");
   });
 
   it("repairs legacy combined content from the pickup package order", () => {

@@ -144,6 +144,7 @@ export function renderXExpressBatchLabelsHtml(
       options.packageContentsByShipmentId?.[shipment.id],
     ),
   );
+  const sheets = chunkLabels(labels, 4);
 
   return `<!doctype html>
 <html lang="sr-Latn">
@@ -151,12 +152,12 @@ export function renderXExpressBatchLabelsHtml(
   <meta charset="utf-8" />
   <title>X Express adresnice ${escapeHtml(title)}</title>
   <style>
-    @page { size: A4; margin: 9mm; }
+    @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f5f5f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
     .screen-note { max-width: 195mm; margin: 5mm auto; border: 1px solid #111; background: #fff; padding: 3mm; font-size: 12px; line-height: 1.35; }
-    .sheet { display: grid; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; gap: 6mm 5mm; align-items: start; justify-content: center; padding: 0; }
-    .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; display: flex; flex-direction: column; }
+    .sheet { width: 210mm; height: 296mm; margin: 0 auto 5mm; overflow: hidden; background: white; padding: 9mm; display: grid; grid-template-columns: repeat(2, 95mm); grid-template-rows: repeat(2, 138mm); gap: 2mm; align-items: start; justify-content: start; page-break-inside: avoid; break-inside: avoid-page; }
+    .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; break-inside: avoid-page; display: flex; flex-direction: column; }
     .topline { border: 1.5px solid #000; padding: 1.2mm; text-align: center; font-size: 8px; line-height: 1.1; font-weight: 800; margin-bottom: 1.5mm; }
     .sender { border: 1px solid #ddd; padding: 1.5mm; min-height: 14mm; font-size: 8px; line-height: 1.08; overflow-wrap: anywhere; }
     .barcode { margin: 2mm 0 1mm; text-align: center; }
@@ -170,17 +171,29 @@ export function renderXExpressBatchLabelsHtml(
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 2.5mm; font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; }
     .note { margin-top: 2mm; font-size: 8.5px; line-height: 1.15; white-space: pre-wrap; }
     .stamp { margin-top: auto; display: flex; justify-content: space-between; gap: 2mm; border-top: 1px solid #000; padding-top: 1.2mm; font-size: 7px; line-height: 1.1; font-weight: 700; }
-    @media print { body { background: white; } .screen-note { display: none; } .sheet { gap: 0; grid-template-columns: repeat(2, 95mm); grid-auto-rows: 138mm; } .label { break-inside: avoid; } }
+    @media print { body { width: 210mm; background: white; } .screen-note { display: none; } .sheet { margin: 0; page-break-after: always; break-after: page; } .sheet:last-of-type { page-break-after: auto; break-after: auto; } }
   </style>
 </head>
 <body>
   <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> ERP generiše adresnice po zvaničnoj X Express specifikaciji iz potvrđene adrese i sačuvanog API zahteva. Pakete prvo odštampajte i označite, pa tek onda pošiljke pošaljite X Express-u.</aside>
-  <main class="sheet">
-    ${labels.join("")}
-  </main>
+  ${sheets
+    .map(
+      (sheet, index) => `<main class="sheet" data-sheet="${index + 1}">
+    ${sheet.join("")}
+  </main>`,
+    )
+    .join("\n  ")}
   ${options.autoPrint ? "<script>window.addEventListener('load', () => window.print());</script>" : ""}
 </body>
 </html>`;
+}
+
+function chunkLabels(labels: readonly string[], size: number) {
+  const chunks: string[][] = [];
+  for (let index = 0; index < labels.length; index += size) {
+    chunks.push(labels.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function renderShipmentLabels(
