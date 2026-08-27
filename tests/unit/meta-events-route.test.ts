@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Order } from "@/types";
 
 const mocks = vi.hoisted(() => ({
@@ -29,10 +29,15 @@ import { POST } from "@/app/api/analytics/meta/events/route";
 
 describe("Meta server event route", () => {
   beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "https://www.svetpovoljnihcena.rs");
     mocks.capiConfig.mockReturnValue({ pixelId: "4622399164665144" });
     mocks.sendCapi.mockResolvedValue({ sent: true });
     mocks.checkRateLimit.mockResolvedValue({ ok: true });
     mocks.getOrder.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("refuses both browser-derived and server events without marketing consent", async () => {
