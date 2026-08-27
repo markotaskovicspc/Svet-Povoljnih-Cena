@@ -122,6 +122,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         attribute4: "Z-A4",
         colorPrimary: "Zelena",
         colorSecondary: "Crna",
+        unitPackWidthCm: 65,
+        unitPackDepthCm: 22,
+        unitPackHeightCm: 18,
       }),
       createProduct({
         sku: fixture.skuA,
@@ -359,6 +362,19 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         }),
       ]);
       expect(batch.lines).toHaveLength(5);
+      expect(
+        batch.lines.map((line) => [
+          Number(line.widthCm),
+          Number(line.depthCm),
+          Number(line.heightCm),
+        ]),
+      ).toEqual([
+        [70, 20, 20],
+        [70, 20, 20],
+        [70, 20, 20],
+        [65, 22, 18],
+        [65, 22, 18],
+      ]);
       expect(new Set(batch.lines.map((line) => line.orderId))).toEqual(
         new Set([eligibleOrderId]),
       );
@@ -875,6 +891,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     colorPrimary: string;
     colorSecondary: string;
     packWidthCm?: number;
+    unitPackWidthCm?: number;
+    unitPackDepthCm?: number;
+    unitPackHeightCm?: number;
   }) {
     return db.product.create({
       data: {
@@ -887,6 +906,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         packDepthCm: 20,
         packHeightCm: 20,
         packGrossWeightKg: 1.25,
+        unitPackWidthCm:
+          input.unitPackWidthCm ?? input.packWidthCm ?? 70,
+        unitPackDepthCm: input.unitPackDepthCm ?? 20,
+        unitPackHeightCm: input.unitPackHeightCm ?? 20,
       },
       select: {
         id: true,
