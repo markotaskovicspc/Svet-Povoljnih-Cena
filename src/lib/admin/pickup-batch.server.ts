@@ -267,18 +267,26 @@ export async function loadEligibleOrders(
           FROM "OrderItem" AS mixed_items
           WHERE mixed_items."orderId" = orders."id"
             AND (
-              mixed_items."supplierReservedQty" > 0
-              OR mixed_items."withAssembly" = true
-              OR mixed_items."warehouseReservedQty" < mixed_items."qty"
+              mixed_items."withAssembly" = true
               OR (
-                mixed_items."warehouseId" IS NOT NULL
+                mixed_items."warehouseReservedQty" > 0
+                AND mixed_items."warehouseId" IS NOT NULL
                 AND mixed_items."warehouseId" <> ${dc.id}
               )
               OR (
-                mixed_items."warehouseId" IS NULL
-                AND mixed_items."warehouseReservedQty" <= 0
+                mixed_items."warehouseReservedQty" > 0
+                AND mixed_items."warehouseId" IS NULL
               )
             )
+        )
+        AND NOT (
+          orders."paymentMethod" IN ('POUZECE_GOTOVINA', 'POUZECE_KARTICA')
+          AND EXISTS (
+            SELECT 1
+            FROM "OrderItem" AS supplier_items
+            WHERE supplier_items."orderId" = orders."id"
+              AND supplier_items."supplierReservedQty" > 0
+          )
         )
         AND NOT EXISTS (
           SELECT 1
@@ -348,6 +356,8 @@ export async function loadEligibleOrders(
     const items = await tx.orderItem.findMany({
       where: {
         orderId: { in: orderIds },
+        warehouseReservedQty: { gt: 0 },
+        warehouseId: dc.id,
       },
       select: {
         id: true,
@@ -355,6 +365,7 @@ export async function loadEligibleOrders(
         sku: true,
         name: true,
         qty: true,
+        warehouseReservedQty: true,
         withAssembly: true,
         product: {
           select: {
@@ -390,7 +401,11 @@ export async function loadEligibleOrders(
     const loadedOrderIds: string[] = [];
     for (const orderId of orderIds) {
       const orderItems = items.filter((item) => item.orderId === orderId);
-      const orderPackages = derivePhysicalPackages(orderItems);
+      const dcOrderItems = orderItems.map((item) => ({
+        ...item,
+        qty: item.warehouseReservedQty,
+      }));
+      const orderPackages = derivePhysicalPackages(dcOrderItems);
       const routing = resolveCourierProvider({
         shippingMethod: "KURIR",
         items: orderPackages.map((pkg) => ({
@@ -425,7 +440,7 @@ export async function loadEligibleOrders(
       }
       loadedOrderIds.push(orderId);
       const quantityByItem = new Map(
-        orderItems.map((item) => [item.id, item.qty]),
+        orderItems.map((item) => [item.id, item.warehouseReservedQty]),
       );
       packages.push(
         ...orderPackages.map((pkg) => ({

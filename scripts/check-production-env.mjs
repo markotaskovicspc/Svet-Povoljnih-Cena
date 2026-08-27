@@ -286,6 +286,14 @@ if (enabled("RABALUX_ENABLED")) {
     "SUPABASE_SERVICE_ROLE_KEY",
     "NEXT_PUBLIC_SUPABASE_URL",
     "EMAIL_FROM",
+    "RABALUX_PICKUP_NAME",
+    "RABALUX_PICKUP_STREET",
+    "RABALUX_PICKUP_HOUSE_NUMBER",
+    "RABALUX_PICKUP_CITY",
+    "RABALUX_PICKUP_POSTAL_CODE",
+    "RABALUX_PICKUP_CONTACT_NAME",
+    "RABALUX_PICKUP_CONTACT_PHONE",
+    "RABALUX_PICKUP_CONTACT_EMAIL",
   ]);
   requireOneOf("Rabalux stock API", [
     "RABALUX_STOCK_API_KEY",
@@ -293,6 +301,21 @@ if (enabled("RABALUX_ENABLED")) {
   ]);
   if (emailProvider === "none") {
     errors.push("Rabalux requires transactional email.");
+  }
+  if (enabled("X_EXPRESS_ENABLED")) {
+    requireNames("Rabalux X Express pickup", [
+      "RABALUX_X_EXPRESS_TOWN_ID",
+      "RABALUX_X_EXPRESS_LATITUDE",
+      "RABALUX_X_EXPRESS_LONGITUDE",
+    ]);
+  }
+  const rabaluxPostalCode = value("RABALUX_PICKUP_POSTAL_CODE");
+  if (rabaluxPostalCode && !/^\d{5}$/.test(rabaluxPostalCode)) {
+    errors.push("RABALUX_PICKUP_POSTAL_CODE must contain exactly 5 digits");
+  }
+  const rabaluxHouseNumber = value("RABALUX_PICKUP_HOUSE_NUMBER");
+  if (enabled("MYGLS_ENABLED") && rabaluxHouseNumber && !/^\d/.test(rabaluxHouseNumber)) {
+    errors.push("RABALUX_PICKUP_HOUSE_NUMBER must start with a digit for MyGLS");
   }
   const mediaWorkers = Number(value("RABALUX_MEDIA_WORKER_CONCURRENCY") ?? "2");
   if (!Number.isInteger(mediaWorkers) || mediaWorkers < 1 || mediaWorkers > 2) {

@@ -96,6 +96,10 @@ const schemas = {
     fulfillmentId: z.string().min(1),
     dispatchKey: z.string().min(1).max(80).optional(),
   }),
+  SUPPLIER_SHIPPING_DOCUMENTS_EMAIL: z.object({
+    fulfillmentId: z.string().min(1),
+    dispatchKey: z.string().min(1).max(80).optional(),
+  }),
   SUPPLIER_CANCEL_EMAIL: z.object({ fulfillmentId: z.string().min(1) }),
   SUPPLIER_RECLAMATION_EMAIL: z.object({ reclamationId: z.string().min(1) }),
 } as const;
@@ -116,6 +120,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "RECLAMATION_RECEIPT",
   "RECLAMATION_STATUS_EMAIL",
   "SUPPLIER_ORDER_EMAIL",
+  "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
   "SUPPLIER_CANCEL_EMAIL",
   "SUPPLIER_RECLAMATION_EMAIL",
 ];
@@ -618,6 +623,15 @@ async function dispatchJob(job: JobRow) {
       const { sendSupplierOrderEmail } = await import("@/lib/rabalux/fulfillment");
       await sendSupplierOrderEmail(
         payload as z.infer<typeof schemas.SUPPLIER_ORDER_EMAIL>,
+      );
+      return;
+    }
+    case "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL": {
+      const { sendSupplierShippingDocumentsEmail } = await import(
+        "@/lib/rabalux/fulfillment"
+      );
+      await sendSupplierShippingDocumentsEmail(
+        payload as z.infer<typeof schemas.SUPPLIER_SHIPPING_DOCUMENTS_EMAIL>,
       );
       return;
     }

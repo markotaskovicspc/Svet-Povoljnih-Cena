@@ -1,6 +1,7 @@
 export type ShipmentAssignment = {
   orderItemIds: string[];
   codAmount: number;
+  supplierFulfillmentId?: string;
 };
 
 export function normalizeOrderItemIds(values: readonly string[] | undefined) {
@@ -25,6 +26,11 @@ export function readShipmentAssignment(raw: unknown): ShipmentAssignment | null 
   return {
     orderItemIds,
     codAmount: Number.isFinite(codAmount) && codAmount >= 0 ? codAmount : 0,
+    supplierFulfillmentId:
+      typeof value.supplierFulfillmentId === "string" &&
+      value.supplierFulfillmentId.trim()
+        ? value.supplierFulfillmentId.trim()
+        : undefined,
   };
 }
 
@@ -46,6 +52,9 @@ export function withShipmentAssignment(
         Number.isFinite(assignment.codAmount) && assignment.codAmount >= 0
           ? assignment.codAmount
           : 0,
+      ...(assignment.supplierFulfillmentId?.trim()
+        ? { supplierFulfillmentId: assignment.supplierFulfillmentId.trim() }
+        : {}),
     },
   };
 }

@@ -6,6 +6,7 @@ import { Prisma, type OrderStatus, type PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { enqueueSupplierShippingDocumentJobsForOrder } from "@/lib/rabalux/fulfillment";
 import type {
   CreatePaymentResult,
   PaymentProviderAdapter,
@@ -679,6 +680,10 @@ async function applyIpsResult(
         payload: { orderId: order.id, source: "AUTO_ADVANCE", paymentMethod: "IPS" },
         idempotencyKey: `fiscal-advance:${order.id}`,
       }),
+      enqueueSupplierShippingDocumentJobsForOrder(
+        order.id,
+        `ips-paid-${payload.paymentReference ?? payload.responseCode}`,
+      ),
     ]);
   }
 

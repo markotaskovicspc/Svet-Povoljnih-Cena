@@ -8,7 +8,7 @@ import {
 import { db } from "@/lib/db";
 import type { PhysicalPackage } from "@/lib/courier/packages";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
-import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled } from "./config";
+import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled, type MyGlsPickupAddress } from "./config";
 import { MyGlsClient, bytesFromMyGls } from "./client";
 import { uploadMyGlsLabelPdf } from "./labels";
 import { buildMyGlsParcelsForOrder } from "./payload";
@@ -28,9 +28,11 @@ export async function createMyGlsShipmentForOrder(
     packages?: readonly PhysicalPackage[];
     orderItemIds?: string[];
     codAmount?: number;
+    supplierFulfillmentId?: string;
+    pickupOverride?: MyGlsPickupAddress;
   } = {},
 ) {
-  const cfg = requireMyGlsEnabled();
+  const cfg = requireMyGlsEnabled(options.pickupOverride);
   const purpose = options.purpose ?? "ORDER_DELIVERY";
   const reclamation =
     purpose === "ORDER_DELIVERY"
@@ -169,6 +171,7 @@ export async function createMyGlsShipmentForOrder(
       rawCreateResponse: withShipmentAssignment(sanitizedResponse, {
         orderItemIds: assignmentOrderItemIds,
         codAmount,
+        supplierFulfillmentId: options.supplierFulfillmentId,
       }) as Prisma.InputJsonValue,
       syncError: null,
     };
@@ -222,6 +225,7 @@ export async function createMyGlsShipmentForOrder(
       raw: err instanceof MyGlsProviderError ? err.raw : undefined,
       orderItemIds: assignmentOrderItemIds,
       codAmount,
+      supplierFulfillmentId: options.supplierFulfillmentId,
     });
     throw err;
   }
@@ -329,10 +333,12 @@ async function persistFailedShipment(args: {
   raw?: unknown;
   orderItemIds: string[];
   codAmount: number;
+  supplierFulfillmentId?: string;
 }) {
   const rawCreateResponse = withShipmentAssignment(args.raw, {
     orderItemIds: args.orderItemIds,
     codAmount: args.codAmount,
+    supplierFulfillmentId: args.supplierFulfillmentId,
   });
   const event = {
     status: "FAILED" as const,

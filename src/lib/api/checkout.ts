@@ -44,6 +44,7 @@ import {
 } from "@/lib/pricing/rules";
 import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
+import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -209,15 +210,20 @@ async function enqueueCheckoutPostCommit(args: {
   orderId: string;
   orderNumber: string;
   accessToken: string;
+  paymentMethod: PaymentMethod;
   supplierFulfillmentIds: string[];
   genericSupplierLines: GenericSupplierJobLine[];
 }) {
   const supplierEmailJobs = await Promise.all(
     args.supplierFulfillmentIds.map((fulfillmentId) =>
       enqueueBackgroundJob({
-        kind: "SUPPLIER_ORDER_EMAIL" as const,
-        payload: { fulfillmentId },
-        idempotencyKey: `supplier-order:${fulfillmentId}`,
+        kind: isCashOnDeliveryPaymentMethod(args.paymentMethod)
+          ? ("SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" as const)
+          : ("SUPPLIER_ORDER_EMAIL" as const),
+        payload: { fulfillmentId, dispatchKey: "checkout" },
+        idempotencyKey: isCashOnDeliveryPaymentMethod(args.paymentMethod)
+          ? `supplier-shipping-documents:${fulfillmentId}:checkout`
+          : `supplier-order:${fulfillmentId}:checkout`,
       }),
     ),
   );
@@ -476,6 +482,7 @@ export async function createOrder(
         orderId: existing.id,
         orderNumber: existing.number,
         accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
+        paymentMethod: existing.paymentMethod,
         supplierFulfillmentIds: existing.supplierFulfillments.map(({ id }) => id),
         genericSupplierLines: existing.items.flatMap((item) =>
           item.productId &&
@@ -1225,6 +1232,7 @@ export async function createOrder(
     orderId: created.id,
     orderNumber: created.number,
     accessToken,
+    paymentMethod: created.paymentMethod,
     supplierFulfillmentIds: created.supplierFulfillmentIds,
     genericSupplierLines,
   });

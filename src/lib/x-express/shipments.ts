@@ -23,12 +23,15 @@ import {
 import { buildXExpressLabelData } from "./labels";
 import {
   normalizeOrderItemIds,
+  readShipmentAssignment,
   sameShipmentAssignment,
   withShipmentAssignment,
 } from "@/lib/courier/shipment-assignment";
 import type { XExpressCreateOrderPayload } from "./types";
 import { isXExpressAnnouncementPaymentReady } from "./payment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
+import type { XExpressConfig } from "./config";
+import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
 
 export async function createXExpressShipmentForOrder(
   orderId: string,
@@ -40,6 +43,8 @@ export async function createXExpressShipmentForOrder(
     orderItemIds?: string[];
     codAmount?: number;
     packageMasses?: number[];
+    supplierFulfillmentId?: string;
+    pickupOverride?: XExpressConfig["pickup"];
   } = {},
 ) {
   const packageCount = Math.max(
@@ -167,6 +172,7 @@ export async function createXExpressShipmentForOrder(
     purpose === "ORDER_DELIVERY" &&
       isXExpressCashOnDelivery(order.paymentMethod) &&
       codAmount > 0,
+    options.pickupOverride,
   );
 
   const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);
@@ -256,6 +262,7 @@ export async function createXExpressShipmentForOrder(
     }, {
       orderItemIds: assignmentOrderItemIds,
       codAmount,
+      supplierFulfillmentId: options.supplierFulfillmentId,
     });
     const data = {
       provider: X_EXPRESS_PROVIDER,
@@ -332,6 +339,7 @@ export async function createXExpressShipmentForOrder(
       raw: err instanceof XExpressProviderError ? err.raw : undefined,
       orderItemIds: assignmentOrderItemIds,
       codAmount,
+      supplierFulfillmentId: options.supplierFulfillmentId,
     });
     throw err;
   }
@@ -400,7 +408,14 @@ export async function announceXExpressShipment(shipmentId: string) {
   }
 
   try {
-    const cfg = requireXExpressShipmentConfig(Boolean(payload.Options?.length));
+    const assignment = readShipmentAssignment(existing.rawCreateResponse);
+    const supplierPickup = assignment?.supplierFulfillmentId
+      ? requireRabaluxPickupForProvider("X_EXPRESS")
+      : null;
+    const cfg = requireXExpressShipmentConfig(
+      Boolean(payload.Options?.length),
+      supplierPickup?.provider === "X_EXPRESS" ? supplierPickup.pickup : undefined,
+    );
     const providerResult = await new XExpressClient(cfg).createOrder(payload);
     const raw = jsonRecord(existing.rawCreateResponse);
     const announcedAt = new Date().toISOString();
@@ -561,10 +576,12 @@ async function persistFailedShipment(args: {
   raw?: unknown;
   orderItemIds: string[];
   codAmount: number;
+  supplierFulfillmentId?: string;
 }) {
   const rawCreateResponse = withShipmentAssignment(args.raw, {
     orderItemIds: args.orderItemIds,
     codAmount: args.codAmount,
+    supplierFulfillmentId: args.supplierFulfillmentId,
   });
   const event = {
     status: "FAILED" as const,

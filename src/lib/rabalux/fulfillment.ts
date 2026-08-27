@@ -9,10 +9,21 @@ import { syncProductChannelAvailability } from "@/lib/channel-availability.serve
 import { isRabaluxSupplierOperational } from "./config";
 import { canSendSupplierOrder } from "./fulfillment-state";
 import {
+  fulfillmentPaymentReadiness,
+  isCashOnDeliveryPaymentMethod,
+} from "@/lib/payments/fulfillment-readiness";
+import {
+  buildRabaluxPackingPdf,
+  buildRabaluxShipmentAttachments,
+} from "./documents";
+import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import {
   supplierCancellationIdempotencyKey,
   supplierCancellationMessage,
   supplierOrderIdempotencyKey,
   supplierOrderMessage,
+  supplierShippingDocumentsIdempotencyKey,
+  supplierShippingDocumentsMessage,
 } from "./messages";
 
 function html(value: string) {
@@ -34,7 +45,13 @@ export async function sendSupplierOrderEmail(args: {
       supplier: {
         select: { name: true, email: true, integrationKey: true, enabled: true },
       },
-      order: { select: { number: true } },
+      order: {
+        select: {
+          number: true,
+          paymentMethod: true,
+          payments: { select: { status: true } },
+        },
+      },
       items: { orderBy: { externalSku: "asc" } },
     },
   });
@@ -52,9 +69,20 @@ export async function sendSupplierOrderEmail(args: {
   if (!fulfillment.supplier.email) {
     throw new Error("Supplier order email is not configured.");
   }
+  const paymentReadiness = fulfillmentPaymentReadiness({
+    purpose: "ORDER_DELIVERY",
+    paymentMethod: fulfillment.order.paymentMethod,
+    paymentStatuses: fulfillment.order.payments.map((payment) => payment.status),
+  });
+  // Backwards-compatible handling for already queued jobs created before the
+  // shipping-document job was introduced.
+  if (paymentReadiness.ready) {
+    return sendSupplierShippingDocumentsEmail(args);
+  }
   const message = supplierOrderMessage({
     orderNumber: fulfillment.order.number,
     items: fulfillment.items,
+    waitingForPayment: true,
   });
   const result = await trackedDispatch({
     kind: "supplier_order",
@@ -98,6 +126,171 @@ export async function sendSupplierOrderEmail(args: {
     }
   }
   return { skipped: null, result };
+}
+
+export async function enqueueSupplierShippingDocumentJobsForOrder(
+  orderId: string,
+  dispatchKey = "payment-ready",
+) {
+  const fulfillments = await db.supplierFulfillment.findMany({
+    where: {
+      orderId,
+      supplier: { integrationKey: "RABALUX", enabled: true },
+      status: { notIn: ["CANCELLED", "COMPLETED"] },
+    },
+    select: { id: true },
+  });
+  return Promise.all(
+    fulfillments.map(({ id }) =>
+      enqueueBackgroundJob({
+        kind: "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
+        payload: { fulfillmentId: id, dispatchKey },
+        idempotencyKey: supplierShippingDocumentsIdempotencyKey(id, dispatchKey),
+      }),
+    ),
+  );
+}
+
+export async function sendSupplierShippingDocumentsEmail(args: {
+  fulfillmentId: string;
+  dispatchKey?: string;
+}) {
+  const fulfillment = await db.supplierFulfillment.findUnique({
+    where: { id: args.fulfillmentId },
+    include: {
+      supplier: {
+        select: { name: true, email: true, integrationKey: true, enabled: true },
+      },
+      order: {
+        select: {
+          id: true,
+          number: true,
+          total: true,
+          paymentMethod: true,
+          shippingMethod: true,
+          payments: { select: { status: true } },
+          items: { select: { id: true } },
+        },
+      },
+      items: {
+        orderBy: { externalSku: "asc" },
+        include: { orderItem: { select: { id: true, name: true } } },
+      },
+    },
+  });
+  if (!fulfillment) throw new Error("Supplier fulfillment does not exist.");
+  if (fulfillment.status === "CANCELLED") return { skipped: "cancelled" as const };
+  if (fulfillment.status === "COMPLETED") return { skipped: "terminal" as const };
+  if (
+    fulfillment.supplier.integrationKey !== "RABALUX" ||
+    !isRabaluxSupplierOperational(fulfillment.supplier)
+  ) {
+    throw new Error("Rabalux supplier integration is disabled.");
+  }
+  if (!fulfillment.supplier.email) {
+    throw new Error("Supplier order email is not configured.");
+  }
+  if (fulfillment.order.shippingMethod !== "KURIR") {
+    throw new Error("Rabalux dropship trenutno podržava samo kurirsku isporuku.");
+  }
+  const paymentReadiness = fulfillmentPaymentReadiness({
+    purpose: "ORDER_DELIVERY",
+    paymentMethod: fulfillment.order.paymentMethod,
+    paymentStatuses: fulfillment.order.payments.map((payment) => payment.status),
+  });
+  if (!paymentReadiness.ready) {
+    throw new Error(paymentReadiness.reason);
+  }
+
+  const orderItemIds = fulfillment.items.map((item) => item.orderItem.id);
+  const mixedOrder = orderItemIds.length !== fulfillment.order.items.length;
+  if (
+    mixedOrder &&
+    isCashOnDeliveryPaymentMethod(fulfillment.order.paymentMethod)
+  ) {
+    throw new Error(
+      "Mešovita DC + Rabalux porudžbina sa pouzećem je bezbedno zaustavljena dok se ne potvrdi raspodela otkupnine.",
+    );
+  }
+  const codAmount = isCashOnDeliveryPaymentMethod(
+    fulfillment.order.paymentMethod,
+  )
+    ? Number(fulfillment.order.total)
+    : 0;
+
+  try {
+    const { announceXExpressShipment } = await import("@/lib/x-express/shipments");
+    const { createShipmentForOrder } = await import("@/lib/courier/registry");
+    let shipment = await createShipmentForOrder(fulfillment.order.id, {
+      orderItemIds,
+      supplierFulfillmentId: fulfillment.id,
+      codAmount,
+      announceXExpress: false,
+    });
+    if (
+      shipment.provider === X_EXPRESS_PROVIDER &&
+      !shipment.providerShipmentId
+    ) {
+      shipment = await announceXExpressShipment(shipment.id);
+    }
+    const packingPdf = buildRabaluxPackingPdf({
+      orderNumber: fulfillment.order.number,
+      items: fulfillment.items.map((item) => ({
+        externalSku: item.externalSku,
+        qty: item.qty,
+        name: item.orderItem.name,
+      })),
+    });
+    const attachments = await buildRabaluxShipmentAttachments({
+      shipmentId: shipment.id,
+      orderNumber: fulfillment.order.number,
+      packingPdf,
+    });
+    const message = supplierShippingDocumentsMessage({
+      orderNumber: fulfillment.order.number,
+      trackingNo: shipment.trackingNo,
+      items: fulfillment.items,
+    });
+    const result = await trackedDispatch({
+      kind: "supplier_shipping_documents",
+      to: fulfillment.supplier.email,
+      ...message,
+      attachments,
+      tags: {
+        kind: "supplier_shipping_documents",
+        fulfillment: fulfillment.id,
+        order: fulfillment.order.number,
+      },
+      idempotencyKey: supplierShippingDocumentsIdempotencyKey(
+        fulfillment.id,
+        args.dispatchKey,
+      ),
+    });
+    if (!result.ok) throw new Error(result.error);
+    await db.supplierFulfillment.updateMany({
+      where: {
+        id: fulfillment.id,
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+      },
+      data: {
+        status: "PICKUP_READY",
+        sentAt: fulfillment.sentAt ?? new Date(),
+        confirmedAt: new Date(),
+        lastError: null,
+      },
+    });
+    return { skipped: null, result, shipmentId: shipment.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await db.supplierFulfillment.updateMany({
+      where: {
+        id: fulfillment.id,
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+      },
+      data: { status: "FAILED", lastError: message },
+    });
+    throw error;
+  }
 }
 
 export async function sendSupplierCancellationEmail(fulfillmentId: string) {
@@ -216,7 +409,11 @@ export async function sendSupplierReclamationEmail(reclamationId: string) {
 export async function releaseOrderSupplierReservations(
   tx: Prisma.TransactionClient,
   orderId: string,
-  options: { cancelled: boolean },
+  options: {
+    cancelled: boolean;
+    supplierFulfillmentId?: string;
+    orderItemIds?: readonly string[];
+  },
 ) {
   const rows = await tx.$queryRaw<
     Array<{
@@ -237,8 +434,24 @@ export async function releaseOrderSupplierReservations(
     if (!options.cancelled && row.status === "CANCELLED") continue;
     const fulfillment = await tx.supplierFulfillment.findUniqueOrThrow({
       where: { id: row.id },
-      include: { items: { select: { productId: true, qty: true } } },
+      include: {
+        items: { select: { orderItemId: true, productId: true, qty: true } },
+      },
     });
+    if (
+      options.supplierFulfillmentId &&
+      fulfillment.id !== options.supplierFulfillmentId
+    ) {
+      continue;
+    }
+    if (
+      options.orderItemIds?.length &&
+      !fulfillment.items.some((item) =>
+        options.orderItemIds!.includes(item.orderItemId),
+      )
+    ) {
+      continue;
+    }
     if (!fulfillment.reservationReleasedAt) {
       for (const item of fulfillment.items) {
         if (!item.productId) continue;
@@ -276,11 +489,17 @@ export async function releaseOrderSupplierReservations(
   return cancellationIds;
 }
 
-export async function assertSupplierPickupConfirmed(orderId: string) {
+export async function assertSupplierPickupConfirmed(
+  orderId: string,
+  orderItemIds: readonly string[] = [],
+) {
   const blocking = await db.supplierFulfillment.findFirst({
     where: {
       orderId,
       supplier: { integrationKey: "RABALUX" },
+      ...(orderItemIds.length
+        ? { items: { some: { orderItemId: { in: [...orderItemIds] } } } }
+        : {}),
       OR: [
         { status: { notIn: ["CONFIRMED", "PICKUP_READY", "COMPLETED"] } },
         { loadingLocationId: null },

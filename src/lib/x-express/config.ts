@@ -165,8 +165,12 @@ export function requireXExpressEnabled() {
   return cfg;
 }
 
-export function requireXExpressShipmentConfig(cashOnDelivery = false) {
-  const cfg = requireXExpressEnabled();
+export function requireXExpressShipmentConfig(
+  cashOnDelivery = false,
+  pickupOverride?: XExpressConfig["pickup"],
+) {
+  const base = requireXExpressEnabled();
+  const cfg = pickupOverride ? { ...base, pickup: pickupOverride } : base;
   requireXExpressPath(cfg, "checkAddress");
   requireXExpressPath(cfg, "createOrder");
   if (

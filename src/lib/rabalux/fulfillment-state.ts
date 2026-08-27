@@ -6,7 +6,11 @@ const SENDABLE = new Set<SupplierFulfillmentStatus>([
   "SENT",
 ]);
 const CONFIRMABLE = new Set<SupplierFulfillmentStatus>(["SENT", "CONFIRMED"]);
-const RESENDABLE = new Set<SupplierFulfillmentStatus>(["SENT", "FAILED"]);
+const RESENDABLE = new Set<SupplierFulfillmentStatus>([
+  "SENT",
+  "FAILED",
+  "PICKUP_READY",
+]);
 
 export function canSendSupplierOrder(status: SupplierFulfillmentStatus) {
   return SENDABLE.has(status);

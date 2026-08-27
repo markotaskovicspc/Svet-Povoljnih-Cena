@@ -25,9 +25,10 @@ describe("supplier fulfillment state machine", () => {
     expect(canConfirmSupplierFulfillment("COMPLETED")).toBe(false);
   });
 
-  it("permits a deliberate resend only after send or failure", () => {
+  it("permits a deliberate resend after reservation, failure or document send", () => {
     expect(canResendSupplierOrder("SENT")).toBe(true);
     expect(canResendSupplierOrder("FAILED")).toBe(true);
+    expect(canResendSupplierOrder("PICKUP_READY")).toBe(true);
     expect(canResendSupplierOrder("PENDING")).toBe(false);
     expect(canResendSupplierOrder("CONFIRMED")).toBe(false);
     expect(canResendSupplierOrder("CANCELLED")).toBe(false);

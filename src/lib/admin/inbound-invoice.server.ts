@@ -338,6 +338,7 @@ export async function postInboundInvoice(id: string, actorId: string) {
       warehouse: { select: { id: true, name: true, active: true } },
       purchaseOrder: {
         select: {
+          supplier: { select: { integrationKey: true } },
           receivingWarehouse: {
             select: { id: true, name: true, active: true },
           },
@@ -351,6 +352,11 @@ export async function postInboundInvoice(id: string, actorId: string) {
   }
   if (!invoice.purchaseOrderId) {
     throw new Error("Veza sa porudžbenicom je obavezna.");
+  }
+  if (invoice.purchaseOrder?.supplier?.integrationKey === "RABALUX") {
+    throw new Error(
+      "Rabalux roba ide direktno kupcu i ne sme da se knjiži kroz magacinsku prijemnicu. Poseban računovodstveni tok još nije potvrđen.",
+    );
   }
   const {
     postPurchaseOrder,

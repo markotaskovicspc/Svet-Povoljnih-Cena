@@ -11,7 +11,11 @@ describe("courier shipment assignments", () => {
   it("stores a stable subset of order lines beside the provider response", () => {
     const raw = withShipmentAssignment(
       { tracking: "GLS-1" },
-      { orderItemIds: ["line-b", "line-a", "line-b"], codAmount: 3499 },
+      {
+        orderItemIds: ["line-b", "line-a", "line-b"],
+        codAmount: 3499,
+        supplierFulfillmentId: "ful-rabalux",
+      },
     );
 
     expect(raw).toMatchObject({
@@ -19,11 +23,13 @@ describe("courier shipment assignments", () => {
       assignment: {
         orderItemIds: ["line-a", "line-b"],
         codAmount: 3499,
+        supplierFulfillmentId: "ful-rabalux",
       },
     });
     expect(readShipmentAssignment(raw)).toEqual({
       orderItemIds: ["line-a", "line-b"],
       codAmount: 3499,
+      supplierFulfillmentId: "ful-rabalux",
     });
     expect(sameShipmentAssignment(raw, ["line-b", "line-a"])).toBe(true);
     expect(sameShipmentAssignment(raw, ["line-a"])).toBe(false);

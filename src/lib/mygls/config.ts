@@ -120,8 +120,9 @@ export function getMyGlsConfig(): MyGlsConfig {
   };
 }
 
-export function requireMyGlsEnabled() {
-  const cfg = getMyGlsConfig();
+export function requireMyGlsEnabled(pickupOverride?: MyGlsPickupAddress) {
+  const base = getMyGlsConfig();
+  const cfg = pickupOverride ? { ...base, pickup: pickupOverride } : base;
   if (!cfg.enabled) {
     throw new MyGlsConfigError("MyGLS integracija nije uključena.");
   }

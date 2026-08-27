@@ -39,8 +39,12 @@ import {
   derivePhysicalPackages,
   type PhysicalPackage,
 } from "./packages";
-import { normalizeOrderItemIds } from "./shipment-assignment";
+import {
+  normalizeOrderItemIds,
+  readShipmentAssignment,
+} from "./shipment-assignment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
+import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -91,6 +95,8 @@ export async function createShipmentForOrder(
     orderItemIds?: string[];
     provider?: SmallParcelProvider;
     codAmount?: number;
+    /** Rabalux dropship group whose items and pickup address must be used. */
+    supplierFulfillmentId?: string;
     /** Prepare an X Express label without announcing it to the provider yet. */
     announceXExpress?: boolean;
   } = {},
@@ -152,6 +158,36 @@ export async function createShipmentForOrder(
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
 
+  const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
+  const supplierFulfillment = options.supplierFulfillmentId
+    ? await db.supplierFulfillment.findFirst({
+        where: {
+          id: options.supplierFulfillmentId,
+          orderId: order.id,
+          supplier: { integrationKey: "RABALUX" },
+          status: { notIn: ["CANCELLED", "COMPLETED"] },
+        },
+        select: { id: true, items: { select: { orderItemId: true } } },
+      })
+    : null;
+  if (options.supplierFulfillmentId && !supplierFulfillment) {
+    throw new CourierConfigError("Rabalux grupa za ovu porudžbinu nije pronađena.");
+  }
+  if (supplierFulfillment) {
+    const fulfillmentItemIds = normalizeOrderItemIds(
+      supplierFulfillment.items.map((item) => item.orderItemId),
+    );
+    if (
+      !requestedOrderItemIds.length ||
+      fulfillmentItemIds.length !== requestedOrderItemIds.length ||
+      fulfillmentItemIds.some((id) => !requestedOrderItemIds.includes(id))
+    ) {
+      throw new CourierConfigError(
+        "Rabalux pošiljka mora sadržati tačno stavke iz izabrane dobavljačke grupe.",
+      );
+    }
+  }
+
   assertFulfillmentPaymentReady({
     orderNumber: order.number,
     purpose,
@@ -159,13 +195,12 @@ export async function createShipmentForOrder(
     paymentStatuses: order.payments.map((payment) => payment.status),
   });
 
-  const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
   const existing = requestedOrderItemIds.length
     ? null
     : order.shipments.find((shipment) => shipment.status !== "FAILED") ?? null;
   if (existing) return existing;
-  if (purpose === "ORDER_DELIVERY") {
-    await assertSupplierPickupConfirmed(order.id);
+  if (purpose === "ORDER_DELIVERY" && !supplierFulfillment) {
+    await assertSupplierPickupConfirmed(order.id, requestedOrderItemIds);
   }
 
   const shipmentItems = reclamation
@@ -219,6 +254,9 @@ export async function createShipmentForOrder(
     );
   }
   const service = routeService(routeInput);
+  const supplierPickup = supplierFulfillment
+    ? requireRabaluxPickupForProvider(routing.provider)
+    : null;
   if (service === "COURIER_SMALL") {
     const selectedProvider = routing.provider;
     const packages =
@@ -240,6 +278,9 @@ export async function createShipmentForOrder(
         packages,
         orderItemIds: requestedOrderItemIds,
         codAmount: options.codAmount,
+        supplierFulfillmentId: supplierFulfillment?.id,
+        pickupOverride:
+          supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
       });
     }
     const shipment = await createXExpressShipmentForOrder(order.id, {
@@ -249,6 +290,9 @@ export async function createShipmentForOrder(
       reclamationId: reclamation?.id,
       orderItemIds: requestedOrderItemIds,
       codAmount: options.codAmount,
+      supplierFulfillmentId: supplierFulfillment?.id,
+      pickupOverride:
+        supplierPickup?.provider === "X_EXPRESS" ? supplierPickup.pickup : undefined,
     });
     return options.announceXExpress === false
       ? shipment
@@ -264,6 +308,9 @@ export async function createShipmentForOrder(
       packages,
       orderItemIds: requestedOrderItemIds,
       codAmount: options.codAmount,
+      supplierFulfillmentId: supplierFulfillment?.id,
+      pickupOverride:
+        supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
     });
   }
 
@@ -492,8 +539,11 @@ export async function applyShipmentEvent(
         event.status,
       )
     ) {
+      const assignment = readShipmentAssignment(shipment.rawCreateResponse);
       await releaseOrderSupplierReservations(tx, shipment.orderId, {
         cancelled: false,
+        supplierFulfillmentId: assignment?.supplierFulfillmentId,
+        orderItemIds: assignment?.orderItemIds,
       });
     }
     if (

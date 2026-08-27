@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { OrderStatus, Prisma, type SupplierFulfillmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import {
@@ -29,7 +29,10 @@ import {
 } from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
-import { releaseOrderSupplierReservations } from "@/lib/rabalux/fulfillment";
+import {
+  enqueueSupplierShippingDocumentJobsForOrder,
+  releaseOrderSupplierReservations,
+} from "@/lib/rabalux/fulfillment";
 import { updateWebOrderItemQuantity } from "@/lib/admin/web-order-edit.server";
 import {
   canConfirmSupplierFulfillment,
@@ -489,6 +492,14 @@ async function confirmBankTransferPaymentAction(
         };
       });
 
+      const supplierJobs = await enqueueSupplierShippingDocumentJobsForOrder(
+        orderId,
+        `bank-paid-${paymentId}`,
+      );
+      await Promise.allSettled(
+        supplierJobs.map((job) => processBackgroundJob(job.id)),
+      );
+
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       revalidatePath("/admin/erp/prodajni-nalozi");
       revalidatePath("/admin/erp/preuzimanja");
@@ -506,7 +517,9 @@ async function confirmBankTransferPaymentAction(
           currency: result.currency,
         },
         message:
-          "Uplata je potvrđena. Porudžbina sada može da se učita u nalog za preuzimanje, ali ništa nije automatski poslato kuriru.",
+          supplierJobs.length > 0
+            ? "Uplata je potvrđena. Rabalux adresnica i dokument za pakovanje stavljeni su u obradu."
+            : "Uplata je potvrđena. Porudžbina sada može da se učita u nalog za preuzimanje.",
       };
     },
   )(formData);
@@ -851,15 +864,36 @@ async function resendSupplierOrderAction(
             `Realizacija u statusu ${fulfillment.status} nije dostupna za ponovno slanje.`,
           );
         }
-        const existingRequest = await tx.backgroundJob.findUnique({
-          where: {
-            idempotencyKey: `supplier-order-resend:${fulfillmentId}:${requestId}`,
+        const order = await tx.order.findUniqueOrThrow({
+          where: { id: orderId },
+          select: {
+            paymentMethod: true,
+            payments: { select: { status: true } },
           },
+        });
+        const ready = fulfillmentPaymentReadiness({
+          purpose: "ORDER_DELIVERY",
+          paymentMethod: order.paymentMethod,
+          paymentStatuses: order.payments.map((payment) => payment.status),
+        }).ready;
+        const kind = ready
+          ? "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL"
+          : "SUPPLIER_ORDER_EMAIL";
+        const idempotencyKey = `${
+          ready ? "supplier-shipping-documents" : "supplier-order"
+        }-resend:${fulfillmentId}:${requestId}`;
+        const existingRequest = await tx.backgroundJob.findUnique({
+          where: { idempotencyKey },
           select: { id: true },
         });
         const active = await tx.backgroundJob.findFirst({
           where: {
-            kind: "SUPPLIER_ORDER_EMAIL",
+            kind: {
+              in: [
+                "SUPPLIER_ORDER_EMAIL",
+                "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
+              ],
+            },
             status: { in: ["QUEUED", "RETRY", "RUNNING"] },
             payload: { path: ["fulfillmentId"], equals: fulfillmentId },
           },
@@ -868,9 +902,9 @@ async function resendSupplierOrderAction(
         if (existingRequest || active) return { alreadyQueued: true };
         await tx.backgroundJob.create({
           data: {
-            kind: "SUPPLIER_ORDER_EMAIL",
+            kind,
             payload: { fulfillmentId, dispatchKey: requestId },
-            idempotencyKey: `supplier-order-resend:${fulfillmentId}:${requestId}`,
+            idempotencyKey,
           },
         });
         await tx.auditLog.create({
@@ -882,7 +916,7 @@ async function resendSupplierOrderAction(
             diff: { requestId, reason, status: fulfillment.status, queued: true },
           },
         });
-        return { alreadyQueued: false };
+        return { alreadyQueued: false, ready };
       });
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       return {
@@ -891,7 +925,9 @@ async function resendSupplierOrderAction(
         diff: { requestId, reason, queued: true, alreadyQueued: result.alreadyQueued },
         message: result.alreadyQueued
           ? "Slanje je već u redu i nije duplirano."
-          : "Ponovno slanje je stavljeno u red.",
+          : result.ready
+            ? "Adresnica i dokument za pakovanje stavljeni su u red za ponovno slanje."
+            : "Rezervacija bez dozvole za slanje stavljena je u red.",
       };
     },
   )(formData);
@@ -1064,6 +1100,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
           supplier: {
             select: {
               name: true,
+              integrationKey: true,
               loadingLocations: { orderBy: { position: "asc" } },
             },
           },
@@ -1340,7 +1377,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                 <Row
                   k="Mesto preuzimanja"
                   v={
-                    fulfillment.loadingLocation
+                    fulfillment.supplier.integrationKey === "RABALUX"
+                      ? "Fiksni Rabalux magacin iz bezbedne RABALUX_PICKUP_* konfiguracije"
+                      : fulfillment.loadingLocation
                       ? `${fulfillment.loadingLocation.name} · ${
                           fulfillment.loadingLocation.address ?? "adresa nije uneta"
                         } · ${fulfillment.loadingLocation.city ?? "grad nije unet"}`
@@ -1353,10 +1392,12 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   {fulfillment.lastError}
                 </p>
               ) : null}
-              {canConfirmSupplierFulfillment(fulfillment.status) ||
+              {(fulfillment.supplier.integrationKey !== "RABALUX" &&
+                canConfirmSupplierFulfillment(fulfillment.status)) ||
               canResendSupplierOrder(fulfillment.status) ? (
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {canConfirmSupplierFulfillment(fulfillment.status) ? (
+                  {fulfillment.supplier.integrationKey !== "RABALUX" &&
+                  canConfirmSupplierFulfillment(fulfillment.status) ? (
                     <AdminActionForm
                       action={confirmSupplierFulfillmentAction}
                       className="space-y-3 rounded-lg border border-border p-3"
