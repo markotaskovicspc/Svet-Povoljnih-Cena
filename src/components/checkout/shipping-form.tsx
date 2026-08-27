@@ -150,6 +150,10 @@ function AddressFieldset({
   };
   const showError = (path: string) =>
     showSubmitErrors ? errAt(`${prefix}.${path}`) : undefined;
+  const cityError = visibleCityError(
+    showError("city"),
+    showError("xExpressTownId"),
+  );
 
   return (
     <div className="grid grid-cols-2 gap-2.5 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
@@ -292,7 +296,7 @@ function AddressFieldset({
         className={cn(xExpressAddressEnabled && "order-1", "lg:col-span-2")}
         required
         value={watch(`${prefix}.city` as const) ?? ""}
-        error={showError("city")}
+        error={cityError}
         strictRemote={xExpressAddressEnabled}
         minChars={xExpressAddressEnabled ? 2 : 3}
         postalCode={watch(`${prefix}.postalCode` as const) ?? ""}
@@ -354,7 +358,7 @@ function AddressFieldset({
           validate: (value) =>
             !xExpressAddressEnabled ||
             (Number.isInteger(Number(value)) && Number(value) > 0) ||
-            "Izaberite mesto iz liste",
+            "Izaberite grad / mesto iz ponuđene liste",
         })}
       />
       <input
@@ -377,6 +381,13 @@ function AddressFieldset({
       />
     </div>
   );
+}
+
+export function visibleCityError(
+  cityError?: string,
+  xExpressTownError?: string,
+) {
+  return cityError ?? xExpressTownError;
 }
 
 type XExpressStreetSuggestion = {

@@ -3,6 +3,7 @@ import {
   resolveExactRemoteCity,
   type CityAutocompletePlace,
 } from "@/components/forms/city-autocomplete";
+import { visibleCityError } from "@/components/checkout/shipping-form";
 
 const places: CityAutocompletePlace[] = [
   { name: "Stara Pazova", postalCode: "22300", townId: 804428 },
@@ -36,5 +37,25 @@ describe("resolveExactRemoteCity", () => {
 
   it("does not resolve a partial city name", () => {
     expect(resolveExactRemoteCity(places, "Pazova")).toBeNull();
+  });
+});
+
+describe("visibleCityError", () => {
+  it("shows the hidden X Express town validation error on the visible city field", () => {
+    expect(
+      visibleCityError(
+        undefined,
+        "Izaberite grad / mesto iz ponuđene liste",
+      ),
+    ).toBe("Izaberite grad / mesto iz ponuđene liste");
+  });
+
+  it("keeps the direct city validation error when both errors exist", () => {
+    expect(
+      visibleCityError(
+        "Unesite grad",
+        "Izaberite grad / mesto iz ponuđene liste",
+      ),
+    ).toBe("Unesite grad");
   });
 });
