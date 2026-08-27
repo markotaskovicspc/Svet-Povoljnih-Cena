@@ -500,7 +500,7 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(inferXExpressShipmentStatus("LOST", "Izgubljena")).toBe("FAILED");
   });
 
-  it("allows label preparation before payment but blocks only the courier announcement", () => {
+  it("uses the shared payment gate before the courier announcement", () => {
     expect(
       isXExpressAnnouncementPaymentReady({
         purpose: "ORDER_DELIVERY",

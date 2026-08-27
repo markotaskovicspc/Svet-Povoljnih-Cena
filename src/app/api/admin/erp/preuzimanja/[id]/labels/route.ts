@@ -11,6 +11,7 @@ import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
 import { mergePdfDocuments } from "@/lib/pdf/merge";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
+import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +59,39 @@ export async function GET(
     );
   }
 
-  const orderIds = [...new Set(batch.lines.map((line) => line.orderId))];
+  const orderIds = [
+    ...new Set(
+      batch.lines
+        .filter((line) => line.purpose === "ORDER_DELIVERY")
+        .map((line) => line.orderId),
+    ),
+  ];
+  if (orderIds.length) {
+    const orders = await db.order.findMany({
+      where: { id: { in: orderIds } },
+      select: {
+        number: true,
+        paymentMethod: true,
+        payments: { select: { status: true } },
+      },
+    });
+    const blocked = orders.filter(
+      (order) =>
+        !fulfillmentPaymentReadiness({
+          purpose: "ORDER_DELIVERY",
+          paymentMethod: order.paymentMethod,
+          paymentStatuses: order.payments.map((payment) => payment.status),
+        }).ready,
+    );
+    if (blocked.length) {
+      return labelConflict(
+        `Adresnice nisu dostupne jer plaćanje nije potvrđeno za: ${blocked
+          .map((order) => order.number)
+          .join(", ")}.`,
+        batch.id,
+      );
+    }
+  }
   const reclamationIds = batch.lines
     .map((line) => line.reclamationId)
     .filter((value): value is string => Boolean(value));

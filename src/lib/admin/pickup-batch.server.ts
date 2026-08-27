@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   Prisma,
+  type PaymentMethod,
   type PickupBatchStatus,
   type ShipmentPurpose,
 } from "@prisma/client";
@@ -46,6 +47,11 @@ import {
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
 } from "@/lib/admin/pickup-batch";
 import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
+import {
+  assertFulfillmentPaymentReady,
+  fulfillmentPaymentReadiness,
+  isCashOnDeliveryPaymentMethod,
+} from "@/lib/payments/fulfillment-readiness";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -220,8 +226,10 @@ export async function loadEligibleOrders(
       );
     }
 
-    const candidates = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT orders."id"
+    const candidates = await tx.$queryRaw<
+      Array<{ id: string; number: string; paymentMethod: PaymentMethod }>
+    >(Prisma.sql`
+      SELECT orders."id", orders."number", orders."paymentMethod"
       FROM "Order" AS orders
       WHERE (
           orders."status" = 'KREIRANO'
@@ -281,14 +289,57 @@ export async function loadEligibleOrders(
       ORDER BY orders."number" ASC
       FOR UPDATE OF orders SKIP LOCKED
     `);
-    const orderIds = candidates.map((row) => row.id);
-    if (!orderIds.length) {
+    const candidateOrderIds = candidates.map((row) => row.id);
+    if (!candidateOrderIds.length) {
       return {
         orderCount: 0,
         lineCount: 0,
         candidateCount: 0,
         skippedOtherProviderCount: 0,
         skippedInvalidDimensionsCount: 0,
+        skippedPaymentCount: 0,
+        skippedPaymentOrderNumbers: [] as string[],
+        loadedMyGlsHardLimitCount: 0,
+        loadedMyGlsOversizeSurchargeCount: 0,
+      };
+    }
+
+    const payments = await tx.payment.findMany({
+      where: { orderId: { in: candidateOrderIds } },
+      select: { orderId: true, status: true },
+      orderBy: { createdAt: "desc" },
+    });
+    const paymentStatusesByOrder = new Map<string, typeof payments[number]["status"][]>();
+    for (const payment of payments) {
+      const statuses = paymentStatusesByOrder.get(payment.orderId) ?? [];
+      statuses.push(payment.status);
+      paymentStatusesByOrder.set(payment.orderId, statuses);
+    }
+    const blockedPaymentCandidates = candidates.filter(
+      (candidate) =>
+        !fulfillmentPaymentReadiness({
+          purpose: "ORDER_DELIVERY",
+          paymentMethod: candidate.paymentMethod,
+          paymentStatuses: paymentStatusesByOrder.get(candidate.id) ?? [],
+        }).ready,
+    );
+    const blockedPaymentIds = new Set(
+      blockedPaymentCandidates.map((candidate) => candidate.id),
+    );
+    const orderIds = candidateOrderIds.filter((id) => !blockedPaymentIds.has(id));
+    const skippedPaymentCount = blockedPaymentCandidates.length;
+    const skippedPaymentOrderNumbers = blockedPaymentCandidates.map(
+      (candidate) => candidate.number,
+    );
+    if (!orderIds.length) {
+      return {
+        orderCount: 0,
+        lineCount: 0,
+        candidateCount: candidateOrderIds.length,
+        skippedOtherProviderCount: 0,
+        skippedInvalidDimensionsCount: 0,
+        skippedPaymentCount,
+        skippedPaymentOrderNumbers,
         loadedMyGlsHardLimitCount: 0,
         loadedMyGlsOversizeSurchargeCount: 0,
       };
@@ -389,9 +440,11 @@ export async function loadEligibleOrders(
       return {
         orderCount: 0,
         lineCount: 0,
-        candidateCount: orderIds.length,
+        candidateCount: candidateOrderIds.length,
         skippedOtherProviderCount,
         skippedInvalidDimensionsCount,
+        skippedPaymentCount,
+        skippedPaymentOrderNumbers,
         loadedMyGlsHardLimitCount,
         loadedMyGlsOversizeSurchargeCount,
       };
@@ -426,9 +479,11 @@ export async function loadEligibleOrders(
     return {
       orderCount: loadedOrderIds.length,
       lineCount: packages.length,
-      candidateCount: orderIds.length,
+      candidateCount: candidateOrderIds.length,
       skippedOtherProviderCount,
       skippedInvalidDimensionsCount,
+      skippedPaymentCount,
+      skippedPaymentOrderNumbers,
       loadedMyGlsHardLimitCount,
       loadedMyGlsOversizeSurchargeCount,
     };
@@ -926,6 +981,8 @@ async function postPickupBatch(batchId: string, actorId: string) {
     );
   }
 
+  let expectedShipmentCount = 0;
+  let announcedShipmentCount = 0;
   try {
     const batch = await db.pickupBatch.findUnique({
       where: { id: batchId },
@@ -943,6 +1000,8 @@ async function postPickupBatch(batchId: string, actorId: string) {
     if (!workGroups.length) {
       throw new Error("Nalog nema nijednu picking grupu za preuzimanje.");
     }
+    expectedShipmentCount = workGroups.length;
+    await assertPickupGroupsPaymentReady(workGroups);
 
     const orderIds = ordinaryOrderIdsForGroups(workGroups);
     const reclamationIds = workGroups
@@ -1003,6 +1062,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
         );
       }
       shipmentIds.push(shipment.id);
+      announcedShipmentCount += 1;
     }
 
     await db.$transaction(async (tx) => {
@@ -1034,8 +1094,11 @@ async function postPickupBatch(batchId: string, actorId: string) {
       phase: "ANNOUNCED" as const,
     };
   } catch (error) {
-    const message =
+    const baseMessage =
       error instanceof Error ? error.message : "Slanje X Express-u nije uspelo.";
+    const message = announcedShipmentCount
+      ? `Delimično poslato: X Express je prihvatio ${announcedShipmentCount} od ${expectedShipmentCount} pošiljki. ${baseMessage} Bezbedno ponovite slanje; već prihvaćene pošiljke neće biti duplirane.`
+      : baseMessage;
     await db.pickupBatch.updateMany({
       where: { id: batchId, status: "POSTING" },
       data: { status: "DRAFT", configurationIssue: message },
@@ -1093,6 +1156,20 @@ async function createXExpressLabelsForPickupBatch(
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za X Express adresnicu.");
     }
+    await assertPickupGroupsPaymentReady(workGroups);
+    for (const group of workGroups) {
+      requireCompleteXExpressPackages(
+        group.lines.map((line) => ({
+          packageNo: line.packageNo,
+          orderItemId: line.orderItemId,
+          content: line.orderItem?.name,
+          weightKg: Number(line.weightKg ?? 0),
+          widthCm: Number(line.widthCm ?? 0),
+          depthCm: Number(line.depthCm ?? 0),
+          heightCm: Number(line.heightCm ?? 0),
+        })),
+      );
+    }
 
     await db.pickupBatch.update({
       where: { id: batch.id },
@@ -1136,6 +1213,7 @@ async function createXExpressLabelsForPickupBatch(
                 "X_EXPRESS",
                 orderItemIdsForGroup(group),
               ),
+              announceXExpress: false,
             });
       if (
         shipment.provider !== X_EXPRESS_PROVIDER ||
@@ -1245,6 +1323,20 @@ async function createMyGlsLabelsForPickupBatch(
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
+    }
+    await assertPickupGroupsPaymentReady(workGroups);
+    for (const group of workGroups) {
+      requireCompleteMyGlsPackages(
+        group.lines.map((line) => ({
+          packageNo: line.packageNo,
+          orderItemId: line.orderItemId,
+          content: line.orderItem?.name,
+          weightKg: Number(line.weightKg ?? 0),
+          widthCm: Number(line.widthCm ?? 0),
+          depthCm: Number(line.depthCm ?? 0),
+          heightCm: Number(line.heightCm ?? 0),
+        })),
+      );
     }
 
     await db.pickupBatch.update({
@@ -1378,6 +1470,7 @@ export async function confirmMyGlsPickupAnnouncement(
     }
     const workGroups = pickupWorkGroups(batch.lines);
     if (!workGroups.length) throw new Error("Nalog nema pakete za preuzimanje.");
+    await assertPickupGroupsPaymentReady(workGroups);
     const orderIds = ordinaryOrderIdsForGroups(workGroups);
 
     const shipments = await tx.shipment.findMany({
@@ -1611,6 +1704,36 @@ function ordinaryOrderIdsForGroups(groups: readonly PickupWorkGroup[]) {
   );
 }
 
+async function assertPickupGroupsPaymentReady(
+  groups: readonly PickupWorkGroup[],
+) {
+  const orderIds = ordinaryOrderIdsForGroups(groups);
+  if (!orderIds.length) return;
+  const orders = await db.order.findMany({
+    where: { id: { in: orderIds } },
+    select: {
+      id: true,
+      number: true,
+      paymentMethod: true,
+      payments: {
+        select: { status: true },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+  if (orders.length !== orderIds.length) {
+    throw new Error("Jedna od porudžbina iz naloga više ne postoji.");
+  }
+  for (const order of orders) {
+    assertFulfillmentPaymentReady({
+      orderNumber: order.number,
+      purpose: "ORDER_DELIVERY",
+      paymentMethod: order.paymentMethod,
+      paymentStatuses: order.payments.map((payment) => payment.status),
+    });
+  }
+}
+
 function requiredReclamationId(group: PickupWorkGroup) {
   if (!group.reclamationId) {
     throw new Error(`Picking grupa ${group.lineGroupKey} nema reklamaciju.`);
@@ -1682,6 +1805,7 @@ async function pickupAssignmentCodAmount(
     where: { id: orderId },
     select: {
       total: true,
+      paymentMethod: true,
       items: {
         select: {
           id: true,
@@ -1711,6 +1835,7 @@ async function pickupAssignmentCodAmount(
     },
   });
   if (!order) throw new Error("Porudžbina za obračun otkupnine ne postoji.");
+  if (!isCashOnDeliveryPaymentMethod(order.paymentMethod)) return 0;
   const assigned = new Set(assignedOrderItemIds);
   if (
     order.items.length > 0 &&

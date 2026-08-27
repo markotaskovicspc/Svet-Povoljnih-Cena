@@ -266,7 +266,11 @@ function PaymentMethodView({
             sačekajte našu potvrdu prijema. Kada potvrdimo uplatu, kreće
             priprema porudžbine.
           </p>
-          <DetailRow label="Broj računa" value="RS35 2651 0000 0000 0000 00" mono />
+          <DetailRow
+            label="Broj računa"
+            value={MERCHANT_LEGAL_INFO.bankAccount}
+            mono
+          />
           <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
           <DetailRow label="Poziv na broj" value={order.id} mono />
         </div>

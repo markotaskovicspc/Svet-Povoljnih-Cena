@@ -3,7 +3,6 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import {
   Prisma,
-  type PaymentStatus,
   type ShipmentPurpose,
 } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -12,14 +11,13 @@ import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled } from "./config";
 import { MyGlsClient, bytesFromMyGls } from "./client";
 import { uploadMyGlsLabelPdf } from "./labels";
-import { buildMyGlsParcelsForOrder, isMyGlsCashOnDelivery } from "./payload";
+import { buildMyGlsParcelsForOrder } from "./payload";
 import {
   normalizeOrderItemIds,
   sameShipmentAssignment,
   withShipmentAssignment,
 } from "@/lib/courier/shipment-assignment";
-
-const PAID_STATUSES: PaymentStatus[] = ["AUTHORIZED", "PAID"];
+import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 
 export async function createMyGlsShipmentForOrder(
   orderId: string,
@@ -111,17 +109,14 @@ export async function createMyGlsShipmentForOrder(
           assignmentOrderItemIds,
         )),
   );
+  assertFulfillmentPaymentReady({
+    orderNumber: order.number,
+    purpose,
+    paymentMethod: order.paymentMethod,
+    paymentStatuses: order.payments.map((payment) => payment.status),
+  });
   if (existing && existing.provider === MYGLS_PROVIDER && existing.status !== "FAILED") {
     return existing;
-  }
-
-  if (purpose === "ORDER_DELIVERY" && !isMyGlsCashOnDelivery(order.paymentMethod)) {
-    const paid = order.payments.some((p) => PAID_STATUSES.includes(p.status));
-    if (!paid) {
-      throw new MyGlsConfigError(
-        "Prepaid porudžbina mora imati uspešno/autorizovano plaćanje pre slanja kroz MyGLS.",
-      );
-    }
   }
 
   const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();

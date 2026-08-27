@@ -40,6 +40,7 @@ import {
   type PhysicalPackage,
 } from "./packages";
 import { normalizeOrderItemIds } from "./shipment-assignment";
+import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -90,6 +91,8 @@ export async function createShipmentForOrder(
     orderItemIds?: string[];
     provider?: SmallParcelProvider;
     codAmount?: number;
+    /** Prepare an X Express label without announcing it to the provider yet. */
+    announceXExpress?: boolean;
   } = {},
 ) {
   const purpose = options.purpose ?? "ORDER_DELIVERY";
@@ -141,9 +144,20 @@ export async function createShipmentForOrder(
         where: { purpose, reclamationId: reclamation?.id ?? null },
         orderBy: { createdAt: "desc" },
       },
+      payments: {
+        select: { status: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
+
+  assertFulfillmentPaymentReady({
+    orderNumber: order.number,
+    purpose,
+    paymentMethod: order.paymentMethod,
+    paymentStatuses: order.payments.map((payment) => payment.status),
+  });
 
   const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
   const existing = requestedOrderItemIds.length
@@ -236,7 +250,9 @@ export async function createShipmentForOrder(
       orderItemIds: requestedOrderItemIds,
       codAmount: options.codAmount,
     });
-    return announceXExpressShipment(shipment.id);
+    return options.announceXExpress === false
+      ? shipment
+      : announceXExpressShipment(shipment.id);
   }
 
   if (routing.provider === "MYGLS") {

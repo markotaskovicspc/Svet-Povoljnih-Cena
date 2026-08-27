@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
+import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export async function GET(
           number: true,
           total: true,
           paymentMethod: true,
+          payments: { select: { status: true } },
           shipFirstName: true,
           shipLastName: true,
           shipCompanyName: true,
@@ -37,6 +39,21 @@ export async function GET(
   });
   if (!shipment) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+  const paymentReadiness = fulfillmentPaymentReadiness({
+    purpose: shipment.purpose,
+    paymentMethod: shipment.order.paymentMethod,
+    paymentStatuses: shipment.order.payments.map((payment) => payment.status),
+  });
+  if (!paymentReadiness.ready) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "payment_not_confirmed",
+        message: `Adresnica nije dostupna. ${paymentReadiness.reason}`,
+      },
+      { status: 409 },
+    );
   }
   if (shipment.provider === X_EXPRESS_PROVIDER) {
     if (shipment.status === "FAILED" || !shipment.trackingNo) {

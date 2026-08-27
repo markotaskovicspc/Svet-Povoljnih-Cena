@@ -4,11 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
-import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
 import { PendingLinkLabel } from "@/components/admin/pending-link-label";
 import { SubmitButton } from "@/components/admin/submit-button";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
@@ -869,7 +867,17 @@ function display(value: string) {
 function pickupLoadMessage(
   result: Awaited<ReturnType<typeof loadEligibleOrders>>,
 ) {
+  const skippedPaymentOrderSummary = result.skippedPaymentOrderNumbers.length
+    ? `${result.skippedPaymentOrderNumbers.slice(0, 5).join(", ")}${
+        result.skippedPaymentOrderNumbers.length > 5
+          ? ` i još ${result.skippedPaymentOrderNumbers.length - 5}`
+          : ""
+      }`
+    : "";
   const skipped = [
+    result.skippedPaymentCount
+      ? `${result.skippedPaymentCount} koje čekaju potvrdu plaćanja (${skippedPaymentOrderSummary})`
+      : null,
     result.skippedOtherProviderCount
       ? `${result.skippedOtherProviderCount} za drugog kurira`
       : null,

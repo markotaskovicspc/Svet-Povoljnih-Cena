@@ -29,6 +29,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     adminEmail: `qa.pickup.${runId}@example.invalid`,
     adminPassword: `QaPickup!${runId}x`,
     eligibleOrder: `QA-PICKUP-ELIGIBLE-${runId}`,
+    pendingBankOrder: `QA-PICKUP-BANK-${runId}`,
     wrongStatusOrder: `QA-PICKUP-STATUS-${runId}`,
     wrongWarehouseOrder: `QA-PICKUP-WH-${runId}`,
     truckOrder: `QA-PICKUP-TRUCK-${runId}`,
@@ -51,6 +52,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
   const reclamationIds: string[] = [];
   const extraWarehouseIds: string[] = [];
   let eligibleOrderId = "";
+  let pendingBankOrderId = "";
   let firstBatchId = "";
   let firstBatchNumber = "";
   let secondBatchId = "";
@@ -166,6 +168,17 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     });
     eligibleOrderId = eligible.id;
     orderIds.push(eligible.id);
+
+    const pendingBankOrder = await createOrder({
+      number: fixture.pendingBankOrder,
+      status: "KREIRANO",
+      shippingMethod: "KURIR",
+      paymentMethod: "UPLATA_NA_RACUN",
+      paymentStatus: "PENDING",
+      lines: [{ product: products[2]!, warehouseId: dcWarehouseId, qty: 1 }],
+    });
+    pendingBankOrderId = pendingBankOrder.id;
+    orderIds.push(pendingBankOrder.id);
 
     const wrongStatus = await createOrder({
       number: fixture.wrongStatusOrder,
@@ -350,6 +363,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           hasText: "Učitano paketa: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
+      await expect(page.getByRole("status")).toContainText(
+        `1 koje čekaju potvrdu plaćanja (${fixture.pendingBankOrder})`,
+      );
       const [batch, orders] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({
           where: { id: firstBatchId },
@@ -393,6 +409,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe("KREIRANO");
       expect(
         orders.find((order) => order.number === fixture.fiscalizedOrder)?.status,
+      ).toBe("KREIRANO");
+      expect(
+        orders.find((order) => order.number === fixture.pendingBankOrder)?.status,
       ).toBe("KREIRANO");
       expect(
         await db.orderStatusEvent.count({
@@ -873,6 +892,71 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           where: { idempotencyKey: `reclamation-return:${reclamation.id}` },
         }),
       ).toBe(1);
+
+      await page.goto(
+        `/admin/erp/prodajni-nalozi/${pendingBankOrderId}`,
+        { waitUntil: "domcontentloaded" },
+      );
+      await expect(
+        page.getByRole("heading", { name: `Porudžbina ${fixture.pendingBankOrder}` }),
+      ).toBeVisible();
+      await expect(page.getByText("Čeka uplatu", { exact: true })).toBeVisible();
+      await expect(
+        page.getByText(
+          "Čeka se potvrda plaćanja. Ova porudžbina ne može u adresnicu niti u kurirski nalog dok uplata ne bude potvrđena.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: "Kreiraj nalog za izabrane stavke",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await page.getByLabel("Datum kada je novac legao").fill("2026-08-27");
+      await page
+        .getByLabel("Poziv na broj / referenca izvoda")
+        .fill(`IZVOD-${runId}`);
+      await page.getByLabel("Napomena (opciono)").fill("Izolovani E2E test.");
+      await acceptConfirmation(
+        page,
+        page.getByRole("button", {
+          name: "Potvrdi da je uplata legla",
+          exact: true,
+        }),
+      );
+      await expect(
+        page.getByText(
+          "Uplata je potvrđena. Porudžbina sme u picking i kurirski nalog.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      const paidBankPayment = await db.payment.findFirstOrThrow({
+        where: { orderId: pendingBankOrderId, method: "UPLATA_NA_RACUN" },
+      });
+      expect(paidBankPayment.status).toBe("PAID");
+      expect(paidBankPayment.providerRef).toBe(`IZVOD-${runId}`);
+      expect(
+        await db.shipment.count({ where: { orderId: pendingBankOrderId } }),
+      ).toBe(0);
+      expect(
+        await db.pickupBatchLine.count({ where: { orderId: pendingBankOrderId } }),
+      ).toBe(0);
+
+      await page.goto(`/admin/erp/preuzimanja/${myGlsBatchId}?mode=edit`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page
+        .getByRole("button", { name: "Učitaj porudžbine", exact: true })
+        .click();
+      await expect(page.getByRole("status")).toContainText(
+        "Učitano paketa: 1 iz 1 porudžbina",
+      );
+      expect(
+        await db.pickupBatchLine.count({
+          where: { batchId: myGlsBatchId, orderId: pendingBankOrderId },
+        }),
+      ).toBe(1);
     });
 
     expect(pageErrors).toEqual([]);
@@ -931,6 +1015,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     number: string;
     status: "KREIRANO" | "POTVRDJENO";
     shippingMethod: "KURIR" | "KAMION";
+    paymentMethod?: "POUZECE_GOTOVINA" | "UPLATA_NA_RACUN";
+    paymentStatus?: "PENDING" | "PAID";
     lines: Array<{
       product: {
         id: string;
@@ -957,7 +1043,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         subtotal: 1_000,
         total: 1_000,
         shippingMethod: input.shippingMethod,
-        paymentMethod: "POUZECE_GOTOVINA",
+        paymentMethod: input.paymentMethod ?? "POUZECE_GOTOVINA",
         shipFirstName: "QA",
         shipLastName: "Pickup",
         shipPhone: "+38160111222",
@@ -987,6 +1073,20 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
             color2: product.colorSecondary,
           })),
         },
+        ...(input.paymentMethod === "UPLATA_NA_RACUN"
+          ? {
+              payments: {
+                create: {
+                  method: "UPLATA_NA_RACUN" as const,
+                  provider: "MANUAL" as const,
+                  status: input.paymentStatus ?? "PENDING",
+                  amount: 1_000,
+                  paidAt:
+                    input.paymentStatus === "PAID" ? new Date() : null,
+                },
+              },
+            }
+          : {}),
       },
       select: { id: true },
     });

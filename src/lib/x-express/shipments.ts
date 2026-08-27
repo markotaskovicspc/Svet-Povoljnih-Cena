@@ -28,6 +28,7 @@ import {
 } from "@/lib/courier/shipment-assignment";
 import type { XExpressCreateOrderPayload } from "./types";
 import { isXExpressAnnouncementPaymentReady } from "./payment";
+import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 
 export async function createXExpressShipmentForOrder(
   orderId: string,
@@ -148,6 +149,12 @@ export async function createXExpressShipmentForOrder(
           assignmentOrderItemIds,
         )),
   );
+  assertFulfillmentPaymentReady({
+    orderNumber: order.number,
+    purpose,
+    paymentMethod: order.paymentMethod,
+    paymentStatuses: order.payments.map((payment) => payment.status),
+  });
   if (
     existing &&
     existing.provider === X_EXPRESS_PROVIDER &&
@@ -368,7 +375,7 @@ export async function announceXExpressShipment(shipmentId: string) {
     })
   ) {
     throw new XExpressConfigError(
-      `Porudžbina ${existing.order.number} mora imati uspešno/autorizovano plaćanje pre slanja X Express-u. Adresnica ostaje sačuvana.`,
+      `Porudžbina ${existing.order.number} ne može biti poslata X Express-u dok plaćanje nije potvrđeno.`,
     );
   }
 

@@ -44,6 +44,10 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/admin/data-table";
 import { AdminActionForm } from "@/components/admin/action-form";
+import {
+  fulfillmentPaymentReadiness,
+  isCashOnDeliveryPaymentMethod,
+} from "@/lib/payments/fulfillment-readiness";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -177,11 +181,32 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
           payload: { orderId: id, status },
           idempotencyKey: `order-status-email:${id}:${status}`,
         });
+        let courierDeferredForPayment = false;
         if (
           status === "SPREMNO_ZA_ISPORUKU" &&
           (await smallParcelAutoCreateEnabled())
         ) {
-          await createShipmentForOrder(id);
+          const paymentState = await db.order.findUnique({
+            where: { id },
+            select: {
+              paymentMethod: true,
+              payments: { select: { status: true } },
+            },
+          });
+          const readiness = paymentState
+            ? fulfillmentPaymentReadiness({
+                purpose: "ORDER_DELIVERY",
+                paymentMethod: paymentState.paymentMethod,
+                paymentStatuses: paymentState.payments.map(
+                  (payment) => payment.status,
+                ),
+              })
+            : { ready: false as const, reason: "Porudžbina ne postoji." };
+          if (readiness.ready) {
+            await createShipmentForOrder(id);
+          } else {
+            courierDeferredForPayment = true;
+          }
         }
         revalidatePath(`/admin/erp/prodajni-nalozi/${id}`);
         revalidatePath("/admin/erp/prodajni-nalozi");
@@ -189,7 +214,9 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
           ok: true as const,
           entityId: id,
           diff: { status, note },
-          message: "Status porudžbine je ažuriran.",
+          message: courierDeferredForPayment
+            ? "Status porudžbine je ažuriran, ali kurirski nalog nije kreiran jer plaćanje još nije potvrđeno."
+            : "Status porudžbine je ažuriran.",
         };
       },
   )(formData);
@@ -354,6 +381,137 @@ async function announceXExpressCourierShipment(
   )(formData);
 }
 
+async function confirmBankTransferPaymentAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.bankTransferConfirm", entity: "Payment" },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const paymentId = String(formData.get("paymentId") ?? "");
+      const paidOn = String(formData.get("paidOn") ?? "").trim();
+      const statementReference = String(
+        formData.get("statementReference") ?? "",
+      ).trim();
+      const note = String(formData.get("note") ?? "").trim();
+      if (!orderId || !paymentId || !/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) {
+        return {
+          ok: false as const,
+          error: "Izaberite datum kada je uplata stvarno legla na račun.",
+        };
+      }
+      if (!statementReference) {
+        return {
+          ok: false as const,
+          error: "Unesite poziv na broj ili referencu izvoda.",
+        };
+      }
+      const paidAt = new Date(`${paidOn}T12:00:00`);
+      if (
+        Number.isNaN(paidAt.getTime()) ||
+        paidAt.getTime() > Date.now() + 24 * 60 * 60_000
+      ) {
+        return { ok: false as const, error: "Datum uplate nije ispravan." };
+      }
+
+      const result = await db.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id"
+          FROM "Order"
+          WHERE "id" = ${orderId}
+          FOR UPDATE
+        `);
+        const order = await tx.order.findUnique({
+          where: { id: orderId },
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            paymentMethod: true,
+            cancelledAt: true,
+          },
+        });
+        if (!order || order.paymentMethod !== "UPLATA_NA_RACUN") {
+          throw new Error("Porudžbina sa uplatom na račun nije pronađena.");
+        }
+        if (order.cancelledAt || order.status === "OTKAZANO") {
+          throw new Error("Uplata se ne potvrđuje na otkazanoj porudžbini.");
+        }
+        const payment = await tx.payment.findFirst({
+          where: {
+            id: paymentId,
+            orderId,
+            method: "UPLATA_NA_RACUN",
+            provider: "MANUAL",
+          },
+          select: { id: true, status: true, amount: true, currency: true },
+        });
+        if (!payment) throw new Error("Evidencija uplate nije pronađena.");
+        if (payment.status !== "PENDING") {
+          throw new Error(
+            payment.status === "PAID"
+              ? "Ova uplata je već potvrđena."
+              : `Uplata je u statusu ${payment.status} i ne može ručno da se potvrdi.`,
+          );
+        }
+        const updated = await tx.payment.updateMany({
+          where: { id: payment.id, status: "PENDING" },
+          data: {
+            status: "PAID",
+            paidAt,
+            providerRef: statementReference.slice(0, 180),
+          },
+        });
+        if (updated.count !== 1) {
+          throw new Error("Status uplate je u međuvremenu promenjen. Osvežite stranicu.");
+        }
+        const eventNote = [
+          `Uplata na račun potvrđena (${payment.amount} ${payment.currency}; ref. ${statementReference.slice(0, 180)}).`,
+          note ? note.slice(0, 500) : null,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        await tx.orderStatusEvent.create({
+          data: {
+            orderId,
+            status: order.status,
+            actorId,
+            note: eventNote,
+          },
+        });
+        return {
+          orderNumber: order.number,
+          amount: Number(payment.amount),
+          currency: payment.currency,
+        };
+      });
+
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      revalidatePath("/admin/erp/preuzimanja");
+      return {
+        ok: true as const,
+        entityId: paymentId,
+        diff: {
+          orderId,
+          orderNumber: result.orderNumber,
+          status: "PAID",
+          paidOn,
+          statementReference: statementReference.slice(0, 180),
+          note: note.slice(0, 500),
+          amount: result.amount,
+          currency: result.currency,
+        },
+        message:
+          "Uplata je potvrđena. Porudžbina sada može da se učita u nalog za preuzimanje, ali ništa nije automatski poslato kuriru.",
+      };
+    },
+  )(formData);
+}
+
 async function syncCourierShipment(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -419,6 +577,19 @@ async function modifyMyGlsCOD(_state: AdminActionState, formData: FormData) {
       const codAmount = Number(formData.get("codAmount") ?? "");
       if (!shipmentId || !orderId || !Number.isFinite(codAmount) || codAmount < 0) {
         return { ok: false as const, error: "Neispravan COD iznos." };
+      }
+      const shipment = await db.shipment.findFirst({
+        where: { id: shipmentId, orderId },
+        select: { order: { select: { paymentMethod: true } } },
+      });
+      if (
+        !shipment ||
+        !isCashOnDeliveryPaymentMethod(shipment.order.paymentMethod)
+      ) {
+        return {
+          ok: false as const,
+          error: "COD može da se menja samo za porudžbinu koja se plaća pouzećem.",
+        };
       }
       try {
         const result = await modifyMyGlsCODForShipment(shipmentId, codAmount);
@@ -943,6 +1114,37 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const availableCourierItems = order.items.filter(
     (item) => !assignedOrderItemIds.has(item.id),
   );
+  const courierPaymentReadiness = fulfillmentPaymentReadiness({
+    purpose: "ORDER_DELIVERY",
+    paymentMethod: order.paymentMethod,
+    paymentStatuses: order.payments.map((payment) => payment.status),
+  });
+  const bankTransferPayment =
+    order.payments.find(
+      (payment) =>
+        payment.method === "UPLATA_NA_RACUN" && payment.provider === "MANUAL",
+    ) ?? null;
+  const bankTransferPaid = bankTransferPayment?.status === "PAID";
+  const todayInBelgrade = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Belgrade",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const activeDeliveryShipments = order.shipments.filter(
+    (shipment) =>
+      shipment.purpose === "ORDER_DELIVERY" && shipment.status !== "FAILED",
+  );
+  const allCourierAssignmentsActive =
+    availableCourierItems.length === 0 &&
+    activeDeliveryShipments.length > 0 &&
+    activeDeliveryShipments.every((shipment) =>
+      shipment.provider === X_EXPRESS_PROVIDER
+        ? Boolean(shipment.providerShipmentId)
+        : shipment.provider === MYGLS_PROVIDER
+          ? Boolean(shipment.providerShipmentId && shipment.labelObjectKey)
+          : Boolean(shipment.trackingNo),
+    );
   const latestIpsPayment =
     order.payments.find((payment) => payment.provider === "IPS") ?? null;
   const reservedRefundTotal = order.paymentRefunds
@@ -1305,6 +1507,93 @@ export async function WebOrderDetail({ id }: { id: string }) {
             </AdminActionForm>
           </Card>
 
+          {order.paymentMethod === "UPLATA_NA_RACUN" ? (
+            <Card>
+              <CardTitle
+                description={
+                  bankTransferPaid ? "Uplata je potvrđena" : "Čeka uplatu"
+                }
+              >
+                Uplata na račun
+              </CardTitle>
+              <dl className="mb-4 space-y-1 text-sm">
+                <Row k="Status" v={bankTransferPayment?.status ?? "NEMA EVIDENCIJE"} />
+                <Row
+                  k="Iznos"
+                  v={formatRsd(num(bankTransferPayment?.amount ?? order.total))}
+                />
+                <Row
+                  k="Datum uplate"
+                  v={
+                    bankTransferPayment?.paidAt
+                      ? bankTransferPayment.paidAt.toLocaleDateString("sr-Latn-RS")
+                      : "—"
+                  }
+                />
+                <Row
+                  k="Referenca izvoda"
+                  v={bankTransferPayment?.providerRef ?? "—"}
+                />
+              </dl>
+              {bankTransferPayment?.status === "PENDING" ? (
+                <AdminActionForm
+                  action={confirmBankTransferPaymentAction}
+                  className="space-y-3 rounded-lg border border-warning/30 bg-warning/5 p-3"
+                >
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <input
+                    type="hidden"
+                    name="paymentId"
+                    value={bankTransferPayment.id}
+                  />
+                  <p className="text-sm text-ink-700">
+                    Prvo proverite izvod banke. Ovo dugme samo beleži da je novac
+                    legao; ne pravi adresnicu i ne šalje ništa kuriru.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Datum kada je novac legao">
+                      <input
+                        name="paidOn"
+                        type="date"
+                        required
+                        defaultValue={todayInBelgrade}
+                        className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                      />
+                    </Field>
+                    <Field label="Poziv na broj / referenca izvoda">
+                      <input
+                        name="statementReference"
+                        required
+                        maxLength={180}
+                        className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Napomena (opciono)">
+                    <Textarea name="note" rows={2} maxLength={500} />
+                  </Field>
+                  <div className="flex justify-end">
+                    <SubmitButton
+                      size="sm"
+                      confirm="Potvrditi da je novac stvarno legao na bankovni račun? Ova radnja se beleži u auditu."
+                    >
+                      Potvrdi da je uplata legla
+                    </SubmitButton>
+                  </div>
+                </AdminActionForm>
+              ) : bankTransferPaid ? (
+                <p className="rounded-lg bg-success/10 px-3 py-2 text-sm text-success">
+                  Uplata je potvrđena. Porudžbina sme u picking i kurirski nalog.
+                </p>
+              ) : (
+                <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
+                  Uplata nije u statusu koji dozvoljava slanje. Proverite evidenciju
+                  plaćanja pre nastavka.
+                </p>
+              )}
+            </Card>
+          ) : null}
+
           {order.paymentMethod === "IPS" ? (
             <Card>
               <CardTitle
@@ -1442,7 +1731,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                 : "Reklamacija / ručni nalog"
                             }
                           />
-                          {assignment && assignment.codAmount > 0 ? (
+                          {assignment &&
+                          assignment.codAmount > 0 &&
+                          isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
                             <Row k="COD ovog naloga" v={formatRsd(assignment.codAmount)} />
                           ) : null}
                           {shipment.providerRouteCode || shipment.providerRouteName ? (
@@ -1484,7 +1775,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               v={<span className="font-mono text-xs">{shipment.providerOrderId}</span>}
                             />
                           ) : null}
-                          {shipment.labelUrl ? (
+                          {shipment.labelUrl &&
+                          (shipment.purpose !== "ORDER_DELIVERY" ||
+                            courierPaymentReadiness.ready) ? (
                             <Row
                               k="Etiketa"
                               v={
@@ -1509,7 +1802,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           {shipment.provider === X_EXPRESS_PROVIDER &&
                           shipment.trackingNo &&
                           !shipment.providerShipmentId &&
-                          shipment.status !== "FAILED" ? (
+                          shipment.status !== "FAILED" &&
+                          (shipment.purpose !== "ORDER_DELIVERY" ||
+                            courierPaymentReadiness.ready) ? (
                             <AdminActionForm action={announceXExpressCourierShipment}>
                               <input type="hidden" name="shipmentId" value={shipment.id} />
                               <input type="hidden" name="orderId" value={order.id} />
@@ -1539,24 +1834,26 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           shipment.status !== "DELIVERED" &&
                           shipment.status !== "RETURNED" ? (
                             <>
-                              <AdminActionForm action={modifyMyGlsCOD} className="flex items-center gap-2">
-                                <input type="hidden" name="shipmentId" value={shipment.id} />
-                                <input type="hidden" name="orderId" value={order.id} />
-                                <input
-                                  name="codAmount"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={num(order.total)}
-                                  className="h-7 w-24 rounded-md border border-input bg-transparent px-2 text-xs"
-                                />
-                                <SubmitButton
-                                  variant="outline"
-                                  size="xs"
-                                  confirm="Izmeniti COD iznos kod MyGLS-a? Proverite iznos pre potvrde."
-                                >
-                                  Izmeni COD
-                                </SubmitButton>
-                              </AdminActionForm>
+                              {isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
+                                <AdminActionForm action={modifyMyGlsCOD} className="flex items-center gap-2">
+                                  <input type="hidden" name="shipmentId" value={shipment.id} />
+                                  <input type="hidden" name="orderId" value={order.id} />
+                                  <input
+                                    name="codAmount"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={num(order.total)}
+                                    className="h-7 w-24 rounded-md border border-input bg-transparent px-2 text-xs"
+                                  />
+                                  <SubmitButton
+                                    variant="outline"
+                                    size="xs"
+                                    confirm="Izmeniti COD iznos kod MyGLS-a? Proverite iznos pre potvrde."
+                                  >
+                                    Izmeni COD
+                                  </SubmitButton>
+                                </AdminActionForm>
+                              ) : null}
                               <AdminActionForm action={deleteMyGlsShipment}>
                                 <input type="hidden" name="shipmentId" value={shipment.id} />
                                 <input type="hidden" name="orderId" value={order.id} />
@@ -1594,7 +1891,12 @@ export async function WebOrderDetail({ id }: { id: string }) {
                 ) : (
                   <p className="text-ink-500">Kurirski nalog još nije kreiran.</p>
                 )}
-                {availableCourierItems.length ? (
+                {!courierPaymentReadiness.ready ? (
+                  <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-warning">
+                    Čeka se potvrda plaćanja. Ova porudžbina ne može u adresnicu
+                    niti u kurirski nalog dok uplata ne bude potvrđena.
+                  </p>
+                ) : availableCourierItems.length ? (
                   <AdminActionForm
                     action={createCourierShipment}
                     className="space-y-3 rounded-lg border border-border p-3"
@@ -1666,9 +1968,14 @@ export async function WebOrderDetail({ id }: { id: string }) {
                       </SubmitButton>
                     </div>
                   </AdminActionForm>
-                ) : (
+                ) : allCourierAssignmentsActive ? (
                   <p className="rounded-lg bg-success/10 px-3 py-2 text-success">
                     Sve stavke porudžbine imaju aktivan kurirski nalog.
+                  </p>
+                ) : (
+                  <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-warning">
+                    Kurirski nalog je samo lokalno pripremljen ili slanje nije
+                    završeno. Nije potvrđeno da je kurir prihvatio sve stavke.
                   </p>
                 )}
               </div>
