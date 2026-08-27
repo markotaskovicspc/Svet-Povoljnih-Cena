@@ -34,32 +34,19 @@ describe("hourly all-channel fiscal reconciliation", () => {
         total: { gt: 0 },
         items: { some: {} },
         fiscalDocuments: { none: { kind: "SALE" } },
-        OR: [
-          {
-            paymentMethod: {
-              notIn: ["POUZECE_GOTOVINA", "POUZECE_KARTICA"],
-            },
-            payments: { some: { status: "PAID" } },
-          },
-          {
-            paymentMethod: {
-              in: ["POUZECE_GOTOVINA", "POUZECE_KARTICA"],
-            },
-            shipments: {
-              some: {
-                purpose: "ORDER_DELIVERY",
-                status: {
-                  in: [
-                    "PICKED_UP",
-                    "IN_TRANSIT",
-                    "OUT_FOR_DELIVERY",
-                    "DELIVERED",
-                  ],
-                },
-              },
+        shipments: {
+          some: {
+            purpose: "ORDER_DELIVERY",
+            status: {
+              in: [
+                "PICKED_UP",
+                "IN_TRANSIT",
+                "OUT_FOR_DELIVERY",
+                "DELIVERED",
+              ],
             },
           },
-        ],
+        },
       },
       orderBy: { createdAt: "asc" },
       take: 25,
@@ -67,17 +54,12 @@ describe("hourly all-channel fiscal reconciliation", () => {
         id: true,
         number: true,
         channel: true,
-        total: true,
         paymentMethod: true,
-        payments: {
-          where: { status: "PAID" },
-          select: { amount: true },
-        },
       },
     });
   });
 
-  it("queues fully paid orders with a stable idempotency key", async () => {
+  it("queues picked-up prepaid orders with the pickup idempotency key", async () => {
     mocks.orderFindMany.mockResolvedValue([
       {
         id: "order-vp-1",
@@ -92,8 +74,8 @@ describe("hourly all-channel fiscal reconciliation", () => {
     await expect(enqueueEligibleOrdersForFiscalization()).resolves.toEqual({
       scanned: 1,
       eligible: 1,
-      eligibleAdvance: 1,
-      eligiblePickup: 0,
+      eligibleAdvance: 0,
+      eligiblePickup: 1,
       queued: 1,
       skippedUnderpaid: 0,
       failed: 0,
@@ -102,10 +84,10 @@ describe("hourly all-channel fiscal reconciliation", () => {
       kind: "FISCAL_RECEIPT",
       payload: {
         orderId: "order-vp-1",
-        source: "AUTO_ADVANCE",
+        source: "AUTO_PICKUP",
         paymentMethod: "UPLATA_NA_RACUN",
       },
-      idempotencyKey: "fiscal-advance:order-vp-1",
+      idempotencyKey: "fiscal-pickup:order-vp-1",
     });
   });
 
@@ -141,7 +123,7 @@ describe("hourly all-channel fiscal reconciliation", () => {
     });
   });
 
-  it("does not fiscalize an order whose paid records do not cover the total", async () => {
+  it("uses courier pickup as the trigger regardless of recorded payment amount", async () => {
     mocks.orderFindMany.mockResolvedValue([
       {
         id: "order-vp-underpaid",
@@ -155,14 +137,22 @@ describe("hourly all-channel fiscal reconciliation", () => {
 
     await expect(enqueueEligibleOrdersForFiscalization()).resolves.toEqual({
       scanned: 1,
-      eligible: 0,
+      eligible: 1,
       eligibleAdvance: 0,
-      eligiblePickup: 0,
-      queued: 0,
-      skippedUnderpaid: 1,
+      eligiblePickup: 1,
+      queued: 1,
+      skippedUnderpaid: 0,
       failed: 0,
     });
-    expect(mocks.enqueueBackgroundJob).not.toHaveBeenCalled();
+    expect(mocks.enqueueBackgroundJob).toHaveBeenCalledWith({
+      kind: "FISCAL_RECEIPT",
+      payload: {
+        orderId: "order-vp-underpaid",
+        source: "AUTO_PICKUP",
+        paymentMethod: "UPLATA_NA_RACUN",
+      },
+      idempotencyKey: "fiscal-pickup:order-vp-underpaid",
+    });
   });
 
   it("continues scanning when one order cannot be queued", async () => {
@@ -191,8 +181,8 @@ describe("hourly all-channel fiscal reconciliation", () => {
     await expect(enqueueEligibleOrdersForFiscalization()).resolves.toEqual({
       scanned: 2,
       eligible: 2,
-      eligibleAdvance: 2,
-      eligiblePickup: 0,
+      eligibleAdvance: 0,
+      eligiblePickup: 2,
       queued: 1,
       skippedUnderpaid: 0,
       failed: 1,

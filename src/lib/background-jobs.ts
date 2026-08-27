@@ -497,6 +497,21 @@ async function dispatchJob(job: JobRow) {
     case "FISCAL_RECEIPT": {
       const { issueAndDeliverFiscalReceipt } = await import("@/lib/fiscal");
       const args = payload as z.infer<typeof schemas.FISCAL_RECEIPT>;
+      if (args.source !== "MANUAL") {
+        const pickedUpDelivery = await db.shipment.findFirst({
+          where: {
+            orderId: args.orderId,
+            purpose: "ORDER_DELIVERY",
+            status: {
+              in: ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"],
+            },
+          },
+          select: { id: true },
+        });
+        // Complete stale pre-payment jobs without issuing a receipt. The
+        // courier event or hourly reconciliation will enqueue the pickup key.
+        if (!pickedUpDelivery) return;
+      }
       const result = await issueAndDeliverFiscalReceipt(args.orderId, {
         source: args.source,
         paymentMethod: args.paymentMethod,

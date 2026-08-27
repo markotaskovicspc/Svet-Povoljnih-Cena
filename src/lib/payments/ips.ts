@@ -675,11 +675,6 @@ async function applyIpsResult(
         payload: { orderId: order.id },
         idempotencyKey: `ips-payment-email:${order.id}`,
       }),
-      enqueueBackgroundJob({
-        kind: "FISCAL_RECEIPT",
-        payload: { orderId: order.id, source: "AUTO_ADVANCE", paymentMethod: "IPS" },
-        idempotencyKey: `fiscal-advance:${order.id}`,
-      }),
       enqueueSupplierShippingDocumentJobsForOrder(
         order.id,
         `ips-paid-${payload.paymentReference ?? payload.responseCode}`,
