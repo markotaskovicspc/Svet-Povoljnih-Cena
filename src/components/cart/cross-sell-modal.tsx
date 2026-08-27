@@ -17,14 +17,20 @@ import type { Product } from "@/types";
 import { PurchaseSuggestion } from "./purchase-suggestion";
 
 /**
- * "Predlog kupovine" modal. Mounted globally; opens from "Pregled korpe"
- * and "Plati" actions, with products loaded from admin recommendation rules.
+ * "Predlog kupovine" modal. Mounted globally; opens immediately after an
+ * eligible add-to-cart action and before explicit cart navigation.
  */
 export function CrossSellModal() {
   const destination = useCartUi((s) => s.suggestionDestination);
   const crossSellSku = useCartUi((s) => s.crossSellSku);
   const lines = useCart((state) => state.lines);
-  const skus = useMemo(() => lines.map((line) => line.sku), [lines]);
+  const skus = useMemo(
+    () =>
+      crossSellSku
+        ? [crossSellSku]
+        : lines.map((line) => line.sku),
+    [crossSellSku, lines],
+  );
   const requested = Boolean(destination || crossSellSku);
 
   if (!requested) return null;
@@ -60,7 +66,7 @@ function RequestedCrossSellModal({
     const target = destination ?? "/korpa";
     if (!skus.length) {
       close();
-      router.push(target);
+      if (destination) router.push(target);
       return;
     }
 
@@ -79,7 +85,7 @@ function RequestedCrossSellModal({
         const next = Array.isArray(data.products) ? data.products : [];
         if (!next.length) {
           close();
-          router.push(target);
+          if (destination) router.push(target);
           return;
         }
         setResult({ key: requestKey, products: next });
@@ -87,7 +93,7 @@ function RequestedCrossSellModal({
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         close();
-        router.push(target);
+        if (destination) router.push(target);
       });
     return () => controller.abort();
   }, [close, destination, requestKey, router, skus]);

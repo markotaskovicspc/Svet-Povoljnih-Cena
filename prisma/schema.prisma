@@ -479,41 +479,42 @@ model Product {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  categories               ProductCategory[]
-  media                    ProductMedia[]
-  attachments              ProductAttachment[]
-  pictograms               ProductPictogram[]
-  materials                ProductMaterial[]
-  variants                 Variant[]
-  familyMembership         ProductFamilyMember?
-  primaryForFamily         ProductFamily?            @relation("ProductFamilyPrimary")
-  assemblyCities           ProductAssemblyCity[]
-  deliveryRules            DeliveryPriceRule[]
-  recommendedBy            RecommendationRule[]      @relation("RecommendationRuleProducts")
-  orderItems               OrderItem[]
-  purchasePrices           PurchasePrice[]
-  purchaseOrderItems       PurchaseOrderItem[]
-  inboundInvoiceItems      InboundInvoiceItem[]
-  retailPriceProposals     RetailPriceProposal[]
-  wishlistItems            WishlistItem[]
-  backInStockAlerts        BackInStockAlert[]
-  onSaleAlerts             OnSaleAlert[]
-  reclamations             Reclamation[]
-  stockSnapshots           SupplierStockSnapshot[]
-  warehouseStocks          WarehouseStock[]
-  stockMovements           StockMovement[]
-  fiscalDocumentLines      FiscalDocumentLine[]
-  lookupAssignments        ProductLookupAssignment[]
-  priceListEntries         PriceListEntry[]
-  actionPrices             ActionProduct[]
-  loyaltyRules             LoyaltyRuleProduct[]
-  loyaltyPriceHistory      LoyaltyPriceHistory[]
-  dispatchNoteItems        DispatchNoteItem[]
-  partnerReservations      PartnerReservation[]
-  stockCountItems          StockCountItem[]
-  analyticsEvents          AnalyticsEvent[]
-  supplierFulfillmentItems SupplierFulfillmentItem[]
-  supplierSyncChanges      SupplierSyncChange[]
+  categories                ProductCategory[]
+  media                     ProductMedia[]
+  attachments               ProductAttachment[]
+  pictograms                ProductPictogram[]
+  materials                 ProductMaterial[]
+  variants                  Variant[]
+  familyMembership          ProductFamilyMember?
+  primaryForFamily          ProductFamily?            @relation("ProductFamilyPrimary")
+  assemblyCities            ProductAssemblyCity[]
+  deliveryRules             DeliveryPriceRule[]
+  recommendedBy             RecommendationRule[]      @relation("RecommendationRuleProducts")
+  recommendationSourceRules RecommendationRule[]      @relation("RecommendationRuleSourceProduct")
+  orderItems                OrderItem[]
+  purchasePrices            PurchasePrice[]
+  purchaseOrderItems        PurchaseOrderItem[]
+  inboundInvoiceItems       InboundInvoiceItem[]
+  retailPriceProposals      RetailPriceProposal[]
+  wishlistItems             WishlistItem[]
+  backInStockAlerts         BackInStockAlert[]
+  onSaleAlerts              OnSaleAlert[]
+  reclamations              Reclamation[]
+  stockSnapshots            SupplierStockSnapshot[]
+  warehouseStocks           WarehouseStock[]
+  stockMovements            StockMovement[]
+  fiscalDocumentLines       FiscalDocumentLine[]
+  lookupAssignments         ProductLookupAssignment[]
+  priceListEntries          PriceListEntry[]
+  actionPrices              ActionProduct[]
+  loyaltyRules              LoyaltyRuleProduct[]
+  loyaltyPriceHistory       LoyaltyPriceHistory[]
+  dispatchNoteItems         DispatchNoteItem[]
+  partnerReservations       PartnerReservation[]
+  stockCountItems           StockCountItem[]
+  analyticsEvents           AnalyticsEvent[]
+  supplierFulfillmentItems  SupplierFulfillmentItem[]
+  supplierSyncChanges       SupplierSyncChange[]
 
   @@unique([supplierId, supplierExternalId])
   @@index([slug])
@@ -907,17 +908,20 @@ model AdFlag {
   @@unique([channel])
 }
 
-/// Per-group cross-sell rules ("predlog kupovine" modal contents)
+/// Cross-sell rules scoped to one product or a whole group.
 model RecommendationRule {
-  id       String    @id @default(cuid())
-  groupId  String
-  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  groupId         String?
+  group           Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sourceProductId String?
+  sourceProduct   Product?  @relation("RecommendationRuleSourceProduct", fields: [sourceProductId], references: [id], onDelete: Cascade)
   /// Ordered SKUs to surface; products linked via M:N join
-  products Product[] @relation("RecommendationRuleProducts")
-  order    Int       @default(0)
-  enabled  Boolean   @default(true)
+  products        Product[] @relation("RecommendationRuleProducts")
+  order           Int       @default(0)
+  enabled         Boolean   @default(true)
 
   @@index([groupId])
+  @@index([sourceProductId])
 }
 
 // ──────────────────────────────────────────────────────────────────────

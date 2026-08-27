@@ -71,6 +71,7 @@ import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
 import { formatProductDisplayName } from "@/lib/product-name";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
+import { selectCartRecommendationRules } from "@/lib/cart-recommendations";
 import {
   dynamicFacetsForGroups,
   type Availability,
@@ -2105,17 +2106,38 @@ export async function getCartRecommendationsForSkus(
 
   const cartProducts = await db.product.findMany({
     where: { sku: { in: uniqueSkus }, ...webStorefrontVisibleProductWhere() },
-    select: { groupId: true },
+    select: { id: true, sku: true, groupId: true },
   });
-  const groupIds = Array.from(
-    new Set(cartProducts.map((product) => product.groupId).filter((id): id is string => Boolean(id))),
+  const cartProductBySku = new Map(
+    cartProducts.map((product) => [product.sku, product]),
   );
-  if (!groupIds.length) return [];
+  const orderedCartProducts = uniqueSkus
+    .map((sku) => cartProductBySku.get(sku))
+    .filter(
+      (product): product is (typeof cartProducts)[number] => Boolean(product),
+    );
+  const sourceProductIds = orderedCartProducts.map((product) => product.id);
+  const groupIds = Array.from(
+    new Set(
+      orderedCartProducts
+        .map((product) => product.groupId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  if (!sourceProductIds.length) return [];
 
   const now = new Date();
   const [rules, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.recommendationRule.findMany({
-      where: { enabled: true, groupId: { in: groupIds } },
+      where: {
+        enabled: true,
+        OR: [
+          { sourceProductId: { in: sourceProductIds } },
+          ...(groupIds.length
+            ? [{ sourceProductId: null, groupId: { in: groupIds } }]
+            : []),
+        ],
+      },
       include: { products: { include: productInclude } },
       orderBy: [{ order: "asc" }],
     }),
@@ -2124,10 +2146,14 @@ export async function getCartRecommendationsForSkus(
     getMonthlyHeroSkus(now),
   ]);
   const heroContext = { now, monthlyHeroSkus } satisfies HeroResolutionContext;
+  const selectedRules = selectCartRecommendationRules(
+    orderedCartProducts,
+    rules,
+  );
 
   const seenSkus = new Set(uniqueSkus);
   const out: ProductDTO[] = [];
-  for (const rule of rules) {
+  for (const rule of selectedRules) {
     for (const product of rule.products) {
       if (
         seenSkus.has(product.sku) ||

@@ -25,8 +25,7 @@ import { deliveryCategory } from "@/lib/delivery-tariff";
  *
  *  - persists the line in the cart store
  *  - fires a toast with thumbnail + "Pogledaj korpu" CTA (per spec 1F.1)
- *  - does not open cart/cross-sell overlays; those are user-triggered from
- *    "Pregled korpe" / "Plati"
+ *  - asks the global cross-sell modal for recommendations tied to this SKU
  *
  * Returns the resolved sale unit price for callers that need it.
  */
@@ -101,6 +100,7 @@ export async function commitAddToCart(
         : undefined),
   };
   useCart.getState().add(line, qty);
+  useCartUi.getState().openCrossSell(product.sku);
   recordFirstPartyEvent({
     type: "ADD_TO_CART",
     productId: product.id,
