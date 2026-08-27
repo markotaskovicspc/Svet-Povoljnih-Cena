@@ -731,6 +731,7 @@ describe("X Express codes, label and webhook envelope", () => {
 
   it("requires exact webhook authentication, contract and schema", () => {
     vi.stubEnv("X_EXPRESS_WEBHOOK_API_KEY", "webhook-key");
+    vi.stubEnv("X_EXPRESS_API_KEY", "api-key");
     vi.stubEnv("X_EXPRESS_CONTRACT_CODE", "U000328");
     const headers = new Headers({
       "X-API-Sender": "XExpress",
@@ -738,6 +739,11 @@ describe("X Express codes, label and webhook envelope", () => {
     });
     expect(verifyXExpressWebhookHeaders(headers)).toBe(true);
     headers.set("X-API-Sender", "someone-else");
+    expect(verifyXExpressWebhookHeaders(headers)).toBe(false);
+    headers.set("X-API-Sender", "XExpress");
+    headers.set("X-API-Key", "api-key");
+    expect(verifyXExpressWebhookHeaders(headers)).toBe(true);
+    headers.set("X-API-Key", "unrecognized-key");
     expect(verifyXExpressWebhookHeaders(headers)).toBe(false);
 
     const batch = parseXExpressWebhookBatch([

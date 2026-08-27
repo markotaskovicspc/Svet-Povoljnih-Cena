@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   if (!verifyXExpressWebhookHeaders(req.headers)) {
+    console.warn("[X Express webhook] Authentication rejected.", {
+      hasApiKey: Boolean(req.headers.get("x-api-key")),
+      hasBearer: /^Bearer\s+\S+/i.test(req.headers.get("authorization") ?? ""),
+      senderMatches: req.headers.get("x-api-sender") === "XExpress",
+    });
     return new NextResponse("", { status: 401 });
   }
 

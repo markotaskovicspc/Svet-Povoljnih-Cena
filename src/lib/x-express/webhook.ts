@@ -51,11 +51,15 @@ export type XExpressWebhookNotify = z.infer<typeof notifySchema>;
 
 export function verifyXExpressWebhookHeaders(headers: Headers) {
   const cfg = getXExpressConfig();
-  if (!cfg.webhookApiKey) return false;
   const bearer = headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const credential = headers.get("x-api-key")?.trim() || bearer;
+  const keyMatches = Boolean(
+    credential &&
+      ((cfg.webhookApiKey && credential === cfg.webhookApiKey) ||
+        (cfg.apiKey && credential === cfg.apiKey)),
+  );
   return (
-    (headers.get("x-api-key") === cfg.webhookApiKey ||
-      bearer === cfg.webhookApiKey) &&
+    keyMatches &&
     headers.get("x-api-sender") === "XExpress"
   );
 }
