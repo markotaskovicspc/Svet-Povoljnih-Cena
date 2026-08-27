@@ -11,6 +11,30 @@ export const MANUAL_SALES_ORDER_STATUSES = [
   "SPREMNO_ZA_ISPORUKU",
 ] as const;
 
+export const MANUAL_SALES_ORDER_PAYMENT_METHODS = [
+  "UPLATA_NA_RACUN",
+  "POUZECE_GOTOVINA",
+  "POUZECE_KARTICA",
+] as const;
+
+export type ManualSalesOrderPaymentMethod =
+  (typeof MANUAL_SALES_ORDER_PAYMENT_METHODS)[number];
+
+export const MANUAL_SALES_ORDER_PAYMENT_METHOD_LABELS: Record<
+  ManualSalesOrderPaymentMethod,
+  string
+> = {
+  UPLATA_NA_RACUN: "Uplata na račun",
+  POUZECE_GOTOVINA: "Pouzeće — gotovina",
+  POUZECE_KARTICA: "Pouzeće — kartica",
+};
+
+export function isManualSalesOrderPaymentMethod(
+  value: string,
+): value is ManualSalesOrderPaymentMethod {
+  return MANUAL_SALES_ORDER_PAYMENT_METHODS.some((method) => method === value);
+}
+
 const manualSalesOrderLineSchema = z.object({
   sku: z.string().trim().min(1, "Šifra artikla je obavezna.").max(120),
   qty: z.coerce
@@ -31,6 +55,9 @@ export const manualSalesOrderInputSchema = z
     channel: z.enum(["MP", "VP", "INO"]),
     customerId: z.string().trim().min(1, "Kupac je obavezan."),
     priceListId: z.string().trim().min(1, "Cenovnik je obavezan."),
+    paymentMethod: z.enum(MANUAL_SALES_ORDER_PAYMENT_METHODS, {
+      error: "Način plaćanja je obavezan.",
+    }),
     status: z.enum(MANUAL_SALES_ORDER_STATUSES).default("KREIRANO"),
     paid: z.boolean().default(false),
     sefAccepted: z.boolean().default(false),

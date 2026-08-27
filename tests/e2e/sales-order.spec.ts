@@ -522,6 +522,7 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
             channel: "VP",
             customerId,
             priceListId,
+            paymentMethod: "UPLATA_NA_RACUN",
             status: "KREIRANO",
             paid: false,
             sefAccepted: false,
@@ -589,6 +590,9 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         `${fixture.customerCompany} · PIB ${fixture.customerPib}`,
       );
       await page.getByLabel("Cenovnik").selectOption(priceListId);
+      await page
+        .getByLabel("Način plaćanja")
+        .selectOption("POUZECE_GOTOVINA");
       await expect(
         page.getByText(fixture.customerCompany, { exact: true }),
       ).toBeVisible();
@@ -655,6 +659,7 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       expect(order.items).toHaveLength(2);
       expect(order.shipCompanyName).toBe(fixture.customerCompany);
       expect(order.shipPib).toBe(fixture.customerPib);
+      expect(order.paymentMethod).toBe("POUZECE_GOTOVINA");
       expect(Number(order.total)).toBe(4_050);
       expect(Number(order.subtotal)).toBe(4_050);
       const dcLine = order.items.find((item) => item.sku === fixture.dcSku)!;
@@ -672,6 +677,8 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       expect(order.supplierFulfillments).toHaveLength(1);
       expect(order.supplierFulfillments[0]?.items).toHaveLength(1);
       expect(order.payments[0]?.status).toBe("PENDING");
+      expect(order.payments[0]?.method).toBe("POUZECE_GOTOVINA");
+      expect(order.payments[0]?.provider).toBe("COD");
 
       const [dcStock, products] = await Promise.all([
         db.warehouseStock.findUniqueOrThrow({

@@ -2,7 +2,6 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import {
-  PaymentProvider,
   PaymentStatus,
   Prisma,
   SalesChannel,
@@ -23,6 +22,7 @@ import {
   resolveSalesOrderWarehouse,
   type ManualSalesOrderInput,
 } from "@/lib/admin/sales-order";
+import { providerForPaymentMethod } from "@/lib/payments/types";
 
 const MANUAL_CHANNELS: SalesChannel[] = [
   SalesChannel.MP,
@@ -192,6 +192,7 @@ export type SalesOrderDetail = {
   status: string;
   customerId: string;
   priceListId: string;
+  paymentMethod: string;
   currency: string;
   paid: boolean;
   sefAccepted: boolean;
@@ -792,13 +793,14 @@ async function setManualPayment(
   tx: Prisma.TransactionClient,
   args: {
     orderId: string;
+    paymentMethod: ManualSalesOrderInput["paymentMethod"];
     paid: boolean;
     amount: number;
     currency: string;
   },
 ) {
   const manualPayment = await tx.payment.findFirst({
-    where: { orderId: args.orderId, provider: PaymentProvider.MANUAL },
+    where: { orderId: args.orderId },
     orderBy: { createdAt: "desc" },
   });
   if (manualPayment) {
@@ -807,6 +809,8 @@ async function setManualPayment(
       data: {
         amount: new Prisma.Decimal(args.amount.toFixed(2)),
         currency: args.currency,
+        method: args.paymentMethod,
+        provider: providerForPaymentMethod(args.paymentMethod),
         status: args.paid ? PaymentStatus.PAID : PaymentStatus.PENDING,
         paidAt: args.paid ? manualPayment.paidAt ?? new Date() : null,
       },
@@ -816,8 +820,8 @@ async function setManualPayment(
   await tx.payment.create({
     data: {
       orderId: args.orderId,
-      method: "UPLATA_NA_RACUN",
-      provider: PaymentProvider.MANUAL,
+      method: args.paymentMethod,
+      provider: providerForPaymentMethod(args.paymentMethod),
       status: args.paid ? PaymentStatus.PAID : PaymentStatus.PENDING,
       amount: new Prisma.Decimal(args.amount.toFixed(2)),
       currency: args.currency,
@@ -843,7 +847,7 @@ export async function createManualSalesOrder(input: unknown, actorId: string) {
         number,
         channel: data.channel,
         shippingMethod: "KURIR",
-        paymentMethod: "UPLATA_NA_RACUN",
+        paymentMethod: data.paymentMethod,
         termsAcceptedAt: new Date(),
         notes: `Ručna ${data.channel} porudžbina kreirana u ERP-u.`,
         items: {
@@ -865,6 +869,7 @@ export async function createManualSalesOrder(input: unknown, actorId: string) {
     });
     await setManualPayment(tx, {
       orderId: order.id,
+      paymentMethod: data.paymentMethod,
       paid: data.paid,
       amount: totals.gross,
       currency: priceList.currency,
@@ -977,6 +982,7 @@ export async function updateManualSalesOrder(
       where: { id: orderId },
       data: {
         ...orderHeaderData(data, customer, totals.gross),
+        paymentMethod: data.paymentMethod,
         items: {
           createMany: {
             data: data.lines.map((line) =>
@@ -999,6 +1005,7 @@ export async function updateManualSalesOrder(
     });
     await setManualPayment(tx, {
       orderId,
+      paymentMethod: data.paymentMethod,
       paid: data.paid,
       amount: totals.gross,
       currency: priceList.currency,
@@ -1226,6 +1233,7 @@ export async function getSalesOrderDetail(
     status: order.status,
     customerId: order.customerId ?? "",
     priceListId: order.priceListId ?? "",
+    paymentMethod: order.paymentMethod,
     currency: order.priceList?.currency ?? order.payments[0]?.currency ?? "RSD",
     paid,
     sefAccepted: Boolean(order.sefAcceptedAt),

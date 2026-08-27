@@ -12,6 +12,7 @@ const validInput = {
   channel: "VP",
   customerId: "customer-1",
   priceListId: "price-list-1",
+  paymentMethod: "UPLATA_NA_RACUN",
   status: "KREIRANO",
   paid: false,
   sefAccepted: false,
@@ -101,6 +102,34 @@ describe("validacija ručne MP/VP/INO porudžbine", () => {
 
   it("prihvata kompletnu VP porudžbinu", () => {
     expect(manualSalesOrderInputSchema.safeParse(validInput).success).toBe(true);
+  });
+
+  it.each([
+    "UPLATA_NA_RACUN",
+    "POUZECE_GOTOVINA",
+    "POUZECE_KARTICA",
+  ])("prihvata ručni način plaćanja %s", (paymentMethod) => {
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        paymentMethod,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("zahteva način plaćanja i ne dozvoljava lažno ručno online plaćanje", () => {
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        paymentMethod: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      manualSalesOrderInputSchema.safeParse({
+        ...validInput,
+        paymentMethod: "KARTICA",
+      }).success,
+    ).toBe(false);
   });
 
   it("prihvata INO kanal i dobavljačku alokaciju", () => {

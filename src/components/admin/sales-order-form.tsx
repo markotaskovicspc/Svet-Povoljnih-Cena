@@ -14,9 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import {
+  MANUAL_SALES_ORDER_PAYMENT_METHOD_LABELS,
+  MANUAL_SALES_ORDER_PAYMENT_METHODS,
   SUPPLIER_ALLOCATION,
   calculateSalesLineTotals,
+  isManualSalesOrderPaymentMethod,
 } from "@/lib/admin/sales-order";
+import { adminPaymentMethodLabel } from "@/lib/payments/admin-display";
 import type {
   SalesOrderCustomerOption,
   SalesOrderDetail,
@@ -225,6 +229,9 @@ export function SalesOrderForm({
   );
   const [customerId, setCustomerId] = useState(detail?.customerId ?? "");
   const [priceListId, setPriceListId] = useState(detail?.priceListId ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(
+    detail?.paymentMethod ?? "",
+  );
   const [status, setStatus] = useState(detail?.status ?? "KREIRANO");
   const [paid, setPaid] = useState(detail?.paid ?? false);
   const [sefAccepted, setSefAccepted] = useState(detail?.sefAccepted ?? false);
@@ -363,6 +370,10 @@ export function SalesOrderForm({
       setMessage({ ok: false, text: "Izaberite cenovnik." });
       return;
     }
+    if (!isManualSalesOrderPaymentMethod(paymentMethod)) {
+      setMessage({ ok: false, text: "Izaberite način plaćanja." });
+      return;
+    }
     const incomplete = lines.find(
       (line) =>
         !line.productId ||
@@ -392,6 +403,7 @@ export function SalesOrderForm({
             channel,
             customerId,
             priceListId,
+            paymentMethod,
             status,
             paid,
             sefAccepted,
@@ -561,6 +573,37 @@ export function SalesOrderForm({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Način plaćanja">
+            <select
+              value={paymentMethod}
+              disabled={readOnly}
+              required
+              onChange={(event) => setPaymentMethod(event.target.value)}
+              className="h-9 rounded-lg border border-input bg-surface px-3 text-sm disabled:opacity-60"
+              aria-label="Način plaćanja"
+            >
+              <option value="">— izaberite način plaćanja —</option>
+              {paymentMethod &&
+              !isManualSalesOrderPaymentMethod(paymentMethod) ? (
+                <option value={paymentMethod}>
+                  {adminPaymentMethodLabel(
+                    paymentMethod as Parameters<typeof adminPaymentMethodLabel>[0],
+                  )}
+                </option>
+              ) : null}
+              {MANUAL_SALES_ORDER_PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {MANUAL_SALES_ORDER_PAYMENT_METHOD_LABELS[method]}
+                </option>
+              ))}
+            </select>
+            {!readOnly ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pouzeće odmah može u kurirski nalog; uplata na račun čeka
+                potvrdu „Plaćeno“.
+              </p>
+            ) : null}
           </Field>
           {detail ? (
             <Field label="Status porudžbine">
