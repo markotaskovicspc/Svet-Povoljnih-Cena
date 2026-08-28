@@ -37,6 +37,7 @@ import { updateWebOrderItemQuantity } from "@/lib/admin/web-order-edit.server";
 import { updateWebOrderShippingContact } from "@/lib/admin/web-order-shipping.server";
 import {
   planWebOrderShippingEdit,
+  shippingEditPickupBatchBlockReason,
   shippingEditWaybillQuestion,
   type WebOrderShippingEditPlan,
 } from "@/lib/admin/web-order-shipping";
@@ -1207,7 +1208,15 @@ export async function WebOrderDetail({ id }: { id: string }) {
           purpose: "ORDER_DELIVERY",
           batch: { status: { not: "CANCELLED" } },
         },
-        select: { id: true },
+        select: {
+          batch: {
+            select: {
+              number: true,
+              status: true,
+              externalBookedAt: true,
+            },
+          },
+        },
       },
       invoices: true,
       fiscal: true,
@@ -1319,6 +1328,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
     ["PAID", "PARTIAL_REFUND"].includes(latestIpsPayment.status) &&
     refundableIpsAmount > 0;
   const shippingEditWaybillPlan = planWebOrderShippingEdit(order.shipments);
+  const shippingEditPickupBatchReason = shippingEditPickupBatchBlockReason(
+    order.pickupBatchLines.map((line) => line.batch),
+  );
   const shippingEditBlockedReason =
     !["KREIRANO", "POTVRDJENO", "U_PRIPREMI", "SPREMNO_ZA_ISPORUKU"].includes(
       order.status,
@@ -1326,8 +1338,8 @@ export async function WebOrderDetail({ id }: { id: string }) {
     order.cancelledAt ||
     order.stockRestoredAt
       ? "Adresa i telefon mogu da se menjaju samo pre nego što pošiljka krene ka kupcu."
-      : order.pickupBatchLines.length
-        ? "Porudžbina je već u nalogu za kurirsko preuzimanje. Prvo je uklonite iz tog naloga."
+      : shippingEditPickupBatchReason
+        ? shippingEditPickupBatchReason
         : shippingEditWaybillPlan.kind === "BLOCKED"
           ? shippingEditWaybillPlan.reason
           : null;

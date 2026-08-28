@@ -3,6 +3,7 @@ import {
   normalizeWebOrderShippingAddress,
   normalizeWebOrderShippingPhone,
   planWebOrderShippingEdit,
+  shippingEditPickupBatchBlockReason,
   shippingEditWaybillQuestion,
   type WebOrderShippingEditShipment,
 } from "@/lib/admin/web-order-shipping";
@@ -53,6 +54,19 @@ describe("WEB order shipping contact editing", () => {
     expect(() => normalizeWebOrderShippingPhone("011123456")).toThrow(
       "mora početi sa 06",
     );
+  });
+
+  it("allows contact correction while a pickup batch is still a draft", () => {
+    expect(
+      shippingEditPickupBatchBlockReason([
+        { number: "PRE-2026-0002", status: "DRAFT", externalBookedAt: null },
+      ]),
+    ).toBeNull();
+    expect(
+      shippingEditPickupBatchBlockReason([
+        { number: "PRE-2026-0002", status: "BOOKED", externalBookedAt: new Date() },
+      ]),
+    ).toContain("PRE-2026-0002");
   });
 
   it("requires replacement for a created MyGLS waybill", () => {

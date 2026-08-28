@@ -351,7 +351,16 @@ export default async function PickupBatchPage({
                 </Link>
               )
             ) : (
-              <Button type="button" variant="outline" disabled>
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                title={
+                  batch.status === "DRAFT" && batch.labelsCreationStartedAt
+                    ? "Mere i sastav naloga ostaju zaključani posle početka izrade adresnica. Adresu ili telefon ispravite u povezanom prodajnom nalogu."
+                    : undefined
+                }
+              >
                 Uredi
               </Button>
             )}
@@ -402,7 +411,9 @@ export default async function PickupBatchPage({
                 ? "Režim uređivanja je uključen. Svaka izmena se čuva svojim dugmetom; „Završi uređivanje“ samo vraća pregled naloga."
                 : editable
                   ? "Ovo je pregled naloga. Kliknite „Uredi“ da učitate porudžbine ili unesete mere paketa."
-                  : "Nalog je zaključan za izmene jer više nije u statusu Novi."
+                  : batch.status === "DRAFT" && batch.labelsCreationStartedAt
+                    ? "Mere i sastav naloga su zaključani jer je izrada adresnica započeta. Adresu ili telefon kupca i dalje možete ispraviti u povezanom prodajnom nalogu."
+                    : "Nalog je zaključan za izmene jer više nije u statusu Novi."
             }
           >
             Podaci naloga
@@ -461,6 +472,13 @@ export default async function PickupBatchPage({
                 „Kreiraj adresnice i pošalji“ je trenutno zaključan:
               </strong>{" "}
               {postingBlockReason}
+              {batch.status === "DRAFT" && batch.labelsCreationStartedAt ? (
+                <span className="mt-1 block">
+                  Ako poruka navodi adresu ili telefon, kliknite broj
+                  porudžbine u picking listi, ispravite podatke u odeljku
+                  „Adresa isporuke“, vratite se ovde i ponovite slanje.
+                </span>
+              ) : null}
             </p>
           ) : (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">

@@ -23,20 +23,20 @@ export function VoucherSection() {
   );
   const applied = useCheckout((s) => s.voucher);
   const apply = useCheckout((s) => s.applyVoucher);
+  const [code, setCode] = useState(applied?.code ?? "");
 
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const code = String(fd.get("code") ?? "").trim();
-    if (!code) {
+  const onApply = async () => {
+    const normalizedCode = code.trim();
+    if (!normalizedCode) {
       apply(null);
+      setValue("voucherCode", "", { shouldDirty: true });
       setError("Unesite kod");
       return;
     }
     const response = await fetch("/api/voucher/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, subtotal }),
+      body: JSON.stringify({ code: normalizedCode, subtotal }),
     });
     const result = (await response.json().catch(() => null)) as
       | { ok: true; code: string; label: string; discountRsd: number }
@@ -49,10 +49,12 @@ export function VoucherSection() {
         label: result.label,
         discountRsd: result.discountRsd,
       });
+      setCode(result.code);
       setValue("voucherCode", result.code, { shouldDirty: true });
       setError(null);
     } else {
       apply(null);
+      setValue("voucherCode", "", { shouldDirty: true });
       setError(result?.reason ?? "Vaučer trenutno nije moguće proveriti");
     }
   };
@@ -67,7 +69,7 @@ export function VoucherSection() {
       >
         <span className="inline-flex items-center gap-2 text-sm font-medium text-ink-900">
           <Tag className="text-walnut size-4" aria-hidden />
-          Imate voucher / promo kod?
+          Imate vaučer / promo kod?
         </span>
         <ChevronDown
           className={cn(
@@ -87,19 +89,25 @@ export function VoucherSection() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <form
-              onSubmit={onSubmit}
+            <div
               className="border-border/60 flex flex-col gap-2 border-t p-4"
             >
               <div className="flex gap-2">
                 <input
                   name="code"
-                  defaultValue={applied?.code ?? ""}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    void onApply();
+                  }}
                   placeholder="npr. SPRING-10"
                   className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 flex-1 rounded-full px-3 text-base text-ink-900 ring-1 transition focus-visible:ring-2 focus-visible:outline-none md:text-sm"
                 />
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={() => void onApply()}
                   className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 inline-flex items-center rounded-full px-4 py-2 text-xs font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
                 >
                   Primeni
@@ -118,7 +126,7 @@ export function VoucherSection() {
               <p className="text-[11px] text-ink-500">
                 Popust se proverava na serveru i odmah ulazi u sažetak porudžbine.
               </p>
-            </form>
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>

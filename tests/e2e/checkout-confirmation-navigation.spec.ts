@@ -233,6 +233,9 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("radio", { name: /Pouzeće — gotovina/ }),
   ).toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Imate vaučer / promo kod?" }),
+  ).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   const paymentFrame = page.getByTestId("checkout-payment-methods");
   const mobileNavigation = page.getByTestId("mobile-checkout-navigation");
@@ -309,16 +312,30 @@ test("successful guest order lands on the confirmation route", async ({
   expect(
     Math.abs((deliveryBlock?.y ?? -100) - (methodBlock?.y ?? 100)),
   ).toBeLessThan(8);
-  await expect(page.getByTestId("mobile-checkout-consent")).toBeVisible();
+  const voucherToggle = page.getByRole("button", {
+    name: "Imate vaučer / promo kod?",
+  });
+  const mobileOrderSummary = page.getByRole("complementary", {
+    name: "Sažetak porudžbine",
+  });
+  await expect(voucherToggle).toBeVisible();
+  await expect(mobileOrderSummary).toBeVisible();
   await expect(page.getByTestId("desktop-checkout-consent")).toBeHidden();
-  await expect(page.getByRole("complementary", { name: "Sažetak porudžbine" })).toBeHidden();
-  const [consentBox, reviewNavigationBox] = await Promise.all([
-    page.getByTestId("mobile-checkout-consent").boundingBox(),
-    page.getByTestId("mobile-checkout-navigation").boundingBox(),
+  const notes = page.getByRole("textbox", {
+    name: /Napomene uz porudžbinu/,
+  });
+  const consent = page.getByTestId("mobile-checkout-consent");
+  const [voucherBox, summaryBox, notesBox, consentBox] = await Promise.all([
+    voucherToggle.boundingBox(),
+    mobileOrderSummary.boundingBox(),
+    notes.boundingBox(),
+    consent.boundingBox(),
   ]);
-  expect((consentBox?.y ?? 0) + (consentBox?.height ?? 0)).toBeLessThanOrEqual(
-    reviewNavigationBox?.y ?? 0,
-  );
+  expect(voucherBox?.y).toBeLessThan(summaryBox?.y ?? 0);
+  expect(summaryBox?.y).toBeLessThan(notesBox?.y ?? 0);
+  expect(notesBox?.y).toBeLessThan(consentBox?.y ?? 0);
+  await consent.scrollIntoViewIfNeeded();
+  await expect(consent).toBeVisible();
   await page
     .getByTestId("mobile-checkout-consent")
     .getByRole("checkbox")

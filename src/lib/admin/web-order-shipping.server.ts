@@ -14,6 +14,7 @@ import {
   normalizeWebOrderShippingAddress,
   normalizeWebOrderShippingPhone,
   planWebOrderShippingEdit,
+  shippingEditPickupBatchBlockReason,
   type WebOrderShippingAddressInput,
 } from "./web-order-shipping";
 
@@ -124,8 +125,15 @@ export async function updateWebOrderShippingContact(
           purpose: "ORDER_DELIVERY",
           batch: { status: { not: "CANCELLED" } },
         },
-        select: { id: true },
-        take: 1,
+        select: {
+          batch: {
+            select: {
+              number: true,
+              status: true,
+              externalBookedAt: true,
+            },
+          },
+        },
       },
     },
   });
@@ -149,11 +157,10 @@ export async function updateWebOrderShippingContact(
       "Adresa i telefon mogu da se menjaju samo pre nego što pošiljka krene ka kupcu.",
     );
   }
-  if (order.pickupBatchLines.length) {
-    throw new Error(
-      "Porudžbina je već u nalogu za kurirsko preuzimanje. Prvo je uklonite iz tog naloga.",
-    );
-  }
+  const pickupBatchBlockReason = shippingEditPickupBatchBlockReason(
+    order.pickupBatchLines.map((line) => line.batch),
+  );
+  if (pickupBatchBlockReason) throw new Error(pickupBatchBlockReason);
 
   const waybillPlan = planWebOrderShippingEdit(order.shipments);
   if (waybillPlan.kind === "BLOCKED") throw new Error(waybillPlan.reason);

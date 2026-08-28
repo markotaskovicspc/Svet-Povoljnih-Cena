@@ -32,6 +32,12 @@ export type WebOrderShippingAddressInput = {
   postalCode: string;
 };
 
+export type WebOrderShippingPickupBatch = {
+  number?: string | null;
+  status: string;
+  externalBookedAt?: Date | string | null;
+};
+
 function normalizedText(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -73,6 +79,20 @@ export function normalizeWebOrderShippingPhone(value: unknown) {
     );
   }
   return digits;
+}
+
+export function shippingEditPickupBatchBlockReason(
+  batches: readonly WebOrderShippingPickupBatch[],
+) {
+  const blocking = batches.find(
+    (batch) =>
+      batch.status !== "CANCELLED" &&
+      (batch.status !== "DRAFT" || Boolean(batch.externalBookedAt)),
+  );
+  if (!blocking) return null;
+  return blocking.number
+    ? `Porudžbina je u nalogu za kurirsko preuzimanje ${blocking.number}, koji više nije u pripremi.`
+    : "Porudžbina je u nalogu za kurirsko preuzimanje koji više nije u pripremi.";
 }
 
 export function planWebOrderShippingEdit(

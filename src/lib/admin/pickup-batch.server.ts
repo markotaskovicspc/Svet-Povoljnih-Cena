@@ -38,6 +38,10 @@ import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
 } from "@/lib/x-express/config";
+import {
+  normalizeXExpressPhone,
+  splitXExpressStreet,
+} from "@/lib/x-express/payload";
 import { announceXExpressShipment } from "@/lib/x-express/shipments";
 import {
   isPickupBatchEditable,
@@ -1156,7 +1160,16 @@ async function createXExpressLabelsForPickupBatch(
       where: { id: batchId },
       include: {
         lines: {
-          include: { orderItem: { select: { name: true } } },
+          include: {
+            order: {
+              select: {
+                number: true,
+                shipPhone: true,
+                shipStreet: true,
+              },
+            },
+            orderItem: { select: { name: true } },
+          },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         },
       },
@@ -1186,6 +1199,21 @@ async function createXExpressLabelsForPickupBatch(
       );
     }
 
+    for (const group of workGroups) {
+      const order = group.lines[0]?.order;
+      if (!order) {
+        throw new Error(
+          `Picking grupa ${group.lineGroupKey} nema povezanu porudžbinu.`,
+        );
+      }
+      try {
+        normalizeXExpressPhone(order.shipPhone);
+        splitXExpressStreet(order.shipStreet);
+      } catch (error) {
+        throw pickupGroupError(order.number, error);
+      }
+    }
+
     await db.pickupBatch.update({
       where: { id: batch.id },
       data: {
@@ -1207,29 +1235,34 @@ async function createXExpressLabelsForPickupBatch(
           heightCm: Number(line.heightCm ?? 0),
         })),
       );
-      const shipment =
-        group.purpose === "RECLAMATION_REPLACEMENT"
-          ? await createReclamationShipment({
-              reclamationId: requiredReclamationId(group),
-              purpose: "RECLAMATION_REPLACEMENT",
-              packageCount: packages.length,
-              packages,
-              provider: "X_EXPRESS",
-              fromPickupBatch: true,
-              actorId,
-            })
-          : await createShipmentForOrder(group.orderId, {
-              packageCount: packages.length,
-              packages,
-              provider: "X_EXPRESS",
-              orderItemIds: orderItemIdsForGroup(group),
-              codAmount: await pickupAssignmentCodAmount(
-                group.orderId,
-                "X_EXPRESS",
-                orderItemIdsForGroup(group),
-              ),
-              announceXExpress: false,
-            });
+      let shipment;
+      try {
+        shipment =
+          group.purpose === "RECLAMATION_REPLACEMENT"
+            ? await createReclamationShipment({
+                reclamationId: requiredReclamationId(group),
+                purpose: "RECLAMATION_REPLACEMENT",
+                packageCount: packages.length,
+                packages,
+                provider: "X_EXPRESS",
+                fromPickupBatch: true,
+                actorId,
+              })
+            : await createShipmentForOrder(group.orderId, {
+                packageCount: packages.length,
+                packages,
+                provider: "X_EXPRESS",
+                orderItemIds: orderItemIdsForGroup(group),
+                codAmount: await pickupAssignmentCodAmount(
+                  group.orderId,
+                  "X_EXPRESS",
+                  orderItemIdsForGroup(group),
+                ),
+                announceXExpress: false,
+              });
+      } catch (error) {
+        throw pickupGroupError(group.lines[0]?.order.number, error);
+      }
       if (
         shipment.provider !== X_EXPRESS_PROVIDER ||
         shipment.status === "FAILED" ||
@@ -1653,6 +1686,18 @@ function normalizeProvider(value: string | null | undefined): SmallParcelProvide
   if (normalized === "MYGLS") return "MYGLS";
   if (normalized === "X_EXPRESS" || normalized === "XPRESS") return "X_EXPRESS";
   return null;
+}
+
+function pickupGroupError(
+  orderNumber: string | null | undefined,
+  error: unknown,
+) {
+  const message =
+    error instanceof Error ? error.message : "Kurirska adresnica nije kreirana.";
+  return new Error(
+    orderNumber ? `Porudžbina ${orderNumber}: ${message}` : message,
+    { cause: error },
+  );
 }
 
 type PickupWorkLine = {

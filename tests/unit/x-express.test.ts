@@ -318,6 +318,11 @@ describe("X Express official API contract", () => {
       streetNumber: "10A",
     });
     expect(normalizeXExpressStreetNumber("25a / 3 / 29")).toBe("25a/3/29");
+    expect(normalizeXExpressStreetNumber("123.")).toBe("123");
+    expect(splitXExpressStreet("Vojvođanska 123.")).toEqual({
+      streetName: "Vojvođanska",
+      streetNumber: "123",
+    });
     expect(splitXExpressStreet("Cara Dušana BB")).toEqual({
       streetName: "Cara Dušana",
       streetNumber: "BB",

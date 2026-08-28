@@ -75,7 +75,10 @@ export function normalizeXExpressPhone(value: string) {
 }
 
 export function normalizeXExpressStreetNumber(value: string) {
-  const normalized = cleanWhitespace(value).replace(/\s+/g, "").slice(0, 10);
+  const compact = cleanWhitespace(value).replace(/\s+/g, "").slice(0, 10);
+  const normalized = /^(?:bb|b\.b\.)$/i.test(compact)
+    ? compact
+    : compact.replace(/\.+$/, "");
   if (!X_EXPRESS_STREET_NUMBER.test(normalized)) {
     throw new XExpressConfigError(
       `Kućni broj „${normalized || value}” nije validan za X Express.`,
