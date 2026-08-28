@@ -38,6 +38,8 @@ import {
   adminPaymentMethodLabel,
   adminPaymentStatusLabel,
 } from "@/lib/payments/admin-display";
+import { MYGLS_PROVIDER } from "@/lib/mygls/config";
+import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -441,6 +443,7 @@ export const operationalErpModules: ErpModule[] = [
       status("paymentMethod", "Način plaćanja", ADMIN_PAYMENT_METHOD_OPTIONS),
       status("paymentStatus", "Status plaćanja", ADMIN_PAYMENT_STATUS_OPTIONS),
       status("status", "Status porudžbine"),
+      text("courierService", "Kurirska služba"),
       date("fiscalizedAt", "Datum fiskalizacije"),
       text("customer", "Ime i prezime kupca / firma"),
       status("purchaseIdentity", "Način kupovine", [
@@ -1550,6 +1553,14 @@ async function salesOrderRows(
         orderBy: { createdAt: "desc" },
         select: { status: true },
       },
+      shipments: {
+        where: {
+          purpose: "ORDER_DELIVERY",
+          status: { not: "FAILED" },
+        },
+        orderBy: { createdAt: "asc" },
+        select: { provider: true },
+      },
     },
   });
   return orders.flatMap((order): ErpRow[] => {
@@ -1580,6 +1591,10 @@ async function salesOrderRows(
       phone: order.shipPhone,
       email: order.guestEmail ?? order.customer?.email ?? null,
       status: order.status,
+      courierService: salesOrderCourierServiceLabel({
+        shippingMethod: order.shippingMethod,
+        providers: order.shipments.map((shipment) => shipment.provider),
+      }),
       fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
       invoiced: order.invoices.length > 0,
       sefAccepted: Boolean(order.sefAcceptedAt),
@@ -1665,6 +1680,27 @@ async function salesOrderRows(
       };
     });
   });
+}
+
+export function salesOrderCourierServiceLabel(args: {
+  shippingMethod: string;
+  providers: readonly (string | null)[];
+}) {
+  if (args.shippingMethod !== "KURIR") {
+    return "Nije kurirska isporuka";
+  }
+
+  const labels = new Set(
+    args.providers.map((provider) => {
+      if (provider === MYGLS_PROVIDER) return "MyGLS";
+      if (provider === X_EXPRESS_PROVIDER) return "X Express";
+      return provider?.trim() || "Kurir nije određen";
+    }),
+  );
+
+  return labels.size
+    ? [...labels].sort((left, right) => left.localeCompare(right, "sr-Latn")).join(" / ")
+    : "Kurirski nalog nije kreiran";
 }
 
 async function dispatchRows(take: number): Promise<ErpRow[]> {

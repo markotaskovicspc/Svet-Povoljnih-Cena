@@ -236,13 +236,14 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     if (
       moduleSlug === "prodajni-nalozi" &&
       window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
-        "purchase-identity-v1"
+        "courier-service-v1"
     ) {
       const migrated = completeOrder.filter(
         (key) =>
           key !== "paymentMethod" &&
           key !== "paymentStatus" &&
-          key !== "purchaseIdentity",
+          key !== "purchaseIdentity" &&
+          key !== "courierService",
       );
       const channelIndex = migrated.indexOf("channel");
       migrated.splice(
@@ -250,6 +251,12 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
         0,
         "paymentMethod",
         "paymentStatus",
+      );
+      const statusIndex = migrated.indexOf("status");
+      migrated.splice(
+        statusIndex >= 0 ? statusIndex + 1 : migrated.length,
+        0,
+        "courierService",
       );
       const customerIndex = migrated.indexOf("customer");
       migrated.splice(
@@ -260,7 +267,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(
         columnOrderVersionKey(moduleSlug),
-        "purchase-identity-v1",
+        "courier-service-v1",
       );
       return migrated;
     }

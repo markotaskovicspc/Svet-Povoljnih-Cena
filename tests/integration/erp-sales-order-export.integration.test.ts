@@ -30,6 +30,24 @@ beforeAll(async () => {
   await Promise.all([
     createFiscalSale(issuedInside.id, new Date("2026-07-11T09:00:00.000Z"), "IN"),
     createFiscalSale(issuedOutside.id, new Date("2026-06-11T09:00:00.000Z"), "OUT"),
+    db.shipment.createMany({
+      data: [
+        {
+          orderId: issuedInside.id,
+          service: "COURIER_SMALL",
+          purpose: "ORDER_DELIVERY",
+          provider: "X_EXPRESS",
+          status: "FAILED",
+        },
+        {
+          orderId: issuedInside.id,
+          service: "COURIER_SMALL",
+          purpose: "ORDER_DELIVERY",
+          provider: "MYGLS",
+          status: "CREATED",
+        },
+      ],
+    }),
   ]);
 });
 
@@ -55,6 +73,10 @@ describe("sales-order ERP export filters", () => {
     );
     expect(fixtureRows[0]?.values.paymentMethod).toBe("Pouzeće — gotovina");
     expect(fixtureRows[0]?.values.paymentStatus).toBe("Plaća se kuriru");
+    const changedCourierRow = fixtureRows.find(
+      (row) => row.detailId === issuedInsideId,
+    );
+    expect(changedCourierRow?.values.courierService).toBe("MyGLS");
   });
 
   it("filters by issued fiscal period without introducing a separate download path", async () => {
