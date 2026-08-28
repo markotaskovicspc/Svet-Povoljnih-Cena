@@ -730,12 +730,10 @@ export function CheckoutFlow({
 
   return (
     <FormProvider {...methods}>
-      <MobileCheckoutHeader step={step} />
-
       <div className="grid gap-5 [overflow-anchor:none] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
         <div
           className={cn(
-            "bg-surface ring-border/60 rounded-2xl p-4 ring-1 sm:p-5",
+            "bg-surface ring-border/60 rounded-2xl p-3 ring-1 sm:p-5",
             isCompactDesktopStep && "lg:p-4",
             step === "review" && "lg:p-5",
           )}
@@ -769,7 +767,7 @@ export function CheckoutFlow({
             </h2>
             <div
               className={cn(
-                step === "shipping" ? "mt-0 sm:mt-4" : "mt-4",
+                step === "shipping" ? "mt-0 sm:mt-4" : "mt-3 sm:mt-4",
                 isCompactDesktopStep && "lg:mt-3",
               )}
             >
@@ -806,7 +804,7 @@ export function CheckoutFlow({
                     />
                   ) : null}
                   {step === "shipping" ? (
-                    <div className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-4 sm:gap-5">
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
                       />
@@ -816,7 +814,7 @@ export function CheckoutFlow({
                       />
                       <section
                         aria-labelledby="checkout-payment-heading"
-                        className="border-border/60 flex flex-col gap-4 border-t pt-5"
+                        className="border-border/60 flex flex-col gap-3 border-t pt-3 sm:gap-4 sm:pt-5"
                       >
                         <h3
                           id="checkout-payment-heading"
@@ -871,14 +869,6 @@ export function CheckoutFlow({
                   </div>
                 </div>
               ) : null}
-              {step === "review" ? (
-                <div
-                  data-testid="mobile-checkout-consent"
-                  className="mt-5 border-t border-border/60 pt-5 lg:hidden"
-                >
-                  <CheckoutConsent id="consent-mobile" />
-                </div>
-              ) : null}
             </div>
             </div>
           </CheckoutOrderFormBoundary>
@@ -893,6 +883,7 @@ export function CheckoutFlow({
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
+          className="hidden lg:block"
           beforeCta={
             step === "review" ? (
               <div data-testid="desktop-checkout-consent" className="hidden lg:block">
@@ -910,58 +901,6 @@ export function CheckoutFlow({
         </div>
       )}
     </FormProvider>
-  );
-}
-
-function MobileCheckoutHeader({ step }: { step: CheckoutStep }) {
-  const activeStep = step === "review" ? 2 : 1;
-
-  return (
-    <div
-      data-testid="mobile-checkout-header"
-      className="mb-3 flex items-center justify-between gap-3 sm:hidden"
-    >
-      <h1 className="font-display min-w-0 whitespace-nowrap text-xl leading-none text-ink-900">
-        Završetak porudžbine
-      </h1>
-      <ol
-        aria-label="Dva koraka do završetka porudžbine"
-        className="flex shrink-0 items-center gap-2"
-      >
-        {[1, 2].map((number) => {
-          const current = number === activeStep;
-          const completed = number < activeStep;
-          return (
-            <li key={number} className="flex items-center gap-2">
-              {number > 1 ? (
-                <span
-                  aria-hidden
-                  className={cn(
-                    "h-px w-4",
-                    completed || current ? "bg-ink-900/40" : "bg-border/60",
-                  )}
-                />
-              ) : null}
-              <span
-                data-checkout-mobile-step={number}
-                aria-label={`Korak ${number} od 2`}
-                aria-current={current ? "step" : undefined}
-                className={cn(
-                  "inline-flex size-7 items-center justify-center rounded-full text-xs font-medium ring-1",
-                  completed && "bg-ink-900 text-canvas ring-ink-900",
-                  current && "bg-walnut text-canvas ring-walnut",
-                  !completed &&
-                    !current &&
-                    "ring-border/60 bg-surface text-ink-500",
-                )}
-              >
-                {number}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
   );
 }
 
@@ -1023,8 +962,8 @@ function ReviewStep({
   );
 
   return (
-    <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="flex flex-col gap-3 sm:gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <ReviewBlock title="Isporuka">
           <p className="break-words text-sm text-ink-700">
             {data.shipping.firstName} {data.shipping.lastName}
@@ -1071,8 +1010,14 @@ function ReviewStep({
         </ReviewBlock>
       </div>
 
-      <div className="border-border/60 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
+      <div className="border-border/60 border-t pt-3 sm:pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
         <NotesConsent />
+        <div
+          data-testid="mobile-checkout-consent"
+          className="mt-2.5 lg:hidden"
+        >
+          <CheckoutConsent id="consent-mobile" />
+        </div>
       </div>
     </div>
   );
@@ -1088,7 +1033,7 @@ function ReviewBlock({
   return (
     <div
       data-review-block={title}
-      className="bg-canvas ring-border/60 min-w-0 rounded-xl p-3 ring-1 sm:p-4 lg:p-3"
+      className="bg-canvas ring-border/60 min-w-0 rounded-xl p-2.5 ring-1 sm:p-4 lg:p-3"
     >
       <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">
         {title}

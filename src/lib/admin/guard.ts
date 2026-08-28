@@ -79,6 +79,7 @@ type AdminActionHandler<TArgs extends unknown[], TOut> = (
       entityId?: string | null;
       diff?: unknown;
       message?: string;
+      tone?: "success" | "warning";
       result?: TOut;
     }
   | {
@@ -144,7 +145,7 @@ export function withAdminState<TArgs extends unknown[], TOut>(
             `Akcija je izvršena, ali završni audit zapis nije potvrđen. Ne ponavljajte akciju pre provere. Referenca: ${requestId}`,
           );
         }
-        return adminActionSuccess<TOut>(out.message, out.result);
+        return adminActionSuccess<TOut>(out.message, out.result, out.tone);
       }
       const message = out.message ?? out.error ?? "Neispravan unos.";
       await recordFailureAudit(finalizeAudit, {

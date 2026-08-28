@@ -1,0 +1,196 @@
+1
+00:00:00,000 --> 00:00:05,460
+To računam, ovaj, on vroto ga...
+
+2
+00:00:05,460 --> 00:00:06,180
+Evo se kum.
+
+3
+00:00:08,180 --> 00:00:15,880
+Sarinu Samune, ovo Sarina 215, da on ga računam, dobro.
+
+4
+00:00:30,000 --> 00:00:46,640
+Stvarno.
+
+5
+00:01:00,000 --> 00:01:02,000
+Hvala.
+
+6
+00:01:30,000 --> 00:01:41,560
+vrednost robne stavke
+
+7
+00:01:41,560 --> 00:01:44,240
+množi sa carinskom stopom
+
+8
+00:01:44,240 --> 00:01:46,680
+sa carinskom stopom
+
+9
+00:01:46,680 --> 00:01:47,180
+da
+
+10
+00:01:47,180 --> 00:01:49,020
+dobro
+
+11
+00:01:49,020 --> 00:01:52,060
+a ima neku proveru da ta cifra
+
+12
+00:01:52,060 --> 00:01:53,520
+bude u ovu tipa
+
+13
+00:01:53,520 --> 00:01:54,840
+ude goza sa u 215
+
+14
+00:01:54,840 --> 00:01:58,680
+a šta si rekao, zabagalo na sekundu
+
+15
+00:01:58,680 --> 00:01:59,600
+provera
+
+16
+00:02:00,000 --> 00:02:11,000
+Znaš šta možete desi? Da ja unesem carinu za jedan artikl da je 17%, a carina je od carinu na 8%.
+
+17
+00:02:11,000 --> 00:02:12,000
+Aha.
+
+18
+00:02:12,000 --> 00:02:19,000
+I sad, onda unesem vrednu carinu ovde, sad je gore, vidiš 211 505.
+
+19
+00:02:19,000 --> 00:02:21,000
+Jasno, jasno.
+
+20
+00:02:21,000 --> 00:02:27,000
+A sad na ovom artiklu je 37 000, a trebala da bude, ne znam, 50 000, nebitno.
+
+21
+00:02:27,000 --> 00:02:28,000
+Jasno.
+
+22
+00:02:28,000 --> 00:02:54,240
+E sad, šta sam ja pravio u Excelu, da bi se to ne mjeseo, prvi artikali ima carinu 18%, drugi su 8%, ti prema izračunaš carinu koliko treba da bude prema tome, kolika je suma te carine, uporadiš sa ovom carinom kojo je carina naplatila i proporcionalno onda ovu carinom kojo je carina naplatila rasporediš po stavkama.
+
+23
+00:02:54,240 --> 00:03:07,460
+transport po zapremini je onda već i računa po zapremini
+
+24
+00:03:07,460 --> 00:03:12,080
+transport po zapremini to ok
+
+25
+00:03:12,080 --> 00:03:15,720
+i ovi ostali vezani trosku isto treba da idu po zapremini
+
+26
+00:03:15,720 --> 00:03:17,360
+dobro
+
+27
+00:03:17,360 --> 00:03:22,300
+to možda nisam promenio da je ostave droškove
+
+28
+00:03:22,300 --> 00:03:26,300
+Da su oni mnogo sitni, ne moraš da se bakiči oko toga.
+
+29
+00:03:26,300 --> 00:03:30,300
+U raziči, ne veze, nije ova igra, da radim, radim kako volja.
+
+30
+00:03:30,300 --> 00:03:34,300
+I to je to onda.
+
+31
+00:03:34,300 --> 00:03:40,300
+Dobro, menjam to pa te zovem, tim promenim.
+
+32
+00:03:40,300 --> 00:03:50,300
+Ako ti ti tič artikala, vidi, ti si meni još, ima tome jebiga, možda dve nelje, tri, tako nešto.
+
+33
+00:03:50,300 --> 00:03:59,380
+Rekao, pošto za sad nemamo toliko proizvoda, da recimo, da kada, ne znam, imamo, ne znam, onu džezvu.
+
+34
+00:04:00,340 --> 00:04:00,680
+Dobre.
+
+35
+00:04:00,680 --> 00:04:05,160
+To pojavljuje kao dva proizvoda, ali opet da unutar tih proizvoda mogu ljudi da menjaju.
+
+36
+00:04:05,840 --> 00:04:07,000
+Da, da, da, tako je.
+
+37
+00:04:07,440 --> 00:04:16,360
+Možda ti za to malo komplikovano, ono, kad nosiš artikle i porodice, postao si u grupu sliku, onu sinoći.
+
+38
+00:04:16,640 --> 00:04:17,040
+Da, da.
+
+39
+00:04:17,040 --> 00:04:18,620
+A šta si štio?
+
+40
+00:04:19,720 --> 00:04:20,520
+Veze nas...
+
+41
+00:04:20,520 --> 00:04:22,820
+Cekaj, sad da vidim šta sam poslao.
+
+42
+00:04:23,900 --> 00:04:24,760
+Zadnju ovu.
+
+43
+00:04:30,660 --> 00:04:31,500
+E to gore.
+
+44
+00:04:33,720 --> 00:04:34,460
+Još gore.
+
+45
+00:04:35,060 --> 00:04:37,000
+Ne, ne, čekaj, sad ću da je to gore na tušku.
+
+46
+00:04:37,780 --> 00:04:38,480
+Ajde, sajte.
+
+47
+00:04:47,040 --> 00:04:55,960
+Aha, a ovo sam te pitao zato što si promenio izgled ovoga pa ne znam šta radi
+
+48
+00:04:55,960 --> 00:04:59,260
+Aha, aha, aha
+
+49
+00:04:59,260 --> 00:04:59,600
+Da
+

@@ -77,7 +77,7 @@ export default async function CheckoutPodaciPage({
       : undefined;
 
   return (
-    <div className="mx-auto max-w-[var(--container-page)] px-4 pt-3 pb-32 md:px-6 md:pt-4 md:pb-16">
+    <div className="mx-auto max-w-[var(--container-page)] px-4 pt-1 pb-32 sm:pt-3 md:px-6 md:pt-4 md:pb-16">
       <CheckoutStartedAnalytics />
       <Breadcrumbs
         trail={[
@@ -88,7 +88,7 @@ export default async function CheckoutPodaciPage({
       <h1 className="font-display mt-2 hidden text-2xl text-ink-900 sm:block md:text-4xl">
         Završetak porudžbine
       </h1>
-      <div className="mt-2 sm:mt-3 md:mt-5">
+      <div className="sm:mt-3 md:mt-5">
         {account?.email && !account.emailVerified ? (
           <div className="mb-4">
             <EmailVerificationBanner email={account.email} />

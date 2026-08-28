@@ -1,0 +1,224 @@
+1
+00:00:00,000 --> 00:00:02,000
+Stavljava
+
+2
+00:00:04,000 --> 00:00:06,000
+jeste EUR
+
+3
+00:00:06,000 --> 00:00:08,000
+ja sam EUR stavljao
+
+4
+00:00:08,000 --> 00:00:10,000
+EUR?
+
+5
+00:00:10,000 --> 00:00:13,000
+dobro ok, sve jedno da li su EUR ili DOLAR
+
+6
+00:00:13,000 --> 00:00:15,000
+to 17 pa to je
+
+7
+00:00:15,000 --> 00:00:19,000
+a ti si stavio kurst DOLAR, fiksan kurst EUR
+
+8
+00:00:21,000 --> 00:00:23,000
+čini mi se da da
+
+9
+00:00:25,000 --> 00:00:27,000
+čekaj
+
+10
+00:00:27,000 --> 00:00:33,000
+onda to može da bude, čekaj ko je 690
+
+11
+00:00:33,000 --> 00:00:38,000
+je samo koliko tebe je, 47
+
+12
+00:00:38,000 --> 00:00:40,000
+47
+
+13
+00:00:40,000 --> 00:00:45,000
+izviješ te, prehidam, može da se promeni u poruđbenici, odnosi se unese
+
+14
+00:00:45,000 --> 00:00:48,000
+šta se unese?
+
+15
+00:00:48,000 --> 00:00:51,000
+u poruđbenici, kurs
+
+16
+00:00:51,000 --> 00:00:55,000
+ali ti u poruđbenici kada unosiš kurs
+
+17
+00:00:55,000 --> 00:01:00,000
+Ti u tom trenutku ne znaš koliko ćeš platiti, ali ti kad poručuješ obo ne platiš šta, nego plaćaš...
+
+18
+00:01:00,000 --> 00:01:04,460
+da, nešta možeš ovde, vrednost fakture
+
+19
+00:01:04,460 --> 00:01:08,120
+možeš unese vrednost fakture
+
+20
+00:01:08,120 --> 00:01:12,320
+tipa, staviš ovako, nešta možeš
+
+21
+00:01:12,320 --> 00:01:14,760
+ne, možeš najbolj, najlakši ovako, vrednost fakture
+
+22
+00:01:14,760 --> 00:01:17,720
+pa da se zabere koja je
+
+23
+00:01:17,720 --> 00:01:21,660
+valuta i da se stavi srednji kurs
+
+24
+00:01:21,660 --> 00:01:23,160
+dobro
+
+25
+00:01:23,160 --> 00:01:25,180
+reći moži
+
+26
+00:01:25,180 --> 00:01:27,180
+Može, može.
+
+27
+00:01:28,240 --> 00:01:28,420
+To.
+
+28
+00:01:29,180 --> 00:01:30,960
+Tarina uvek ide u dinarima,
+
+29
+00:01:31,360 --> 00:01:32,100
+transport,
+
+30
+00:01:32,100 --> 00:01:34,980
+transport može da ide u dinarima.
+
+31
+00:01:37,400 --> 00:01:37,660
+Novo,
+
+32
+00:01:37,780 --> 00:01:38,200
+to je to.
+
+33
+00:01:39,600 --> 00:01:40,000
+I sad,
+
+34
+00:01:41,340 --> 00:01:43,140
+sad sam odim,
+
+35
+00:01:43,260 --> 00:01:44,180
+i onda ćeš imati,
+
+36
+00:01:44,560 --> 00:01:45,640
+imat ćeš
+
+37
+00:01:45,640 --> 00:01:49,000
+vrednost dolara,
+
+38
+00:01:49,660 --> 00:01:51,540
+kurz dolara, koji množiš,
+
+39
+00:01:51,540 --> 00:01:53,160
+onda ovde bi možda mogo dole
+
+40
+00:01:53,160 --> 00:02:23,160
+Zvučaš koja je nabavna cena za tu poružbenicu, tipa ova šifra, 110,1,7,4, nabavna cena je 16,9 dobra, a ko je vrednost faktura 1,8,2,7,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+
+41
+00:02:23,160 --> 00:02:25,000
+Ne, to da už.
+
+42
+00:02:31,940 --> 00:02:33,640
+Ne, o sami su dvešče.
+
+43
+00:02:47,320 --> 00:02:48,940
+Si, ja ba se to na supros.
+
+44
+00:02:53,160 --> 00:03:23,140
+Hvala vam.
+
+45
+00:03:23,160 --> 00:03:36,160
+Bilo 6,9 puta 6,9 puta 600 komada, pa dobro računa ovo obrat.
+
+46
+00:03:41,160 --> 00:03:45,160
+Dobro računa, ne znam kako si ti to, ali to je to.
+
+47
+00:03:46,160 --> 00:03:51,160
+Pa ajde raditi kako si rekao sad, da ti bude lakše, mislim, preglednije.
+
+48
+00:03:51,160 --> 00:04:21,160
+Pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa pa
+
+49
+00:04:21,160 --> 00:04:30,940
+4 puta 5,7 puta 6,3,4,7,8
+
+50
+00:04:30,940 --> 00:04:34,240
+a jeba mater brate, to je isto
+
+51
+00:04:34,240 --> 00:04:43,540
+vidim, meni nije problem to da napravim, kao što ti sad rekao
+
+52
+00:04:43,540 --> 00:04:51,020
+pa nam mislim, tako je po knjižki, kako treba se računa kog se
+
+53
+00:04:51,160 --> 00:04:53,160
+važni biti tako onda
+
+54
+00:04:53,160 --> 00:04:57,160
+dobro, e sad, onda stvarna carina
+
+55
+00:04:57,160 --> 00:04:58,160
+dobro
+
+56
+00:04:58,160 --> 00:05:00,160
+ovde ne znam kako
+

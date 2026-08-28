@@ -77,6 +77,7 @@ interface OrderSummaryProps {
   beforeCta?: React.ReactNode;
   /** Hide the cart-line list; useful on confirmation page. */
   collapseLines?: boolean;
+  className?: string;
 }
 
 export function OrderSummary({
@@ -87,6 +88,7 @@ export function OrderSummary({
   cta,
   beforeCta,
   collapseLines,
+  className,
 }: OrderSummaryProps) {
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
@@ -122,7 +124,7 @@ export function OrderSummary({
   return (
     <aside
       aria-label="Sažetak porudžbine"
-      className="lg:sticky lg:top-28 lg:self-start"
+      className={cn("lg:sticky lg:top-28 lg:self-start", className)}
     >
       <div className="bg-surface ring-border/60 flex flex-col gap-4 rounded-2xl p-5 shadow-soft-2 ring-1">
         <h2 className="order-1 font-display text-lg text-ink-900">Sažetak porudžbine</h2>

@@ -88,6 +88,7 @@ export function AdminActionForm({
   const popupHandledState = useRef(state);
   const message = clientValidationMessage || state.message;
   const messageIsSuccess = !clientValidationMessage && Boolean(state.message) && state.ok;
+  const messageIsWarning = messageIsSuccess && state.tone === "warning";
   const hasMessage = Boolean(message);
 
   useEffect(() => {
@@ -167,7 +168,9 @@ export function AdminActionForm({
           tabIndex={-1}
           className={cn(
             "mb-3 scroll-mt-6 rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
-            messageIsSuccess
+            messageIsWarning
+              ? "border-warning/25 bg-warning/10 text-warning"
+              : messageIsSuccess
               ? "border-success/25 bg-success/10 text-success"
               : "border-destructive/25 bg-destructive/10 text-destructive",
           )}

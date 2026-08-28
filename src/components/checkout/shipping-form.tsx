@@ -32,8 +32,8 @@ export function ShippingForm({
   const billingLice = watch("billing.liceType");
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5 lg:gap-3">
-      <fieldset className="flex flex-col gap-2.5 lg:gap-2">
+    <div className="flex flex-col gap-3 md:gap-5 lg:gap-3">
+      <fieldset className="flex flex-col gap-2 lg:gap-2">
         <legend className="text-sm font-medium text-ink-900">Tip kupca</legend>
         <div className="bg-muted-bg ring-border/60 inline-flex w-fit rounded-full p-1 ring-1">
           {(["fizicko", "pravno"] as const).map((lt) => (
@@ -156,7 +156,7 @@ function AddressFieldset({
   );
 
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
+    <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-6 lg:gap-2.5">
       {liceType === "pravno" ? (
         <>
           <Field
@@ -457,7 +457,7 @@ function XExpressStreetAutocomplete({
 
   return (
     <label
-      className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)}
+      className={cn("relative flex flex-col gap-1 lg:gap-1", className)}
       htmlFor={inputId}
     >
       <span className="text-xs font-medium text-ink-700">
@@ -538,7 +538,7 @@ const Field = ({
   const id = `f-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${props.name ?? ""}`;
   return (
     <label
-      className={cn("flex flex-col gap-1.5 lg:gap-1", className)}
+      className={cn("flex flex-col gap-1 lg:gap-1", className)}
       htmlFor={id}
     >
       <span className="text-xs font-medium text-ink-700">

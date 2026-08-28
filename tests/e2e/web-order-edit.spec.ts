@@ -171,6 +171,70 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     await db.$disconnect();
   });
 
+  test("ispravlja adresu i telefon uz audit trag", async ({ page }) => {
+    await login(page);
+    await page.goto(`/admin/erp/prodajni-nalozi/${orderId}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    await page.getByText("Izmeni adresu", { exact: true }).click();
+    const addressForm = page.getByTestId("shipping-address-edit-form");
+    await addressForm.getByLabel("Ulica i broj").fill("Test ulica 22");
+    await addressForm.getByLabel("Grad / mesto").fill("Novi Sad");
+    await addressForm.getByLabel("Poštanski broj").fill("21000");
+    await clickConfirmation(
+      page,
+      addressForm.getByRole("button", { name: "Sačuvaj adresu" }),
+    );
+    await expect(addressForm.getByRole("status")).toContainText(
+      "Adresa isporuke je izmenjena",
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(async () => {
+        const row = await db.order.findUniqueOrThrow({
+          where: { id: orderId },
+          select: { shipStreet: true, shipCity: true, shipPostalCode: true },
+        });
+        return `${row.shipStreet}|${row.shipPostalCode}|${row.shipCity}`;
+      })
+      .toBe("Test ulica 22|21000|Novi Sad");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText("Izmeni broj telefona", { exact: true }).click();
+    const phoneForm = page.getByTestId("shipping-phone-edit-form");
+    await phoneForm.getByLabel("Broj telefona").fill("060 332 63 25");
+    await clickConfirmation(
+      page,
+      phoneForm.getByRole("button", { name: "Sačuvaj broj telefona" }),
+    );
+    await expect(phoneForm.getByRole("status")).toContainText(
+      "Broj telefona za isporuku je izmenjen",
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(() =>
+        db.order.findUniqueOrThrow({
+          where: { id: orderId },
+          select: { shipPhone: true },
+        }),
+      )
+      .toEqual({ shipPhone: "0603326325" });
+    await expect
+      .poll(() =>
+        db.auditLog.count({
+          where: {
+            actorId: adminId,
+            action: {
+              in: ["order.shippingAddressUpdate", "order.shippingPhoneUpdate"],
+            },
+            entity: "Order",
+          },
+        }),
+      )
+      .toBe(2);
+  });
+
   test("smanjuje količinu, briše drugi red i sinhronizuje sve tragove", async ({
     page,
   }) => {

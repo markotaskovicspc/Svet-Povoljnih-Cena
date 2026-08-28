@@ -208,41 +208,15 @@ test("successful guest order lands on the confirmation route", async ({
     .click();
   await expect(page).toHaveURL(/\/checkout\/podaci$/);
 
-  const mobileCheckoutHeader = page.getByTestId("mobile-checkout-header");
-  await expect(mobileCheckoutHeader).toBeVisible();
+  await expect(page.getByTestId("mobile-checkout-header")).toHaveCount(0);
   await expect(
-    mobileCheckoutHeader.getByRole("heading", {
-      name: "Završetak porudžbine",
-    }),
-  ).toBeVisible();
-  await expect(
-    mobileCheckoutHeader.locator("[data-checkout-mobile-step]"),
-  ).toHaveCount(2);
+    page.getByRole("heading", { name: "Završetak porudžbine" }),
+  ).toBeHidden();
   await expect(
     page.getByText(
       "Sve što vam treba za bezbednu kupovinu — u jednom toku, bez odlaska sa stranice.",
     ),
   ).toHaveCount(0);
-  const [checkoutTitleBox, checkoutStepOneBox, checkoutStepTwoBox] =
-    await Promise.all([
-      mobileCheckoutHeader
-        .getByRole("heading", { name: "Završetak porudžbine" })
-        .boundingBox(),
-      mobileCheckoutHeader
-        .locator('[data-checkout-mobile-step="1"]')
-        .boundingBox(),
-      mobileCheckoutHeader
-        .locator('[data-checkout-mobile-step="2"]')
-        .boundingBox(),
-    ]);
-  const titleCenterY =
-    (checkoutTitleBox?.y ?? 0) + (checkoutTitleBox?.height ?? 0) / 2;
-  expect(checkoutTitleBox?.height).toBeLessThanOrEqual(32);
-  for (const stepBox of [checkoutStepOneBox, checkoutStepTwoBox]) {
-    const stepCenterY = (stepBox?.y ?? 0) + (stepBox?.height ?? 0) / 2;
-    expect(Math.abs(titleCenterY - stepCenterY)).toBeLessThanOrEqual(4);
-  }
-
   await page.getByRole("button", { name: "Nastavi kao gost" }).click();
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("button", { name: "Nastavi", exact: true }).click();
@@ -259,13 +233,16 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("radio", { name: /Pouzeće — gotovina/ }),
   ).toBeChecked();
+  await page.evaluate(() => window.scrollTo(0, 0));
   const paymentFrame = page.getByTestId("checkout-payment-methods");
+  const mobileNavigation = page.getByTestId("mobile-checkout-navigation");
   const selectedPayment = page
     .getByRole("radio", { name: /Pouzeće — gotovina/ })
     .locator("..");
-  const [paymentFrameBox, selectedPaymentBox] = await Promise.all([
+  const [paymentFrameBox, selectedPaymentBox, mobileNavigationBox] = await Promise.all([
     paymentFrame.boundingBox(),
     selectedPayment.boundingBox(),
+    mobileNavigation.boundingBox(),
   ]);
   expect(selectedPaymentBox?.x).toBeGreaterThanOrEqual(
     (paymentFrameBox?.x ?? 0) + 1,
@@ -275,6 +252,7 @@ test("successful guest order lands on the confirmation route", async ({
   ).toBeLessThanOrEqual(
     (paymentFrameBox?.x ?? 0) + (paymentFrameBox?.width ?? 0) - 1,
   );
+  expect(paymentFrameBox?.y).toBeLessThan(mobileNavigationBox?.y ?? 0);
 
   await page.getByRole("textbox", { name: "Ime*", exact: true }).fill("Codex");
   await page.getByRole("textbox", { name: "Prezime*", exact: true }).fill("QA");
@@ -333,6 +311,14 @@ test("successful guest order lands on the confirmation route", async ({
   ).toBeLessThan(8);
   await expect(page.getByTestId("mobile-checkout-consent")).toBeVisible();
   await expect(page.getByTestId("desktop-checkout-consent")).toBeHidden();
+  await expect(page.getByRole("complementary", { name: "Sažetak porudžbine" })).toBeHidden();
+  const [consentBox, reviewNavigationBox] = await Promise.all([
+    page.getByTestId("mobile-checkout-consent").boundingBox(),
+    page.getByTestId("mobile-checkout-navigation").boundingBox(),
+  ]);
+  expect((consentBox?.y ?? 0) + (consentBox?.height ?? 0)).toBeLessThanOrEqual(
+    reviewNavigationBox?.y ?? 0,
+  );
   await page
     .getByTestId("mobile-checkout-consent")
     .getByRole("checkbox")
@@ -345,6 +331,7 @@ test("successful guest order lands on the confirmation route", async ({
   await expect(
     page.getByRole("heading", { name: "Hvala vam na porudžbini!" }).first(),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sažetak" })).toBeVisible();
 
   await expect(
     page.getByRole("button", { name: "Otkaži porudžbinu" }),

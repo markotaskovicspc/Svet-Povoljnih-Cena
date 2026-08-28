@@ -50,7 +50,7 @@ describe("Rabalux Serbia stock-only catalog policy", () => {
     ).toThrow("configured for Serbia");
   });
 
-  it("imports every positive unrestricted Serbian SKU and publishes only above 3", () => {
+  it("imports every positive unrestricted Serbian SKU and publishes at 3 or more", () => {
     const selection = selectRabaluxSerbiaStockCatalog(
       ["AVAILABLE", "THRESHOLD", "LOW", "ZERO", "RESTRICTED", "MISSING"].map(
         catalogItem,
@@ -81,8 +81,7 @@ describe("Rabalux Serbia stock-only catalog policy", () => {
     expect(isRabaluxSerbiaStockPresent(stockItem("A", 0))).toBe(false);
     expect(isRabaluxSerbiaStockPresent(stockItem("A", 20, true))).toBe(false);
     expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 2))).toBe(false);
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 3))).toBe(false);
-    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 4))).toBe(true);
+    expect(isRabaluxSerbiaWebStockAvailable(stockItem("A", 3))).toBe(true);
   });
 
   it("fails closed instead of combining duplicate warehouse rows", () => {

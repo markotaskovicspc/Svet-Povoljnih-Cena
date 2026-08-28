@@ -26,7 +26,7 @@ export function NotesConsent() {
   const notes = watch("notes") ?? "";
 
   return (
-    <label htmlFor="notes" className="flex flex-col gap-1.5">
+    <label htmlFor="notes" className="flex flex-col gap-1">
         <span className="text-sm font-medium text-ink-900">
           Napomene uz porudžbinu (opciono)
         </span>
@@ -35,7 +35,7 @@ export function NotesConsent() {
           rows={2}
           maxLength={NOTES_MAX}
           placeholder="Npr. radno vreme za prijem, sprat bez lifta, posebne instrukcije…"
-          className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas min-h-20 resize-y rounded-xl px-3 py-2 text-sm text-ink-900 ring-1 transition placeholder:text-ink-300 focus-visible:ring-2 focus-visible:outline-none lg:min-h-16"
+          className="ring-border/60 focus-visible:ring-walnut/40 bg-canvas min-h-16 resize-y rounded-xl px-3 py-2 text-sm text-ink-900 ring-1 transition placeholder:text-ink-300 focus-visible:ring-2 focus-visible:outline-none"
           {...register("notes", {
             maxLength: { value: NOTES_MAX, message: `Najviše ${NOTES_MAX} karaktera` },
           })}
@@ -72,8 +72,8 @@ export function CheckoutConsent({
 
   return (
     <>
-      <div className="bg-muted-bg ring-border/60 flex flex-col gap-2 rounded-2xl p-4 ring-1 lg:p-3">
-        <label htmlFor={id} className="flex items-start gap-3 text-sm">
+      <div className="bg-muted-bg ring-border/60 flex flex-col gap-1.5 rounded-2xl p-3 ring-1">
+        <label htmlFor={id} className="flex items-start gap-2.5 text-[13px] leading-snug sm:text-sm">
           {mirror ? (
             <input
               id={id}

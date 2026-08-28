@@ -845,6 +845,17 @@ Audit log se ne uređuje i ne briše iz panela.
 
 Ova stranica ima najviše poslovno osetljivih radnji.
 
+### Adresa isporuke i telefon
+
+- **Izmeni adresu** — otvara ulicu i broj, grad/mesto i poštanski broj. Izmena je moguća samo pre predaje pošiljke kuriru.
+- **Izmeni broj telefona** — menja kontakt telefon na konkretnoj porudžbini; ne menja automatski adresar kupca.
+- Ako aktivna adresnica već postoji, admin mora potvrditi pitanje: **„Da li želite da poništimo staru i napravimo novu sa ispravljenim podacima?”** Bez te potvrde izmena se ne čuva.
+- MyGLS adresnica se automatski poništava kod provajdera i sistem odmah pokušava da napravi novu.
+- X Express adresnica koja je samo lokalno pripremljena menja se automatski. Ako je već poslata X Express-u, admin prvo mora da je poništi u njihovom portalu ili preko podrške i zatim to izričito potvrdi u formi.
+- Ako je kupac izabrao GLS mesto preuzimanja, promena na kućnu adresu zahteva posebnu potvrdu i uklanja raniji izbor mesta preuzimanja.
+- Promena se upisuje u istoriju porudžbine i audit log. Postojeći predračun se osvežava, ali se ne šalje automatski kupcu.
+- Kada zamena adresnice ili osvežavanje predračuna ne uspe, admin dobija žuto upozorenje i staru adresnicu ne sme da koristi.
+
 ### Dobavljačka realizacija
 
 - **Potvrdi preuzimanje** — čuva lokaciju/adresu/grad i status realizacije dobavljača; zahteva razlog i potvrdu.

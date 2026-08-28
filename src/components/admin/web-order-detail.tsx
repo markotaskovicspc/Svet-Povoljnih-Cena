@@ -34,6 +34,12 @@ import {
   releaseOrderSupplierReservations,
 } from "@/lib/rabalux/fulfillment";
 import { updateWebOrderItemQuantity } from "@/lib/admin/web-order-edit.server";
+import { updateWebOrderShippingContact } from "@/lib/admin/web-order-shipping.server";
+import {
+  planWebOrderShippingEdit,
+  shippingEditWaybillQuestion,
+  type WebOrderShippingEditPlan,
+} from "@/lib/admin/web-order-shipping";
 import {
   canConfirmSupplierFulfillment,
   canResendSupplierOrder,
@@ -103,6 +109,115 @@ async function updateWebOrderItemQuantityAction(
       };
     },
   )(formData);
+}
+
+async function updateShippingAddressAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.shippingAddressUpdate", entity: "Order" },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const result = await updateWebOrderShippingContact({
+        orderId,
+        actorId,
+        expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
+        mode: "ADDRESS",
+        address: {
+          street: formData.get("street"),
+          city: formData.get("city"),
+          postalCode: formData.get("postalCode"),
+        },
+        replaceWaybills: formData.get("replaceWaybills") === "yes",
+        confirmXExpressCancellation:
+          formData.get("confirmXExpressCancellation") === "yes",
+        clearDeliveryPoint: formData.get("clearDeliveryPoint") === "yes",
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      return shippingContactActionResult(result, "Adresa isporuke je izmenjena.");
+    },
+  )(formData);
+}
+
+async function updateShippingPhoneAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.shippingPhoneUpdate", entity: "Order" },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const result = await updateWebOrderShippingContact({
+        orderId,
+        actorId,
+        expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
+        mode: "PHONE",
+        phone: formData.get("phone"),
+        replaceWaybills: formData.get("replaceWaybills") === "yes",
+        confirmXExpressCancellation:
+          formData.get("confirmXExpressCancellation") === "yes",
+        clearDeliveryPoint: false,
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      return shippingContactActionResult(
+        result,
+        "Broj telefona za isporuku je izmenjen.",
+      );
+    },
+  )(formData);
+}
+
+function shippingContactActionResult(
+  result: Awaited<ReturnType<typeof updateWebOrderShippingContact>>,
+  successMessage: string,
+) {
+  const details = [successMessage];
+  if (result.replacedWaybills > 0) {
+    details.push(
+      result.replacedWaybills === 1
+        ? "Stara adresnica je poništena i napravljena je nova."
+        : `Poništene su stare adresnice i napravljeno je ${result.replacedWaybills} novih.`,
+    );
+  }
+  if (result.replacementErrors.length) {
+    details.push(
+      `PAŽNJA: nova adresnica nije napravljena (${result.replacementErrors.join(
+        "; ",
+      )}). Nemojte koristiti staru adresnicu; napravite novu iz kurirske sekcije.`,
+    );
+  }
+  if (result.receiptRefreshed) {
+    details.push("Predračun je osvežen, ali nije automatski poslat kupcu.");
+  } else if (result.receiptError) {
+    details.push(
+      `PAŽNJA: predračun nije osvežen (${result.receiptError}). Regenerišite ga ručno.`,
+    );
+  }
+  return {
+    ok: true as const,
+    entityId: result.orderId,
+    diff: {
+      mode: result.mode,
+      previous: result.previous,
+      next: result.next,
+      replacedWaybills: result.replacedWaybills,
+      replacementErrors: result.replacementErrors,
+      receiptRefreshed: result.receiptRefreshed,
+      receiptError: result.receiptError,
+    },
+    tone:
+      result.replacementErrors.length || result.receiptError
+        ? ("warning" as const)
+        : ("success" as const),
+    message: details.join(" "),
+  };
 }
 
 async function updateStatus(_state: AdminActionState, formData: FormData) {
@@ -1087,6 +1202,13 @@ export async function WebOrderDetail({ id }: { id: string }) {
       payments: { orderBy: { createdAt: "desc" } },
       paymentRefunds: { orderBy: { createdAt: "desc" } },
       shipments: { include: { events: { orderBy: { occurredAt: "desc" } } } },
+      pickupBatchLines: {
+        where: {
+          purpose: "ORDER_DELIVERY",
+          batch: { status: { not: "CANCELLED" } },
+        },
+        select: { id: true },
+      },
       invoices: true,
       fiscal: true,
       fiscalDocuments: {
@@ -1196,6 +1318,22 @@ export async function WebOrderDetail({ id }: { id: string }) {
     latestIpsPayment != null &&
     ["PAID", "PARTIAL_REFUND"].includes(latestIpsPayment.status) &&
     refundableIpsAmount > 0;
+  const shippingEditWaybillPlan = planWebOrderShippingEdit(order.shipments);
+  const shippingEditBlockedReason =
+    !["KREIRANO", "POTVRDJENO", "U_PRIPREMI", "SPREMNO_ZA_ISPORUKU"].includes(
+      order.status,
+    ) ||
+    order.cancelledAt ||
+    order.stockRestoredAt
+      ? "Adresa i telefon mogu da se menjaju samo pre nego što pošiljka krene ka kupcu."
+      : order.pickupBatchLines.length
+        ? "Porudžbina je već u nalogu za kurirsko preuzimanje. Prvo je uklonite iz tog naloga."
+        : shippingEditWaybillPlan.kind === "BLOCKED"
+          ? shippingEditWaybillPlan.reason
+          : null;
+  const shippingWaybillQuestion = shippingEditWaybillQuestion(
+    shippingEditWaybillPlan,
+  );
   const refundRequestId = randomUUID();
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
@@ -1237,9 +1375,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Osnovni WEB podaci ostaju samo za pregled. Količina stavke može da
-            se smanji ili stavka ukloni samo pre naplate, fiskalizacije i
-            otpreme; poslednja stavka se uklanja otkazivanjem cele porudžbine.
+            Količina stavke može da se smanji ili stavka ukloni samo pre
+            naplate, fiskalizacije i otpreme; poslednja stavka se uklanja
+            otkazivanjem cele porudžbine. Adresa i telefon mogu da se isprave
+            do predaje pošiljke kuriru, uz obaveznu zamenu postojeće adresnice.
           </p>
           <Card>
             <CardTitle>Identitet prodajnog naloga</CardTitle>
@@ -1360,6 +1499,141 @@ export async function WebOrderDetail({ id }: { id: string }) {
               <br />
               {order.shipPhone}
             </p>
+            {shippingEditBlockedReason ? (
+              <p className="mt-4 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-sm text-warning">
+                Izmena je trenutno zaključana. {shippingEditBlockedReason}
+              </p>
+            ) : (
+              <div className="mt-5 flex flex-col gap-3">
+                <details className="rounded-xl border border-border/70 bg-muted-bg/20">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                    Izmeni adresu
+                  </summary>
+                  <AdminActionForm
+                    action={updateShippingAddressAction}
+                    preserveValues
+                    refreshOnSuccess
+                    className="border-t border-border/70 p-4"
+                    testId="shipping-address-edit-form"
+                  >
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input
+                      type="hidden"
+                      name="expectedUpdatedAt"
+                      value={order.updatedAt.toISOString()}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Ulica i broj" className="sm:col-span-2">
+                        <input
+                          name="street"
+                          defaultValue={order.shipStreet}
+                          minLength={3}
+                          maxLength={200}
+                          autoComplete="street-address"
+                          required
+                          className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
+                        />
+                      </Field>
+                      <Field label="Grad / mesto">
+                        <input
+                          name="city"
+                          defaultValue={order.shipCity}
+                          minLength={2}
+                          maxLength={80}
+                          autoComplete="address-level2"
+                          required
+                          className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
+                        />
+                      </Field>
+                      <Field label="Poštanski broj">
+                        <input
+                          name="postalCode"
+                          defaultValue={order.shipPostalCode}
+                          inputMode="numeric"
+                          pattern="[0-9]{5}"
+                          maxLength={5}
+                          autoComplete="postal-code"
+                          required
+                          className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
+                        />
+                      </Field>
+                    </div>
+                    {order.glsDeliveryPointId ? (
+                      <label className="mt-4 flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/10 p-3 text-sm text-warning">
+                        <input
+                          type="checkbox"
+                          name="clearDeliveryPoint"
+                          value="yes"
+                          required
+                          className="mt-0.5 size-4"
+                        />
+                        <span>
+                          Potvrđujem da se uklanja postojeće GLS mesto
+                          preuzimanja i da isporuka ide na novu kućnu adresu.
+                        </span>
+                      </label>
+                    ) : null}
+                    <WaybillReplacementFields plan={shippingEditWaybillPlan} />
+                    <div className="mt-4 flex justify-end">
+                      <SubmitButton
+                        confirm={
+                          shippingWaybillQuestion ??
+                          "Sačuvati novu adresu isporuke na ovoj porudžbini?"
+                        }
+                      >
+                        Sačuvaj adresu
+                      </SubmitButton>
+                    </div>
+                  </AdminActionForm>
+                </details>
+
+                <details className="rounded-xl border border-border/70 bg-muted-bg/20">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                    Izmeni broj telefona
+                  </summary>
+                  <AdminActionForm
+                    action={updateShippingPhoneAction}
+                    preserveValues
+                    refreshOnSuccess
+                    className="border-t border-border/70 p-4"
+                    testId="shipping-phone-edit-form"
+                  >
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input
+                      type="hidden"
+                      name="expectedUpdatedAt"
+                      value={order.updatedAt.toISOString()}
+                    />
+                    <Field
+                      label="Broj telefona"
+                      hint="Unesite 9 ili 10 cifara; broj mora početi sa 06."
+                    >
+                      <input
+                        name="phone"
+                        type="tel"
+                        defaultValue={order.shipPhone}
+                        minLength={9}
+                        maxLength={20}
+                        autoComplete="tel"
+                        required
+                        className="h-9 rounded-lg border border-input bg-transparent px-3 text-sm"
+                      />
+                    </Field>
+                    <WaybillReplacementFields plan={shippingEditWaybillPlan} />
+                    <div className="mt-4 flex justify-end">
+                      <SubmitButton
+                        confirm={
+                          shippingWaybillQuestion ??
+                          "Sačuvati novi broj telefona na ovoj porudžbini?"
+                        }
+                      >
+                        Sačuvaj broj telefona
+                      </SubmitButton>
+                    </div>
+                  </AdminActionForm>
+                </details>
+              </div>
+            )}
           </Card>
 
           {order.supplierFulfillments.map((fulfillment) => (
@@ -2140,6 +2414,60 @@ export async function WebOrderDetail({ id }: { id: string }) {
         </div>
       </div>
     </>
+  );
+}
+
+function WaybillReplacementFields({
+  plan,
+}: {
+  plan: WebOrderShippingEditPlan;
+}) {
+  if (plan.kind !== "REPLACE_WAYBILLS") return null;
+  const question = shippingEditWaybillQuestion(plan);
+  const tracking = plan.activeShipments
+    .map((shipment) => shipment.trackingNo)
+    .filter(Boolean)
+    .join(", ");
+  const requiresManualXExpressCancellation =
+    plan.manuallyCancelledXExpressShipments.length > 0;
+
+  return (
+    <div className="mt-4 space-y-3 rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
+      <p className="font-medium">{question}</p>
+      {tracking ? (
+        <p className="text-xs">Aktivni broj pošiljke: {tracking}</p>
+      ) : null}
+      {requiresManualXExpressCancellation ? (
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="confirmXExpressCancellation"
+            value="yes"
+            required
+            className="mt-0.5 size-4"
+          />
+          <span>
+            Potvrđujem da sam staru X Express adresnicu prvo poništio/la u X
+            Express portalu ili preko njihove podrške.
+          </span>
+        </label>
+      ) : null}
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          name="replaceWaybills"
+          value="yes"
+          required
+          className="mt-0.5 size-4"
+        />
+        <span>
+          Da, poništi {plan.activeShipments.length === 1 ? "staru adresnicu" : "stare adresnice"}
+          {requiresManualXExpressCancellation ? " u sistemu" : ""} i napravi
+          {plan.activeShipments.length === 1 ? " novu" : " nove"} sa
+          ispravljenim podacima.
+        </span>
+      </label>
+    </div>
   );
 }
 
