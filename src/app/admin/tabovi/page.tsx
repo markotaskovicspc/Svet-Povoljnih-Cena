@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { DataTable } from "@/components/admin/data-table";
 import { LANDING_PAGE_OPTIONS } from "@/lib/storefront/homepage";
+import {
+  landingPageNavigationOptions,
+  landingPageSlugFromDestinationHref,
+} from "@/lib/storefront/landing-destinations";
+import { getLandingPageForStorefront } from "@/lib/storefront/landing-pages";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -66,6 +71,30 @@ async function upsert(_state: AdminActionState, formData: FormData) {
         }
         if (parsed.data.pictogramId && !pictogram) {
           return { ok: false as const, error: "Izabrani piktogram više ne postoji." };
+        }
+
+        const landingPageSlug = landingPageSlugFromDestinationHref(parsed.data.href);
+        if (landingPageSlug) {
+          const landingPage = await db.landingPage.findUnique({
+            where: { slug: landingPageSlug },
+            select: { id: true, archivedAt: true },
+          });
+          if (!landingPage || landingPage.archivedAt) {
+            return {
+              ok: false as const,
+              error: "Izabrana landing strana više ne postoji.",
+            };
+          }
+          if (
+            parsed.data.enabled &&
+            !(await getLandingPageForStorefront(landingPageSlug))
+          ) {
+            return {
+              ok: false as const,
+              error:
+                "Aktivna navigacija može da vodi samo na trenutno objavljenu landing stranu.",
+            };
+          }
         }
 
         if (parsed.data.enabled) {
@@ -136,13 +165,18 @@ export default async function TabsPage({
 }) {
   await requireAdminAction(["CONTENT"]);
   const params = await searchParams;
-  const [tabs, categories, pictograms] = await Promise.all([
+  const [tabs, categories, pictograms, landingPages] = await Promise.all([
     db.tab.findMany({
       orderBy: [{ order: "asc" }, { label: "asc" }],
       include: { pictogram: true },
     }),
     db.category.findMany({ orderBy: { path: "asc" }, select: { name: true, path: true } }),
     db.pictogram.findMany({ orderBy: [{ label: "asc" }, { code: "asc" }] }),
+    db.landingPage.findMany({
+      where: { archivedAt: null },
+      orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
+      select: { id: true, slug: true, title: true, status: true },
+    }),
   ]);
   const requestedSlot = Number(params.slot);
   const selected = tabs.find((tab) => tab.id === params.edit);
@@ -153,6 +187,7 @@ export default async function TabsPage({
     : firstEmptySlot;
   const destinationOptions = [
     ...LANDING_PAGE_OPTIONS.map((page) => ({ value: page.href, label: `Landing · ${page.label}` })),
+    ...landingPageNavigationOptions(landingPages),
     ...categories.map((category) => ({ value: `/k${category.path}`, label: `Kategorija · ${category.name}` })),
   ].filter((option, index, all) => all.findIndex((candidate) => candidate.value === option.value) === index);
 
