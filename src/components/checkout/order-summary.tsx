@@ -78,10 +78,6 @@ interface OrderSummaryProps {
   /** Hide the cart-line list; useful on confirmation page. */
   collapseLines?: boolean;
   className?: string;
-  /** Tighter presentation used inside the mobile review step. */
-  compact?: boolean;
-  /** Show final-review quantities without checkout quantity controls. */
-  readOnlyLines?: boolean;
 }
 
 export function OrderSummary({
@@ -93,8 +89,6 @@ export function OrderSummary({
   beforeCta,
   collapseLines,
   className,
-  compact = false,
-  readOnlyLines = false,
 }: OrderSummaryProps) {
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
@@ -132,36 +126,21 @@ export function OrderSummary({
       aria-label="Sažetak porudžbine"
       className={cn("lg:sticky lg:top-28 lg:self-start", className)}
     >
-      <div
-        className={cn(
-          "bg-surface ring-border/60 flex flex-col rounded-2xl shadow-soft-2 ring-1",
-          compact ? "gap-3 p-3 sm:p-4" : "gap-4 p-5",
-        )}
-      >
+      <div className="bg-surface ring-border/60 flex flex-col gap-4 rounded-2xl p-5 shadow-soft-2 ring-1">
         <h2 className="order-1 font-display text-lg text-ink-900">Sažetak porudžbine</h2>
 
         {!hydrated ? (
-          <div className="order-2 flex h-24 items-center justify-center text-ink-500 lg:order-7">
+          <div className="order-7 flex h-24 items-center justify-center text-ink-500">
             <Loader2 className="size-4 animate-spin" aria-hidden />
           </div>
         ) : !collapseLines ? (
-          <ul className="order-2 divide-y divide-border/60 border-t border-border/60 pt-1 lg:order-7 lg:pt-2">
+          <ul className="order-7 divide-y divide-border/60 border-t border-border/60 pt-2">
             {lines.map((l) => (
               <li
                 key={l.sku}
-                className={cn(
-                  "grid items-center",
-                  compact
-                    ? "grid-cols-[36px_minmax(0,1fr)_auto] gap-2 py-2"
-                    : "grid-cols-[44px_minmax(0,1fr)_auto] gap-3 py-3",
-                )}
+                className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 py-3"
               >
-                <span
-                  className={cn(
-                    "bg-white ring-border/60 relative block overflow-hidden rounded-lg ring-1",
-                    compact ? "size-9" : "size-11",
-                  )}
-                >
+                <span className="bg-white ring-border/60 relative block size-11 overflow-hidden rounded-lg ring-1">
                   {l.thumbnailUrl ? (
                     <Image
                       src={l.thumbnailUrl}
@@ -187,17 +166,15 @@ export function OrderSummary({
                 <span className="text-xs font-medium text-ink-900 tabular-nums">
                   {formatRsd(l.unitPriceSale * l.qty)}
                 </span>
-                {!readOnlyLines ? (
-                  <div className="col-start-2 col-span-2 -mt-1">
-                    <CartQuantityControl sku={l.sku} quantity={l.qty} />
-                  </div>
-                ) : null}
+                <div className="col-start-2 col-span-2 -mt-1">
+                  <CartQuantityControl sku={l.sku} quantity={l.qty} />
+                </div>
               </li>
             ))}
           </ul>
         ) : null}
 
-        <dl className="order-3 border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm lg:order-2">
+        <dl className="order-2 border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
           <Row label="Vrednost artikala" value={formatRsd(totals.itemsFull)} />
           {totals.savings > 0 ? (
             <Row
@@ -248,7 +225,7 @@ export function OrderSummary({
           ) : null}
         </dl>
 
-        <div className="order-4 border-border/60 flex items-baseline justify-between border-t pt-3 lg:order-3">
+        <div className="order-3 border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">
             Ukupno za plaćanje
           </span>
