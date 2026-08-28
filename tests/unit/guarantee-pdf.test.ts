@@ -4,6 +4,7 @@ import {
   buildGuaranteePdf,
   GUARANTEE_PROVIDER,
   GUARANTEE_TERM_TEXT,
+  guaranteeBuyerLines,
   guaranteeItemsForOrder,
 } from "@/lib/email/guarantee-pdf";
 
@@ -19,6 +20,25 @@ describe("guarantee PDF", () => {
       pib: "115085587",
       reclamationsEmail: "reklamacije@svetpovoljnihcena.rs",
     });
+  });
+
+  it("adds company identity and PIB for a business buyer", () => {
+    expect(
+      guaranteeBuyerLines({
+        firstName: "Milan",
+        lastName: "Jovanović",
+        companyName: "Kupac d.o.o.",
+        pib: "109876543",
+        street: "Poslovna 12",
+        postalCode: "21000",
+        city: "Novi Sad",
+      }),
+    ).toEqual([
+      "Kupac d.o.o.",
+      "PIB: 109876543",
+      "Kontakt: Milan Jovanović",
+      "Poslovna 12, 21000 Novi Sad",
+    ]);
   });
 
   it("keeps every non-Rabalux item and excludes Rabalux", () => {
@@ -45,6 +65,15 @@ describe("guarantee PDF", () => {
           supplierIntegrationKey: "SPC",
         },
       ],
+      buyer: {
+        firstName: "Milan",
+        lastName: "Jovanović",
+        companyName: "Kupac d.o.o.",
+        pib: "109876543",
+        street: "Poslovna 12",
+        postalCode: "21000",
+        city: "Novi Sad",
+      },
     });
 
     expect(pdf.subarray(0, 8).toString("binary")).toBe("%PDF-1.4");

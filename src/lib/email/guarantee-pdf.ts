@@ -30,6 +30,17 @@ export type GuaranteePdfInput = {
   number: string;
   createdAt: Date;
   items: GuaranteeItem[];
+  buyer?: GuaranteeBuyerInput;
+};
+
+export type GuaranteeBuyerInput = {
+  firstName: string;
+  lastName: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  companyName?: string | null;
+  pib?: string | null;
 };
 
 type RenderedItem = GuaranteeItem & {
@@ -125,8 +136,9 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   const tableBottom =
     tableY + headerHeight + input.items.reduce((sum, item) => sum + item.rowHeight, 0);
   const metaY = tableBottom + 18;
-  const termsY = Math.max(830, metaY + 106);
+  const termsY = Math.max(930, metaY + 176);
   const rightsY = termsY + 232;
+  const buyerLines = input.buyer ? guaranteeBuyerLines(input.buyer) : [];
   const pageLabel =
     input.pageCount > 1
       ? `<text x="1095" y="1700" text-anchor="end" class="footer">Strana ${
@@ -197,6 +209,17 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
     <text x="165" y="${metaY + 71}" class="label">Broj porudžbine</text>
     <text x="450" y="${metaY + 71}" class="value">${xmlEscape(input.number)}</text>
 
+    ${buyerLines.length ? `
+      <text x="650" y="${metaY + 24}" class="label">Podaci o kupcu</text>
+      <text x="650" y="${metaY + 52}" class="value">${buyerLines
+        .flatMap((line) => wrapText(line, 49))
+        .slice(0, 5)
+        .map(
+          (line, index) =>
+            `<tspan x="650" dy="${index === 0 ? 0 : 23}">${xmlEscape(line)}</tspan>`,
+        )
+        .join("")}</text>` : ""}
+
     <text x="145" y="${termsY}" class="section">Obim i trajanje garancije</text>
     <text x="145" y="${termsY + 35}" class="body">
       <tspan x="145" dy="0">Garantni rok: ${GUARANTEE_TERM_TEXT}, počev od datuma predaje robe kupcu. Garancija pokriva nedostatke u materijalu i</tspan>
@@ -219,6 +242,24 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
     <text x="620" y="1700" text-anchor="middle" class="footer">Dokument se predaje kupcu uz potvrdu porudžbine. Sačuvati uz račun ili drugi dokaz o kupovini.</text>
     ${pageLabel}
   </svg>`;
+}
+
+export function guaranteeBuyerLines(buyer: GuaranteeBuyerInput) {
+  const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
+  const companyName = buyer.companyName?.trim();
+  const pib = buyer.pib?.trim();
+  const address = `${buyer.street}, ${buyer.postalCode} ${buyer.city}`;
+
+  if (companyName || pib) {
+    return [
+      companyName || contactName,
+      pib ? `PIB: ${pib}` : "",
+      companyName && contactName ? `Kontakt: ${contactName}` : "",
+      address,
+    ].filter(Boolean);
+  }
+
+  return [contactName, address];
 }
 
 function providerRow(y: number, label: string, value: string) {

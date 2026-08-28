@@ -4,6 +4,7 @@ import {
   buildInvoicePdf,
   buildWithdrawalFormPdf,
   invoiceBuyerLines,
+  withdrawalBuyerLines,
   type InvoiceOrderInput,
 } from "@/lib/email/pdf";
 
@@ -89,5 +90,17 @@ describe("customer PDF documents", () => {
       "Kontakt: Milan Jovanović",
       "Poslovna 12, 21000 Novi Sad",
     ]);
+  });
+
+  it("adds the company, PIB and contact to the business return form", () => {
+    expect(withdrawalBuyerLines(businessOrder)).toEqual([
+      "Pravno lice: Kupac d.o.o.",
+      "PIB: 109876543",
+      "Kontakt osoba: Milan Jovanović",
+      "Adresa: Poslovna 12, 21000 Novi Sad",
+    ]);
+    const pdf = buildWithdrawalFormPdf(businessOrder).toString("binary");
+    expect(pdf).toContain("Pravno lice: Kupac d.o.o.");
+    expect(pdf).toContain("PIB: 109876543");
   });
 });

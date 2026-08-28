@@ -65,27 +65,25 @@ export async function sendOrderConfirmation(args: {
       baseUrl: cfg.baseUrl,
       accessToken: args.accessToken,
       includesPurchaseDocuments: args.attachInvoice !== false,
-      includesWithdrawalForm: !isBusinessBuyer,
+      includesWithdrawalForm: args.attachInvoice !== false,
       guaranteeTermText: guaranteeItems.length ? GUARANTEE_TERM_TEXT : undefined,
       previewMode: args.previewMode,
     }),
   );
 
+  const pdfOrder = orderToPdfInput(args.order);
   const attachments: EmailAttachment[] = [];
   if (args.attachInvoice !== false) {
-    const pdfOrder = orderToPdfInput(args.order);
     attachments.push({
       filename: `predracun-racun-${args.order.id}.pdf`,
       content: (await buildInvoicePdf(pdfOrder)).toString("base64"),
       contentType: "application/pdf",
     });
-    if (!isBusinessBuyer) {
-      attachments.push({
-        filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
-        content: (await buildWithdrawalFormPdf(pdfOrder)).toString("base64"),
-        contentType: "application/pdf",
-      });
-    }
+    attachments.push({
+      filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
+      content: (await buildWithdrawalFormPdf(pdfOrder)).toString("base64"),
+      contentType: "application/pdf",
+    });
   }
   if (guaranteeItems.length) {
     attachments.push({
@@ -95,6 +93,7 @@ export async function sendOrderConfirmation(args: {
           number: args.order.id,
           createdAt: new Date(args.order.createdAt),
           items: guaranteeItems,
+          buyer: pdfOrder.billing_address ?? pdfOrder.shipping_address,
         })
       ).toString("base64"),
       contentType: "application/pdf",

@@ -145,7 +145,20 @@ export async function issueAndDeliverFiscalReceipt(
       street: loaded.order.shippingAddress.street,
       postalCode: loaded.order.shippingAddress.postalCode,
       city: loaded.order.shippingAddress.city,
+      companyName: loaded.order.shippingAddress.companyName,
+      pib: loaded.order.shippingAddress.pib,
     },
+    billing_address: loaded.order.billingAddress
+      ? {
+          firstName: loaded.order.billingAddress.firstName,
+          lastName: loaded.order.billingAddress.lastName,
+          street: loaded.order.billingAddress.street,
+          postalCode: loaded.order.billingAddress.postalCode,
+          city: loaded.order.billingAddress.city,
+          companyName: loaded.order.billingAddress.companyName,
+          pib: loaded.order.billingAddress.pib,
+        }
+      : undefined,
   });
 
   const receiptNumbers = receiptDocuments.map((document) => document.receiptNumber).join(", ");

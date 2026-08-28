@@ -222,15 +222,17 @@ describe("all transactional Resend send flows", () => {
         firstPurchaseDiscount: null,
         savedCardDiscount: null,
         total: 10_093,
-        paymentMethod: "pouzece_gotovina",
+        paymentMethod: "uplata_na_racun",
         payment: { status: "pending" },
         shippingAddress: {
           ...order.shippingAddress,
-          firstName: "QA20",
-          lastName: "Kupac",
+          firstName: "Milan",
+          lastName: "Jovanović",
           street: "QA test ulica 20",
           city: "Novi Sad",
           postalCode: "21000",
+          companyName: "KUPAC PRAVNO LICE DOO NOVI SAD",
+          pib: "109876543",
         },
       };
       await sendOrderConfirmation({
@@ -285,7 +287,7 @@ describe("all transactional Resend send flows", () => {
     ).toBe(false);
   });
 
-  it("renders business identity and bank instructions without consumer withdrawal form", async () => {
+  it("renders business identity, bank instructions and the complete document set", async () => {
     await sendOrderConfirmation({
       order: {
         ...order,
@@ -313,16 +315,16 @@ describe("all transactional Resend send flows", () => {
     expect(input.html).toContain("109876543");
     expect(input.html).toContain("Podaci za uplatu");
     expect(input.html).toContain("265-3310310005375-34");
-    expect(input.html).not.toContain("Obrazac za odustanak od kupovine");
+    expect(input.html).toContain("Obrazac za odustanak od kupovine");
     expect(input.html).not.toContain("Pogledaj porudžbinu");
-    expect(input.attachments).toHaveLength(2);
+    expect(input.attachments).toHaveLength(3);
     expect(
       input.attachments.some((attachment: { filename: string }) =>
         attachment.filename.startsWith("obrazac-za-odustajanje-"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(input.metadata).toMatchObject({
-      attachmentCount: 2,
+      attachmentCount: 3,
       guaranteeItemCount: 1,
       businessBuyer: true,
       previewMode: true,

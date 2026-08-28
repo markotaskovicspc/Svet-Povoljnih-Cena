@@ -521,6 +521,7 @@ function xmlEscapePdf(value: string) {
 }
 
 export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
+  const buyerLines = withdrawalBuyerLines(order);
   const lines: Line[] = [
     { text: "(Zakon o zaštiti potrošača, član 28)", spaceAbove: 2 },
     { text: "" },
@@ -530,9 +531,7 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
     { text: "" },
     { text: `Broj porudžbine: ${order.number}` },
     { text: `Datum porudžbine: ${DOCUMENT_DATE_FORMATTER.format(order.createdAt)}` },
-    {
-      text: `Kupac: ${order.shipping_address.firstName} ${order.shipping_address.lastName}, ${order.shipping_address.street}, ${order.shipping_address.postalCode} ${order.shipping_address.city}`,
-    },
+    ...buyerLines.map((text) => ({ text })),
     { text: "" },
     {
       text: "Ovim obaveštavam da odustajem od kupovine sledećih artikala:",
@@ -557,6 +556,25 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
     text: "Pravo na odustanak imate u roku od 14 dana od preuzimanja robe, bez navođenja razloga. Povraćaj sredstava sledi u roku od 14 dana od prijema vraćenog artikla.",
   });
   return buildPdf("Obrazac za odustanak", lines);
+}
+
+export function withdrawalBuyerLines(order: InvoiceOrderInput) {
+  const buyer = order.billing_address ?? order.shipping_address;
+  const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
+  const companyName = buyer.companyName?.trim();
+  const pib = buyer.pib?.trim();
+  const address = `${buyer.street}, ${buyer.postalCode} ${buyer.city}`;
+
+  if (companyName || pib) {
+    return [
+      `Pravno lice: ${companyName || contactName}`,
+      pib ? `PIB: ${pib}` : "",
+      companyName && contactName ? `Kontakt osoba: ${contactName}` : "",
+      `Adresa: ${address}`,
+    ].filter(Boolean);
+  }
+
+  return [`Kupac: ${contactName}`, `Adresa: ${address}`];
 }
 
 export type { InvoiceOrderInput };
