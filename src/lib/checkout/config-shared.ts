@@ -21,7 +21,7 @@ export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   google_pay: "Google Pay",
   apple_pay: "Apple Pay",
   uplata_na_racun: "Uplata na račun",
-  pouzece_gotovina: "Pouzeće — gotovina",
+  pouzece_gotovina: "Pouzeće gotovine",
   pouzece_kartica: "Pouzeće — kartica",
 };
 

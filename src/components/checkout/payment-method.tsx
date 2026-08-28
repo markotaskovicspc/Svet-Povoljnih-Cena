@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
 import { useFormContext } from "react-hook-form";
-import { motion } from "framer-motion";
 import {
   CreditCard,
   Smartphone,
@@ -14,97 +12,42 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod } from "@/types";
-import type { CheckoutPaymentMethodConfig } from "@/lib/checkout/config-shared";
+import {
+  PAYMENT_LABELS,
+  type CheckoutPaymentMethodConfig,
+} from "@/lib/checkout/config-shared";
 import type { CheckoutFormData } from "./checkout-flow";
 
 interface MethodMeta {
-  id: PaymentMethod;
   icon: React.ElementType;
-  short: string;
-  details: React.ReactNode;
 }
 
 const METHOD_META: Record<PaymentMethod, MethodMeta> = {
   ips: {
-    id: "ips",
     icon: ScanLine,
-    short: "Raiffeisen IPS QR/deep-link plaćanje preko m-banking aplikacije.",
-    details: (
-      <div className="flex flex-col gap-2">
-        <Image
-          src="/icons/ips-skeniraj.svg"
-          alt="IPS Skeniraj"
-          width={110}
-          height={36}
-          className="h-9 w-auto"
-        />
-        <p>
-          Posle potvrde porudžbine preusmeravamo vas na Raiffeisen IPS stranu
-          gde se prikazuje QR kod ili otvara m-banking deep link.
-        </p>
-      </div>
-    ),
   },
   kartica: {
-    id: "kartica",
     icon: CreditCard,
-    short: "Visa, Mastercard, DinaCard — kartično plaćanje preko RaiAccept-a.",
-    details: (
-      <p>
-        Kartično plaćanje ide odvojeno od IPS-a, preko RaiAccept hosted strane i
-        3-D Secure provere.
-      </p>
-    ),
   },
   google_pay: {
-    id: "google_pay",
     icon: Wallet,
-    short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
-    details: <p>Google Pay radi kroz kartični RaiAccept tok kada je metod aktivan.</p>,
   },
   apple_pay: {
-    id: "apple_pay",
     icon: Apple,
-    short: "Digitalni novčanik — biće dostupan uz kartičnu uslugu.",
-    details: (
-      <p>Apple Pay radi kroz kartični RaiAccept tok kada je metod aktivan.</p>
-    ),
   },
   uplata_na_racun: {
-    id: "uplata_na_racun",
     icon: Receipt,
-    short: "Dobijate prilagođenu uplatnicu i podatke za nalog.",
-    details: (
-      <p>
-        Pripremićemo uplatnicu sa pozivom na broj — nakon evidentiranja uplate
-        kreće priprema porudžbine.
-      </p>
-    ),
   },
   pouzece_gotovina: {
-    id: "pouzece_gotovina",
     icon: Banknote,
-    short: "Plaćate gotovinom kuriru pri preuzimanju pošiljke.",
-    details: (
-      <p>
-        Pripremite tačan iznos u dinarima. Naknada za pouzeće biće prikazana u
-        sažetku ako je primenljiva.
-      </p>
-    ),
   },
   pouzece_kartica: {
-    id: "pouzece_kartica",
     icon: Smartphone,
-    short: "Kuriri imaju POS terminale za plaćanje karticom na vratima.",
-    details: (
-      <p>Plaćanje obavljate karticom direktno na POS terminalu kurira.</p>
-    ),
   },
 };
 
 /**
- * Step 5 — Payment method picker. Selecting a card expands a helpful detail
- * block. Real RaiAccept / wallet handoff arrives when the bank contract lands.
+ * Step 5 — Payment method picker.
  */
 export function PaymentMethodStep({
   methods,
@@ -144,17 +87,21 @@ export function PaymentMethodStep({
           const meta = METHOD_META[method.id];
           const Icon = meta.icon;
           const checked = active === method.id;
+          const label =
+            method.id === "uplata_na_racun" || method.id === "pouzece_gotovina"
+              ? PAYMENT_LABELS[method.id]
+              : method.label;
           return (
             <label
               key={method.id}
               htmlFor={`pay-${method.id}`}
               className={cn(
-                "bg-surface ring-border/60 group flex min-w-[180px] flex-1 snap-start cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
+                "bg-surface ring-border/60 group flex min-w-[180px] flex-1 snap-start cursor-pointer items-center rounded-2xl p-4 ring-1 transition lg:p-3",
                 "hover:ring-walnut/40",
                 checked && "ring-walnut shadow-soft-2 ring-2",
               )}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex w-full items-center gap-3">
                 <span
                   className={cn(
                     "inline-flex size-9 items-center justify-center rounded-xl lg:size-8",
@@ -164,25 +111,10 @@ export function PaymentMethodStep({
                 >
                   <Icon className="size-4" />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-ink-900">
-                    {method.label}
-                  </span>
-                  <span className="text-xs text-ink-500">
-                    {method.note || meta.short}
-                  </span>
-                </div>
+                <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">
+                  {label}
+                </span>
               </div>
-              {checked ? (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="border-border/60 mt-1 overflow-hidden border-t pt-2 text-xs text-ink-700 lg:pt-1.5"
-                >
-                  {method.note ? <p>{method.note}</p> : meta.details}
-                </motion.div>
-              ) : null}
               <input
                 id={`pay-${method.id}`}
                 type="radio"
