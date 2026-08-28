@@ -10,6 +10,7 @@ import {
 import { db, hasDatabaseConnection } from "@/lib/db";
 import type { Banner, MediaAsset, Product } from "@/types";
 import {
+  getProductsBySkus,
   listProducts,
   type ListProductsInput,
 } from "@/lib/api/catalog";
@@ -20,6 +21,11 @@ import {
   hasTabPictogramColumn,
 } from "@/lib/storefront/homepage-schema";
 import { normalizeStorefrontHref } from "@/lib/storefront/href";
+import {
+  databaseLandingPageId,
+  landingPageProductSkus,
+} from "@/lib/storefront/homepage-landing";
+import { getLandingPageForStorefrontById } from "@/lib/storefront/landing-pages";
 import {
   akcijaIcon,
   herojiMesecaIcon,
@@ -374,21 +380,38 @@ async function resolveSlot(slot: HomeSlotForRender) {
   const landing = slot.landingPageKey
     ? landingByKey.get(slot.landingPageKey)
     : undefined;
-  if (!landing) return null;
+  if (landing) {
+    const products = await listProducts({
+      ...landing.query,
+      limit,
+      includeTotal: false,
+    });
 
-  const products = await listProducts({
-    ...landing.query,
-    limit,
-    includeTotal: false,
-  });
+    return {
+      slotKey: slot.slotKey,
+      title: slot.titleOverride?.trim() || landing.label,
+      href: landing.href,
+      icon: landing.icon,
+      campaignSticker: landing.campaignSticker,
+      products: products.items,
+    };
+  }
+
+  const landingPageId = databaseLandingPageId(slot.landingPageKey);
+  if (!landingPageId) return null;
+
+  const page = await getLandingPageForStorefrontById(landingPageId);
+  if (!page) return null;
+
+  const products = await getProductsBySkus(
+    landingPageProductSkus(page.snapshot).slice(0, limit),
+  );
 
   return {
     slotKey: slot.slotKey,
-    title: slot.titleOverride?.trim() || landing.label,
-    href: landing.href,
-    icon: landing.icon,
-    campaignSticker: landing.campaignSticker,
-    products: products.items,
+    title: slot.titleOverride?.trim() || page.snapshot.title,
+    href: `/ponuda/${encodeURIComponent(page.slug)}`,
+    products,
   };
 }
 

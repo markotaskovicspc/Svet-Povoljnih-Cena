@@ -94,6 +94,7 @@ function refreshLandingPaths(...slugs: Array<string | null | undefined>) {
     revalidatePath(`/ponuda/${slug}`);
   }
   revalidateTag("storefront-landing-pages", { expire: 0 });
+  revalidateTag("storefront-home", { expire: 0 });
 }
 
 function snapshotData(snapshot: LandingPageSnapshot) {

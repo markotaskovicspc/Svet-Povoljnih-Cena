@@ -58,6 +58,10 @@ async function loadLandingRow(slug: string) {
   return db.landingPage.findUnique({ where: { slug }, include: landingPageInclude });
 }
 
+async function loadLandingRowById(id: string) {
+  return db.landingPage.findUnique({ where: { id }, include: landingPageInclude });
+}
+
 function withinPublicationWindow(snapshot: LandingPageSnapshot, now = new Date()) {
   if (snapshot.startsAt && new Date(snapshot.startsAt) > now) return false;
   if (snapshot.endsAt && new Date(snapshot.endsAt) < now) return false;
@@ -83,9 +87,9 @@ function normalizeSnapshot(
   return parsed.data;
 }
 
-async function loadPublishedLandingPage(slug: string): Promise<StorefrontLandingPage | null> {
-  if (!hasDatabaseConnection()) return null;
-  const page = await loadLandingRow(slug);
+function publishedLandingPage(
+  page: LandingRow | null,
+): StorefrontLandingPage | null {
   if (!page || page.status !== "PUBLISHED" || page.archivedAt) return null;
   const snapshot = page.publishedRevision
     ? normalizeSnapshot(page, page.publishedRevision.snapshot)
@@ -99,6 +103,11 @@ async function loadPublishedLandingPage(slug: string): Promise<StorefrontLanding
   };
 }
 
+async function loadPublishedLandingPage(slug: string): Promise<StorefrontLandingPage | null> {
+  if (!hasDatabaseConnection()) return null;
+  return publishedLandingPage(await loadLandingRow(slug));
+}
+
 const getPublishedLandingPageAcrossRequests = unstable_cache(
   loadPublishedLandingPage,
   ["storefront-landing-page-v2"],
@@ -107,6 +116,13 @@ const getPublishedLandingPageAcrossRequests = unstable_cache(
 
 export function getLandingPageForStorefront(slug: string) {
   return getPublishedLandingPageAcrossRequests(slug);
+}
+
+export async function getLandingPageForStorefrontById(
+  id: string,
+): Promise<StorefrontLandingPage | null> {
+  if (!hasDatabaseConnection()) return null;
+  return publishedLandingPage(await loadLandingRowById(id));
 }
 
 export async function getLandingPageForAdminPreview(slug: string): Promise<StorefrontLandingPage | null> {

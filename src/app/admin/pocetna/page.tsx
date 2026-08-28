@@ -5,6 +5,7 @@ import {
   HomeSectionSlotKey,
   HomeSectionSourceType,
   type ActionKind,
+  type LandingPageStatus,
 } from "@prisma/client";
 import {
   withAdminState,
@@ -23,6 +24,11 @@ import {
   HOME_SECTION_SLOT_ORDER,
   LANDING_PAGE_OPTIONS,
 } from "@/lib/storefront/homepage";
+import {
+  databaseLandingPageId,
+  databaseLandingPageKey,
+} from "@/lib/storefront/homepage-landing";
+import { getLandingPageForStorefrontById } from "@/lib/storefront/landing-pages";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -33,6 +39,12 @@ export const metadata = {
 const sourceTypeLabel: Record<HomeSectionSourceType, string> = {
   ACTION: "Akcija",
   LANDING_PAGE: "Landing page",
+};
+
+const landingPageStatusLabel: Record<LandingPageStatus, string> = {
+  DRAFT: "Nacrt",
+  PUBLISHED: "Objavljeno",
+  ARCHIVED: "Arhivirano",
 };
 
 const schema = z.object({
@@ -85,7 +97,34 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
         landingPageKey &&
         !LANDING_PAGE_OPTIONS.some((option) => option.key === landingPageKey)
       ) {
-        return { ok: false as const, error: "Nepoznat landing page." };
+        const landingPageId = databaseLandingPageId(landingPageKey);
+        const landingPage = landingPageId
+          ? await db.landingPage.findUnique({
+              where: { id: landingPageId },
+              select: {
+                id: true,
+                archivedAt: true,
+              },
+            })
+          : null;
+
+        if (!landingPage || landingPage.archivedAt) {
+          return {
+            ok: false as const,
+            error: "Izabrana landing strana više ne postoji.",
+          };
+        }
+
+        if (
+          data.enabled &&
+          !(await getLandingPageForStorefrontById(landingPage.id))
+        ) {
+          return {
+            ok: false as const,
+            error:
+              "Aktivna promo sekcija može da koristi samo trenutno objavljenu landing stranu.",
+          };
+        }
       }
 
       const payload = {
@@ -120,7 +159,7 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
 export default async function HomeAdminPage() {
   await requireAdminAction(["CONTENT"]);
 
-  const [slots, actions] = await Promise.all([
+  const [slots, actions, landingPages] = await Promise.all([
     db.homeSectionSlot.findMany({ orderBy: { slotKey: "asc" } }),
     db.action.findMany({
       orderBy: [{ sortOrder: "asc" }, { startsAt: "desc" }],
@@ -132,6 +171,11 @@ export default async function HomeAdminPage() {
         startsAt: true,
         endsAt: true,
       },
+    }),
+    db.landingPage.findMany({
+      where: { archivedAt: null },
+      orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
+      select: { id: true, slug: true, title: true, status: true },
     }),
   ]);
 
@@ -175,6 +219,7 @@ export default async function HomeAdminPage() {
                 slotKey={slotKey}
                 values={values}
                 actions={actions}
+                landingPages={landingPages}
               />
             </Card>
           );
@@ -193,6 +238,13 @@ type ActionOption = {
   endsAt: Date;
 };
 
+type DatabaseLandingPageOption = {
+  id: string;
+  slug: string;
+  title: string;
+  status: LandingPageStatus;
+};
+
 type SectionFormValues = {
   sourceType: HomeSectionSourceType;
   actionId?: string | null;
@@ -207,6 +259,7 @@ function SectionForm({
   slotKey,
   values,
   actions,
+  landingPages,
 }: {
   action: (
     state: AdminActionState,
@@ -215,6 +268,7 @@ function SectionForm({
   slotKey: HomeSectionSlotKey;
   values: SectionFormValues;
   actions: ActionOption[];
+  landingPages: DatabaseLandingPageOption[];
 }) {
   return (
     <AdminActionForm action={action} className="space-y-4">
@@ -267,11 +321,23 @@ function SectionForm({
           className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
         >
           <option value="">— Izaberite landing page —</option>
-          {LANDING_PAGE_OPTIONS.map((page) => (
-            <option key={page.key} value={page.key}>
-              {page.label} ({page.href})
-            </option>
-          ))}
+          <optgroup label="Standardne stranice">
+            {LANDING_PAGE_OPTIONS.map((page) => (
+              <option key={page.key} value={page.key}>
+                {page.label} ({page.href})
+              </option>
+            ))}
+          </optgroup>
+          {landingPages.length ? (
+            <optgroup label="Landing strane iz baze">
+              {landingPages.map((page) => (
+                <option key={page.id} value={databaseLandingPageKey(page.id)}>
+                  {page.title} (/ponuda/{page.slug}) ·{" "}
+                  {landingPageStatusLabel[page.status]}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
         </select>
       </Field>
 
