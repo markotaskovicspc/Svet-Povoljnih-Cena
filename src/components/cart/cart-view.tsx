@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowRight, Loader2, LogIn, ShoppingBag, Tag, Truck } from "lucide-react";
+import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
@@ -318,7 +318,7 @@ function CartSummary({
 
 export function CartLoginOfferCopy() {
   return (
-    <div>
+    <div className="min-w-0 flex-1">
       <p className="text-action text-base font-extrabold uppercase sm:text-lg">
         PRIJAVITE SE I OSTVARITE 30% LOYALTY POPUSTA (VAŽI ZA ARTIKLE KOJI
         NISU NA AKCIJI)
@@ -348,12 +348,7 @@ export function CartLoginOffer({
 
   return (
     <div className="border-action/30 bg-action/5 flex flex-col gap-3 border-y px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div className="flex items-start gap-3">
-        <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-full">
-          <LogIn className="size-4" aria-hidden />
-        </span>
-        <CartLoginOfferCopy />
-      </div>
+      <CartLoginOfferCopy />
       {reopenDrawerAfterLogin ? (
         <CartDrawerLoginOfferLink onNavigate={onNavigate} />
       ) : (
