@@ -43,9 +43,13 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeLabel = "Zatvori",
+  closeButtonClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  closeLabel?: string
+  closeButtonClassName?: string
 }) {
   return (
     <DialogPortal>
@@ -65,14 +69,14 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className={cn("absolute top-2 right-2", closeButtonClassName)}
                 size="icon-sm"
               />
             }
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{closeLabel}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

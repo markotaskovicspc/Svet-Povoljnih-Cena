@@ -1,11 +1,14 @@
 import type { Product } from "@/types";
-import { ProductCard } from "@/components/product/product-card";
+import { PurchaseSuggestionCard } from "./purchase-suggestion-card";
 
 export function PurchaseSuggestion({ products }: { products: Product[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div
+      data-testid="purchase-suggestion-grid"
+      className="grid grid-cols-1 items-stretch gap-3 min-[360px]:grid-cols-2 md:grid-cols-3"
+    >
       {products.map((product) => (
-        <ProductCard key={product.sku} product={product} className="h-full" />
+        <PurchaseSuggestionCard key={product.sku} product={product} />
       ))}
     </div>
   );
