@@ -336,6 +336,31 @@ export function getCartLoginOfferDetails(lines: CartLine[]) {
   return { discountPct, potentialSavings };
 }
 
+export function CartLoginOfferCopy({
+  discountPct,
+  potentialSavings,
+}: {
+  discountPct: number;
+  potentialSavings: number;
+}) {
+  return (
+    <div>
+      <p className="text-action text-base font-extrabold uppercase sm:text-lg">
+        PRIJAVITE SE I OSTVARITE {discountPct}% LOYALTY POPUSTA
+      </p>
+      <p className="mt-0.5 text-sm font-semibold text-ink-900">
+        15% popusta za prvu kupovinu
+      </p>
+      <p className="mt-0.5 text-xs text-ink-600">
+        Važi za artikle koji nisu na akciji.
+        {potentialSavings > 0
+          ? ` Moguća dodatna ušteda u ovoj korpi: ${formatRsd(potentialSavings)}.`
+          : null}
+      </p>
+    </div>
+  );
+}
+
 export function CartLoginOffer({
   onNavigate,
   reopenDrawerAfterLogin = false,
@@ -359,17 +384,10 @@ export function CartLoginOffer({
         <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-full">
           <LogIn className="size-4" aria-hidden />
         </span>
-        <div>
-          <p className="text-action text-base font-extrabold uppercase sm:text-lg">
-            PRIJAVITE SE I OSTVARITE {discountPct}% LOYALTY POPUSTA
-          </p>
-          <p className="mt-0.5 text-xs text-ink-600">
-            Važi za artikle koji nisu na akciji.
-            {potentialSavings > 0
-              ? ` Moguća dodatna ušteda u ovoj korpi: ${formatRsd(potentialSavings)}.`
-              : null}
-          </p>
-        </div>
+        <CartLoginOfferCopy
+          discountPct={discountPct}
+          potentialSavings={potentialSavings}
+        />
       </div>
       {reopenDrawerAfterLogin ? (
         <CartDrawerLoginOfferLink onNavigate={onNavigate} />

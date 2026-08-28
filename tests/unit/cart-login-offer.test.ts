@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
+  CartLoginOfferCopy,
   CartLoginOfferLink,
   getCartLoginOfferDetails,
 } from "@/components/cart/cart-view";
@@ -18,6 +21,29 @@ function cartLine(overrides: Partial<CartLine> = {}): CartLine {
 }
 
 describe("cart login offer", () => {
+  it("shows the first-purchase discount immediately below the loyalty headline", () => {
+    const markup = renderToStaticMarkup(
+      createElement(CartLoginOfferCopy, {
+        discountPct: 30,
+        potentialSavings: 0,
+      }),
+    );
+
+    const loyaltyHeadline = markup.indexOf(
+      "PRIJAVITE SE I OSTVARITE 30% LOYALTY POPUSTA",
+    );
+    const firstPurchaseCopy = markup.indexOf(
+      "15% popusta za prvu kupovinu",
+    );
+    const eligibilityCopy = markup.indexOf(
+      "Važi za artikle koji nisu na akciji.",
+    );
+
+    expect(loyaltyHeadline).toBeGreaterThanOrEqual(0);
+    expect(firstPurchaseCopy).toBeGreaterThan(loyaltyHeadline);
+    expect(eligibilityCopy).toBeGreaterThan(firstPurchaseCopy);
+  });
+
   it("passes the drawer close callback to the login link", () => {
     const onNavigate = () => undefined;
     const link = CartLoginOfferLink({ onNavigate });
