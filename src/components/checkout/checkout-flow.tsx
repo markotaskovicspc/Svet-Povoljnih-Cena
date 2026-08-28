@@ -54,6 +54,7 @@ import type { SocialAuthProvider } from "@/components/account/social-auth-button
 import type { CustomerAuthFormAction } from "@/components/account/customer-auth-methods";
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
+import { shouldRestoreBusinessBuyerType } from "@/lib/checkout/business-policy";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -230,6 +231,10 @@ export function CheckoutFlow({
     control: methods.control,
     name: "paymentMethod",
   });
+  const shippingLiceType = useWatch({
+    control: methods.control,
+    name: "shipping.liceType",
+  });
   const shippingCity = useWatch({
     control: methods.control,
     name: "shipping.city",
@@ -318,6 +323,27 @@ export function CheckoutFlow({
     getValues,
     preferredPaymentMethod,
     setValue,
+  ]);
+
+  useEffect(() => {
+    if (shippingLiceType !== "pravno") return;
+    const bankTransferEnabled = checkoutConfig.paymentMethods.some(
+      (method) => method.id === "uplata_na_racun",
+    );
+    if (
+      bankTransferEnabled &&
+      getValues("paymentMethod") !== "uplata_na_racun"
+    ) {
+      setValue("paymentMethod", "uplata_na_racun", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [
+    checkoutConfig.paymentMethods,
+    getValues,
+    setValue,
+    shippingLiceType,
   ]);
 
   const quoteLineKey = useMemo(
@@ -452,7 +478,14 @@ export function CheckoutFlow({
         const field = `shipping.${key}` as const;
         const current = getValues(field);
         const dirty = formState.dirtyFields.shipping?.[key];
-        if (!dirty && !current) {
+        const canRestoreBusinessType =
+          key === "liceType" &&
+          shouldRestoreBusinessBuyerType({
+            current: current as CheckoutAddress["liceType"] | undefined,
+            remembered: value as CheckoutAddress["liceType"] | undefined,
+            dirty: Boolean(dirty),
+          });
+        if (!dirty && (!current || canRestoreBusinessType)) {
           setValue(field, value as never, {
             shouldDirty: false,
             shouldTouch: false,
@@ -1354,6 +1387,10 @@ function readCreateOrderError(
       return "Izaberite važeće X Express mesto za kurirsku isporuku.";
     case "PAYMENT_UNAVAILABLE":
       return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
+    case "BUSINESS_REQUIRES_BANK_TRANSFER":
+      return "Za pravno lice porudžbina se potvrđuje uplatom na račun. Vratite se na podatke i proverite način plaćanja.";
+    case "CHECKOUT_SESSION_MISMATCH":
+      return "Podaci su promenjeni nakon što je porudžbina već evidentirana. Osvežite stranicu i proverite postojeću porudžbinu pre novog pokušaja.";
     case "DELIVERY_UNAVAILABLE":
       return "Dostava za ovu korpu trenutno ne može tačno da se obračuna. Proverite korpu ili kontaktirajte podršku.";
     case "EMPTY_CART":

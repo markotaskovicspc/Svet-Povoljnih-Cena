@@ -57,7 +57,9 @@ export interface OrderConfirmationProps {
   baseUrl?: string;
   accessToken?: string;
   includesPurchaseDocuments?: boolean;
+  includesWithdrawalForm?: boolean;
   guaranteeTermText?: string;
+  previewMode?: boolean;
 }
 
 export function OrderConfirmation({
@@ -65,8 +67,16 @@ export function OrderConfirmation({
   baseUrl = "https://www.svetpovoljnihcena.rs",
   accessToken,
   includesPurchaseDocuments = true,
+  includesWithdrawalForm = true,
   guaranteeTermText,
+  previewMode = false,
 }: OrderConfirmationProps) {
+  const buyer = order.billingAddress ?? order.shippingAddress;
+  const businessName = buyer.companyName?.trim();
+  const businessPib = buyer.pib?.trim();
+  const isBusiness = Boolean(businessName || businessPib);
+  const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
+  const businessDisplayName = businessName || contactName;
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
     : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}${
@@ -83,9 +93,25 @@ export function OrderConfirmation({
     <EmailLayout preview={`Porudžbina ${order.id} je uspešno primljena`}>
       <EmailEyebrow>Porudžbina je primljena</EmailEyebrow>
       <EmailHeading>Hvala vam na kupovini!</EmailHeading>
+      {previewMode ? (
+        <EmailNotice>
+          <strong>Kontrolni pregled — nije poslato kupcu.</strong>
+          <br />
+          Ova poruka prikazuje kako će izgledati potvrda za pravno lice.
+        </EmailNotice>
+      ) : null}
       <EmailParagraph>
-        Poštovani/a {order.shippingAddress.firstName}, vaša porudžbina je uspešno
-        evidentirana i započeli smo njenu pripremu.
+        {isBusiness ? (
+          <>
+            Poštovani, porudžbina za <strong>{businessDisplayName}</strong> je uspešno
+            evidentirana. Priprema počinje nakon evidentirane uplate na račun.
+          </>
+        ) : (
+          <>
+            Poštovani/a {order.shippingAddress.firstName}, vaša porudžbina je
+            uspešno evidentirana i započeli smo njenu pripremu.
+          </>
+        )}
       </EmailParagraph>
 
       <table
@@ -245,8 +271,12 @@ export function OrderConfirmation({
         <tbody>
           <DetailRow
             label="Kupac"
-            value={`${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`}
+            value={businessName || contactName}
           />
+          {businessPib ? <DetailRow label="PIB" value={businessPib} /> : null}
+          {isBusiness && contactName ? (
+            <DetailRow label="Kontakt" value={contactName} />
+          ) : null}
           <DetailRow
             label="Adresa isporuke"
             value={`${order.shippingAddress.street}, ${order.shippingAddress.postalCode} ${order.shippingAddress.city}`}
@@ -259,6 +289,20 @@ export function OrderConfirmation({
           ) : null}
         </tbody>
       </table>
+
+      {order.paymentMethod === "uplata_na_racun" ? (
+        <>
+          <EmailDivider />
+          <EmailSectionHeading>Podaci za uplatu</EmailSectionHeading>
+          <EmailNotice>
+            Uplatite <strong>{fmt(order.total)}</strong> na račun{" "}
+            <strong>{MERCHANT_LEGAL_INFO.bankAccount}</strong> kod{" "}
+            {MERCHANT_LEGAL_INFO.bankName}. Kao poziv na broj navedite{" "}
+            <strong>{order.id}</strong>. Porudžbina ide u pripremu nakon što
+            evidentiramo uplatu.
+          </EmailNotice>
+        </>
+      ) : null}
 
       {includesPurchaseDocuments || guaranteeTermText ? (
         <>
@@ -275,7 +319,9 @@ export function OrderConfirmation({
               {includesPurchaseDocuments ? (
                 <>
                   <AttachmentRow label="Predračun sa pregledom cena i PDV-a" />
-                  <AttachmentRow label="Obrazac za odustanak od kupovine" />
+                  {includesWithdrawalForm ? (
+                    <AttachmentRow label="Obrazac za odustanak od kupovine" />
+                  ) : null}
                 </>
               ) : null}
               {guaranteeTermText ? (
@@ -298,10 +344,14 @@ export function OrderConfirmation({
         </>
       ) : null}
 
-      <EmailDivider />
-      <EmailButton href={orderUrl}>Pogledaj porudžbinu</EmailButton>
+      {previewMode ? null : (
+        <>
+          <EmailDivider />
+          <EmailButton href={orderUrl}>Pogledaj porudžbinu</EmailButton>
+        </>
+      )}
 
-      {guestReclamationUrl ? (
+      {!previewMode && guestReclamationUrl ? (
         <>
           <EmailDivider />
           <EmailParagraph>

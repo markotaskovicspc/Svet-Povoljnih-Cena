@@ -47,17 +47,27 @@ export async function sendOrderConfirmation(args: {
   attachInvoice?: boolean;
   idempotencyKey?: string;
   accessToken?: string;
+  /** Preview sends can explicitly suppress the normal internal order copy. */
+  bcc?: string | string[] | null;
+  subjectPrefix?: string;
+  previewMode?: boolean;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
   const guaranteeItems = guaranteeItemsForOrder(args.order.items);
+  const invoiceBuyer = args.order.billingAddress ?? args.order.shippingAddress;
+  const isBusinessBuyer = Boolean(
+    invoiceBuyer.companyName?.trim() || invoiceBuyer.pib?.trim(),
+  );
   const { html, text } = await renderEmail(
     OrderConfirmation({
       order: args.order,
       baseUrl: cfg.baseUrl,
       accessToken: args.accessToken,
       includesPurchaseDocuments: args.attachInvoice !== false,
+      includesWithdrawalForm: !isBusinessBuyer,
       guaranteeTermText: guaranteeItems.length ? GUARANTEE_TERM_TEXT : undefined,
+      previewMode: args.previewMode,
     }),
   );
 
@@ -69,11 +79,13 @@ export async function sendOrderConfirmation(args: {
       content: (await buildInvoicePdf(pdfOrder)).toString("base64"),
       contentType: "application/pdf",
     });
-    attachments.push({
-      filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
-      content: (await buildWithdrawalFormPdf(pdfOrder)).toString("base64"),
-      contentType: "application/pdf",
-    });
+    if (!isBusinessBuyer) {
+      attachments.push({
+        filename: `obrazac-za-odustajanje-${args.order.id}.pdf`,
+        content: (await buildWithdrawalFormPdf(pdfOrder)).toString("base64"),
+        contentType: "application/pdf",
+      });
+    }
   }
   if (guaranteeItems.length) {
     attachments.push({
@@ -92,13 +104,13 @@ export async function sendOrderConfirmation(args: {
   return trackedDispatch({
     kind: "order_confirmation",
     to: args.to,
-    subject: `Porudžbina ${args.order.id} — potvrda`,
+    subject: `${args.subjectPrefix ? `${args.subjectPrefix} ` : ""}Porudžbina ${args.order.id} — potvrda`,
     html,
     text,
     // Confirmation copies belong only in the dedicated orders inbox. The
     // generic order BCC can be an alias for the same mailbox, which would make
     // the provider deliver two copies of one message.
-    bcc: ORDER_CONFIRMATION_BCC,
+    bcc: args.bcc === undefined ? ORDER_CONFIRMATION_BCC : args.bcc,
     attachments,
     tags: { kind: "order_confirmation", order: args.order.id },
     metadata: {
@@ -106,6 +118,8 @@ export async function sendOrderConfirmation(args: {
       attachmentNames: attachments.map((attachment) => attachment.filename),
       attachmentCount: attachments.length,
       guaranteeItemCount: guaranteeItems.length,
+      businessBuyer: isBusinessBuyer,
+      previewMode: args.previewMode === true,
     },
     idempotencyKey: args.idempotencyKey ?? `order-conf:${args.order.id}`,
   });

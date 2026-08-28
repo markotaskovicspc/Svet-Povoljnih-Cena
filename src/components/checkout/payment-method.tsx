@@ -113,74 +113,87 @@ export function PaymentMethodStep({
 }) {
   const { register, watch } = useFormContext<CheckoutFormData>();
   const active = watch("paymentMethod");
+  const isBusiness = watch("shipping.liceType") === "pravno";
+  const availableMethods = isBusiness
+    ? methods.filter((method) => method.id === "uplata_na_racun")
+    : methods;
 
-  if (!methods.length) {
+  if (!availableMethods.length) {
     return (
       <div className="rounded-xl border border-action/30 bg-action/5 px-4 py-3 text-sm text-action">
-        Trenutno nema aktivnih načina plaćanja. Kontaktirajte podršku ili
-        pokušajte kasnije.
+        {isBusiness
+          ? "Uplata na račun trenutno nije dostupna. Kontaktirajte podršku pre potvrde porudžbine za pravno lice."
+          : "Trenutno nema aktivnih načina plaćanja. Kontaktirajte podršku ili pokušajte kasnije."}
       </div>
     );
   }
 
   return (
-    <fieldset
-      data-testid="checkout-payment-methods"
-      className="flex snap-x gap-3 overflow-x-auto p-0.5 pb-1.5 lg:gap-2.5"
-    >
-      {methods.map((method) => {
-        const meta = METHOD_META[method.id];
-        const Icon = meta.icon;
-        const checked = active === method.id;
-        return (
-          <label
-            key={method.id}
-            htmlFor={`pay-${method.id}`}
-            className={cn(
-              "bg-surface ring-border/60 group flex min-w-[180px] flex-1 snap-start cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
-              "hover:ring-walnut/40",
-              checked && "ring-walnut shadow-soft-2 ring-2",
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className={cn(
-                  "inline-flex size-9 items-center justify-center rounded-xl lg:size-8",
-                  checked ? "bg-walnut text-canvas" : "bg-muted-bg text-ink-700",
-                )}
-                aria-hidden
-              >
-                <Icon className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-ink-900">
-                  {method.label}
+    <div className="space-y-3">
+      {isBusiness ? (
+        <p className="rounded-xl border border-success/20 bg-success/5 px-3 py-2 text-sm text-ink-700">
+          Za pravno lice izdaje se predračun, a priprema porudžbine počinje
+          nakon evidentirane uplate na račun.
+        </p>
+      ) : null}
+      <fieldset
+        data-testid="checkout-payment-methods"
+        className="flex snap-x gap-3 overflow-x-auto p-0.5 pb-1.5 lg:gap-2.5"
+      >
+        {availableMethods.map((method) => {
+          const meta = METHOD_META[method.id];
+          const Icon = meta.icon;
+          const checked = active === method.id;
+          return (
+            <label
+              key={method.id}
+              htmlFor={`pay-${method.id}`}
+              className={cn(
+                "bg-surface ring-border/60 group flex min-w-[180px] flex-1 snap-start cursor-pointer flex-col gap-2 rounded-2xl p-4 ring-1 transition lg:gap-1.5 lg:p-3",
+                "hover:ring-walnut/40",
+                checked && "ring-walnut shadow-soft-2 ring-2",
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "inline-flex size-9 items-center justify-center rounded-xl lg:size-8",
+                    checked ? "bg-walnut text-canvas" : "bg-muted-bg text-ink-700",
+                  )}
+                  aria-hidden
+                >
+                  <Icon className="size-4" />
                 </span>
-                <span className="text-xs text-ink-500">
-                  {method.note || meta.short}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-ink-900">
+                    {method.label}
+                  </span>
+                  <span className="text-xs text-ink-500">
+                    {method.note || meta.short}
+                  </span>
+                </div>
               </div>
-            </div>
-            {checked ? (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="border-border/60 mt-1 overflow-hidden border-t pt-2 text-xs text-ink-700 lg:pt-1.5"
-              >
-                {method.note ? <p>{method.note}</p> : meta.details}
-              </motion.div>
-            ) : null}
-            <input
-              id={`pay-${method.id}`}
-              type="radio"
-              value={method.id}
-              className="sr-only"
-              {...register("paymentMethod")}
-            />
-          </label>
-        );
-      })}
-    </fieldset>
+              {checked ? (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="border-border/60 mt-1 overflow-hidden border-t pt-2 text-xs text-ink-700 lg:pt-1.5"
+                >
+                  {method.note ? <p>{method.note}</p> : meta.details}
+                </motion.div>
+              ) : null}
+              <input
+                id={`pay-${method.id}`}
+                type="radio"
+                value={method.id}
+                className="sr-only"
+                {...register("paymentMethod")}
+              />
+            </label>
+          );
+        })}
+      </fieldset>
+    </div>
   );
 }

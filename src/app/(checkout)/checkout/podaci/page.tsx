@@ -112,6 +112,10 @@ export default async function CheckoutPodaciPage({
                   authenticated: true,
                   address: defaultAddress
                     ? {
+                        liceType:
+                          defaultAddress.companyName || defaultAddress.pib
+                            ? "pravno"
+                            : "fizicko",
                         firstName: defaultAddress.firstName,
                         lastName: defaultAddress.lastName,
                         phone: defaultAddress.phone,

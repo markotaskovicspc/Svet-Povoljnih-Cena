@@ -164,6 +164,8 @@ describe("all transactional Resend send flows", () => {
       ],
       attachmentCount: 3,
       guaranteeItemCount: 1,
+      businessBuyer: false,
+      previewMode: false,
     });
     expect(input.attachments).toEqual([
       expect.objectContaining({ contentType: "application/pdf" }),
@@ -281,6 +283,50 @@ describe("all transactional Resend send flows", () => {
         attachment.filename.startsWith("garantni-list-"),
       ),
     ).toBe(false);
+  });
+
+  it("renders business identity and bank instructions without consumer withdrawal form", async () => {
+    await sendOrderConfirmation({
+      order: {
+        ...order,
+        paymentMethod: "uplata_na_racun",
+        payment: { status: "pending" },
+        shippingAddress: {
+          ...order.shippingAddress,
+          firstName: "Milan",
+          lastName: "Jovanović",
+          companyName: "Kupac d.o.o.",
+          pib: "109876543",
+        },
+      },
+      to: "owner@example.test",
+      bcc: null,
+      subjectPrefix: "[PREGLED]",
+      previewMode: true,
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.subject).toContain("[PREGLED]");
+    expect(input.bcc).toBeNull();
+    expect(input.html).toContain("Kontrolni pregled");
+    expect(input.html).toContain("Kupac d.o.o.");
+    expect(input.html).toContain("109876543");
+    expect(input.html).toContain("Podaci za uplatu");
+    expect(input.html).toContain("265-3310310005375-34");
+    expect(input.html).not.toContain("Obrazac za odustanak od kupovine");
+    expect(input.html).not.toContain("Pogledaj porudžbinu");
+    expect(input.attachments).toHaveLength(2);
+    expect(
+      input.attachments.some((attachment: { filename: string }) =>
+        attachment.filename.startsWith("obrazac-za-odustajanje-"),
+      ),
+    ).toBe(false);
+    expect(input.metadata).toMatchObject({
+      attachmentCount: 2,
+      guaranteeItemCount: 1,
+      businessBuyer: true,
+      previewMode: true,
+    });
   });
 
   it("shows customer-friendly cash-on-delivery labels instead of raw values", async () => {

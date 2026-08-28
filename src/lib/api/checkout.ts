@@ -1,6 +1,5 @@
 import "server-only";
 import { Prisma, type PaymentMethod, type ShippingMethod } from "@prisma/client";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { validateVoucher, validateVoucherForCheckout } from "@/lib/api/vouchers";
@@ -45,6 +44,13 @@ import {
 import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
 import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
+import {
+  businessCheckoutRequiresBankTransfer,
+  checkoutBusinessIdentityMatchesOrder,
+} from "@/lib/checkout/business-policy";
+import type { CreateOrderInput } from "@/lib/checkout/order-schema";
+export { createOrderSchema } from "@/lib/checkout/order-schema";
+export type { CreateOrderInput } from "@/lib/checkout/order-schema";
 
 /**
  * Order creation (Phase 3C — item 3 of plan).
@@ -63,89 +69,6 @@ import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readin
  * The pricing engine in 3D will replace the inline `effectivePrice` helpers.
  */
 
-const lineSchema = z.object({
-  sku: z.string().min(1),
-  qty: z.int().min(1).max(99),
-  withAssembly: z.boolean().optional(),
-});
-
-const addressSchema = z.object({
-  liceType: z.enum(["fizicko", "pravno"]).optional(),
-  firstName: z.string().min(2),
-  lastName: z.string().min(2),
-  phone: z.string().min(8).max(32),
-  street: z.string().min(3),
-  city: z.string().min(2),
-  postalCode: z.string().regex(/^\d{5}$/),
-  xExpressTownId: z.coerce.number().int().positive().optional().nullable(),
-  xExpressStreetId: z.coerce.number().int().positive().optional().nullable(),
-  country: z.string().default("RS"),
-  companyName: z.string().optional(),
-  pib: z.string().regex(/^\d{9}$/).optional(),
-});
-
-export const createOrderSchema = z.object({
-  checkoutSessionId: z
-    .string()
-    .min(12)
-    .max(80)
-    .regex(/^[A-Za-z0-9_-]+$/)
-    .optional(),
-  guestEmail: z.email().optional(),
-  lines: z.array(lineSchema).min(1).max(50),
-  shipping: addressSchema,
-  billingSameAsShipping: z.boolean().default(true),
-  billing: addressSchema.optional(),
-  shippingMethod: z.enum(["KURIR", "KAMION"]),
-  glsDeliveryPoint: z
-    .object({
-      code: z.string().min(1),
-      name: z.string().min(1),
-      street: z.string().optional().nullable(),
-      city: z.string().optional().nullable(),
-      postalCode: z.string().optional().nullable(),
-      label: z.string().optional().nullable(),
-    })
-    .optional()
-    .nullable(),
-  paymentMethod: z.enum([
-    "IPS",
-    "KARTICA",
-    "GOOGLE_PAY",
-    "APPLE_PAY",
-    "UPLATA_NA_RACUN",
-    "POUZECE_GOTOVINA",
-    "POUZECE_KARTICA",
-  ]),
-  voucherCode: z.string().trim().optional(),
-  /** Pay with a tokenized saved card (eligible only for logged-in users). */
-  useSavedCard: z.boolean().optional(),
-  notes: z.string().max(500).optional(),
-  consent: z.literal(true),
-  analytics: z
-    .object({
-      anonymousId: z.string().min(3).max(96),
-      sessionId: z.string().min(3).max(96),
-      consentVersion: z.string().min(1).max(40),
-      path: z.string().max(500),
-    })
-    .optional(),
-}).superRefine((input, context) => {
-  const seen = new Set<string>();
-  input.lines.forEach((line, index) => {
-    if (seen.has(line.sku)) {
-      context.addIssue({
-        code: "custom",
-        path: ["lines", index, "sku"],
-        message: "Artikal je dupliran u korpi.",
-      });
-    }
-    seen.add(line.sku);
-  });
-});
-
-export type CreateOrderInput = z.infer<typeof createOrderSchema>;
-
 export type CreateOrderError =
   | { code: "EMPTY_CART" }
   | { code: "OUT_OF_STOCK"; sku: string }
@@ -155,6 +78,8 @@ export type CreateOrderError =
   | { code: "DELIVERY_POINT_INVALID" }
   | { code: "DELIVERY_ADDRESS_INVALID" }
   | { code: "PAYMENT_UNAVAILABLE" }
+  | { code: "BUSINESS_REQUIRES_BANK_TRANSFER" }
+  | { code: "CHECKOUT_SESSION_MISMATCH" }
   | { code: "DELIVERY_UNAVAILABLE" };
 
 export interface CreateOrderResult {
@@ -442,6 +367,12 @@ export async function createOrder(
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
   if (!input.lines.length) return { ok: false, error: { code: "EMPTY_CART" } };
+  if (businessCheckoutRequiresBankTransfer(input)) {
+    return {
+      ok: false,
+      error: { code: "BUSINESS_REQUIRES_BANK_TRANSFER" },
+    };
+  }
   if (input.checkoutSessionId) {
     const existingSession = await db.checkoutSession.findUnique({
       where: { id: input.checkoutSessionId },
@@ -460,6 +391,10 @@ export async function createOrder(
             voucherDiscount: true,
             firstPurchaseDiscount: true,
             savedCardDiscount: true,
+            shipCompanyName: true,
+            shipPib: true,
+            billCompanyName: true,
+            billPib: true,
             supplierFulfillments: { select: { id: true } },
             items: {
               select: {
@@ -478,6 +413,12 @@ export async function createOrder(
     });
     if (existingSession?.order) {
       const existing = existingSession.order;
+      if (!checkoutBusinessIdentityMatchesOrder(input, existing)) {
+        return {
+          ok: false,
+          error: { code: "CHECKOUT_SESSION_MISMATCH" },
+        };
+      }
       await enqueueCheckoutPostCommit({
         orderId: existing.id,
         orderNumber: existing.number,
