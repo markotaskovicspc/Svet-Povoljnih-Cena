@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { OrderStatus, Prisma, type SupplierFulfillmentStatus } from "@prisma/client";
+import {
+  OrderStatus,
+  PaymentMethod,
+  Prisma,
+  type SupplierFulfillmentStatus,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
@@ -33,7 +38,15 @@ import {
   enqueueSupplierShippingDocumentJobsForOrder,
   releaseOrderSupplierReservations,
 } from "@/lib/rabalux/fulfillment";
-import { updateWebOrderItemQuantity } from "@/lib/admin/web-order-edit.server";
+import {
+  addWebOrderItem,
+  updateWebOrderItemQuantity,
+} from "@/lib/admin/web-order-edit.server";
+import { updateWebOrderPaymentMethod } from "@/lib/admin/web-order-payment.server";
+import {
+  EDITABLE_WEB_ORDER_PAYMENT_METHODS,
+  planWebOrderPaymentMethodChange,
+} from "@/lib/admin/web-order-payment";
 import { updateWebOrderShippingContact } from "@/lib/admin/web-order-shipping.server";
 import {
   planWebOrderShippingEdit,
@@ -58,6 +71,11 @@ import {
   fulfillmentPaymentReadiness,
   isCashOnDeliveryPaymentMethod,
 } from "@/lib/payments/fulfillment-readiness";
+import {
+  clientPaymentMethodToDb,
+  getCheckoutPaymentMethods,
+} from "@/lib/checkout/config";
+import { adminPaymentMethodLabel } from "@/lib/payments/admin-display";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -107,6 +125,126 @@ async function updateWebOrderItemQuantityAction(
         message: result.receiptRefreshed
           ? `Stavka ${result.sku} je promenjena (${result.previousQty} → ${result.newQty}); rezervacije, iznosi i predračun su osveženi, a obaveštenje kupcu je zakazano.`
           : `Stavka ${result.sku} je promenjena i obaveštenje kupcu je zakazano, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Ne ponavljajte izmenu; regenerišite dokument ručno.`,
+      };
+    },
+  )(formData);
+}
+
+async function addWebOrderItemAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.webItemAdd", entity: "OrderItem" },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const sku = String(formData.get("sku") ?? "").trim();
+      const rawQty = String(formData.get("qty") ?? "").trim();
+      if (
+        !orderId ||
+        !sku ||
+        sku.length > 100 ||
+        !/^\d+$/.test(rawQty) ||
+        Number(rawQty) < 1 ||
+        Number(rawQty) > 999
+      ) {
+        return {
+          ok: false as const,
+          error: "Unesite ispravnu šifru i količinu od 1 do 999.",
+        };
+      }
+      const result = await addWebOrderItem({
+        orderId,
+        sku,
+        qty: Number(rawQty),
+        actorId,
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      const change =
+        result.previousQty > 0
+          ? `Količina artikla ${result.sku} je povećana (${result.previousQty} → ${result.newQty})`
+          : `Artikal ${result.sku} je dodat u količini ${result.newQty}`;
+      return {
+        ok: true as const,
+        entityId: result.itemId,
+        diff: {
+          orderId,
+          sku: result.sku,
+          previousQty: result.previousQty,
+          newQty: result.newQty,
+          totals: result.totals,
+          receiptRefreshed: result.receiptRefreshed,
+          receiptError: result.receiptError,
+          customerNotificationQueued: result.customerNotificationQueued,
+        },
+        tone: result.receiptRefreshed
+          ? ("success" as const)
+          : ("warning" as const),
+        message: result.receiptRefreshed
+          ? `${change}; rezervacije, iznosi i predračun su osveženi, a obaveštenje kupcu je zakazano.`
+          : `${change} i obaveštenje kupcu je zakazano, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Ne ponavljajte izmenu; regenerišite dokument ručno.`,
+      };
+    },
+  )(formData);
+}
+
+async function updateWebOrderPaymentMethodAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "order.webPaymentMethodUpdate",
+      entity: "Payment",
+    },
+    async (actorId, formData: FormData) => {
+      const orderId = String(formData.get("orderId") ?? "");
+      const rawMethod = String(formData.get("paymentMethod") ?? "");
+      if (
+        !orderId ||
+        !Object.values(PaymentMethod).includes(rawMethod as PaymentMethod)
+      ) {
+        return {
+          ok: false as const,
+          error: "Izaberite ispravan način plaćanja.",
+        };
+      }
+      const result = await updateWebOrderPaymentMethod({
+        orderId,
+        nextMethod: rawMethod as PaymentMethod,
+        actorId,
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      const previousLabel = adminPaymentMethodLabel(result.previousMethod);
+      const nextLabel = adminPaymentMethodLabel(result.nextMethod);
+      const supplierMessage = result.supplierJobsQueued
+        ? " Dobavljački tok je usklađen sa novim načinom plaćanja."
+        : "";
+      return {
+        ok: true as const,
+        entityId: result.paymentId,
+        diff: {
+          orderId,
+          previousMethod: result.previousMethod,
+          nextMethod: result.nextMethod,
+          invalidatedPaymentAttempts: result.invalidatedPaymentAttempts,
+          supplierJobsQueued: result.supplierJobsQueued,
+          receiptRefreshed: result.receiptRefreshed,
+          receiptError: result.receiptError,
+        },
+        tone: result.receiptRefreshed
+          ? ("success" as const)
+          : ("warning" as const),
+        message: result.receiptRefreshed
+          ? `Način plaćanja je promenjen: ${previousLabel} → ${nextLabel}. Predračun je osvežen, ali nije automatski poslat kupcu.${supplierMessage}`
+          : `Način plaćanja je promenjen: ${previousLabel} → ${nextLabel}, ali predračun nije osvežen (${result.receiptError ?? "nepoznata greška"}). Regenerišite ga ručno.${supplierMessage}`,
       };
     },
   )(formData);
@@ -1180,6 +1318,14 @@ export async function WebOrderDetail({ id }: { id: string }) {
     include: {
       items: {
         include: {
+          dispatchNoteItems: {
+            where: { dispatchNote: { status: { not: "CANCELLED" } } },
+            select: { id: true },
+          },
+          pickupBatchLines: {
+            where: { batch: { status: { not: "CANCELLED" } } },
+            select: { id: true },
+          },
           product: {
             select: {
               packQty: true,
@@ -1202,6 +1348,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
       events: { orderBy: { createdAt: "desc" } },
       payments: { orderBy: { createdAt: "desc" } },
       paymentRefunds: { orderBy: { createdAt: "desc" } },
+      dispatchNotes: {
+        where: { status: { not: "CANCELLED" } },
+        select: { id: true },
+      },
       shipments: { include: { events: { orderBy: { occurredAt: "desc" } } } },
       pickupBatchLines: {
         where: {
@@ -1242,6 +1392,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
     },
   });
   if (!order) notFound();
+  const [configuredPaymentMethods, saleFiscalDocumentCount] = await Promise.all([
+    getCheckoutPaymentMethods(),
+    db.fiscalDocument.count({ where: { orderId: order.id, kind: "SALE" } }),
+  ]);
   const courierPackages = derivePhysicalPackages(
     order.items.map((item) => ({
       id: item.id,
@@ -1350,20 +1504,74 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
   const latestFiscal = order.fiscalDocuments[0] ?? null;
+  const businessBuyer = [
+    order.shipCompanyName,
+    order.shipPib,
+    order.billCompanyName,
+    order.billPib,
+  ].some((value) => Boolean(value?.trim()));
+  const activeRabaluxOrderItemIds = new Set(
+    order.supplierFulfillments
+      .filter(
+        (fulfillment) =>
+          fulfillment.supplier.integrationKey === "RABALUX" &&
+          !["CANCELLED", "COMPLETED"].includes(fulfillment.status),
+      )
+      .flatMap((fulfillment) =>
+        fulfillment.items.map((item) => item.orderItemId),
+      ),
+  );
+  const mixedRabaluxOrder =
+    activeRabaluxOrderItemIds.size > 0 &&
+    order.items.some((item) => !activeRabaluxOrderItemIds.has(item.id));
+  const paymentChangeAttempts = order.payments.map((payment) => ({
+    status: payment.status,
+    providerRef: payment.providerRef,
+    paymentReference: payment.paymentReference,
+    redirectUrl: payment.redirectUrl,
+    hasRawRequest: payment.rawRequest != null,
+    hasRawResponse: payment.rawResponse != null,
+  }));
+  const paymentChangeOptions = configuredPaymentMethods.flatMap((method) => {
+    const value = clientPaymentMethodToDb(method.id);
+    if (
+      !EDITABLE_WEB_ORDER_PAYMENT_METHODS.includes(
+        value as (typeof EDITABLE_WEB_ORDER_PAYMENT_METHODS)[number],
+      ) ||
+      value === order.paymentMethod
+    ) {
+      return [];
+    }
+    try {
+      planWebOrderPaymentMethodChange({
+        currentMethod: order.paymentMethod,
+        nextMethod: value,
+        businessBuyer,
+        mixedRabaluxOrder,
+        attempts: paymentChangeAttempts,
+      });
+      return [{ value, label: method.label }];
+    } catch {
+      return [];
+    }
+  });
+  const currentEditablePayments = order.payments.filter(
+    (payment) => payment.status !== "FAILED",
+  );
   const canOfferWebItemEdit =
     ["KREIRANO", "POTVRDJENO", "U_PRIPREMI"].includes(order.status) &&
     !order.stockRestoredAt &&
     !order.cancelledAt &&
     !order.fiscal &&
-    order.fiscalDocuments.length === 0 &&
+    saleFiscalDocumentCount === 0 &&
     order.reclamations.length === 0 &&
     order.paymentRefunds.length === 0 &&
     order.shipments.every(
       (shipment) =>
         shipment.purpose !== "ORDER_DELIVERY" || shipment.status === "FAILED",
     ) &&
-    order.payments.length > 0 &&
-    order.payments.every(
+    currentEditablePayments.length > 0 &&
+    currentEditablePayments.every(
       (payment) =>
         payment.status === "PENDING" &&
         ["MANUAL", "COD"].includes(payment.provider) &&
@@ -1371,6 +1579,24 @@ export async function WebOrderDetail({ id }: { id: string }) {
         !payment.paymentReference &&
         !payment.redirectUrl,
     );
+  const canOfferPaymentMethodEdit =
+    ["KREIRANO", "POTVRDJENO", "U_PRIPREMI"].includes(order.status) &&
+    !order.stockRestoredAt &&
+    !order.cancelledAt &&
+    !order.fiscal &&
+    saleFiscalDocumentCount === 0 &&
+    order.reclamations.length === 0 &&
+    order.paymentRefunds.length === 0 &&
+    order.dispatchNotes.length === 0 &&
+    order.items.every(
+      (item) =>
+        item.warehouseDispatchedQty === 0 &&
+        item.dispatchNoteItems.length === 0 &&
+        item.pickupBatchLines.length === 0,
+    ) &&
+    order.pickupBatchLines.length === 0 &&
+    activeDeliveryShipments.length === 0 &&
+    paymentChangeOptions.length > 0;
 
   return (
     <>
@@ -1387,10 +1613,11 @@ export async function WebOrderDetail({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Količina stavke može da se smanji ili stavka ukloni samo pre
-            naplate, fiskalizacije i otpreme; poslednja stavka se uklanja
-            otkazivanjem cele porudžbine. Adresa i telefon mogu da se isprave
-            do predaje pošiljke kuriru, uz obaveznu zamenu postojeće adresnice.
+            Novi artikal može da se doda, a postojeća količina da se poveća,
+            smanji ili ukloni samo pre naplate, fiskalizacije i otpreme;
+            poslednja stavka se uklanja otkazivanjem cele porudžbine. Adresa i
+            telefon mogu da se isprave do predaje pošiljke kuriru, uz obaveznu
+            zamenu postojeće adresnice.
           </p>
           <Card>
             <CardTitle>Identitet prodajnog naloga</CardTitle>
@@ -1506,6 +1733,55 @@ export async function WebOrderDetail({ id }: { id: string }) {
               }))}
               empty="Bez stavki."
             />
+            {canOfferWebItemEdit ? (
+              <AdminActionForm
+                action={addWebOrderItemAction}
+                refreshOnSuccess
+                testId="web-order-item-add-form"
+                className="mt-5 rounded-xl border border-border/70 bg-muted-bg/40 p-4"
+              >
+                <div className="mb-3">
+                  <h3 className="font-medium text-ink-900">Dodaj artikal</h3>
+                  <p className="mt-1 text-sm text-ink-500">
+                    Unesite tačnu šifru iz WEB kataloga. Ako šifra već postoji
+                    u porudžbini, uneta količina će biti dodata na postojeću.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <Field label="Šifra artikla" className="min-w-56 flex-1">
+                    <input
+                      name="sku"
+                      type="text"
+                      required
+                      maxLength={100}
+                      autoComplete="off"
+                      aria-label="Šifra artikla za dodavanje"
+                      className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm uppercase"
+                    />
+                  </Field>
+                  <Field label="Količina" className="w-28">
+                    <input
+                      name="qty"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      defaultValue={1}
+                      required
+                      aria-label="Količina artikla za dodavanje"
+                      className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-right text-sm"
+                    />
+                  </Field>
+                  <SubmitButton
+                    pendingLabel="Dodavanje…"
+                    confirm="Dodati uneti artikal u WEB porudžbinu? Cena, dostava, rezervacije i ukupan iznos biće ponovo obračunati."
+                  >
+                    Dodaj artikal
+                  </SubmitButton>
+                </div>
+              </AdminActionForm>
+            ) : null}
           </Card>
 
           <Card>
@@ -1826,6 +2102,60 @@ export async function WebOrderDetail({ id }: { id: string }) {
               ) : null}
               <Row k="Ukupno" v={<strong>{formatRsd(num(order.total))}</strong>} />
             </dl>
+          </Card>
+
+          <Card>
+            <CardTitle
+              description={`Trenutno: ${adminPaymentMethodLabel(order.paymentMethod)}`}
+            >
+              Način plaćanja
+            </CardTitle>
+            {canOfferPaymentMethodEdit ? (
+              <AdminActionForm
+                action={updateWebOrderPaymentMethodAction}
+                className="space-y-3"
+                preserveValues
+                refreshOnSuccess
+                testId="web-order-payment-method-form"
+              >
+                <input type="hidden" name="orderId" value={order.id} />
+                <Field label="Novi način plaćanja">
+                  <select
+                    name="paymentMethod"
+                    defaultValue={order.paymentMethod}
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  >
+                    <option value={order.paymentMethod}>
+                      {adminPaymentMethodLabel(order.paymentMethod)} (trenutno)
+                    </option>
+                    {paymentChangeOptions.map((method) => (
+                      <option key={method.value} value={method.value}>
+                        {method.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <p className="text-xs leading-5 text-ink-500">
+                  Dostupne su uplata na račun i plaćanje pouzećem. Online
+                  plaćanje se ovde ne pokreće ponovo; predračun se osvežava bez
+                  automatskog slanja kupcu.
+                </p>
+                <div className="flex justify-end">
+                  <SubmitButton
+                    size="sm"
+                    confirm="Promeniti način plaćanja? Stara aktivna evidencija biće zatvorena, nova otvorena, a predračun osvežen."
+                  >
+                    Promeni način plaćanja
+                  </SubmitButton>
+                </div>
+              </AdminActionForm>
+            ) : (
+              <p className="text-sm leading-6 text-ink-500">
+                Izmena je dostupna samo pre pokretanja ili potvrde naplate,
+                fiskalizacije, otpremnice i isporuke. Za pravno lice ostaje
+                obavezna uplata na račun.
+              </p>
+            )}
           </Card>
 
           <Card>

@@ -421,6 +421,27 @@ describe("all transactional Resend send flows", () => {
     expect(input.text).toContain("1.490");
   });
 
+  it("obaveštava kupca kada je novi artikal dodat u porudžbinu", async () => {
+    await sendOrderItemsChanged({
+      order: {
+        ...order,
+        total: 3_490,
+      },
+      to: "delivered@resend.dev",
+      itemName: "Novi test proizvod",
+      sku: "AUDIT-NEW",
+      previousQty: 0,
+      newQty: 2,
+      idempotencyKey: "order-items-changed:add-operation",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.html).toContain("Novi artikal je dodat");
+    expect(input.html).toContain("Novi test proizvod");
+    expect(input.html).toContain("0 → 2");
+    expect(input.text).toContain("3.490");
+  });
+
   it("šalje magacinu broj naloga kada kupac otkaže već učitanu porudžbinu", async () => {
     await sendWarehouseOrderCancellation({
       to: ["dc@example.invalid"],

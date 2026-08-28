@@ -29,15 +29,20 @@ export function OrderItemsChanged({
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
     : baseUrl;
   const removed = newQty === 0;
+  const added = previousQty === 0 && newQty > 0;
+  const increased = newQty > previousQty;
+  const changeDescription = removed
+    ? "Jedan artikal je uklonjen iz vaše porudžbine. Sve ostale stavke ostaju potvrđene."
+    : added
+      ? "Novi artikal je dodat u vašu porudžbinu. Sve ranije potvrđene stavke ostaju nepromenjene."
+      : increased
+        ? "Količina jednog artikla u vašoj porudžbini je povećana. Sve ostale stavke ostaju potvrđene."
+        : "Količina jednog artikla u vašoj porudžbini je smanjena. Sve ostale stavke ostaju potvrđene.";
 
   return (
     <EmailLayout preview={`Izmena porudžbine ${order.id}`}>
       <EmailHeading>Porudžbina je izmenjena</EmailHeading>
-      <EmailParagraph>
-        {removed
-          ? "Jedan artikal je uklonjen iz vaše porudžbine jer trenutno nije dostupan. Sve ostale stavke ostaju potvrđene."
-          : "Količina jednog artikla u vašoj porudžbini je smanjena. Sve ostale stavke ostaju potvrđene."}
-      </EmailParagraph>
+      <EmailParagraph>{changeDescription}</EmailParagraph>
       <table
         role="presentation"
         cellPadding={0}

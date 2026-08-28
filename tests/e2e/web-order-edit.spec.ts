@@ -20,12 +20,16 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
   const adminEmail = `${prefix.toLowerCase()}@example.invalid`;
   const adminPassword = `QaWebEdit!${runId}x`;
   const orderNumber = `${prefix}-ORDER`;
-  const skus = [`${prefix}-A`, `${prefix}-B`] as const;
+  const skus = [`${prefix}-A`, `${prefix}-B`, `${prefix}-C`] as const;
   let db: PrismaClient;
   let adminId = "";
   let orderId = "";
   let warehouseId = "";
   let createdWarehouse = false;
+  let groupId = "";
+  let parentCategoryId = "";
+  let childCategoryId = "";
+  let priceListId = "";
   const productIds: string[] = [];
 
   test.beforeAll(async () => {
@@ -62,21 +66,74 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     }
     warehouseId = warehouse.id;
 
+    const group = await db.group.create({
+      data: {
+        slug: `${prefix}-group`.toLowerCase(),
+        name: `${prefix} grupa`,
+      },
+      select: { id: true },
+    });
+    groupId = group.id;
+    const parentCategory = await db.category.create({
+      data: {
+        slug: `${prefix}-parent`.toLowerCase(),
+        name: `${prefix} kategorija`,
+        path: `/${prefix.toLowerCase()}-parent`,
+        level: 0,
+      },
+      select: { id: true, path: true },
+    });
+    parentCategoryId = parentCategory.id;
+    const childCategory = await db.category.create({
+      data: {
+        slug: `${prefix}-child`.toLowerCase(),
+        name: `${prefix} potkategorija`,
+        path: `${parentCategory.path}/${prefix.toLowerCase()}-child`,
+        level: 1,
+        parentId: parentCategory.id,
+      },
+      select: { id: true },
+    });
+    childCategoryId = childCategory.id;
+    const priceList = await db.priceList.create({
+      data: {
+        code: `${prefix}-RETAIL`,
+        name: `${prefix} WEB cenovnik`,
+        kind: "RETAIL",
+        active: true,
+      },
+      select: { id: true },
+    });
+    priceListId = priceList.id;
+
     for (const [index, sku] of skus.entries()) {
+      const fullPrice = index === 0 ? 1_200 : index === 1 ? 500 : 700;
       const product = await db.product.create({
         data: {
           sku,
           slug: `${prefix}-${index}`.toLowerCase(),
           name: `${prefix} artikal ${index + 1}`,
           description: "Privremeni acceptance artikal za izmenu WEB porudžbine.",
-          fullPrice: index === 0 ? 1_200 : 500,
+          fullPrice,
           salePrice: index === 0 ? 1_000 : null,
           stock: 10,
           dcAvailableQty: 10,
-          isActive: false,
+          isActive: true,
+          availableWebAuto: true,
+          groupId,
           unitPackWidthCm: 10,
           unitPackDepthCm: 10,
           unitPackHeightCm: 10,
+          categories: {
+            create: { categoryId: childCategoryId },
+          },
+          priceListEntries: {
+            create: {
+              priceListId,
+              price: fullPrice,
+              validFrom: new Date(Date.now() - 60_000),
+            },
+          },
           warehouseStocks: {
             create: { warehouseId, qty: 10 },
           },
@@ -161,6 +218,18 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
       await db.auditLog.deleteMany({ where: { actorId: adminId } });
     }
     await db.product.deleteMany({ where: { id: { in: productIds } } });
+    if (priceListId) {
+      await db.priceList.deleteMany({ where: { id: priceListId } });
+    }
+    if (childCategoryId) {
+      await db.category.deleteMany({ where: { id: childCategoryId } });
+    }
+    if (parentCategoryId) {
+      await db.category.deleteMany({ where: { id: parentCategoryId } });
+    }
+    if (groupId) {
+      await db.group.deleteMany({ where: { id: groupId } });
+    }
     if (createdWarehouse && warehouseId) {
       await db.warehouse.deleteMany({ where: { id: warehouseId } });
     }
@@ -233,6 +302,183 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         }),
       )
       .toBe(2);
+  });
+
+  test("menja način plaćanja i čuva istoriju pokušaja", async ({ page }) => {
+    await login(page);
+    await page.goto(`/admin/erp/prodajni-nalozi/${orderId}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    let paymentForm = page.getByTestId("web-order-payment-method-form");
+    await paymentForm
+      .getByLabel("Novi način plaćanja")
+      .selectOption("UPLATA_NA_RACUN");
+    await clickConfirmation(
+      page,
+      paymentForm.getByRole("button", { name: "Promeni način plaćanja" }),
+    );
+    await expect(paymentForm.getByRole("status")).toContainText(
+      "Pouzeće — gotovina → Uplata na račun",
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(async () => {
+        const order = await db.order.findUniqueOrThrow({
+          where: { id: orderId },
+          include: { payments: { orderBy: { createdAt: "desc" } } },
+        });
+        return {
+          method: order.paymentMethod,
+          latestMethod: order.payments[0]?.method,
+          latestStatus: order.payments[0]?.status,
+          failedAttempts: order.payments.filter(
+            (payment) => payment.status === "FAILED",
+          ).length,
+        };
+      })
+      .toEqual({
+        method: "UPLATA_NA_RACUN",
+        latestMethod: "UPLATA_NA_RACUN",
+        latestStatus: "PENDING",
+        failedAttempts: 1,
+      });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    paymentForm = page.getByTestId("web-order-payment-method-form");
+    await paymentForm
+      .getByLabel("Novi način plaćanja")
+      .selectOption("POUZECE_GOTOVINA");
+    await clickConfirmation(
+      page,
+      paymentForm.getByRole("button", { name: "Promeni način plaćanja" }),
+    );
+    await expect(paymentForm.getByRole("status")).toContainText(
+      "Uplata na račun → Pouzeće — gotovina",
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(async () => {
+        const order = await db.order.findUniqueOrThrow({
+          where: { id: orderId },
+          include: { payments: { orderBy: { createdAt: "desc" } } },
+        });
+        return {
+          method: order.paymentMethod,
+          latestMethod: order.payments[0]?.method,
+          latestStatus: order.payments[0]?.status,
+          failedAttempts: order.payments.filter(
+            (payment) => payment.status === "FAILED",
+          ).length,
+        };
+      })
+      .toEqual({
+        method: "POUZECE_GOTOVINA",
+        latestMethod: "POUZECE_GOTOVINA",
+        latestStatus: "PENDING",
+        failedAttempts: 2,
+      });
+    await expect
+      .poll(() =>
+        db.auditLog.count({
+          where: {
+            actorId: adminId,
+            action: "order.webPaymentMethodUpdate",
+            entity: "Payment",
+          },
+        }),
+      )
+      .toBe(2);
+  });
+
+  test("dodaje novi WEB artikal i povećava postojeći red", async ({ page }) => {
+    await login(page);
+    await page.goto(`/admin/erp/prodajni-nalozi/${orderId}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    let addForm = page.getByTestId("web-order-item-add-form");
+    await addForm.getByLabel("Šifra artikla za dodavanje").fill(skus[2]);
+    await addForm.getByLabel("Količina artikla za dodavanje").fill("2");
+    await clickConfirmation(
+      page,
+      addForm.getByRole("button", { name: "Dodaj artikal" }),
+    );
+    await expect(addForm.getByRole("status")).toContainText(
+      `Artikal ${skus[2]} je dodat`,
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(() => readState(), { timeout: 30_000 })
+      .toMatchObject({
+        quantities: { [skus[0]]: 2, [skus[1]]: 1, [skus[2]]: 2 },
+        reservations: { [skus[0]]: 2, [skus[1]]: 1, [skus[2]]: 2 },
+        subtotal: 3_900,
+        savings: 400,
+        paymentMatchesTotal: true,
+        invoiceMatchesTotal: true,
+        itemChangeEmailJobs: 1,
+      });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    addForm = page.getByTestId("web-order-item-add-form");
+    await addForm.getByLabel("Šifra artikla za dodavanje").fill(skus[2]);
+    await addForm.getByLabel("Količina artikla za dodavanje").fill("1");
+    await clickConfirmation(
+      page,
+      addForm.getByRole("button", { name: "Dodaj artikal" }),
+    );
+    await expect(addForm.getByRole("status")).toContainText(
+      `Količina artikla ${skus[2]} je povećana (2 → 3)`,
+      { timeout: 90_000 },
+    );
+    await expect
+      .poll(() => readState(), { timeout: 30_000 })
+      .toMatchObject({
+        quantities: { [skus[0]]: 2, [skus[1]]: 1, [skus[2]]: 3 },
+        reservations: { [skus[2]]: 3 },
+        subtotal: 4_600,
+        paymentMatchesTotal: true,
+        invoiceMatchesTotal: true,
+        itemChangeEmailJobs: 2,
+      });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const addedRow = page.locator("tr").filter({ hasText: skus[2] });
+    await addedRow.getByLabel(`Nova količina za ${skus[2]}`).fill("0");
+    await clickConfirmation(
+      page,
+      addedRow.getByRole("button", { name: "Sačuvaj" }),
+    );
+    await expect(addedRow).toHaveCount(0, { timeout: 90_000 });
+    await expect
+      .poll(() => readState(), { timeout: 30_000 })
+      .toMatchObject({
+        quantities: { [skus[0]]: 2, [skus[1]]: 1 },
+        reservations: { [skus[0]]: 2, [skus[1]]: 1 },
+        subtotal: 2_500,
+        savings: 400,
+        paymentMatchesTotal: true,
+        invoiceMatchesTotal: true,
+        itemChangeEmailJobs: 3,
+      });
+
+    await db.backgroundJob.deleteMany({
+      where: {
+        kind: "ORDER_ITEMS_CHANGED_EMAIL",
+        payload: { path: ["orderId"], equals: orderId },
+      },
+    });
+    await db.orderStatusEvent.deleteMany({
+      where: { orderId, note: { contains: skus[2] } },
+    });
+    await db.auditLog.deleteMany({
+      where: {
+        actorId: adminId,
+        entity: "OrderItem",
+        action: { in: ["order.webItemAdd", "order.webItemUpdate"] },
+      },
+    });
   });
 
   test("smanjuje količinu, briše drugi red i sinhronizuje sve tragove", async ({
@@ -362,7 +608,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
       where: { id: orderId },
       include: {
         items: true,
-        payments: true,
+        payments: { orderBy: { createdAt: "desc" } },
         invoices: { where: { kind: "PROFORMA" } },
       },
     });
@@ -389,7 +635,9 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
           ?.qty,
       ]),
     );
-    const payment = order.payments[0];
+    const payment = order.payments.find(
+      (candidate) => candidate.status === "PENDING",
+    );
     const invoice = order.invoices[0];
     const itemChangeEmailJobs = await db.backgroundJob.count({
       where: {
