@@ -442,6 +442,7 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         "Status porudžbine",
         "Datum fiskalizacije",
         "Ime i prezime kupca / firma",
+        "Način kupovine",
         "PIB",
         "Cenovnik",
         "Adresa",
@@ -484,6 +485,9 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       const pendingBankRow = page.getByRole("row").filter({
         has: page.getByRole("link", { name: webOrderNumber, exact: true }),
       });
+      await expect(
+        pendingBankRow.getByText("Bez prijave", { exact: true }),
+      ).toBeVisible();
       await expect(pendingBankRow.getByText("Uplata na račun", { exact: true })).toBeVisible();
       await expect(pendingBankRow.getByText("Čeka uplatu", { exact: true })).toBeVisible();
 

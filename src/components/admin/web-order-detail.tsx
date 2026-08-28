@@ -1413,6 +1413,14 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   <option value="WEB">WEB</option>
                 </select>
               </Field>
+              <Field label="Način kupovine">
+                <input
+                  value={order.userId ? "Ulogovan korisnik" : "Bez prijave"}
+                  readOnly
+                  disabled
+                  className="h-9 rounded-lg border border-input bg-muted-bg px-3 text-sm disabled:opacity-70"
+                />
+              </Field>
             </div>
           </Card>
           <Card>

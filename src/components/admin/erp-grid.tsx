@@ -236,10 +236,13 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     if (
       moduleSlug === "prodajni-nalozi" &&
       window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
-        "payment-tracking-v1"
+        "purchase-identity-v1"
     ) {
       const migrated = completeOrder.filter(
-        (key) => key !== "paymentMethod" && key !== "paymentStatus",
+        (key) =>
+          key !== "paymentMethod" &&
+          key !== "paymentStatus" &&
+          key !== "purchaseIdentity",
       );
       const channelIndex = migrated.indexOf("channel");
       migrated.splice(
@@ -248,10 +251,16 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
         "paymentMethod",
         "paymentStatus",
       );
+      const customerIndex = migrated.indexOf("customer");
+      migrated.splice(
+        customerIndex >= 0 ? customerIndex + 1 : migrated.length,
+        0,
+        "purchaseIdentity",
+      );
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(
         columnOrderVersionKey(moduleSlug),
-        "payment-tracking-v1",
+        "purchase-identity-v1",
       );
       return migrated;
     }

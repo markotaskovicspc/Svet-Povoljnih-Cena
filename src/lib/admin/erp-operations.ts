@@ -442,6 +442,10 @@ export const operationalErpModules: ErpModule[] = [
       status("status", "Status porudžbine"),
       date("fiscalizedAt", "Datum fiskalizacije"),
       text("customer", "Ime i prezime kupca / firma"),
+      status("purchaseIdentity", "Način kupovine", [
+        "Ulogovan korisnik",
+        "Bez prijave",
+      ]),
       text("pib", "PIB"),
       text("priceList", "Cenovnik"),
       text("address", "Adresa"),
@@ -1563,6 +1567,7 @@ async function salesOrderRows(
         paymentStatuses: order.payments.map((payment) => payment.status),
       }),
       customer,
+      purchaseIdentity: order.userId ? "Ulogovan korisnik" : "Bez prijave",
       pib: order.shipPib,
       priceList: order.priceList
         ? `${order.priceList.code} · ${order.priceList.name} (${order.priceList.currency})`
