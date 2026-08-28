@@ -2799,23 +2799,27 @@ model PickupBatch {
 }
 
 model PickupBatchLine {
-  id            String          @id @default(cuid())
-  batchId       String
-  orderId       String
-  orderItemId   String?
-  reclamationId String?
-  purpose       ShipmentPurpose @default(ORDER_DELIVERY)
+  id                  String          @id @default(cuid())
+  batchId             String
+  orderId             String
+  orderItemId         String?
+  reclamationId       String?
+  purpose             ShipmentPurpose @default(ORDER_DELIVERY)
   /// Stable logical unit inside a batch. Mixed orders use one provider-specific
   /// order group; replacements use their reclamation ID.
-  lineGroupKey  String
+  lineGroupKey        String
   /// Quantity represented by this logical picking line. Null keeps legacy
   /// order rows compatible and falls back to OrderItem.qty.
-  quantity      Int?
-  packageNo     Int             @default(1)
-  weightKg      Decimal?        @db.Decimal(10, 3)
-  widthCm       Decimal?        @db.Decimal(8, 2)
-  depthCm       Decimal?        @db.Decimal(8, 2)
-  heightCm      Decimal?        @db.Decimal(8, 2)
+  quantity            Int?
+  packageNo           Int             @default(1)
+  weightKg            Decimal?        @db.Decimal(10, 3)
+  widthCm             Decimal?        @db.Decimal(8, 2)
+  depthCm             Decimal?        @db.Decimal(8, 2)
+  heightCm            Decimal?        @db.Decimal(8, 2)
+  /// Manual warehouse confirmation that the courier physically took this
+  /// package. Every package in one lineGroupKey is updated together.
+  courierPickedUpAt   DateTime?
+  courierPickedUpById String?
 
   batch       PickupBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)

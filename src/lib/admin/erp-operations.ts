@@ -13,7 +13,8 @@ import {
 import { calculateSalesLineTotals } from "@/lib/admin/sales-order";
 import {
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
-  PICKUP_BATCH_STATUS_LABEL,
+  pickupBatchDisplayStatus,
+  pickupBatchHandoverProgress,
 } from "@/lib/admin/pickup-batch";
 import {
   customerGenderLabel,
@@ -606,7 +607,8 @@ export const operationalErpModules: ErpModule[] = [
         "Novi",
         "Slanje kuriru",
         "Proknjižen",
-        "Preuzet",
+        "Delimično preuzeta",
+        "Kompletno preuzeta",
         "Otkazan",
       ]),
       text("number", "Broj naloga"),
@@ -1701,23 +1703,34 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
   const rows = await db.pickupBatch.findMany({
     take,
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { lines: true } } },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    values: {
-      number: row.number,
-      provider:
-        row.provider === "MYGLS"
-          ? "MyGLS"
-          : row.provider === "X_EXPRESS"
-            ? "X Express"
-            : row.provider,
-      status: PICKUP_BATCH_STATUS_LABEL[row.status],
-      packages: row._count.lines,
-      createdAt: dateTime(row.createdAt),
+    include: {
+      _count: { select: { lines: true } },
+      lines: {
+        select: {
+          lineGroupKey: true,
+          courierPickedUpAt: true,
+        },
+      },
     },
-  }));
+  });
+  return rows.map((row) => {
+    const handoverProgress = pickupBatchHandoverProgress(row.lines);
+    return {
+      id: row.id,
+      values: {
+        number: row.number,
+        provider:
+          row.provider === "MYGLS"
+            ? "MyGLS"
+            : row.provider === "X_EXPRESS"
+              ? "X Express"
+              : row.provider,
+        status: pickupBatchDisplayStatus(row.status, handoverProgress),
+        packages: row._count.lines,
+        createdAt: dateTime(row.createdAt),
+      },
+    };
+  });
 }
 
 async function customerRows(take: number): Promise<ErpRow[]> {

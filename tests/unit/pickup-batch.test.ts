@@ -6,6 +6,8 @@ import {
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
+  pickupBatchDisplayStatus,
+  pickupBatchHandoverProgress,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
 
@@ -68,6 +70,43 @@ describe("ERP module 13 pickup batches", () => {
     expect(isPickupBatchEditable("CANCELLED")).toBe(false);
     expect(PICKUP_BATCH_STATUS_LABEL.DRAFT).toBe("Novi");
     expect(PICKUP_BATCH_STATUS_LABEL.POSTING).toBe("Slanje kuriru");
+  });
+
+  it("derives partial and complete courier handover from picking groups", () => {
+    const pickedAt = new Date("2026-08-28T10:00:00.000Z");
+    const lines = [
+      { lineGroupKey: "order:1", courierPickedUpAt: pickedAt },
+      { lineGroupKey: "order:1", courierPickedUpAt: pickedAt },
+      { lineGroupKey: "order:2", courierPickedUpAt: null },
+    ];
+
+    const partial = pickupBatchHandoverProgress(lines);
+    expect(partial).toEqual({
+      totalGroups: 2,
+      pickedUpGroups: 1,
+      totalPackages: 3,
+      pickedUpPackages: 2,
+    });
+    expect(pickupBatchDisplayStatus("BOOKED", partial)).toBe(
+      "Delimično preuzeta",
+    );
+
+    const complete = pickupBatchHandoverProgress(
+      lines.map((line) => ({ ...line, courierPickedUpAt: pickedAt })),
+    );
+    expect(pickupBatchDisplayStatus("PICKED_UP", complete)).toBe(
+      "Kompletno preuzeta",
+    );
+  });
+
+  it("keeps legacy picked-up batches complete until the new checklist is saved", () => {
+    const emptyProgress = pickupBatchHandoverProgress([
+      { lineGroupKey: "order:1", courierPickedUpAt: null },
+    ]);
+    expect(pickupBatchDisplayStatus("PICKED_UP", emptyProgress)).toBe(
+      "Kompletno preuzeta",
+    );
+    expect(pickupBatchDisplayStatus("BOOKED", emptyProgress)).toBe("Proknjižen");
   });
 
   it("allows MyGLS label recreation only before the pickup is announced", () => {

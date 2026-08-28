@@ -17,10 +17,12 @@ import {
   postPickupBatches,
   removePickupGroupFromBatch,
   savePickupPackage,
+  updatePickupBatchCourierHandover,
 } from "@/lib/admin/pickup-batch.server";
 import {
   isPickupBatchEditable,
-  PICKUP_BATCH_STATUS_LABEL,
+  pickupBatchDisplayStatus,
+  pickupBatchHandoverProgress,
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
 import {
@@ -202,6 +204,49 @@ async function postAction(
   )(formData);
 }
 
+async function updateCourierHandoverAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.courier-handover.update",
+      entity: "PickupBatch",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = batchSchema.safeParse({
+        batchId: actionData.get("batchId"),
+      });
+      const pickedUpGroupKeys = actionData
+        .getAll("pickedUpGroupKeys")
+        .map(String)
+        .map((key) => key.trim())
+        .filter(Boolean);
+      if (!parsed.success || pickedUpGroupKeys.length > 500) {
+        return { ok: false as const, error: "Izbor pošiljki nije ispravan." };
+      }
+      const result = await updatePickupBatchCourierHandover(
+        parsed.data.batchId,
+        pickedUpGroupKeys,
+        actorId,
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.batchId,
+        diff: result,
+        message: result.complete
+          ? `Kurir je evidentiran za sve pošiljke (${result.pickedUpGroupCount}/${result.totalGroupCount}) i pakete (${result.pickedUpPackageCount}/${result.totalPackageCount}).`
+          : result.pickedUpGroupCount > 0
+            ? `Sačuvano je delimično preuzimanje: ${result.pickedUpGroupCount}/${result.totalGroupCount} pošiljki i ${result.pickedUpPackageCount}/${result.totalPackageCount} paketa.`
+            : "Evidencija preuzimanja je poništena; nijedna pošiljka nije označena kao preuzeta.",
+      };
+    },
+  )(formData);
+}
+
 export default async function PickupBatchPage({
   params,
   searchParams,
@@ -269,6 +314,16 @@ export default async function PickupBatchPage({
         }),
     );
   const pickingGroups = aggregatePickupGroups(rows);
+  const handoverProgress = pickupBatchHandoverProgress(rows);
+  const handoverStatus = pickupBatchDisplayStatus(
+    batch.status,
+    handoverProgress,
+  );
+  const canRecordCourierHandover =
+    batch.status === "BOOKED" || batch.status === "PICKED_UP";
+  const legacyCompleteHandover =
+    batch.status === "PICKED_UP" && handoverProgress.pickedUpPackages === 0;
+  const handoverFormId = `courier-handover-${batch.id}`;
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
   const invalidPackageCount = rows.filter((row) =>
     myGls
@@ -298,7 +353,7 @@ export default async function PickupBatchPage({
     <>
       <PageHeader
         title={`Nalog za preuzimanje ${batch.number}`}
-        description={`${PICKUP_BATCH_STATUS_LABEL[batch.status]} · ${pickingGroups.length} picking grupa · ${rows.length} paketa`}
+        description={`${handoverStatus} · ${pickingGroups.length} picking grupa · ${rows.length} paketa`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -421,7 +476,7 @@ export default async function PickupBatchPage({
           <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-lg bg-muted-bg/50 p-3">
               <p className="text-ink-500">Status</p>
-              <p className="font-semibold">{PICKUP_BATCH_STATUS_LABEL[batch.status]}</p>
+              <p className="font-semibold">{handoverStatus}</p>
             </div>
             <div className="rounded-lg bg-muted-bg/50 p-3">
               <p className="text-ink-500">Broj naloga</p>
@@ -457,11 +512,19 @@ export default async function PickupBatchPage({
               adresnice“, odštampajte ih i zalepite na pakete.
             </p>
           </div>
-          {batch.status === "BOOKED" ? (
-            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              Adresnice su kreirane, pošiljke su automatski poslate kuriru i
-              nalog je proknjižen. Otvorite „Kurirske adresnice“ i odštampajte
-              ih za pakete.
+          {canRecordCourierHandover ? (
+            <p
+              className={
+                handoverStatus === "Delimično preuzeta"
+                  ? "mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
+                  : "mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success"
+              }
+            >
+              {handoverStatus === "Kompletno preuzeta"
+                ? `Kurir je preuzeo sve pošiljke i pakete (${handoverProgress.totalGroups}/${handoverProgress.totalGroups} pošiljki · ${handoverProgress.totalPackages}/${handoverProgress.totalPackages} paketa).`
+                : handoverStatus === "Delimično preuzeta"
+                  ? `Kurir je preuzeo ${handoverProgress.pickedUpGroups}/${handoverProgress.totalGroups} pošiljki i ${handoverProgress.pickedUpPackages}/${handoverProgress.totalPackages} paketa.`
+                  : "Adresnice su kreirane, pošiljke su poslate kuriru i nalog je proknjižen. Evidentirajte preuzimanje u picking listi kada kurir fizički preuzme pošiljke."}
             </p>
           ) : postingBlockReason ? (
             <p
@@ -503,6 +566,51 @@ export default async function PickupBatchPage({
                   Učitaj porudžbine
                 </SubmitButton>
               </AdminActionForm>
+            ) : canRecordCourierHandover ? (
+              <div className="flex flex-wrap items-end justify-end gap-2">
+                <AdminActionForm
+                  id={handoverFormId}
+                  action={updateCourierHandoverAction}
+                  preserveValues
+                  className="flex flex-wrap items-center justify-end gap-2"
+                >
+                  <input type="hidden" name="batchId" value={batch.id} />
+                  <span className="text-xs text-ink-500">
+                    {handoverProgress.pickedUpGroups}/{handoverProgress.totalGroups}{" "}
+                    pošiljki · {handoverProgress.pickedUpPackages}/
+                    {handoverProgress.totalPackages} paketa
+                  </span>
+                  <SubmitButton
+                    size="sm"
+                    pendingLabel="Čuvanje…"
+                    confirm="Sačuvati označene pošiljke kao fizički preuzete od strane kurira?"
+                  >
+                    Sačuvaj preuzimanje
+                  </SubmitButton>
+                </AdminActionForm>
+                <AdminActionForm
+                  action={updateCourierHandoverAction}
+                  className="flex items-center"
+                >
+                  <input type="hidden" name="batchId" value={batch.id} />
+                  {pickingGroups.map((group) => (
+                    <input
+                      key={group.lineGroupKey}
+                      type="hidden"
+                      name="pickedUpGroupKeys"
+                      value={group.lineGroupKey}
+                    />
+                  ))}
+                  <SubmitButton
+                    size="sm"
+                    variant="outline"
+                    pendingLabel="Čuvanje…"
+                    confirm={`Potvrditi da je kurir preuzeo svih ${pickingGroups.length} pošiljki i ${rows.length} paketa?`}
+                  >
+                    Sve preuzeto
+                  </SubmitButton>
+                </AdminActionForm>
+              </div>
             ) : null}
           </div>
 
@@ -515,6 +623,9 @@ export default async function PickupBatchPage({
                     <th className="px-3 py-3">Artikli za picking</th>
                     <th className="px-3 py-3 text-right">Paketa</th>
                     <th className="px-3 py-3">Stvarne mere paketa</th>
+                    {canRecordCourierHandover ? (
+                      <th className="px-3 py-3 text-center">Kurir preuzeo</th>
+                    ) : null}
                     {editing ? <th className="px-3 py-3">Komanda</th> : null}
                   </tr>
                 </thead>
@@ -599,6 +710,33 @@ export default async function PickupBatchPage({
                           </div>
                         </details>
                       </td>
+                      {canRecordCourierHandover ? (
+                        <td className="px-3 py-3 text-center">
+                          <label className="inline-flex cursor-pointer flex-col items-center gap-1">
+                            <input
+                              type="checkbox"
+                              name="pickedUpGroupKeys"
+                              value={group.lineGroupKey}
+                              form={handoverFormId}
+                              defaultChecked={
+                                group.courierPickedUp || legacyCompleteHandover
+                              }
+                              aria-label={`Kurir preuzeo ${group.sourceLabel}`}
+                              className="size-4 accent-brand-blue"
+                            />
+                            <span className="text-xs font-medium text-ink-700">
+                              {group.courierPickedUp || legacyCompleteHandover
+                                ? "Da"
+                                : "Ne"}
+                            </span>
+                            {group.courierPickedUpAt ? (
+                              <span className="whitespace-nowrap text-[11px] text-ink-500">
+                                {formatDateTime(group.courierPickedUpAt)}
+                              </span>
+                            ) : null}
+                          </label>
+                        </td>
+                      ) : null}
                       {editing ? (
                         <td className="px-3 py-3">
                           <AdminActionForm action={removeGroupAction}>
@@ -658,6 +796,8 @@ function pickupLineRow(line: {
   widthCm: unknown;
   depthCm: unknown;
   heightCm: unknown;
+  courierPickedUpAt: Date | null;
+  courierPickedUpById: string | null;
   order: { id: string; number: string };
   reclamation: {
     number: string;
@@ -725,6 +865,8 @@ function pickupLineRow(line: {
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: line.quantity ?? item?.qty ?? 0,
     packageNo: line.packageNo,
+    courierPickedUpAt: line.courierPickedUpAt,
+    courierPickedUpById: line.courierPickedUpById,
     weightKg,
     widthCm,
     depthCm,
@@ -811,6 +953,20 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       items: [...items.values()],
       completePackageCount: group.rows.filter((row) => row.measurementsComplete)
         .length,
+      courierPickedUp:
+        group.rows.length > 0 &&
+        group.rows.every((row) => Boolean(row.courierPickedUpAt)),
+      courierPickedUpAt:
+        group.rows.length > 0 &&
+        group.rows.every((row) => Boolean(row.courierPickedUpAt))
+          ? new Date(
+              Math.max(
+                ...group.rows.map((row) =>
+                  row.courierPickedUpAt?.getTime() ?? 0,
+                ),
+              ),
+            )
+          : null,
     };
   });
 }

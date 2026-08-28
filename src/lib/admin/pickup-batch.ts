@@ -29,6 +29,69 @@ export const PICKUP_BATCH_STATUS_LABEL: Record<PickupBatchStatus, string> = {
   CANCELLED: "Otkazan",
 };
 
+export type PickupBatchHandoverLine = {
+  lineGroupKey: string;
+  courierPickedUpAt: Date | null;
+};
+
+export type PickupBatchHandoverProgress = {
+  totalGroups: number;
+  pickedUpGroups: number;
+  totalPackages: number;
+  pickedUpPackages: number;
+};
+
+export function pickupBatchHandoverProgress(
+  lines: readonly PickupBatchHandoverLine[],
+): PickupBatchHandoverProgress {
+  const groups = new Map<
+    string,
+    { totalPackages: number; pickedUpPackages: number }
+  >();
+  for (const line of lines) {
+    const group = groups.get(line.lineGroupKey) ?? {
+      totalPackages: 0,
+      pickedUpPackages: 0,
+    };
+    group.totalPackages += 1;
+    if (line.courierPickedUpAt) group.pickedUpPackages += 1;
+    groups.set(line.lineGroupKey, group);
+  }
+
+  const values = [...groups.values()];
+  return {
+    totalGroups: values.length,
+    pickedUpGroups: values.filter(
+      (group) =>
+        group.totalPackages > 0 &&
+        group.pickedUpPackages === group.totalPackages,
+    ).length,
+    totalPackages: lines.length,
+    pickedUpPackages: lines.filter((line) => line.courierPickedUpAt).length,
+  };
+}
+
+export function pickupBatchDisplayStatus(
+  status: PickupBatchStatus,
+  progress: PickupBatchHandoverProgress,
+) {
+  if (status === "DRAFT" || status === "POSTING" || status === "CANCELLED") {
+    return PICKUP_BATCH_STATUS_LABEL[status];
+  }
+  if (
+    progress.totalGroups > 0 &&
+    progress.pickedUpGroups === progress.totalGroups
+  ) {
+    return "Kompletno preuzeta";
+  }
+  if (progress.pickedUpPackages > 0) return "Delimično preuzeta";
+  // Existing MyGLS batches may already be complete without the newly added
+  // per-group handover markers. Preserve their meaning until an admin edits
+  // the new checklist, which will backfill the markers.
+  if (status === "PICKED_UP") return "Kompletno preuzeta";
+  return PICKUP_BATCH_STATUS_LABEL[status];
+}
+
 export function isPickupBatchEditable(status: PickupBatchStatus) {
   return status === "DRAFT";
 }

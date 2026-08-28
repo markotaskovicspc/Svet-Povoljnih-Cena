@@ -49,6 +49,7 @@ import {
   MYGLS_BOOKING_CHANNEL_LABEL,
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
+  pickupBatchHandoverProgress,
 } from "@/lib/admin/pickup-batch";
 import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
 import {
@@ -818,6 +819,121 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
     if (result.phase === "ANNOUNCED") announced += 1;
   }
   return { posted, shipmentCount, labelsPrepared: 0, announced };
+}
+
+export async function updatePickupBatchCourierHandover(
+  batchId: string,
+  pickedUpGroupKeys: readonly string[],
+  actorId: string,
+) {
+  const selectedKeys = Array.from(
+    new Set(pickedUpGroupKeys.map((key) => key.trim()).filter(Boolean)),
+  );
+
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const batch = await tx.pickupBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        id: true,
+        status: true,
+        lines: {
+          select: {
+            id: true,
+            lineGroupKey: true,
+            courierPickedUpAt: true,
+          },
+        },
+      },
+    });
+    if (!batch) throw new Error("Nalog za preuzimanje ne postoji.");
+    if (batch.status !== "BOOKED" && batch.status !== "PICKED_UP") {
+      throw new Error(
+        "Preuzimanje kurira može da se evidentira samo na proknjiženom nalogu.",
+      );
+    }
+    if (!batch.lines.length) {
+      throw new Error("Nalog nema nijednu picking grupu.");
+    }
+
+    const allGroupKeys = Array.from(
+      new Set(batch.lines.map((line) => line.lineGroupKey)),
+    );
+    const allGroupKeySet = new Set(allGroupKeys);
+    const unknownKey = selectedKeys.find((key) => !allGroupKeySet.has(key));
+    if (unknownKey) {
+      throw new Error("Izabrana picking grupa ne pripada ovom nalogu.");
+    }
+
+    const progressBefore = pickupBatchHandoverProgress(batch.lines);
+    const pickedBefore = new Set(
+      allGroupKeys.filter((lineGroupKey) => {
+        const lines = batch.lines.filter(
+          (line) => line.lineGroupKey === lineGroupKey,
+        );
+        return lines.length > 0 && lines.every((line) => line.courierPickedUpAt);
+      }),
+    );
+    // Before these columns existed, a completely picked-up batch was stored
+    // only on PickupBatch.status. Treat all groups as selected on the first edit.
+    if (
+      batch.status === "PICKED_UP" &&
+      progressBefore.pickedUpPackages === 0
+    ) {
+      allGroupKeys.forEach((key) => pickedBefore.add(key));
+    }
+
+    const selectedKeySet = new Set(selectedKeys);
+    const unselectedKeys = allGroupKeys.filter((key) => !selectedKeySet.has(key));
+    const now = new Date();
+    if (selectedKeys.length) {
+      await tx.pickupBatchLine.updateMany({
+        where: {
+          batchId,
+          lineGroupKey: { in: selectedKeys },
+          courierPickedUpAt: null,
+        },
+        data: {
+          courierPickedUpAt: now,
+          courierPickedUpById: actorId,
+        },
+      });
+    }
+    if (unselectedKeys.length) {
+      await tx.pickupBatchLine.updateMany({
+        where: {
+          batchId,
+          lineGroupKey: { in: unselectedKeys },
+        },
+        data: {
+          courierPickedUpAt: null,
+          courierPickedUpById: null,
+        },
+      });
+    }
+
+    const complete = selectedKeys.length === allGroupKeys.length;
+    await tx.pickupBatch.update({
+      where: { id: batch.id },
+      data: { status: complete ? "PICKED_UP" : "BOOKED" },
+    });
+
+    return {
+      pickedUpGroupCount: selectedKeys.length,
+      totalGroupCount: allGroupKeys.length,
+      pickedUpPackageCount: batch.lines.filter((line) =>
+        selectedKeySet.has(line.lineGroupKey),
+      ).length,
+      totalPackageCount: batch.lines.length,
+      newlyPickedUpGroupCount: selectedKeys.filter(
+        (key) => !pickedBefore.has(key),
+      ).length,
+      clearedGroupCount: [...pickedBefore].filter(
+        (key) => !selectedKeySet.has(key),
+      ).length,
+      complete,
+    };
+  }, TRANSACTION_OPTIONS);
 }
 
 export async function recreateMyGlsLabelsForPickupBatch(
