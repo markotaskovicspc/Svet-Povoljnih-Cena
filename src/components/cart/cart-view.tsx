@@ -319,13 +319,19 @@ function CartSummary({
 export function CartLoginOfferCopy() {
   return (
     <div className="min-w-0 flex-1">
-      <p className="text-action text-base font-extrabold uppercase sm:text-lg">
-        PRIJAVITE SE I OSTVARITE 30% LOYALTY POPUSTA (VAŽI ZA ARTIKLE KOJI
-        NISU NA AKCIJI)
+      <p className="text-base font-extrabold sm:text-lg">
+        <span className="text-action uppercase">
+          PRIJAVITE SE I OSTVARITE 30% LOYALTY POPUSTA
+        </span>{" "}
+        <span className="text-ink-900">
+          (Važi za artikle koji nisu na akciji)
+        </span>
       </p>
-      <p className="text-action mt-1 text-sm font-extrabold uppercase sm:text-base">
-        15% POPUSTA ZA PRVU KUPOVINU SE OBRAČUNAVA NAKON POTVRDE PORUDŽBINE
-        (VAŽI ZA ULOGOVANE KORISNIKE)
+      <p className="mt-1 text-sm font-extrabold sm:text-base">
+        <span className="text-action uppercase">
+          15% POPUSTA ZA PRVU KUPOVINU SE OBRAČUNAVA NAKON POTVRDE PORUDŽBINE
+        </span>{" "}
+        <span className="text-ink-900">(Važi za ulogovane korisnike)</span>
       </p>
     </div>
   );
