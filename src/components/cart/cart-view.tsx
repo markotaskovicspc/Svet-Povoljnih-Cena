@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Loader2, LogIn, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
-import type { CartLine } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import { useCheckout } from "@/lib/checkout/store";
@@ -317,45 +316,16 @@ function CartSummary({
   );
 }
 
-export function getCartLoginOfferDetails(lines: CartLine[]) {
-  const eligible = lines.filter(
-    (line) =>
-      line.unitPriceLoyalty != null &&
-      line.unitPriceLoyalty > 0 &&
-      line.unitPriceLoyalty < line.unitPriceSale,
-  );
-  const discountPct = eligible.length
-    ? Math.max(...eligible.map((line) => line.loyaltyDiscountPct ?? 0)) || 30
-    : 30;
-  const potentialSavings = eligible.reduce(
-    (total, line) =>
-      total + (line.unitPriceSale - (line.unitPriceLoyalty ?? line.unitPriceSale)) * line.qty,
-    0,
-  );
-
-  return { discountPct, potentialSavings };
-}
-
-export function CartLoginOfferCopy({
-  discountPct,
-  potentialSavings,
-}: {
-  discountPct: number;
-  potentialSavings: number;
-}) {
+export function CartLoginOfferCopy() {
   return (
     <div>
       <p className="text-action text-base font-extrabold uppercase sm:text-lg">
-        PRIJAVITE SE I OSTVARITE {discountPct}% LOYALTY POPUSTA
+        PRIJAVITE SE I OSTVARITE 30% LOYALTY POPUSTA (VAŽI ZA ARTIKLE KOJI
+        NISU NA AKCIJI)
       </p>
-      <p className="mt-0.5 text-sm font-semibold text-ink-900">
-        15% popusta za prvu kupovinu
-      </p>
-      <p className="mt-0.5 text-xs text-ink-600">
-        Važi za artikle koji nisu na akciji.
-        {potentialSavings > 0
-          ? ` Moguća dodatna ušteda u ovoj korpi: ${formatRsd(potentialSavings)}.`
-          : null}
+      <p className="text-action mt-1 text-sm font-extrabold uppercase sm:text-base">
+        15% POPUSTA ZA PRVU KUPOVINU SE OBRAČUNAVA NAKON POTVRDE PORUDŽBINE
+        (VAŽI ZA ULOGOVANE KORISNIKE)
       </p>
     </div>
   );
@@ -376,18 +346,13 @@ export function CartLoginOffer({
   const lines = useCart((state) => state.lines);
   if (status === "loading" || loggedIn || !lines.length) return null;
 
-  const { discountPct, potentialSavings } = getCartLoginOfferDetails(lines);
-
   return (
     <div className="border-action/30 bg-action/5 flex flex-col gap-3 border-y px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="flex items-start gap-3">
         <span className="bg-walnut text-canvas inline-flex size-9 shrink-0 items-center justify-center rounded-full">
           <LogIn className="size-4" aria-hidden />
         </span>
-        <CartLoginOfferCopy
-          discountPct={discountPct}
-          potentialSavings={potentialSavings}
-        />
+        <CartLoginOfferCopy />
       </div>
       {reopenDrawerAfterLogin ? (
         <CartDrawerLoginOfferLink onNavigate={onNavigate} />
