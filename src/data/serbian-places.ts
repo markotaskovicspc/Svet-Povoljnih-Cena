@@ -178,8 +178,8 @@ export const SERBIAN_PLACES: SerbianPlace[] = [
   { name: "Zrenjanin", postalCode: "23000" },
 ];
 
-/** Strip diacritics + lowercase for fuzzy matching. */
-function normalize(s: string): string {
+/** Strip Serbian Latin diacritics + lowercase for fuzzy matching. */
+export function normalizeSerbianPlaceSearch(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
@@ -196,14 +196,16 @@ export function searchSerbianPlaces(
   query: string,
   limit = 8,
 ): SerbianPlace[] {
-  const q = normalize(query.trim());
+  const q = normalizeSerbianPlaceSearch(query.trim());
   if (q.length < 2) return [];
 
   const startsWith: SerbianPlace[] = [];
   const contains: SerbianPlace[] = [];
 
   for (const place of SERBIAN_PLACES) {
-    const candidates = [normalize(place.name), ...(place.aliases ?? [])];
+    const candidates = [place.name, ...(place.aliases ?? [])].map(
+      normalizeSerbianPlaceSearch,
+    );
     let matched: "start" | "contain" | null = null;
     for (const c of candidates) {
       if (c.startsWith(q)) {

@@ -456,13 +456,10 @@ function XExpressStreetAutocomplete({
   const showPanel = open && items.length > 0 && Boolean(resultKey);
 
   return (
-    <label
-      className={cn("relative flex flex-col gap-1 lg:gap-1", className)}
-      htmlFor={inputId}
-    >
-      <span className="text-xs font-medium text-ink-700">
+    <div className={cn("relative flex flex-col gap-1 lg:gap-1", className)}>
+      <label htmlFor={inputId} className="text-xs font-medium text-ink-700">
         Adresa<span className="text-action ml-0.5">*</span>
-      </span>
+      </label>
       <input
         id={inputId}
         type="text"
@@ -496,8 +493,7 @@ function XExpressStreetAutocomplete({
             <li key={street.id} role="option" aria-selected={false}>
               <button
                 type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
+                onClick={() => {
                   onSelect(street);
                   setOpen(false);
                 }}
@@ -519,7 +515,7 @@ function XExpressStreetAutocomplete({
           {error}
         </span>
       ) : null}
-    </label>
+    </div>
   );
 }
 

@@ -86,7 +86,10 @@ test("successful guest order lands on the confirmation route", async ({
     {
       name: "spc_cookie_consent",
       value: "essential",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+      url:
+        process.env.PLAYWRIGHT_BASE_URL ??
+        process.env.NEXT_PUBLIC_BASE_URL ??
+        "http://127.0.0.1:3000",
     },
   ]);
   await page.addInitScript(() => {
@@ -149,12 +152,12 @@ test("successful guest order lands on the confirmation route", async ({
       body: JSON.stringify({
         items: [
           {
-            code: "34000",
-            name: "Kragujevac",
-            postalCode: "34000",
-            townId: 718980,
-            municipalityId: 1,
-            displayName: "Kragujevac (Kragujevac)",
+            code: "18000",
+            name: "Niš (Medijana)",
+            postalCode: "18000",
+            townId: 792047,
+            municipalityId: 71331,
+            displayName: "Niš (Medijana) - 18000",
           },
         ],
       }),
@@ -264,20 +267,25 @@ test("successful guest order lands on the confirmation route", async ({
     .fill("0601234567");
   await page
     .getByRole("combobox", { name: "Grad / mesto*", exact: true })
-    .fill("Kragujevac");
-  await page
-    .getByRole("option", { name: /Kragujevac/ })
-    .first()
-    .click();
+    .fill("Niš");
+  const cityOption = page.getByRole("option", { name: /Niš/ }).first();
+  await cityOption.getByRole("button").click();
+  await expect(
+    page.getByRole("combobox", { name: "Grad / mesto*", exact: true }),
+  ).toHaveValue("Niš (Medijana)");
+  await expect(
+    page.getByRole("textbox", { name: "Poštanski broj*", exact: true }),
+  ).toHaveValue("18000");
   await page
     .getByRole("combobox", { name: "Adresa*", exact: true })
     .fill("Kralja Petra");
   const streetOption = page.getByRole("option", { name: /Kralja Petra I 1/ });
-  if (await streetOption.isVisible().catch(() => false))
-    await streetOption.click();
+  if (await streetOption.isVisible().catch(() => false)) {
+    await streetOption.getByRole("button").click();
+  }
   await page
     .getByRole("textbox", { name: "Poštanski broj*", exact: true })
-    .fill("34000");
+    .fill("18000");
   const [firstNameBox, lastNameBox, cityBox, postalCodeBox] = await Promise.all(
     [
       page.getByRole("textbox", { name: "Ime*", exact: true }).boundingBox(),

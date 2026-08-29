@@ -15,7 +15,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { searchSerbianPlaces, type SerbianPlace } from "@/data/serbian-places";
+import {
+  normalizeSerbianPlaceSearch,
+  searchSerbianPlaces,
+  type SerbianPlace,
+} from "@/data/serbian-places";
 
 export type CityAutocompletePlace = SerbianPlace & {
   code?: string;
@@ -25,7 +29,7 @@ export type CityAutocompletePlace = SerbianPlace & {
 };
 
 function normalizedPlaceName(value: string) {
-  return value.trim().toLocaleLowerCase("sr-Latn-RS");
+  return normalizeSerbianPlaceSearch(value.trim());
 }
 
 export function preferExactCityMatches(
@@ -234,14 +238,11 @@ export function CityAutocomplete({
     open && value.trim().length >= minChars && suggestions.length > 0;
 
   return (
-    <label
-      htmlFor={inputId}
-      className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)}
-    >
-      <span className="text-xs font-medium text-ink-700">
+    <div className={cn("relative flex flex-col gap-1.5 lg:gap-1", className)}>
+      <label htmlFor={inputId} className="text-xs font-medium text-ink-700">
         {label}
         {required ? <span className="text-action ml-0.5">*</span> : null}
-      </span>
+      </label>
       <div ref={containerRef} className="relative">
         <MapPin
           className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-500"
@@ -291,11 +292,7 @@ export function CityAutocomplete({
                 <button
                   type="button"
                   onMouseEnter={() => setActive(i)}
-                  onMouseDown={(e) => {
-                    // Prevent input blur before click resolves.
-                    e.preventDefault();
-                    pick(place);
-                  }}
+                  onClick={() => pick(place)}
                   className={cn(
                     "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition",
                     i === boundedActive
@@ -320,6 +317,6 @@ export function CityAutocomplete({
           {error}
         </span>
       ) : null}
-    </label>
+    </div>
   );
 }

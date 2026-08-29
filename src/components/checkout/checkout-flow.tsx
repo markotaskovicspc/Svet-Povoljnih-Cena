@@ -55,6 +55,7 @@ import type { CustomerAuthFormAction } from "@/components/account/customer-auth-
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 import { shouldRestoreBusinessBuyerType } from "@/lib/checkout/business-policy";
+import { FIRST_PURCHASE_PCT } from "@/lib/pricing/config";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -146,6 +147,7 @@ export function CheckoutFlow({
   initialCustomer,
   glsDeliveryPointsEnabled = false,
   xExpressAddressEnabled = false,
+  firstPurchaseEligible = false,
   socialAuthProviders = [],
   loginAction,
   registrationAction,
@@ -157,6 +159,7 @@ export function CheckoutFlow({
   initialCustomer?: CheckoutInitialCustomer;
   glsDeliveryPointsEnabled?: boolean;
   xExpressAddressEnabled?: boolean;
+  firstPurchaseEligible?: boolean;
   socialAuthProviders?: SocialAuthProvider[];
   loginAction?: CustomerAuthFormAction;
   registrationAction?: CustomerAuthFormAction;
@@ -866,6 +869,7 @@ export function CheckoutFlow({
                     <ReviewStep
                       deliveryQuote={deliveryQuote}
                       paymentMethods={checkoutConfig.paymentMethods}
+                      firstPurchaseEligible={firstPurchaseEligible}
                     />
                   ) : null}
                 </motion.div>
@@ -916,6 +920,7 @@ export function CheckoutFlow({
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
+          firstPurchaseEligible={firstPurchaseEligible}
           className="hidden lg:block"
           beforeCta={
             step === "review" ? (
@@ -963,9 +968,11 @@ function CheckoutOrderFormBoundary({
 function ReviewStep({
   deliveryQuote,
   paymentMethods,
+  firstPurchaseEligible,
 }: {
   deliveryQuote: CheckoutDeliveryQuote;
   paymentMethods: CheckoutPaymentMethodConfig[];
+  firstPurchaseEligible: boolean;
 }) {
   const data = useFormContext<CheckoutFormData>().getValues();
   const reviewShippingPrice = deliveryQuote.prices[data.shippingMethod];
@@ -989,9 +996,17 @@ function ReviewStep({
               )
             : 0,
         voucherDiscountRsd: voucher?.discountRsd ?? 0,
+        firstPurchaseEligible,
         shippingPrices: deliveryQuote.prices,
       }),
-    [deliveryQuote, lines, data.shippingMethod, data.perItemAssembly, voucher],
+    [
+      deliveryQuote,
+      lines,
+      data.shippingMethod,
+      data.perItemAssembly,
+      firstPurchaseEligible,
+      voucher,
+    ],
   );
 
   return (
@@ -1034,6 +1049,12 @@ function ReviewStep({
           </p>
         </ReviewBlock>
         <ReviewBlock title="Iznos">
+          {totals.firstPurchaseDiscount > 0 ? (
+            <p className="mb-1 text-xs text-action tabular-nums">
+              Popust za prvu kupovinu ({FIRST_PURCHASE_PCT}%): −
+              {formatRsd(totals.firstPurchaseDiscount)}
+            </p>
+          ) : null}
           <p className="text-sm text-ink-700 tabular-nums">
             Ukupno za plaćanje:{" "}
             <span className="font-medium text-ink-900">

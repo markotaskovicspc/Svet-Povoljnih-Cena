@@ -14,6 +14,11 @@ import { formatRsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
 import { DeliveryCategoryBreakdown } from "@/components/cart/delivery-category-breakdown";
+import { capDiscountComponents } from "@/lib/pricing/engine";
+import {
+  FIRST_PURCHASE_PCT,
+  MAX_STACK_PCT,
+} from "@/lib/pricing/config";
 
 export interface SummaryTotals {
   itemsFull: number;
@@ -22,6 +27,7 @@ export interface SummaryTotals {
   shipping: number | null;
   assembly: number;
   voucherDiscount: number;
+  firstPurchaseDiscount: number;
   total: number | null;
 }
 
@@ -38,6 +44,7 @@ export function computeTotals({
   shippingMethod,
   assemblyTotal,
   voucherDiscountRsd,
+  firstPurchaseEligible = false,
   shippingPrices = SHIPPING_PRICES,
 }: {
   itemsFull: number;
@@ -45,14 +52,32 @@ export function computeTotals({
   shippingMethod: ShippingMethod;
   assemblyTotal: number;
   voucherDiscountRsd: number;
+  firstPurchaseEligible?: boolean;
   shippingPrices?: Record<ShippingMethod, number | null>;
 }): SummaryTotals {
   const shipping = shippingPrices[shippingMethod];
-  const voucherDiscount = Math.min(Math.max(0, voucherDiscountRsd), itemsSale);
+  const eligibleSubtotal = Math.max(0, itemsSale);
+  const requestedDiscounts = {
+    voucher: Math.max(0, voucherDiscountRsd),
+    first: firstPurchaseEligible
+      ? Math.round((eligibleSubtotal * FIRST_PURCHASE_PCT) / 100)
+      : 0,
+    card: 0,
+  };
+  const appliedDiscounts = capDiscountComponents(
+    requestedDiscounts,
+    Math.round((eligibleSubtotal * MAX_STACK_PCT) / 100),
+  );
+  const voucherDiscount = appliedDiscounts.voucher;
+  const firstPurchaseDiscount = appliedDiscounts.first;
   const total =
     shipping == null
       ? null
-      : itemsSale + shipping + assemblyTotal - voucherDiscount;
+      : itemsSale +
+        shipping +
+        assemblyTotal -
+        voucherDiscount -
+        firstPurchaseDiscount;
   return {
     itemsFull,
     itemsSale,
@@ -60,6 +85,7 @@ export function computeTotals({
     shipping,
     assembly: assemblyTotal,
     voucherDiscount,
+    firstPurchaseDiscount,
     total: total == null ? null : Math.max(0, total),
   };
 }
@@ -71,6 +97,8 @@ interface OrderSummaryProps {
   shippingMethod: ShippingMethod;
   paymentMethod?: PaymentMethod | null;
   perItemAssembly?: Record<SKU, boolean>;
+  /** Server-resolved eligibility; the order API recalculates it authoritatively. */
+  firstPurchaseEligible?: boolean;
   /** Optional CTA appended at the bottom (used by the final review state). */
   cta?: React.ReactNode;
   /** Content that must sit immediately above the desktop confirmation CTA. */
@@ -85,6 +113,7 @@ export function OrderSummary({
   deliveryQuoteStatus = "ready",
   shippingMethod,
   perItemAssembly,
+  firstPurchaseEligible = false,
   cta,
   beforeCta,
   collapseLines,
@@ -116,6 +145,7 @@ export function OrderSummary({
     shippingMethod,
     assemblyTotal,
     voucherDiscountRsd: voucher?.discountRsd ?? 0,
+    firstPurchaseEligible,
     shippingPrices: deliveryQuoteReady
       ? deliveryQuote.prices
       : UNRESOLVED_SHIPPING_PRICES,
@@ -220,6 +250,13 @@ export function OrderSummary({
             <Row
               label={`Vaučer „${voucher.code}"`}
               value={`−${formatRsd(totals.voucherDiscount)}`}
+              tone="action"
+            />
+          ) : null}
+          {totals.firstPurchaseDiscount > 0 ? (
+            <Row
+              label={`Popust za prvu kupovinu (${FIRST_PURCHASE_PCT}%)`}
+              value={`−${formatRsd(totals.firstPurchaseDiscount)}`}
               tone="action"
             />
           ) : null}

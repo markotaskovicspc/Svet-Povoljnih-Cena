@@ -48,6 +48,7 @@ import {
   businessCheckoutRequiresBankTransfer,
   checkoutBusinessIdentityMatchesOrder,
 } from "@/lib/checkout/business-policy";
+import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
 export { createOrderSchema } from "@/lib/checkout/order-schema";
 export type { CreateOrderInput } from "@/lib/checkout/order-schema";
@@ -632,16 +633,7 @@ export async function createOrder(
   }
 
   // Resolve eligibility from the auth context (server-only).
-  const firstPurchase = userId
-    ? (await db.order.count({
-        where: {
-          userId,
-          fiscalDocuments: {
-            some: { kind: "SALE", status: "ISSUED" },
-          },
-        },
-      })) === 0
-    : false;
+  const firstPurchase = await isFirstPurchaseDiscountEligible(userId);
   // A boolean supplied by the browser cannot prove which token will be
   // charged. Keep the discount disabled until the selected payment instrument
   // is server-verified and bound to the actual card authorization.

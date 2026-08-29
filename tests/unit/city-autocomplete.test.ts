@@ -8,6 +8,7 @@ import { visibleCityError } from "@/components/checkout/shipping-form";
 const places: CityAutocompletePlace[] = [
   { name: "Stara Pazova", postalCode: "22300", townId: 804428 },
   { name: "Nova Pazova", postalCode: "22330", townId: 803855 },
+  { name: "Niš", postalCode: "18000", townId: 792047 },
 ];
 
 describe("resolveExactRemoteCity", () => {
@@ -33,6 +34,11 @@ describe("resolveExactRemoteCity", () => {
     expect(
       resolveExactRemoteCity(places, "Stara Pazova", "99999")?.townId,
     ).toBe(804428);
+  });
+
+  it("resolves Niš with or without the diacritic", () => {
+    expect(resolveExactRemoteCity(places, "Niš")?.townId).toBe(792047);
+    expect(resolveExactRemoteCity(places, "nis")?.townId).toBe(792047);
   });
 
   it("does not resolve a partial city name", () => {

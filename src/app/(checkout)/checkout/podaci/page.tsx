@@ -15,6 +15,7 @@ import {
 } from "@/app/(account)/nalog/customer-auth-actions";
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
+import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 
 export const metadata: Metadata = {
   title: "Završetak porudžbine",
@@ -30,9 +31,10 @@ export default async function CheckoutPodaciPage({
 }) {
   const sp = await searchParams;
   const user = await getCurrentUser();
-  const account =
-    user?.userType === "customer"
-      ? await db.user.findUnique({
+  const isCustomer = user?.userType === "customer";
+  const [account, addresses, firstPurchaseEligible] = await Promise.all([
+    isCustomer
+      ? db.user.findUnique({
           where: { id: user.id },
           select: {
             email: true,
@@ -42,11 +44,10 @@ export default async function CheckoutPodaciPage({
             lastName: true,
           },
         })
-      : null;
-  const addresses =
-    user?.userType === "customer"
-      ? await listAddresses(user.id).catch(() => [])
-      : [];
+      : null,
+    isCustomer ? listAddresses(user.id).catch(() => []) : [],
+    isCustomer ? isFirstPurchaseDiscountEligible(user.id) : false,
+  ]);
   const defaultAddress = addresses[0];
   const accountFullName = [account?.firstName, account?.lastName]
     .filter(Boolean)
@@ -98,6 +99,7 @@ export default async function CheckoutPodaciPage({
           checkoutConfig={checkoutConfig}
           glsDeliveryPointsEnabled={glsDeliveryPointsEnabled}
           xExpressAddressEnabled={xExpressAddressEnabled}
+          firstPurchaseEligible={firstPurchaseEligible}
           socialAuthProviders={socialProviders}
           loginAction={loginCustomerAction}
           registrationAction={registerCustomerAction}
