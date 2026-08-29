@@ -1,37 +1,116 @@
 import { describe, expect, it } from "vitest";
-import { salesOrderCourierServiceLabel } from "@/lib/admin/erp-operations";
+import { salesOrderCourierDisplay } from "@/lib/admin/erp-operations";
 
-describe("sales-order courier overview label", () => {
-  it("shows the active courier provider", () => {
+describe("sales-order courier overview display", () => {
+  it("shows the courier status assigned to the matching order item", () => {
     expect(
-      salesOrderCourierServiceLabel({
+      salesOrderCourierDisplay({
         shippingMethod: "KURIR",
-        providers: ["MYGLS"],
+        itemId: "line-a",
+        shipments: [
+          shipment({
+            provider: "MYGLS",
+            status: "OUT_FOR_DELIVERY",
+            itemIds: ["line-a"],
+          }),
+          shipment({
+            provider: "X_EXPRESS",
+            status: "DELIVERED",
+            itemIds: ["line-b"],
+          }),
+        ],
       }),
-    ).toBe("MyGLS");
+    ).toEqual({ service: "MyGLS", status: "Na isporuci" });
   });
 
-  it("shows each provider once when an order has multiple active shipments", () => {
+  it("uses the latest shipment when a courier assignment was replaced", () => {
     expect(
-      salesOrderCourierServiceLabel({
+      salesOrderCourierDisplay({
         shippingMethod: "KURIR",
-        providers: ["X_EXPRESS", "MYGLS", "X_EXPRESS"],
+        itemId: "line-a",
+        shipments: [
+          shipment({
+            provider: "X_EXPRESS",
+            status: "FAILED",
+            itemIds: ["line-a"],
+            updatedAt: "2026-08-28T10:00:00.000Z",
+          }),
+          shipment({
+            provider: "MYGLS",
+            status: "PICKED_UP",
+            itemIds: ["line-a"],
+            updatedAt: "2026-08-28T10:01:00.000Z",
+          }),
+        ],
       }),
-    ).toBe("MyGLS / X Express");
+    ).toEqual({ service: "MyGLS", status: "Preuzeto iz magacina" });
   });
 
-  it("distinguishes missing courier orders from non-courier delivery", () => {
+  it("shows a genuine provider failure and distinguishes local cancellation", () => {
     expect(
-      salesOrderCourierServiceLabel({
+      salesOrderCourierDisplay({
         shippingMethod: "KURIR",
-        providers: [],
+        itemId: "line-a",
+        shipments: [shipment({ status: "FAILED", itemIds: ["line-a"] })],
       }),
-    ).toBe("Kurirski nalog nije kreiran");
+    ).toEqual({ service: "X Express", status: "Neuspešna isporuka" });
     expect(
-      salesOrderCourierServiceLabel({
-        shippingMethod: "KAMION",
-        providers: [],
+      salesOrderCourierDisplay({
+        shippingMethod: "KURIR",
+        itemId: "line-a",
+        shipments: [
+          shipment({
+            status: "FAILED",
+            itemIds: ["line-a"],
+            providerStatusCode: "ADDRESS_REPLACED",
+          }),
+        ],
       }),
-    ).toBe("Nije kurirska isporuka");
+    ).toEqual({ service: "X Express", status: "Kurirski nalog otkazan" });
+  });
+
+  it("supports legacy whole-order assignments and orders without a shipment", () => {
+    expect(
+      salesOrderCourierDisplay({
+        shippingMethod: "KURIR",
+        itemId: "legacy-line",
+        shipments: [shipment({ status: "IN_TRANSIT", itemIds: null })],
+      }),
+    ).toEqual({ service: "X Express", status: "U tranzitu" });
+    expect(
+      salesOrderCourierDisplay({
+        shippingMethod: "KURIR",
+        itemId: "line-a",
+        shipments: [],
+      }),
+    ).toEqual({
+      service: "Kurirski nalog nije kreiran",
+      status: "Nalog nije kreiran",
+    });
   });
 });
+
+function shipment(overrides: {
+  provider?: string;
+  status:
+    | "CREATED"
+    | "PICKED_UP"
+    | "IN_TRANSIT"
+    | "OUT_FOR_DELIVERY"
+    | "DELIVERED"
+    | "RETURNED"
+    | "FAILED";
+  itemIds: string[] | null;
+  providerStatusCode?: string;
+  updatedAt?: string;
+}) {
+  return {
+    provider: overrides.provider ?? "X_EXPRESS",
+    status: overrides.status,
+    providerStatusCode: overrides.providerStatusCode ?? null,
+    updatedAt: overrides.updatedAt ?? "2026-08-28T10:00:00.000Z",
+    rawCreateResponse: overrides.itemIds
+      ? { assignment: { orderItemIds: overrides.itemIds, codAmount: 0 } }
+      : null,
+  };
+}

@@ -11,6 +11,8 @@ let warehouseId = "";
 let issuedInsideId = "";
 let issuedOutsideId = "";
 let notIssuedId = "";
+let firstIssuedItemSku = "";
+let secondIssuedItemSku = "";
 
 beforeAll(async () => {
   const warehouse = await db.warehouse.create({
@@ -27,26 +29,62 @@ beforeAll(async () => {
   issuedOutsideId = issuedOutside.id;
   notIssuedId = notIssued.id;
 
+  const firstIssuedItem = await db.orderItem.findFirstOrThrow({
+    where: { orderId: issuedInside.id },
+  });
+  firstIssuedItemSku = firstIssuedItem.sku;
+  const secondIssuedItem = await db.orderItem.create({
+    data: {
+      orderId: issuedInside.id,
+      sku: `${prefix}-SKU-2`,
+      name: `${prefix} drugi artikal`,
+      qty: 1,
+      unitPriceFull: 1_000,
+      unitPriceSale: 1_000,
+      warehouseId,
+    },
+  });
+  secondIssuedItemSku = secondIssuedItem.sku;
+
   await Promise.all([
     createFiscalSale(issuedInside.id, new Date("2026-07-11T09:00:00.000Z"), "IN"),
     createFiscalSale(issuedOutside.id, new Date("2026-06-11T09:00:00.000Z"), "OUT"),
-    db.shipment.createMany({
-      data: [
-        {
-          orderId: issuedInside.id,
-          service: "COURIER_SMALL",
-          purpose: "ORDER_DELIVERY",
-          provider: "X_EXPRESS",
-          status: "FAILED",
-        },
-        {
-          orderId: issuedInside.id,
-          service: "COURIER_SMALL",
-          purpose: "ORDER_DELIVERY",
-          provider: "MYGLS",
-          status: "CREATED",
-        },
-      ],
+    db.shipment.create({
+      data: {
+        orderId: issuedInside.id,
+        service: "COURIER_SMALL",
+        purpose: "ORDER_DELIVERY",
+        provider: "X_EXPRESS",
+        status: "FAILED",
+        providerStatusCode: "ADDRESS_REPLACED",
+        rawCreateResponse: assignment(firstIssuedItem.id),
+        createdAt: new Date("2026-08-28T10:00:00.000Z"),
+        updatedAt: new Date("2026-08-28T10:00:00.000Z"),
+      },
+    }),
+    db.shipment.create({
+      data: {
+        orderId: issuedInside.id,
+        service: "COURIER_SMALL",
+        purpose: "ORDER_DELIVERY",
+        provider: "MYGLS",
+        status: "OUT_FOR_DELIVERY",
+        rawCreateResponse: assignment(firstIssuedItem.id),
+        createdAt: new Date("2026-08-28T10:01:00.000Z"),
+        updatedAt: new Date("2026-08-28T10:01:00.000Z"),
+      },
+    }),
+    db.shipment.create({
+      data: {
+        orderId: issuedInside.id,
+        service: "COURIER_SMALL",
+        purpose: "ORDER_DELIVERY",
+        provider: "X_EXPRESS",
+        status: "DELIVERED",
+        rawCreateResponse: assignment(secondIssuedItem.id),
+        createdAt: new Date("2026-08-28T10:01:00.000Z"),
+        updatedAt: new Date("2026-08-28T10:01:00.000Z"),
+      },
     }),
   ]);
 });
@@ -74,9 +112,15 @@ describe("sales-order ERP export filters", () => {
     expect(fixtureRows[0]?.values.paymentMethod).toBe("Pouzeće — gotovina");
     expect(fixtureRows[0]?.values.paymentStatus).toBe("Plaća se kuriru");
     const changedCourierRow = fixtureRows.find(
-      (row) => row.detailId === issuedInsideId,
+      (row) => row.values.sku === firstIssuedItemSku,
     );
     expect(changedCourierRow?.values.courierService).toBe("MyGLS");
+    expect(changedCourierRow?.values.courierStatus).toBe("Na isporuci");
+    const deliveredCourierRow = fixtureRows.find(
+      (row) => row.values.sku === secondIssuedItemSku,
+    );
+    expect(deliveredCourierRow?.values.courierService).toBe("X Express");
+    expect(deliveredCourierRow?.values.courierStatus).toBe("Isporučeno");
   });
 
   it("filters by issued fiscal period without introducing a separate download path", async () => {
@@ -164,4 +208,13 @@ async function createFiscalSale(orderId: string, issuedAt: Date, suffix: string)
       issuedAt,
     },
   });
+}
+
+function assignment(orderItemId: string) {
+  return {
+    assignment: {
+      orderItemIds: [orderItemId],
+      codAmount: 0,
+    },
+  };
 }

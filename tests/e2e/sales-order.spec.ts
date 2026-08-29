@@ -441,6 +441,7 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         "Status plaćanja",
         "Status porudžbine",
         "Kurirska služba",
+        "Status kurirske pošiljke",
         "Datum fiskalizacije",
         "Ime i prezime kupca / firma",
         "Način kupovine",

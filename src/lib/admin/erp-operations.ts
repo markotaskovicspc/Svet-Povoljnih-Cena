@@ -1,4 +1,4 @@
-import { DispatchNoteType, Prisma } from "@prisma/client";
+import { DispatchNoteType, Prisma, type ShipmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import type {
   ErpColumn,
@@ -40,6 +40,8 @@ import {
 } from "@/lib/payments/admin-display";
 import { MYGLS_PROVIDER } from "@/lib/mygls/config";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
+import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -444,6 +446,12 @@ export const operationalErpModules: ErpModule[] = [
       status("paymentStatus", "Status plaćanja", ADMIN_PAYMENT_STATUS_OPTIONS),
       status("status", "Status porudžbine"),
       text("courierService", "Kurirska služba"),
+      status("courierStatus", "Status kurirske pošiljke", [
+        "Nalog nije kreiran",
+        "Kurirski nalog otkazan",
+        ...Object.values(SHIPMENT_STATUS_LABEL),
+        "Nije kurirska isporuka",
+      ]),
       date("fiscalizedAt", "Datum fiskalizacije"),
       text("customer", "Ime i prezime kupca / firma"),
       status("purchaseIdentity", "Način kupovine", [
@@ -1554,12 +1562,17 @@ async function salesOrderRows(
         select: { status: true },
       },
       shipments: {
-        where: {
-          purpose: "ORDER_DELIVERY",
-          status: { not: "FAILED" },
+        where: { purpose: "ORDER_DELIVERY" },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          provider: true,
+          status: true,
+          providerStatusCode: true,
+          syncError: true,
+          rawCreateResponse: true,
+          createdAt: true,
+          updatedAt: true,
         },
-        orderBy: { createdAt: "asc" },
-        select: { provider: true },
       },
     },
   });
@@ -1567,6 +1580,11 @@ async function salesOrderRows(
     const customer =
       order.shipCompanyName ||
       [order.shipFirstName, order.shipLastName].filter(Boolean).join(" ");
+    const orderCourier = salesOrderCourierDisplay({
+      shippingMethod: order.shippingMethod,
+      itemId: null,
+      shipments: order.shipments,
+    });
     const common = {
       number: order.number,
       orderDate: dateTime(order.createdAt),
@@ -1591,10 +1609,8 @@ async function salesOrderRows(
       phone: order.shipPhone,
       email: order.guestEmail ?? order.customer?.email ?? null,
       status: order.status,
-      courierService: salesOrderCourierServiceLabel({
-        shippingMethod: order.shippingMethod,
-        providers: order.shipments.map((shipment) => shipment.provider),
-      }),
+      courierService: orderCourier.service,
+      courierStatus: orderCourier.status,
       fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
       invoiced: order.invoices.length > 0,
       sefAccepted: Boolean(order.sefAcceptedAt),
@@ -1634,6 +1650,11 @@ async function salesOrderRows(
       ];
     }
     return order.items.map((item) => {
+      const courier = salesOrderCourierDisplay({
+        shippingMethod: order.shippingMethod,
+        itemId: item.id,
+        shipments: order.shipments,
+      });
       const product = item.product;
       const leaf = product?.categories[0]?.category ?? null;
       const unitPrice = decimal(item.unitPriceSale) ?? 0;
@@ -1646,6 +1667,8 @@ async function salesOrderRows(
         },
         values: {
           ...common,
+          courierService: courier.service,
+          courierStatus: courier.status,
           sku: item.sku,
           supplier: product?.supplier?.name ?? item.supplierName,
           category:
@@ -1682,25 +1705,69 @@ async function salesOrderRows(
   });
 }
 
-export function salesOrderCourierServiceLabel(args: {
+type SalesOrderCourierShipment = {
+  provider: string | null;
+  status: ShipmentStatus;
+  providerStatusCode?: string | null;
+  syncError?: string | null;
+  rawCreateResponse?: unknown;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+};
+
+export function salesOrderCourierDisplay(args: {
   shippingMethod: string;
-  providers: readonly (string | null)[];
+  itemId: string | null;
+  shipments: readonly SalesOrderCourierShipment[];
 }) {
   if (args.shippingMethod !== "KURIR") {
-    return "Nije kurirska isporuka";
+    return {
+      service: "Nije kurirska isporuka",
+      status: "Nije kurirska isporuka",
+    };
   }
 
-  const labels = new Set(
-    args.providers.map((provider) => {
-      if (provider === MYGLS_PROVIDER) return "MyGLS";
-      if (provider === X_EXPRESS_PROVIDER) return "X Express";
-      return provider?.trim() || "Kurir nije određen";
-    }),
-  );
+  const shipment = args.shipments
+    .filter((candidate) => {
+      const assignment = readShipmentAssignment(candidate.rawCreateResponse);
+      return !args.itemId || !assignment || assignment.orderItemIds.includes(args.itemId);
+    })
+    .sort((left, right) => {
+      const updated = timestamp(right.updatedAt) - timestamp(left.updatedAt);
+      return updated || timestamp(right.createdAt) - timestamp(left.createdAt);
+    })[0];
 
-  return labels.size
-    ? [...labels].sort((left, right) => left.localeCompare(right, "sr-Latn")).join(" / ")
-    : "Kurirski nalog nije kreiran";
+  if (!shipment) {
+    return {
+      service: "Kurirski nalog nije kreiran",
+      status: "Nalog nije kreiran",
+    };
+  }
+
+  const service =
+    shipment.provider === MYGLS_PROVIDER
+      ? "MyGLS"
+      : shipment.provider === X_EXPRESS_PROVIDER
+        ? "X Express"
+        : shipment.provider?.trim() || "Kurir nije određen";
+  const locallyCancelled =
+    shipment.status === "FAILED" &&
+    (shipment.providerStatusCode === "ADDRESS_REPLACED" ||
+      shipment.syncError === "MyGLS etiketa obrisana." ||
+      shipment.syncError?.includes("poništena zbog izmene"));
+
+  return {
+    service,
+    status: locallyCancelled
+      ? "Kurirski nalog otkazan"
+      : SHIPMENT_STATUS_LABEL[shipment.status],
+  };
+}
+
+function timestamp(value: Date | string | undefined) {
+  if (!value) return 0;
+  const result = new Date(value).getTime();
+  return Number.isFinite(result) ? result : 0;
 }
 
 async function dispatchRows(take: number): Promise<ErpRow[]> {

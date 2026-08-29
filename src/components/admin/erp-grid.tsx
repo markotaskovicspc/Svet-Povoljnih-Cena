@@ -236,14 +236,15 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     if (
       moduleSlug === "prodajni-nalozi" &&
       window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
-        "courier-service-v1"
+        "courier-status-v1"
     ) {
       const migrated = completeOrder.filter(
         (key) =>
           key !== "paymentMethod" &&
           key !== "paymentStatus" &&
           key !== "purchaseIdentity" &&
-          key !== "courierService",
+          key !== "courierService" &&
+          key !== "courierStatus",
       );
       const channelIndex = migrated.indexOf("channel");
       migrated.splice(
@@ -257,6 +258,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
         statusIndex >= 0 ? statusIndex + 1 : migrated.length,
         0,
         "courierService",
+        "courierStatus",
       );
       const customerIndex = migrated.indexOf("customer");
       migrated.splice(
@@ -267,7 +269,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(
         columnOrderVersionKey(moduleSlug),
-        "courier-service-v1",
+        "courier-status-v1",
       );
       return migrated;
     }
@@ -508,6 +510,20 @@ export function ErpGrid({
     window.addEventListener("spc:erp-grid-refresh", refreshRows);
     return () => window.removeEventListener("spc:erp-grid-refresh", refreshRows);
   }, []);
+
+  useEffect(() => {
+    if (module.slug !== "prodajni-nalozi") return;
+    const refreshRows = () => setReloadToken((current) => current + 1);
+    const interval = window.setInterval(refreshRows, 60_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshRows();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [module.slug]);
 
   useEffect(() => {
     const controller = new AbortController();
