@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
+  BadgePercent,
   CheckCircle2,
   LogIn,
   UserPlus,
@@ -74,7 +75,7 @@ export function IdentityStep({
       id: "register",
       icon: UserPlus,
       title: "Registruj se",
-      desc: "Ostvari 15% popusta na prvu kupovinu i prati status porudžbine.",
+      desc: "Ostvari 15% popusta na prvu kupovinu. Kod nije potreban.",
       accent: "Novo: 15% na prvu kupovinu",
     },
     {
@@ -122,6 +123,21 @@ export function IdentityStep({
           >
             Nastavi sa ovim nalogom
           </button>
+        </div>
+        <div className="border-olive/25 bg-olive/5 mt-4 flex items-start gap-3 rounded-xl border px-3.5 py-3">
+          <BadgePercent
+            className="text-olive mt-0.5 size-5 shrink-0"
+            aria-hidden
+          />
+          <div>
+            <p className="text-sm font-semibold text-ink-900">
+              15% popusta za prvu kupovinu
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-600 sm:text-sm">
+              Ako vam je ovo prva kupovina, popust se obračunava automatski
+              nakon potvrde porudžbine. Vaučer ili promo kod nije potreban.
+            </p>
+          </div>
         </div>
       </div>
     );

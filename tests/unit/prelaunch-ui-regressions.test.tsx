@@ -59,7 +59,28 @@ describe("pre-launch UI regressions", () => {
     expect(html).toContain("Registrujte se uz Google");
     expect(html).toContain("Registrujte se uz Apple");
     expect(html).toContain("Registrujte se uz Facebook");
+    expect(html).toContain("Ostvari 15% popusta na prvu kupovinu");
+    expect(html).toContain("Kod nije potreban");
     expect(html).not.toContain("/nalog/registracija?callbackUrl=");
+  });
+
+  it("explains the automatic first-purchase discount to logged-in customers", () => {
+    const html = renderToStaticMarkup(
+      <IdentityStep
+        value="login"
+        authenticatedCustomer={{
+          name: "Mila Milić",
+          email: "mila@example.com",
+        }}
+        onPick={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("15% popusta za prvu kupovinu");
+    expect(html).toContain(
+      "Ako vam je ovo prva kupovina, popust se obračunava automatski nakon potvrde porudžbine.",
+    );
+    expect(html).toContain("Vaučer ili promo kod nije potreban");
   });
 
   it("describes only the selected payment transport", () => {
