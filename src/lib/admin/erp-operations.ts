@@ -1616,7 +1616,12 @@ async function salesOrderRows(
       sefAccepted: Boolean(order.sefAcceptedAt),
       paid: order.payments.some((payment) => payment.status === "PAID"),
     };
-    if (!order.items.length) {
+    const shippingRow = salesOrderShippingRow({
+      orderId: order.id,
+      common,
+      shipping: order.shipping,
+    });
+    if (!order.items.length && !shippingRow) {
       return [
         {
           id: order.id,
@@ -1649,7 +1654,7 @@ async function salesOrderRows(
         },
       ];
     }
-    return order.items.map((item) => {
+    const itemRows = order.items.map((item) => {
       const courier = salesOrderCourierDisplay({
         shippingMethod: order.shippingMethod,
         itemId: item.id,
@@ -1702,7 +1707,49 @@ async function salesOrderRows(
         },
       };
     });
+    return shippingRow ? [...itemRows, shippingRow] : itemRows;
   });
+}
+
+export function salesOrderShippingRow(args: {
+  orderId: string;
+  common: ErpRow["values"];
+  shipping: Prisma.Decimal | number | null | undefined;
+}): ErpRow | null {
+  const unitPrice = decimal(args.shipping) ?? 0;
+  if (unitPrice <= 0) return null;
+
+  const totals = calculateSalesLineTotals(1, unitPrice);
+  return {
+    // Order ids are valid sales-order command targets and cannot collide with item ids.
+    id: args.orderId,
+    detailId: args.orderId,
+    cellHrefs: {
+      number: `/admin/erp/prodajni-nalozi/${args.orderId}`,
+    },
+    values: {
+      ...args.common,
+      sku: "DOSTAVA",
+      supplier: null,
+      category: "Usluga",
+      group: null,
+      subgroup: null,
+      collection: null,
+      shortDescription: "Naplaćena isporuka",
+      shortName: "Dostava",
+      attribute1: null,
+      attribute2: null,
+      attribute3: null,
+      attribute4: null,
+      color1: null,
+      color2: null,
+      qty: 1,
+      unitPrice,
+      totalNet: totals.totalNet,
+      totalGross: totals.totalGross,
+      warehouse: null,
+    },
+  };
 }
 
 type SalesOrderCourierShipment = {
