@@ -158,6 +158,8 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         paymentMethod: "POUZECE_GOTOVINA",
         shipFirstName: "QA",
         shipLastName: "Kupac",
+        shipCompanyName: "QA Kupac d.o.o.",
+        shipPib: "109876543",
         shipPhone: "+381641112223",
         shipStreet: "Test ulica 1",
         shipCity: "Novi Sad",

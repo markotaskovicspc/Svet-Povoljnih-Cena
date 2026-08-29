@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  businessCheckoutRequiresBankTransfer,
   checkoutBusinessIdentityMatchesOrder,
   missingBusinessAddressFields,
   shouldRestoreBusinessBuyerType,
@@ -54,27 +53,29 @@ describe("checkout for a business buyer", () => {
     );
   });
 
-  it("requires bank transfer for every business checkout", () => {
-    const business = {
+  it("accepts cash on delivery for a business checkout", () => {
+    const parsed = createOrderSchema.safeParse({
+      guestEmail: "kupac@example.test",
+      lines: [{ sku: "TEST-1", qty: 1 }],
       shipping: {
         liceType: "pravno" as const,
+        firstName: "Test",
+        lastName: "Kupac",
+        phone: "0601234567",
+        street: "Test ulica 1",
+        city: "Beograd",
+        postalCode: "11000",
+        country: "RS",
         companyName: "Kupac d.o.o.",
         pib: "109876543",
       },
-    };
+      billingSameAsShipping: true,
+      shippingMethod: "KURIR",
+      paymentMethod: "POUZECE_GOTOVINA",
+      consent: true,
+    });
 
-    expect(
-      businessCheckoutRequiresBankTransfer({
-        ...business,
-        paymentMethod: "POUZECE_GOTOVINA",
-      }),
-    ).toBe(true);
-    expect(
-      businessCheckoutRequiresBankTransfer({
-        ...business,
-        paymentMethod: "UPLATA_NA_RACUN",
-      }),
-    ).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 
   it("refuses to reuse a converted checkout session with stale buyer data", () => {

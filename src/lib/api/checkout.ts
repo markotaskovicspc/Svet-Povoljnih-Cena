@@ -45,7 +45,6 @@ import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
 import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
 import {
-  businessCheckoutRequiresBankTransfer,
   checkoutBusinessIdentityMatchesOrder,
 } from "@/lib/checkout/business-policy";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
@@ -79,7 +78,6 @@ export type CreateOrderError =
   | { code: "DELIVERY_POINT_INVALID" }
   | { code: "DELIVERY_ADDRESS_INVALID" }
   | { code: "PAYMENT_UNAVAILABLE" }
-  | { code: "BUSINESS_REQUIRES_BANK_TRANSFER" }
   | { code: "CHECKOUT_SESSION_MISMATCH" }
   | { code: "DELIVERY_UNAVAILABLE" };
 
@@ -368,12 +366,6 @@ export async function createOrder(
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
   if (!input.lines.length) return { ok: false, error: { code: "EMPTY_CART" } };
-  if (businessCheckoutRequiresBankTransfer(input)) {
-    return {
-      ok: false,
-      error: { code: "BUSINESS_REQUIRES_BANK_TRANSFER" },
-    };
-  }
   if (input.checkoutSessionId) {
     const existingSession = await db.checkoutSession.findUnique({
       where: { id: input.checkoutSessionId },

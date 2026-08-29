@@ -234,10 +234,6 @@ export function CheckoutFlow({
     control: methods.control,
     name: "paymentMethod",
   });
-  const shippingLiceType = useWatch({
-    control: methods.control,
-    name: "shipping.liceType",
-  });
   const shippingCity = useWatch({
     control: methods.control,
     name: "shipping.city",
@@ -326,27 +322,6 @@ export function CheckoutFlow({
     getValues,
     preferredPaymentMethod,
     setValue,
-  ]);
-
-  useEffect(() => {
-    if (shippingLiceType !== "pravno") return;
-    const bankTransferEnabled = checkoutConfig.paymentMethods.some(
-      (method) => method.id === "uplata_na_racun",
-    );
-    if (
-      bankTransferEnabled &&
-      getValues("paymentMethod") !== "uplata_na_racun"
-    ) {
-      setValue("paymentMethod", "uplata_na_racun", {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    }
-  }, [
-    checkoutConfig.paymentMethods,
-    getValues,
-    setValue,
-    shippingLiceType,
   ]);
 
   const quoteLineKey = useMemo(
@@ -1408,8 +1383,6 @@ function readCreateOrderError(
       return "Izaberite važeće X Express mesto za kurirsku isporuku.";
     case "PAYMENT_UNAVAILABLE":
       return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
-    case "BUSINESS_REQUIRES_BANK_TRANSFER":
-      return "Za pravno lice porudžbina se potvrđuje uplatom na račun. Vratite se na podatke i proverite način plaćanja.";
     case "CHECKOUT_SESSION_MISMATCH":
       return "Podaci su promenjeni nakon što je porudžbina već evidentirana. Osvežite stranicu i proverite postojeću porudžbinu pre novog pokušaja.";
     case "DELIVERY_UNAVAILABLE":

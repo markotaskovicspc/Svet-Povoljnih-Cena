@@ -16,7 +16,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "UPLATA_NA_RACUN",
         nextMethod: "POUZECE_GOTOVINA",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [emptyAttempt],
       }),
@@ -32,7 +31,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "POUZECE_GOTOVINA",
         nextMethod: "POUZECE_KARTICA",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [emptyAttempt],
       }),
@@ -47,7 +45,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "KARTICA",
         nextMethod: "UPLATA_NA_RACUN",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [
           {
@@ -66,7 +63,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "POUZECE_GOTOVINA",
         nextMethod: "POUZECE_GOTOVINA",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [emptyAttempt],
       }),
@@ -75,28 +71,17 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "POUZECE_GOTOVINA",
         nextMethod: "KARTICA",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [emptyAttempt],
       }),
     ).toThrow("samo uplata na račun ili plaćanje pouzećem");
   });
 
-  it("keeps legal entities on bank transfer and blocks mixed Rabalux COD", () => {
-    expect(() =>
-      planWebOrderPaymentMethodChange({
-        currentMethod: "UPLATA_NA_RACUN",
-        nextMethod: "POUZECE_KARTICA",
-        businessBuyer: true,
-        mixedRabaluxOrder: false,
-        attempts: [emptyAttempt],
-      }),
-    ).toThrow("Pravno lice");
+  it("blocks mixed Rabalux COD", () => {
     expect(() =>
       planWebOrderPaymentMethodChange({
         currentMethod: "UPLATA_NA_RACUN",
         nextMethod: "POUZECE_GOTOVINA",
-        businessBuyer: false,
         mixedRabaluxOrder: true,
         attempts: [emptyAttempt],
       }),
@@ -108,7 +93,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "KARTICA",
         nextMethod: "UPLATA_NA_RACUN",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [{ ...emptyAttempt, status: "PAID" }],
       }),
@@ -117,7 +101,6 @@ describe("WEB order payment-method editing", () => {
       planWebOrderPaymentMethodChange({
         currentMethod: "KARTICA",
         nextMethod: "UPLATA_NA_RACUN",
-        businessBuyer: false,
         mixedRabaluxOrder: false,
         attempts: [{ ...emptyAttempt, redirectUrl: "https://pay.example/1" }],
       }),

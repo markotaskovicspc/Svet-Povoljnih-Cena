@@ -1504,12 +1504,6 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
   const latestFiscal = order.fiscalDocuments[0] ?? null;
-  const businessBuyer = [
-    order.shipCompanyName,
-    order.shipPib,
-    order.billCompanyName,
-    order.billPib,
-  ].some((value) => Boolean(value?.trim()));
   const activeRabaluxOrderItemIds = new Set(
     order.supplierFulfillments
       .filter(
@@ -1546,7 +1540,6 @@ export async function WebOrderDetail({ id }: { id: string }) {
       planWebOrderPaymentMethodChange({
         currentMethod: order.paymentMethod,
         nextMethod: value,
-        businessBuyer,
         mixedRabaluxOrder,
         attempts: paymentChangeAttempts,
       });
@@ -2152,8 +2145,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
             ) : (
               <p className="text-sm leading-6 text-ink-500">
                 Izmena je dostupna samo pre pokretanja ili potvrde naplate,
-                fiskalizacije, otpremnice i isporuke. Za pravno lice ostaje
-                obavezna uplata na račun.
+                fiskalizacije, otpremnice i isporuke.
               </p>
             )}
           </Card>

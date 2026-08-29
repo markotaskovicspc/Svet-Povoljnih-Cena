@@ -29,7 +29,6 @@ type PaymentAttempt = {
 export function planWebOrderPaymentMethodChange(input: {
   currentMethod: PaymentMethod;
   nextMethod: PaymentMethod;
-  businessBuyer: boolean;
   mixedRabaluxOrder: boolean;
   attempts: PaymentAttempt[];
 }) {
@@ -40,9 +39,6 @@ export function planWebOrderPaymentMethodChange(input: {
   }
   if (input.currentMethod === input.nextMethod) {
     throw new Error("Izabrani način plaćanja je već aktivan.");
-  }
-  if (input.businessBuyer && input.nextMethod !== "UPLATA_NA_RACUN") {
-    throw new Error("Pravno lice može da plati samo uplatom na račun.");
   }
   if (
     input.mixedRabaluxOrder &&

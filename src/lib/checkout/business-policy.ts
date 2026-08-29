@@ -12,27 +12,6 @@ export function missingBusinessAddressFields(address: CheckoutBusinessAddress) {
   ].filter((field): field is "companyName" | "pib" => field !== null);
 }
 
-export function checkoutHasBusinessBuyer(input: {
-  shipping: CheckoutBusinessAddress;
-  billing?: CheckoutBusinessAddress | null;
-}) {
-  return (
-    input.shipping.liceType === "pravno" ||
-    input.billing?.liceType === "pravno"
-  );
-}
-
-export function businessCheckoutRequiresBankTransfer(input: {
-  shipping: CheckoutBusinessAddress;
-  billing?: CheckoutBusinessAddress | null;
-  paymentMethod: string;
-}) {
-  return (
-    checkoutHasBusinessBuyer(input) &&
-    input.paymentMethod !== "UPLATA_NA_RACUN"
-  );
-}
-
 export function shouldRestoreBusinessBuyerType(input: {
   current: "fizicko" | "pravno" | undefined;
   remembered: "fizicko" | "pravno" | undefined;

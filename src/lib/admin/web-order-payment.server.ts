@@ -29,10 +29,6 @@ type LockedBackgroundJob = {
   status: string;
 };
 
-function hasText(value: string | null) {
-  return Boolean(value?.trim());
-}
-
 async function refreshBuyerReceipt(orderId: string) {
   let receiptRefreshed = false;
   let receiptError: string | null = null;
@@ -242,12 +238,6 @@ export async function updateWebOrderPaymentMethod(input: {
       const plan = planWebOrderPaymentMethodChange({
         currentMethod: order.paymentMethod,
         nextMethod: input.nextMethod,
-        businessBuyer: [
-          order.shipCompanyName,
-          order.shipPib,
-          order.billCompanyName,
-          order.billPib,
-        ].some(hasText),
         mixedRabaluxOrder:
           rabaluxOrderItemIds.size > 0 &&
           order.items.some((item) => !rabaluxOrderItemIds.has(item.id)),
