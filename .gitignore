@@ -29,6 +29,7 @@
 # Local git worktrees created inside the shared workspace.
 /.worktrees/
 /svet akcija/.worktrees/
+/.codex-worktrees/
 
 # production
 /build

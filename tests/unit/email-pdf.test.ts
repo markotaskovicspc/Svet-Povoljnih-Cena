@@ -46,6 +46,27 @@ const businessOrder: InvoiceOrderInput = {
   },
 };
 
+const shippingBusinessWithPersonalBilling: InvoiceOrderInput = {
+  ...order,
+  shipping_address: {
+    ...order.shipping_address,
+    firstName: "Darko",
+    lastName: "Stanić",
+    companyName: "DSF DOO",
+    pib: "106986493",
+    street: "Tihomira Vuksanovića 45",
+    postalCode: "34000",
+    city: "Kragujevac",
+  },
+  billing_address: {
+    firstName: "Iva",
+    lastName: "Stanić",
+    street: "Industrijska 17",
+    postalCode: "34000",
+    city: "Kragujevac",
+  },
+};
+
 describe("customer PDF documents", () => {
   it("renders the styled pro-forma as a branded A4 image PDF", async () => {
     const bytes = await buildInvoicePdf(businessOrder);
@@ -85,10 +106,48 @@ describe("customer PDF documents", () => {
     expect(
       invoiceBuyerLines(businessOrder),
     ).toEqual([
-      "Kupac d.o.o.",
+      "Tip kupca: Pravno lice",
+      "Naziv firme: Kupac d.o.o.",
       "PIB: 109876543",
-      "Kontakt: Milan Jovanović",
-      "Poslovna 12, 21000 Novi Sad",
+      "Kontakt osoba: Milan Jovanović",
+      "Adresa: Poslovna 12, 21000 Novi Sad",
+    ]);
+  });
+
+  it("keeps the shipping legal identity when a separate billing address is personal", () => {
+    expect(invoiceBuyerLines(shippingBusinessWithPersonalBilling)).toEqual([
+      "Tip kupca: Pravno lice",
+      "Naziv firme: DSF DOO",
+      "PIB: 106986493",
+      "Kontakt osoba: Darko Stanić",
+      "Adresa: Tihomira Vuksanovića 45, 34000 Kragujevac",
+    ]);
+    expect(withdrawalBuyerLines(shippingBusinessWithPersonalBilling)).toEqual([
+      "Pravno lice: DSF DOO",
+      "PIB: 106986493",
+      "Kontakt osoba: Darko Stanić",
+      "Adresa: Tihomira Vuksanovića 45, 34000 Kragujevac",
+    ]);
+  });
+
+  it("includes every customer field shown in the admin overview", () => {
+    expect(
+      invoiceBuyerLines({
+        ...shippingBusinessWithPersonalBilling,
+        shipping_address: {
+          ...shippingBusinessWithPersonalBilling.shipping_address,
+          phone: "0603021060",
+          email: "tehnickipregled@dsf.rs",
+        },
+      }),
+    ).toEqual([
+      "Tip kupca: Pravno lice",
+      "Naziv firme: DSF DOO",
+      "PIB: 106986493",
+      "Kontakt osoba: Darko Stanić",
+      "Adresa: Tihomira Vuksanovića 45, 34000 Kragujevac",
+      "Telefon: 0603021060",
+      "E-pošta: tehnickipregled@dsf.rs",
     ]);
   });
 

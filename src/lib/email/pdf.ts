@@ -3,6 +3,7 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import { rasterJpegPagesPdf } from "@/lib/pdf/raster-pages";
 import { renderPdfSvgToJpeg } from "@/lib/pdf/render-svg";
 
@@ -221,6 +222,8 @@ export interface InvoiceAddressInput {
   street: string;
   postalCode: string;
   city: string;
+  phone?: string | null;
+  email?: string | null;
   companyName?: string | null;
   pib?: string | null;
 }
@@ -322,7 +325,7 @@ function invoicePageSvg(
 ) {
   const blue = "#124987";
   const tableX = 70;
-  const tableY = 430;
+  const tableY = 495;
   const headerHeight = 56;
   const rowHeight = 66;
   const widths = [440, 140, 75, 165, 165, 175];
@@ -417,8 +420,8 @@ function invoicePageSvg(
     <text x="1170" y="119" text-anchor="end" class="docNo">${xmlEscapePdf(order.number)}</text>
     <text x="1170" y="148" text-anchor="end" class="date">Datum: ${xmlEscapePdf(DOCUMENT_DATE_FORMATTER.format(order.createdAt))}</text>
     <rect x="70" y="165" width="1100" height="4" fill="${blue}"/>
-    <rect x="70" y="205" width="550" height="170" class="partyBox"/>
-    <rect x="620" y="205" width="550" height="170" class="partyBox"/>
+    <rect x="70" y="205" width="550" height="235" class="partyBox"/>
+    <rect x="620" y="205" width="550" height="235" class="partyBox"/>
     <text x="92" y="242" class="partyLabel">PRODAVAC</text>
     ${partyText(92, 274, [MERCHANT_LEGAL_INFO.name, `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`, MERCHANT_LEGAL_INFO.shortAddress, `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`])}
     <text x="642" y="242" class="partyLabel">KUPAC</text>
@@ -430,25 +433,35 @@ function invoicePageSvg(
 }
 
 export function invoiceBuyerLines(order: InvoiceOrderInput) {
-  const buyer = order.billing_address ?? order.shipping_address;
+  const buyer = resolveDocumentBuyerAddress(
+    order.shipping_address,
+    order.billing_address,
+  );
   const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
   const companyName = buyer.companyName?.trim();
   const pib = buyer.pib?.trim();
+  const phone = buyer.phone?.trim();
+  const email = buyer.email?.trim();
 
   if (companyName || pib) {
     return [
-      companyName || contactName,
+      "Tip kupca: Pravno lice",
+      `Naziv firme: ${companyName || contactName}`,
       pib ? `PIB: ${pib}` : "",
-      companyName && contactName ? `Kontakt: ${contactName}` : "",
-      `${buyer.street}, ${buyer.postalCode} ${buyer.city}`,
+      companyName && contactName ? `Kontakt osoba: ${contactName}` : "",
+      `Adresa: ${buyer.street}, ${buyer.postalCode} ${buyer.city}`,
+      phone ? `Telefon: ${phone}` : "",
+      email ? `E-pošta: ${email}` : "",
     ].filter(Boolean);
   }
 
   return [
+    "Tip kupca: Fizičko lice",
     contactName,
-    `${buyer.street},`,
-    `${buyer.postalCode} ${buyer.city}`,
-  ];
+    `Adresa: ${buyer.street}, ${buyer.postalCode} ${buyer.city}`,
+    phone ? `Telefon: ${phone}` : "",
+    email ? `E-pošta: ${email}` : "",
+  ].filter(Boolean);
 }
 
 function partyText(x: number, y: number, values: string[]) {
@@ -559,7 +572,10 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
 }
 
 export function withdrawalBuyerLines(order: InvoiceOrderInput) {
-  const buyer = order.billing_address ?? order.shipping_address;
+  const buyer = resolveDocumentBuyerAddress(
+    order.shipping_address,
+    order.billing_address,
+  );
   const contactName = `${buyer.firstName} ${buyer.lastName}`.trim();
   const companyName = buyer.companyName?.trim();
   const pib = buyer.pib?.trim();

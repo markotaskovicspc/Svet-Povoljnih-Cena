@@ -65,10 +65,11 @@ import {
   rabaluxStockItemsBySku,
   selectRabaluxSerbiaStockCatalog,
 } from "./serbia-stock";
+import { rabaluxShortDescription } from "./descriptions";
 
 const MAX_RECORDED_ERRORS = 50;
 const ITEM_CONCURRENCY = 6;
-const RABALUX_CATALOG_MODEL_VERSION = 2;
+const RABALUX_CATALOG_MODEL_VERSION = 3;
 const RABALUX_PICTOGRAM_CODES: ReadonlySet<string> = new Set(
   RABALUX_PICTOGRAMS.map((definition) => definition.code),
 );
@@ -1023,11 +1024,7 @@ async function upsertCatalogItem(
       slug: item.slug,
       name: item.name,
       description: item.description,
-      shortDescription: item.description
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 320) || null,
+      shortDescription: rabaluxShortDescription(item),
       colorPrimary: item.colorPrimary,
       colorSecondary: item.colorSecondary,
       groupId,

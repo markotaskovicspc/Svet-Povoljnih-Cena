@@ -162,7 +162,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       status: "KREIRANO",
       shippingMethod: "KURIR",
       lines: [
-        { product: products[0]!, warehouseId: null, qty: 2 },
+        { product: products[0]!, warehouseId: dcWarehouseId, qty: 2 },
         { product: products[1]!, warehouseId: dcWarehouseId, qty: 3 },
       ],
     });

@@ -7,6 +7,7 @@ import {
   type ShipmentPurpose,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import {
   createShipmentForOrder,
   getSelectedSmallParcelProvider,
@@ -836,11 +837,17 @@ export async function updatePickupBatchCourierHandover(
       where: { id: batchId },
       select: {
         id: true,
+        number: true,
+        provider: true,
         status: true,
         lines: {
           select: {
             id: true,
             lineGroupKey: true,
+            orderId: true,
+            orderItemId: true,
+            reclamationId: true,
+            purpose: true,
             courierPickedUpAt: true,
           },
         },
@@ -884,6 +891,66 @@ export async function updatePickupBatchCourierHandover(
     }
 
     const selectedKeySet = new Set(selectedKeys);
+    const clearedGroupKeys = [...pickedBefore].filter(
+      (key) => !selectedKeySet.has(key),
+    );
+    if (clearedGroupKeys.length) {
+      throw new Error(
+        "Jednom potvrđeno fizičko preuzimanje ne može da se poništi uklanjanjem oznake. Ako je potvrda pogrešna, obustavite obradu i evidentirajte ispravku kroz kontrolisani operativni postupak.",
+      );
+    }
+
+    const newlyPickedUpGroupKeys = selectedKeys.filter(
+      (key) => !pickedBefore.has(key),
+    );
+    const groups = pickupWorkGroups(batch.lines);
+    const newlyPickedUpGroups = groups.filter((group) =>
+      newlyPickedUpGroupKeys.includes(group.lineGroupKey),
+    );
+    const shipments = newlyPickedUpGroups.length
+      ? await tx.shipment.findMany({
+          where: {
+            provider: batch.provider ?? undefined,
+            status: { not: "FAILED" },
+            OR: newlyPickedUpGroups.map((group) =>
+              group.purpose === "RECLAMATION_REPLACEMENT"
+                ? {
+                    reclamationId: requiredReclamationId(group),
+                    purpose: "RECLAMATION_REPLACEMENT" as const,
+                  }
+                : {
+                    orderId: group.orderId,
+                    purpose: "ORDER_DELIVERY" as const,
+                  },
+            ),
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            orderId: true,
+            reclamationId: true,
+            purpose: true,
+            rawCreateResponse: true,
+          },
+        })
+      : [];
+    const handoverJobs = newlyPickedUpGroups.map((group) => {
+      const shipment = shipments.find((candidate) =>
+        group.purpose === "RECLAMATION_REPLACEMENT"
+          ? candidate.purpose === "RECLAMATION_REPLACEMENT" &&
+            candidate.reclamationId === group.reclamationId
+          : candidate.purpose === "ORDER_DELIVERY" &&
+            candidate.orderId === group.orderId &&
+            samePickupAssignment(candidate.rawCreateResponse, group),
+      );
+      if (!shipment) {
+        throw new Error(
+          `Picking grupa ${group.lineGroupKey} nema aktivnu kurirsku pošiljku. Preuzimanje nije sačuvano.`,
+        );
+      }
+      return { group, shipmentId: shipment.id };
+    });
+
     const unselectedKeys = allGroupKeys.filter((key) => !selectedKeySet.has(key));
     const now = new Date();
     if (selectedKeys.length) {
@@ -917,6 +984,23 @@ export async function updatePickupBatchCourierHandover(
       where: { id: batch.id },
       data: { status: complete ? "PICKED_UP" : "BOOKED" },
     });
+    for (const handover of handoverJobs) {
+      await enqueueBackgroundJob(
+        {
+          kind: "COURIER_HANDOVER",
+          payload: {
+            batchId: batch.id,
+            batchNumber: batch.number,
+            lineGroupKey: handover.group.lineGroupKey,
+            shipmentId: handover.shipmentId,
+            actorId,
+            occurredAt: now.toISOString(),
+          },
+          idempotencyKey: `courier-handover:${batch.id}:${handover.group.lineGroupKey}`,
+        },
+        tx,
+      );
+    }
 
     return {
       pickedUpGroupCount: selectedKeys.length,
@@ -925,12 +1009,9 @@ export async function updatePickupBatchCourierHandover(
         selectedKeySet.has(line.lineGroupKey),
       ).length,
       totalPackageCount: batch.lines.length,
-      newlyPickedUpGroupCount: selectedKeys.filter(
-        (key) => !pickedBefore.has(key),
-      ).length,
-      clearedGroupCount: [...pickedBefore].filter(
-        (key) => !selectedKeySet.has(key),
-      ).length,
+      newlyPickedUpGroupCount: newlyPickedUpGroupKeys.length,
+      queuedHandoverCount: handoverJobs.length,
+      clearedGroupCount: 0,
       complete,
     };
   }, TRANSACTION_OPTIONS);

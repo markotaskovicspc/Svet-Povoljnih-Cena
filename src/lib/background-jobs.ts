@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { redactText } from "@/lib/monitoring";
@@ -37,6 +37,14 @@ const schemas = {
     eventId: z.string().min(1).max(200),
   }),
   NEWSLETTER_CAMPAIGN_SEND: z.object({ campaignId: z.string().min(1) }),
+  COURIER_HANDOVER: z.object({
+    batchId: z.string().min(1),
+    batchNumber: z.string().min(1).max(100),
+    lineGroupKey: z.string().min(1).max(300),
+    shipmentId: z.string().min(1),
+    actorId: z.string().min(1),
+    occurredAt: z.iso.datetime(),
+  }),
   FISCAL_RECEIPT: z.object({
     orderId: z.string().min(1),
     source: z.enum(["AUTO_ADVANCE", "AUTO_PICKUP", "MANUAL"]).optional(),
@@ -111,6 +119,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "GUEST_RECLAMATION_LINK_EMAIL",
   "BUYER_RECEIPT",
   "SUPPLIER_RESERVATION",
+  "COURIER_HANDOVER",
   "FISCAL_RECEIPT",
   "ORDER_STATUS_EMAIL",
   "ORDER_ITEMS_CHANGED_EMAIL",
@@ -491,6 +500,122 @@ async function dispatchJob(job: JobRow) {
       } catch (error) {
         await failNewsletterCampaign(campaignId, error);
         throw error;
+      }
+      return;
+    }
+    case "COURIER_HANDOVER": {
+      const args = payload as z.infer<typeof schemas.COURIER_HANDOVER>;
+      const lines = await db.pickupBatchLine.findMany({
+        where: {
+          batchId: args.batchId,
+          lineGroupKey: args.lineGroupKey,
+        },
+        select: {
+          courierPickedUpAt: true,
+          orderId: true,
+          reclamationId: true,
+          purpose: true,
+        },
+      });
+      // The batch may have been removed before this job started. There is no
+      // shipment transition left to apply in that case.
+      if (!lines.length) return;
+      if (lines.some((line) => !line.courierPickedUpAt)) {
+        throw new PermanentBackgroundJobError(
+          "Picking grupa nije u celosti potvrđena kao fizički preuzeta.",
+        );
+      }
+
+      const shipment = await db.shipment.findUnique({
+        where: { id: args.shipmentId },
+        select: {
+          id: true,
+          orderId: true,
+          trackingNo: true,
+          service: true,
+          purpose: true,
+          reclamationId: true,
+          status: true,
+        },
+      });
+      const handoverLine = lines[0]!;
+      const groupIsConsistent = lines.every(
+        (line) =>
+          line.orderId === handoverLine.orderId &&
+          line.purpose === handoverLine.purpose &&
+          line.reclamationId === handoverLine.reclamationId,
+      );
+      const shipmentMatchesGroup = Boolean(
+        shipment &&
+          shipment.orderId === handoverLine.orderId &&
+          shipment.purpose === handoverLine.purpose &&
+          shipment.reclamationId === handoverLine.reclamationId,
+      );
+      if (
+        !shipment?.trackingNo ||
+        !groupIsConsistent ||
+        !shipmentMatchesGroup ||
+        ["FAILED", "RETURNED"].includes(shipment.status)
+      ) {
+        throw new PermanentBackgroundJobError(
+          "Aktivna kurirska pošiljka za potvrđenu picking grupu nije pronađena.",
+        );
+      }
+
+      const pickedUpOrLater = [
+        "PICKED_UP",
+        "IN_TRANSIT",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+      ].includes(shipment.status);
+      let statusAfterHandover: ShipmentStatus = shipment.status;
+      if (!pickedUpOrLater) {
+        const { applyShipmentEvent } = await import("@/lib/courier");
+        const result = await applyShipmentEvent(shipment.service, {
+          trackingNo: shipment.trackingNo,
+          status: "PICKED_UP",
+          providerStatusCode: "WAREHOUSE_HANDOVER",
+          providerEventId: `pickup-batch:${args.batchId}:${args.lineGroupKey}`,
+          occurredAt: new Date(args.occurredAt),
+          message: `Kurir je fizički preuzeo pošiljku prema nalogu za preuzimanje ${args.batchNumber}.`,
+          raw: {
+            source: "PICKUP_BATCH_HANDOVER",
+            batchId: args.batchId,
+            batchNumber: args.batchNumber,
+            lineGroupKey: args.lineGroupKey,
+            actorId: args.actorId,
+          },
+        });
+        if (!result) {
+          throw new PermanentBackgroundJobError(
+            "Kurirska pošiljka za potvrđenu picking grupu nije pronađena.",
+          );
+        }
+        statusAfterHandover = result.status;
+      }
+
+      if (shipment.purpose === "ORDER_DELIVERY") {
+        // Queueing is intentionally unconditional once the physical handover
+        // is confirmed. Both keys are idempotent, so a retry can recover if
+        // the shipment event was saved before either side effect was queued.
+        await enqueueBackgroundJob({
+          kind: "FISCAL_RECEIPT",
+          payload: {
+            orderId: shipment.orderId,
+            source: "AUTO_PICKUP",
+          },
+          idempotencyKey: `fiscal-pickup:${shipment.orderId}`,
+        });
+        if (statusAfterHandover === "PICKED_UP") {
+          await enqueueBackgroundJob({
+            kind: "ORDER_STATUS_EMAIL",
+            payload: {
+              orderId: shipment.orderId,
+              status: "SPREMNO_ZA_ISPORUKU",
+            },
+            idempotencyKey: `order-status-email:${shipment.orderId}:PICKED_UP`,
+          });
+        }
       }
       return;
     }

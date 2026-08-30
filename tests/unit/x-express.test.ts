@@ -24,6 +24,7 @@ import {
   renderXExpressLabelsHtml,
 } from "@/lib/x-express/labels";
 import {
+  describeXExpressWebhookAuthentication,
   isXExpressWebhookContractValid,
   parseXExpressWebhookBatch,
   verifyXExpressWebhookHeaders,
@@ -754,6 +755,15 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(verifyXExpressWebhookHeaders(headers)).toBe(true);
     headers.set("X-API-Key", "unrecognized-key");
     expect(verifyXExpressWebhookHeaders(headers)).toBe(false);
+
+    const diagnostics = describeXExpressWebhookAuthentication(headers);
+    expect(diagnostics).toMatchObject({
+      hasApiKey: true,
+      hasBearer: false,
+      senderMatches: true,
+      configuredCredentialCount: 3,
+    });
+    expect(diagnostics.credentialFingerprint).toMatch(/^[0-9a-f]{12}$/);
 
     const batch = parseXExpressWebhookBatch([
       {

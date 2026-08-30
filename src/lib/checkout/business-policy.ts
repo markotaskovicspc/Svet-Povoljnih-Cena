@@ -5,7 +5,10 @@ export type CheckoutBusinessAddress = {
 };
 
 export function missingBusinessAddressFields(address: CheckoutBusinessAddress) {
-  if (address.liceType !== "pravno") return [];
+  const inferredBusiness =
+    !address.liceType &&
+    Boolean(address.companyName?.trim() || address.pib?.trim());
+  if (address.liceType !== "pravno" && !inferredBusiness) return [];
   return [
     address.companyName?.trim() ? null : "companyName",
     address.pib?.trim() ? null : "pib",

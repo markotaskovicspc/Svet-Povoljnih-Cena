@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { Order, OrderStatus, Reclamation, ReclamationStatus } from "@/types";
 import { BRAND } from "@/lib/brand";
 import { formatRsd } from "@/lib/format";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import { OrderConfirmation } from "./templates/order-confirmation";
 import { IpsPaymentConfirmation } from "./templates/ips-payment-confirmation";
 import { OrderStatusChanged } from "./templates/order-status-changed";
@@ -55,7 +56,10 @@ export async function sendOrderConfirmation(args: {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
   const guaranteeItems = guaranteeItemsForOrder(args.order.items);
-  const invoiceBuyer = args.order.billingAddress ?? args.order.shippingAddress;
+  const invoiceBuyer = resolveDocumentBuyerAddress(
+    args.order.shippingAddress,
+    args.order.billingAddress,
+  );
   const isBusinessBuyer = Boolean(
     invoiceBuyer.companyName?.trim() || invoiceBuyer.pib?.trim(),
   );
@@ -93,7 +97,10 @@ export async function sendOrderConfirmation(args: {
           number: args.order.id,
           createdAt: new Date(args.order.createdAt),
           items: guaranteeItems,
-          buyer: pdfOrder.billing_address ?? pdfOrder.shipping_address,
+          buyer: resolveDocumentBuyerAddress(
+            pdfOrder.shipping_address,
+            pdfOrder.billing_address,
+          ),
         })
       ).toString("base64"),
       contentType: "application/pdf",
@@ -590,6 +597,8 @@ function orderToPdfInput(order: Order) {
       street: order.shippingAddress.street,
       postalCode: order.shippingAddress.postalCode,
       city: order.shippingAddress.city,
+      phone: order.shippingAddress.phone,
+      email: order.customerEmail ?? order.guestEmail,
       companyName: order.shippingAddress.companyName,
       pib: order.shippingAddress.pib,
     },
@@ -600,6 +609,8 @@ function orderToPdfInput(order: Order) {
           street: order.billingAddress.street,
           postalCode: order.billingAddress.postalCode,
           city: order.billingAddress.city,
+          phone: order.shippingAddress.phone,
+          email: order.customerEmail ?? order.guestEmail,
           companyName: order.billingAddress.companyName,
           pib: order.billingAddress.pib,
         }

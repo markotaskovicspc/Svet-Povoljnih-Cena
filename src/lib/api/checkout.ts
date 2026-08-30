@@ -48,6 +48,7 @@ import {
   checkoutBusinessIdentityMatchesOrder,
 } from "@/lib/checkout/business-policy";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
 export { createOrderSchema } from "@/lib/checkout/order-schema";
 export type { CreateOrderInput } from "@/lib/checkout/order-schema";
@@ -751,6 +752,35 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
   }
 
+  const shippingBuyerAddress = {
+    firstName: ship.firstName,
+    lastName: ship.lastName,
+    phone: ship.phone,
+    street: ship.street,
+    city: xExpressTown?.name ?? ship.city,
+    postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+    country: ship.country,
+    companyName: shipIsBusiness ? ship.companyName ?? null : null,
+    pib: shipIsBusiness ? ship.pib ?? null : null,
+  };
+  const billingBuyerAddress = bill
+    ? {
+        firstName: bill.firstName,
+        lastName: bill.lastName,
+        phone: bill.phone,
+        street: bill.street,
+        city: bill.city,
+        postalCode: bill.postalCode,
+        country: bill.country,
+        companyName: billIsBusiness ? bill.companyName ?? null : null,
+        pib: billIsBusiness ? bill.pib ?? null : null,
+      }
+    : null;
+  const customerBuyerAddress = resolveDocumentBuyerAddress(
+    shippingBuyerAddress,
+    billingBuyerAddress,
+  );
+
   const accessToken = input.checkoutSessionId
     ? createCheckoutOrderAccessToken(input.checkoutSessionId)
     : createOrderAccessToken();
@@ -762,17 +792,7 @@ export async function createOrder(
       const customer = await upsertWebCustomer(tx, {
         userId,
         guestEmail: input.guestEmail,
-        address: {
-          firstName: ship.firstName,
-          lastName: ship.lastName,
-          phone: ship.phone,
-          street: ship.street,
-          city: xExpressTown?.name ?? ship.city,
-          postalCode: xExpressTown?.postalCode ?? ship.postalCode,
-          country: ship.country,
-          companyName: shipIsBusiness ? ship.companyName ?? null : null,
-          pib: shipIsBusiness ? ship.pib ?? null : null,
-        },
+        address: customerBuyerAddress,
       });
       if (input.checkoutSessionId) {
         await ensureCheckoutSessionForOrder({ tx, input, userId, total });

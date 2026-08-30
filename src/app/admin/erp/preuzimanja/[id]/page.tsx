@@ -712,14 +712,7 @@ export default async function PickupBatchPage({
                       </td>
                       {canRecordCourierHandover ? (
                         <td className="px-3 py-3 text-center">
-                          <label
-                            key={`${group.lineGroupKey}:${
-                              group.courierPickedUp
-                                ? (group.courierPickedUpAt?.getTime() ?? "legacy")
-                                : "pending"
-                            }`}
-                            className="inline-flex cursor-pointer flex-col items-center gap-1"
-                          >
+                          <label className="inline-flex cursor-pointer flex-col items-center gap-1">
                             <input
                               type="checkbox"
                               name="pickedUpGroupKeys"

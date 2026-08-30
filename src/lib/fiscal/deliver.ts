@@ -6,6 +6,7 @@ import { loadOrderForEmail, sendFiscalReceipt } from "@/lib/email";
 import { buildWithdrawalFormPdf } from "@/lib/email/pdf";
 import { num } from "@/lib/api/_helpers";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import { buildFiscalReceiptPdf } from "./pdf";
 import { downloadFiscalPdf } from "./pdf-storage";
 import {
@@ -68,7 +69,10 @@ export async function issueAndDeliverFiscalReceipt(
   }
 
   const cfg = getFiscalConfig();
-  const buyerAddress = loaded.order.billingAddress ?? loaded.order.shippingAddress;
+  const buyerAddress = resolveDocumentBuyerAddress(
+    loaded.order.shippingAddress,
+    loaded.order.billingAddress,
+  );
   const attachments = await Promise.all(receiptDocuments.map(async (document) => {
     // Prefer the provider-issued official PDF (QR + Tax Authority
     // signature); the locally rendered slip is the fallback.

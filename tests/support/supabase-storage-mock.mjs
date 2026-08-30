@@ -22,12 +22,19 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && publicMatch) {
       const object = objects.get(objectId(publicMatch[1], publicMatch[2]));
       if (!object) return json(response, 404, { message: "Object not found" });
-      response.writeHead(200, {
-        "content-type": object.contentType,
-        "content-length": object.body.length,
-        "cache-control": "public, max-age=60",
-      });
-      return response.end(object.body);
+      return file(response, object, "public, max-age=60");
+    }
+
+    // Supabase's authenticated download API uses the same object route without
+    // the `/public` segment. This keeps private acceptance-test labels entirely
+    // in memory while exercising the exact production download code path.
+    const privateMatch = pathname.match(
+      /^\/storage\/v1\/object\/([^/]+)\/(.+)$/,
+    );
+    if (request.method === "GET" && privateMatch) {
+      const object = objects.get(objectId(privateMatch[1], privateMatch[2]));
+      if (!object) return json(response, 404, { message: "Object not found" });
+      return file(response, object, "private, no-store");
     }
 
     const listMatch = pathname.match(/^\/storage\/v1\/object\/list\/([^/]+)$/);
@@ -141,4 +148,14 @@ function json(response, status, body) {
     "access-control-allow-origin": "*",
   });
   response.end(JSON.stringify(body));
+}
+
+function file(response, object, cacheControl) {
+  response.writeHead(200, {
+    "content-type": object.contentType,
+    "content-length": object.body.length,
+    "cache-control": cacheControl,
+    "access-control-allow-origin": "*",
+  });
+  response.end(object.body);
 }

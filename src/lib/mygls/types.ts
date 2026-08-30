@@ -26,9 +26,11 @@ export interface MyGlsService {
 export interface MyGlsParcelProperty {
   Content: string;
   PackageType: number;
+  /** MyGLS contract: parcel dimensions are Int32 centimetres. */
   Height?: number;
   Length?: number;
   Width?: number;
+  /** MyGLS contract: weight may be decimal. */
   Weight?: number;
 }
 

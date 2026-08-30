@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  describeXExpressWebhookAuthentication,
   isXExpressWebhookContractValid,
   parseXExpressWebhookBatch,
   stageXExpressWebhookBatch,
@@ -11,11 +12,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   if (!verifyXExpressWebhookHeaders(req.headers)) {
-    console.warn("[X Express webhook] Authentication rejected.", {
-      hasApiKey: Boolean(req.headers.get("x-api-key")),
-      hasBearer: /^Bearer\s+\S+/i.test(req.headers.get("authorization") ?? ""),
-      senderMatches: req.headers.get("x-api-sender") === "XExpress",
-    });
+    console.warn(
+      "[X Express webhook] Authentication rejected.",
+      describeXExpressWebhookAuthentication(req.headers),
+    );
     return new NextResponse("", { status: 401 });
   }
 

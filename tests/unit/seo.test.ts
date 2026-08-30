@@ -6,10 +6,10 @@ import { HOME_SEO_DESCRIPTION, HOME_SEO_TITLE } from "@/lib/seo";
 describe("public SEO identity", () => {
   it("uses the approved Google title and description", () => {
     expect(HOME_SEO_TITLE).toBe(
-      "Svet Povoljnih Cena — povoljne cene za dom",
+      "Svet povoljnih cena – mesto gde su dobre ponude dostupne svima!",
     );
     expect(HOME_SEO_DESCRIPTION).toBe(
-      "Povoljni proizvodi za dom, tehniku, putovanja i svakodnevnu kupovinu. Brza isporuka, sigurno plaćanje i akcijske cene.",
+      "Dobrodošli na platformu koja iskustvo kupovine čini jednostavnim, sigurnim i bez stresa, uz garanciju kratkih rokova isporuke.",
     );
   });
 

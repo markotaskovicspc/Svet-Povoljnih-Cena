@@ -152,6 +152,31 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.ServiceList).toBeUndefined();
   });
 
+  it("rounds decimal dimensions upwards to the Int32 values required by MyGLS", () => {
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order,
+      packages: [
+        {
+          ...packages[0]!,
+          weightKg: 7.5,
+          heightCm: 6.5,
+          widthCm: 88.1,
+          depthCm: 44,
+        },
+      ],
+    });
+
+    expect(parcel.ParcelPropertyList).toEqual([
+      expect.objectContaining({
+        Weight: 7.5,
+        Height: 7,
+        Width: 89,
+        Length: 44,
+      }),
+    ]);
+  });
+
   it("keeps the exact product name on each physical-package property", () => {
     const contents = ["Ergo Lux", "Urban Seat", "Clean Box"];
     const parcel = buildMyGlsParcelForOrder({

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCheckout } from "@/lib/checkout/store";
 import { formatDateTime, formatRsd } from "@/lib/format";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
@@ -345,7 +346,10 @@ function IpsPaymentReceipt({
   const paidAt = payment?.paidAt
     ? formatDateTime(payment.paidAt)
     : "—";
-  const customerAddress = order.billingAddress ?? order.shippingAddress;
+  const customerAddress = resolveDocumentBuyerAddress(
+    order.shippingAddress,
+    order.billingAddress,
+  );
 
   return (
     <section className="bg-surface ring-border/60 rounded-2xl p-5 ring-1">

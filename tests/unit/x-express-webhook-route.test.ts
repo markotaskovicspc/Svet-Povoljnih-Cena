@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  describeAuthentication: vi.fn(),
   verifyHeaders: vi.fn(),
   parseBatch: vi.fn(),
   verifyContract: vi.fn(),
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/x-express/webhook", () => ({
+  describeXExpressWebhookAuthentication: mocks.describeAuthentication,
   verifyXExpressWebhookHeaders: mocks.verifyHeaders,
   parseXExpressWebhookBatch: mocks.parseBatch,
   isXExpressWebhookContractValid: mocks.verifyContract,
@@ -25,6 +27,13 @@ const event = {
 };
 
 beforeEach(() => {
+  mocks.describeAuthentication.mockReturnValue({
+    hasApiKey: true,
+    hasBearer: false,
+    senderMatches: true,
+    credentialFingerprint: "0123456789ab",
+    configuredCredentialCount: 3,
+  });
   mocks.verifyHeaders.mockReturnValue(true);
   mocks.parseBatch.mockReturnValue([event]);
   mocks.verifyContract.mockReturnValue(true);

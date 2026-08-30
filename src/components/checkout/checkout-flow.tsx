@@ -48,14 +48,16 @@ import { AutomaticDeliverySection } from "./shipping-method";
 import { VoucherSection } from "./voucher-section";
 import { PaymentMethodStep } from "./payment-method";
 import { CheckoutConsent, NotesConsent } from "./notes-consent";
-import { OrderSummary, computeTotals } from "./order-summary";
+import {
+  OrderSummary,
+  type DeliveryQuoteDisplayStatus,
+} from "./order-summary";
 import { getConsentedAnalyticsContext } from "@/components/analytics/first-party-analytics";
 import type { SocialAuthProvider } from "@/components/account/social-auth-buttons";
 import type { CustomerAuthFormAction } from "@/components/account/customer-auth-methods";
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 import { shouldRestoreBusinessBuyerType } from "@/lib/checkout/business-policy";
-import { FIRST_PURCHASE_PCT } from "@/lib/pricing/config";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -836,13 +838,13 @@ export function CheckoutFlow({
                         <PaymentMethodStep
                           methods={checkoutConfig.paymentMethods}
                         />
-                        <VoucherSection />
                       </section>
                     </div>
                   ) : null}
                   {step === "review" ? (
                     <ReviewStep
                       deliveryQuote={deliveryQuote}
+                      deliveryQuoteStatus={deliveryQuoteDisplayStatus}
                       paymentMethods={checkoutConfig.paymentMethods}
                       firstPurchaseEligible={firstPurchaseEligible}
                     />
@@ -942,47 +944,17 @@ function CheckoutOrderFormBoundary({
 
 function ReviewStep({
   deliveryQuote,
+  deliveryQuoteStatus,
   paymentMethods,
   firstPurchaseEligible,
 }: {
   deliveryQuote: CheckoutDeliveryQuote;
+  deliveryQuoteStatus: DeliveryQuoteDisplayStatus;
   paymentMethods: CheckoutPaymentMethodConfig[];
   firstPurchaseEligible: boolean;
 }) {
   const data = useFormContext<CheckoutFormData>().getValues();
   const reviewShippingPrice = deliveryQuote.prices[data.shippingMethod];
-  const lines = useCart((s) => s.lines);
-  const voucher = useCheckout((s) => s.voucher);
-  const totals = useMemo(
-    () =>
-      computeTotals({
-        itemsFull: lines.reduce((n, l) => n + l.unitPriceFull * l.qty, 0),
-        itemsSale: lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0),
-        shippingMethod: data.shippingMethod,
-        assemblyTotal:
-          data.shippingMethod === "kamion"
-            ? lines.reduce(
-                (n, l) =>
-                  n +
-                  (data.perItemAssembly?.[l.sku]
-                    ? lineAssemblyPrice(deliveryQuote, l.sku) * l.qty
-                    : 0),
-                0,
-              )
-            : 0,
-        voucherDiscountRsd: voucher?.discountRsd ?? 0,
-        firstPurchaseEligible,
-        shippingPrices: deliveryQuote.prices,
-      }),
-    [
-      deliveryQuote,
-      lines,
-      data.shippingMethod,
-      data.perItemAssembly,
-      firstPurchaseEligible,
-      voucher,
-    ],
-  );
 
   return (
     <div className="flex flex-col gap-3 sm:gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
@@ -1018,32 +990,30 @@ function ReviewStep({
             </p>
           ) : null}
         </ReviewBlock>
-        <ReviewBlock title="Plaćanje">
+        <ReviewBlock title="Plaćanje" className="col-span-2">
           <p className="text-sm text-ink-700">
             {getPaymentLabel(data.paymentMethod, paymentMethods)}
           </p>
         </ReviewBlock>
-        <ReviewBlock title="Iznos">
-          {totals.firstPurchaseDiscount > 0 ? (
-            <p className="mb-1 text-xs text-action tabular-nums">
-              Popust za prvu kupovinu ({FIRST_PURCHASE_PCT}%): −
-              {formatRsd(totals.firstPurchaseDiscount)}
-            </p>
-          ) : null}
-          <p className="text-sm text-ink-700 tabular-nums">
-            Ukupno za plaćanje:{" "}
-            <span className="font-medium text-ink-900">
-              {totals.total == null ? "—" : formatRsd(totals.total)}
-            </span>
-          </p>
-        </ReviewBlock>
       </div>
 
-      <div className="border-border/60 border-t pt-3 sm:pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
+      <div className="border-border/60 flex flex-col gap-3 border-t pt-3 sm:gap-4 sm:pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
+        <VoucherSection />
+        <OrderSummary
+          deliveryQuote={deliveryQuote}
+          deliveryQuoteStatus={deliveryQuoteStatus}
+          shippingMethod={data.shippingMethod}
+          paymentMethod={data.paymentMethod}
+          perItemAssembly={data.perItemAssembly}
+          firstPurchaseEligible={firstPurchaseEligible}
+          className="lg:hidden"
+          compact
+          readOnlyLines
+        />
         <NotesConsent />
         <div
           data-testid="mobile-checkout-consent"
-          className="mt-2.5 lg:hidden"
+          className="lg:hidden"
         >
           <CheckoutConsent id="consent-mobile" />
         </div>
@@ -1055,14 +1025,19 @@ function ReviewStep({
 function ReviewBlock({
   title,
   children,
+  className,
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <div
       data-review-block={title}
-      className="bg-canvas ring-border/60 min-w-0 rounded-xl p-2.5 ring-1 sm:p-4 lg:p-3"
+      className={cn(
+        "bg-canvas ring-border/60 min-w-0 rounded-xl p-2.5 ring-1 sm:p-4 lg:p-3",
+        className,
+      )}
     >
       <p className="text-xs font-medium text-ink-500 uppercase tracking-wide">
         {title}

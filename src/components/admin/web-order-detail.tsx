@@ -35,6 +35,10 @@ import {
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import {
+  hasBusinessIdentity,
+  resolveOrderDocumentBuyerAddress,
+} from "@/lib/document-buyer";
+import {
   enqueueSupplierShippingDocumentJobsForOrder,
   releaseOrderSupplierReservations,
 } from "@/lib/rabalux/fulfillment";
@@ -1503,6 +1507,13 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const refundRequestId = randomUUID();
   const buyerReceipt =
     order.invoices.find((invoice) => invoice.kind === "PROFORMA") ?? null;
+  const documentBuyer = resolveOrderDocumentBuyerAddress(order);
+  const documentBuyerIsBusiness = hasBusinessIdentity(documentBuyer);
+  const documentBuyerContact =
+    `${documentBuyer.firstName} ${documentBuyer.lastName}`.trim();
+  const documentBuyerName =
+    documentBuyer.companyName?.trim() || documentBuyerContact;
+  const documentBuyerUsesShippingAddress = documentBuyer.source === "shipping";
   const latestFiscal = order.fiscalDocuments[0] ?? null;
   const activeRabaluxOrderItemIds = new Set(
     order.supplierFulfillments
@@ -1595,7 +1606,11 @@ export async function WebOrderDetail({ id }: { id: string }) {
     <>
       <PageHeader
         title={`Porudžbina ${order.number}`}
-        description={`${order.shipFirstName} ${order.shipLastName} · ${order.shipCity}`}
+        description={`${documentBuyerName} · ${
+          documentBuyerIsBusiness
+            ? `Pravno lice${documentBuyer.pib?.trim() ? ` · PIB ${documentBuyer.pib.trim()}` : ""}`
+            : "Fizičko lice"
+        } · ${order.shipCity}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -1778,9 +1793,67 @@ export async function WebOrderDetail({ id }: { id: string }) {
           </Card>
 
           <Card>
+            <CardTitle
+              description={
+                documentBuyerIsBusiness ? "Pravno lice" : "Fizičko lice"
+              }
+            >
+              Kupac i podaci za račun
+            </CardTitle>
+            <dl className="space-y-1 text-sm">
+              <Row k="Naziv kupca" v={documentBuyerName || "—"} />
+              {documentBuyerIsBusiness ? (
+                <Row k="PIB" v={documentBuyer.pib?.trim() || "—"} />
+              ) : null}
+              {documentBuyerIsBusiness && documentBuyerContact ? (
+                <Row k="Kontakt" v={documentBuyerContact} />
+              ) : null}
+              <Row
+                k="Adresa za dokument"
+                v={`${documentBuyer.street}, ${documentBuyer.postalCode} ${documentBuyer.city}`}
+              />
+              <Row
+                k="Izvor podataka"
+                v={
+                  documentBuyerUsesShippingAddress
+                    ? "Adresa isporuke"
+                    : "Adresa računa"
+                }
+              />
+            </dl>
+            {documentBuyerIsBusiness &&
+            !order.billingSameAsShipping &&
+            order.billFirstName &&
+            documentBuyerUsesShippingAddress ? (
+              <p className="mt-3 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-sm text-warning">
+                Zasebna adresa računa nema podatke firme, pa dokument koristi
+                pravno lice i PIB sa adrese isporuke.
+              </p>
+            ) : null}
+          </Card>
+
+          <Card>
             <CardTitle>Adresa isporuke</CardTitle>
             <p className="text-sm text-ink-700">
-              {order.shipFirstName} {order.shipLastName}
+              {order.shipCompanyName || order.shipPib ? (
+                <>
+                  {order.shipCompanyName ? (
+                    <>
+                      <span className="font-medium">
+                        {order.shipCompanyName}
+                      </span>
+                      <br />
+                    </>
+                  ) : null}
+                  Pravno lice{order.shipPib ? ` · PIB ${order.shipPib}` : ""}
+                  <br />
+                  Kontakt: {order.shipFirstName} {order.shipLastName}
+                </>
+              ) : (
+                <>
+                  {order.shipFirstName} {order.shipLastName}
+                </>
+              )}
               <br />
               {order.shipStreet}
               <br />

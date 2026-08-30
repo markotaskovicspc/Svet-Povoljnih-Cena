@@ -104,8 +104,45 @@ describe("buyer receipt totals", () => {
       street: "Poslovna 12",
       postalCode: "21000",
       city: "Novi Sad",
+      phone: "+381600000000",
+      email: "kupac@example.com",
       companyName: "Kupac d.o.o.",
       pib: "109876543",
+    });
+  });
+
+  it("snapshots the same legal buyer that appears on the document", () => {
+    const businessShippingOrder = {
+      ...order,
+      billingSameAsShipping: false,
+      shipFirstName: "Darko",
+      shipLastName: "Stanić",
+      shipCompanyName: "DSF DOO",
+      shipPib: "106986493",
+      shipStreet: "Tihomira Vuksanovića 45",
+      shipPostalCode: "34000",
+      shipCity: "Kragujevac",
+      billFirstName: "Iva",
+      billLastName: "Stanić",
+      billStreet: "Industrijska 17",
+      billPostalCode: "34000",
+      billCity: "Kragujevac",
+      billCompanyName: null,
+      billPib: null,
+    };
+
+    expect(
+      buildReceiptSnapshot(
+        businessShippingOrder as never,
+        "kupac@example.com",
+      ).order.customer,
+    ).toMatchObject({
+      firstName: "Darko",
+      lastName: "Stanić",
+      companyName: "DSF DOO",
+      pib: "106986493",
+      street: "Tihomira Vuksanovića 45",
+      addressSource: "shipping",
     });
   });
 });

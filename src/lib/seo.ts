@@ -1,5 +1,5 @@
 export const HOME_SEO_TITLE =
-  "Svet Povoljnih Cena — povoljne cene za dom";
+  "Svet povoljnih cena – mesto gde su dobre ponude dostupne svima!";
 
 export const HOME_SEO_DESCRIPTION =
-  "Povoljni proizvodi za dom, tehniku, putovanja i svakodnevnu kupovinu. Brza isporuka, sigurno plaćanje i akcijske cene.";
+  "Dobrodošli na platformu koja iskustvo kupovine čini jednostavnim, sigurnim i bez stresa, uz garanciju kratkih rokova isporuke.";

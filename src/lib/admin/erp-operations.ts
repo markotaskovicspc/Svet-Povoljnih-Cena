@@ -42,6 +42,7 @@ import { MYGLS_PROVIDER } from "@/lib/mygls/config";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -1577,9 +1578,12 @@ async function salesOrderRows(
     },
   });
   return orders.flatMap((order): ErpRow[] => {
+    const documentBuyer = resolveOrderDocumentBuyerAddress(order);
     const customer =
-      order.shipCompanyName ||
-      [order.shipFirstName, order.shipLastName].filter(Boolean).join(" ");
+      documentBuyer.companyName ||
+      [documentBuyer.firstName, documentBuyer.lastName]
+        .filter(Boolean)
+        .join(" ");
     const orderCourier = salesOrderCourierDisplay({
       shippingMethod: order.shippingMethod,
       itemId: null,
@@ -1599,13 +1603,13 @@ async function salesOrderRows(
       }),
       customer,
       purchaseIdentity: order.userId ? "Ulogovan korisnik" : "Bez prijave",
-      pib: order.shipPib,
+      pib: documentBuyer.pib ?? null,
       priceList: order.priceList
         ? `${order.priceList.code} · ${order.priceList.name} (${order.priceList.currency})`
         : null,
-      address: order.shipStreet,
-      city: order.shipCity,
-      postalCode: order.shipPostalCode,
+      address: documentBuyer.street,
+      city: documentBuyer.city,
+      postalCode: documentBuyer.postalCode,
       phone: order.shipPhone,
       email: order.guestEmail ?? order.customer?.email ?? null,
       status: order.status,

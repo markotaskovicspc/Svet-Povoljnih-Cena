@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -53,15 +54,41 @@ export function verifyXExpressWebhookHeaders(headers: Headers) {
   const cfg = getXExpressConfig();
   const bearer = headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
   const credential = headers.get("x-api-key")?.trim() || bearer;
-  const keyMatches = Boolean(
-    credential &&
-      ((cfg.webhookApiKey && credential === cfg.webhookApiKey) ||
-        (cfg.webhookSecret && credential === cfg.webhookSecret) ||
-        (cfg.apiKey && credential === cfg.apiKey)),
+  const keyMatches = Boolean(credential) && configuredWebhookCredentials(cfg).some(
+    (expected) => credentialsMatch(credential!, expected),
   );
   return (
     keyMatches &&
     headers.get("x-api-sender") === "XExpress"
+  );
+}
+
+export function describeXExpressWebhookAuthentication(headers: Headers) {
+  const cfg = getXExpressConfig();
+  const bearer = headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const apiKey = headers.get("x-api-key")?.trim();
+  const credential = apiKey || bearer;
+  return {
+    hasApiKey: Boolean(apiKey),
+    hasBearer: Boolean(bearer),
+    senderMatches: headers.get("x-api-sender") === "XExpress",
+    credentialFingerprint: credential
+      ? createHash("sha256").update(credential).digest("hex").slice(0, 12)
+      : null,
+    configuredCredentialCount: configuredWebhookCredentials(cfg).length,
+  };
+}
+
+function configuredWebhookCredentials(cfg: ReturnType<typeof getXExpressConfig>) {
+  return [...new Set([cfg.webhookApiKey, cfg.webhookSecret, cfg.apiKey].filter(Boolean))];
+}
+
+function credentialsMatch(received: string, expected: string) {
+  const receivedBytes = Buffer.from(received);
+  const expectedBytes = Buffer.from(expected);
+  return (
+    receivedBytes.length === expectedBytes.length &&
+    timingSafeEqual(receivedBytes, expectedBytes)
   );
 }
 

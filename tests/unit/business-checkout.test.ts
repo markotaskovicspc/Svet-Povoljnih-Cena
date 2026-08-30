@@ -53,6 +53,21 @@ describe("checkout for a business buyer", () => {
     );
   });
 
+  it("also rejects incomplete inferred business data from older clients", () => {
+    expect(
+      missingBusinessAddressFields({ companyName: "Kupac d.o.o." }),
+    ).toEqual(["pib"]);
+    expect(missingBusinessAddressFields({ pib: "109876543" })).toEqual([
+      "companyName",
+    ]);
+    expect(
+      missingBusinessAddressFields({
+        companyName: "Kupac d.o.o.",
+        pib: "109876543",
+      }),
+    ).toEqual([]);
+  });
+
   it("accepts cash on delivery for a business checkout", () => {
     const parsed = createOrderSchema.safeParse({
       guestEmail: "kupac@example.test",

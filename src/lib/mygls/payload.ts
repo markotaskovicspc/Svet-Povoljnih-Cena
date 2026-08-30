@@ -117,9 +117,9 @@ export function buildMyGlsParcelForOrder(
       Content: (pkg.content?.trim() || content).slice(0, 120),
       PackageType: 2,
       Weight: pkg.weightKg,
-      Height: pkg.heightCm,
-      Width: pkg.widthCm,
-      Length: pkg.depthCm,
+      Height: myGlsDimension(pkg.heightCm),
+      Width: myGlsDimension(pkg.widthCm),
+      Length: myGlsDimension(pkg.depthCm),
     })),
   };
 
@@ -263,6 +263,16 @@ function completePackages(packages: readonly PhysicalPackage[]) {
       error instanceof Error ? error.message : "MyGLS paketi nisu ispravni.",
     );
   }
+}
+
+/**
+ * MyGLS models parcel dimensions as Int32 values even though the article
+ * master stores centimetres with decimals. Always round upwards at the
+ * provider boundary so the declared parcel is never smaller than the real
+ * package. Weight remains decimal, as required by the provider contract.
+ */
+function myGlsDimension(value: number) {
+  return Math.ceil(value);
 }
 
 function nextBusinessDay() {

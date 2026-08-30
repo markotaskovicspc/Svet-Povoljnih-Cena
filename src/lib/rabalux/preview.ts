@@ -18,6 +18,7 @@ import {
   isRabaluxSerbiaWebStockAvailable,
 } from "./serbia-stock";
 import { shouldReconcileMissingCatalogProducts } from "./weekly-stock-policy";
+import { rabaluxShortDescription } from "./descriptions";
 
 export type RabaluxPreviewSummary = {
   source: "XML" | "CSV" | "DATABASE";
@@ -684,9 +685,7 @@ function catalogItemSnapshot(
     barcode: item.barcode,
     name: item.name,
     description: item.description,
-    shortDescription:
-      item.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 320) ||
-      null,
+    shortDescription: rabaluxShortDescription(item),
     colorPrimary: item.colorPrimary,
     colorSecondary: item.colorSecondary,
     groupName: item.type,

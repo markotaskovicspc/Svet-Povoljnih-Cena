@@ -9,6 +9,7 @@ import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { envValue } from "@/lib/env";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 
 const DEFAULT_RECEIPT_BUCKET = "order-receipts";
 
@@ -169,6 +170,7 @@ type OrderForReceipt = Prisma.OrderGetPayload<{
 }>;
 
 export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
+  const email = order.user?.email ?? order.guestEmail ?? null;
   return {
     number: order.number,
     createdAt: order.createdAt,
@@ -198,6 +200,8 @@ export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
       street: order.shipStreet,
       postalCode: order.shipPostalCode,
       city: order.shipCity,
+      phone: order.shipPhone,
+      email,
       companyName: order.shipCompanyName,
       pib: order.shipPib,
     },
@@ -209,6 +213,8 @@ export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
             street: order.billStreet ?? "",
             postalCode: order.billPostalCode ?? "",
             city: order.billCity ?? "",
+            phone: order.shipPhone,
+            email,
             companyName: order.billCompanyName,
             pib: order.billPib,
           }
@@ -217,6 +223,7 @@ export function orderToPdfInput(order: OrderForReceipt): InvoiceOrderInput {
 }
 
 export function buildReceiptSnapshot(order: OrderForReceipt, recipient: string | null) {
+  const buyer = resolveOrderDocumentBuyerAddress(order);
   return {
     merchant: MERCHANT_LEGAL_INFO,
     recipient,
@@ -243,14 +250,15 @@ export function buildReceiptSnapshot(order: OrderForReceipt, recipient: string |
       },
       customer: {
         email: recipient,
-        firstName: order.shipFirstName,
-        lastName: order.shipLastName,
+        firstName: buyer.firstName,
+        lastName: buyer.lastName,
         phone: order.shipPhone,
-        street: order.shipStreet,
-        city: order.shipCity,
-        postalCode: order.shipPostalCode,
-        companyName: order.shipCompanyName,
-        pib: order.shipPib,
+        street: buyer.street,
+        city: buyer.city,
+        postalCode: buyer.postalCode,
+        companyName: buyer.companyName,
+        pib: buyer.pib,
+        addressSource: buyer.source,
       },
       items: order.items.map((i) => ({
         sku: i.sku,

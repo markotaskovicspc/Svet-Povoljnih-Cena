@@ -1,4 +1,5 @@
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
+import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { Order } from "@/types";
 import {
   EmailButton,
@@ -71,7 +72,10 @@ export function OrderConfirmation({
   guaranteeTermText,
   previewMode = false,
 }: OrderConfirmationProps) {
-  const buyer = order.billingAddress ?? order.shippingAddress;
+  const buyer = resolveDocumentBuyerAddress(
+    order.shippingAddress,
+    order.billingAddress,
+  );
   const businessName = buyer.companyName?.trim();
   const businessPib = buyer.pib?.trim();
   const isBusiness = Boolean(businessName || businessPib);

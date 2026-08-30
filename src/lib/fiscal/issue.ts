@@ -19,6 +19,7 @@ import { fiscalize, type FiscalDispatchResult } from "./transport";
 import { uploadFiscalPdf } from "./pdf-storage";
 import { isUnsafeFiscalRedispatch } from "./retry-safety";
 import { ensureIssuedFiscalSaleInventoryPosted } from "./inventory-posting";
+import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 
 export type FiscalIssueOutcome =
   | {
@@ -802,21 +803,17 @@ function draftFromCents(item: FiscalOrderItem | null, qty: number, unitPriceCent
 }
 
 function saleLineCreate(line: SaleLineDraft, order: FiscalOrder, warehouseName: string) {
-  const companyName = order.billCompanyName ?? order.shipCompanyName ?? null;
-  const firstName = order.billFirstName ?? order.shipFirstName;
-  const lastName = order.billLastName ?? order.shipLastName;
-  const street = order.billStreet ?? order.shipStreet;
-  const city = order.billCity ?? order.shipCity;
-  const postalCode = order.billPostalCode ?? order.shipPostalCode;
+  const buyer = resolveOrderDocumentBuyerAddress(order);
   const customer = {
     priceList: "MP",
     orderNumber: order.number,
-    customerName: companyName ?? `${firstName} ${lastName}`,
-    companyName,
-    pib: order.billPib ?? order.shipPib ?? null,
-    address: street,
-    city,
-    postalCode,
+    customerName:
+      buyer.companyName ?? `${buyer.firstName} ${buyer.lastName}`,
+    companyName: buyer.companyName ?? null,
+    pib: buyer.pib ?? null,
+    address: buyer.street,
+    city: buyer.city,
+    postalCode: buyer.postalCode,
     phone: order.shipPhone,
     email: order.guestEmail ?? order.user?.email ?? null,
   };
@@ -966,17 +963,18 @@ function sumRefundLines(lines: { line: FiscalDocumentLine; qty: number }[]) {
 }
 
 function buyerForFiscal(order: FiscalOrder) {
-  const tin = order.billPib ?? order.shipPib;
+  const buyer = resolveOrderDocumentBuyerAddress(order);
+  const tin = buyer.pib;
   if (!tin) return undefined;
   return {
     tin,
-    name: order.billCompanyName ?? order.shipCompanyName ?? `${order.shipFirstName} ${order.shipLastName}`,
+    name: buyer.companyName ?? `${buyer.firstName} ${buyer.lastName}`,
   };
 }
 
 /** `10:` is the Tax Authority prefix for a PIB (B2B receipts). */
 function buyerIdForFiscal(order: FiscalOrder): string | null {
-  const tin = order.billPib ?? order.shipPib;
+  const tin = resolveOrderDocumentBuyerAddress(order).pib;
   return tin ? `10:${tin}` : null;
 }
 
