@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  formatPdpMobileActionValidity,
   getPdpAvailabilityMessage,
   PdpMobilePriceContent,
 } from "@/components/product/pdp-add-to-cart";
@@ -90,6 +91,12 @@ describe("PDP price and benefit display", () => {
     const markup = renderToStaticMarkup(
       <PdpMobilePriceContent
         quote={quote({ actionOffer, payable: actionOffer })}
+        action={{
+          id: "weekly-action",
+          name: "Nedeljna akcija",
+          startsAt: "2026-08-30T00:00:00.000Z",
+          endsAt: "2026-09-05T23:59:59.999Z",
+        }}
       />,
     );
 
@@ -99,6 +106,16 @@ describe("PDP price and benefit display", () => {
     expect(markup).toContain("text-action");
     expect(markup).toContain("8.999 RSD");
     expect(markup).toContain("6.999 RSD");
+    expect(markup).toContain("Važi od 30.08. do 05.09.2026.");
+  });
+
+  it("keeps the year on both dates when an action crosses into a new year", () => {
+    expect(
+      formatPdpMobileActionValidity({
+        startsAt: "2026-12-30T00:00:00.000Z",
+        endsAt: "2027-01-05T23:59:59.999Z",
+      }),
+    ).toBe("Važi od 30.12.2026. do 05.01.2027.");
   });
 
   it("shows the regular and highlighted loyalty prices in the mobile bar", () => {

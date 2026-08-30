@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { Heart } from "lucide-react";
-import type { Product } from "@/types";
+import type { Product, PromoAction } from "@/types";
 import { cn } from "@/lib/utils";
 import { commitAddToCart } from "@/components/cart/add-to-cart-action";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
@@ -25,7 +25,7 @@ import {
   resolveProductPriceQuote,
   type ProductPriceQuote,
 } from "@/lib/pricing";
-import { formatRsd } from "@/lib/format";
+import { formatDate, formatRsd } from "@/lib/format";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -46,8 +46,10 @@ export function getPdpAvailabilityMessage(
 
 export function PdpMobilePriceContent({
   quote,
+  action,
 }: {
   quote: ProductPriceQuote;
+  action?: PromoAction;
 }) {
   const reducedOffer = quote.actionOffer ?? quote.loyaltyOffer;
 
@@ -65,6 +67,10 @@ export function PdpMobilePriceContent({
   }
 
   const isLoyalty = !quote.actionOffer && Boolean(quote.loyaltyOffer);
+  const actionValidity =
+    quote.actionOffer?.kind === "sale" && action && !action.isPermanent
+      ? formatPdpMobileActionValidity(action)
+      : null;
 
   return (
     <div className="min-w-[94px] shrink-0">
@@ -80,8 +86,28 @@ export function PdpMobilePriceContent({
       <p className="text-[19px] leading-none font-black whitespace-nowrap text-action">
         {formatRsd(reducedOffer.effective)}
       </p>
+      {actionValidity ? (
+        <p className="mt-1 whitespace-nowrap text-[9px] leading-none font-medium text-ink-600">
+          {actionValidity}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+export function formatPdpMobileActionValidity(
+  action: Pick<PromoAction, "startsAt" | "endsAt">,
+) {
+  const startsAt = formatDate(action.startsAt);
+  const endsAt = formatDate(action.endsAt);
+  const startYear = startsAt.match(/\d{4}\.$/)?.[0];
+  const endYear = endsAt.match(/\d{4}\.$/)?.[0];
+  const compactStartsAt =
+    startYear && startYear === endYear
+      ? startsAt.slice(0, -startYear.length)
+      : startsAt;
+
+  return `Važi od ${compactStartsAt} do ${endsAt}`;
 }
 
 export function PdpAddToCart({
@@ -227,7 +253,7 @@ export function PdpAddToCart({
             aria-hidden
           />
         </button>
-        <PdpMobilePriceContent quote={priceQuote} />
+        <PdpMobilePriceContent quote={priceQuote} action={product.action} />
         {ctas}
       </div>
     </div>
