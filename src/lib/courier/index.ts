@@ -13,6 +13,7 @@ export {
   applyShipmentEvent,
   createShipmentForOrder,
   getAdapter,
+  preflightShipmentForOrder,
   SERVICE_SLUG,
   syncCourierShipmentById,
 } from "./registry";

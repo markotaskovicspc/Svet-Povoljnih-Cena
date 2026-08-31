@@ -19,18 +19,153 @@ import {
 } from "@/lib/courier/shipment-assignment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 
+type MyGlsShipmentOptions = {
+  purpose?: ShipmentPurpose;
+  reclamationId?: string;
+  pickupDate?: Date;
+  packages?: readonly PhysicalPackage[];
+  orderItemIds?: string[];
+  codAmount?: number;
+  supplierFulfillmentId?: string;
+  pickupOverride?: MyGlsPickupAddress;
+};
+
+/**
+ * Build and validate the exact provider payload without creating a label.
+ * Pickup batches use this for every group before the first PrintLabels call,
+ * so a bad address or service configuration cannot leave a partial batch in
+ * MyGLS.
+ */
+export async function preflightMyGlsShipmentForOrder(
+  orderId: string,
+  options: MyGlsShipmentOptions = {},
+) {
+  await prepareMyGlsShipmentForOrder(orderId, options);
+}
+
 export async function createMyGlsShipmentForOrder(
   orderId: string,
-  options: {
-    purpose?: ShipmentPurpose;
-    reclamationId?: string;
-    pickupDate?: Date;
-    packages?: readonly PhysicalPackage[];
-    orderItemIds?: string[];
-    codAmount?: number;
-    supplierFulfillmentId?: string;
-    pickupOverride?: MyGlsPickupAddress;
-  } = {},
+  options: MyGlsShipmentOptions = {},
+) {
+  const prepared = await prepareMyGlsShipmentForOrder(orderId, options);
+  if (prepared.completedShipment) return prepared.completedShipment;
+
+  const {
+    cfg,
+    purpose,
+    reclamation,
+    order,
+    assignmentOrderItemIds,
+    codAmount,
+    existing,
+    shipmentId,
+    parcelList,
+  } = prepared;
+
+  try {
+    const response = await new MyGlsClient(cfg).printLabels({ parcelList });
+    const printData = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
+    const first = printData[0] ?? {};
+    const parcelIds = printData.map((item) => item.ParcelId).filter(isNumber);
+    const parcelNumbers = printData
+      .map((item) => item.ParcelNumberWithCheckdigit ?? item.ParcelNumber)
+      .filter(isNumber);
+    const trackingNo = String(parcelNumbers[0] ?? first.ParcelNumber ?? first.ParcelId ?? order.number);
+    const labelBytes = bytesFromMyGls(response.Labels);
+    const label = await uploadMyGlsLabelPdf({
+      shipmentId,
+      orderNumber: order.number,
+      bytes: labelBytes,
+    });
+    const sanitizedResponse = {
+      ...response,
+      Labels: Array.from(label.bytes),
+    };
+
+    const data = {
+      provider: MYGLS_PROVIDER,
+      packageCount: parcelList.reduce((sum, parcel) => sum + parcel.Count, 0),
+      purpose,
+      reclamationId: reclamation?.id ?? null,
+      reclamationQty: reclamation?.quantity ?? null,
+      warehouseId: reclamation?.warehouseId ?? null,
+      providerOrderId: first.ClientReference ?? order.number,
+      providerShipmentId: first.ParcelId ? String(first.ParcelId) : null,
+      providerParcelId: first.ParcelId ? String(first.ParcelId) : null,
+      providerParcelIds: parcelIds as Prisma.InputJsonValue,
+      providerParcelNumbers: parcelNumbers as Prisma.InputJsonValue,
+      trackingNo,
+      labelUrl: label.labelUrl,
+      labelObjectKey: label.objectKey,
+      labelMimeType: label.mimeType,
+      status: "CREATED" as const,
+      providerStatusCode: null,
+      rawCreateResponse: withShipmentAssignment(sanitizedResponse, {
+        orderItemIds: assignmentOrderItemIds,
+        codAmount,
+        supplierFulfillmentId: options.supplierFulfillmentId,
+      }) as Prisma.InputJsonValue,
+      syncError: null,
+    };
+
+    if (existing?.provider === MYGLS_PROVIDER) {
+      return db.shipment.update({
+        where: { id: existing.id },
+        data: {
+          ...data,
+          events: {
+            create: {
+              status: "CREATED",
+              message: "MyGLS nalog kreiran",
+              raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
+            },
+          },
+        },
+      });
+    }
+
+    return db.shipment.create({
+      data: {
+        id: shipmentId,
+        orderId: order.id,
+        service: "COURIER_SMALL",
+        ...data,
+        events: {
+          create: {
+            status: "CREATED",
+            message: "MyGLS nalog kreiran",
+            raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
+          },
+        },
+      },
+    });
+  } catch (err) {
+    const message =
+      err instanceof MyGlsProviderError || err instanceof MyGlsConfigError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "MyGLS nalog nije kreiran.";
+    await persistFailedShipment({
+      orderId: order.id,
+      existingShipmentId: existing?.provider === MYGLS_PROVIDER ? existing.id : undefined,
+      purpose,
+      reclamationId: reclamation?.id,
+      reclamationQty: reclamation?.quantity,
+      warehouseId: reclamation?.warehouseId,
+      message,
+      raw: err instanceof MyGlsProviderError ? err.raw : undefined,
+      orderItemIds: assignmentOrderItemIds,
+      codAmount,
+      supplierFulfillmentId: options.supplierFulfillmentId,
+    });
+    throw err;
+  }
+}
+
+async function prepareMyGlsShipmentForOrder(
+  orderId: string,
+  options: MyGlsShipmentOptions,
 ) {
   const cfg = requireMyGlsEnabled(options.pickupOverride);
   const purpose = options.purpose ?? "ORDER_DELIVERY";
@@ -118,7 +253,7 @@ export async function createMyGlsShipmentForOrder(
     paymentStatuses: order.payments.map((payment) => payment.status),
   });
   if (existing && existing.provider === MYGLS_PROVIDER && existing.status !== "FAILED") {
-    return existing;
+    return { completedShipment: existing } as const;
   }
 
   const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
@@ -130,105 +265,18 @@ export async function createMyGlsShipmentForOrder(
     purpose,
   });
 
-  try {
-    const response = await new MyGlsClient(cfg).printLabels({ parcelList });
-    const printData = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
-    const first = printData[0] ?? {};
-    const parcelIds = printData.map((item) => item.ParcelId).filter(isNumber);
-    const parcelNumbers = printData
-      .map((item) => item.ParcelNumberWithCheckdigit ?? item.ParcelNumber)
-      .filter(isNumber);
-    const trackingNo = String(parcelNumbers[0] ?? first.ParcelNumber ?? first.ParcelId ?? order.number);
-    const labelBytes = bytesFromMyGls(response.Labels);
-    const label = await uploadMyGlsLabelPdf({
-      shipmentId,
-      orderNumber: order.number,
-      bytes: labelBytes,
-    });
-    const sanitizedResponse = {
-      ...response,
-      Labels: Array.from(label.bytes),
-    };
-
-    const data = {
-      provider: MYGLS_PROVIDER,
-      packageCount: parcelList.reduce((sum, parcel) => sum + parcel.Count, 0),
-      purpose,
-      reclamationId: reclamation?.id ?? null,
-      reclamationQty: reclamation?.quantity ?? null,
-      warehouseId: reclamation?.warehouseId ?? null,
-      providerOrderId: first.ClientReference ?? order.number,
-      providerShipmentId: first.ParcelId ? String(first.ParcelId) : null,
-      providerParcelId: first.ParcelId ? String(first.ParcelId) : null,
-      providerParcelIds: parcelIds as Prisma.InputJsonValue,
-      providerParcelNumbers: parcelNumbers as Prisma.InputJsonValue,
-      trackingNo,
-      labelUrl: label.labelUrl,
-      labelObjectKey: label.objectKey,
-      labelMimeType: label.mimeType,
-      status: "CREATED" as const,
-      providerStatusCode: null,
-      rawCreateResponse: withShipmentAssignment(sanitizedResponse, {
-        orderItemIds: assignmentOrderItemIds,
-        codAmount,
-        supplierFulfillmentId: options.supplierFulfillmentId,
-      }) as Prisma.InputJsonValue,
-      syncError: null,
-    };
-
-    if (existing?.provider === MYGLS_PROVIDER) {
-      return db.shipment.update({
-        where: { id: existing.id },
-        data: {
-          ...data,
-          events: {
-            create: {
-              status: "CREATED",
-              message: "MyGLS nalog kreiran",
-              raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
-            },
-          },
-        },
-      });
-    }
-
-    return db.shipment.create({
-      data: {
-        id: shipmentId,
-      orderId: order.id,
-      service: "COURIER_SMALL",
-        ...data,
-        events: {
-          create: {
-            status: "CREATED",
-            message: "MyGLS nalog kreiran",
-            raw: sanitizedResponse as unknown as Prisma.InputJsonValue,
-          },
-        },
-      },
-    });
-  } catch (err) {
-    const message =
-      err instanceof MyGlsProviderError || err instanceof MyGlsConfigError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "MyGLS nalog nije kreiran.";
-    await persistFailedShipment({
-      orderId: order.id,
-      existingShipmentId: existing?.provider === MYGLS_PROVIDER ? existing.id : undefined,
-      purpose,
-      reclamationId: reclamation?.id,
-      reclamationQty: reclamation?.quantity,
-      warehouseId: reclamation?.warehouseId,
-      message,
-      raw: err instanceof MyGlsProviderError ? err.raw : undefined,
-      orderItemIds: assignmentOrderItemIds,
-      codAmount,
-      supplierFulfillmentId: options.supplierFulfillmentId,
-    });
-    throw err;
-  }
+  return {
+    completedShipment: null,
+    cfg,
+    purpose,
+    reclamation,
+    order,
+    assignmentOrderItemIds,
+    codAmount,
+    existing,
+    shipmentId,
+    parcelList,
+  } as const;
 }
 
 export async function deleteMyGlsLabelsForShipment(shipmentId: string) {

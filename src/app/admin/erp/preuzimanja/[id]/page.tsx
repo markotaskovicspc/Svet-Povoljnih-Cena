@@ -511,15 +511,27 @@ export default async function PickupBatchPage({
               </p>
             </div>
           </div>
+          {myGls && batch.labelsCreatedAt ? (
+            <div className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-3 text-sm text-success">
+              <p className="font-semibold">
+                Aktivne GLS adresnice u ovom nalogu: {rows.length} ({rows.length} paketa).
+              </p>
+              <p className="mt-1 leading-6">
+                MyGLS portal može prikazati veći istorijski zbir ako je neka
+                ranija adresnica obrisana i zamenjena. Obrisana adresnica nije
+                aktivna pošiljka i ne štampa se iz ovog naloga.
+              </p>
+            </div>
+          ) : null}
           <div className="mb-4 rounded-lg border border-border px-3 py-3 text-sm text-ink-700">
             <p className="font-semibold">
               {myGls ? "Redosled za MyGLS" : "Redosled za X Express"}
             </p>
             <p className="mt-1 leading-6">
               1. Učitajte porudžbine i proverite stvarne mere. 2. Kliknite
-              „Kreiraj adresnice i pošalji“. 3. Sistem automatski šalje sve
-              pošiljke kuriru i proknjižava nalog. 4. Otvorite „Kurirske
-              adresnice“, odštampajte ih i zalepite na pakete.
+              „Kreiraj adresnice i pošalji“. 3. Sistem prvo proverava sve
+              pošiljke, zatim kreira adresnice i proknjižava nalog. 4. Otvorite
+              „Kurirske adresnice“, odštampajte ih i zalepite na pakete.
             </p>
           </div>
           {canRecordCourierHandover ? (
@@ -568,6 +580,9 @@ export default async function PickupBatchPage({
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
               {myGls ? "MyGLS" : "X Express"} je spreman. Jedan klik kreira
               adresnice i odmah šalje sve pošiljke kuriru.
+              {myGls
+                ? " Pre prvog MyGLS zahteva sistem proverava ceo nalog, tako da neispravna porudžbina ne ostavlja delimično kreirane adresnice."
+                : null}
             </p>
           )}
         </Card>

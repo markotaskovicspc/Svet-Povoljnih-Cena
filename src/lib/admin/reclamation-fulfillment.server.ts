@@ -7,7 +7,10 @@ import type {
 import { StockMovementKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
-import { createShipmentForOrder } from "@/lib/courier/registry";
+import {
+  createShipmentForOrder,
+  preflightShipmentForOrder,
+} from "@/lib/courier/registry";
 import type { PhysicalPackage } from "@/lib/courier/packages";
 import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
 import {
@@ -20,6 +23,17 @@ const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
   "RECLAMATION_REPLACEMENT",
 ];
+
+type ReclamationShipmentOptions = {
+  reclamationId: string;
+  purpose: ShipmentPurpose;
+  packageCount?: number;
+  packages?: readonly PhysicalPackage[];
+  pickupDate?: Date;
+  provider?: SmallParcelProvider;
+  fromPickupBatch?: boolean;
+  actorId?: string | null;
+};
 
 export async function saveReclamationWarehouse(args: {
   reclamationId: string;
@@ -43,19 +57,50 @@ export async function saveReclamationWarehouse(args: {
   });
 }
 
-export async function createReclamationShipment(args: {
-  reclamationId: string;
-  purpose: ShipmentPurpose;
-  packageCount?: number;
-  packages?: readonly PhysicalPackage[];
-  pickupDate?: Date;
-  provider?: SmallParcelProvider;
-  fromPickupBatch?: boolean;
-  actorId?: string | null;
-}) {
-  if (!RECLAMATION_PURPOSES.includes(args.purpose)) {
-    throw new Error("Nepoznata svrha reklamacione pošiljke.");
+export async function preflightReclamationShipment(
+  args: ReclamationShipmentOptions,
+) {
+  assertReclamationPurpose(args.purpose);
+  const reclamation = await db.reclamation.findUnique({
+    where: { id: args.reclamationId },
+    select: {
+      id: true,
+      orderId: true,
+      decision: true,
+      resolution: true,
+      warehouseId: true,
+      warehouseStatus: true,
+      pickupBatchLines: {
+        where: { purpose: args.purpose },
+        select: { batchId: true },
+        take: 1,
+      },
+      shipments: {
+        where: { purpose: args.purpose },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+        take: 1,
+      },
+    },
+  });
+  if (!reclamation) throw new Error("Reklamacija nije pronađena.");
+  if (reclamation.shipments[0]?.status !== "FAILED" && reclamation.shipments[0]) {
+    return;
   }
+  assertReclamationShipmentReady(reclamation, args);
+  await preflightShipmentForOrder(reclamation.orderId, {
+    purpose: args.purpose,
+    reclamationId: reclamation.id,
+    packageCount: args.packageCount,
+    packages: args.packages,
+    pickupDate: args.pickupDate,
+    provider: args.provider,
+    codAmount: 0,
+  });
+}
+
+export async function createReclamationShipment(args: ReclamationShipmentOptions) {
+  assertReclamationPurpose(args.purpose);
 
   const lockKey = `reclamation-shipment:${args.reclamationId}:${args.purpose}`;
   return db.$transaction(
@@ -89,35 +134,7 @@ export async function createReclamationShipment(args: {
       if (!reclamation) throw new Error("Reklamacija nije pronađena.");
       const existing = reclamation.shipments[0];
       if (existing && existing.status !== "FAILED") return existing;
-      if (reclamation.decision !== "PRIHVACENA") {
-        throw new Error("Kurirski nalog se kreira tek posle prihvatanja reklamacije.");
-      }
-      if (!reclamation.warehouseId) {
-        throw new Error("Izaberite magacin pre kreiranja kurirskog naloga.");
-      }
-      if (
-        args.purpose === "RECLAMATION_REPLACEMENT" &&
-        !["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "")
-      ) {
-        throw new Error("Za zamensku pošiljku izaberite zamenu artikla ili dela.");
-      }
-      if (
-        args.purpose === "RECLAMATION_REPLACEMENT" &&
-        reclamation.warehouseStatus !== "READY"
-      ) {
-        throw new Error("Zamena mora imati status „Spremno” pre predaje kuriru.");
-      }
-      if (args.purpose === "RECLAMATION_REPLACEMENT") {
-        const queued = Boolean(reclamation.pickupBatchLines[0]);
-        if (queued && !args.fromPickupBatch) {
-          throw new Error(
-            "Zamena je u picking nalogu i mora se poslati knjiženjem tog naloga.",
-          );
-        }
-        if (!queued && args.fromPickupBatch) {
-          throw new Error("Zamena više nije povezana sa picking nalogom.");
-        }
-      }
+      assertReclamationShipmentReady(reclamation, args);
 
       if (
         args.purpose === "RECLAMATION_REPLACEMENT" &&
@@ -169,6 +186,53 @@ export async function createReclamationShipment(args: {
     },
     { maxWait: 10_000, timeout: 60_000 },
   );
+}
+
+function assertReclamationPurpose(purpose: ShipmentPurpose) {
+  if (!RECLAMATION_PURPOSES.includes(purpose)) {
+    throw new Error("Nepoznata svrha reklamacione pošiljke.");
+  }
+}
+
+function assertReclamationShipmentReady(
+  reclamation: {
+    decision: string | null;
+    resolution: string | null;
+    warehouseId: string | null;
+    warehouseStatus: ReclamationWarehouseStatus;
+    pickupBatchLines: readonly { batchId: string }[];
+  },
+  args: Pick<ReclamationShipmentOptions, "purpose" | "fromPickupBatch">,
+) {
+  if (reclamation.decision !== "PRIHVACENA") {
+    throw new Error("Kurirski nalog se kreira tek posle prihvatanja reklamacije.");
+  }
+  if (!reclamation.warehouseId) {
+    throw new Error("Izaberite magacin pre kreiranja kurirskog naloga.");
+  }
+  if (
+    args.purpose === "RECLAMATION_REPLACEMENT" &&
+    !["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "")
+  ) {
+    throw new Error("Za zamensku pošiljku izaberite zamenu artikla ili dela.");
+  }
+  if (
+    args.purpose === "RECLAMATION_REPLACEMENT" &&
+    reclamation.warehouseStatus !== "READY"
+  ) {
+    throw new Error("Zamena mora imati status „Spremno” pre predaje kuriru.");
+  }
+  if (args.purpose === "RECLAMATION_REPLACEMENT") {
+    const queued = Boolean(reclamation.pickupBatchLines[0]);
+    if (queued && !args.fromPickupBatch) {
+      throw new Error(
+        "Zamena je u picking nalogu i mora se poslati knjiženjem tog naloga.",
+      );
+    }
+    if (!queued && args.fromPickupBatch) {
+      throw new Error("Zamena više nije povezana sa picking nalogom.");
+    }
+  }
 }
 
 export async function cancelReclamationShipment(

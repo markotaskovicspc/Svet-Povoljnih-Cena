@@ -11,6 +11,7 @@ import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import {
   createShipmentForOrder,
   getSelectedSmallParcelProvider,
+  preflightShipmentForOrder,
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
@@ -53,7 +54,10 @@ import {
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   pickupBatchHandoverProgress,
 } from "@/lib/admin/pickup-batch";
-import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
+import {
+  createReclamationShipment,
+  preflightReclamationShipment,
+} from "@/lib/admin/reclamation-fulfillment.server";
 import { retryTransientDatabaseOperation } from "@/lib/admin/pickup-posting-retry";
 import {
   assertFulfillmentPaymentReady,
@@ -1575,6 +1579,7 @@ async function createMyGlsLabelsForPickupBatch(
       include: {
         lines: {
           include: {
+            order: { select: { number: true } },
             orderItem: { select: { name: true } },
           },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
@@ -1592,8 +1597,15 @@ async function createMyGlsLabelsForPickupBatch(
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
     }
     await assertPickupGroupsPaymentReady(workGroups);
+
+    const workPlans: Array<{
+      group: (typeof workGroups)[number];
+      packages: PhysicalPackage[];
+      orderItemIds: string[];
+      codAmount: number;
+    }> = [];
     for (const group of workGroups) {
-      requireCompleteMyGlsPackages(
+      const packages = requireCompleteMyGlsPackages(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
@@ -1604,6 +1616,38 @@ async function createMyGlsLabelsForPickupBatch(
           heightCm: Number(line.heightCm ?? 0),
         })),
       );
+      const orderItemIds = orderItemIdsForGroup(group);
+      const codAmount =
+        group.purpose === "RECLAMATION_REPLACEMENT"
+          ? 0
+          : await pickupAssignmentCodAmount(
+              group.orderId,
+              "MYGLS",
+              orderItemIds,
+            );
+      try {
+        if (group.purpose === "RECLAMATION_REPLACEMENT") {
+          await preflightReclamationShipment({
+            reclamationId: requiredReclamationId(group),
+            purpose: "RECLAMATION_REPLACEMENT",
+            packages,
+            packageCount: packages.length,
+            provider: "MYGLS",
+            fromPickupBatch: true,
+          });
+        } else {
+          await preflightShipmentForOrder(group.orderId, {
+            packages,
+            packageCount: packages.length,
+            provider: "MYGLS",
+            orderItemIds,
+            codAmount,
+          });
+        }
+      } catch (error) {
+        throw pickupGroupError(group.lines[0]?.order.number, error);
+      }
+      workPlans.push({ group, packages, orderItemIds, codAmount });
     }
 
     await db.pickupBatch.update({
@@ -1615,19 +1659,8 @@ async function createMyGlsLabelsForPickupBatch(
     });
 
     const shipmentIds: string[] = [];
-    for (const group of workGroups) {
-      const packageLines = group.lines;
-      const packages = requireCompleteMyGlsPackages(
-        packageLines.map((line) => ({
-          packageNo: line.packageNo,
-          orderItemId: line.orderItemId,
-          content: line.orderItem?.name,
-          weightKg: Number(line.weightKg ?? 0),
-          widthCm: Number(line.widthCm ?? 0),
-          depthCm: Number(line.depthCm ?? 0),
-          heightCm: Number(line.heightCm ?? 0),
-        })),
-      );
+    for (const plan of workPlans) {
+      const { group, packages, orderItemIds, codAmount } = plan;
       providerAttempted = true;
       const shipment = group.purpose === "RECLAMATION_REPLACEMENT"
         ? await createReclamationShipment({
@@ -1643,12 +1676,8 @@ async function createMyGlsLabelsForPickupBatch(
             packages,
             packageCount: packages.length,
             provider: "MYGLS",
-            orderItemIds: orderItemIdsForGroup(group),
-            codAmount: await pickupAssignmentCodAmount(
-              group.orderId,
-              "MYGLS",
-              orderItemIdsForGroup(group),
-            ),
+            orderItemIds,
+            codAmount,
           });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(

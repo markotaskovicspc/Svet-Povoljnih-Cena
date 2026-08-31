@@ -3,6 +3,7 @@ import "server-only";
 import {
   Prisma,
   type OrderStatus,
+  type Shipment,
   type ShipmentPurpose,
   type ShipmentService,
   type ShipmentStatus,
@@ -18,6 +19,7 @@ import { syncXExpressShipmentById } from "@/lib/x-express/sync";
 import {
   MYGLS_PROVIDER,
   createMyGlsShipmentForOrder,
+  preflightMyGlsShipmentForOrder as preflightMyGlsProviderShipmentForOrder,
   syncMyGlsShipmentById,
 } from "@/lib/mygls";
 import {
@@ -85,23 +87,41 @@ export function adapterFromSlug(slug: string): CourierAdapter | null {
  * `ShipmentEvent`. Idempotent on `orderId`: an existing CREATED/PICKED_UP
  * shipment is returned unchanged.
  */
-export async function createShipmentForOrder(
+type ShipmentCreationOptions = {
+  packageCount?: number;
+  packages?: readonly PhysicalPackage[];
+  pickupDate?: Date;
+  purpose?: ShipmentPurpose;
+  reclamationId?: string;
+  orderItemIds?: string[];
+  provider?: SmallParcelProvider;
+  codAmount?: number;
+  /** Rabalux dropship group whose items and pickup address must be used. */
+  supplierFulfillmentId?: string;
+  /** Prepare an X Express label without announcing it to the provider yet. */
+  announceXExpress?: boolean;
+};
+
+export function createShipmentForOrder(
   orderId: string,
-  options: {
-    packageCount?: number;
-    packages?: readonly PhysicalPackage[];
-    pickupDate?: Date;
-    purpose?: ShipmentPurpose;
-    reclamationId?: string;
-    orderItemIds?: string[];
-    provider?: SmallParcelProvider;
-    codAmount?: number;
-    /** Rabalux dropship group whose items and pickup address must be used. */
-    supplierFulfillmentId?: string;
-    /** Prepare an X Express label without announcing it to the provider yet. */
-    announceXExpress?: boolean;
-  } = {},
+  options: ShipmentCreationOptions = {},
+): Promise<Shipment> {
+  return processShipmentForOrder(orderId, options, "create") as Promise<Shipment>;
+}
+
+/** Validate routing and the exact provider payload without any provider write. */
+export async function preflightShipmentForOrder(
+  orderId: string,
+  options: ShipmentCreationOptions = {},
 ) {
+  await processShipmentForOrder(orderId, options, "preflight");
+}
+
+async function processShipmentForOrder(
+  orderId: string,
+  options: ShipmentCreationOptions,
+  mode: "create" | "preflight",
+): Promise<Shipment | void> {
   const purpose = options.purpose ?? "ORDER_DELIVERY";
   const reclamation =
     purpose === "ORDER_DELIVERY"
@@ -272,7 +292,7 @@ export async function createShipmentForOrder(
       derivedPackages;
     const derivedPackageCount = derivedPackages.length;
     if (selectedProvider === "MYGLS") {
-      return createMyGlsShipmentForOrder(order.id, {
+      const myGlsOptions = {
         purpose,
         reclamationId: reclamation?.id,
         pickupDate: options.pickupDate,
@@ -282,8 +302,14 @@ export async function createShipmentForOrder(
         supplierFulfillmentId: supplierFulfillment?.id,
         pickupOverride:
           supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
-      });
+      };
+      if (mode === "preflight") {
+        await preflightMyGlsProviderShipmentForOrder(order.id, myGlsOptions);
+        return;
+      }
+      return createMyGlsShipmentForOrder(order.id, myGlsOptions);
     }
+    if (mode === "preflight") return;
     const shipment = await createXExpressShipmentForOrder(order.id, {
       packageCount: options.packageCount ?? derivedPackageCount,
       packages,
@@ -302,7 +328,7 @@ export async function createShipmentForOrder(
 
   if (routing.provider === "MYGLS") {
     const packages = options.packages ?? derivedPackages;
-    return createMyGlsShipmentForOrder(order.id, {
+    const myGlsOptions = {
       purpose,
       reclamationId: reclamation?.id,
       pickupDate: options.pickupDate,
@@ -312,7 +338,12 @@ export async function createShipmentForOrder(
       supplierFulfillmentId: supplierFulfillment?.id,
       pickupOverride:
         supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
-    });
+    };
+    if (mode === "preflight") {
+      await preflightMyGlsProviderShipmentForOrder(order.id, myGlsOptions);
+      return;
+    }
+    return createMyGlsShipmentForOrder(order.id, myGlsOptions);
   }
 
   if (purpose === "RECLAMATION_RETURN") {
@@ -320,6 +351,8 @@ export async function createShipmentForOrder(
       "Povrat kabaste robe zahteva ručni kamionski nalog; automatski obrnuti smer nije podržan.",
     );
   }
+
+  if (mode === "preflight") return;
 
   const adapter = getAdapter(service);
 
