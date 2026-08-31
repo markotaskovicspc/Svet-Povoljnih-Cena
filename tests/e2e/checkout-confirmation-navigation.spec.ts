@@ -333,16 +333,21 @@ test("successful guest order lands on the confirmation route", async ({
     name: /Napomene uz porudžbinu/,
   });
   const consent = page.getByTestId("mobile-checkout-consent");
-  const [voucherBox, summaryBox, notesBox, consentBox] = await Promise.all([
-    voucherToggle.boundingBox(),
-    mobileOrderSummary.boundingBox(),
-    notes.boundingBox(),
-    consent.boundingBox(),
-  ]);
+  const reviewNavigation = page.getByTestId("mobile-checkout-navigation");
+  const [consentBox, voucherBox, summaryBox, notesBox, reviewNavigationBox] =
+    await Promise.all([
+      consent.boundingBox(),
+      voucherToggle.boundingBox(),
+      mobileOrderSummary.boundingBox(),
+      notes.boundingBox(),
+      reviewNavigation.boundingBox(),
+    ]);
+  expect(consentBox?.y).toBeLessThan(voucherBox?.y ?? 0);
+  expect((consentBox?.y ?? 0) + (consentBox?.height ?? 0)).toBeLessThanOrEqual(
+    reviewNavigationBox?.y ?? 0,
+  );
   expect(voucherBox?.y).toBeLessThan(summaryBox?.y ?? 0);
   expect(summaryBox?.y).toBeLessThan(notesBox?.y ?? 0);
-  expect(notesBox?.y).toBeLessThan(consentBox?.y ?? 0);
-  await consent.scrollIntoViewIfNeeded();
   await expect(consent).toBeVisible();
   await page
     .getByTestId("mobile-checkout-consent")

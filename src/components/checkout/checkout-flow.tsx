@@ -998,6 +998,9 @@ function ReviewStep({
       </div>
 
       <div className="border-border/60 flex flex-col gap-3 border-t pt-3 sm:gap-4 sm:pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-4">
+        <div data-testid="mobile-checkout-consent" className="lg:hidden">
+          <CheckoutConsent id="consent-mobile" />
+        </div>
         <VoucherSection />
         <OrderSummary
           deliveryQuote={deliveryQuote}
@@ -1011,12 +1014,6 @@ function ReviewStep({
           readOnlyLines
         />
         <NotesConsent />
-        <div
-          data-testid="mobile-checkout-consent"
-          className="lg:hidden"
-        >
-          <CheckoutConsent id="consent-mobile" />
-        </div>
       </div>
     </div>
   );
