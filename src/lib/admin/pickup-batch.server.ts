@@ -53,6 +53,7 @@ import {
   pickupBatchHandoverProgress,
 } from "@/lib/admin/pickup-batch";
 import { createReclamationShipment } from "@/lib/admin/reclamation-fulfillment.server";
+import { retryTransientDatabaseOperation } from "@/lib/admin/pickup-posting-retry";
 import {
   assertFulfillmentPaymentReady,
   fulfillmentPaymentReadiness,
@@ -1168,10 +1169,19 @@ async function postPickupBatch(batchId: string, actorId: string) {
   }
   if (availability.provider === "MYGLS") {
     const result = await createMyGlsLabelsForPickupBatch(batchId, actorId);
-    await confirmMyGlsPickupAnnouncement(batchId, actorId, {
-      channel: "MYGLS_API",
-      reference: "PrintLabels",
-    });
+    try {
+      await retryTransientDatabaseOperation(() =>
+        confirmMyGlsPickupAnnouncement(batchId, actorId, {
+          channel: "MYGLS_API",
+          reference: "PrintLabels",
+        }),
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "nepoznata greška";
+      throw new Error(
+        `MyGLS je prihvatio pošiljke i adresnice su spremne za štampu, ali završna potvrda naloga nije uspela: ${detail}. Bezbedno ponovite slanje; postojeće pošiljke neće biti duplirane.`,
+      );
+    }
     return { ...result, phase: "ANNOUNCED" as const };
   }
   if (!summary.labelsCreatedAt) {
@@ -1684,7 +1694,8 @@ export async function confirmMyGlsPickupAnnouncement(
     reference: string;
   },
 ) {
-  if (!input.reference.trim()) {
+  const reference = input.reference.trim().slice(0, 120);
+  if (!reference) {
     throw new Error("Referenca GLS najave je obavezna.");
   }
   return db.$transaction(async (tx) => {
@@ -1707,14 +1718,25 @@ export async function confirmMyGlsPickupAnnouncement(
     if (normalizeProvider(batch.provider) !== "MYGLS") {
       throw new Error("Ručna potvrda najave dozvoljena je samo za MyGLS nalog.");
     }
+    const workGroups = pickupWorkGroups(batch.lines);
+    if (!workGroups.length) throw new Error("Nalog nema pakete za preuzimanje.");
+    if (
+      batch.status === "BOOKED" &&
+      batch.externalBookedAt &&
+      batch.externalBookingChannel === input.channel &&
+      batch.externalBookingReference === reference
+    ) {
+      return {
+        orderCount: workGroups.length,
+        bookedAt: batch.externalBookedAt,
+      };
+    }
     if (batch.status !== "DRAFT") {
       throw new Error("Samo novi MyGLS nalog može biti potvrđen kao najavljen.");
     }
     if (!batch.labelsCreatedAt) {
       throw new Error("Prvo moraju biti kreirane MyGLS adresnice za sve pakete.");
     }
-    const workGroups = pickupWorkGroups(batch.lines);
-    if (!workGroups.length) throw new Error("Nalog nema pakete za preuzimanje.");
     await assertPickupGroupsPaymentReady(workGroups);
     const orderIds = ordinaryOrderIdsForGroups(workGroups);
 
@@ -1765,7 +1787,6 @@ export async function confirmMyGlsPickupAnnouncement(
       );
     }
 
-    const reference = input.reference.trim().slice(0, 120);
     const bookedAt = new Date();
     await tx.pickupBatch.update({
       where: { id: batch.id },
