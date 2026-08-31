@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, X, Clock3 } from "lucide-react";
 import type { PromoBar as PromoBarData } from "@/types";
 
-const STORAGE_KEY = "spc-promobar-dismissed";
+const STORAGE_KEY_PREFIX = "spc-promobar-dismissed";
 const STORAGE_EVENT = "spc-promobar-dismissed-change";
 const COUNTDOWN_THRESHOLD_MS = 72 * 60 * 60 * 1000;
 
@@ -19,9 +19,9 @@ function subscribeDismissed(onStoreChange: () => void) {
   };
 }
 
-function getDismissedSnapshot() {
+function getDismissedSnapshot(storageKey: string) {
   try {
-    return sessionStorage.getItem(STORAGE_KEY) === "1";
+    return sessionStorage.getItem(storageKey) === "1";
   } catch {
     return false;
   }
@@ -44,9 +44,10 @@ interface PromoBarProps {
 }
 
 export function PromoBar({ bar }: PromoBarProps) {
+  const storageKey = `${STORAGE_KEY_PREFIX}:${bar.id}`;
   const dismissed = useSyncExternalStore(
     subscribeDismissed,
-    getDismissedSnapshot,
+    () => getDismissedSnapshot(storageKey),
     () => false,
   );
   const [now, setNow] = useState<number | null>(null);
@@ -65,7 +66,7 @@ export function PromoBar({ bar }: PromoBarProps) {
 
   const handleDismiss = () => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, "1");
+      sessionStorage.setItem(storageKey, "1");
       window.dispatchEvent(new Event(STORAGE_EVENT));
     } catch {
       // ignore

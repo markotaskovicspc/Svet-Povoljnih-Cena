@@ -1,7 +1,11 @@
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
+import {
+  formatBelgradePricingDateTime,
+  parseBelgradePricingDateTime,
+} from "@/lib/admin/pricing-date-time";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { PageHeader } from "@/components/admin/page-header";
@@ -41,13 +45,18 @@ async function upsert(_state: AdminActionState, formData: FormData) {
         const data = {
           text: payload.text,
           href: payload.href || null,
-          startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
-          endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
+          startsAt: payload.startsAt
+            ? parseBelgradePricingDateTime(payload.startsAt)
+            : null,
+          endsAt: payload.endsAt
+            ? parseBelgradePricingDateTime(payload.endsAt)
+            : null,
           enabled: payload.enabled,
         };
         const saved = id
           ? await db.promoBar.update({ where: { id }, data })
           : await db.promoBar.create({ data });
+        updateTag("storefront-home");
         revalidatePath("/admin/promo-traka");
         revalidatePath("/");
         return { ok: true as const, entityId: saved.id, diff: data };
@@ -64,18 +73,13 @@ async function remove(formData: FormData) {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
         await db.promoBar.delete({ where: { id } });
+        updateTag("storefront-home");
         revalidatePath("/admin/promo-traka");
         revalidatePath("/");
         return { ok: true as const, entityId: id };
       },
   )(formData);
 }
-
-const dt = (d?: Date | null) => {
-  if (!d) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
 
 export default async function PromoBarPage() {
   await requireAdminAction(["CONTENT"]);
@@ -101,7 +105,11 @@ export default async function PromoBarPage() {
               </CardTitle>
               <Form
                 action={upsert}
-                values={{ ...b, startsAt: dt(b.startsAt), endsAt: dt(b.endsAt) }}
+                values={{
+                  ...b,
+                  startsAt: formatBelgradePricingDateTime(b.startsAt),
+                  endsAt: formatBelgradePricingDateTime(b.endsAt),
+                }}
               />
               <form action={remove} className="mt-4 flex justify-end">
                 <input type="hidden" name="id" value={b.id} />
