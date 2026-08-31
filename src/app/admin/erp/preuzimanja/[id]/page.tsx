@@ -335,12 +335,13 @@ export default async function PickupBatchPage({
       group.purpose === "RECLAMATION_REPLACEMENT" &&
       group.warehouseStatus !== "READY",
   ).length;
+  const previousPostingIssue = batch.labelsCreationStartedAt
+    ? batch.configurationIssue
+    : null;
   const postingBlockReason = unreadyReplacementCount
     ? `${unreadyReplacementCount} zamena još nema status magacina „Spremno“. Otvorite reklamaciju i završite pripremu pre knjiženja.`
     : pickupPostingBlockReason({
-        configurationIssue: batch.labelsCreationStartedAt
-          ? batch.configurationIssue
-          : null,
+        configurationIssue: null,
         providerReason: posting.reason,
         provider: posting.provider,
         rowCount: rows.length,
@@ -448,8 +449,17 @@ export default async function PickupBatchPage({
                 }
                 pendingLabel="Slanje kuriru…"
                 confirm={`Kreirati adresnice i odmah poslati sve pošiljke ${myGls ? "MyGLS-u" : "X Express-u"}? Nakon uspešnog API poziva nalog će biti proknjižen.`}
-                title={postingBlockReason ?? undefined}
-                aria-describedby={postingBlockReason ? postingReasonId : undefined}
+                title={
+                  postingBlockReason ??
+                  (previousPostingIssue
+                    ? "Prethodni pokušaj nije uspeo. Bezbedno ponovite slanje."
+                    : undefined)
+                }
+                aria-describedby={
+                  postingBlockReason || previousPostingIssue
+                    ? postingReasonId
+                    : undefined
+                }
               >
                 Kreiraj adresnice i pošalji
               </SubmitButton>
@@ -526,6 +536,24 @@ export default async function PickupBatchPage({
                   ? `Kurir je preuzeo ${handoverProgress.pickedUpGroups}/${handoverProgress.totalGroups} pošiljki i ${handoverProgress.pickedUpPackages}/${handoverProgress.totalPackages} paketa.`
                   : "Adresnice su kreirane, pošiljke su poslate kuriru i nalog je proknjižen. Evidentirajte preuzimanje u picking listi kada kurir fizički preuzme pošiljke."}
             </p>
+          ) : previousPostingIssue && !postingBlockReason ? (
+            <p
+              id={postingReasonId}
+              className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
+            >
+              <strong>Prethodni pokušaj nije uspeo:</strong>{" "}
+              {previousPostingIssue}
+              <span className="mt-1 block">
+                Greška je sačuvana radi dijagnostike. Dugme „Kreiraj adresnice
+                i pošalji“ je dostupno za bezbedno ponovno slanje; već uspešno
+                kreirane pošiljke neće biti duplirane.
+              </span>
+              <span className="mt-1 block">
+                Ako poruka navodi adresu ili telefon, kliknite broj porudžbine
+                u picking listi, ispravite podatke u odeljku „Adresa
+                isporuke“, vratite se ovde i ponovite slanje.
+              </span>
+            </p>
           ) : postingBlockReason ? (
             <p
               id={postingReasonId}
@@ -535,13 +563,6 @@ export default async function PickupBatchPage({
                 „Kreiraj adresnice i pošalji“ je trenutno zaključan:
               </strong>{" "}
               {postingBlockReason}
-              {batch.status === "DRAFT" && batch.labelsCreationStartedAt ? (
-                <span className="mt-1 block">
-                  Ako poruka navodi adresu ili telefon, kliknite broj
-                  porudžbine u picking listi, ispravite podatke u odeljku
-                  „Adresa isporuke“, vratite se ovde i ponovite slanje.
-                </span>
-              ) : null}
             </p>
           ) : (
             <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">

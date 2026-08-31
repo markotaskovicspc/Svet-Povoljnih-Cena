@@ -211,6 +211,24 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(lines.map((line) => Number(line.heightCm))).toEqual([6.5, 6.5]);
       expect(lines.map((line) => Number(line.weightKg))).toEqual([7.25, 7.25]);
       expect(new Set(lines.map((line) => line.lineGroupKey).values()).size).toBe(1);
+
+      await db.pickupBatch.update({
+        where: { id: batchId },
+        data: {
+          labelsCreationStartedAt: new Date(),
+          configurationIssue:
+            "There was an error deserializing the object of type GLS.MyGLS.ServiceData.APIDTOs.LabelOperations.PrintLabelsRequest. The value '6.5' cannot be parsed as the type 'Int32'.",
+        },
+      });
+      await page.goto(`/admin/erp/preuzimanja/${batchId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByText("Prethodni pokušaj nije uspeo:"),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Dugme „Kreiraj adresnice i pošalji“ je dostupno"),
+      ).toBeVisible();
     });
 
     let popup: Page | null = null;
