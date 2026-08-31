@@ -157,4 +157,24 @@ describe("package routing", () => {
       ["GLS", "3/3"],
     ]);
   });
+
+  it("never merges sold units using warehouse transport pack quantity", () => {
+    const plan = routePackages({
+      shippingMethod: "KURIR",
+      items: [
+        {
+          withAssembly: false,
+          qty: 18,
+          packQty: 2,
+          packWidthCm: 30,
+          packDepthCm: 20,
+          packHeightCm: 10,
+          packGrossWeightKg: 5,
+        },
+      ],
+    });
+
+    expect(plan).toHaveLength(18);
+    expect(plan.at(-1)?.label).toBe("18/18");
+  });
 });

@@ -74,7 +74,8 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         fullPrice: 1_000,
         collectionId: collection.id,
         packQty: 6,
-        packGrossWeightKg: 7.25,
+        grossWeightKg: 7.25,
+        packGrossWeightKg: 43.5,
         unitPackWidthCm: 88,
         unitPackDepthCm: 44,
         unitPackHeightCm: 6.5,
@@ -164,7 +165,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       );
     });
 
-    await test.step("OPS admin formira MyGLS nalog sa 12 komada u 2 paketa", async () => {
+    await test.step("OPS admin formira MyGLS nalog sa 12 komada u 12 paketa", async () => {
       await page.goto("/admin/erp/preuzimanja", {
         waitUntil: "domcontentloaded",
       });
@@ -190,7 +191,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
       await expect(page.getByRole("status")).toContainText(
-        "Učitano paketa: 2 iz 1 porudžbina",
+        "Učitano paketa: 12 iz 1 porudžbina",
       );
       const groupRow = page.getByRole("row").filter({
         has: page.getByRole("link", {
@@ -200,16 +201,16 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       });
       await expect(groupRow).toBeVisible();
       await expect(groupRow).toContainText("× 12");
-      await expect(groupRow.locator("td").nth(2)).toHaveText("2");
+      await expect(groupRow.locator("td").nth(2)).toHaveText("12");
 
       const lines = await db.pickupBatchLine.findMany({
         where: { batchId },
         orderBy: { packageNo: "asc" },
       });
-      expect(lines).toHaveLength(2);
-      expect(lines.map((line) => line.quantity)).toEqual([12, 12]);
-      expect(lines.map((line) => Number(line.heightCm))).toEqual([6.5, 6.5]);
-      expect(lines.map((line) => Number(line.weightKg))).toEqual([7.25, 7.25]);
+      expect(lines).toHaveLength(12);
+      expect(lines.every((line) => line.quantity === 12)).toBe(true);
+      expect(lines.every((line) => Number(line.heightCm) === 6.5)).toBe(true);
+      expect(lines.every((line) => Number(line.weightKg) === 7.25)).toBe(true);
       expect(new Set(lines.map((line) => line.lineGroupKey).values()).size).toBe(1);
 
       await db.pickupBatch.update({
@@ -260,7 +261,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       );
       const printResponse = await popupLabelResponse;
       expect(printResponse.headers()["content-type"]).toContain("application/pdf");
-      expect(printResponse.headers()["x-courier-label-count"]).toBe("2");
+      expect(printResponse.headers()["x-courier-label-count"]).toBe("12");
     });
 
     let shipmentId = "";
@@ -287,7 +288,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       shipmentId = shipment.id;
       expect(shipment.provider).toBe("MYGLS");
       expect(shipment.status).toBe("CREATED");
-      expect(shipment.packageCount).toBe(2);
+      expect(shipment.packageCount).toBe(12);
       expect(shipment.trackingNo).toMatch(/^\d+$/);
       expect(shipment.labelObjectKey).toBe(
         `mygls/${fixture.orderNumber}/${shipment.id}.pdf`,
@@ -307,7 +308,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(successfulPayload.ParcelList).toHaveLength(1);
       const parcel = successfulPayload.ParcelList[0];
       expect(parcel.ClientReference).toBe(fixture.orderNumber);
-      expect(parcel.Count).toBe(2);
+      expect(parcel.Count).toBe(12);
       expect(parcel.CODAmount).toBe(12_000);
       expect(parcel.PickupDate).toMatch(/^\/Date\(\d+\)\/$/);
       expect(parcel.PickupAddress.HouseNumber).toBe("1");
@@ -322,7 +323,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         "CS1",
         "FDS",
       ]);
-      expect(parcel.ParcelPropertyList).toHaveLength(2);
+      expect(parcel.ParcelPropertyList).toHaveLength(12);
       for (const property of parcel.ParcelPropertyList) {
         expect(property).toMatchObject({
           Width: 88,
@@ -347,11 +348,11 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(batchLabels.headers()["x-courier-label-source"]).toBe(
         "mygls-provider-pdfs-merged",
       );
-      expect(batchLabels.headers()["x-courier-label-count"]).toBe("2");
+      expect(batchLabels.headers()["x-courier-label-count"]).toBe("12");
       const batchPdfBytes = await batchLabels.body();
       expect(batchPdfBytes.subarray(0, 4).toString()).toBe("%PDF");
       const batchPdf = await PDFDocument.load(batchPdfBytes);
-      expect(batchPdf.getPageCount()).toBe(2);
+      expect(batchPdf.getPageCount()).toBe(12);
 
       expect(shipmentLabel.status()).toBe(200);
       expect(shipmentLabel.headers()["content-type"]).toContain("application/pdf");
@@ -360,7 +361,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         "mygls-provider-pdf",
       );
       const shipmentPdf = await PDFDocument.load(await shipmentLabel.body());
-      expect(shipmentPdf.getPageCount()).toBe(2);
+      expect(shipmentPdf.getPageCount()).toBe(12);
     });
 
     await test.step("picking štampa razlikuje komade od fizičkih paketa", async () => {
@@ -374,7 +375,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         has: page.getByText(fixture.sku, { exact: true }),
       });
       await expect(row).toContainText("12");
-      await expect(row).toContainText("2");
+      await expect(row).toContainText("12");
       await expect(
         page.getByRole("link", { name: "Otvori sve kurirske adresnice" }),
       ).toHaveAttribute("href", `/api/admin/erp/preuzimanja/${batchId}/labels`);
@@ -389,7 +390,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         page.getByRole("button", { name: "Sve preuzeto", exact: true }),
       );
       await expect(page.getByRole("status")).toContainText(
-        "Kurir je evidentiran za sve pošiljke (1/1) i pakete (2/2)",
+        "Kurir je evidentiran za sve pošiljke (1/1) i pakete (12/12)",
       );
       const [batch, lines, jobs] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({ where: { id: batchId } }),

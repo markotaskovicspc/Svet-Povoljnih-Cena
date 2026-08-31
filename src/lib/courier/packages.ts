@@ -49,6 +49,30 @@ export type PackageSourceItem = {
 };
 
 /**
+ * Courier labels follow the merchant's operational rule: every sold unit is
+ * handed to the courier as its own package. Catalogue `packQty` describes
+ * inbound/warehouse transport packaging and must never merge customer units.
+ */
+export function courierPackageCount(quantity: unknown) {
+  return positiveInteger(quantity) ?? 1;
+}
+
+/** Returns the weight of one customer-facing package. */
+export function courierUnitWeightKg(
+  product: PackageSourceItem["product"],
+) {
+  const individualWeight =
+    positiveNumber(product?.grossWeightKg) ??
+    positiveNumber(product?.weightKg);
+  if (individualWeight != null) return individualWeight;
+
+  const transportWeight = positiveNumber(product?.packGrossWeightKg);
+  if (transportWeight == null) return null;
+  const unitsPerTransportPackage = positiveInteger(product?.packQty) ?? 1;
+  return transportWeight / unitsPerTransportPackage;
+}
+
+/**
  * Weight above 40 kg and a side above 200 cm are hard MyGLS limits. The
  * 300 cm volumetric boundary is handled separately because the published
  * Serbian terms and the merchant tariff allow larger parcels with a surcharge.
@@ -96,10 +120,10 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
 }
 
 /**
- * Expands order lines into physical packages. Individual article packaging is
- * the only catalogue source for courier dimensions. Missing values
- * intentionally remain null so an operator must enter real measurements
- * before a provider request can be sent.
+ * Expands order lines into one physical package per sold unit. Individual
+ * article packaging is the only catalogue source for courier dimensions.
+ * Missing values intentionally remain null so an operator must enter real
+ * measurements before a provider request can be sent.
  */
 export function derivePhysicalPackages(
   items: readonly PackageSourceItem[],
@@ -107,18 +131,13 @@ export function derivePhysicalPackages(
   const packages: PhysicalPackage[] = [];
 
   for (const item of items) {
-    const qty = positiveInteger(item.qty) ?? 1;
-    const packQty = positiveInteger(item.product?.packQty) ?? 1;
-    const count = Math.max(1, Math.ceil(qty / packQty));
+    const count = courierPackageCount(item.qty);
     for (let index = 0; index < count; index += 1) {
       packages.push({
         packageNo: packages.length + 1,
         orderItemId: item.id,
         content: item.name,
-        weightKg:
-          positiveNumber(item.product?.packGrossWeightKg) ??
-          positiveNumber(item.product?.grossWeightKg) ??
-          positiveNumber(item.product?.weightKg),
+        weightKg: courierUnitWeightKg(item.product),
         widthCm: positiveNumber(item.product?.unitPackWidthCm),
         depthCm: positiveNumber(item.product?.unitPackDepthCm),
         heightCm: positiveNumber(item.product?.unitPackHeightCm),

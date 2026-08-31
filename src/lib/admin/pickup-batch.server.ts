@@ -14,6 +14,7 @@ import {
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
+  courierUnitWeightKg,
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
   requireCompletePhysicalPackages,
@@ -2052,11 +2053,7 @@ function courierRouteItem(item: {
     packWidthCm: firstPositiveNumber(item.product?.unitPackWidthCm),
     packDepthCm: firstPositiveNumber(item.product?.unitPackDepthCm),
     packHeightCm: firstPositiveNumber(item.product?.unitPackHeightCm),
-    packGrossWeightKg: firstPositiveNumber(
-      item.product?.packGrossWeightKg,
-      item.product?.grossWeightKg,
-      item.product?.weightKg,
-    ),
+    packGrossWeightKg: courierUnitWeightKg(item.product),
   };
 }
 

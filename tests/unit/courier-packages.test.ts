@@ -9,27 +9,53 @@ import {
 } from "@/lib/courier/packages";
 
 describe("physical courier packages", () => {
-  it("expands quantity by catalogue pack quantity and copies individual package measures", () => {
-    expect(
-      derivePhysicalPackages([
-        {
-          id: "item-1",
-          name: "Stolica",
-          qty: 5,
-          product: {
-            packQty: 2,
-            packGrossWeightKg: 8,
-            unitPackWidthCm: 40,
-            unitPackDepthCm: 50,
-            unitPackHeightCm: 30,
-          },
+  it("creates one courier package per sold unit regardless of catalogue pack quantity", () => {
+    const packages = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Stolica",
+        qty: 5,
+        product: {
+          packQty: 2,
+          grossWeightKg: 3.5,
+          packGrossWeightKg: 8,
+          unitPackWidthCm: 40,
+          unitPackDepthCm: 50,
+          unitPackHeightCm: 30,
         },
-      ]),
-    ).toEqual([
-      expect.objectContaining({ packageNo: 1, weightKg: 8, widthCm: 40 }),
-      expect.objectContaining({ packageNo: 2, weightKg: 8, widthCm: 40 }),
-      expect.objectContaining({ packageNo: 3, weightKg: 8, widthCm: 40 }),
+      },
     ]);
+
+    expect(packages).toHaveLength(5);
+    expect(packages).toEqual(
+      Array.from({ length: 5 }, (_, index) =>
+        expect.objectContaining({
+          packageNo: index + 1,
+          weightKg: 3.5,
+          widthCm: 40,
+        }),
+      ),
+    );
+  });
+
+  it("derives a per-unit fallback when only transport-package weight exists", () => {
+    const packages = derivePhysicalPackages([
+      {
+        id: "item-1",
+        name: "Blender",
+        qty: 2,
+        product: {
+          packQty: 2,
+          packGrossWeightKg: 8,
+          unitPackWidthCm: 40,
+          unitPackDepthCm: 50,
+          unitPackHeightCm: 30,
+        },
+      },
+    ]);
+
+    expect(packages).toHaveLength(2);
+    expect(packages.map((pkg) => pkg.weightKg)).toEqual([4, 4]);
   });
 
   it("leaves missing catalogue measurements empty for explicit operator entry", () => {

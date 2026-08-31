@@ -36,6 +36,7 @@ import { resolveCourierProvider, routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
 import type { SmallParcelProvider } from "@/lib/mygls/config";
 import {
+  courierPackageCount,
   derivePhysicalPackages,
   type PhysicalPackage,
 } from "./packages";
@@ -346,8 +347,7 @@ export async function createShipmentForOrder(
     },
     notes: order.notes,
     packageCount: shipmentItems.reduce(
-      (sum, item) =>
-        sum + Math.max(1, Math.ceil(item.qty / Math.max(item.product?.packQty ?? 1, 1))),
+      (sum, item) => sum + courierPackageCount(item.qty),
       0,
     ),
   });

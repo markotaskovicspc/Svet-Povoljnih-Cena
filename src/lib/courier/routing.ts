@@ -1,4 +1,5 @@
 import type { ShipmentService } from "@prisma/client";
+import { courierPackageCount } from "@/lib/courier/packages";
 
 export interface PackageRouteInput {
   shippingMethod: "KURIR" | "KAMION";
@@ -31,10 +32,7 @@ export const X_EXPRESS_MAX_PACKAGE_SIDE_CM = 60;
 
 function expandedPackages(order: PackageRouteInput) {
   return order.items.flatMap((item) => {
-    const packageCount = Math.max(
-      1,
-      Math.ceil((item.qty ?? 1) / Math.max(item.packQty ?? 1, 1)),
-    );
+    const packageCount = courierPackageCount(item.qty);
     const largestDimension = Math.max(
       item.packWidthCm ?? 0,
       item.packDepthCm ?? 0,
