@@ -57,19 +57,19 @@ export function courierPackageCount(quantity: unknown) {
   return positiveInteger(quantity) ?? 1;
 }
 
-/** Returns the weight of one customer-facing package. */
+/**
+ * Returns the weight of one customer-facing package. Transport-carton weight
+ * is deliberately ignored: dividing it by `packQty` would only be an estimate
+ * and can accidentally declare the whole carton as one courier package when
+ * catalogue metadata is incomplete.
+ */
 export function courierUnitWeightKg(
   product: PackageSourceItem["product"],
 ) {
-  const individualWeight =
+  return (
     positiveNumber(product?.grossWeightKg) ??
-    positiveNumber(product?.weightKg);
-  if (individualWeight != null) return individualWeight;
-
-  const transportWeight = positiveNumber(product?.packGrossWeightKg);
-  if (transportWeight == null) return null;
-  const unitsPerTransportPackage = positiveInteger(product?.packQty) ?? 1;
-  return transportWeight / unitsPerTransportPackage;
+    positiveNumber(product?.weightKg)
+  );
 }
 
 /**

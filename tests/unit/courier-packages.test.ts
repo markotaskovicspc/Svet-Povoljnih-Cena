@@ -38,7 +38,7 @@ describe("physical courier packages", () => {
     );
   });
 
-  it("derives a per-unit fallback when only transport-package weight exists", () => {
+  it("never derives courier weight from a transport package", () => {
     const packages = derivePhysicalPackages([
       {
         id: "item-1",
@@ -55,7 +55,10 @@ describe("physical courier packages", () => {
     ]);
 
     expect(packages).toHaveLength(2);
-    expect(packages.map((pkg) => pkg.weightKg)).toEqual([4, 4]);
+    expect(packages.map((pkg) => pkg.weightKg)).toEqual([null, null]);
+    expect(() => requireCompleteXExpressPackages(packages)).toThrow(
+      "nema kompletne stvarne mere: težina",
+    );
   });
 
   it("leaves missing catalogue measurements empty for explicit operator entry", () => {
