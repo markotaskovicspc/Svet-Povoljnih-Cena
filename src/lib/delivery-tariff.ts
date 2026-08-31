@@ -1,4 +1,9 @@
-export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 1_999;
+export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 4_000;
+export const PREVIOUS_FREE_CATEGORY_ONE_THRESHOLD_RSD = 1_999;
+/** 1 September 2026 at 00:01 in Europe/Belgrade (CEST, UTC+02:00). */
+export const FREE_CATEGORY_ONE_THRESHOLD_CHANGE_AT_MS = Date.parse(
+  "2026-09-01T00:01:00+02:00",
+);
 /** Customer-favouring checkout estimate when an article has no usable weight data. */
 export const MISSING_UNIT_WEIGHT_FALLBACK_KG = 1;
 
@@ -107,10 +112,16 @@ export function deliveryRate(
   return rates[category].find(([limit]) => weightKg <= limit)?.[1] ?? null;
 }
 
+export function freeCategoryOneThresholdRsd(at: Date = new Date()) {
+  return at.getTime() >= FREE_CATEGORY_ONE_THRESHOLD_CHANGE_AT_MS
+    ? FREE_CATEGORY_ONE_THRESHOLD_RSD
+    : PREVIOUS_FREE_CATEGORY_ONE_THRESHOLD_RSD;
+}
+
 /** Published tariff for the complete supported weight range. */
 export function calculatePublishedDeliveryTariff(
   products: DeliveryTariffProduct[],
-  options: { loggedIn: boolean; rates?: DeliveryTariffRates },
+  options: { loggedIn: boolean; rates?: DeliveryTariffRates; at?: Date },
 ) {
   const quote = calculatePublishedDeliveryTariffQuote(products, options);
   if (quote.total == null || !quote.categories) return null;
@@ -129,7 +140,7 @@ export function calculatePublishedDeliveryTariff(
  */
 export function calculatePublishedDeliveryTariffQuote(
   products: DeliveryTariffProduct[],
-  options: { loggedIn: boolean; rates?: DeliveryTariffRates },
+  options: { loggedIn: boolean; rates?: DeliveryTariffRates; at?: Date },
 ): PublishedDeliveryTariffQuote {
   const totals = {
     1: { weightKg: 0, subtotal: 0 },
@@ -160,7 +171,9 @@ export function calculatePublishedDeliveryTariffQuote(
       ? deliveryRate(2, totals[2].weightKg, options.rates)
       : 0;
   const categoryOnePrice =
-    totals[1].subtotal >= FREE_CATEGORY_ONE_THRESHOLD_RSD ? 0 : categoryOneRate;
+    totals[1].subtotal >= freeCategoryOneThresholdRsd(options.at)
+      ? 0
+      : categoryOneRate;
   if (categoryOneRate == null || categoryTwoRate == null) {
     return {
       total: null,

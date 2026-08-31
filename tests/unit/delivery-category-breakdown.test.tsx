@@ -27,7 +27,7 @@ describe("delivery category breakdown", () => {
       [
         {
           qty: 2,
-          unitPrice: 1_500,
+          unitPrice: 2_000,
           unitPackWidthCm: 50,
           unitPackDepthCm: 40,
           unitPackHeightCm: 30,
@@ -40,7 +40,10 @@ describe("delivery category breakdown", () => {
           unitPackHeightCm: 40,
         },
       ],
-      { loggedIn: true },
+      {
+        loggedIn: true,
+        at: new Date("2026-09-01T00:01:00+02:00"),
+      },
     );
     const html = renderToStaticMarkup(
       <dl>
@@ -52,7 +55,7 @@ describe("delivery category breakdown", () => {
       total: 699,
       issue: null,
       categories: {
-        1: { weightKg: 2, subtotal: 3_000, price: 0 },
+        1: { weightKg: 2, subtotal: 4_000, price: 0 },
         2: { weightKg: 3, subtotal: 12_000, price: 699 },
       },
     });

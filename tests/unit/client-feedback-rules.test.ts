@@ -4,6 +4,7 @@ import {
   calculatePublishedDeliveryTariffQuote,
   deliveryCategory,
   deliveryRate,
+  freeCategoryOneThresholdRsd,
   packageVolumetricDimension,
 } from "@/lib/delivery-tariff";
 import { formatProductCardDimensions } from "@/lib/product-dimensions";
@@ -30,7 +31,7 @@ describe("confirmed client rules", () => {
     expect(deliveryCategory([100, 60, 40])).toBe(1);
     const product = {
       qty: 2,
-      unitPrice: 1_100,
+      unitPrice: 2_000,
       packQty: 1,
       unitPackWidthCm: 50,
       unitPackDepthCm: 40,
@@ -39,14 +40,18 @@ describe("confirmed client rules", () => {
     };
     const guestTariff = calculatePublishedDeliveryTariff([product], {
       loggedIn: false,
+      at: new Date("2026-09-01T00:01:00+02:00"),
     });
     expect(guestTariff?.total).toBe(0);
     expect(guestTariff?.categories[1]).toEqual({
       weightKg: 8,
-      subtotal: 2_200,
+      subtotal: 4_000,
       price: 0,
     });
-    expect(calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total).toBe(0);
+    expect(calculatePublishedDeliveryTariff([product], {
+      loggedIn: true,
+      at: new Date("2026-09-01T00:01:00+02:00"),
+    })?.total).toBe(0);
   });
 
   it("uses the published category-II rates without the retired surcharge", () => {
@@ -110,32 +115,39 @@ describe("confirmed client rules", () => {
     expect(tariff?.total).toBe(222);
   });
 
-  it("grants free category-I delivery from the 1,999 RSD threshold", () => {
+  it("switches the free category-I threshold to 4,000 RSD at 1 September 00:01", () => {
     const product = {
       qty: 1,
-      unitPrice: 1_998.99,
+      unitPrice: 3_999.99,
       unitPackWidthCm: 50,
       unitPackDepthCm: 40,
       unitPackHeightCm: 30,
       grossWeightKg: 2,
     };
 
+    const beforeChange = new Date("2026-09-01T00:00:59.999+02:00");
+    const atChange = new Date("2026-09-01T00:01:00+02:00");
+
+    expect(freeCategoryOneThresholdRsd(beforeChange)).toBe(1_999);
+    expect(freeCategoryOneThresholdRsd(atChange)).toBe(4_000);
     expect(
-      calculatePublishedDeliveryTariff([product], { loggedIn: false })?.total,
-    ).toBe(299);
-    expect(
-      calculatePublishedDeliveryTariff([product], { loggedIn: true })?.total,
-    ).toBe(299);
-    expect(
-      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 1_999 }], {
+      calculatePublishedDeliveryTariff([product], {
         loggedIn: false,
+        at: beforeChange,
       })?.total,
     ).toBe(0);
     expect(
-      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 1_999 }], {
+      calculatePublishedDeliveryTariff([product], {
+        loggedIn: false,
+        at: atChange,
+      })?.total,
+    ).toBe(299);
+    expect(
+      calculatePublishedDeliveryTariff([{ ...product, unitPrice: 4_000 }], {
         loggedIn: true,
+        at: atChange,
       })?.categories[1],
-    ).toEqual({ weightKg: 2, subtotal: 1_999, price: 0 });
+    ).toEqual({ weightKg: 2, subtotal: 4_000, price: 0 });
   });
 
   it("charges the open-ended category-I rate above 30 kg", () => {

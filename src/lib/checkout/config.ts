@@ -166,6 +166,7 @@ export async function resolveDeliveryQuote({
   lines?: QuoteLineInput[];
   loggedIn?: boolean;
 }): Promise<CheckoutDeliveryQuote> {
+  const now = new Date();
   const normalizedCity = normalizeCity(city);
   const skus = [...new Set(lines.map((line) => line.sku).filter(Boolean))];
 
@@ -236,8 +237,8 @@ export async function resolveDeliveryQuote({
             priceListEntries: {
               where: {
                 price: { gt: 0 },
-                validFrom: { lte: new Date() },
-                OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+                validFrom: { lte: now },
+                OR: [{ validTo: null }, { validTo: { gte: now } }],
                 priceList: { kind: "RETAIL", active: true },
               },
               orderBy: { validFrom: "desc" },
@@ -377,6 +378,7 @@ export async function resolveDeliveryQuote({
       ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, {
           loggedIn,
           rates: deliveryTariffRatesFromSettings(deliveryTariffSettings),
+          at: now,
         })
       : null;
   const resolvedDelivery = resolveDeliveryMethodQuote({

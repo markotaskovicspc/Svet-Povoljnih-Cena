@@ -67,6 +67,19 @@ describe("CMS Markdown safety", () => {
     );
   });
 
+  it("publishes the scheduled 4,000 RSD free-delivery threshold", () => {
+    const deliveryPage = SYSTEM_CONTENT_PAGES.find(
+      (page) => page.slug === "uslovi-isporuke",
+    );
+
+    expect(deliveryPage?.bodyMarkdown).toContain(
+      "Od 1. septembra 2026. u 00:01, dostava artikala I kategorije je besplatna kada njihov zbir iznosi najmanje 4.000 RSD.",
+    );
+    expect(deliveryPage?.bodyMarkdown).not.toContain(
+      "najmanje 1.999 RSD",
+    );
+  });
+
   it("registers every functional public page as editable CMS content", () => {
     expect([...FUNCTIONAL_CONTENT_PAGE_SLUGS].sort()).toEqual([
       "komentari",
