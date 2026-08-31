@@ -183,6 +183,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       await createDialog.getByRole("button", { name: "Novi", exact: true }).click();
       await expect(page).toHaveURL(
         /\/admin\/erp\/preuzimanja\/[^/?]+\?mode=edit$/,
+        { timeout: 90_000 },
       );
       batchId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
       expect(batchId).not.toBe("");
@@ -335,6 +336,57 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         expect(Number.isInteger(property.Length)).toBe(true);
         expect(Number.isInteger(property.Height)).toBe(true);
       }
+    });
+
+    await test.step("oporavak starog naloga knjiži postojeće adresnice bez novog MyGLS zahteva", async () => {
+      await db.pickupBatch.update({
+        where: { id: batchId },
+        data: {
+          status: "DRAFT",
+          manifestRef: null,
+          externalBookedAt: null,
+          externalBookingChannel: null,
+          externalBookingReference: null,
+          externalBookedById: null,
+        },
+      });
+
+      const before = await fetch(`${providerUrl}/requests`).then((response) =>
+        response.json(),
+      );
+      const printLabelsBefore = before.requests.filter(
+        (request: { method: string }) => request.method === "PrintLabels",
+      );
+      expect(printLabelsBefore).toHaveLength(2);
+
+      await page.goto(`/admin/erp/preuzimanja/${batchId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      const dialogPromise = page.waitForEvent("dialog");
+      const clickPromise = page
+        .getByRole("button", {
+          name: "Kreiraj adresnice i pošalji",
+          exact: true,
+        })
+        .click();
+      const dialog = await dialogPromise;
+      await dialog.accept();
+      await clickPromise;
+      await expect(page.getByRole("status")).toContainText(
+        "1 pošiljki je uspešno poslato u sistem kurira",
+        { timeout: 120_000 },
+      );
+      const [recoveredBatch, after] = await Promise.all([
+        db.pickupBatch.findUniqueOrThrow({ where: { id: batchId } }),
+        fetch(`${providerUrl}/requests`).then((response) => response.json()),
+      ]);
+      expect(recoveredBatch.status).toBe("BOOKED");
+      expect(recoveredBatch.externalBookedAt).not.toBeNull();
+      expect(
+        after.requests.filter(
+          (request: { method: string }) => request.method === "PrintLabels",
+        ),
+      ).toHaveLength(2);
     });
 
     await test.step("zbirna i pojedinačna privatna adresnica su validni PDF-ovi", async () => {

@@ -1169,20 +1169,10 @@ async function postPickupBatch(batchId: string, actorId: string) {
     });
   }
   if (availability.provider === "MYGLS") {
-    const result = await createMyGlsLabelsForPickupBatch(batchId, actorId);
-    try {
-      await retryTransientDatabaseOperation(() =>
-        confirmMyGlsPickupAnnouncement(batchId, actorId, {
-          channel: "MYGLS_API",
-          reference: "PrintLabels",
-        }),
-      );
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "nepoznata greška";
-      throw new Error(
-        `MyGLS je prihvatio pošiljke i adresnice su spremne za štampu, ali završna potvrda naloga nije uspela: ${detail}. Bezbedno ponovite slanje; postojeće pošiljke neće biti duplirane.`,
-      );
-    }
+    const result = await createMyGlsLabelsForPickupBatch(batchId, actorId, {
+      channel: "MYGLS_API",
+      reference: "PrintLabels",
+    });
     return { ...result, phase: "ANNOUNCED" as const };
   }
   if (!summary.labelsCreatedAt) {
@@ -1528,8 +1518,13 @@ async function createXExpressLabelsForPickupBatch(
 async function createMyGlsLabelsForPickupBatch(
   batchId: string,
   actorId: string,
+  booking?: {
+    channel: MyGlsBookingChannel;
+    reference: string;
+  },
 ) {
   let providerAttempted = false;
+  let allLabelsCreated = false;
   const existing = await db.pickupBatch.findUnique({
     where: { id: batchId },
     select: {
@@ -1539,9 +1534,25 @@ async function createMyGlsLabelsForPickupBatch(
     },
   });
   if (existing?.labelsCreatedAt) {
+    let bookedAt: Date | undefined;
+    if (booking) {
+      try {
+        const confirmation = await retryTransientDatabaseOperation(() =>
+          confirmMyGlsPickupAnnouncement(batchId, actorId, booking),
+        );
+        bookedAt = confirmation.bookedAt;
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : "nepoznata greška";
+        throw new Error(
+          `MyGLS je prihvatio pošiljke i adresnice su spremne za štampu, ali oporavak starog naloga nije uspeo: ${detail}. Postojeće pošiljke nisu duplirane.`,
+        );
+      }
+    }
     return {
       shipmentCount: new Set(existing.lines.map((line) => line.lineGroupKey)).size,
       shipmentIds: [] as string[],
+      bookedAt,
     };
   }
 
@@ -1646,43 +1657,83 @@ async function createMyGlsLabelsForPickupBatch(
       }
       shipmentIds.push(shipment.id);
     }
+    allLabelsCreated = true;
 
     await db.$transaction(async (tx) => {
       await lockBatch(tx, batch.id);
+      const labelsCreatedAt = new Date();
+      const bookedAt = booking ? labelsCreatedAt : null;
       const completed = await tx.pickupBatch.updateMany({
         where: { id: batch.id, status: "POSTING" },
         data: {
-          status: "DRAFT",
-          labelsCreatedAt: new Date(),
+          status: booking ? "BOOKED" : "DRAFT",
+          labelsCreatedAt,
           labelsCreatedById: actorId,
+          ...(booking
+            ? {
+                manifestRef: `MYGLS:${booking.channel}:${booking.reference}`,
+                externalBookedAt: bookedAt,
+                externalBookingChannel: booking.channel,
+                externalBookingReference: booking.reference,
+                externalBookedById: actorId,
+              }
+            : {}),
           configurationIssue: null,
         },
       });
       if (!completed.count) {
-        throw new Error("Status naloga promenjen je tokom kreiranja adresnica.");
+        throw new Error(
+          "Status naloga promenjen je tokom završetka MyGLS obrade.",
+        );
       }
       const ordinaryOrderIds = ordinaryOrderIdsForGroups(workGroups);
       await tx.orderStatusEvent.createMany({
-        data: ordinaryOrderIds.map((orderId) => ({
-          orderId,
-          status: "U_PRIPREMI" as const,
-          note: `MyGLS adresnica je kreirana za nalog ${batch.number}; pošiljka je automatski poslata u MyGLS sistem.`,
-          actorId,
-        })),
+        data: ordinaryOrderIds.flatMap((orderId) => [
+          {
+            orderId,
+            status: "U_PRIPREMI" as const,
+            note: `MyGLS adresnica je kreirana za nalog ${batch.number}; pošiljka je automatski poslata u MyGLS sistem.`,
+            actorId,
+          },
+          ...(booking
+            ? [
+                {
+                  orderId,
+                  status: "U_PRIPREMI" as const,
+                  note: `MyGLS pošiljke iz naloga ${batch.number} automatski su poslate preko API-ja (ref. ${booking.reference}).`,
+                  actorId,
+                },
+              ]
+            : []),
+        ]),
       });
     }, TRANSACTION_OPTIONS);
-    return { shipmentCount: shipmentIds.length, shipmentIds };
+    return {
+      shipmentCount: shipmentIds.length,
+      shipmentIds,
+      bookedAt: booking ? new Date() : undefined,
+    };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "MyGLS adresnice nisu kreirane.";
-    await db.pickupBatch.updateMany({
-      where: { id: batchId, status: "POSTING" },
-      data: {
-        status: "DRAFT",
-        configurationIssue: message,
-        ...(!providerAttempted ? { labelsCreationStartedAt: null } : {}),
-      },
-    });
+    try {
+      await db.pickupBatch.updateMany({
+        where: { id: batchId, status: "POSTING" },
+        data: {
+          status: "DRAFT",
+          configurationIssue: message,
+          ...(!providerAttempted ? { labelsCreationStartedAt: null } : {}),
+        },
+      });
+    } catch {
+      // Preserve the original provider/finalization error when the same
+      // transient database outage also prevents saving diagnostic state.
+    }
+    if (allLabelsCreated) {
+      throw new Error(
+        `MyGLS je prihvatio sve pošiljke, ali jedinstveni završni upis naloga nije uspeo: ${message}. Postojeće pošiljke nisu duplirane.`,
+      );
+    }
     throw error;
   }
 }
