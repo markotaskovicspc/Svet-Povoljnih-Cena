@@ -1,4 +1,4 @@
-import { formatDate } from "@/lib/format";
+import { formatBelgradeDate } from "@/lib/format";
 
 export interface ListingActionPeriod {
   startsAt?: string;
@@ -9,7 +9,7 @@ export interface ListingActionPeriod {
 /** Customer-facing validity copy used once, in the listing header. */
 export function formatListingActionPeriod(period: ListingActionPeriod) {
   const startsAt = period.startsAt
-    ? ` od ${formatDate(period.startsAt)}`
+    ? ` od ${formatBelgradeDate(period.startsAt)}`
     : "";
-  return `${period.label ?? "Akcija"} važi${startsAt} do ${formatDate(period.endsAt)}`;
+  return `${period.label ?? "Akcija"} važi${startsAt} do ${formatBelgradeDate(period.endsAt)}`;
 }

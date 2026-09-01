@@ -66,6 +66,31 @@ function dateParts(value: string | Date) {
   };
 }
 
+function datePartsInTimeZone(value: string | Date, timeZone: string) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) {
+    return { year: 1970, month: 1, day: 1 };
+  }
+
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+  };
+}
+
 function timeParts(value: string | Date) {
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) {
@@ -80,6 +105,15 @@ function timeParts(value: string | Date) {
 
 export function formatDate(value: string | Date) {
   const { day, month, year } = dateParts(value);
+  return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}.`;
+}
+
+/** Formats a stored instant as the Serbian storefront calendar date. */
+export function formatBelgradeDate(value: string | Date) {
+  const { day, month, year } = datePartsInTimeZone(
+    value,
+    "Europe/Belgrade",
+  );
   return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}.`;
 }
 

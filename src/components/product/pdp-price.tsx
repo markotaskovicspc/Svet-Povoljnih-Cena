@@ -7,7 +7,7 @@ import {
   resolveProductPriceQuote,
   type ProductPriceQuote,
 } from "@/lib/pricing";
-import { formatDate, formatRsd } from "@/lib/format";
+import { formatBelgradeDate, formatRsd } from "@/lib/format";
 
 /**
  * Personalized price island for an otherwise public, CDN-cacheable PDP.
@@ -95,8 +95,8 @@ export function PdpPriceContent({
         product.action?.startsAt &&
         product.action.endsAt ? (
         <p className="mt-1 text-xs text-ink-500">
-          Akcijska cena važi od {formatDate(product.action.startsAt)} do{" "}
-          {formatDate(product.action.endsAt)}
+          Akcijska cena važi od {formatBelgradeDate(product.action.startsAt)} do{" "}
+          {formatBelgradeDate(product.action.endsAt)}
         </p>
       ) : payable.kind === "linear" ? (
         <p className="mt-1 text-xs text-ink-500">

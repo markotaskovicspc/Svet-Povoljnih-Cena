@@ -82,6 +82,33 @@ describe("PDP price and benefit display", () => {
     expect(markup).toContain("line-through");
   });
 
+  it("shows the action period on desktop in the Serbian calendar date", () => {
+    const actionOffer = price({
+      effective: 6_999,
+      kind: "sale",
+      onSale: true,
+    });
+    const markup = renderToStaticMarkup(
+      <PdpPriceContent
+        product={{
+          ...product,
+          action: {
+            id: "september-action",
+            name: "Septembar",
+            startsAt: "2026-08-31T22:01:00.000Z",
+            endsAt: "2026-09-30T21:59:00.000Z",
+          },
+        }}
+        quote={quote({ actionOffer, payable: actionOffer })}
+        loyaltyEligible={false}
+      />,
+    );
+
+    expect(markup).toContain(
+      "Akcijska cena važi od 01.09.2026. do 30.09.2026.",
+    );
+  });
+
   it("shows the regular and highlighted action prices in the mobile bar", () => {
     const actionOffer = price({
       effective: 6_999,
@@ -95,7 +122,7 @@ describe("PDP price and benefit display", () => {
           id: "weekly-action",
           name: "Nedeljna akcija",
           startsAt: "2026-08-30T00:00:00.000Z",
-          endsAt: "2026-09-05T23:59:59.999Z",
+          endsAt: "2026-09-05T21:59:59.999Z",
         }}
       />,
     );
@@ -109,11 +136,20 @@ describe("PDP price and benefit display", () => {
     expect(markup).toContain("Važi od 30.08. do 05.09.2026.");
   });
 
+  it("shows the mobile action period in the Serbian calendar date", () => {
+    expect(
+      formatPdpMobileActionValidity({
+        startsAt: "2026-08-31T22:01:00.000Z",
+        endsAt: "2026-09-30T21:59:00.000Z",
+      }),
+    ).toBe("Važi od 01.09. do 30.09.2026.");
+  });
+
   it("keeps the year on both dates when an action crosses into a new year", () => {
     expect(
       formatPdpMobileActionValidity({
         startsAt: "2026-12-30T00:00:00.000Z",
-        endsAt: "2027-01-05T23:59:59.999Z",
+        endsAt: "2027-01-05T22:59:59.999Z",
       }),
     ).toBe("Važi od 30.12.2026. do 05.01.2027.");
   });

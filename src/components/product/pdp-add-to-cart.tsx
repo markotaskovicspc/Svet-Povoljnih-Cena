@@ -25,7 +25,7 @@ import {
   resolveProductPriceQuote,
   type ProductPriceQuote,
 } from "@/lib/pricing";
-import { formatDate, formatRsd } from "@/lib/format";
+import { formatBelgradeDate, formatRsd } from "@/lib/format";
 
 interface PdpAddToCartProps {
   product: Product;
@@ -98,8 +98,8 @@ export function PdpMobilePriceContent({
 export function formatPdpMobileActionValidity(
   action: Pick<PromoAction, "startsAt" | "endsAt">,
 ) {
-  const startsAt = formatDate(action.startsAt);
-  const endsAt = formatDate(action.endsAt);
+  const startsAt = formatBelgradeDate(action.startsAt);
+  const endsAt = formatBelgradeDate(action.endsAt);
   const startYear = startsAt.match(/\d{4}\.$/)?.[0];
   const endYear = endsAt.match(/\d{4}\.$/)?.[0];
   const compactStartsAt =
