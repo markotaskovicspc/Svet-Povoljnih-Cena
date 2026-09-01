@@ -357,7 +357,7 @@ describe("X Express official API contract", () => {
     ).toThrow(/MOD97/);
   });
 
-  it("sanitizes provider text and omits overlong optional email fields", () => {
+  it("sanitizes provider text, omits overlong email fields and keeps notes out of the address", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: {
         ...config,
@@ -387,8 +387,9 @@ describe("X Express official API contract", () => {
     expect(payload.Recipient.Name).toBe("Kupac i partner maloprodaja");
     expect(payload.Content).toBe("LED 10 5W i zidna lampa");
     expect(payload.Waypoints[1]?.Address.Description).toBe(
-      "Pozvati ulaz 2 plus sprat",
+      "Isporuka webshop porudžbine",
     );
+    expect(JSON.stringify(payload)).not.toContain("Pozvati");
     expect(payload.Options?.[0]?.Data.Address).toBe(
       "Vojvođanska 401 11000 Beograd",
     );
@@ -430,10 +431,26 @@ describe("X Express official API contract", () => {
       labelUrl: null,
     });
 
-    const request = fetchMock.mock.calls[0]?.[1];
-    expect(JSON.parse(String(request?.body))).toEqual(addressPayload);
-    expect(new Headers(request?.headers).get("x-api-user")).toBe("api-user");
-    expect(new Headers(request?.headers).get("x-api-key")).toBe("api-key");
+    const addressRequest = fetchMock.mock.calls[0]?.[1];
+    const createRequest = fetchMock.mock.calls[1]?.[1];
+    expect(JSON.parse(String(addressRequest?.body))).toEqual(addressPayload);
+    expect(new Headers(addressRequest?.headers).get("x-api-user")).toBe("api-user");
+    expect(new Headers(addressRequest?.headers).get("x-api-key")).toBe("api-key");
+
+    const sentCreatePayload = JSON.parse(String(createRequest?.body)) as {
+      Waypoints: Array<{
+        WaypointType: string;
+        Address: { Description: string };
+      }>;
+    };
+    expect(
+      sentCreatePayload.Waypoints.find(
+        (waypoint) => waypoint.WaypointType === "DELIVERY",
+      )?.Address.Description,
+    ).toBe("Isporuka webshop porudžbine");
+    expect(JSON.stringify(sentCreatePayload)).not.toContain(
+      "Pozvati pre isporuke",
+    );
   });
 
   it("flattens ASP.NET ProblemDetails field errors", async () => {
@@ -606,6 +623,7 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(html).toContain("1,8 kg");
     expect(html).toContain("2,2 kg");
     expect(html).toContain("12.346 RSD");
+    expect(html).toContain("Napomena:</strong><br />Pozvati");
     const firstLabel = html.match(
       /<section class="label">([\s\S]*?)<\/section>/,
     )?.[1];

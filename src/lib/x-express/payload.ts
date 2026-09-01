@@ -170,11 +170,10 @@ export function buildXExpressCreateOrderPayload(args: {
       "Nepoznata ulica",
     ),
     StreetNumber: deliveryStreet.streetNumber,
-    Description: providerDescription(
-      order.notes || "Isporuka webshop porudžbine",
-      50,
-      "Isporuka webshop porudžbine",
-    ),
+    // X Express treats Address.Description as part of the address. Customer
+    // notes stay on the order and our local label so they cannot invalidate
+    // the provider waybill address.
+    Description: "Isporuka webshop porudžbine",
   };
   const content = providerContent(
     order.items.map((item) => item.name).filter(Boolean).join(", ") ||

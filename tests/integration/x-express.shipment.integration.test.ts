@@ -146,6 +146,7 @@ beforeAll(async () => {
       shipPostalCode: "15000",
       shipXExpressTownId: 746606,
       shipXExpressStreetId: 38975,
+      notes: "Pozvati primaoca pre isporuke, ulaz iz dvorišta.",
       termsAcceptedAt: new Date(),
       items: {
         create: {
@@ -255,6 +256,16 @@ describe("X Express shipment persistence", () => {
     expect(addRequest?.headers["x-api-user"]).toBe("integration-user");
     expect(addRequest?.headers["x-api-key"]).toBe("integration-key");
     expect(addRequest?.body.Reference).toBe(shipment.id);
+    const deliveryWaypoint = (
+      (addRequest?.body.Waypoints ?? []) as Array<{
+        WaypointType: string;
+        Address: { Description: string };
+      }>
+    ).find((waypoint) => waypoint.WaypointType === "DELIVERY");
+    expect(deliveryWaypoint?.Address.Description).toBe(
+      "Isporuka webshop porudžbine",
+    );
+    expect(JSON.stringify(addRequest?.body)).not.toContain("Pozvati primaoca");
     expect(addRequest?.body.Packages).toEqual([
       { Code: "QAX0850300001", Mass: 3, Content: "Integracioni paket" },
       { Code: "QAX0850300002", Mass: 3, Content: "Integracioni paket" },
