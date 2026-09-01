@@ -173,6 +173,18 @@ export async function setMarketingConsent(
     },
   });
   if (channels.email !== undefined) {
+    if (channels.email === false) {
+      await db.checkoutSession.updateMany({
+        where: { userId, status: "ACTIVE" },
+        data: {
+          recoveryConsent: false,
+          recoveryConsentAt: null,
+          recoveryNextSendAt: null,
+          recoveryStoppedAt: new Date(),
+          recoveryStopReason: "account_marketing_disabled",
+        },
+      });
+    }
     const { syncAccountMarketingContact } = await import("@/lib/newsletter/contacts");
     await syncAccountMarketingContact(userId, channels.email);
     await enqueueBackgroundJob({

@@ -243,7 +243,14 @@ function extractRecipient(payload: Prisma.InputJsonValue) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;
   }
-  const data = (payload as Record<string, unknown>).data;
+  const root = payload as Record<string, unknown>;
+  const mail = root.mail;
+  if (mail && typeof mail === "object" && !Array.isArray(mail)) {
+    const destination = (mail as Record<string, unknown>).destination;
+    const email = Array.isArray(destination) ? destination[0] : null;
+    if (typeof email === "string") return email.trim().toLowerCase();
+  }
+  const data = root.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return null;
   }

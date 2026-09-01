@@ -1,4 +1,5 @@
 const READ_ONLY_E2E_FLAGS = new Set([
+  "E2E_CART_RECOVERY_UI",
   "E2E_CROSS_SELL",
   "E2E_LIVE_CATALOG",
 ]);

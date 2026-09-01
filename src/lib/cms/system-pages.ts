@@ -322,7 +322,7 @@ Eventualne sporove rešavamo dogovorno. Ako to nije moguće, nadležna su sudska
     slug: "politika-privatnosti",
     template: "STANDARD",
     eyebrow: "GDPR & ZZPL",
-    heroNote: "Poslednje izmene: 26. avgust 2026.",
+    heroNote: "Poslednje izmene: 1. septembar 2026.",
     title: "Politika privatnosti.",
     lead:
       "Vaše podatke koristimo isključivo za realizaciju porudžbine, podršku i — ako date pristanak — za informisanje o akcijama.",
@@ -344,6 +344,12 @@ Eventualne sporove rešavamo dogovorno. Ako to nije moguće, nadležna su sudska
 - **Zakonska obaveza** — knjigovodstvo, fiskalizacija.
 - **Pristanak** — newsletter, analitika i marketinško merenje.
 - **Legitimni interes** — sprečavanje prevara, poboljšanje sajta.
+
+## Podsetnici za nezavršenu kupovinu {#nezavrsena-kupovina}
+
+Ako u toku kupovine unesete e-poštu i posebno označite da želite podsetnike, čuvamo sadržaj korpe i možemo poslati najviše tri poruke nakon približno 1, 24 i 48 sati. Poslednja poruka može sadržati jednokratni kupon. Artikli nisu rezervisani, a cenu i dostupnost ponovo proveravamo kada otvorite korpu.
+
+Saglasnost nije unapred označena. Podsetnike možete isključiti jednim klikom iz bilo koje poruke; ta odjava ne menja vaš zaseban izbor za newsletter. Podatke o nezavršenoj kupovini koristimo samo za ovaj tok i prestajemo sa slanjem kada završite porudžbinu, isključite podsetnike ili se niz poruka završi.
 
 ## Kolačići {#kolacici}
 

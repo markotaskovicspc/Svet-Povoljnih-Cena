@@ -18,6 +18,7 @@ export interface EmailConfig {
   apiKey: string | null;
   sesRegion: string;
   sesConfigurationSet: string | null;
+  sesSnsTopicArn: string | null;
   sesCredentialsConfigured: boolean;
   from: string;
   marketingFrom: string;
@@ -66,6 +67,7 @@ export function getEmailConfig(): EmailConfig {
     sesRegion:
       envValue("SES_REGION") ?? envValue("AWS_REGION") ?? "eu-central-1",
     sesConfigurationSet: envValue("SES_CONFIGURATION_SET"),
+    sesSnsTopicArn: envValue("SES_SNS_TOPIC_ARN"),
     sesCredentialsConfigured: Boolean(
       envValue("AWS_ROLE_ARN") ||
       (envValue("AWS_ACCESS_KEY_ID") && envValue("AWS_SECRET_ACCESS_KEY")) ||

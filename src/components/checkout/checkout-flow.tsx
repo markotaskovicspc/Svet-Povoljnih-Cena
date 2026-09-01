@@ -96,6 +96,7 @@ export interface CheckoutFormData {
   voucherCode?: string;
   notes?: string;
   consent: boolean;
+  recoveryConsent: boolean;
 }
 
 export interface CheckoutInitialCustomer {
@@ -156,6 +157,8 @@ export function CheckoutFlow({
   initialAuthIntent,
   loginError,
   registrationError,
+  cartRecoveryEnabled = false,
+  initialRecoveryConsent = false,
 }: {
   checkoutConfig: CheckoutConfig;
   initialCustomer?: CheckoutInitialCustomer;
@@ -168,6 +171,8 @@ export function CheckoutFlow({
   initialAuthIntent?: "login" | "register";
   loginError?: LoginErrorCode;
   registrationError?: RegistrationErrorCode;
+  cartRecoveryEnabled?: boolean;
+  initialRecoveryConsent?: boolean;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -224,6 +229,7 @@ export function CheckoutFlow({
       voucherCode: "",
       notes: "",
       consent: false,
+      recoveryConsent: initialRecoveryConsent,
     },
   });
 
@@ -243,6 +249,10 @@ export function CheckoutFlow({
   const shippingEmail = useWatch({
     control: methods.control,
     name: "shipping.email",
+  });
+  const recoveryConsent = useWatch({
+    control: methods.control,
+    name: "recoveryConsent",
   });
   const perItemAssembly = useWatch({
     control: methods.control,
@@ -271,7 +281,11 @@ export function CheckoutFlow({
         sessionId: checkoutSessionId,
         step,
         identity,
-        guestEmail: identity === "guest" ? shippingEmail : null,
+        guestEmail:
+          identity === "guest" && isCompleteEmail(shippingEmail)
+            ? shippingEmail
+            : null,
+        recoveryConsent: cartRecoveryEnabled && Boolean(recoveryConsent),
         shippingCity,
         shippingMethod,
         paymentMethod,
@@ -281,10 +295,12 @@ export function CheckoutFlow({
     return () => window.clearTimeout(timeout);
   }, [
     checkoutSessionId,
+    cartRecoveryEnabled,
     hydrated,
     identity,
     lines,
     paymentMethod,
+    recoveryConsent,
     shippingCity,
     shippingEmail,
     shippingMethod,
@@ -820,6 +836,7 @@ export function CheckoutFlow({
                     <div className="flex flex-col gap-4 sm:gap-5">
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
+                        cartRecoveryEnabled={cartRecoveryEnabled}
                       />
                       <AutomaticDeliverySection
                         deliveryQuote={deliveryQuote}
@@ -1260,6 +1277,7 @@ async function trackCheckoutSession({
   step,
   identity,
   guestEmail,
+  recoveryConsent,
   shippingCity,
   shippingMethod,
   paymentMethod,
@@ -1269,12 +1287,12 @@ async function trackCheckoutSession({
   step: CheckoutStep;
   identity: IdentityChoice | null;
   guestEmail: string | null;
+  recoveryConsent: boolean;
   shippingCity: string;
   shippingMethod: ShippingMethod;
   paymentMethod: PaymentMethod;
   lines: ReturnType<typeof useCart.getState>["lines"];
 }) {
-  if (!lines.length) return;
   const cartTotal = lines.reduce(
     (n, line) => n + line.unitPriceSale * line.qty,
     0,
@@ -1287,14 +1305,20 @@ async function trackCheckoutSession({
       step,
       identity,
       guestEmail: guestEmail || null,
+      recoveryConsent,
       shippingCity: shippingCity || null,
       shippingMethod,
       paymentMethod,
       lineCount: lines.length,
       itemQty: lines.reduce((n, line) => n + line.qty, 0),
       cartTotal,
+      lines,
     }),
   }).catch(() => undefined);
+}
+
+function isCompleteEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function addressForApi(address: CheckoutAddress) {

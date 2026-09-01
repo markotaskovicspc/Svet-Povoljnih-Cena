@@ -17,6 +17,12 @@ export type EmailUnsubscribePayload =
       exp?: number;
     }
   | {
+      purpose: "cart_recovery";
+      sessionId: string;
+      email: string;
+      exp?: number;
+    }
+  | {
       purpose: "alert";
       userId: string;
       productId: string;
@@ -87,6 +93,52 @@ export async function applyEmailUnsubscribe(payload: EmailUnsubscribePayload) {
       await withdrawMarketingEmail(email, "account-email-link");
     }
     return { ok: true as const, email: email || null, kind: "marketing" as const };
+  }
+
+  if (payload.purpose === "cart_recovery") {
+    const session = await db.checkoutSession.findUnique({
+      where: { id: payload.sessionId },
+      select: {
+        userId: true,
+        guestEmail: true,
+        user: { select: { email: true } },
+      },
+    });
+    const email = (session?.user?.email ?? session?.guestEmail ?? "")
+      .trim()
+      .toLowerCase();
+    if (!session || !email || email !== payload.email.trim().toLowerCase()) {
+      return {
+        ok: true as const,
+        email: payload.email.trim().toLowerCase(),
+        kind: "cart_recovery" as const,
+        changed: 0,
+        userId: null,
+      };
+    }
+    const stoppedAt = new Date();
+    const changed = await db.checkoutSession.updateMany({
+      where: session.userId
+        ? { userId: session.userId, status: "ACTIVE" }
+        : {
+            guestEmail: { equals: email, mode: "insensitive" },
+            status: "ACTIVE",
+          },
+      data: {
+        recoveryConsent: false,
+        recoveryConsentAt: null,
+        recoveryNextSendAt: null,
+        recoveryStoppedAt: stoppedAt,
+        recoveryStopReason: "unsubscribed",
+      },
+    });
+    return {
+      ok: true as const,
+      email,
+      kind: "cart_recovery" as const,
+      changed: changed.count,
+      userId: session.userId,
+    };
   }
 
   const data =

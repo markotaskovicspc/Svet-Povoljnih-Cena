@@ -6,13 +6,14 @@ import {
   Prisma,
   type PaymentMethod as DbPaymentMethod,
 } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, hasDatabaseConnection } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import type { PaymentMethod as ClientPaymentMethod, SKU } from "@/types";
 import { getPaymentMethodAcceptance } from "@/lib/provider-acceptance";
 import {
   ASSEMBLY_PRICE_DEFAULT,
   ASSEMBLY_ENABLED,
+  DEFAULT_DELIVERY_QUOTE,
   DEFAULT_PAYMENT_METHOD_CONFIG,
   DEFAULT_TRUCK_CITY_NAMES,
   resolveDeliveryMethodQuote,
@@ -120,7 +121,9 @@ export async function getCheckoutPaymentMethods({
 }: {
   enabledOnly?: boolean;
 } = {}): Promise<CheckoutPaymentMethodConfig[]> {
-  const rows = await db.paymentMethodConfig.findMany();
+  const rows = hasDatabaseConnection()
+    ? await db.paymentMethodConfig.findMany()
+    : [];
   const byMethod = new Map(rows.map((row) => [paymentMethodToClient(row.method), row]));
   const methods = DEFAULT_PAYMENT_METHOD_CONFIG.map((fallback) => {
     const row = byMethod.get(fallback.id);
@@ -166,6 +169,16 @@ export async function resolveDeliveryQuote({
   lines?: QuoteLineInput[];
   loggedIn?: boolean;
 }): Promise<CheckoutDeliveryQuote> {
+  if (!hasDatabaseConnection()) {
+    return {
+      ...DEFAULT_DELIVERY_QUOTE,
+      prices: { ...DEFAULT_DELIVERY_QUOTE.prices },
+      deliveryCategoriesBySku: {},
+      deliveryCategoryBreakdown: null,
+      assemblyPricesBySku: {},
+      truckCities: [...DEFAULT_DELIVERY_QUOTE.truckCities],
+    };
+  }
   const now = new Date();
   const normalizedCity = normalizeCity(city);
   const skus = [...new Set(lines.map((line) => line.sku).filter(Boolean))];

@@ -43,6 +43,7 @@ interface CartState {
   setQty: (sku: SKU, qty: number) => void;
   toggleAssembly: (sku: SKU) => void;
   reprice: (updates: CartPriceUpdate[]) => void;
+  restore: (lines: CartLine[]) => void;
   clear: () => void;
   /** Derived helpers */
   count: () => number;
@@ -138,6 +139,22 @@ export function repriceCartLines(
   });
 }
 
+export function mergeRecoveredCartLines(
+  currentLines: CartLine[],
+  recoveredLines: CartLine[],
+): CartLine[] {
+  const current = normalizeCartLines(currentLines);
+  const bySku = new Map(current.map((line) => [line.sku, line]));
+  for (const line of normalizeCartLines(recoveredLines)) {
+    const existing = bySku.get(line.sku);
+    bySku.set(
+      line.sku,
+      existing ? { ...line, qty: Math.max(existing.qty, line.qty) } : line,
+    );
+  }
+  return normalizeCartLines(Array.from(bySku.values()));
+}
+
 export const useCart = create<CartState>()(
   persist(
     (set, get) => ({
@@ -189,6 +206,10 @@ export const useCart = create<CartState>()(
           const changed = lines.some((line, index) => line !== current[index]);
           return changed ? { lines } : state;
         }),
+      restore: (recovered) =>
+        set((state) => ({
+          lines: mergeRecoveredCartLines(state.lines, recovered),
+        })),
       clear: () => set({ lines: [] }),
       count: () => normalizeCartLines(get().lines).reduce((n, l) => n + l.qty, 0),
       subtotal: () =>

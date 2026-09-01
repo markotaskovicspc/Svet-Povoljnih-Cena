@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "env": {
+    "ABANDONED_CART_RECOVERY_ENABLED": "true",
     "NEXT_PUBLIC_MERCHANT_WAREHOUSE_ADDRESS": "Evropska bb, 22300 Stara Pazova",
     "NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS": "Evropska bb, 22300 Stara Pazova",
     "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_NAME": "Marko Medić",

@@ -1101,6 +1101,9 @@ export async function createOrder(
             shippingMethod: input.shippingMethod,
             paymentMethod: input.paymentMethod,
             orderId: order.id,
+            recoveryNextSendAt: null,
+            recoveryStoppedAt: new Date(),
+            recoveryStopReason: "converted",
           },
           update: {
             userId,
@@ -1115,6 +1118,9 @@ export async function createOrder(
             shippingMethod: input.shippingMethod,
             paymentMethod: input.paymentMethod,
             orderId: order.id,
+            recoveryNextSendAt: null,
+            recoveryStoppedAt: new Date(),
+            recoveryStopReason: "converted",
           },
         });
       }

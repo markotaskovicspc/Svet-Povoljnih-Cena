@@ -49,12 +49,12 @@ export async function POST(
       idempotencyKey: `marketing-unsubscribe:${payload.userId}:${Date.now()}`,
     });
   }
-
   return NextResponse.json({ ok: true, kind: result.kind });
 }
 
 function titleFor(purpose: string) {
   if (purpose === "alert") return "Isključivanje obaveštenja";
+  if (purpose === "cart_recovery") return "Isključivanje podsetnika za korpu";
   if (purpose === "marketing") return "Odjava od promotivnih mejlova";
   return "Odjava od newslettera";
 }
@@ -65,6 +65,9 @@ function textFor(purpose: string) {
   }
   if (purpose === "marketing") {
     return "Potvrdite da više ne želite promotivne mejlove.";
+  }
+  if (purpose === "cart_recovery") {
+    return "Potvrdite da više ne želite podsetnike za nezavršenu kupovinu.";
   }
   return "Potvrdite da više ne želite newsletter poruke.";
 }

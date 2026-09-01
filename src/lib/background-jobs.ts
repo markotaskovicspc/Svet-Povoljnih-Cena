@@ -11,6 +11,11 @@ import {
 
 const schemas = {
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
+  ABANDONED_CART_RECOVERY: z.object({
+    sessionId: z.string().min(12).max(80),
+    step: z.number().int().min(1).max(3),
+    activityAt: z.iso.datetime(),
+  }),
   GUEST_RECLAMATION_LINK_EMAIL: z.object({
     orderId: z.string().min(1),
     accessToken: z.string().min(20),
@@ -268,9 +273,46 @@ export async function processBackgroundJob(id: string) {
   }
 }
 
+export async function enqueueDueCartRecoveryJobs(limit = 100) {
+  const { isCartRecoveryEnabled } = await import(
+    "@/lib/checkout/cart-recovery-policy"
+  );
+  if (!isCartRecoveryEnabled()) return { selected: 0, queued: 0 };
+  const now = new Date();
+  const sessions = await db.checkoutSession.findMany({
+    where: {
+      status: "ACTIVE",
+      orderId: null,
+      recoveryConsent: true,
+      recoveryNextSendAt: { lte: now },
+      recoveryStep: { lt: 3 },
+    },
+    orderBy: { recoveryNextSendAt: "asc" },
+    take: Math.min(Math.max(limit, 1), 500),
+    select: { id: true, recoveryStep: true, lastActivityAt: true },
+  });
+  let queued = 0;
+  for (const session of sessions) {
+    const step = session.recoveryStep + 1;
+    const job = await enqueueBackgroundJob({
+      kind: "ABANDONED_CART_RECOVERY",
+      payload: {
+        sessionId: session.id,
+        step,
+        activityAt: session.lastActivityAt.toISOString(),
+      },
+      idempotencyKey: `cart-recovery:${session.id}:${step}:${session.lastActivityAt.getTime()}`,
+      maxAttempts: 8,
+    });
+    if (job.status === "QUEUED" || job.status === "RETRY") queued += 1;
+  }
+  return { selected: sessions.length, queued };
+}
+
 export async function processPendingBackgroundJobs(limit = 20) {
   const { enqueueDueNewsletterCampaigns } = await import("@/lib/newsletter/campaigns");
   await enqueueDueNewsletterCampaigns();
+  await enqueueDueCartRecoveryJobs();
   const now = new Date();
   const stale = new Date(now.getTime() - 15 * 60 * 1000);
   const take = Math.min(Math.max(limit, 1), 100);
@@ -399,6 +441,15 @@ async function dispatchJob(job: JobRow) {
   const payload = schemas[kind].parse(job.payload);
 
   switch (kind) {
+    case "ABANDONED_CART_RECOVERY": {
+      const { deliverCartRecoveryStep } = await import(
+        "@/lib/checkout/cart-recovery.server"
+      );
+      await deliverCartRecoveryStep(
+        payload as z.infer<typeof schemas.ABANDONED_CART_RECOVERY>,
+      );
+      return;
+    }
     case "PASSWORD_RESET_EMAIL": {
       const { sendPasswordReset } = await import("@/lib/email");
       const result = await sendPasswordReset(payload as z.infer<typeof schemas.PASSWORD_RESET_EMAIL>);

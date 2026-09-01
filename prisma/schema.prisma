@@ -1380,26 +1380,38 @@ model SalesOrderSequence {
 }
 
 model CheckoutSession {
-  id             String                @id
-  userId         String?
-  guestEmail     String?
-  identity       String?
-  step           String
-  status         CheckoutSessionStatus @default(ACTIVE)
-  lineCount      Int                   @default(0)
-  itemQty        Int                   @default(0)
-  cartTotal      Decimal               @default(0) @db.Decimal(12, 2)
-  shippingCity   String?
-  shippingMethod ShippingMethod?
-  paymentMethod  PaymentMethod?
-  orderId        String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id                  String                @id
+  userId              String?
+  guestEmail          String?
+  identity            String?
+  step                String
+  status              CheckoutSessionStatus @default(ACTIVE)
+  lineCount           Int                   @default(0)
+  itemQty             Int                   @default(0)
+  cartTotal           Decimal               @default(0) @db.Decimal(12, 2)
+  cartSnapshot        Json?
+  shippingCity        String?
+  shippingMethod      ShippingMethod?
+  paymentMethod       PaymentMethod?
+  orderId             String?
+  lastActivityAt      DateTime              @default(now())
+  recoveryConsent     Boolean               @default(false)
+  recoveryConsentAt   DateTime?
+  recoveryStep        Int                   @default(0)
+  recoveryNextSendAt  DateTime?
+  recoveryLastSentAt  DateTime?
+  recoveryClickedAt   DateTime?
+  recoveryClickedStep Int?
+  recoveryStoppedAt   DateTime?
+  recoveryStopReason  String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
   order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([status, updatedAt])
+  @@index([status, recoveryNextSendAt])
   @@index([userId, updatedAt])
   @@index([guestEmail])
   @@index([orderId])

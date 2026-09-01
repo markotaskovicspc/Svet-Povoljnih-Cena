@@ -126,6 +126,21 @@ if (emailProvider === "ses") {
   warnings.push("Transactional email is disabled");
 }
 
+validBoolean("ABANDONED_CART_RECOVERY_ENABLED");
+if (enabled("ABANDONED_CART_RECOVERY_ENABLED")) {
+  if (emailProvider !== "ses") {
+    errors.push("Abandoned cart recovery requires EMAIL_PROVIDER=ses");
+  }
+  requireNames("Abandoned cart recovery", ["EMAIL_UNSUBSCRIBE_SECRET"]);
+  const recoveryDiscount = Number(value("ABANDONED_CART_DISCOUNT_PERCENT") ?? "0");
+  if (!Number.isFinite(recoveryDiscount) || recoveryDiscount < 0 || recoveryDiscount > 50) {
+    errors.push("ABANDONED_CART_DISCOUNT_PERCENT must be between 0 and 50");
+  }
+  if (!value("SES_SNS_TOPIC_ARN")) {
+    warnings.push("Abandoned cart recovery is enabled without SES_SNS_TOPIC_ARN event tracking");
+  }
+}
+
 if (value("IPS_BASE_URL") || enabled("IPS_PRODUCTION_ACCEPTED")) {
   if (!enabled("IPS_PRODUCTION_ACCEPTED")) warnings.push("IPS is configured but remains behind the production acceptance gate");
   requireNames("IPS", ["IPS_PUBLIC_BASE_URL", "IPS_CALLBACK_URL"]);

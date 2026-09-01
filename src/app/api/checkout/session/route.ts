@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { cartLineSchema } from "@/lib/api/cart";
+import { nextCartRecoverySendAt } from "@/lib/checkout/cart-recovery-policy";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -39,6 +41,7 @@ const bodySchema = z.object({
   step: z.enum(["identity", "shipping", "method", "payment", "review"]),
   identity: z.enum(["guest", "login", "register"]).optional().nullable(),
   guestEmail: z.email().optional().nullable(),
+  recoveryConsent: z.boolean().default(false),
   shippingCity: z.string().trim().max(80).optional().nullable(),
   shippingMethod: z.enum(["kurir", "kamion"]).optional().nullable(),
   paymentMethod: z
@@ -56,6 +59,7 @@ const bodySchema = z.object({
   lineCount: z.int().min(0).max(99).default(0),
   itemQty: z.int().min(0).max(999).default(0),
   cartTotal: z.number().min(0).max(99_999_999).default(0),
+  lines: z.array(cartLineSchema).max(100).default([]),
 });
 
 export async function POST(req: Request) {
@@ -79,6 +83,29 @@ export async function POST(req: Request) {
   const input = parsed.data;
   const user = await getCurrentUser();
   const userId = user?.userType === "customer" ? user.id : null;
+  const existing = await db.checkoutSession.findUnique({
+    where: { id: input.sessionId },
+    select: {
+      recoveryConsent: true,
+      recoveryConsentAt: true,
+      recoveryStep: true,
+    },
+  });
+  const activityAt = new Date();
+  const canRecover = Boolean(
+    input.recoveryConsent &&
+      (userId || input.guestEmail) &&
+      input.lines.some((line) => line.qty > 0),
+  );
+  const startsNewSequence = canRecover && existing?.recoveryConsent === false;
+  const recoveryStep = startsNewSequence ? 0 : (existing?.recoveryStep ?? 0);
+  const recoveryConsentAt = canRecover
+    ? (startsNewSequence ? activityAt : (existing?.recoveryConsentAt ?? activityAt))
+    : null;
+  const recoveryNextSendAt = canRecover
+    ? nextCartRecoverySendAt(activityAt, recoveryStep)
+    : null;
+  const cartSnapshot = input.lines as Prisma.InputJsonValue;
 
   await db.checkoutSession.upsert({
     where: { id: input.sessionId },
@@ -92,6 +119,7 @@ export async function POST(req: Request) {
       lineCount: input.lineCount,
       itemQty: input.itemQty,
       cartTotal: new Prisma.Decimal(input.cartTotal),
+      cartSnapshot,
       shippingCity: input.shippingCity || null,
       shippingMethod: input.shippingMethod
         ? shippingMethodMap[input.shippingMethod]
@@ -99,6 +127,13 @@ export async function POST(req: Request) {
       paymentMethod: input.paymentMethod
         ? paymentMethodMap[input.paymentMethod]
         : null,
+      lastActivityAt: activityAt,
+      recoveryConsent: canRecover,
+      recoveryConsentAt,
+      recoveryStep,
+      recoveryNextSendAt,
+      recoveryStoppedAt: null,
+      recoveryStopReason: null,
     },
     update: {
       userId,
@@ -109,6 +144,7 @@ export async function POST(req: Request) {
       lineCount: input.lineCount,
       itemQty: input.itemQty,
       cartTotal: new Prisma.Decimal(input.cartTotal),
+      cartSnapshot,
       shippingCity: input.shippingCity || null,
       shippingMethod: input.shippingMethod
         ? shippingMethodMap[input.shippingMethod]
@@ -116,6 +152,21 @@ export async function POST(req: Request) {
       paymentMethod: input.paymentMethod
         ? paymentMethodMap[input.paymentMethod]
         : null,
+      lastActivityAt: activityAt,
+      recoveryConsent: canRecover,
+      recoveryConsentAt,
+      ...(startsNewSequence ? { recoveryStep: 0 } : {}),
+      recoveryNextSendAt,
+      ...(canRecover
+        ? { recoveryStoppedAt: null, recoveryStopReason: null }
+        : existing?.recoveryConsent
+          ? {
+              recoveryStoppedAt: activityAt,
+              recoveryStopReason: input.recoveryConsent
+                ? "empty_cart"
+                : "consent_withdrawn",
+            }
+          : {}),
     },
   });
 

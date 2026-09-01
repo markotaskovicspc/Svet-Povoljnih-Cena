@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { useFormContext } from "react-hook-form";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { CheckoutFormData } from "./checkout-flow";
@@ -17,8 +18,10 @@ import {
  */
 export function ShippingForm({
   xExpressAddressEnabled = false,
+  cartRecoveryEnabled = false,
 }: {
   xExpressAddressEnabled?: boolean;
+  cartRecoveryEnabled?: boolean;
 }) {
   const {
     register,
@@ -76,6 +79,28 @@ export function ShippingForm({
         errors={errors}
         xExpressAddressEnabled={xExpressAddressEnabled}
       />
+
+      {cartRecoveryEnabled ? (
+        <label className="border-border/70 bg-muted-bg/50 flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm leading-relaxed text-ink-700">
+          <input
+            type="checkbox"
+            className="accent-walnut mt-1 size-4 shrink-0"
+            {...register("recoveryConsent")}
+          />
+          <span>
+            Želim da mi pošaljete najviše tri podsetnika ako ne završim
+            kupovinu, uključujući eventualni kupon. Mogu da se odjavim jednim
+            klikom u svakom mejlu. Više u{" "}
+            <Link
+              href="/politika-privatnosti"
+              className="text-walnut underline-offset-2 hover:underline"
+            >
+              Politici privatnosti
+            </Link>
+            .
+          </span>
+        </label>
+      ) : null}
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
         <input

@@ -23,6 +23,7 @@ export const cartLineSchema = z.object({
   thumbnailUrl: z.string().max(2048).optional(),
   variant: z.string().max(120).optional(),
   familyCode: z.string().max(64).optional(),
+  deliveryCategory: z.union([z.literal(1), z.literal(2)]).optional(),
   withAssembly: z.boolean().optional(),
   assemblyPrice: z.number().nonnegative().optional(),
 });

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
-import { Card } from "@/components/admin/card";
+import { Card, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { Input } from "@/components/ui/input";
 
@@ -16,7 +16,7 @@ export const metadata = {
 };
 
 const PAGE = 30;
-const ABANDONED_AFTER_MS = 2 * 60 * 60 * 1000;
+const ABANDONED_AFTER_MS = 60 * 60 * 1000;
 
 export default async function AdminCheckoutsPage({
   searchParams,
@@ -45,10 +45,10 @@ export default async function AdminCheckoutsPage({
     ...statusWhere(status, abandonedBefore),
   };
 
-  const [sessions, total] = await Promise.all([
+  const [sessions, total, eligible, sent, clicked, recovered] = await Promise.all([
     db.checkoutSession.findMany({
       where,
-      orderBy: { updatedAt: "desc" },
+      orderBy: { lastActivityAt: "desc" },
       take: PAGE,
       skip: (page - 1) * PAGE,
       include: {
@@ -57,6 +57,23 @@ export default async function AdminCheckoutsPage({
       },
     }),
     db.checkoutSession.count({ where }),
+    db.checkoutSession.count({
+      where: {
+        status: "ACTIVE",
+        orderId: null,
+        recoveryConsent: true,
+        recoveryNextSendAt: { not: null },
+      },
+    }),
+    db.checkoutSession.count({ where: { recoveryLastSentAt: { not: null } } }),
+    db.checkoutSession.count({ where: { recoveryClickedAt: { not: null } } }),
+    db.order.aggregate({
+      where: {
+        checkoutSessions: { some: { recoveryClickedAt: { not: null } } },
+      },
+      _count: { _all: true },
+      _sum: { total: true },
+    }),
   ]);
 
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -77,6 +94,29 @@ export default async function AdminCheckoutsPage({
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Checkouti" }]}
       />
       <div className="space-y-4 px-8 py-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Recovery saglasnosti"
+            value={eligible.toLocaleString("sr-Latn-RS")}
+            hint="Checkout sesije koje mogu da prime podsetnik"
+          />
+          <StatCard
+            label="Poslat recovery"
+            value={sent.toLocaleString("sr-Latn-RS")}
+            hint="Najmanje jedan poslat mejl"
+          />
+          <StatCard
+            label="Klikovi"
+            value={clicked.toLocaleString("sr-Latn-RS")}
+            hint="Povratak preko potpisanog linka"
+          />
+          <StatCard
+            label="Oporavljene porudžbine"
+            value={recovered._count._all.toLocaleString("sr-Latn-RS")}
+            hint={`${formatRsd(num(recovered._sum.total))} click-attributed prihoda`}
+            tone="success"
+          />
+        </div>
         <Card>
           <form className="flex flex-wrap items-end gap-3" method="get">
             <div className="min-w-[240px] flex-1">
@@ -111,20 +151,24 @@ export default async function AdminCheckoutsPage({
 
         <DataTable
           columns={[
-            { key: "updated", label: "Ažurirano" },
+            { key: "updated", label: "Aktivnost" },
             { key: "customer", label: "Kupac" },
             { key: "step", label: "Korak" },
             { key: "cart", label: "Korpa" },
             { key: "method", label: "Isporuka / plaćanje" },
             { key: "status", label: "Status" },
+            { key: "recovery", label: "Recovery" },
             { key: "order", label: "Porudžbina" },
           ]}
           rows={sessions.map((session) => {
-            const derivedStatus = resolveStatus(session.status, session.updatedAt);
+            const derivedStatus = resolveStatus(
+              session.status,
+              session.lastActivityAt,
+            );
             return {
               id: session.id,
               cells: {
-                updated: session.updatedAt.toLocaleString("sr-Latn-RS", {
+                updated: session.lastActivityAt.toLocaleString("sr-Latn-RS", {
                   dateStyle: "short",
                   timeStyle: "short",
                 }),
@@ -153,6 +197,27 @@ export default async function AdminCheckoutsPage({
                   </span>
                 ),
                 status: <StatusPill status={derivedStatus} />,
+                recovery: (
+                  <div className="space-y-0.5 text-xs">
+                    <p>
+                      {session.recoveryConsent
+                        ? `Korak ${session.recoveryStep}/3`
+                        : "Bez saglasnosti"}
+                    </p>
+                    {session.recoveryClickedAt ? (
+                      <p className="font-medium text-success">
+                        Klik · korak {session.recoveryClickedStep ?? "—"}
+                      </p>
+                    ) : session.recoveryLastSentAt ? (
+                      <p className="text-ink-500">
+                        Poslato {session.recoveryLastSentAt.toLocaleString("sr-Latn-RS", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                ),
                 order: session.order ? (
                   <Link
                     href={`/admin/erp/prodajni-nalozi/${session.order.id}`}
@@ -208,24 +273,24 @@ function statusWhere(
   abandonedBefore: Date,
 ): Prisma.CheckoutSessionWhereInput {
   if (status === "ACTIVE") {
-    return { status: "ACTIVE", updatedAt: { gte: abandonedBefore } };
+    return { status: "ACTIVE", lastActivityAt: { gte: abandonedBefore } };
   }
   if (status === "CONVERTED") return { status: "CONVERTED" };
   if (status === "ABANDONED") {
     return {
       OR: [
         { status: "ABANDONED" },
-        { status: "ACTIVE", updatedAt: { lt: abandonedBefore } },
+        { status: "ACTIVE", lastActivityAt: { lt: abandonedBefore } },
       ],
     };
   }
   return {};
 }
 
-function resolveStatus(status: CheckoutSessionStatus, updatedAt: Date) {
+function resolveStatus(status: CheckoutSessionStatus, lastActivityAt: Date) {
   if (
     status === "ACTIVE" &&
-    updatedAt.getTime() < Date.now() - ABANDONED_AFTER_MS
+    lastActivityAt.getTime() < Date.now() - ABANDONED_AFTER_MS
   ) {
     return "ABANDONED" as const;
   }
