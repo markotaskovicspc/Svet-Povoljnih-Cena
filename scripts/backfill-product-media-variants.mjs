@@ -111,10 +111,7 @@ try {
 
 async function backfillMediaRow(row) {
   const sourceKey = row.sourceKey;
-  const { data, error } = await storage.download(sourceKey);
-  if (error || !data) {
-    throw new Error(`download failed for ${sourceKey}: ${error?.message || "missing object"}`);
-  }
+  const data = await downloadObject(sourceKey);
   const source = Buffer.from(await data.arrayBuffer());
   const metadata = await sharp(source, {
     failOn: "warning",
@@ -144,12 +141,7 @@ async function backfillMediaRow(row) {
         })
         .webp({ quality: variant.quality, effort: 4 })
         .toBuffer();
-      const { error: uploadError } = await storage.upload(key, buffer, {
-        cacheControl: CACHE_CONTROL,
-        contentType: "image/webp",
-        upsert: true,
-      });
-      if (uploadError) throw new Error(`upload failed for ${key}: ${uploadError.message}`);
+      await uploadObject(key, buffer, "image/webp");
       uploaded.push(key);
       update[variant.field] = key;
     }
@@ -194,19 +186,53 @@ async function referencedVariantCacheCandidates() {
 }
 
 async function repairObjectCacheMetadata(row) {
-  const { data, error } = await storage.download(row.name);
-  if (error || !data) {
-    throw new Error(`download failed for ${row.name}: ${error?.message || "missing object"}`);
-  }
+  const data = await downloadObject(row.name);
   const body = Buffer.from(await data.arrayBuffer());
-  const { error: uploadError } = await storage.upload(row.name, body, {
-    cacheControl: CACHE_CONTROL,
-    contentType: data.type || row.contentType || "image/webp",
-    upsert: true,
+  await uploadObject(
+    row.name,
+    body,
+    data.type || row.contentType || "image/webp",
+  );
+}
+
+async function downloadObject(key) {
+  return withRetry(async () => {
+    const { data, error } = await storage.download(key);
+    if (error || !data) {
+      throw new Error(`download failed for ${key}: ${error?.message || "missing object"}`);
+    }
+    return data;
   });
-  if (uploadError) {
-    throw new Error(`cache metadata upload failed for ${row.name}: ${uploadError.message}`);
+}
+
+async function uploadObject(key, body, contentType) {
+  return withRetry(async () => {
+    const { error } = await storage.upload(key, body, {
+      cacheControl: CACHE_CONTROL,
+      contentType,
+      upsert: true,
+    });
+    if (error) throw new Error(`upload failed for ${key}: ${error.message}`);
+  });
+}
+
+async function withRetry(operation, attempts = 5) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const transient =
+        /too many connections|fetch failed|timeout|timed out|\b429\b|\b5\d\d\b/i.test(message);
+      if (!transient || attempt === attempts) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(500 * 2 ** (attempt - 1), 4_000)),
+      );
+    }
   }
+  throw lastError;
 }
 
 async function runPool(items, size, worker, label) {

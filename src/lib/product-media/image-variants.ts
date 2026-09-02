@@ -68,8 +68,9 @@ export async function buildProductImageRenditions(
   const height = orientationSwapsDimensions ? metadata.width : metadata.height;
 
   try {
-    const variants = await Promise.all(
-      PRODUCT_IMAGE_VARIANTS.map(async (variant) => ({
+    const variants: ProductImageVariant[] = [];
+    for (const variant of PRODUCT_IMAGE_VARIANTS) {
+      variants.push({
         name: variant.name,
         width: variant.width,
         key: productImageVariantKey(sourceKey, variant),
@@ -86,8 +87,8 @@ export async function buildProductImageRenditions(
           })
           .webp({ quality: variant.quality, effort: 4 })
           .toBuffer(),
-      })),
-    );
+      });
+    }
     return { width, height, variants };
   } catch {
     throw new Error(
