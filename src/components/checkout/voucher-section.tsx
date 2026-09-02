@@ -48,6 +48,7 @@ export function VoucherSection() {
         code: result.code,
         label: result.label,
         discountRsd: result.discountRsd,
+        validatedSubtotalRsd: subtotal,
       });
       setCode(result.code);
       setValue("voucherCode", result.code, { shouldDirty: true });

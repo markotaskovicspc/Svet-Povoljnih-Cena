@@ -72,6 +72,10 @@ describe("buyer receipt totals", () => {
       firstPurchaseDiscount: 150,
       savedCardDiscount: 50,
       total: 2_790,
+      shipping_address: {
+        phone: "+381600000000",
+        email: "kupac@example.com",
+      },
     });
     expect(snapshot.order.totals).toEqual({
       subtotal: 2_000,

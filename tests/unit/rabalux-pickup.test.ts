@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
+import {
+  getRabaluxPickupReadiness,
+  requireRabaluxPickupForProvider,
+} from "@/lib/rabalux/pickup";
 
 const common = {
   RABALUX_PICKUP_NAME: "Rabalux Srbija",
@@ -46,6 +49,41 @@ describe("Rabalux fixed dropship pickup", () => {
     stub({ ...common, RABALUX_PICKUP_NAME: "GET_FROM_VERCEL" });
     expect(() => requireRabaluxPickupForProvider("MYGLS")).toThrow(
       /RABALUX_PICKUP_NAME/,
+    );
+  });
+
+  it("reports all missing values at once, including active X Express fields", () => {
+    const readiness = getRabaluxPickupReadiness("X_EXPRESS", {
+      RABALUX_PICKUP_STREET: "Industrijska",
+      RABALUX_PICKUP_NAME: "GET_FROM_VERCEL",
+    });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.missing).toEqual([
+      "RABALUX_PICKUP_NAME",
+      "RABALUX_PICKUP_HOUSE_NUMBER",
+      "RABALUX_PICKUP_CITY",
+      "RABALUX_PICKUP_POSTAL_CODE",
+      "RABALUX_PICKUP_CONTACT_NAME",
+      "RABALUX_PICKUP_CONTACT_PHONE",
+      "RABALUX_PICKUP_CONTACT_EMAIL",
+      "RABALUX_X_EXPRESS_TOWN_ID",
+      "RABALUX_X_EXPRESS_LATITUDE",
+      "RABALUX_X_EXPRESS_LONGITUDE",
+    ]);
+  });
+
+  it("reports every invalid provider value in one error", () => {
+    stub({
+      ...common,
+      RABALUX_PICKUP_POSTAL_CODE: "1100",
+      RABALUX_X_EXPRESS_TOWN_ID: "0",
+      RABALUX_X_EXPRESS_LATITUDE: "91",
+      RABALUX_X_EXPRESS_LONGITUDE: "not-a-coordinate",
+    });
+
+    expect(() => requireRabaluxPickupForProvider("X_EXPRESS")).toThrow(
+      /POSTAL_CODE.*TOWN_ID.*LATITUDE.*LONGITUDE/,
     );
   });
 });

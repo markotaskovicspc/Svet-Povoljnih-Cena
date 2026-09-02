@@ -44,6 +44,7 @@ export function CartRecoveryClient({
             code: result.code,
             label: result.label,
             discountRsd: result.discountRsd,
+            validatedSubtotalRsd: subtotal,
           });
         }
       }

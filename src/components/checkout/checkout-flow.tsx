@@ -431,6 +431,17 @@ export function CheckoutFlow({
       methods.setValue("identity", identity, { shouldDirty: false });
   }, [identity, methods]);
 
+  // The voucher can be applied in the cart before this form is mounted. Keep
+  // the submitted field aligned with the authoritative checkout store.
+  useEffect(() => {
+    const nextCode = voucher?.code ?? "";
+    if (getValues("voucherCode") === nextCode) return;
+    setValue("voucherCode", nextCode, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [getValues, setValue, voucher?.code]);
+
   useEffect(() => {
     if (!isAuthenticatedCustomer) return;
     setIdentity("login");
@@ -605,7 +616,7 @@ export function CheckoutFlow({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         buildCreateOrderPayload(
-          data,
+          { ...data, voucherCode: voucher?.code ?? "" },
           lines,
           checkoutSessionId ?? getCheckoutSessionId(),
           getConsentedAnalyticsContext(),

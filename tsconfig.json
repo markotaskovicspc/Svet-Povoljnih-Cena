@@ -44,7 +44,9 @@
     ".next-client-feedback-e2e/types/**/*.ts",
     ".next-client-feedback-e2e/dev/types/**/*.ts",
     ".next-mygls-e2e/types/**/*.ts",
-    ".next-mygls-e2e/dev/types/**/*.ts"
+    ".next-mygls-e2e/dev/types/**/*.ts",
+    ".next-qa-sales-e2e/types/**/*.ts",
+    ".next-qa-sales-e2e/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

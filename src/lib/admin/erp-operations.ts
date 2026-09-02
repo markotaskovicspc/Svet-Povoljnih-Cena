@@ -1,4 +1,10 @@
-import { DispatchNoteType, Prisma, type ShipmentStatus } from "@prisma/client";
+import {
+  DispatchNoteType,
+  Prisma,
+  type OrderStatus,
+  type PaymentStatus,
+  type ShipmentStatus,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import type {
   ErpColumn,
@@ -73,11 +79,13 @@ const status = (
   key: string,
   label: string,
   options?: string[],
+  statusToneByValue?: ErpColumn["statusToneByValue"],
 ): ErpColumn => ({
   key,
   label,
   type: "status",
   options,
+  statusToneByValue,
   defaultVisible: true,
 });
 const bool = (key: string, label: string): ErpColumn => ({
@@ -445,14 +453,30 @@ export const operationalErpModules: ErpModule[] = [
       status("channel", "Kanal", ["WEB", "ANANAS", "MP", "VP", "INO"]),
       status("paymentMethod", "Način plaćanja", ADMIN_PAYMENT_METHOD_OPTIONS),
       status("paymentStatus", "Status plaćanja", ADMIN_PAYMENT_STATUS_OPTIONS),
-      status("status", "Status porudžbine"),
       text("courierService", "Kurirska služba"),
       status("courierStatus", "Status kurirske pošiljke", [
+        "Refundirano",
+        "Otkazano",
+        "Delimično refundirano",
         "Nalog nije kreiran",
         "Kurirski nalog otkazan",
         ...Object.values(SHIPMENT_STATUS_LABEL),
         "Nije kurirska isporuka",
-      ]),
+      ], {
+        Refundirano: "purple",
+        Otkazano: "red",
+        "Delimično refundirano": "purple",
+        "Nalog nije kreiran": "blue",
+        "Pošiljka kreirana": "blue",
+        "Preuzeto iz magacina": "yellow",
+        "U tranzitu": "yellow",
+        "Na isporuci": "yellow",
+        Isporučeno: "green",
+        Vraćeno: "purple",
+        "Neuspešna isporuka": "red",
+        "Kurirski nalog otkazan": "red",
+        "Nije kurirska isporuka": "neutral",
+      }),
       date("fiscalizedAt", "Datum fiskalizacije"),
       text("customer", "Ime i prezime kupca / firma"),
       status("purchaseIdentity", "Način kupovine", [
@@ -619,8 +643,8 @@ export const operationalErpModules: ErpModule[] = [
         "Novi",
         "Slanje kuriru",
         "Proknjižen",
-        "Delimično preuzeta",
-        "Kompletno preuzeta",
+        "Delimično preuzeto",
+        "Kompletno preuzeto",
         "Otkazan",
       ]),
       text("number", "Broj naloga"),
@@ -1589,6 +1613,7 @@ async function salesOrderRows(
       itemId: null,
       shipments: order.shipments,
     });
+    const paymentStatuses = order.payments.map((payment) => payment.status);
     const common = {
       number: order.number,
       orderDate: dateTime(order.createdAt),
@@ -1599,7 +1624,7 @@ async function salesOrderRows(
       paymentMethod: adminPaymentMethodLabel(order.paymentMethod),
       paymentStatus: adminPaymentStatusLabel({
         paymentMethod: order.paymentMethod,
-        paymentStatuses: order.payments.map((payment) => payment.status),
+        paymentStatuses,
       }),
       customer,
       purchaseIdentity: order.userId ? "Ulogovan korisnik" : "Bez prijave",
@@ -1612,9 +1637,12 @@ async function salesOrderRows(
       postalCode: documentBuyer.postalCode,
       phone: order.shipPhone,
       email: order.guestEmail ?? order.customer?.email ?? null,
-      status: order.status,
       courierService: orderCourier.service,
-      courierStatus: orderCourier.status,
+      courierStatus: salesOrderOperationalStatus({
+        orderStatus: order.status,
+        paymentStatuses,
+        courierStatus: orderCourier.status,
+      }),
       fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
       invoiced: order.invoices.length > 0,
       sefAccepted: Boolean(order.sefAcceptedAt),
@@ -1677,7 +1705,11 @@ async function salesOrderRows(
         values: {
           ...common,
           courierService: courier.service,
-          courierStatus: courier.status,
+          courierStatus: salesOrderOperationalStatus({
+            orderStatus: order.status,
+            paymentStatuses,
+            courierStatus: courier.status,
+          }),
           sku: item.sku,
           supplier: product?.supplier?.name ?? item.supplierName,
           category:
@@ -1765,6 +1797,19 @@ type SalesOrderCourierShipment = {
   createdAt?: Date | string;
   updatedAt?: Date | string;
 };
+
+export function salesOrderOperationalStatus(args: {
+  orderStatus: OrderStatus;
+  paymentStatuses: readonly PaymentStatus[];
+  courierStatus: string;
+}) {
+  if (args.paymentStatuses.includes("REFUNDED")) return "Refundirano";
+  if (args.orderStatus === "OTKAZANO") return "Otkazano";
+  if (args.paymentStatuses.includes("PARTIAL_REFUND")) {
+    return "Delimično refundirano";
+  }
+  return args.courierStatus;
+}
 
 export function salesOrderCourierDisplay(args: {
   shippingMethod: string;

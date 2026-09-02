@@ -153,6 +153,27 @@ export function getIntegrationReadiness(
     normalized(env.SEF_ENV)?.toLowerCase() === "production";
   const badiProduction =
     normalized(env.BADI_ENV)?.toLowerCase() === "production";
+  const selectedSmallParcelProvider =
+    normalized(env.COURIER_SMALL_PROVIDER)?.toUpperCase() === "MYGLS"
+      ? "MYGLS"
+      : "X_EXPRESS";
+  const rabaluxPickupRequirements = [
+    present("RABALUX_PICKUP_NAME"),
+    present("RABALUX_PICKUP_STREET"),
+    present("RABALUX_PICKUP_HOUSE_NUMBER"),
+    present("RABALUX_PICKUP_CITY"),
+    present("RABALUX_PICKUP_POSTAL_CODE"),
+    present("RABALUX_PICKUP_CONTACT_NAME"),
+    present("RABALUX_PICKUP_CONTACT_PHONE"),
+    present("RABALUX_PICKUP_CONTACT_EMAIL"),
+    ...(selectedSmallParcelProvider === "X_EXPRESS"
+      ? [
+          present("RABALUX_X_EXPRESS_TOWN_ID"),
+          present("RABALUX_X_EXPRESS_LATITUDE"),
+          present("RABALUX_X_EXPRESS_LONGITUDE"),
+        ]
+      : []),
+  ];
 
   return [
     integration(env, {
@@ -177,6 +198,7 @@ export function getIntegrationReadiness(
         present("RABALUX_CATALOG_PASS"),
         present("RABALUX_STOCK_USER"),
         presentOneOf("RABALUX_STOCK_API_KEY", "RABALUX_STOCK_PASS"),
+        ...rabaluxPickupRequirements,
       ],
     }),
     integration(env, {

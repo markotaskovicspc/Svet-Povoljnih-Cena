@@ -185,6 +185,19 @@ export interface FacetValues {
   dynamic: Record<string, string[]>;
 }
 
+/** Shared storefront facet ordering: most matches first, then Serbian Latin alphabet. */
+export function sortFacetValuesByCount(
+  values: Iterable<string>,
+  counts: Readonly<Record<string, number>>,
+  labelFor: (value: string) => string = (value) => value,
+) {
+  return Array.from(values).sort((left, right) => {
+    const countDifference = (counts[right] ?? 0) - (counts[left] ?? 0);
+    return countDifference ||
+      labelFor(left).localeCompare(labelFor(right), "sr-Latn-RS");
+  });
+}
+
 /**
  * Per-group dynamic facets — what extra filters to show besides the fixed ones.
  * Mirrors `Product.group`. Each entry produces a checkbox section.
@@ -300,20 +313,25 @@ export function computeFacetValues(products: Product[]): FacetValues {
     }
   }
 
-  const sorted = (s: Set<string>) =>
-    Array.from(s).sort((a, b) => a.localeCompare(b, "sr-Latn-RS"));
+  const sorted = (s: Set<string>, facetCounts: Record<string, number>) =>
+    sortFacetValuesByCount(s, facetCounts);
   return {
-    groups: Array.from(groups).sort((a, b) =>
-      groupLabels[a].localeCompare(groupLabels[b], "sr-Latn-RS"),
+    groups: sortFacetValuesByCount(
+      groups,
+      counts.groups,
+      (group) => groupLabels[group] ?? group,
     ),
     groupLabels,
-    materials: sorted(materials),
-    colors: sorted(colors),
+    materials: sorted(materials, counts.materials),
+    colors: sorted(colors, counts.colors),
     colorSwatches,
-    attributes: sorted(attributes),
+    attributes: sorted(attributes, counts.attributes),
     counts,
     dynamic: Object.fromEntries(
-      Object.entries(dynamic).map(([k, v]) => [k, sorted(v)]),
+      Object.entries(dynamic).map(([k, v]) => [
+        k,
+        Array.from(v).sort((a, b) => a.localeCompare(b, "sr-Latn-RS")),
+      ]),
     ),
   };
 }

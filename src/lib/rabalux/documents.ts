@@ -82,6 +82,33 @@ export async function buildRabaluxShipmentAttachments(args: {
   throw new Error("Adresnica za izabranog kurira nije dostupna.");
 }
 
+/** Defense in depth: a supplier dispatch may contain only its label and packing list. */
+export function assertRabaluxSupplierAttachmentSet(
+  attachments: readonly EmailAttachment[],
+) {
+  const labelCount = attachments.filter((attachment) =>
+    attachment.filename.startsWith("adresnica-"),
+  ).length;
+  const packingCount = attachments.filter((attachment) =>
+    attachment.filename.startsWith("pak-lista-"),
+  ).length;
+  const everyAttachmentAllowed = attachments.every(
+    (attachment) =>
+      attachment.filename.startsWith("adresnica-") ||
+      attachment.filename.startsWith("pak-lista-"),
+  );
+  if (
+    attachments.length !== 2 ||
+    labelCount !== 1 ||
+    packingCount !== 1 ||
+    !everyAttachmentAllowed
+  ) {
+    throw new Error(
+      "Rabalux dobavljaču se smeju poslati samo adresnica i packing lista.",
+    );
+  }
+}
+
 function safe(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }

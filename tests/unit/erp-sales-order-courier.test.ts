@@ -1,7 +1,64 @@
 import { describe, expect, it } from "vitest";
-import { salesOrderCourierDisplay } from "@/lib/admin/erp-operations";
+import {
+  salesOrderCourierDisplay,
+  salesOrderOperationalStatus,
+} from "@/lib/admin/erp-operations";
+import { getErpModuleDefinition } from "@/lib/admin/erp";
 
 describe("sales-order courier overview display", () => {
+  it("uses one operational status with the agreed business precedence", () => {
+    expect(
+      salesOrderOperationalStatus({
+        orderStatus: "OTKAZANO",
+        paymentStatuses: ["REFUNDED", "PARTIAL_REFUND"],
+        courierStatus: "Isporučeno",
+      }),
+    ).toBe("Refundirano");
+    expect(
+      salesOrderOperationalStatus({
+        orderStatus: "OTKAZANO",
+        paymentStatuses: ["PARTIAL_REFUND"],
+        courierStatus: "Isporučeno",
+      }),
+    ).toBe("Otkazano");
+    expect(
+      salesOrderOperationalStatus({
+        orderStatus: "U_OBRADI",
+        paymentStatuses: ["PARTIAL_REFUND"],
+        courierStatus: "U tranzitu",
+      }),
+    ).toBe("Delimično refundirano");
+    expect(
+      salesOrderOperationalStatus({
+        orderStatus: "U_OBRADI",
+        paymentStatuses: ["PAID"],
+        courierStatus: "U tranzitu",
+      }),
+    ).toBe("U tranzitu");
+  });
+
+  it("defines every agreed operational status tone explicitly", () => {
+    const definition = getErpModuleDefinition("prodajni-nalozi");
+    const columns = definition?.columns ?? [];
+    expect(columns.some((column) => column.key === "status")).toBe(false);
+    const tones = columns.find((column) => column.key === "courierStatus")
+      ?.statusToneByValue;
+
+    expect(tones).toMatchObject({
+      "Nalog nije kreiran": "blue",
+      "Pošiljka kreirana": "blue",
+      "Preuzeto iz magacina": "yellow",
+      "U tranzitu": "yellow",
+      "Na isporuci": "yellow",
+      Isporučeno: "green",
+      Otkazano: "red",
+      "Neuspešna isporuka": "red",
+      Refundirano: "purple",
+      "Delimično refundirano": "purple",
+      Vraćeno: "purple",
+    });
+  });
+
   it("shows the courier status assigned to the matching order item", () => {
     expect(
       salesOrderCourierDisplay({

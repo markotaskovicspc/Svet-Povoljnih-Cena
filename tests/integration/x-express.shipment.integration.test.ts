@@ -4,11 +4,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
-import {
-  postPickupBatches,
-  updatePickupBatchCourierHandover,
-} from "@/lib/admin/pickup-batch.server";
-import { processBackgroundJob } from "@/lib/background-jobs";
+import { postPickupBatches } from "@/lib/admin/pickup-batch.server";
 import {
   processXExpressWebhookNotifyIds,
   stageXExpressWebhookBatch,
@@ -20,6 +16,8 @@ const productSku = `XE-IT-${runId}`.slice(0, 90);
 const requestGuid = "758bb513-499d-4ab1-8697-5e747602f222";
 const webhookReferenceGuid = "4c4d7389-bf92-4c39-8cd8-91014c410a18";
 const notifyId = randomUUID();
+const cancelledNotifyId = randomUUID();
+const pickupNotifyId = randomUUID();
 
 let server: Server;
 let baseUrl = "";
@@ -165,11 +163,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.xExpressWebhookEvent.deleteMany({ where: { notifyId } });
+  await db.xExpressWebhookEvent.deleteMany({
+    where: {
+      notifyId: { in: [notifyId, cancelledNotifyId, pickupNotifyId] },
+    },
+  });
   await db.backgroundJob.deleteMany({
     where: {
       OR: [
-        { idempotencyKey: { startsWith: `courier-handover:${batchId}:` } },
         { idempotencyKey: `fiscal-pickup:${orderId}` },
         { idempotencyKey: `order-status-email:${orderId}:PICKED_UP` },
       ],
@@ -306,30 +307,47 @@ describe("X Express shipment persistence", () => {
     expect(webhook.shipmentId).toBe(shipment.id);
     expect(webhook.processedAt).not.toBeNull();
 
-    const groupKey = `order:${orderId}:X_EXPRESS`;
-    await expect(
-      updatePickupBatchCourierHandover(
-        batch.id,
-        [groupKey],
-        "integration-test",
-      ),
-    ).resolves.toMatchObject({
-      pickedUpGroupCount: 1,
-      totalGroupCount: 1,
-      newlyPickedUpGroupCount: 1,
-      queuedHandoverCount: 1,
-      complete: true,
-    });
-    const handoverJob = await db.backgroundJob.findUniqueOrThrow({
-      where: {
-        idempotencyKey: `courier-handover:${batch.id}:${groupKey}`,
+    await stageXExpressWebhookBatch([
+      {
+        ContractId: "U000328",
+        NotifyId: cancelledNotifyId,
+        OrderCode: "XE-ORDER-1",
+        ReferenceId: shipment.id,
+        ReferenceGuid: webhookReferenceGuid,
+        Status: "SRVC_CANCELED",
+        StatusTime: "2099-07-26T12:30:00Z",
       },
-      select: { id: true, status: true },
-    });
-    expect(handoverJob.status).toBe("QUEUED");
-    await expect(processBackgroundJob(handoverJob.id)).resolves.toEqual({
-      claimed: true,
-      ok: true,
+    ]);
+    await expect(
+      processXExpressWebhookNotifyIds([cancelledNotifyId]),
+    ).resolves.toEqual({ read: 1, processed: 1, failed: 0 });
+    await expect(
+      db.pickupBatchLine.count({
+        where: { batchId: batch.id, courierPickedUpAt: { not: null } },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      db.pickupBatch.findUniqueOrThrow({
+        where: { id: batch.id },
+        select: { status: true },
+      }),
+    ).resolves.toEqual({ status: "BOOKED" });
+
+    await stageXExpressWebhookBatch([
+      {
+        ContractId: "U000328",
+        NotifyId: pickupNotifyId,
+        OrderCode: "XE-ORDER-1",
+        ReferenceId: shipment.id,
+        ReferenceGuid: webhookReferenceGuid,
+        Status: "PICKED_UP",
+        StatusTime: "2099-07-26T13:00:00Z",
+      },
+    ]);
+    await expect(processXExpressWebhookNotifyIds([pickupNotifyId])).resolves.toEqual({
+      read: 1,
+      processed: 1,
+      failed: 0,
     });
 
     const handedOverShipment = await db.shipment.findUniqueOrThrow({
@@ -338,7 +356,7 @@ describe("X Express shipment persistence", () => {
     });
     expect(handedOverShipment).toMatchObject({
       status: "PICKED_UP",
-      providerStatusCode: "WAREHOUSE_HANDOVER",
+      providerStatusCode: "PICKED_UP",
     });
     expect(handedOverShipment.shippedAt).not.toBeNull();
     await expect(
@@ -349,15 +367,29 @@ describe("X Express shipment persistence", () => {
     ).resolves.toMatchObject({
       kind: "FISCAL_RECEIPT",
       status: "QUEUED",
-      payload: { orderId, source: "AUTO_PICKUP" },
+      payload: { orderId },
     });
-    await expect(
-      updatePickupBatchCourierHandover(batch.id, [], "integration-test"),
-    ).rejects.toThrow(/ne može da se poništi uklanjanjem oznake/i);
     await expect(
       db.pickupBatchLine.count({
         where: { batchId: batch.id, courierPickedUpAt: { not: null } },
       }),
     ).resolves.toBe(2);
+    await expect(
+      db.pickupBatch.findUniqueOrThrow({
+        where: { id: batch.id },
+        select: { status: true },
+      }),
+    ).resolves.toEqual({ status: "PICKED_UP" });
+
+    await expect(processXExpressWebhookNotifyIds([pickupNotifyId])).resolves.toEqual({
+      read: 0,
+      processed: 0,
+      failed: 0,
+    });
+    await expect(
+      db.shipmentEvent.count({
+        where: { shipmentId: shipment.id, providerEventId: pickupNotifyId },
+      }),
+    ).resolves.toBe(1);
   });
 });

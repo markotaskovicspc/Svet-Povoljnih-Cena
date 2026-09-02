@@ -25,6 +25,14 @@ import { resolveRetailPrice } from "@/lib/pricing/retail-price";
 
 export type ErpValue = string | number | boolean | null;
 
+export type ErpStatusTone =
+  | "blue"
+  | "yellow"
+  | "green"
+  | "red"
+  | "purple"
+  | "neutral";
+
 export type ErpColumn = {
   key: string;
   label: string;
@@ -32,6 +40,8 @@ export type ErpColumn = {
   options?: string[];
   /** Human-readable labels for compact stored option values. */
   optionLabels?: Record<string, string>;
+  /** Explicit, serializable visual meaning for status values. */
+  statusToneByValue?: Record<string, ErpStatusTone>;
   defaultVisible?: boolean;
   align?: "left" | "right" | "center";
 };

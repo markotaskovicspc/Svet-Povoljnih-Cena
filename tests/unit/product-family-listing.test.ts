@@ -8,6 +8,7 @@ import {
   emptyFilterState,
   matchesListingSubTab,
   resolveListingProducts,
+  sortFacetValuesByCount,
 } from "@/lib/listing/filters";
 import type { Product } from "@/types";
 
@@ -146,6 +147,25 @@ describe("filter dostupnosti", () => {
 });
 
 describe("dinamički filteri listinga", () => {
+  it("sortira fiksne facete opadajuće po broju, pa po srpskoj latinici", () => {
+    expect(
+      sortFacetValuesByCount(
+        ["Žuta", "Crvena", "Čelik", "Bela"],
+        { Žuta: 2, Crvena: 4, Čelik: 2, Bela: 1 },
+      ),
+    ).toEqual(["Crvena", "Čelik", "Žuta", "Bela"]);
+
+    const secondGreenTable = {
+      ...greenTable,
+      sku: "TABLE-GREEN-2",
+      slug: "table-green-2",
+    } as Product;
+    const facets = computeFacetValues([oakChair, greenTable, secondGreenTable]);
+    expect(facets.groups).toEqual(["trpezarijski-stolovi", "stolice"]);
+    expect(facets.colors).toEqual(["Zelena", "Natur"]);
+    expect(facets.attributes).toEqual(["SKLOPIVO", "ZA 4 OSOBE"]);
+  });
+
   it("lokalni filter i sortiranje koriste najnižu javno prikazanu krajnju cenu", () => {
     const fullPriceOnly = {
       ...product,

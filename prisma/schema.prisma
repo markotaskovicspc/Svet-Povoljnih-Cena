@@ -2828,8 +2828,8 @@ model PickupBatchLine {
   widthCm             Decimal?        @db.Decimal(8, 2)
   depthCm             Decimal?        @db.Decimal(8, 2)
   heightCm            Decimal?        @db.Decimal(8, 2)
-  /// Manual warehouse confirmation that the courier physically took this
-  /// package. Every package in one lineGroupKey is updated together.
+  /// Provider-confirmed time when the courier physically took this package.
+  /// Every package in one lineGroupKey is updated together.
   courierPickedUpAt   DateTime?
   courierPickedUpById String?
 

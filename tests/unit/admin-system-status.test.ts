@@ -85,11 +85,48 @@ describe("admin system status", () => {
       RABALUX_CATALOG_PASS: "catalog-secret",
       RABALUX_STOCK_USER: "stock-user",
       RABALUX_STOCK_API_KEY: apiKey,
+      RABALUX_PICKUP_NAME: "Rabalux Srbija",
+      RABALUX_PICKUP_STREET: "Industrijska",
+      RABALUX_PICKUP_HOUSE_NUMBER: "12",
+      RABALUX_PICKUP_CITY: "Beograd",
+      RABALUX_PICKUP_POSTAL_CODE: "11000",
+      RABALUX_PICKUP_CONTACT_NAME: "Magacin",
+      RABALUX_PICKUP_CONTACT_PHONE: "+38111111111",
+      RABALUX_PICKUP_CONTACT_EMAIL: "magacin@example.test",
+      RABALUX_X_EXPRESS_TOWN_ID: "42",
+      RABALUX_X_EXPRESS_LATITUDE: "44.8125",
+      RABALUX_X_EXPRESS_LONGITUDE: "20.4612",
     }).find((item) => item.id === "rabalux");
 
     expect(rabalux?.ready).toBe(true);
     expect(rabalux?.missing).toEqual([]);
     expect(JSON.stringify(rabalux)).not.toContain(apiKey);
+  });
+
+  it("reports every missing Rabalux pickup field in one readiness result", () => {
+    const rabalux = getIntegrationReadiness({
+      RABALUX_ENABLED: "true",
+      RABALUX_CATALOG_USER: "catalog-user",
+      RABALUX_CATALOG_PASS: "catalog-secret",
+      RABALUX_STOCK_USER: "stock-user",
+      RABALUX_STOCK_API_KEY: "stock-secret",
+      RABALUX_PICKUP_NAME: "GET_FROM_VERCEL",
+      RABALUX_PICKUP_STREET: "Industrijska",
+    }).find((item) => item.id === "rabalux");
+
+    expect(rabalux?.ready).toBe(false);
+    expect(rabalux?.missing).toEqual(expect.arrayContaining([
+      "RABALUX_PICKUP_NAME",
+      "RABALUX_PICKUP_HOUSE_NUMBER",
+      "RABALUX_PICKUP_CITY",
+      "RABALUX_PICKUP_POSTAL_CODE",
+      "RABALUX_PICKUP_CONTACT_NAME",
+      "RABALUX_PICKUP_CONTACT_PHONE",
+      "RABALUX_PICKUP_CONTACT_EMAIL",
+      "RABALUX_X_EXPRESS_TOWN_ID",
+      "RABALUX_X_EXPRESS_LATITUDE",
+      "RABALUX_X_EXPRESS_LONGITUDE",
+    ]));
   });
 
   it("allows a complete X Express test account but gates production", () => {

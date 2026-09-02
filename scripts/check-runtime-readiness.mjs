@@ -8,7 +8,7 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 const RABALUX_INTEGRATION_KEY = "RABALUX";
-const RABALUX_PUBLIC_STOCK_THRESHOLD = 3;
+const RABALUX_PUBLIC_STOCK_THRESHOLD = 2;
 const RABALUX_SUPPLIER_SAFETY_STOCK = 1;
 const connectionString = getConnectionString();
 const missingStorageSchemaRequested =

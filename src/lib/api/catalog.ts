@@ -74,6 +74,7 @@ import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 import { selectCartRecommendationRules } from "@/lib/cart-recommendations";
 import {
   dynamicFacetsForGroups,
+  sortFacetValuesByCount,
   type Availability,
   type FacetExtents,
   type FacetValues,
@@ -1792,15 +1793,20 @@ function computeProductFacets(
 
   const localeSort = (left: string, right: string) =>
     left.localeCompare(right, "sr-Latn-RS");
-  facets.groups = Array.from(groups).sort((left, right) =>
-    (facets.groupLabels[left] ?? left).localeCompare(
-      facets.groupLabels[right] ?? right,
-      "sr-Latn-RS",
-    ),
+  facets.groups = sortFacetValuesByCount(
+    groups,
+    facets.counts.groups,
+    (group) => facets.groupLabels[group] ?? group,
   );
-  facets.materials = Array.from(materials.values()).sort(localeSort);
-  facets.colors = Array.from(colors.values()).sort(localeSort);
-  facets.attributes = Array.from(attributes.values()).sort(localeSort);
+  facets.materials = sortFacetValuesByCount(
+    materials.values(),
+    facets.counts.materials,
+  );
+  facets.colors = sortFacetValuesByCount(colors.values(), facets.counts.colors);
+  facets.attributes = sortFacetValuesByCount(
+    attributes.values(),
+    facets.counts.attributes,
+  );
   facets.dynamic = Object.fromEntries(
     Object.entries(dynamic).map(([key, values]) => [
       key,

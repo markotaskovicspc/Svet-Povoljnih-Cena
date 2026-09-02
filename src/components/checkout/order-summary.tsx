@@ -4,7 +4,10 @@ import Image from "next/image";
 import { Loader2, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
-import { useCheckout } from "@/lib/checkout/store";
+import {
+  useCheckout,
+  voucherDiscountForSubtotal,
+} from "@/lib/checkout/store";
 import {
   SHIPPING_PRICES,
   type CheckoutDeliveryQuote,
@@ -150,7 +153,7 @@ export function OrderSummary({
     itemsSale,
     shippingMethod,
     assemblyTotal,
-    voucherDiscountRsd: voucher?.discountRsd ?? 0,
+    voucherDiscountRsd: voucherDiscountForSubtotal(voucher, itemsSale),
     firstPurchaseEligible,
     shippingPrices: deliveryQuoteReady
       ? deliveryQuote.prices
@@ -271,7 +274,7 @@ export function OrderSummary({
           ) : null}
           {totals.voucherDiscount > 0 && voucher ? (
             <Row
-              label={`Vaučer „${voucher.code}"`}
+              label={`Vaučer „${voucher.code}”`}
               value={`−${formatRsd(totals.voucherDiscount)}`}
               tone="action"
             />

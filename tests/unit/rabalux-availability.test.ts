@@ -25,7 +25,7 @@ describe("Rabalux customer availability", () => {
     });
   });
 
-  it("keeps 2 and below hidden and requires raw Serbia stock to be at least 3", () => {
+  it("keeps 1 hidden and publishes 2 with one sellable unit after the reserve", () => {
     const input = {
       warehouseStock: 0,
       supplierReservedStock: 0,
@@ -33,13 +33,13 @@ describe("Rabalux customer availability", () => {
       supplierOperational: true,
       supplierApproved: true,
     };
-    expect(resolveRabaluxAvailability({ ...input, supplierStock: 2 })).toMatchObject({
+    expect(resolveRabaluxAvailability({ ...input, supplierStock: 1 })).toMatchObject({
       sellableStock: 0,
       supplierEligible: false,
       source: "NONE",
     });
-    expect(resolveRabaluxAvailability({ ...input, supplierStock: 3 })).toMatchObject({
-      sellableStock: 2,
+    expect(resolveRabaluxAvailability({ ...input, supplierStock: 2 })).toMatchObject({
+      sellableStock: 1,
       supplierEligible: true,
       source: "SUPPLIER",
     });
@@ -49,7 +49,7 @@ describe("Rabalux customer availability", () => {
     expect(
       resolveRabaluxAvailability({
         warehouseStock: 2,
-        supplierStock: 2,
+        supplierStock: 1,
         supplierReservedStock: 0,
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierOperational: true,
@@ -139,15 +139,15 @@ describe("Rabalux customer availability", () => {
   it("still reports the exact stock when unobserved or below the public threshold", () => {
     expect(
       resolveRabaluxSupplierStock({
-        supplierStock: 2,
+        supplierStock: 1,
         supplierReservedStock: 0,
         lastSupplierStockSyncAt: new Date("2026-07-27T11:50:00.000Z"),
         supplierOperational: true,
         supplierApproved: true,
       }),
     ).toMatchObject({
-      rawStock: 2,
-      netAfterSafety: 1,
+      rawStock: 1,
+      netAfterSafety: 0,
       sellableStock: 0,
       status: "BELOW_THRESHOLD",
     });

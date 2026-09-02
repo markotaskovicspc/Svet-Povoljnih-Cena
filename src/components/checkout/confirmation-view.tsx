@@ -581,7 +581,7 @@ function OrderRecap({ order }: { order: Order }) {
         ) : null}
         {order.voucherDiscount && order.voucherCode ? (
           <Row
-            label={`Vaučer „${order.voucherCode}"`}
+            label={`Vaučer „${order.voucherCode}”`}
             value={`−${formatRsd(order.voucherDiscount)}`}
             action
           />

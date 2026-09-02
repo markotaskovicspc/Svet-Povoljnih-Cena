@@ -37,6 +37,7 @@ describe("Rabalux supplier email", () => {
     expect(message.text).toContain("7996 × 2");
     expect(message.text).toContain("AAA8503000010");
     expect(message.text).not.toMatch(/cena|12[.,]999|DC-/i);
+    expect(message.text).not.toMatch(/garant|predračun|predracun/i);
     expect(supplierShippingDocumentsIdempotencyKey("ful-1")).toBe(
       "supplier-shipping-documents:ful-1:initial",
     );

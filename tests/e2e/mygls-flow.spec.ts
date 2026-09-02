@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PDFDocument } from "pdf-lib";
 import { config as loadEnv } from "dotenv";
+import { applyShipmentEvent } from "@/lib/courier/registry";
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -354,6 +355,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
     });
 
     let shipmentId = "";
+    let secondaryShipmentId = "";
     await test.step("provider payload zaokružuje samo dimenzije, ne i težinu", async () => {
       const [batch, shipments, requestLog, storageHealth] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({ where: { id: batchId } }),
@@ -378,9 +380,17 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
 
       expect(shipments).toHaveLength(2);
       const shipment = shipments.find((candidate) => candidate.packageCount === 12);
+      const secondaryShipment = shipments.find(
+        (candidate) => candidate.packageCount === 1,
+      );
       expect(shipment).toBeDefined();
+      expect(secondaryShipment).toBeDefined();
       if (!shipment) throw new Error("Primarna MyGLS pošiljka nije pronađena.");
+      if (!secondaryShipment) {
+        throw new Error("Sekundarna MyGLS pošiljka nije pronađena.");
+      }
       shipmentId = shipment.id;
+      secondaryShipmentId = secondaryShipment.id;
       expect(shipment.provider).toBe("MYGLS");
       expect(shipment.status).toBe("CREATED");
       expect(shipment.packageCount).toBe(12);
@@ -534,20 +544,64 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       ).toHaveAttribute("href", `/api/admin/erp/preuzimanja/${batchId}/labels`);
     });
 
-    await test.step("fizičko preuzimanje se beleži jednom i šalje u izolovani outbox", async () => {
+    await test.step("provider status automatski vodi delimično pa kompletno preuzimanje", async () => {
+      const [primary, secondary] = await Promise.all([
+        db.shipment.findUniqueOrThrow({ where: { id: shipmentId } }),
+        db.shipment.findUniqueOrThrow({ where: { id: secondaryShipmentId } }),
+      ]);
+      if (!primary.trackingNo || !secondary.trackingNo) {
+        throw new Error("MyGLS tracking brojevi nisu sačuvani.");
+      }
+      const pickedUpAt = new Date(Date.now() + 60_000);
+      await expect(
+        applyShipmentEvent("COURIER_SMALL", {
+          trackingNo: primary.trackingNo,
+          status: "PICKED_UP",
+          providerStatusCode: "3",
+          providerEventId: `qa-mygls-picked-up:${primary.id}`,
+          occurredAt: pickedUpAt,
+        }),
+      ).resolves.toMatchObject({ eventCreated: true, stateApplied: true });
+
       await page.goto(`/admin/erp/preuzimanja/${batchId}`, {
         waitUntil: "domcontentloaded",
       });
       await expect(
         page.getByText("Aktivne GLS adresnice u ovom nalogu: 13 (13 paketa)."),
       ).toBeVisible();
-      await acceptConfirmation(
-        page,
+      await expect(page.getByText("Delimično preuzeto", { exact: true })).toBeVisible();
+      await expect(
         page.getByRole("button", { name: "Sve preuzeto", exact: true }),
-      );
-      await expect(page.getByRole("status")).toContainText(
-        "Kurir je evidentiran za sve pošiljke (2/2) i pakete (13/13)",
-      );
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("Kurir je preuzeo 1/2 pošiljki i 12/13 paketa.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+
+      const partialBatch = await db.pickupBatch.findUniqueOrThrow({
+        where: { id: batchId },
+      });
+      expect(partialBatch.status).toBe("BOOKED");
+
+      await expect(
+        applyShipmentEvent("COURIER_SMALL", {
+          trackingNo: secondary.trackingNo,
+          status: "PICKED_UP",
+          providerStatusCode: "3",
+          providerEventId: `qa-mygls-picked-up:${secondary.id}`,
+          occurredAt: new Date(pickedUpAt.getTime() + 1_000),
+        }),
+      ).resolves.toMatchObject({ eventCreated: true, stateApplied: true });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByText("Kompletno preuzeto", { exact: true })).toBeVisible();
+      await expect(
+        page.getByText(
+          "Kurir je preuzeo sve pošiljke i pakete (2/2 pošiljki · 13/13 paketa).",
+          { exact: true },
+        ),
+      ).toBeVisible();
+
       const [batch, lines, jobs] = await Promise.all([
         db.pickupBatch.findUniqueOrThrow({ where: { id: batchId } }),
         db.pickupBatchLine.findMany({ where: { batchId } }),
@@ -560,12 +614,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       ]);
       expect(batch.status).toBe("PICKED_UP");
       expect(lines.every((line) => line.courierPickedUpAt != null)).toBe(true);
-      expect(jobs).toHaveLength(2);
-      expect(jobs[0]!.status).toBe("QUEUED");
-      expect(jobs[0]!.payload).toMatchObject({
-        batchId,
-        batchNumber: batch.number,
-      });
+      expect(jobs).toHaveLength(0);
     });
 
     await popup?.close().catch(() => undefined);

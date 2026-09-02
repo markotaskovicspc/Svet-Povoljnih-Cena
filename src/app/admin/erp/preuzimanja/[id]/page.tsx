@@ -17,7 +17,6 @@ import {
   postPickupBatches,
   removePickupGroupFromBatch,
   savePickupPackage,
-  updatePickupBatchCourierHandover,
 } from "@/lib/admin/pickup-batch.server";
 import {
   isPickupBatchEditable,
@@ -204,49 +203,6 @@ async function postAction(
   )(formData);
 }
 
-async function updateCourierHandoverAction(
-  _state: AdminActionState,
-  formData: FormData,
-) {
-  "use server";
-  return withAdminState(
-    {
-      allowed: ["OPS"],
-      action: "pickup-batch.courier-handover.update",
-      entity: "PickupBatch",
-    },
-    async (actorId, actionData: FormData) => {
-      const parsed = batchSchema.safeParse({
-        batchId: actionData.get("batchId"),
-      });
-      const pickedUpGroupKeys = actionData
-        .getAll("pickedUpGroupKeys")
-        .map(String)
-        .map((key) => key.trim())
-        .filter(Boolean);
-      if (!parsed.success || pickedUpGroupKeys.length > 500) {
-        return { ok: false as const, error: "Izbor pošiljki nije ispravan." };
-      }
-      const result = await updatePickupBatchCourierHandover(
-        parsed.data.batchId,
-        pickedUpGroupKeys,
-        actorId,
-      );
-      revalidatePickupPaths(parsed.data.batchId);
-      return {
-        ok: true as const,
-        entityId: parsed.data.batchId,
-        diff: result,
-        message: result.complete
-          ? `Kurir je evidentiran za sve pošiljke (${result.pickedUpGroupCount}/${result.totalGroupCount}) i pakete (${result.pickedUpPackageCount}/${result.totalPackageCount}).`
-          : result.pickedUpGroupCount > 0
-            ? `Sačuvano je delimično preuzimanje: ${result.pickedUpGroupCount}/${result.totalGroupCount} pošiljki i ${result.pickedUpPackageCount}/${result.totalPackageCount} paketa.`
-            : "Evidencija preuzimanja je poništena; nijedna pošiljka nije označena kao preuzeta.",
-      };
-    },
-  )(formData);
-}
-
 export default async function PickupBatchPage({
   params,
   searchParams,
@@ -319,11 +275,17 @@ export default async function PickupBatchPage({
     batch.status,
     handoverProgress,
   );
-  const canRecordCourierHandover =
+  const showCourierHandoverStatus =
     batch.status === "BOOKED" || batch.status === "PICKED_UP";
   const legacyCompleteHandover =
     batch.status === "PICKED_UP" && handoverProgress.pickedUpPackages === 0;
-  const handoverFormId = `courier-handover-${batch.id}`;
+  const displayedHandoverProgress = legacyCompleteHandover
+    ? {
+        ...handoverProgress,
+        pickedUpGroups: handoverProgress.totalGroups,
+        pickedUpPackages: handoverProgress.totalPackages,
+      }
+    : handoverProgress;
   const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
   const invalidPackageCount = rows.filter((row) =>
     myGls
@@ -534,19 +496,19 @@ export default async function PickupBatchPage({
               „Kurirske adresnice“, odštampajte ih i zalepite na pakete.
             </p>
           </div>
-          {canRecordCourierHandover ? (
+          {showCourierHandoverStatus ? (
             <p
               className={
-                handoverStatus === "Delimično preuzeta"
+                handoverStatus === "Delimično preuzeto"
                   ? "mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
                   : "mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success"
               }
             >
-              {handoverStatus === "Kompletno preuzeta"
+              {handoverStatus === "Kompletno preuzeto"
                 ? `Kurir je preuzeo sve pošiljke i pakete (${handoverProgress.totalGroups}/${handoverProgress.totalGroups} pošiljki · ${handoverProgress.totalPackages}/${handoverProgress.totalPackages} paketa).`
-                : handoverStatus === "Delimično preuzeta"
+                : handoverStatus === "Delimično preuzeto"
                   ? `Kurir je preuzeo ${handoverProgress.pickedUpGroups}/${handoverProgress.totalGroups} pošiljki i ${handoverProgress.pickedUpPackages}/${handoverProgress.totalPackages} paketa.`
-                  : "Adresnice su kreirane, pošiljke su poslate kuriru i nalog je proknjižen. Evidentirajte preuzimanje u picking listi kada kurir fizički preuzme pošiljke."}
+                  : "Adresnice su kreirane i nalog je proknjižen. Status preuzimanja će se automatski promeniti kada kurir evidentira da je preuzeo pošiljke."}
             </p>
           ) : previousPostingIssue && !postingBlockReason ? (
             <p
@@ -602,50 +564,15 @@ export default async function PickupBatchPage({
                   Učitaj porudžbine
                 </SubmitButton>
               </AdminActionForm>
-            ) : canRecordCourierHandover ? (
-              <div className="flex flex-wrap items-end justify-end gap-2">
-                <AdminActionForm
-                  id={handoverFormId}
-                  action={updateCourierHandoverAction}
-                  preserveValues
-                  className="flex flex-wrap items-center justify-end gap-2"
-                >
-                  <input type="hidden" name="batchId" value={batch.id} />
-                  <span className="text-xs text-ink-500">
-                    {handoverProgress.pickedUpGroups}/{handoverProgress.totalGroups}{" "}
-                    pošiljki · {handoverProgress.pickedUpPackages}/
-                    {handoverProgress.totalPackages} paketa
-                  </span>
-                  <SubmitButton
-                    size="sm"
-                    pendingLabel="Čuvanje…"
-                    confirm="Sačuvati označene pošiljke kao fizički preuzete od strane kurira?"
-                  >
-                    Sačuvaj preuzimanje
-                  </SubmitButton>
-                </AdminActionForm>
-                <AdminActionForm
-                  action={updateCourierHandoverAction}
-                  className="flex items-center"
-                >
-                  <input type="hidden" name="batchId" value={batch.id} />
-                  {pickingGroups.map((group) => (
-                    <input
-                      key={group.lineGroupKey}
-                      type="hidden"
-                      name="pickedUpGroupKeys"
-                      value={group.lineGroupKey}
-                    />
-                  ))}
-                  <SubmitButton
-                    size="sm"
-                    variant="outline"
-                    pendingLabel="Čuvanje…"
-                    confirm={`Potvrditi da je kurir preuzeo svih ${pickingGroups.length} pošiljki i ${rows.length} paketa?`}
-                  >
-                    Sve preuzeto
-                  </SubmitButton>
-                </AdminActionForm>
+            ) : showCourierHandoverStatus ? (
+              <div className="rounded-lg bg-muted-bg/60 px-3 py-2 text-right text-xs text-ink-500">
+                <span className="block font-medium text-ink-700">
+                  Automatski status kurira
+                </span>
+                {displayedHandoverProgress.pickedUpGroups}/
+                {displayedHandoverProgress.totalGroups}{" "}
+                pošiljki · {displayedHandoverProgress.pickedUpPackages}/
+                {displayedHandoverProgress.totalPackages} paketa
               </div>
             ) : null}
           </div>
@@ -659,8 +586,8 @@ export default async function PickupBatchPage({
                     <th className="px-3 py-3">Artikli za picking</th>
                     <th className="px-3 py-3 text-right">Paketa</th>
                     <th className="px-3 py-3">Stvarne mere paketa</th>
-                    {canRecordCourierHandover ? (
-                      <th className="px-3 py-3 text-center">Kurir preuzeo</th>
+                    {showCourierHandoverStatus ? (
+                      <th className="px-3 py-3 text-center">Status kurira</th>
                     ) : null}
                     {editing ? <th className="px-3 py-3">Komanda</th> : null}
                   </tr>
@@ -746,31 +673,30 @@ export default async function PickupBatchPage({
                           </div>
                         </details>
                       </td>
-                      {canRecordCourierHandover ? (
+                      {showCourierHandoverStatus ? (
                         <td className="px-3 py-3 text-center">
-                          <label className="inline-flex cursor-pointer flex-col items-center gap-1">
-                            <input
-                              type="checkbox"
-                              name="pickedUpGroupKeys"
-                              value={group.lineGroupKey}
-                              form={handoverFormId}
-                              defaultChecked={
+                          <div className="inline-flex flex-col items-center gap-1">
+                            <span
+                              className={
                                 group.courierPickedUp || legacyCompleteHandover
+                                  ? "rounded-full bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-success/20"
+                                  : "rounded-full bg-warning/10 px-2 py-1 text-xs font-medium text-warning ring-1 ring-warning/20"
                               }
-                              aria-label={`Kurir preuzeo ${group.sourceLabel}`}
-                              className="size-4 accent-brand-blue"
-                            />
-                            <span className="text-xs font-medium text-ink-700">
+                            >
                               {group.courierPickedUp || legacyCompleteHandover
-                                ? "Da"
-                                : "Ne"}
+                                ? "Preuzeto"
+                                : "Čeka status kurira"}
                             </span>
                             {group.courierPickedUpAt ? (
                               <span className="whitespace-nowrap text-[11px] text-ink-500">
                                 {formatDateTime(group.courierPickedUpAt)}
                               </span>
+                            ) : legacyCompleteHandover ? (
+                              <span className="text-[11px] text-ink-500">
+                                Istorijski status naloga
+                              </span>
                             ) : null}
-                          </label>
+                          </div>
                         </td>
                       ) : null}
                       {editing ? (

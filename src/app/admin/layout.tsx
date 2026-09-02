@@ -98,7 +98,10 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-canvas print:min-h-0 print:bg-white">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1600px] md:grid-cols-[260px_1fr] print:block print:min-h-0 print:max-w-none">
+      <div
+        data-admin-shell
+        className="grid min-h-screen w-full md:grid-cols-[260px_1fr] print:block print:min-h-0"
+      >
         <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-border/60 bg-surface md:block print:hidden">
           <AdminSidebar nav={nav} availableNav={availableNavWithViews} />
         </aside>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
 type OrderOption = {
   number: string;
@@ -525,9 +526,11 @@ async function optimizePhoto(file: File) {
         canvas.toBlob(resolve, "image/webp", quality),
       );
       if (blob && blob.size <= MAX_PHOTO_BYTES) {
-        const baseName = file.name.replace(/\.[^.]+$/, "") || "fotografija";
         return {
-          file: new File([blob], `${baseName}.webp`, { type: "image/webp" }),
+          // Safari can fall back to PNG when WebP canvas encoding is not
+          // available. Preserve the actual Blob type so the extension, signed
+          // upload MIME type and server-side content check stay consistent.
+          file: createReclamationPhotoFile(blob, file.name),
           width,
           height,
         };

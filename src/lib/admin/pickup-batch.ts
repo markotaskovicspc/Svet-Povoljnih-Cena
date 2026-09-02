@@ -82,13 +82,12 @@ export function pickupBatchDisplayStatus(
     progress.totalGroups > 0 &&
     progress.pickedUpGroups === progress.totalGroups
   ) {
-    return "Kompletno preuzeta";
+    return "Kompletno preuzeto";
   }
-  if (progress.pickedUpPackages > 0) return "Delimično preuzeta";
-  // Existing MyGLS batches may already be complete without the newly added
-  // per-group handover markers. Preserve their meaning until an admin edits
-  // the new checklist, which will backfill the markers.
-  if (status === "PICKED_UP") return "Kompletno preuzeta";
+  if (progress.pickedUpPackages > 0) return "Delimično preuzeto";
+  // Existing batches may already be complete without per-group provider
+  // timestamps. Preserve their historical meaning in the read-only view.
+  if (status === "PICKED_UP") return "Kompletno preuzeto";
   return PICKUP_BATCH_STATUS_LABEL[status];
 }
 

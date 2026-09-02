@@ -10,6 +10,7 @@
  * a summary without re-reading the cart (cart gets cleared post-submit).
  */
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { Address, Order } from "@/types";
 export {
   ASSEMBLY_PRICE_DEFAULT,
@@ -32,6 +33,16 @@ export interface AppliedVoucher {
   discountRsd: number;
   /** Display label (e.g. "−10%" or "−1.500 RSD"). */
   label: string;
+  /** Merchandise subtotal against which the server calculated the discount. */
+  validatedSubtotalRsd: number;
+}
+
+export function voucherDiscountForSubtotal(
+  voucher: AppliedVoucher | null,
+  subtotal: number,
+) {
+  if (!voucher || voucher.validatedSubtotalRsd !== subtotal) return 0;
+  return Math.min(Math.max(0, voucher.discountRsd), Math.max(0, subtotal));
 }
 
 interface CheckoutState {
@@ -48,28 +59,40 @@ interface CheckoutState {
   reset: () => void;
 }
 
-export const useCheckout = create<CheckoutState>()((set) => ({
-  step: "identity",
-  identity: "guest",
-  voucher: null,
-  lastOrder: null,
-  setStep: (step) => set({ step }),
-  setIdentity: (identity) => set({ identity }),
-  applyVoucher: (voucher) => set({ voucher }),
-  setLastOrder: (lastOrder) => set({ lastOrder }),
-  resetProgress: () =>
-    set({
-      step: "identity",
-      identity: "guest",
-      voucher: null,
-    }),
-  reset: () =>
-    set({
+export const useCheckout = create<CheckoutState>()(
+  persist(
+    (set) => ({
       step: "identity",
       identity: "guest",
       voucher: null,
       lastOrder: null,
+      setStep: (step) => set({ step }),
+      setIdentity: (identity) => set({ identity }),
+      applyVoucher: (voucher) => set({ voucher }),
+      setLastOrder: (lastOrder) => set({ lastOrder }),
+      resetProgress: () =>
+        set({
+          step: "identity",
+          identity: "guest",
+          voucher: null,
+        }),
+      reset: () =>
+        set({
+          step: "identity",
+          identity: "guest",
+          voucher: null,
+          lastOrder: null,
+        }),
     }),
-}));
+    {
+      // A voucher must survive cart → checkout and an accidental reload, but
+      // checkout identity, addresses and order snapshots remain transient.
+      name: "spc-checkout-voucher",
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({ voucher: state.voucher }),
+      version: 1,
+    },
+  ),
+);
 
 export type AddressDraft = Omit<Address, "id"> & { liceType?: "fizicko" | "pravno" };

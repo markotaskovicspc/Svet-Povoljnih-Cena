@@ -14,6 +14,7 @@ import { CartPricingSync } from "@/components/cart/cart-pricing-sync";
 import { CustomerCommerceSync } from "@/components/cart/customer-commerce-sync";
 import { CustomerSessionSync } from "@/components/account/customer-session-sync";
 import { CartDrawerAuthReturn } from "@/components/cart/cart-drawer-auth-return";
+import { VoucherPricingSync } from "@/components/checkout/voucher-pricing-sync";
 
 export function Providers({
   children,
@@ -29,6 +30,7 @@ export function Providers({
       <PricingEligibilityProvider isCustomerLoggedIn={isCustomerLoggedIn}>
         <MotionConfig reducedMotion="user">
           <CartPricingSync />
+          <VoucherPricingSync />
           <CustomerCommerceSync />
           <TooltipProvider delay={150}>
             {children}

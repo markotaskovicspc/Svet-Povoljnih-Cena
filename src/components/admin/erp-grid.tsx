@@ -133,7 +133,21 @@ function formatValue(value: ErpValue, column: ErpColumn) {
   return textValue(value);
 }
 
-function statusClass(value: ErpValue) {
+const STATUS_TONE_CLASS: Record<
+  NonNullable<ErpColumn["statusToneByValue"]>[string],
+  string
+> = {
+  blue: "bg-brand-blue-50 text-brand-blue ring-brand-blue/15",
+  yellow: "bg-warning/10 text-warning ring-warning/20",
+  green: "bg-success/10 text-success ring-success/20",
+  red: "bg-danger/10 text-danger ring-danger/20",
+  purple: "bg-purple-50 text-purple-700 ring-purple-200",
+  neutral: "bg-ink-500/10 text-ink-500 ring-ink-500/20",
+};
+
+function statusClass(value: ErpValue, column?: ErpColumn) {
+  const configuredTone = column?.statusToneByValue?.[textValue(value)];
+  if (configuredTone) return STATUS_TONE_CLASS[configuredTone];
   const v = textValue(value).toLowerCase();
   if (["neuspešno", "odbijeno"].some((x) => v.includes(x))) {
     return "bg-danger/10 text-danger ring-danger/20";
@@ -236,7 +250,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     if (
       moduleSlug === "prodajni-nalozi" &&
       window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
-        "courier-status-v1"
+        "operational-status-v2"
     ) {
       const migrated = completeOrder.filter(
         (key) =>
@@ -244,7 +258,8 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
           key !== "paymentStatus" &&
           key !== "purchaseIdentity" &&
           key !== "courierService" &&
-          key !== "courierStatus",
+          key !== "courierStatus" &&
+          key !== "status",
       );
       const channelIndex = migrated.indexOf("channel");
       migrated.splice(
@@ -253,9 +268,8 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
         "paymentMethod",
         "paymentStatus",
       );
-      const statusIndex = migrated.indexOf("status");
       migrated.splice(
-        statusIndex >= 0 ? statusIndex + 1 : migrated.length,
+        migrated.length,
         0,
         "courierService",
         "courierStatus",
@@ -269,7 +283,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(
         columnOrderVersionKey(moduleSlug),
-        "courier-status-v1",
+        "operational-status-v2",
       );
       return migrated;
     }
@@ -372,11 +386,19 @@ export function ErpGrid({
       ? (initialView?.searchColumn ?? initialSearchColumn)
       : "",
   );
-  const [filters, setFilters] = useState<AdminGridFilter[]>(
-    initialView?.filters ?? [],
+  const knownColumnKeys = useMemo(
+    () => new Set(module.columns.map((column) => column.key)),
+    [module.columns],
   );
-  const [sorting, setSorting] = useState<AdminGridSort[]>(
-    initialView?.sorting ?? [],
+  const [filters, setFilters] = useState<AdminGridFilter[]>(() =>
+    (initialView?.filters ?? []).filter((filter) =>
+      knownColumnKeys.has(filter.columnKey),
+    ),
+  );
+  const [sorting, setSorting] = useState<AdminGridSort[]>(() =>
+    (initialView?.sorting ?? []).filter((sort) =>
+      knownColumnKeys.has(sort.columnKey),
+    ),
   );
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
   const [cellEdits, setCellEdits] = useState<Record<string, Record<string, ErpValue>>>({});
@@ -917,19 +939,31 @@ export function ErpGrid({
   };
 
   const applyView = (view: SavedView) => {
-    updateVisibleColumns(view.visibleColumns);
+    const visible = view.visibleColumns.filter((key) => knownColumnKeys.has(key));
+    updateVisibleColumns(visible.length ? visible : defaultColumns);
     if (view.columnOrder?.length) {
-      setColumnOrder(view.columnOrder);
-      writeColumnOrder(module.slug, view.columnOrder);
+      const savedOrder = view.columnOrder.filter((key) => knownColumnKeys.has(key));
+      const completeOrder = [
+        ...savedOrder,
+        ...module.columns
+          .map((column) => column.key)
+          .filter((key) => !savedOrder.includes(key)),
+      ];
+      setColumnOrder(completeOrder);
+      writeColumnOrder(module.slug, completeOrder);
     }
     setColumnWidths(view.columnWidths ?? {});
     updateFilters(
-      view.filters.map((filter) => ({
-        ...filter,
-        operator: filter.operator ?? "contains",
-      })),
+      view.filters
+        .filter((filter) => knownColumnKeys.has(filter.columnKey))
+        .map((filter) => ({
+          ...filter,
+          operator: filter.operator ?? "contains",
+        })),
     );
-    updateSorting(view.sorting ?? []);
+    updateSorting(
+      (view.sorting ?? []).filter((sort) => knownColumnKeys.has(sort.columnKey)),
+    );
     updateQuery(view.query);
     setSearchColumn(view.searchColumn ?? "");
     setContext((current) => ({ ...current, ...(view.context ?? {}) }));
@@ -1898,7 +1932,7 @@ export function ErpGrid({
                               className={cn(
                                 "inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1",
                                 isCellEditable && "cursor-text",
-                                statusClass(value),
+                                statusClass(value, column),
                               )}
                               title={
                                 isCellEditable

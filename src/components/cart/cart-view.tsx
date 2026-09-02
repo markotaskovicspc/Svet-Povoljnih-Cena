@@ -7,7 +7,10 @@ import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
-import { useCheckout } from "@/lib/checkout/store";
+import {
+  useCheckout,
+  voucherDiscountForSubtotal,
+} from "@/lib/checkout/store";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 import { useSession } from "next-auth/react";
@@ -90,10 +93,6 @@ export function CartView() {
       >
         <Link
           href="/checkout/podaci"
-          onClick={(event) => {
-            event.preventDefault();
-            window.location.assign("/checkout/podaci");
-          }}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 mx-auto inline-flex w-full max-w-[var(--container-page)] items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none"
         >
           Nastavi ka podacima za isporuku
@@ -152,7 +151,7 @@ function CartSummary({
   const [checkingVoucher, setCheckingVoucher] = useState(false);
   const shippingMethod = quote?.recommendedMethod ?? null;
   const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
-  const voucherDiscount = Math.min(voucher?.discountRsd ?? 0, subtotal);
+  const voucherDiscount = voucherDiscountForSubtotal(voucher, subtotal);
   const total =
     shipping == null
       ? null
@@ -183,6 +182,7 @@ function CartSummary({
         code: result.code,
         label: result.label,
         discountRsd: result.discountRsd,
+        validatedSubtotalRsd: subtotal,
       });
       setCode(result.code);
     } else {
@@ -302,10 +302,6 @@ function CartSummary({
 
         <Link
           href="/checkout/podaci"
-          onClick={(event) => {
-            event.preventDefault();
-            window.location.assign("/checkout/podaci");
-          }}
           className="bg-ink-900 hover:bg-walnut focus-visible:ring-walnut/40 hidden items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-canvas transition focus-visible:ring-2 focus-visible:outline-none md:inline-flex"
         >
           Nastavi ka podacima za isporuku

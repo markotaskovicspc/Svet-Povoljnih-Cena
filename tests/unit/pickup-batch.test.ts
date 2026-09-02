@@ -88,14 +88,14 @@ describe("ERP module 13 pickup batches", () => {
       pickedUpPackages: 2,
     });
     expect(pickupBatchDisplayStatus("BOOKED", partial)).toBe(
-      "Delimično preuzeta",
+      "Delimično preuzeto",
     );
 
     const complete = pickupBatchHandoverProgress(
       lines.map((line) => ({ ...line, courierPickedUpAt: pickedAt })),
     );
     expect(pickupBatchDisplayStatus("PICKED_UP", complete)).toBe(
-      "Kompletno preuzeta",
+      "Kompletno preuzeto",
     );
   });
 
@@ -104,7 +104,7 @@ describe("ERP module 13 pickup batches", () => {
       { lineGroupKey: "order:1", courierPickedUpAt: null },
     ]);
     expect(pickupBatchDisplayStatus("PICKED_UP", emptyProgress)).toBe(
-      "Kompletno preuzeta",
+      "Kompletno preuzeto",
     );
     expect(pickupBatchDisplayStatus("BOOKED", emptyProgress)).toBe("Proknjižen");
   });

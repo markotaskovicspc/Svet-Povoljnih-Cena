@@ -45,6 +45,7 @@ import {
 import {
   normalizeOrderItemIds,
   readShipmentAssignment,
+  sameShipmentAssignment,
 } from "./shipment-assignment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
@@ -474,6 +475,13 @@ export async function applyShipmentEvent(
     service === "COURIER_SMALL"
       ? await getSelectedSmallParcelProvider()
       : null;
+  const appliedProvider =
+    shipment.provider ??
+    (service === "COURIER_SMALL"
+      ? selectedSmallProvider === "MYGLS"
+        ? MYGLS_PROVIDER
+        : X_EXPRESS_PROVIDER
+      : null);
   let eventCreated = false;
   let stateApplied = false;
 
@@ -519,12 +527,7 @@ export async function applyShipmentEvent(
       },
       data: {
         provider:
-          shipment.provider ??
-          (service === "COURIER_SMALL"
-            ? selectedSmallProvider === "MYGLS"
-              ? MYGLS_PROVIDER
-              : X_EXPRESS_PROVIDER
-            : undefined),
+          appliedProvider ?? undefined,
         status: event.status,
         providerStatusCode: event.providerStatusCode ?? shipment.providerStatusCode,
         lastStatusEventAt: occurredAt,
@@ -617,18 +620,20 @@ export async function applyShipmentEvent(
         );
       }
     }
+    if (
+      appliedProvider &&
+      PICKUP_PROOF_STATUSES.includes(event.status)
+    ) {
+      await reconcilePickupBatchesFromShipment(tx, {
+        orderId: shipment.orderId,
+        reclamationId: shipment.reclamationId,
+        purpose: shipment.purpose,
+        provider: appliedProvider,
+        rawCreateResponse: shipment.rawCreateResponse,
+        occurredAt,
+      });
+    }
   });
-
-  if (
-    eventCreated &&
-    stateApplied &&
-    shipment.provider === MYGLS_PROVIDER &&
-    ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
-      event.status,
-    )
-  ) {
-    await markCompletedMyGlsPickupBatches(shipment.orderId);
-  }
 
   return {
     shipmentId: shipment.id,
@@ -642,42 +647,116 @@ export async function applyShipmentEvent(
   };
 }
 
-async function markCompletedMyGlsPickupBatches(orderId: string) {
-  const batches = await db.pickupBatch.findMany({
+const PICKUP_PROOF_STATUSES: ShipmentStatus[] = [
+  "PICKED_UP",
+  "IN_TRANSIT",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+  "RETURNED",
+];
+
+async function reconcilePickupBatchesFromShipment(
+  tx: Prisma.TransactionClient,
+  shipment: {
+    orderId: string;
+    reclamationId: string | null;
+    purpose: ShipmentPurpose;
+    provider: string;
+    rawCreateResponse: unknown;
+    occurredAt: Date;
+  },
+) {
+  const batches = await tx.pickupBatch.findMany({
     where: {
-      provider: MYGLS_PROVIDER,
-      status: "BOOKED",
-      lines: { some: { orderId } },
+      provider: shipment.provider,
+      status: { in: ["BOOKED", "PICKED_UP"] },
+      lines: {
+        some:
+          shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+          shipment.reclamationId
+            ? {
+                reclamationId: shipment.reclamationId,
+                purpose: "RECLAMATION_REPLACEMENT",
+              }
+            : {
+                orderId: shipment.orderId,
+                purpose: "ORDER_DELIVERY",
+              },
+      },
     },
     select: {
       id: true,
-      lines: { select: { orderId: true } },
+      lines: {
+        select: {
+          lineGroupKey: true,
+          orderId: true,
+          orderItemId: true,
+          reclamationId: true,
+          purpose: true,
+        },
+      },
     },
   });
-  const pickedUpStatuses: ShipmentStatus[] = [
-    "PICKED_UP",
-    "IN_TRANSIT",
-    "OUT_FOR_DELIVERY",
-    "DELIVERED",
-  ];
+
   for (const batch of batches) {
-    const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
-    const shipments = await db.shipment.findMany({
-      where: {
-        orderId: { in: orderIds },
-        provider: MYGLS_PROVIDER,
-        purpose: "ORDER_DELIVERY",
-        status: { in: pickedUpStatuses },
-      },
-      select: { orderId: true },
+    const matchingLines = batch.lines.filter((line) => {
+      if (shipment.purpose === "RECLAMATION_REPLACEMENT") {
+        return Boolean(
+          shipment.reclamationId &&
+            line.purpose === "RECLAMATION_REPLACEMENT" &&
+            line.reclamationId === shipment.reclamationId &&
+            line.lineGroupKey === `reclamation:${shipment.reclamationId}`,
+        );
+      }
+      return (
+        line.purpose === "ORDER_DELIVERY" &&
+        line.orderId === shipment.orderId &&
+        line.lineGroupKey ===
+          `order:${shipment.orderId}:${shipment.provider}`
+      );
     });
-    const pickedUpOrderIds = new Set(shipments.map((item) => item.orderId));
-    if (orderIds.every((id) => pickedUpOrderIds.has(id))) {
-      await db.pickupBatch.updateMany({
-        where: { id: batch.id, status: "BOOKED" },
-        data: { status: "PICKED_UP" },
-      });
+    if (!matchingLines.length) continue;
+
+    if (shipment.purpose === "ORDER_DELIVERY") {
+      const groupItemIds = normalizeOrderItemIds(
+        matchingLines.flatMap((line) =>
+          line.orderItemId ? [line.orderItemId] : [],
+        ),
+      );
+      const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+      if (
+        assignment &&
+        (!groupItemIds.length ||
+          !sameShipmentAssignment(
+            shipment.rawCreateResponse,
+            groupItemIds,
+          ))
+      ) {
+        continue;
+      }
     }
+
+    const groupKeys = Array.from(
+      new Set(matchingLines.map((line) => line.lineGroupKey)),
+    );
+    await tx.pickupBatchLine.updateMany({
+      where: {
+        batchId: batch.id,
+        lineGroupKey: { in: groupKeys },
+        courierPickedUpAt: null,
+      },
+      data: {
+        courierPickedUpAt: shipment.occurredAt,
+        courierPickedUpById: null,
+      },
+    });
+    const remainingPackages = await tx.pickupBatchLine.count({
+      where: { batchId: batch.id, courierPickedUpAt: null },
+    });
+    await tx.pickupBatch.updateMany({
+      where: { id: batch.id, status: { in: ["BOOKED", "PICKED_UP"] } },
+      data: { status: remainingPackages === 0 ? "PICKED_UP" : "BOOKED" },
+    });
   }
 }
 

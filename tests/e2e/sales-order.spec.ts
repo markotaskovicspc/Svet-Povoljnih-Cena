@@ -420,9 +420,12 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
     });
 
     await test.step("pregled sadrži sve zahtevane komande i kolone", async () => {
+      await page.setViewportSize({ width: 1920, height: 1080 });
       await page.goto("/admin/erp/prodajni-nalozi", {
         waitUntil: "domcontentloaded",
       });
+      const shellBox = await page.locator("[data-admin-shell]").boundingBox();
+      expect(shellBox?.width ?? 0).toBeGreaterThan(1800);
       await expect(
         page.getByRole("heading", { name: "Pregled porudžbina" }),
       ).toBeVisible();
@@ -439,7 +442,6 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         "Kanal",
         "Način plaćanja",
         "Status plaćanja",
-        "Status porudžbine",
         "Kurirska služba",
         "Status kurirske pošiljke",
         "Datum fiskalizacije",
@@ -481,6 +483,9 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
           }),
         ).toBeVisible();
       }
+      await expect(
+        page.getByRole("columnheader", { name: "Status porudžbine" }),
+      ).toHaveCount(0);
 
       const search = page.getByPlaceholder("Brza pretraga po vidljivim kolonama");
       await search.fill(webOrderNumber);

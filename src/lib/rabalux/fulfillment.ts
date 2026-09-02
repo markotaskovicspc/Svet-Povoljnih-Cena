@@ -13,6 +13,7 @@ import {
   isCashOnDeliveryPaymentMethod,
 } from "@/lib/payments/fulfillment-readiness";
 import {
+  assertRabaluxSupplierAttachmentSet,
   buildRabaluxPackingPdf,
   buildRabaluxShipmentAttachments,
 } from "./documents";
@@ -246,6 +247,7 @@ export async function sendSupplierShippingDocumentsEmail(args: {
       orderNumber: fulfillment.order.number,
       packingPdf,
     });
+    assertRabaluxSupplierAttachmentSet(attachments);
     const message = supplierShippingDocumentsMessage({
       orderNumber: fulfillment.order.number,
       trackingNo: shipment.trackingNo,

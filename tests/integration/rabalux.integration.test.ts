@@ -302,11 +302,11 @@ function rabaluxStockFeed(
 }
 
 describe("Rabalux checkout integration", () => {
-  it("moves 2→3→2 through the public threshold without a DC exception", async () => {
+  it("moves 1→2→1 through the public threshold without a DC exception", async () => {
     const product = await createProduct({
       suffix: "THRESHOLD",
       warehouseStock: 0,
-      supplierStock: 2,
+      supplierStock: 1,
     });
     const visible = () =>
       db.product.count({
@@ -327,12 +327,12 @@ describe("Rabalux checkout integration", () => {
     expect(await visibleAsOutOfStock()).toBe(0);
     await db.product.update({
       where: { id: product.id },
-      data: { supplierStock: 3, lastSupplierStockSyncAt: new Date() },
+      data: { supplierStock: 2, lastSupplierStockSyncAt: new Date() },
     });
     expect(await visible()).toBe(1);
     await db.product.update({
       where: { id: product.id },
-      data: { supplierStock: 2, dcAvailableQty: 0 },
+      data: { supplierStock: 1, dcAvailableQty: 0 },
     });
     expect(await visible()).toBe(0);
     await db.product.update({

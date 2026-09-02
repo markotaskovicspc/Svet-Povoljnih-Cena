@@ -3,6 +3,22 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 
+// A non-final order temporarily reserves voucher capacity. A cancelled or
+// returned order releases that reservation unless a SALE receipt was already
+// issued, in which case the confirmed business rule still counts it as used.
+const voucherCapacityReservationWhere = {
+  order: {
+    OR: [
+      { status: { notIn: ["OTKAZANO", "VRACENO"] } },
+      {
+        fiscalDocuments: {
+          some: { kind: "SALE", status: "ISSUED" },
+        },
+      },
+    ],
+  },
+} satisfies Prisma.VoucherRedemptionWhereInput;
+
 /**
  * Voucher validation (Phase 3C — item 3 of checkout flow / item 7 of plan).
  *
@@ -38,13 +54,7 @@ export async function validateVoucher(
     where: { code },
     include: {
       redemptions: {
-        where: {
-          order: {
-            fiscalDocuments: {
-              some: { kind: "SALE", status: "ISSUED" },
-            },
-          },
-        },
+        where: voucherCapacityReservationWhere,
         select: { userId: true },
       },
     },
@@ -146,11 +156,7 @@ export async function validateVoucherForCheckout(
     const used = await tx.voucherRedemption.count({
       where: {
         voucherCode: v.code,
-        order: {
-          fiscalDocuments: {
-            some: { kind: "SALE", status: "ISSUED" },
-          },
-        },
+        ...voucherCapacityReservationWhere,
       },
     });
     if (used >= v.usageLimit) {
@@ -163,11 +169,7 @@ export async function validateVoucherForCheckout(
       where: {
         voucherCode: v.code,
         userId,
-        order: {
-          fiscalDocuments: {
-            some: { kind: "SALE", status: "ISSUED" },
-          },
-        },
+        ...voucherCapacityReservationWhere,
       },
     });
     if (usedByUser >= v.perUserLimit) {

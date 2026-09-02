@@ -30,6 +30,7 @@ const order: InvoiceOrderInput = {
     street: "Glavna 1",
     postalCode: "11000",
     city: "Beograd",
+    phone: "0601234567",
   },
 };
 
@@ -43,6 +44,7 @@ const businessOrder: InvoiceOrderInput = {
     street: "Poslovna 12",
     postalCode: "21000",
     city: "Novi Sad",
+    phone: "0601234567",
   },
 };
 
@@ -74,6 +76,7 @@ describe("customer PDF documents", () => {
     expect(pdf).toContain("/Subtype /Image");
     expect(pdf).toContain("/MediaBox [0 0 595 842]");
     expect(bytes.length).toBeGreaterThan(20_000);
+    expect(invoiceBuyerLines(order)).toContain("Telefon: 0601234567");
     if (process.env.INVOICE_PDF_SAMPLE_PATH) {
       writeFileSync(process.env.INVOICE_PDF_SAMPLE_PATH, bytes);
     }
@@ -111,6 +114,7 @@ describe("customer PDF documents", () => {
       "PIB: 109876543",
       "Kontakt osoba: Milan Jovanović",
       "Adresa: Poslovna 12, 21000 Novi Sad",
+      "Telefon: 0601234567",
     ]);
   });
 
@@ -121,6 +125,7 @@ describe("customer PDF documents", () => {
       "PIB: 106986493",
       "Kontakt osoba: Darko Stanić",
       "Adresa: Tihomira Vuksanovića 45, 34000 Kragujevac",
+      "Telefon: 0601234567",
     ]);
     expect(withdrawalBuyerLines(shippingBusinessWithPersonalBilling)).toEqual([
       "Pravno lice: DSF DOO",
