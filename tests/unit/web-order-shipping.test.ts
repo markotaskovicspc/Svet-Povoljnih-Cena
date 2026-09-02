@@ -109,4 +109,20 @@ describe("WEB order shipping contact editing", () => {
       expect(plan.reason).toContain("već preuzeta");
     }
   });
+
+  it("does not treat a recoverable MyGLS status-mapping failure as a missing waybill", () => {
+    const plan = planWebOrderShippingEdit([
+      shipment({
+        status: "FAILED",
+        providerStatusCode: "86",
+        labelObjectKey: "mygls/order/shipment.pdf",
+        syncError: null,
+      }),
+    ]);
+    expect(plan.kind).toBe("BLOCKED");
+    if (plan.kind === "BLOCKED") {
+      expect(plan.activeShipments).toHaveLength(1);
+      expect(plan.reason).toContain("već preuzeta");
+    }
+  });
 });

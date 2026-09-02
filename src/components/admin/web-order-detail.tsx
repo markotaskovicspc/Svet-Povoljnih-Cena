@@ -53,11 +53,13 @@ import {
 } from "@/lib/admin/web-order-payment";
 import { updateWebOrderShippingContact } from "@/lib/admin/web-order-shipping.server";
 import {
+  isActiveWebOrderShipment,
   planWebOrderShippingEdit,
   shippingEditPickupBatchBlockReason,
   shippingEditWaybillQuestion,
   type WebOrderShippingEditPlan,
 } from "@/lib/admin/web-order-shipping";
+import { effectiveMyGlsShipmentStatus } from "@/lib/mygls/status";
 import {
   canConfirmSupplierFulfillment,
   canResendSupplierOrder,
@@ -1429,7 +1431,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const allOrderItemIds = order.items.map((item) => item.id);
   const assignedOrderItemIds = new Set<string>();
   for (const shipment of order.shipments) {
-    if (shipment.purpose !== "ORDER_DELIVERY" || shipment.status === "FAILED") {
+    if (!isActiveWebOrderShipment(shipment)) {
       continue;
     }
     const assignment = readShipmentAssignment(shipment.rawCreateResponse);
@@ -1457,10 +1459,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-  const activeDeliveryShipments = order.shipments.filter(
-    (shipment) =>
-      shipment.purpose === "ORDER_DELIVERY" && shipment.status !== "FAILED",
-  );
+  const activeDeliveryShipments = order.shipments.filter(isActiveWebOrderShipment);
   const allCourierAssignmentsActive =
     availableCourierItems.length === 0 &&
     activeDeliveryShipments.length > 0 &&
@@ -1570,10 +1569,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
     saleFiscalDocumentCount === 0 &&
     order.reclamations.length === 0 &&
     order.paymentRefunds.length === 0 &&
-    order.shipments.every(
-      (shipment) =>
-        shipment.purpose !== "ORDER_DELIVERY" || shipment.status === "FAILED",
-    ) &&
+    order.shipments.every((shipment) => !isActiveWebOrderShipment(shipment)) &&
     currentEditablePayments.length > 0 &&
     currentEditablePayments.every(
       (payment) =>
@@ -2442,6 +2438,15 @@ export async function WebOrderDetail({ id }: { id: string }) {
                       )
                         .map((itemId) => order.items.find((item) => item.id === itemId))
                         .filter((item): item is (typeof order.items)[number] => Boolean(item));
+                      const myGlsParcelNumbers =
+                        shipment.provider === MYGLS_PROVIDER &&
+                        Array.isArray(shipment.providerParcelNumbers)
+                          ? shipment.providerParcelNumbers.map(String)
+                          : [];
+                      const myGlsCodParcelNumber =
+                        myGlsParcelNumbers[0] ?? shipment.trackingNo;
+                      const effectiveShipmentStatus =
+                        effectiveMyGlsShipmentStatus(shipment);
                       return (
                       <li key={shipment.id} className="rounded-lg border border-border p-3">
                         <dl className="space-y-1 text-ink-700">
@@ -2454,7 +2459,14 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               </span>
                             }
                           />
-                          <Row k="Status" v={shipment.status} />
+                          <Row
+                            k="Status"
+                            v={
+                              effectiveShipmentStatus === shipment.status
+                                ? shipment.status
+                                : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`
+                            }
+                          />
                           <Row
                             k="Kurir status"
                             v={
@@ -2482,7 +2494,35 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           {assignment &&
                           assignment.codAmount > 0 &&
                           isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
-                            <Row k="COD ovog naloga" v={formatRsd(assignment.codAmount)} />
+                            <>
+                              <Row
+                                k="COD / pouzeće"
+                                v={
+                                  shipment.provider === MYGLS_PROVIDER &&
+                                  myGlsCodParcelNumber ? (
+                                    <span>
+                                      {formatRsd(assignment.codAmount)} · naplaćuje se samo na
+                                      GLS parcelu{" "}
+                                      <span className="font-mono text-xs">
+                                        {myGlsCodParcelNumber}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    formatRsd(assignment.codAmount)
+                                  )
+                                }
+                              />
+                              {myGlsParcelNumbers.length > 1 ? (
+                                <Row
+                                  k="Bez dodatne naplate"
+                                  v={
+                                    <span className="font-mono text-xs">
+                                      {myGlsParcelNumbers.slice(1).join(", ")}
+                                    </span>
+                                  }
+                                />
+                              ) : null}
+                            </>
                           ) : null}
                           {shipment.providerRouteCode || shipment.providerRouteName ? (
                             <Row

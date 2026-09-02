@@ -1,3 +1,5 @@
+import { effectiveMyGlsShipmentStatus } from "@/lib/mygls/status";
+
 export type WebOrderShippingEditShipment = {
   id: string;
   purpose: string;
@@ -5,6 +7,9 @@ export type WebOrderShippingEditShipment = {
   provider: string | null;
   providerShipmentId: string | null;
   trackingNo: string | null;
+  providerStatusCode?: string | null;
+  labelObjectKey?: string | null;
+  syncError?: string | null;
   rawCreateResponse?: unknown;
 };
 
@@ -98,10 +103,7 @@ export function shippingEditPickupBatchBlockReason(
 export function planWebOrderShippingEdit(
   shipments: readonly WebOrderShippingEditShipment[],
 ): WebOrderShippingEditPlan {
-  const activeShipments = shipments.filter(
-    (shipment) =>
-      shipment.purpose === "ORDER_DELIVERY" && shipment.status !== "FAILED",
-  );
+  const activeShipments = shipments.filter(isActiveWebOrderShipment);
   const manuallyCancelledXExpressShipments = activeShipments.filter(
     (shipment) =>
       shipment.provider === "X_EXPRESS" && Boolean(shipment.providerShipmentId),
@@ -116,7 +118,7 @@ export function planWebOrderShippingEdit(
   }
 
   const handedToCourier = activeShipments.find(
-    (shipment) => shipment.status !== "CREATED",
+    (shipment) => effectiveMyGlsShipmentStatus(shipment) !== "CREATED",
   );
   if (handedToCourier) {
     return {
@@ -147,6 +149,15 @@ export function planWebOrderShippingEdit(
     activeShipments,
     manuallyCancelledXExpressShipments,
   };
+}
+
+export function isActiveWebOrderShipment(
+  shipment: WebOrderShippingEditShipment,
+) {
+  return (
+    shipment.purpose === "ORDER_DELIVERY" &&
+    effectiveMyGlsShipmentStatus(shipment) !== "FAILED"
+  );
 }
 
 export function shippingEditWaybillQuestion(plan: WebOrderShippingEditPlan) {

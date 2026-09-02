@@ -12,14 +12,14 @@ import {
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { MyGlsClient, decompressMyGlsJson } from "./client";
 import { MYGLS_PROVIDER, requireMyGlsEnabled } from "./config";
-import { orderStatusForMyGlsStatus, inferMyGlsShipmentStatus } from "./status";
+import {
+  MYGLS_RECOVERABLE_STATUS_CODES,
+  normalizeMyGlsStatusResponses,
+} from "./status";
 import { parcelNumberList } from "./shipments";
 import type {
   MyGlsDeliveryPoint,
   MyGlsLocation,
-  MyGlsParcelListStatusesResponse,
-  MyGlsParcelStatusResponse,
-  MyGlsStatusEvent,
 } from "./types";
 
 export async function syncMyGlsMasterData() {
@@ -154,7 +154,9 @@ export async function syncMyGlsShipmentStatuses(limit = 100) {
           { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
           {
             status: "FAILED",
-            providerStatusCode: { in: ["51", "52"] },
+            providerStatusCode: {
+              in: [...MYGLS_RECOVERABLE_STATUS_CODES],
+            },
             syncError: null,
             labelObjectKey: { not: null },
           },
@@ -233,14 +235,17 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     numbers.length > 1
       ? await client.getParcelListStatuses({ parcelNumberList: numbers })
       : await client.getParcelStatuses({ parcelNumber: numbers[0]! });
-  const events = normalizeStatusResponses(raw, numbers);
+  const events = normalizeMyGlsStatusResponses(raw, numbers);
   const results = [];
 
   for (const event of events) {
     const result = await applyShipmentEvent("COURIER_SMALL", {
-      trackingNo: event.trackingNo,
+      trackingNo: shipment.trackingNo,
       status: event.status,
-      message: event.message ?? undefined,
+      message:
+        numbers.length > 1
+          ? `${event.parcelNumber} · ${event.message ?? event.status}`
+          : event.message ?? undefined,
       occurredAt: event.occurredAt,
       raw: event.raw,
       providerEventId: event.providerEventId,
@@ -274,7 +279,8 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     const corrected = await applyShipmentEvent("COURIER_SMALL", {
       ...latestEvent,
       providerEventId: `${latestEvent.providerEventId}:status-map-v2`,
-      message: `${latestEvent.message ?? "MyGLS status"} · ispravljeno mapiranje`,
+      trackingNo: shipment.trackingNo,
+      message: `${latestEvent.parcelNumber} · ${latestEvent.message ?? "MyGLS status"} · ispravljeno mapiranje`,
     });
     if (corrected) results.push(corrected);
   }
@@ -288,50 +294,6 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
   });
 
   return { events: events.length, applied: results.length };
-}
-
-function normalizeStatusResponses(
-  response: MyGlsParcelStatusResponse | MyGlsParcelListStatusesResponse,
-  fallbackNumbers: number[],
-): MyGlsStatusEvent[] {
-  if ("ParcelList" in response && Array.isArray(response.ParcelList)) {
-    return response.ParcelList.flatMap((parcel) =>
-      statusListToEvents(
-        parcel.ParcelStatusList ?? [],
-        parcel.ParcelNumber ?? fallbackNumbers[0]!,
-        parcel.ClientReference,
-      ),
-    );
-  }
-  const single = response as MyGlsParcelStatusResponse;
-  return statusListToEvents(
-    single.ParcelStatusList ?? [],
-    single.ParcelNumber ?? fallbackNumbers[0]!,
-    single.ClientReference,
-  );
-}
-
-function statusListToEvents(
-  list: MyGlsParcelStatusResponse["ParcelStatusList"],
-  parcelNumber: number,
-  clientReference?: string | null,
-): MyGlsStatusEvent[] {
-  return (list ?? []).map((status) => {
-    const code = String(status.StatusCode ?? "");
-    const mapped = inferMyGlsShipmentStatus(code, status.StatusDescription ?? status.StatusInfo ?? null);
-    const occurredAt = parseDate(status.StatusDate);
-    return {
-      trackingNo: String(parcelNumber),
-      parcelNumber,
-      providerStatusCode: code,
-      status: mapped,
-      orderStatus: orderStatusForMyGlsStatus(mapped),
-      message: status.StatusDescription ?? status.StatusInfo ?? null,
-      occurredAt,
-      providerEventId: `MYGLS:${parcelNumber}:${code}:${occurredAt?.toISOString() ?? "unknown"}`,
-      raw: { ...status, clientReference },
-    };
-  });
 }
 
 function deliveryPointRow(point: MyGlsDeliveryPoint) {
@@ -362,13 +324,6 @@ function decimalOrNull(value: unknown) {
 
 function stringOrNull(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function parseDate(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  const dotNet = value.match(/\/Date\((\d+)\)\//);
-  const date = dotNet ? new Date(Number(dotNet[1])) : new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 async function readCursor(kind: string) {

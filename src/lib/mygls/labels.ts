@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMyGlsConfig, MyGlsConfigError } from "./config";
 import { redactMyGlsSenderContactPdf } from "./label-redaction";
+import { MYGLS_RECOVERABLE_STATUS_CODES } from "./status";
 
 /**
  * A provider PDF remains printable when a status-sync mapping failed, as long
@@ -15,7 +16,9 @@ export function usableMyGlsLabelWhere(): Prisma.ShipmentWhereInput {
       { status: { not: "FAILED" } },
       {
         status: "FAILED",
-        providerStatusCode: { in: ["51", "52"] },
+        providerStatusCode: {
+          in: [...MYGLS_RECOVERABLE_STATUS_CODES],
+        },
         labelObjectKey: { not: null },
         syncError: null,
       },
