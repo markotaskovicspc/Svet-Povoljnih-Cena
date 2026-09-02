@@ -150,13 +150,18 @@ export async function syncProductChannelAvailability(
 }
 
 export async function disableInvalidRabaluxWebAvailability() {
-  const invalidWhere = isRabaluxEnabled()
+  const supplier = await db.supplier.findUnique({
+    where: { integrationKey: "RABALUX" },
+    select: { id: true, enabled: true },
+  });
+  if (!supplier) return 0;
+
+  const invalidWhere = isRabaluxEnabled() && supplier.enabled
     ? {
         OR: [
           { lastSupplierStockSyncAt: null },
           { supplierApprovalStatus: null },
           { supplierApprovalStatus: { not: "APPROVED" as const } },
-          { supplier: { is: { integrationKey: "RABALUX", enabled: false } } },
         ],
       }
     : {};
@@ -164,7 +169,7 @@ export async function disableInvalidRabaluxWebAvailability() {
     where: {
       deletedAt: null,
       availableWebAuto: true,
-      supplier: { is: { integrationKey: "RABALUX" } },
+      supplierId: supplier.id,
       ...invalidWhere,
     },
     data: { availableWebAuto: false },

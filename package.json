@@ -59,6 +59,7 @@
     "rabalux:sync-stock": "node scripts/rabalux-sync.mjs stock",
     "rabalux:sync-media": "node scripts/rabalux-sync.mjs media",
     "media:variants": "node \"svet akcija/outputs/build-product-media-variants.mjs\"",
+    "media:backfill-variants": "node scripts/backfill-product-media-variants.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "postinstall": "prisma generate && node scripts/patch-brace-expansion-compat.mjs"
   },

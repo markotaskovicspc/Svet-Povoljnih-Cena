@@ -309,11 +309,14 @@ export async function enqueueDueCartRecoveryJobs(limit = 100) {
   return { selected: sessions.length, queued };
 }
 
-export async function processPendingBackgroundJobs(limit = 20) {
+export async function processPendingBackgroundJobs(
+  limit = 20,
+  options: { now?: Date } = {},
+) {
   const { enqueueDueNewsletterCampaigns } = await import("@/lib/newsletter/campaigns");
   await enqueueDueNewsletterCampaigns();
   await enqueueDueCartRecoveryJobs();
-  const now = new Date();
+  const now = options.now ?? new Date();
   const stale = new Date(now.getTime() - 15 * 60 * 1000);
   const take = Math.min(Math.max(limit, 1), 100);
   const eligible: Prisma.BackgroundJobWhereInput = {
@@ -406,10 +409,9 @@ export async function processPendingBackgroundJobs(limit = 20) {
       )),
     );
   }
-  const [, , , , partnerReservations, invalidRabaluxProducts] = await Promise.all([
-    db.backgroundJob.deleteMany({
-      where: { status: "COMPLETED", completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) } },
-    }),
+  const hourlyMaintenance = now.getUTCMinutes() < 5;
+  const dailyMaintenance = hourlyMaintenance && now.getUTCHours() === 3;
+  const [, , partnerReservations] = await Promise.all([
     db.rateLimitBucket.deleteMany({ where: { resetAt: { lt: now } } }),
     db.paymentRefund.updateMany({
       where: {
@@ -421,10 +423,22 @@ export async function processPendingBackgroundJobs(limit = 20) {
         error: "Refund submission did not reach a final recorded state; reconcile with provider before retrying.",
       },
     }),
-    db.newsletterOptInToken.deleteMany({ where: { expiresAt: { lt: now } } }),
     expirePartnerReservations(),
-    disableInvalidRabaluxWebAvailability(),
   ]);
+  const invalidRabaluxProducts = hourlyMaintenance
+    ? await disableInvalidRabaluxWebAvailability()
+    : 0;
+  if (dailyMaintenance) {
+    await Promise.all([
+      db.backgroundJob.deleteMany({
+        where: {
+          status: "COMPLETED",
+          completedAt: { lt: new Date(now.getTime() - 30 * 86400_000) },
+        },
+      }),
+      db.newsletterOptInToken.deleteMany({ where: { expiresAt: { lt: now } } }),
+    ]);
+  }
   return {
     selected:
       newsletter.length + priority.length + standard.length + media.length,

@@ -204,7 +204,6 @@ const productCardCoreSelect = {
   media: {
     where: { kind: "IMAGE", syncStatus: "READY" },
     orderBy: { order: "asc" },
-    take: 6,
   },
   pictograms: {
     select: { pictogram: true },
@@ -735,6 +734,7 @@ function mapProductListItem(
     assemblyCities: [],
     media: {
       images: p.media
+        .slice(0, 6)
         .map(mapImageMedia)
         .filter((m) => isRenderableImageUrl(m.url)),
     },

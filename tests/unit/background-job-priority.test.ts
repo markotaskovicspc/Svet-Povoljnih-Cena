@@ -5,13 +5,15 @@ const mocks = vi.hoisted(() => ({
   enqueueDueNewsletterCampaigns: vi.fn(),
   expirePartnerReservations: vi.fn(),
   disableInvalidRabaluxWebAvailability: vi.fn(),
+  backgroundJobDeleteMany: vi.fn(),
+  newsletterTokenDeleteMany: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   db: {
     backgroundJob: {
       findMany: mocks.findMany,
-      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: mocks.backgroundJobDeleteMany,
     },
     rateLimitBucket: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -20,7 +22,7 @@ vi.mock("@/lib/db", () => ({
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     newsletterOptInToken: {
-      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: mocks.newsletterTokenDeleteMany,
     },
   },
 }));
@@ -45,11 +47,17 @@ describe("background job priority", () => {
     mocks.expirePartnerReservations.mockResolvedValue({ released: 0 });
     mocks.disableInvalidRabaluxWebAvailability.mockReset();
     mocks.disableInvalidRabaluxWebAvailability.mockResolvedValue(0);
+    mocks.backgroundJobDeleteMany.mockReset();
+    mocks.backgroundJobDeleteMany.mockResolvedValue({ count: 0 });
+    mocks.newsletterTokenDeleteMany.mockReset();
+    mocks.newsletterTokenDeleteMany.mockResolvedValue({ count: 0 });
   });
 
   it("selects customer-facing jobs before bulk Rabalux media", async () => {
     const { processPendingBackgroundJobs } = await import("@/lib/background-jobs");
-    const result = await processPendingBackgroundJobs(20);
+    const result = await processPendingBackgroundJobs(20, {
+      now: new Date("2026-09-02T10:17:00.000Z"),
+    });
 
     expect(mocks.findMany).toHaveBeenCalledTimes(4);
     expect(mocks.findMany.mock.calls[0]?.[0]).toMatchObject({
@@ -83,5 +91,24 @@ describe("background job priority", () => {
       take: 20,
     });
     expect(result.selected).toBe(0);
+    expect(mocks.disableInvalidRabaluxWebAvailability).not.toHaveBeenCalled();
+    expect(mocks.backgroundJobDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it("runs Rabalux validation hourly and retention only in the daily window", async () => {
+    const { processPendingBackgroundJobs } = await import("@/lib/background-jobs");
+
+    await processPendingBackgroundJobs(20, {
+      now: new Date("2026-09-02T02:00:00.000Z"),
+    });
+    expect(mocks.disableInvalidRabaluxWebAvailability).toHaveBeenCalledTimes(1);
+    expect(mocks.backgroundJobDeleteMany).not.toHaveBeenCalled();
+
+    await processPendingBackgroundJobs(20, {
+      now: new Date("2026-09-02T03:00:00.000Z"),
+    });
+    expect(mocks.disableInvalidRabaluxWebAvailability).toHaveBeenCalledTimes(2);
+    expect(mocks.backgroundJobDeleteMany).toHaveBeenCalledTimes(1);
+    expect(mocks.newsletterTokenDeleteMany).toHaveBeenCalledTimes(1);
   });
 });

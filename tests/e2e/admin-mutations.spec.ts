@@ -440,7 +440,15 @@ test.describe("isolated admin mutation acceptance", () => {
         .poll(async () => {
           const result = await db.productMedia.findFirst({
             where: { productId: productId!, alt: fixture.productMediaAlt },
-            select: { id: true, url: true },
+            select: {
+              id: true,
+              url: true,
+              thumbUrl: true,
+              cardUrl: true,
+              pdpUrl: true,
+              width: true,
+              height: true,
+            },
           });
           return result;
         })
@@ -448,15 +456,36 @@ test.describe("isolated admin mutation acceptance", () => {
         .then(() =>
           db.productMedia.findFirstOrThrow({
             where: { productId: productId!, alt: fixture.productMediaAlt },
-            select: { id: true, url: true },
+            select: {
+              id: true,
+              url: true,
+              thumbUrl: true,
+              cardUrl: true,
+              pdpUrl: true,
+              width: true,
+              height: true,
+            },
           }),
         );
-      uploadedStorageKeys.add(media.url);
+      expect(media.thumbUrl).toBeTruthy();
+      expect(media.cardUrl).toBeTruthy();
+      expect(media.pdpUrl).toBeTruthy();
+      expect(media.width).toBeGreaterThan(0);
+      expect(media.height).toBeGreaterThan(0);
+      const mediaStorageKeys = [
+        media.url,
+        media.thumbUrl!,
+        media.cardUrl!,
+        media.pdpUrl!,
+      ];
+      for (const key of mediaStorageKeys) uploadedStorageKeys.add(key);
 
       const bucket = productMediaBucket();
-      await expect
-        .poll(() => storageObjectExists(supabase, bucket, media.url))
-        .toBe(true);
+      for (const key of mediaStorageKeys) {
+        await expect
+          .poll(() => storageObjectExists(supabase, bucket, key))
+          .toBe(true);
+      }
 
       const deleteForm = page
         .locator("form")
@@ -479,9 +508,11 @@ test.describe("isolated admin mutation acceptance", () => {
           db.productMedia.count({ where: { id: media.id } }),
         )
         .toBe(0);
-      await expect
-        .poll(() => storageObjectExists(supabase, bucket, media.url))
-        .toBe(false);
+      for (const key of mediaStorageKeys) {
+        await expect
+          .poll(() => storageObjectExists(supabase, bucket, key))
+          .toBe(false);
+      }
       await acceptanceExpect
         .poll(() =>
           db.auditLog.count({
@@ -504,8 +535,8 @@ test.describe("isolated admin mutation acceptance", () => {
       });
       expect(
         (deletionAudit.diff as { storageKeys?: string[] })?.storageKeys,
-      ).toContain(media.url);
-      uploadedStorageKeys.delete(media.url);
+      ).toEqual(expect.arrayContaining(mediaStorageKeys));
+      for (const key of mediaStorageKeys) uploadedStorageKeys.delete(key);
     });
 
     await test.step("delivery rule create and confirmed delete", async () => {

@@ -90,6 +90,9 @@ model BackgroundJob {
   updatedAt      DateTime  @updatedAt
 
   @@index([status, availableAt])
+  @@index([status, availableAt, createdAt])
+  @@index([kind, status, availableAt, createdAt])
+  @@index([status, completedAt])
   @@index([lockedAt])
 }
 
@@ -630,6 +633,7 @@ model ProductMedia {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, order])
+  @@index([productId, kind, syncStatus, order])
   @@index([syncStatus])
 }
 

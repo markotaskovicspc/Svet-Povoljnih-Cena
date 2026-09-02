@@ -13,6 +13,10 @@ import { num } from "@/lib/api/_helpers";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  buildProductImageRenditions,
+  PRODUCT_MEDIA_IMMUTABLE_CACHE_SECONDS,
+} from "@/lib/product-media/image-variants";
+import {
   getManagedProductMediaStorageKeys,
   getProductMediaBucket,
   resolveSupabaseStorageUrl,
@@ -367,13 +371,49 @@ async function uploadProductImage(productId: string, file: File) {
     file.type.split("/")[1] ??
     "jpg";
   const key = `products/${productId}/${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
+  const source = Buffer.from(await file.arrayBuffer());
+  const renditions = await buildProductImageRenditions(source, key);
   const storage = createAdminClient().storage.from(getProductMediaBucket());
-  const { error } = await storage.upload(key, Buffer.from(await file.arrayBuffer()), {
-    contentType: file.type,
-    upsert: false,
-  });
-  if (error) throw new Error(error.message);
-  return key;
+  const uploadedKeys: string[] = [];
+  try {
+    const { error: sourceError } = await storage.upload(key, source, {
+      cacheControl: PRODUCT_MEDIA_IMMUTABLE_CACHE_SECONDS,
+      contentType: file.type,
+      upsert: false,
+    });
+    if (sourceError) throw new Error(sourceError.message);
+    uploadedKeys.push(key);
+
+    for (const variant of renditions.variants) {
+      const { error } = await storage.upload(variant.key, variant.buffer, {
+        cacheControl: PRODUCT_MEDIA_IMMUTABLE_CACHE_SECONDS,
+        contentType: "image/webp",
+        upsert: false,
+      });
+      if (error) throw new Error(error.message);
+      uploadedKeys.push(variant.key);
+    }
+  } catch (error) {
+    if (uploadedKeys.length) await storage.remove(uploadedKeys);
+    throw new Error(
+      `Upload fotografije nije uspeo: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const variants = Object.fromEntries(
+    renditions.variants.map((variant) => [variant.name, variant.key]),
+  ) as Record<"thumb" | "card" | "pdp", string>;
+  return {
+    row: {
+      url: key,
+      thumbUrl: variants.thumb,
+      cardUrl: variants.card,
+      pdpUrl: variants.pdp,
+      width: renditions.width,
+      height: renditions.height,
+    },
+    storageKeys: uploadedKeys,
+  };
 }
 
 function changedManualGroups(
@@ -844,12 +884,13 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
         return { ok: false as const, error: "Dodajte URL ili upload fotografiju." };
       }
 
-      const uploadedKeys: string[] = [];
+      const uploadedImages: Awaited<ReturnType<typeof uploadProductImage>>[] = [];
       try {
         for (const file of files) {
-          uploadedKeys.push(await uploadProductImage(productId, file));
+          uploadedImages.push(await uploadProductImage(productId, file));
         }
       } catch (err) {
+        const uploadedKeys = uploadedImages.flatMap((image) => image.storageKeys);
         if (uploadedKeys.length) {
           await createAdminClient().storage.from(getProductMediaBucket()).remove(uploadedKeys);
         }
@@ -859,13 +900,15 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
         };
       }
 
-      const mediaRows = uploadedKeys.length
-        ? uploadedKeys.map((url) => ({ url, thumbUrl: null, cardUrl: null, pdpUrl: null }))
+      const mediaRows = uploadedImages.length
+        ? uploadedImages.map((image) => image.row)
         : [{
             url: remoteUrl,
             thumbUrl: thumbUrl?.trim() || null,
             cardUrl: cardUrl?.trim() || null,
             pdpUrl: pdpUrl?.trim() || null,
+            width: null,
+            height: null,
           }];
       const last = await db.productMedia.aggregate({
         where: { productId },
@@ -884,6 +927,7 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
           await lockSupplierOwnedFields(tx, productId, actorId, ["media"]);
         });
       } catch (error) {
+        const uploadedKeys = uploadedImages.flatMap((image) => image.storageKeys);
         if (uploadedKeys.length) {
           await createAdminClient().storage.from(getProductMediaBucket()).remove(uploadedKeys);
         }
