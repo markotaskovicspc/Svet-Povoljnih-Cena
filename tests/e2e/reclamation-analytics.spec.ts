@@ -460,6 +460,7 @@ test.describe("Admin analitika reklamacija", () => {
         "Fiskalni promet period",
         "Reklamacije period",
         "Top proizvodi period",
+        "Posete i konverzije period",
       ]) {
         await expect(page.getByLabel(label)).toBeVisible();
       }
@@ -474,6 +475,9 @@ test.describe("Admin analitika reklamacija", () => {
         "Trenutni broj poseta",
         "Današnji broj poseta",
         "Prosečan dnevni broj poseta",
+        "Poseta → kupovina",
+        "Poseta → vrednost",
+        "Korpa → kupovina",
       ]) {
         await expect(page.getByText(label, { exact: true })).toBeVisible();
       }
@@ -518,6 +522,9 @@ test.describe("Admin analitika reklamacija", () => {
           topProductsRange: "custom",
           topProductsFrom: dashboardDate,
           topProductsTo: dashboardDate,
+          analyticsRange: "custom",
+          analyticsFrom: dashboardDate,
+          analyticsTo: dashboardDate,
         },
       };
       const rejectedView = await page.request.post("/api/admin/saved-views", {
@@ -525,7 +532,13 @@ test.describe("Admin analitika reklamacija", () => {
       });
       expect(rejectedView.status()).toBe(400);
 
-      for (const name of ["orders", "fiscal", "reclamations", "topProducts"]) {
+      for (const name of [
+        "orders",
+        "fiscal",
+        "reclamations",
+        "topProducts",
+        "analytics",
+      ]) {
         await page.locator(`select[name="${name}Range"]`).selectOption("custom");
       }
       await page.locator('select[name="warehouseId"]').selectOption(createdWarehouseId);
@@ -626,6 +639,7 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(page.getByRole("heading", { name: "Izveštajni centar" })).toBeVisible();
       const reportsHub = page.locator('nav[aria-label="Dostupni namenski izveštaji"]');
       for (const link of [
+        "Dnevni promet",
         "Knjigovodstveni izveštaji",
         "Posete i konverzije",
         "QA objave",
@@ -640,14 +654,45 @@ test.describe("Admin analitika reklamacija", () => {
       await page.goto("/admin/erp/posete-konverzije", {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.getByRole("heading", { name: "Posete i konverzije" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", {
+          name: "Posete i konverzije",
+          exact: true,
+        }),
+      ).toBeVisible();
       await expect(page.getByRole("heading", { name: "Top 50 proizvoda" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Korpa po kupcu i artiklu" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Raw drilldown" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", {
+          name: "Posete i konverzije po stranici",
+        }),
+      ).toBeVisible();
       await expect(page.getByText(fixture.skuA, { exact: true }).first()).toBeVisible();
       await expect(
         page.getByText("Poseta → kupovina", { exact: true }).locator(".."),
       ).toContainText("%");
+
+      const analyticsExport = await page.request.get(
+        "/api/admin/analytics/conversions/export?range=30d&group=week",
+      );
+      await assertWorkbookContains(analyticsExport, "Jedinstvene posete", "/");
+
+      await page.goto("/admin/erp/dnevni-promet", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByRole("heading", {
+          name: "Dnevni zbir profaktura i fiskalizacije",
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Neto fiskalizovano", { exact: true }).first(),
+      ).toBeVisible();
+      const dailyExport = await page.request.get(
+        "/api/admin/reports/daily-finance/export?range=30d",
+      );
+      await assertWorkbookContains(dailyExport, "Fiskalizovano", "UKUPNO");
     });
 
     await test.step("operater ručno evidentira reklamaciju samo za isporučenu stavku", async () => {
@@ -992,12 +1037,15 @@ async function assertWorkbookContains(
   );
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load((await response.body()) as never);
-  const sheet = workbook.worksheets[0]!;
-  const headers = (sheet.getRow(1).values as unknown[]).map(String);
-  expect(headers).toContain(expectedHeader);
+  const sheet = workbook.worksheets.find((candidate) =>
+    (candidate.getRow(1).values as unknown[])
+      .map(String)
+      .includes(expectedHeader),
+  );
+  expect(sheet, `Nedostaje kolona ${expectedHeader} u XLSX-u`).toBeDefined();
   expect(
-    sheet
-      .getRows(2, Math.max(sheet.rowCount - 1, 0))
+    sheet!
+      .getRows(2, Math.max(sheet!.rowCount - 1, 0))
       ?.some((row) => row.values.some((cell) => String(cell) === expectedCell)),
   ).toBe(true);
 }

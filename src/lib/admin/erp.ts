@@ -254,6 +254,7 @@ const articleColumns: ErpColumn[] = [
   { key: "rabaluxStockSyncedAt", label: "Rabalux osveženo", type: "date", defaultVisible: true },
   { key: "rabaluxNextArrivalAt", label: "Rabalux sledeći dolazak", type: "date" },
   { key: "cogs", label: "COGS", type: "money", align: "right" },
+  { key: "cogsValue", label: "COGS vrednost", type: "money", align: "right", defaultVisible: true },
   { key: "incomingTotal", label: "Količina u dolasku", type: "number", align: "right" },
   { key: "incomingAvailable", label: "Raspoloživo u dolasku", type: "number", align: "right" },
   { key: "weightKg", label: "Težina kg", type: "number", align: "right" },
@@ -1428,6 +1429,11 @@ async function getArticleRows(
             ? product.supplierNextArrivalAt.toISOString()
             : null,
         cogs: asNumber(product.cogs),
+        cogsValue:
+          product.cogs === null
+            ? null
+            : Math.round(product.cogs.toNumber() * stock.physicalTotal * 100) /
+              100,
         incomingTotal: product.incomingStock,
         incomingAvailable: product.incomingStock,
         widthCm: width,

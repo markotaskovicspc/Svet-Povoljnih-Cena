@@ -50,6 +50,14 @@ type VisitSummary = {
   daily_average_30d: number;
 };
 
+type ConversionSummary = {
+  visitors: number;
+  purchasers: number;
+  purchase_value: number;
+  cart_buyers: number;
+  converted_cart_buyers: number;
+};
+
 type FiscalTurnoverSummary = {
   today_net: number;
   period_net: number;
@@ -126,6 +134,7 @@ export default async function AdminDashboard({
     fiscal: fiscalPeriod,
     reclamations: reclamationsPeriod,
     topProducts: topProductsPeriod,
+    analytics: analyticsPeriod,
   } = resolved.periods;
   const todayPeriod = resolveReportPeriod({ range: "today" }, now);
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
@@ -159,6 +168,7 @@ export default async function AdminDashboard({
     warehouseStockRows,
     incomingRows,
     visitRows,
+    conversionRows,
     lowStock,
   ] = await Promise.all([
     db.order.aggregate({
@@ -167,7 +177,7 @@ export default async function AdminDashboard({
         ...orderWarehouseWhere,
       },
       _count: { _all: true },
-      _sum: { total: true },
+      _sum: { total: true, shipping: true },
     }),
     db.order.aggregate({
       where: {
@@ -175,7 +185,7 @@ export default async function AdminDashboard({
         ...orderWarehouseWhere,
       },
       _count: { _all: true },
-      _sum: { total: true },
+      _sum: { total: true, shipping: true },
     }),
     db.$queryRaw<FiscalTurnoverSummary[]>(Prisma.sql`
       SELECT
@@ -284,7 +294,7 @@ export default async function AdminDashboard({
         ), 0)::double precision AS total_volume
       FROM "PurchaseOrder" po
       LEFT JOIN "PurchaseOrderItem" poi ON poi."purchaseOrderId" = po.id
-      WHERE po.status IN ('SENT', 'CONFIRMED') ${purchaseWarehouseSql}
+      WHERE po.status IN ('DRAFT', 'SENT', 'CONFIRMED') ${purchaseWarehouseSql}
     `),
     db.$queryRaw<VisitSummary[]>(Prisma.sql`
       WITH days AS (
@@ -316,6 +326,57 @@ export default async function AdminDashboard({
             AND "occurredAt" < ${todayPeriod.endExclusive})::int AS today,
         COALESCE((SELECT AVG(visits) FROM daily), 0)::double precision AS daily_average_30d
     `),
+    db.$queryRaw<ConversionSummary[]>(Prisma.sql`
+      WITH visitors AS (
+        SELECT DISTINCT a."anonymousId"
+        FROM "AnalyticsEvent" a
+        WHERE a.type = 'PAGE_VIEW'
+          AND a."occurredAt" >= ${analyticsPeriod.start}
+          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
+      ), attributed AS (
+        SELECT DISTINCT ON (c."orderId")
+          c."orderId",
+          c."anonymousId",
+          COALESCE(c.value, 0)::double precision AS value
+        FROM "AnalyticsEvent" c
+        WHERE c.type = 'CHECKOUT_COMPLETED'
+          AND c."orderId" IS NOT NULL
+          AND c."occurredAt" >= ${analyticsPeriod.start}
+          AND c."occurredAt" < ${analyticsPeriod.endExclusive}
+          AND EXISTS (
+            SELECT 1
+            FROM "AnalyticsEvent" v
+            WHERE v.type = 'PAGE_VIEW'
+              AND v."anonymousId" = c."anonymousId"
+              AND v."occurredAt" <= c."occurredAt"
+              AND v."occurredAt" >= c."occurredAt" - interval '30 days'
+          )
+        ORDER BY c."orderId", c."occurredAt" ASC
+      ), cart_buyers AS (
+        SELECT
+          a."anonymousId",
+          MIN(a."occurredAt") AS first_cart_at
+        FROM "AnalyticsEvent" a
+        WHERE a.type = 'ADD_TO_CART'
+          AND a."occurredAt" >= ${analyticsPeriod.start}
+          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
+        GROUP BY a."anonymousId"
+      ), converted_cart_buyers AS (
+        SELECT DISTINCT carts."anonymousId"
+        FROM cart_buyers carts
+        JOIN "AnalyticsEvent" c
+          ON c."anonymousId" = carts."anonymousId"
+          AND c.type = 'CHECKOUT_COMPLETED'
+          AND c."occurredAt" >= carts.first_cart_at
+          AND c."occurredAt" <= carts.first_cart_at + interval '30 days'
+      )
+      SELECT
+        (SELECT COUNT(*) FROM visitors)::int AS visitors,
+        (SELECT COUNT(DISTINCT "anonymousId") FROM attributed)::int AS purchasers,
+        COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value,
+        (SELECT COUNT(*) FROM cart_buyers)::int AS cart_buyers,
+        (SELECT COUNT(*) FROM converted_cart_buyers)::int AS converted_cart_buyers
+    `),
     db.$queryRaw<LowStockRow[]>(Prisma.sql`
       SELECT
         p.id,
@@ -338,8 +399,10 @@ export default async function AdminDashboard({
   const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
   const ordersToday = ordersTodaySummary._count._all;
   const ordersTodayAmount = Number(ordersTodaySummary._sum.total ?? 0);
+  const ordersTodayShipping = Number(ordersTodaySummary._sum.shipping ?? 0);
   const ordersInPeriod = ordersInPeriodSummary._count._all;
   const ordersInPeriodAmount = Number(ordersInPeriodSummary._sum.total ?? 0);
+  const ordersInPeriodShipping = Number(ordersInPeriodSummary._sum.shipping ?? 0);
   const incoming = incomingRows[0] ?? {
     order_count: 0,
     remaining_qty: 0,
@@ -351,6 +414,22 @@ export default async function AdminDashboard({
     today: 0,
     daily_average_30d: 0,
   };
+  const conversions = conversionRows[0] ?? {
+    visitors: 0,
+    purchasers: 0,
+    purchase_value: 0,
+    cart_buyers: 0,
+    converted_cart_buyers: 0,
+  };
+  const visitPurchaseConversion = conversions.visitors
+    ? (conversions.purchasers / conversions.visitors) * 100
+    : 0;
+  const valuePerVisit = conversions.visitors
+    ? conversions.purchase_value / conversions.visitors
+    : 0;
+  const cartPurchaseConversion = conversions.cart_buyers
+    ? (conversions.converted_cart_buyers / conversions.cart_buyers) * 100
+    : 0;
   const totalStock = warehouseStockRows.reduce(
     (total, row) => ({
       total_qty: total.total_qty + row.total_qty,
@@ -406,8 +485,8 @@ export default async function AdminDashboard({
 
         <section aria-label="Ključni pokazatelji" className="space-y-8">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · ${warehouseLabel}`} />
-            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · dostava ${formatRsd(ordersTodayShipping)} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · dostava ${formatRsd(ordersInPeriodShipping)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
             <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
             <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
           </div>
@@ -428,6 +507,12 @@ export default async function AdminDashboard({
             <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
             <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
             <StatCard label="Prosečan dnevni broj poseta" value={visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} hint="Poslednjih 30 kalendarskih dana, uključujući dane bez poseta" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <StatCard label="Poseta → kupovina" value={`${visitPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.purchasers} kupaca / ${conversions.visitors} posetilaca · ${analyticsPeriod.label}`} />
+            <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(conversions.purchase_value)} atribuirane vrednosti · ${analyticsPeriod.label}`} />
+            <StatCard label="Korpa → kupovina" value={`${cartPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.converted_cart_buyers} / ${conversions.cart_buyers} kupaca · ${analyticsPeriod.label}`} />
           </div>
         </section>
 

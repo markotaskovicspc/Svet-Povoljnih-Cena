@@ -65,6 +65,7 @@ export const adminNav: AdminNavGroup[] = [
         label: "Knjigovodstveni izveštaji",
         allowed: O,
       },
+      { href: "/admin/erp/dnevni-promet", label: "Dnevni promet", allowed: O },
     ],
   },
   {

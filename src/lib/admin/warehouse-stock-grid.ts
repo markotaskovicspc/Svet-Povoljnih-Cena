@@ -21,6 +21,7 @@ export type WarehouseStockGridProduct = {
   name: string;
   stock: number;
   incomingStock: number;
+  cogs: number | { toNumber(): number } | null;
   availableWebManual: boolean;
   availableWholesaleManual: boolean;
   availableExportManual: boolean;
@@ -87,6 +88,12 @@ function createWarehouseStockGridRow(input: {
     partnerReserved,
   });
   const { physical, reserved, available } = balance;
+  const unitCogs =
+    input.product.cogs === null
+      ? null
+      : typeof input.product.cogs === "number"
+        ? input.product.cogs
+        : input.product.cogs.toNumber();
   const channels = resolveChannelAvailability({
     physical: available,
     manualWeb: input.product.availableWebManual,
@@ -103,6 +110,11 @@ function createWarehouseStockGridRow(input: {
       reserved,
       available,
       incoming: input.incoming,
+      cogs: unitCogs,
+      cogsValue:
+        unitCogs === null
+          ? null
+          : Math.round(physical * unitCogs * 100) / 100,
       web: channels.web,
       wholesale: channels.wholesale,
       export: channels.export,

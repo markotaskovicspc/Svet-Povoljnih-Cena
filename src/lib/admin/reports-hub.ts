@@ -10,6 +10,13 @@ export type ReportDestination = {
 
 export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
   {
+    href: "/admin/erp/dnevni-promet",
+    title: "Dnevni promet",
+    description:
+      "Dnevni broj i iznosi profaktura, fiskalnih računa i refundacija, sa Excel izvozom.",
+    allowed: ["OPS"],
+  },
+  {
     href: "/admin/erp/racunovodstveni-registri",
     title: "Knjigovodstveni izveštaji",
     description:

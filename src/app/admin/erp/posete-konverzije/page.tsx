@@ -8,17 +8,19 @@ import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { ErpGrid } from "@/components/admin/erp-grid";
+import { Input } from "@/components/ui/input";
+import { REPORT_PERIOD_PRESETS, resolveReportPeriod } from "@/lib/admin/report-period";
+import {
+  getAnalyticsFunnelSummary,
+  getPageConversionReport,
+  normalizeAnalyticsGranularity,
+} from "@/lib/admin/analytics-report.server";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Posete i konverzije · ERP",
   robots: { index: false, follow: false },
-};
-
-type FunnelRow = {
-  visitors: number;
-  purchasers: number;
-  purchase_value: number;
 };
 
 type ProductPerformanceRow = {
@@ -41,49 +43,42 @@ type CartConversionRow = {
   purchase_value: number;
 };
 
-export default async function AnalyticsConversionPage() {
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AnalyticsConversionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    range?: string | string[];
+    from?: string | string[];
+    to?: string | string[];
+    group?: string | string[];
+  }>;
+}) {
   await requireAdminAction(allowedRolesForErpModule("posete-konverzije"));
+  const params = await searchParams;
   const now = new Date();
-  const periodStart = new Date(now.getTime() - 30 * 86_400_000);
+  const period = resolveReportPeriod(
+    {
+      range: first(params.range),
+      from: first(params.from),
+      to: first(params.to),
+    },
+    now,
+  );
+  const granularity = normalizeAnalyticsGranularity(params.group);
   const activeStart = new Date(now.getTime() - 5 * 60_000);
-  const [activeSessions, funnelRows, products, cartConversions, rawModule] =
+  const [activeSessions, funnel, pageConversions, products, cartConversions, rawModule] =
     await Promise.all([
       db.analyticsEvent.findMany({
         where: { type: "PAGE_VIEW", occurredAt: { gte: activeStart } },
         distinct: ["sessionId", "anonymousId"],
         select: { id: true },
       }),
-      db.$queryRaw<FunnelRow[]>(Prisma.sql`
-        WITH visitors AS (
-          SELECT DISTINCT a."anonymousId"
-          FROM "AnalyticsEvent" a
-          WHERE a.type = 'PAGE_VIEW'
-            AND a."occurredAt" >= ${periodStart}
-            AND a."occurredAt" < ${now}
-        ), attributed AS (
-          SELECT DISTINCT ON (c."orderId")
-            c."orderId",
-            c."anonymousId",
-            COALESCE(c.value, 0)::double precision AS value
-          FROM "AnalyticsEvent" c
-          WHERE c.type = 'CHECKOUT_COMPLETED'
-            AND c."occurredAt" >= ${periodStart}
-            AND c."occurredAt" < ${now}
-            AND EXISTS (
-              SELECT 1
-              FROM "AnalyticsEvent" v
-              WHERE v.type = 'PAGE_VIEW'
-                AND v."anonymousId" = c."anonymousId"
-                AND v."occurredAt" <= c."occurredAt"
-                AND v."occurredAt" >= c."occurredAt" - interval '30 days'
-            )
-          ORDER BY c."orderId", c."occurredAt" ASC
-        )
-        SELECT
-          (SELECT COUNT(*) FROM visitors)::int AS visitors,
-          (SELECT COUNT(DISTINCT "anonymousId") FROM attributed)::int AS purchasers,
-          COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value
-      `),
+      getAnalyticsFunnelSummary(period),
+      getPageConversionReport(period, granularity),
       db.$queryRaw<ProductPerformanceRow[]>(Prisma.sql`
         WITH visits AS (
           SELECT
@@ -92,8 +87,8 @@ export default async function AnalyticsConversionPage() {
           FROM "AnalyticsEvent" a
           WHERE a.type IN ('PRODUCT_VIEW', 'PAGE_VIEW')
             AND a."productId" IS NOT NULL
-            AND a."occurredAt" >= ${periodStart}
-            AND a."occurredAt" < ${now}
+            AND a."occurredAt" >= ${period.start}
+            AND a."occurredAt" < ${period.endExclusive}
           GROUP BY a."productId"
         ), fiscalized AS (
           SELECT
@@ -113,8 +108,8 @@ export default async function AnalyticsConversionPage() {
           JOIN "FiscalDocument" f ON f.id = l."fiscalDocumentId"
           WHERE f.kind IN ('SALE', 'REFUND')
             AND f.status = 'ISSUED'
-            AND f."issuedAt" >= ${periodStart}
-            AND f."issuedAt" < ${now}
+            AND f."issuedAt" >= ${period.start}
+            AND f."issuedAt" < ${period.endExclusive}
             AND l."productId" IS NOT NULL
           GROUP BY l."productId"
         )
@@ -142,8 +137,8 @@ export default async function AnalyticsConversionPage() {
           FROM "AnalyticsEvent" a
           WHERE a.type = 'ADD_TO_CART'
             AND a."productId" IS NOT NULL
-            AND a."occurredAt" >= ${periodStart}
-            AND a."occurredAt" < ${now}
+            AND a."occurredAt" >= ${period.start}
+            AND a."occurredAt" < ${period.endExclusive}
           GROUP BY a."anonymousId", a."productId"
         ), purchases AS (
           SELECT
@@ -182,19 +177,18 @@ export default async function AnalyticsConversionPage() {
       getErpModule("posete-konverzije", { take: 100 }),
     ]);
 
-  const funnel = funnelRows[0] ?? { visitors: 0, purchasers: 0, purchase_value: 0 };
   const conversion = funnel.visitors ? (funnel.purchasers / funnel.visitors) * 100 : 0;
-  const valuePerVisit = funnel.visitors ? funnel.purchase_value / funnel.visitors : 0;
-  const cartBuyers = new Set(cartConversions.map((row) => row.anonymous_id)).size;
-  const convertedCartBuyers = new Set(
-    cartConversions.filter((row) => row.purchased_qty > 0).map((row) => row.anonymous_id),
-  ).size;
+  const valuePerVisit = funnel.visitors ? funnel.purchaseValue / funnel.visitors : 0;
+  const cartConversion = funnel.cartBuyers
+    ? (funnel.convertedCartBuyers / funnel.cartBuyers) * 100
+    : 0;
+  const exportHref = `/api/admin/analytics/conversions/export?range=${encodeURIComponent(period.preset)}&from=${period.fromInput}&to=${period.toInput}&group=${granularity}`;
 
   return (
     <>
       <PageHeader
         title="Posete i konverzije"
-        description="Agregati sa 30-dnevnom atribucijom; beleže se samo događaji uz analytics saglasnost."
+        description="Posete po stranici i konverzije; kupovina se pripisuje poslednjoj posećenoj stranici pre checkout-a."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -202,15 +196,77 @@ export default async function AnalyticsConversionPage() {
         ]}
       />
       <div className="space-y-8 px-8 py-6">
+        <form method="get" className="grid gap-3 rounded-xl border border-border/60 bg-surface p-4 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-xs font-medium text-ink-600">
+            Period
+            <select name="range" defaultValue={period.preset} className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm">
+              {REPORT_PERIOD_PRESETS.map((preset) => (
+                <option key={preset.key} value={preset.key}>{preset.label}</option>
+              ))}
+              <option value="custom">Tačan raspon</option>
+            </select>
+          </label>
+          <label className="text-xs font-medium text-ink-600">
+            Od
+            <Input name="from" type="date" defaultValue={period.fromInput} className="mt-1 h-9" />
+          </label>
+          <label className="text-xs font-medium text-ink-600">
+            Do
+            <Input name="to" type="date" defaultValue={period.toInput} className="mt-1 h-9" />
+          </label>
+          <label className="text-xs font-medium text-ink-600">
+            Grupisanje
+            <select name="group" defaultValue={granularity} className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm">
+              <option value="day">Dnevno</option>
+              <option value="week">Nedeljno</option>
+              <option value="month">Mesečno</option>
+            </select>
+          </label>
+          <div className="flex items-end gap-2">
+            <button className="h-9 rounded-lg bg-walnut px-4 text-sm font-medium text-white">Primeni</button>
+            <Link href={exportHref} className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-ink-700">Excel</Link>
+          </div>
+        </form>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Trenutne posete" value={String(activeSessions.length)} hint="Jedinstvene aktivne sesije u poslednjih 5 minuta" />
-          <StatCard label="Poseta → kupovina" value={`${conversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${funnel.purchasers} kupaca / ${funnel.visitors} posetilaca`} />
-          <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(funnel.purchase_value)} atribuirane vrednosti`} />
-          <StatCard label="Korpa → kupovina" value={`${(cartBuyers ? (convertedCartBuyers / cartBuyers) * 100 : 0).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${convertedCartBuyers} / ${cartBuyers} anonimizovanih kupaca`} />
+          <StatCard label="Poseta → kupovina" value={`${conversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${funnel.purchasers} kupaca / ${funnel.visitors} posetilaca · ${period.label}`} />
+          <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(funnel.purchaseValue)} atribuirane vrednosti · ${period.label}`} />
+          <StatCard label="Korpa → kupovina" value={`${cartConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${funnel.convertedCartBuyers} / ${funnel.cartBuyers} anonimizovanih kupaca · ${period.label}`} />
         </div>
 
         <Card>
-          <CardTitle description="Posete proizvoda i izdata fiskalizovana prodaja u poslednjih 30 dana">Top 50 proizvoda</CardTitle>
+          <CardTitle description={`${period.label}; kupovina se pripisuje poslednjem PAGE_VIEW događaju pre checkout-a.`}>
+            Posete i konverzije po stranici
+          </CardTitle>
+          <DataTable
+            columns={[
+              { key: "period", label: granularity === "day" ? "Dan" : granularity === "week" ? "Nedelja od" : "Mesec" },
+              { key: "path", label: "Stranica" },
+              { key: "pageViews", label: "Pregledi", align: "right" },
+              { key: "visits", label: "Jedinstvene posete", align: "right" },
+              { key: "purchases", label: "Kupovine", align: "right" },
+              { key: "conversion", label: "Konverzija", align: "right" },
+              { key: "value", label: "Vrednost", align: "right" },
+            ]}
+            rows={pageConversions.map((row) => ({
+              id: `${row.bucket}:${row.path}`,
+              cells: {
+                period: row.bucket,
+                path: <span className="font-mono text-xs">{row.path}</span>,
+                pageViews: row.pageViews,
+                visits: row.visits,
+                purchases: row.purchases,
+                conversion: `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`,
+                value: formatRsd(row.purchaseValue),
+              },
+            }))}
+            empty="Nema consented poseta u izabranom periodu."
+          />
+        </Card>
+
+        <Card>
+          <CardTitle description={`Posete proizvoda i izdata fiskalizovana prodaja · ${period.label}`}>Top 50 proizvoda</CardTitle>
           <DataTable
             columns={[
               { key: "sku", label: "SKU" },
@@ -229,7 +285,7 @@ export default async function AnalyticsConversionPage() {
                 revenue: formatRsd(row.fiscal_revenue),
               },
             }))}
-            empty="Nema poseta proizvoda u poslednjih 30 dana."
+            empty="Nema poseta proizvoda u izabranom periodu."
           />
         </Card>
 

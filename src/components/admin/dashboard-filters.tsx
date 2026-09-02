@@ -228,7 +228,7 @@ export function DashboardFilters({
       data-client-ready={clientReady ? "true" : "false"}
     >
       <fieldset className="contents" disabled={!clientReady || saving}>
-        <form method="get" className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-5">
+        <form method="get" className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
           <label className="text-xs font-medium text-ink-600">
             Magacin
             <select
@@ -254,7 +254,8 @@ export function DashboardFilters({
           <DateRange name="fiscal" label="Fiskalni promet" draft={draft} setDraft={setDraft} />
           <DateRange name="reclamations" label="Reklamacije" draft={draft} setDraft={setDraft} />
           <DateRange name="topProducts" label="Top proizvodi" draft={draft} setDraft={setDraft} />
-          <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-5">
+          <DateRange name="analytics" label="Posete i konverzije" draft={draft} setDraft={setDraft} />
+          <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-3">
             <button className="rounded-lg bg-walnut px-4 py-2 text-sm font-medium text-white">
               Primeni filtere
             </button>

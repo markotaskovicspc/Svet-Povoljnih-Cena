@@ -15,6 +15,7 @@ describe("dashboard filter context", () => {
     expect(resolved.context.ordersRange).toBe("30d");
     expect(resolved.context.ordersFrom).toBe("2026-06-28");
     expect(resolved.context.fiscalRange).toBe("30d");
+    expect(resolved.context.analyticsRange).toBe("30d");
     expect(resolved.context.warehouseId).toBe("");
   });
 
@@ -50,6 +51,7 @@ describe("dashboard filter context", () => {
         fiscalRange: "mtd",
         fiscalFrom: "2026-07-01",
         fiscalTo: "2026-07-27",
+        analyticsRange: "7d",
         ordersRange: "invalid",
         unknown: "value",
       },
@@ -60,6 +62,7 @@ describe("dashboard filter context", () => {
       fiscalRange: "mtd",
       fiscalFrom: "2026-07-01",
       fiscalTo: "2026-07-27",
+      analyticsRange: "7d",
     });
     expect(cleanDashboardContext({ ordersFrom: "not-a-date" })).toEqual({});
     expect(hasDashboardContext(context)).toBe(true);

@@ -142,6 +142,10 @@ export async function PATCH(
       revalidateTag("catalog-pricing", { expire: 0 });
       revalidateTag("catalog-products", { expire: 0 });
     }
+    if (module === "prodajni-nalozi") {
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      revalidatePath(`/admin/erp/prodajni-nalozi/${rowId}`);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -179,6 +183,8 @@ async function persistErpCell(
     case "porudzbenice":
     case "porudzbenice-po-artiklima":
       return null;
+    case "prodajni-nalozi":
+      return persistSalesOrderCell(rowId, columnKey, value);
     case "ulazne-fakture":
       return persistInboundInvoiceCell(rowId, columnKey, value);
     case "sifarnici-artikala":
@@ -212,6 +218,46 @@ async function persistErpCell(
     default:
       return null;
   }
+}
+
+async function persistSalesOrderCell(
+  rowId: string,
+  columnKey: string,
+  value: CellValue,
+) {
+  if (columnKey !== "courierPaid") return null;
+  if (typeof value !== "boolean") {
+    throw new Error("Status uplate kurira mora biti Da ili Ne.");
+  }
+  const order = await db.order.findFirst({
+    where: {
+      OR: [{ id: rowId }, { items: { some: { id: rowId } } }],
+    },
+    select: {
+      id: true,
+      shippingMethod: true,
+      paymentMethod: true,
+    },
+  });
+  if (!order) throw new Error("Porudžbina nije pronađena.");
+  if (
+    value &&
+    (order.shippingMethod !== "KURIR" ||
+      !["POUZECE_GOTOVINA", "POUZECE_KARTICA"].includes(order.paymentMethod))
+  ) {
+    throw new Error(
+      "Uplata kurira može da se potvrdi samo za kurirsku pošiljku sa plaćanjem pouzećem.",
+    );
+  }
+  const updated = await db.order.update({
+    where: { id: order.id },
+    data: { courierPaidAt: value ? new Date() : null },
+    select: { courierPaidAt: true },
+  });
+  return {
+    value: Boolean(updated.courierPaidAt),
+    refreshRow: true,
+  };
 }
 
 async function persistProductCell(

@@ -10,6 +10,7 @@ export const DASHBOARD_PERIOD_NAMES = [
   "fiscal",
   "reclamations",
   "topProducts",
+  "analytics",
 ] as const;
 
 export type DashboardPeriodName = (typeof DASHBOARD_PERIOD_NAMES)[number];
@@ -34,6 +35,9 @@ export type DashboardFilterContext = {
   topProductsRange: DashboardPeriodRange;
   topProductsFrom: string;
   topProductsTo: string;
+  analyticsRange: DashboardPeriodRange;
+  analyticsFrom: string;
+  analyticsTo: string;
 };
 
 export type DashboardFilterParams = Partial<DashboardFilterContext>;
@@ -52,6 +56,9 @@ export const DASHBOARD_CONTEXT_KEYS = [
   "topProductsRange",
   "topProductsFrom",
   "topProductsTo",
+  "analyticsRange",
+  "analyticsFrom",
+  "analyticsTo",
 ] as const satisfies readonly (keyof DashboardFilterContext)[];
 
 export type ResolvedDashboardFilters = {
@@ -139,6 +146,9 @@ export function resolveDashboardFilters(
       topProductsRange: periods.topProducts.preset,
       topProductsFrom: periods.topProducts.fromInput,
       topProductsTo: periods.topProducts.toInput,
+      analyticsRange: periods.analytics.preset,
+      analyticsFrom: periods.analytics.fromInput,
+      analyticsTo: periods.analytics.toInput,
     },
   };
 }

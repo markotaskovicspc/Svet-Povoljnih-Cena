@@ -12,6 +12,7 @@ import {
   filterAndSortGridRows,
   parseGridArray,
 } from "@/lib/admin/grid-query";
+import { summarizeSalesOrderRows } from "@/lib/admin/sales-order-overview";
 
 export async function GET(
   request: Request,
@@ -99,5 +100,9 @@ export async function GET(
     pageSize,
     total: result.length,
     pageCount: Math.max(1, Math.ceil(result.length / pageSize)),
+    summary:
+      slug === "prodajni-nalozi"
+        ? summarizeSalesOrderRows(result)
+        : undefined,
   });
 }

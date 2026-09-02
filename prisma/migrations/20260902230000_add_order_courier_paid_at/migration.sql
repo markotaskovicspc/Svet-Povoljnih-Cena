@@ -1,0 +1,2 @@
+ALTER TABLE "Order"
+ADD COLUMN "courierPaidAt" TIMESTAMP(3);

@@ -444,7 +444,13 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         "Status plaćanja",
         "Kurirska služba",
         "Status kurirske pošiljke",
+        "Kurir uplatio pouzeće",
+        "Datum uplate kurira",
         "Datum fiskalizacije",
+        "Refundirano",
+        "Refundirano kom",
+        "Datum fiskalnog refunda",
+        "Datum povrata novca",
         "Ime i prezime kupca / firma",
         "Način kupovine",
         "PIB",
@@ -486,6 +492,9 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       await expect(
         page.getByRole("columnheader", { name: "Status porudžbine" }),
       ).toHaveCount(0);
+      await expect(
+        page.getByLabel("Zbir svih filtriranih porudžbina"),
+      ).toBeVisible();
 
       const search = page.getByPlaceholder("Brza pretraga po vidljivim kolonama");
       await search.fill(webOrderNumber);
@@ -576,7 +585,7 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
       await expect(page.getByLabel("Vrsta porudžbine")).toHaveValue("WEB");
       await expect(page.getByLabel("Vrsta porudžbine")).toBeDisabled();
       await expect(
-        page.getByText("Osnovni WEB podaci ostaju samo za pregled.", {
+        page.getByText("Novi artikal može da se doda", {
           exact: false,
         }),
       ).toBeVisible();
@@ -593,11 +602,15 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         page.getByRole("heading", { name: "Nova porudžbina" }),
       ).toBeVisible();
       await expect(page.locator('form[data-client-ready="true"]')).toHaveCount(1);
-      await page.getByLabel("Kupac").fill(fixture.customerPib);
+      const customerCombobox = page.getByRole("combobox", {
+        name: "Kupac",
+        exact: true,
+      });
+      await customerCombobox.fill(fixture.customerPib);
       await page
         .getByRole("option", { name: new RegExp(fixture.customerCompany) })
         .click();
-      await expect(page.getByLabel("Kupac")).toHaveValue(
+      await expect(customerCombobox).toHaveValue(
         `${fixture.customerCompany} · PIB ${fixture.customerPib}`,
       );
       await page.getByLabel("Cenovnik").selectOption(priceListId);
@@ -712,6 +725,53 @@ test.describe("ERP pregled i ručne MP/VP/INO porudžbine", () => {
         products.find((product) => product.id === supplierProductId)
           ?.supplierReservedStock,
       ).toBe(3);
+    });
+
+    await test.step("interna oznaka uplate kurira beleži i briše datum", async () => {
+      const order = await db.order.findUniqueOrThrow({
+        where: { id: orderId! },
+        select: { number: true },
+      });
+      await page.goto("/admin/erp/prodajni-nalozi", {
+        waitUntil: "domcontentloaded",
+      });
+      await page
+        .getByPlaceholder("Brza pretraga po vidljivim kolonama")
+        .fill(order.number);
+      await page.getByRole("button", { name: "Uredi podržana polja" }).click();
+      const row = page.getByRole("row").filter({ hasText: fixture.dcSku }).first();
+      const courierPaid = row.getByRole("checkbox", {
+        name: /^Kurir uplatio pouzeće /,
+      });
+      await courierPaid.check();
+      await expect
+        .poll(async () =>
+          (
+            await db.order.findUniqueOrThrow({
+              where: { id: orderId! },
+              select: { courierPaidAt: true },
+            })
+          ).courierPaidAt,
+        )
+        .not.toBeNull();
+
+      const refreshedRow = page
+        .getByRole("row")
+        .filter({ hasText: fixture.dcSku })
+        .first();
+      await refreshedRow
+        .getByRole("checkbox", { name: /^Kurir uplatio pouzeće / })
+        .uncheck();
+      await expect
+        .poll(async () =>
+          (
+            await db.order.findUniqueOrThrow({
+              where: { id: orderId! },
+              select: { courierPaidAt: true },
+            })
+          ).courierPaidAt,
+        )
+        .toBeNull();
     });
 
     await test.step("broj iz pregleda otvara celu porudžbinu, a Uredi bez gubitka zalihe menja količinu i statuse", async () => {

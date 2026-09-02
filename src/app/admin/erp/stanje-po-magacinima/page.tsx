@@ -263,8 +263,16 @@ async function importOpeningInventory(
   )(formData);
 }
 
-export default async function InventoryPage() {
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ prikaz?: string | string[] }>;
+}) {
   await requireAdminAction(["OPS"]);
+  const requestedView = (await searchParams).prikaz;
+  const managementView =
+    (Array.isArray(requestedView) ? requestedView[0] : requestedView) ===
+    "upravljanje";
   const [warehouse, stockModule, productCount, stockedCount] = await Promise.all([
     db.warehouse.findFirst({ where: { active: true, isDefault: true } }),
     getErpModule("stanje-po-magacinima", { take: 10_000 }),
@@ -283,10 +291,25 @@ export default async function InventoryPage() {
         <nav className="flex flex-wrap gap-2" aria-label="Lager">
           <Link
             href="/admin/erp/stanje-po-magacinima"
-            aria-current="page"
-            className="rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-canvas"
+            aria-current={!managementView ? "page" : undefined}
+            className={
+              !managementView
+                ? "rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-canvas"
+                : "rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-muted"
+            }
           >
-            Stanje
+            Stanje i artikli
+          </Link>
+          <Link
+            href="/admin/erp/stanje-po-magacinima?prikaz=upravljanje"
+            aria-current={managementView ? "page" : undefined}
+            className={
+              managementView
+                ? "rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-canvas"
+                : "rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-muted"
+            }
+          >
+            Upravljanje lagerom
           </Link>
           <Link
             href="/admin/erp/kretanja-zaliha"
@@ -295,32 +318,37 @@ export default async function InventoryPage() {
             Promene zaliha
           </Link>
         </nav>
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatCard label="Magacin" value={warehouse?.code ?? "DC"} hint={warehouse?.name ?? "Kreira se pri prvom unosu"} />
-          <StatCard label="Artikli" value={String(productCount)} />
-          <StatCard label="Sa zalihom" value={String(stockedCount)} tone={stockedCount ? "success" : "warning"} />
-        </div>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Card>
-            <CardTitle description="CSV ili XLSX; obavezne kolone su sku i qty. Opcione dimenzije: widthCm, depthCm, heightCm.">
-              DC stanje iz tabele
-            </CardTitle>
-            <InventoryImportForm action={importOpeningInventory} />
-          </Card>
-          <Card>
-            <CardTitle>Ručna korekcija</CardTitle>
-            <AdminActionForm action={adjustStock} className="space-y-3" refreshOnSuccess>
-              <input type="hidden" name="operationId" value={randomUUID()} />
-              <Field label="SKU"><Input name="sku" required /></Field>
-              <Field label="Promena količine" hint="Pozitivno za ulaz, negativno za izlaz."><Input name="qtyDelta" type="number" step="1" required /></Field>
-              <Field label="Razlog"><Input name="note" maxLength={300} required /></Field>
-              <SubmitButton confirm="Proknjižiti ovu korekciju lagera? Promena će ostaviti trajan magacinski i audit trag.">
-                Proknjiži promenu
-              </SubmitButton>
-            </AdminActionForm>
-          </Card>
-        </div>
-        {stockModule ? <ErpGrid module={stockModule} /> : null}
+        {managementView ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-3">
+              <StatCard label="Magacin" value={warehouse?.code ?? "DC"} hint={warehouse?.name ?? "Kreira se pri prvom unosu"} />
+              <StatCard label="Artikli" value={String(productCount)} />
+              <StatCard label="Sa zalihom" value={String(stockedCount)} tone={stockedCount ? "success" : "warning"} />
+            </div>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Card>
+                <CardTitle description="CSV ili XLSX; obavezne kolone su sku i qty. Opcione dimenzije: widthCm, depthCm, heightCm.">
+                  DC stanje iz tabele
+                </CardTitle>
+                <InventoryImportForm action={importOpeningInventory} />
+              </Card>
+              <Card>
+                <CardTitle>Ručna korekcija</CardTitle>
+                <AdminActionForm action={adjustStock} className="space-y-3" refreshOnSuccess>
+                  <input type="hidden" name="operationId" value={randomUUID()} />
+                  <Field label="SKU"><Input name="sku" required /></Field>
+                  <Field label="Promena količine" hint="Pozitivno za ulaz, negativno za izlaz."><Input name="qtyDelta" type="number" step="1" required /></Field>
+                  <Field label="Razlog"><Input name="note" maxLength={300} required /></Field>
+                  <SubmitButton confirm="Proknjižiti ovu korekciju lagera? Promena će ostaviti trajan magacinski i audit trag.">
+                    Proknjiži promenu
+                  </SubmitButton>
+                </AdminActionForm>
+              </Card>
+            </div>
+          </>
+        ) : stockModule ? (
+          <ErpGrid module={stockModule} />
+        ) : null}
       </div>
     </>
   );

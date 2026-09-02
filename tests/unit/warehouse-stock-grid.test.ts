@@ -23,6 +23,7 @@ function product(
     name: `Artikal ${id}`,
     stock: 0,
     incomingStock,
+    cogs: 250,
     availableWebManual: true,
     availableWholesaleManual: true,
     availableExportManual: true,
@@ -32,6 +33,31 @@ function product(
 }
 
 describe("DC warehouse incoming rows", () => {
+  it("values stock from physical quantity, not available quantity", () => {
+    const reserved = product("reserved");
+    reserved.orderItems = [
+      {
+        warehouseId: "dc",
+        warehouseReservedQty: 3,
+        stockMovements: [],
+      },
+    ];
+    const [row] = buildWarehouseStockGridRows({
+      stocks: [{ id: "stock-row", qty: 10, warehouse, product: reserved }],
+      incomingOrderLines: [],
+      productsWithStoredIncoming: [],
+      defaultWarehouse: warehouse,
+    });
+
+    expect(row.values).toMatchObject({
+      physical: 10,
+      reserved: 3,
+      available: 7,
+      cogs: 250,
+      cogsValue: 2_500,
+    });
+  });
+
   it("treats every non-final purchase-order status as incoming", () => {
     expect(WAREHOUSE_GRID_INCOMING_ORDER_STATUSES).toEqual([
       "DRAFT",

@@ -1288,6 +1288,8 @@ model Order {
   externalOrderNo            String?
   /// Manual or synchronized confirmation that the issued invoice was accepted by SEF.
   sefAcceptedAt              DateTime?
+  /// Admin-confirmed time when the courier remitted collected cash-on-delivery funds.
+  courierPaidAt              DateTime?
 
   subtotal              Decimal  @db.Decimal(12, 2)
   savings               Decimal  @default(0) @db.Decimal(12, 2)

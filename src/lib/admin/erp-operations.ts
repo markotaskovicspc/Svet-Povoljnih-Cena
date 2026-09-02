@@ -49,6 +49,7 @@ import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
+import { discountedSalesOrderLineTotals } from "@/lib/admin/sales-order-overview";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -296,6 +297,8 @@ export const operationalErpModules: ErpModule[] = [
       number("reserved", "Rezervisano"),
       number("available", "Raspoloživo"),
       number("incoming", "U dolasku"),
+      money("cogs", "COGS / kom"),
+      money("cogsValue", "COGS vrednost"),
       bool("web", "Web"),
       bool("wholesale", "VP"),
       bool("export", "INO"),
@@ -477,7 +480,13 @@ export const operationalErpModules: ErpModule[] = [
         "Kurirski nalog otkazan": "red",
         "Nije kurirska isporuka": "neutral",
       }),
+      bool("courierPaid", "Kurir uplatio pouzeće"),
+      date("courierPaidAt", "Datum uplate kurira"),
       date("fiscalizedAt", "Datum fiskalizacije"),
+      bool("refunded", "Refundirano"),
+      number("refundedQty", "Refundirano kom"),
+      date("refundFiscalizedAt", "Datum fiskalnog refunda"),
+      date("refundPaidAt", "Datum povrata novca"),
       text("customer", "Ime i prezime kupca / firma"),
       status("purchaseIdentity", "Način kupovine", [
         "Ulogovan korisnik",
@@ -514,9 +523,12 @@ export const operationalErpModules: ErpModule[] = [
       bool("sefAccepted", "Prihvaćeno na SEF-u"),
       { ...bool("paid", "Plaćeno (Da/Ne)"), defaultVisible: false },
     ],
+    editableColumns: ["courierPaid"],
     rows: emptyRows,
     notes: [
       "Klik na broj otvara celu porudžbinu. Nova, Uredi i Obriši rade nad celom porudžbinom i kada je izabran samo jedan red artikla.",
+      "Kurir uplatio pouzeće je interni ručni podatak: čekiranje automatski beleži trenutni datum, a skidanje čeka briše datum.",
+      "Fakturisano znači da porudžbina ima najmanje jednu fakturu koja nije otkazana; ne znači fiskalizovano, plaćeno ili SEF prihvaćeno.",
       "DOB artikal se podrazumevano vodi u DC-u kada tamo postoji raspoloživo stanje; bez DC stanja vodi se kod dobavljača. Ostali statusi podrazumevano koriste DC.",
     ],
   },
@@ -1246,6 +1258,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
     name: true,
     stock: true,
     incomingStock: true,
+    cogs: true,
     availableWebManual: true,
     availableWholesaleManual: true,
     availableExportManual: true,
@@ -1548,10 +1561,17 @@ async function salesOrderRows(
       customer: true,
       priceList: { select: { code: true, name: true, currency: true } },
       items: {
-        ...(filters?.warehouseId ? { where: { warehouseId: filters.warehouseId } } : {}),
         orderBy: { id: "asc" },
         include: {
           warehouse: { select: { name: true } },
+          fiscalLines: {
+            where: {
+              fiscalDocument: {
+                is: { kind: "SALE", status: "ISSUED" },
+              },
+            },
+            select: { qty: true, refundedQty: true },
+          },
           product: {
             include: {
               supplier: { select: { name: true } },
@@ -1574,9 +1594,14 @@ async function salesOrderRows(
       },
       fiscal: { select: { id: true, fiscalizedAt: true } },
       fiscalDocuments: {
-        where: { kind: "SALE", status: "ISSUED" },
-        select: { id: true, issuedAt: true },
+        where: { kind: { in: ["SALE", "REFUND"] }, status: "ISSUED" },
+        select: { id: true, kind: true, issuedAt: true },
         orderBy: { issuedAt: "asc" },
+      },
+      paymentRefunds: {
+        where: { status: "COMPLETED" },
+        select: { completedAt: true },
+        orderBy: { completedAt: "asc" },
       },
       invoices: {
         where: { status: { not: "CANCELLED" } },
@@ -1602,6 +1627,24 @@ async function salesOrderRows(
     },
   });
   return orders.flatMap((order): ErpRow[] => {
+    const saleFiscalDocuments = order.fiscalDocuments.filter(
+      (document) => document.kind === "SALE",
+    );
+    const refundFiscalDocuments = order.fiscalDocuments.filter(
+      (document) => document.kind === "REFUND",
+    );
+    const refundedQty = order.items.reduce(
+      (sum, item) =>
+        sum +
+        item.fiscalLines.reduce(
+          (lineSum, line) => lineSum + Math.max(0, line.refundedQty),
+          0,
+        ),
+      0,
+    );
+    const refundFiscalizedAt =
+      refundFiscalDocuments.at(-1)?.issuedAt ?? null;
+    const refundPaidAt = order.paymentRefunds.at(-1)?.completedAt ?? null;
     const documentBuyer = resolveOrderDocumentBuyerAddress(order);
     const customer =
       documentBuyer.companyName ||
@@ -1618,7 +1661,7 @@ async function salesOrderRows(
       number: order.number,
       orderDate: dateTime(order.createdAt),
       fiscalizedAt: dateTime(
-        order.fiscalDocuments[0]?.issuedAt ?? order.fiscal?.fiscalizedAt ?? null,
+        saleFiscalDocuments[0]?.issuedAt ?? order.fiscal?.fiscalizedAt ?? null,
       ),
       channel: order.channel,
       paymentMethod: adminPaymentMethodLabel(order.paymentMethod),
@@ -1643,7 +1686,16 @@ async function salesOrderRows(
         paymentStatuses,
         courierStatus: orderCourier.status,
       }),
-      fiscalized: Boolean(order.fiscal || order.fiscalDocuments.length),
+      courierPaid: Boolean(order.courierPaidAt),
+      courierPaidAt: dateTime(order.courierPaidAt),
+      refunded:
+        refundedQty > 0 ||
+        refundFiscalDocuments.length > 0 ||
+        order.paymentRefunds.length > 0,
+      refundedQty,
+      refundFiscalizedAt: dateTime(refundFiscalizedAt),
+      refundPaidAt: dateTime(refundPaidAt),
+      fiscalized: Boolean(order.fiscal || saleFiscalDocuments.length),
       invoiced: order.invoices.length > 0,
       sefAccepted: Boolean(order.sefAcceptedAt),
       paid: order.payments.some((payment) => payment.status === "PAID"),
@@ -1653,7 +1705,10 @@ async function salesOrderRows(
       common,
       shipping: order.shipping,
     });
-    if (!order.items.length && !shippingRow) {
+    const visibleItems = filters?.warehouseId
+      ? order.items.filter((item) => item.warehouseId === filters.warehouseId)
+      : order.items;
+    if (!visibleItems.length && !shippingRow) {
       return [
         {
           id: order.id,
@@ -1686,7 +1741,15 @@ async function salesOrderRows(
         },
       ];
     }
-    const itemRows = order.items.map((item) => {
+    const discountedTotals = discountedSalesOrderLineTotals(
+      order.items.map((item) => ({
+        id: item.id,
+        qty: item.qty,
+        unitPrice: decimal(item.unitPriceSale) ?? 0,
+      })),
+      decimal(order.firstPurchaseDiscount) ?? 0,
+    );
+    const itemRows = visibleItems.map((item) => {
       const courier = salesOrderCourierDisplay({
         shippingMethod: order.shippingMethod,
         itemId: item.id,
@@ -1695,7 +1758,13 @@ async function salesOrderRows(
       const product = item.product;
       const leaf = product?.categories[0]?.category ?? null;
       const unitPrice = decimal(item.unitPriceSale) ?? 0;
-      const totals = calculateSalesLineTotals(item.qty, unitPrice);
+      const totals =
+        discountedTotals.get(item.id) ??
+        calculateSalesLineTotals(item.qty, unitPrice);
+      const itemRefundedQty = item.fiscalLines.reduce(
+        (sum, line) => sum + Math.max(0, line.refundedQty),
+        0,
+      );
       return {
         id: item.id,
         detailId: order.id,
@@ -1710,6 +1779,8 @@ async function salesOrderRows(
             paymentStatuses,
             courierStatus: courier.status,
           }),
+          refunded: itemRefundedQty > 0,
+          refundedQty: itemRefundedQty,
           sku: item.sku,
           supplier: product?.supplier?.name ?? item.supplierName,
           category:

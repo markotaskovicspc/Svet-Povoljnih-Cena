@@ -48,6 +48,10 @@ import type {
   ErpValue,
 } from "@/lib/admin/erp";
 import { nextGridSorting } from "@/lib/admin/grid-query";
+import {
+  summarizeSalesOrderRows,
+  type SalesOrderGridSummary,
+} from "@/lib/admin/sales-order-overview";
 
 type SavedView = {
   id?: string;
@@ -131,6 +135,13 @@ function formatValue(value: ErpValue, column: ErpColumn) {
     }).format(value);
   }
   return textValue(value);
+}
+
+function formatMoney(value: number) {
+  return `${new Intl.NumberFormat("sr-Latn-RS", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)} RSD`;
 }
 
 const STATUS_TONE_CLASS: Record<
@@ -250,7 +261,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     if (
       moduleSlug === "prodajni-nalozi" &&
       window.localStorage.getItem(columnOrderVersionKey(moduleSlug)) !==
-        "operational-status-v2"
+        "finance-status-v3"
     ) {
       const migrated = completeOrder.filter(
         (key) =>
@@ -259,6 +270,12 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
           key !== "purchaseIdentity" &&
           key !== "courierService" &&
           key !== "courierStatus" &&
+          key !== "courierPaid" &&
+          key !== "courierPaidAt" &&
+          key !== "refunded" &&
+          key !== "refundedQty" &&
+          key !== "refundFiscalizedAt" &&
+          key !== "refundPaidAt" &&
           key !== "status",
       );
       const channelIndex = migrated.indexOf("channel");
@@ -267,6 +284,17 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
         0,
         "paymentMethod",
         "paymentStatus",
+        "courierPaid",
+        "courierPaidAt",
+      );
+      const fiscalizedIndex = migrated.indexOf("fiscalizedAt");
+      migrated.splice(
+        fiscalizedIndex >= 0 ? fiscalizedIndex + 1 : migrated.length,
+        0,
+        "refunded",
+        "refundedQty",
+        "refundFiscalizedAt",
+        "refundPaidAt",
       );
       migrated.splice(
         migrated.length,
@@ -283,7 +311,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
       window.localStorage.setItem(columnOrderKey(moduleSlug), JSON.stringify(migrated));
       window.localStorage.setItem(
         columnOrderVersionKey(moduleSlug),
-        "operational-status-v2",
+        "finance-status-v3",
       );
       return migrated;
     }
@@ -447,6 +475,11 @@ export function ErpGrid({
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [totalRows, setTotalRows] = useState(module.rows.length);
+  const [summary, setSummary] = useState<SalesOrderGridSummary | null>(() =>
+    module.slug === "prodajni-nalozi"
+      ? summarizeSalesOrderRows(module.rows)
+      : null,
+  );
   const [loadingRows, setLoadingRows] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [context, setContext] = useState<Record<string, string>>(() =>
@@ -572,6 +605,7 @@ export function ErpGrid({
               page?: number;
               pageCount?: number;
               total?: number;
+              summary?: SalesOrderGridSummary;
               error?: string;
             }
           | null;
@@ -581,6 +615,7 @@ export function ErpGrid({
         setServerRows(payload.rows);
         setPageCount(payload.pageCount ?? 1);
         setTotalRows(payload.total ?? payload.rows.length);
+        setSummary(payload.summary ?? null);
         const loadedIds = new Set(payload.rows.map((row) => row.id));
         setSelectedIds(
           (current) =>
@@ -1515,15 +1550,22 @@ export function ErpGrid({
       <div>
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-            <p className="text-sm text-ink-500">
-              {loadingRows
-                ? "Učitavanje…"
-                : `${filteredRows.length} na strani · ${totalRows} ukupno`}
-              {" · "}
-              {visible.length} vidljivih kolona
-              {savedCellCount ? ` · ${savedCellCount} snimljenih izmena` : ""}
-              {isEditMode ? " · uređivanje uključeno" : ""}
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-ink-500">
+                {loadingRows
+                  ? "Učitavanje…"
+                  : `${filteredRows.length} na strani · ${totalRows} ukupno`}
+                {" · "}
+                {visible.length} vidljivih kolona
+                {savedCellCount ? ` · ${savedCellCount} snimljenih izmena` : ""}
+                {isEditMode ? " · uređivanje uključeno" : ""}
+              </p>
+              {module.slug === "prodajni-nalozi" && summary ? (
+                <p className="text-sm font-medium text-ink-800" aria-label="Zbir svih filtriranih porudžbina">
+                  Zbir svih filtriranih porudžbina: {summary.orderCount} naloga · bez PDV-a {formatMoney(summary.totalNet)} · sa PDV-om {formatMoney(summary.totalGross)}
+                </p>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"

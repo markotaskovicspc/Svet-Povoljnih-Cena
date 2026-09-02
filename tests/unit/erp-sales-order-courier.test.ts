@@ -59,6 +59,23 @@ describe("sales-order courier overview display", () => {
     });
   });
 
+  it("exposes refund and manual courier-remittance fields", () => {
+    const definition = getErpModuleDefinition("prodajni-nalozi");
+    const keys = definition?.columns.map((column) => column.key) ?? [];
+
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "refunded",
+        "refundedQty",
+        "refundFiscalizedAt",
+        "refundPaidAt",
+        "courierPaid",
+        "courierPaidAt",
+      ]),
+    );
+    expect(definition?.editableColumns).toContain("courierPaid");
+  });
+
   it("shows the courier status assigned to the matching order item", () => {
     expect(
       salesOrderCourierDisplay({
