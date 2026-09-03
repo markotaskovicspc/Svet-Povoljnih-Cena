@@ -147,10 +147,11 @@ async function createManualReclamation(
 
       const order = await lookupOrderForReclamation(parsed.data.orderNumberOrFiscal);
       if (!order) return { ok: false as const, error: "Porudžbina nije pronađena." };
-      if (order.status !== "ISPORUCENO") {
+      if (!["U_ISPORUCI", "ISPORUCENO"].includes(order.status)) {
         return {
           ok: false as const,
-          error: "Ručna reklamacija je dozvoljena samo za isporučenu porudžbinu.",
+          error:
+            "Ručna reklamacija je dozvoljena za porudžbinu u isporuci ili isporučenu porudžbinu.",
         };
       }
       const orderItem = order.items.find((item) => item.sku === parsed.data.sku);
@@ -194,7 +195,7 @@ async function createManualReclamation(
         const errors: Record<typeof result.reason, string> = {
           ORDER_NOT_FOUND: "Porudžbina nije pronađena.",
           ORDER_NOT_DELIVERED:
-            "Ručna reklamacija je dozvoljena samo za isporučenu porudžbinu.",
+            "Ručna reklamacija je dozvoljena za porudžbinu u isporuci ili isporučenu porudžbinu.",
           ITEM_NOT_FOUND: "Stavka nije pronađena u porudžbini.",
           UNAUTHORIZED: "Nemate pravo da unesete ovu reklamaciju.",
           INVALID_PHOTO: "Priložena fotografija nije ispravna.",
@@ -280,9 +281,55 @@ async function updateReclamationDetails(formData: FormData) {
       const adminNote = String(formData.get("adminNote") ?? "").trim() || null;
       const resolutionNote =
         String(formData.get("resolutionNote") ?? "").trim() || null;
+      const current = await db.reclamation.findUnique({
+        where: { id },
+        select: {
+          quantity: true,
+          resolution: true,
+          replacementQty: true,
+          pickupBatchLines: {
+            where: { purpose: "RECLAMATION_REPLACEMENT" },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+      if (!current) {
+        return { ok: false as const, error: "Reklamacija nije pronađena." };
+      }
+      const replacementQty =
+        resolution === "ZAMENA_DELA"
+          ? 0
+          : resolution === "ZAMENA_ARTIKLA"
+            ? current.quantity
+            : null;
+      if (decision === "PRIHVACENA" && resolution === "ZAMENA_DELA" && !resolutionNote) {
+        return {
+          ok: false as const,
+          error: "Upišite tačan naziv dela koji magacin treba da pošalje.",
+        };
+      }
+      if (
+        current.pickupBatchLines.length &&
+        (current.resolution !== resolution ||
+          current.replacementQty !== replacementQty)
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Zamena je već u picking nalogu. Prvo je uklonite iz naloga, pa promenite vrstu zamene.",
+        };
+      }
       await db.reclamation.update({
         where: { id },
-        data: { decision, resolution, respondedAt, adminNote, resolutionNote },
+        data: {
+          decision,
+          resolution,
+          replacementQty,
+          respondedAt,
+          adminNote,
+          resolutionNote,
+        },
       });
       await queueReclamationReplacement(id, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
@@ -290,7 +337,14 @@ async function updateReclamationDetails(formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
-        diff: { decision, resolution, respondedAt, adminNote, resolutionNote },
+        diff: {
+          decision,
+          resolution,
+          replacementQty,
+          respondedAt,
+          adminNote,
+          resolutionNote,
+        },
       };
     },
   )(formData);
@@ -473,7 +527,7 @@ export default async function ReclamationsPage({
             <span className="ml-2 text-sm font-normal text-ink-500">Forma je sakrivena dok je ne otvorite.</span>
           </summary>
         <Card className="rounded-t-none border-x-0 border-b-0">
-          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Dostupne su samo isporučene porudžbine i preostale količine.">
+          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Dostupne su porudžbine u isporuci i isporučene porudžbine, uz preostale količine.">
             Ručni unos reklamacije
           </CardTitle>
           <AdminActionForm

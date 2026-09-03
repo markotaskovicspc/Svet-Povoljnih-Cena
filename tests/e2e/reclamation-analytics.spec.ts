@@ -695,7 +695,41 @@ test.describe("Admin analitika reklamacija", () => {
       await assertWorkbookContains(dailyExport, "Fiskalizovano", "UKUPNO");
     });
 
-    await test.step("operater ručno evidentira reklamaciju samo za isporučenu stavku", async () => {
+    await test.step("stara nefiskalizovana porudžbina ostaje dostupna za ručnu fiskalizaciju", async () => {
+      const product = await db.product.findUniqueOrThrow({
+        where: { sku: fixture.skuC },
+      });
+      const oldOrderNumber = `${prefix}-STARA-FISKAL`.slice(0, 80);
+      await db.order.create({
+        data: {
+          ...orderData(oldOrderNumber, "U_ISPORUCI"),
+          createdAt: new Date("2025-01-01T10:00:00.000Z"),
+          items: {
+            create: orderItemData(product, fixture.supplierA, 1, createdWarehouseId),
+          },
+        },
+      });
+      await db.order.createMany({
+        data: Array.from({ length: 85 }, (_, index) => ({
+          ...orderData(`${prefix}-NOVIJA-${index}`.slice(0, 80), "U_ISPORUCI"),
+          createdAt: new Date(Date.now() + index * 1_000),
+        })),
+      });
+
+      await page.goto("/admin/fiskalizacija", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Ručna fiskalizacija" }).click();
+      const dialog = page.getByRole("dialog", { name: "Ručna fiskalizacija" });
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog
+          .getByRole("combobox", { name: "Porudžbina" })
+          .locator("option")
+          .filter({ hasText: oldOrderNumber }),
+      ).toHaveCount(1);
+      await page.keyboard.press("Escape");
+    });
+
+    await test.step("operater ručno evidentira reklamaciju dok je porudžbina u isporuci", async () => {
       await page.goto("/admin/erp/reklamacije-dnevnik", {
         waitUntil: "domcontentloaded",
       });
@@ -709,19 +743,19 @@ test.describe("Admin analitika reklamacija", () => {
         name: "Broj porudžbine ili fiskalnog računa",
       });
       const skuSelect = form.locator('select[name="sku"]');
-      await orderSearch.fill(fixture.activeOrder);
+      await orderSearch.fill(fixture.cancelledOrder);
       await expect(
-        form.getByText("Nema isporučenih porudžbina sa tim nizom."),
+        form.getByText("Nema porudžbina u isporuci ili isporučenih sa tim nizom."),
       ).toBeVisible();
       await expect(skuSelect).toBeDisabled();
 
-      const description = `${prefix} ručni unos reklamacije`;
-      await orderSearch.fill(fixture.deliveredOrder);
+      const description = `${prefix} ručni unos reklamacije u isporuci`;
+      await orderSearch.fill(fixture.activeOrder);
       await form
-        .getByRole("option", { name: new RegExp(fixture.deliveredOrder) })
+        .getByRole("option", { name: new RegExp(fixture.activeOrder) })
         .click();
       await expect(skuSelect).toBeEnabled();
-      await skuSelect.selectOption(fixture.skuC);
+      await skuSelect.selectOption(fixture.skuA);
       await form.locator('input[name="quantity"]').fill("1");
       await form.locator('select[name="type"]').selectOption("KVAR");
       await form.locator('select[name="request"]').selectOption("ZAMENA");
@@ -744,7 +778,18 @@ test.describe("Admin analitika reklamacija", () => {
         where: { description },
         include: { events: true },
       });
-      expect(saved).toMatchObject({ type: "KVAR", request: "ZAMENA" });
+      expect(saved).toMatchObject({
+        type: "KVAR",
+        request: "ZAMENA",
+      });
+      expect(saved.orderId).toBe(
+        (
+          await db.order.findUniqueOrThrow({
+            where: { number: fixture.activeOrder },
+            select: { id: true },
+          })
+        ).id,
+      );
       expect(
         saved.events.some(
           (event) =>

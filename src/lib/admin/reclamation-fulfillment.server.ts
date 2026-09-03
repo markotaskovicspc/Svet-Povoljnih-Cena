@@ -101,91 +101,102 @@ export async function preflightReclamationShipment(
 
 export async function createReclamationShipment(args: ReclamationShipmentOptions) {
   assertReclamationPurpose(args.purpose);
+  const reclamation = await db.reclamation.findUnique({
+    where: { id: args.reclamationId },
+    select: {
+      id: true,
+      orderId: true,
+      decision: true,
+      resolution: true,
+      productId: true,
+      orderItemId: true,
+      sku: true,
+      quantity: true,
+      replacementQty: true,
+      warehouseId: true,
+      warehouseStatus: true,
+      pickupBatchLines: {
+        where: { purpose: args.purpose },
+        select: { batchId: true },
+        take: 1,
+      },
+      shipments: {
+        where: { purpose: args.purpose },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+  if (!reclamation) throw new Error("Reklamacija nije pronađena.");
+  const existing = reclamation.shipments[0];
+  if (!existing || existing.status === "FAILED") {
+    assertReclamationShipmentReady(reclamation, args);
+  }
 
-  const lockKey = `reclamation-shipment:${args.reclamationId}:${args.purpose}`;
-  return db.$transaction(
-    async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))::text AS "lock"`;
-      const reclamation = await tx.reclamation.findUnique({
-        where: { id: args.reclamationId },
-        select: {
-          id: true,
-          orderId: true,
-          decision: true,
-          resolution: true,
-          productId: true,
-          orderItemId: true,
-          sku: true,
-          quantity: true,
-          warehouseId: true,
-          warehouseStatus: true,
-          pickupBatchLines: {
-            where: { purpose: args.purpose },
-            select: { batchId: true },
-            take: 1,
-          },
-          shipments: {
-            where: { purpose: args.purpose },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      });
-      if (!reclamation) throw new Error("Reklamacija nije pronađena.");
-      const existing = reclamation.shipments[0];
-      if (existing && existing.status !== "FAILED") return existing;
-      assertReclamationShipmentReady(reclamation, args);
-
-      if (
-        args.purpose === "RECLAMATION_REPLACEMENT" &&
-        reclamation.resolution === "ZAMENA_ARTIKLA"
-      ) {
-        if (!reclamation.productId || !reclamation.warehouseId) {
-          throw new Error("Zamenski artikal nema vezan proizvod ili magacin.");
-        }
-        await adjustInventory(tx, {
-          idempotencyKey: `reclamation-replacement:${reclamation.id}:out`,
-          productId: reclamation.productId,
-          sku: reclamation.sku,
-          qtyDelta: -reclamation.quantity,
-          warehouseId: reclamation.warehouseId,
-          kind: StockMovementKind.ADJUSTMENT,
-          note: `Izdavanje zamenskog artikla po reklamaciji ${reclamation.id}.`,
-          actorId: args.actorId,
-          orderId: reclamation.orderId,
-          orderItemId: reclamation.orderItemId,
+  // Provider creation performs its own Prisma reads and writes. It must not run
+  // inside an interactive transaction: production intentionally uses a
+  // one-connection pool, so a nested client query would wait on the connection
+  // held by its parent transaction until `timeout exceeded when trying to
+  // connect`. Provider I/O also must not keep a database transaction open.
+  const shipment =
+    existing && existing.status !== "FAILED"
+      ? existing
+      : await createShipmentForOrder(reclamation.orderId, {
+          purpose: args.purpose,
+          reclamationId: reclamation.id,
+          packageCount: args.packageCount,
+          packages: args.packages,
+          pickupDate: args.pickupDate,
+          provider: args.provider,
+          codAmount: 0,
         });
-      }
 
-      const shipment = await createShipmentForOrder(reclamation.orderId, {
-        purpose: args.purpose,
-        reclamationId: reclamation.id,
-        packageCount: args.packageCount,
-        packages: args.packages,
-        pickupDate: args.pickupDate,
-        provider: args.provider,
-        codAmount: 0,
+  await db.$transaction(async (tx) => {
+    if (
+      args.purpose === "RECLAMATION_REPLACEMENT" &&
+      reclamation.resolution === "ZAMENA_ARTIKLA"
+    ) {
+      if (!reclamation.productId || !reclamation.warehouseId) {
+        throw new Error("Zamenski artikal nema vezan proizvod ili magacin.");
+      }
+      const replacementQty =
+        reclamation.replacementQty ?? reclamation.quantity;
+      if (replacementQty < 1) {
+        throw new Error("Količina celih zamenskih artikala nije ispravna.");
+      }
+      await adjustInventory(tx, {
+        idempotencyKey: `reclamation-replacement:${reclamation.id}:out`,
+        productId: reclamation.productId,
+        sku: reclamation.sku,
+        qtyDelta: -replacementQty,
+        warehouseId: reclamation.warehouseId,
+        kind: StockMovementKind.ADJUSTMENT,
+        note: `Izdavanje ${replacementQty} zamenskih artikala po reklamaciji ${reclamation.id}.`,
+        actorId: args.actorId,
+        orderId: reclamation.orderId,
+        orderItemId: reclamation.orderItemId,
       });
-      await tx.reclamation.update({
-        where: { id: reclamation.id },
-        data: {
-          courierRequestedAt: new Date(),
-          warehouseRequestedAt:
-            reclamation.warehouseStatus === "NOT_REQUESTED"
-              ? new Date()
-              : undefined,
-          warehouseStatus:
-            args.purpose === "RECLAMATION_REPLACEMENT"
-              ? "HANDED_OVER"
-              : reclamation.warehouseStatus === "NOT_REQUESTED"
+    }
+
+    await tx.reclamation.update({
+      where: { id: reclamation.id },
+      data: {
+        courierRequestedAt: new Date(),
+        warehouseRequestedAt:
+          reclamation.warehouseStatus === "NOT_REQUESTED"
+            ? new Date()
+            : undefined,
+        warehouseStatus:
+          args.purpose === "RECLAMATION_REPLACEMENT"
+            ? "HANDED_OVER"
+            : reclamation.warehouseStatus === "NOT_REQUESTED"
               ? "REQUESTED"
               : undefined,
-        },
-      });
-      return shipment;
-    },
-    { maxWait: 10_000, timeout: 60_000 },
-  );
+      },
+    });
+  }, { maxWait: 10_000, timeout: 30_000 });
+
+  return shipment;
 }
 
 function assertReclamationPurpose(purpose: ShipmentPurpose) {
@@ -255,6 +266,7 @@ export async function cancelReclamationShipment(
           productId: true,
           sku: true,
           quantity: true,
+          replacementQty: true,
           warehouseId: true,
           resolution: true,
         },
@@ -291,7 +303,9 @@ export async function cancelReclamationShipment(
         idempotencyKey: `reclamation-replacement:${shipment.reclamation!.id}:restore`,
         productId: shipment.reclamation!.productId!,
         sku: shipment.reclamation!.sku,
-        qtyDelta: shipment.reclamation!.quantity,
+        qtyDelta:
+          shipment.reclamation!.replacementQty ??
+          shipment.reclamation!.quantity,
         warehouseId: shipment.reclamation!.warehouseId!,
         kind: StockMovementKind.ADJUSTMENT,
         note: `Vraćena rezerva zamenskog artikla posle otkazivanja reklamacije ${shipment.reclamation!.number}.`,

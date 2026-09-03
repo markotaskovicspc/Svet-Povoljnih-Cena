@@ -129,7 +129,7 @@ export function ReclamationOrderFields() {
                 ))
               ) : loading ? null : (
                 <p className="px-3 py-2 text-sm text-ink-500">
-                  Nema isporučenih porudžbina sa tim nizom.
+                  Nema porudžbina u isporuci ili isporučenih sa tim nizom.
                 </p>
               )}
             </div>

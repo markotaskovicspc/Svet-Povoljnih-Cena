@@ -67,4 +67,35 @@ describe("pickup picking print", () => {
       }),
     ]);
   });
+
+  it("prints the named spare part and explicitly excludes the complete article", () => {
+    const rows = buildPickupPrintRows([
+      {
+        id: "part-line",
+        lineGroupKey: "reclamation:1:X_EXPRESS",
+        purpose: "RECLAMATION_REPLACEMENT",
+        quantity: 0,
+        reclamation: {
+          resolution: "ZAMENA_DELA",
+          resolutionNote: "ukrasna maska",
+        },
+        orderItem: {
+          id: "chair-line",
+          sku: "110081",
+          name: "Kancelarijska stolica ERGO LUX",
+          qty: 1,
+        },
+      },
+    ]);
+
+    expect(rows).toEqual([
+      {
+        key: "part:reclamation:1:X_EXPRESS",
+        sku: "DEO ZA 110081",
+        name: "ukrasna maska — NE SLATI CEO ARTIKAL (Kancelarijska stolica ERGO LUX)",
+        quantity: 1,
+        packageCount: 1,
+      },
+    ]);
+  });
 });

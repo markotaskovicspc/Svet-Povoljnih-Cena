@@ -3163,6 +3163,9 @@ model Reclamation {
   productId                 String?
   sku                       String
   quantity                  Int                        @default(1)
+  /// Number of complete catalogue units that must be sent as the resolution.
+  /// Zero is valid for ZAMENA_DELA because only the named spare part is picked.
+  replacementQty            Int?
   customerFirst             String
   customerLast              String
   customerEmail             String?

@@ -300,7 +300,6 @@ async function loadManualOrders() {
   const orders = await db.order.findMany({
     where: { status: { notIn: ["OTKAZANO", "VRACENO"] } },
     orderBy: { createdAt: "desc" },
-    take: 80,
     select: {
       id: true,
       number: true,

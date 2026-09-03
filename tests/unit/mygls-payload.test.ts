@@ -117,6 +117,23 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.DeliveryAddress.City).toBe("Novi Sad");
   });
 
+  it("uses the actual spare-part description on the replacement label", () => {
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order,
+      packages: [
+        {
+          ...packages[0]!,
+          content: "ukrasna maska",
+        },
+      ],
+      purpose: "RECLAMATION_REPLACEMENT",
+    });
+
+    expect(parcel.Content).toBe("ukrasna maska");
+    expect(parcel.ParcelPropertyList?.[0]?.Content).toBe("ukrasna maska");
+  });
+
   it("maps every physical package to one real ParcelProperty and never invents dimensions", () => {
     const parcel = buildMyGlsParcelForOrder({ cfg: config, order, packages });
 

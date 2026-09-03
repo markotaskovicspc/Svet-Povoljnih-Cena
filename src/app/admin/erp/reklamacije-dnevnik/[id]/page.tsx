@@ -93,9 +93,77 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
       }
       const adminNote = String(formData.get("adminNote") ?? "").trim() || null;
       const resolutionNote = String(formData.get("resolutionNote") ?? "").trim() || null;
+      const reclamation = await db.reclamation.findUnique({
+        where: { id },
+        select: {
+          quantity: true,
+          replacementQty: true,
+          resolution: true,
+          pickupBatchLines: {
+            where: { purpose: "RECLAMATION_REPLACEMENT" },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+      if (!reclamation) {
+        return { ok: false as const, error: "Reklamacija nije pronađena." };
+      }
+      const isReplacement =
+        resolution === "ZAMENA_ARTIKLA" || resolution === "ZAMENA_DELA";
+      const replacementQty = isReplacement
+        ? Number(formData.get("replacementQty"))
+        : null;
+      if (
+        isReplacement &&
+        (!Number.isInteger(replacementQty) ||
+          replacementQty! < 0 ||
+          replacementQty! > reclamation.quantity)
+      ) {
+        return {
+          ok: false as const,
+          error: `Količina celih artikala za slanje mora biti od 0 do ${reclamation.quantity}.`,
+        };
+      }
+      if (resolution === "ZAMENA_ARTIKLA" && replacementQty === 0) {
+        return {
+          ok: false as const,
+          error: "Za zamenu artikla unesite najmanje 1 ceo artikal.",
+        };
+      }
+      if (resolution === "ZAMENA_DELA" && replacementQty !== 0) {
+        return {
+          ok: false as const,
+          error: "Kod zamene dela količina celih artikala mora biti 0.",
+        };
+      }
+      if (decision === "PRIHVACENA" && resolution === "ZAMENA_DELA" && !resolutionNote) {
+        return {
+          ok: false as const,
+          error: "Upišite tačan naziv dela koji magacin treba da pošalje.",
+        };
+      }
+      if (
+        reclamation.pickupBatchLines.length &&
+        (reclamation.resolution !== resolution ||
+          reclamation.replacementQty !== replacementQty)
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Zamena je već u picking nalogu. Prvo je uklonite iz naloga, pa promenite vrstu ili količinu zamene.",
+        };
+      }
       await db.reclamation.update({
         where: { id },
-        data: { decision, resolution, respondedAt, adminNote, resolutionNote },
+        data: {
+          decision,
+          resolution,
+          replacementQty,
+          respondedAt,
+          adminNote,
+          resolutionNote,
+        },
       });
       const queue = await queueReclamationReplacement(id, actorId);
       refresh(id);
@@ -279,15 +347,16 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
 
         <div className="grid gap-6 xl:grid-cols-2">
           <Card>
-            <CardTitle description="Odluka, datum odgovora i način rešavanja ostaju u pravnom dnevniku.">Odluka i rešenje</CardTitle>
+            <CardTitle description="Količina reklamiranih proizvoda ostaje pravni podatak, a količina celih artikala za slanje govori magacinu šta zaista priprema. Za deo unesite 0 i napišite tačan naziv dela.">Odluka i rešenje</CardTitle>
             <AdminActionForm action={saveDetailsAction} preserveValues className="space-y-4">
               <input type="hidden" name="id" value={reclamation.id} />
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Field label="Odluka"><select name="decision" defaultValue={reclamation.decision} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm">{Object.values(ReclamationDecision).map((value) => <option key={value} value={value}>{DECISION_LABELS[value]}</option>)}</select></Field>
                 <Field label="Način rešavanja"><select name="resolution" defaultValue={reclamation.resolution ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="">Nije određeno</option>{Object.values(ReclamationResolution).map((value) => <option key={value} value={value}>{RESOLUTION_LABELS[value]}</option>)}</select></Field>
+                <Field label="Celih artikala za slanje" hint="Unesite 0 kada se šalje samo deo."><input name="replacementQty" type="number" min={0} max={reclamation.quantity} step={1} defaultValue={reclamation.replacementQty ?? (reclamation.resolution === "ZAMENA_DELA" ? 0 : reclamation.quantity)} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm" /></Field>
                 <Field label="Datum odgovora"><input name="respondedAt" type="date" defaultValue={dateOnly(reclamation.respondedAt)} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm" /></Field>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2"><Field label="Interna napomena"><Textarea name="adminNote" defaultValue={reclamation.adminNote ?? ""} rows={4} /></Field><Field label="Napomena o rešenju"><Textarea name="resolutionNote" defaultValue={reclamation.resolutionNote ?? ""} rows={4} /></Field></div>
+              <div className="grid gap-3 sm:grid-cols-2"><Field label="Interna napomena"><Textarea name="adminNote" defaultValue={reclamation.adminNote ?? ""} rows={4} /></Field><Field label="Deo za slanje / napomena o rešenju" hint="Kod zamene dela upišite tačan sadržaj, npr. „ukrasna maska“." ><Textarea name="resolutionNote" defaultValue={reclamation.resolutionNote ?? ""} rows={4} /></Field></div>
               <SubmitButton pendingLabel="Čuvam…">Sačuvaj odluku</SubmitButton>
             </AdminActionForm>
           </Card>

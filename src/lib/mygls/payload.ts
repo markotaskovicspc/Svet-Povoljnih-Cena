@@ -61,8 +61,14 @@ export function buildMyGlsParcelForOrder(
 
   const recipientName = `${order.shipFirstName} ${order.shipLastName}`.trim();
   const contactEmail = order.user?.email ?? order.guestEmail ?? null;
-  const content = buildContent(order, cfg.defaultContent);
   const packages = completePackages(args.packages);
+  const packageContents = [
+    ...new Set(packages.map((pkg) => pkg.content?.trim()).filter(Boolean)),
+  ];
+  const content =
+    packageContents.length === 1
+      ? packageContents[0]!.slice(0, 120)
+      : buildContent(order, cfg.defaultContent);
   const cod =
     purpose === "ORDER_DELIVERY" &&
     isMyGlsCashOnDelivery(order.paymentMethod) &&

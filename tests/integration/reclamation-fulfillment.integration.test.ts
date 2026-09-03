@@ -174,12 +174,12 @@ describe("quantity-aware reclamation fulfillment", () => {
     }
   });
 
-  it("allows an audited manual reclamation only after delivery", async () => {
+  it("allows an audited manual reclamation while the courier delivery is still open", async () => {
     const manualOrder = await db.order.create({
       data: {
         number: `${tag}-MANUAL`,
         guestEmail: "manual-reclamation@example.invalid",
-        status: "U_ISPORUCI",
+        status: "U_PRIPREMI",
         channel: "WEB",
         subtotal: 1_000,
         total: 1_000,
@@ -222,7 +222,7 @@ describe("quantity-aware reclamation fulfillment", () => {
 
       await db.order.update({
         where: { id: manualOrder.id },
-        data: { status: "ISPORUCENO" },
+        data: { status: "U_ISPORUCI" },
       });
       const created = await createAdminReclamation(input, "integration-admin");
       expect(created.ok).toBe(true);

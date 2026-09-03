@@ -221,6 +221,8 @@ export default async function PickupBatchPage({
           reclamation: {
             select: {
               number: true,
+              resolution: true,
+              resolutionNote: true,
               warehouseStatus: true,
               warehouse: { select: { code: true, name: true } },
             },
@@ -608,7 +610,7 @@ export default async function PickupBatchPage({
                         </Link>
                         <p className="mt-1 text-xs text-ink-500">
                           {group.purpose === "RECLAMATION_REPLACEMENT"
-                            ? `Zamena · ${group.warehouseLabel ?? "magacin nije izabran"}`
+                            ? `${group.isPartReplacement ? "Deo" : "Zamena"} · ${group.warehouseLabel ?? "magacin nije izabran"}`
                             : "Isporuka porudžbine"}
                         </p>
                       </td>
@@ -616,14 +618,32 @@ export default async function PickupBatchPage({
                         <ul className="space-y-2">
                           {group.items.map((item) => (
                             <li key={item.key}>
-                              <span className="font-mono font-semibold">{display(item.sku)}</span>{" "}
-                              <span>{display(item.name)}</span>{" "}
-                              <strong className="whitespace-nowrap">× {item.quantity}</strong>
-                              <p className="text-xs text-ink-500">
-                                {[item.barcode, item.collection, item.description, item.attributes]
-                                  .filter(Boolean)
-                                  .join(" · ") || "Bez dodatnih podataka"}
-                              </p>
+                              {item.isPartReplacement ? (
+                                <>
+                                  <span className="font-semibold text-warning">
+                                    DEO ZA
+                                  </span>{" "}
+                                  <span className="font-mono font-semibold">
+                                    {display(item.sku)}
+                                  </span>{" "}
+                                  <span>{display(item.name)}</span>{" "}
+                                  <strong className="whitespace-nowrap">× 1</strong>
+                                  <p className="text-xs font-medium text-warning">
+                                    Ne pripremati ceo artikal · {display(item.originalName)}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-mono font-semibold">{display(item.sku)}</span>{" "}
+                                  <span>{display(item.name)}</span>{" "}
+                                  <strong className="whitespace-nowrap">× {item.quantity}</strong>
+                                  <p className="text-xs text-ink-500">
+                                    {[item.barcode, item.collection, item.description, item.attributes]
+                                      .filter(Boolean)
+                                      .join(" · ") || "Bez dodatnih podataka"}
+                                  </p>
+                                </>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -763,6 +783,8 @@ function pickupLineRow(line: {
   order: { id: string; number: string };
   reclamation: {
     number: string;
+    resolution: string | null;
+    resolutionNote: string | null;
     warehouseStatus: string;
     warehouse: { code: string; name: string } | null;
   } | null;
@@ -800,12 +822,16 @@ function pickupLineRow(line: {
   const widthCm = measureNumber(line.widthCm);
   const depthCm = measureNumber(line.depthCm);
   const heightCm = measureNumber(line.heightCm);
+  const isPartReplacement =
+    line.purpose === "RECLAMATION_REPLACEMENT" &&
+    line.reclamation?.resolution === "ZAMENA_DELA";
   return {
     lineId: line.id,
     lineGroupKey: line.lineGroupKey,
     purpose: line.purpose,
     reclamationId: line.reclamationId,
     reclamationNumber: line.reclamation?.number ?? null,
+    isPartReplacement,
     warehouseStatus: line.reclamation?.warehouseStatus ?? null,
     warehouseLabel: line.reclamation?.warehouse
       ? `${line.reclamation.warehouse.code} · ${line.reclamation.warehouse.name}`
@@ -818,14 +844,17 @@ function pickupLineRow(line: {
     collection: product?.collection?.name ?? item?.collectionName ?? "",
     shortDescription:
       product?.shortDescription ?? item?.shortDescriptionSnapshot ?? "",
-    shortName: item?.name ?? "",
+    shortName: isPartReplacement
+      ? line.reclamation?.resolutionNote?.trim() || "Deo prema reklamaciji"
+      : item?.name ?? "",
+    originalName: item?.name ?? "",
     attribute1: product?.attribute1 ?? item?.attribute1 ?? "",
     attribute2: product?.attribute2 ?? item?.attribute2 ?? "",
     attribute3: product?.attribute3 ?? item?.attribute3 ?? "",
     attribute4: product?.attribute4 ?? item?.attribute4 ?? "",
     color1: product?.colorPrimary ?? item?.color1 ?? "",
     color2: product?.colorSecondary ?? item?.color2 ?? "",
-    qty: line.quantity ?? item?.qty ?? 0,
+    qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
     packageNo: line.packageNo,
     courierPickedUpAt: line.courierPickedUpAt,
     courierPickedUpById: line.courierPickedUpById,
@@ -848,6 +877,7 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       orderNumber: string;
       reclamationId: string | null;
       purpose: ReturnType<typeof pickupLineRow>["purpose"];
+      isPartReplacement: boolean;
       sourceLabel: string;
       warehouseLabel: string | null;
       warehouseStatus: string | null;
@@ -861,6 +891,7 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       orderNumber: row.orderNumber,
       reclamationId: row.reclamationId,
       purpose: row.purpose,
+      isPartReplacement: row.isPartReplacement,
       sourceLabel:
         row.purpose === "RECLAMATION_REPLACEMENT"
           ? `Zamena · ${row.reclamationNumber ?? row.orderNumber}`
@@ -884,6 +915,8 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
         collection: string;
         description: string;
         attributes: string;
+        isPartReplacement: boolean;
+        originalName: string;
       }
     >();
     for (const row of group.rows) {
@@ -907,6 +940,8 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
         ]
           .filter(Boolean)
           .join(" / "),
+        isPartReplacement: row.isPartReplacement,
+        originalName: row.originalName,
       });
     }
     return {

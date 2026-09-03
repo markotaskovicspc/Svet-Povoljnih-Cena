@@ -1,5 +1,9 @@
 import "server-only";
-import type { ReclamationRequest, ReclamationType } from "@prisma/client";
+import type {
+  OrderStatus,
+  ReclamationRequest,
+  ReclamationType,
+} from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
@@ -97,7 +101,7 @@ export async function createReclamation(
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
     expectedUserId: userId,
-    requireDelivered: true,
+    allowedOrderStatuses: ["ISPORUCENO"],
   });
 }
 
@@ -107,7 +111,7 @@ export async function createGuestReclamation(
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
     guestAccessToken: accessToken ?? null,
-    requireDelivered: true,
+    allowedOrderStatuses: ["ISPORUCENO"],
   });
 }
 
@@ -120,7 +124,10 @@ export async function createAdminReclamation(
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
     actorId,
-    requireDelivered: true,
+    // Courier tracking can lag behind the physical delivery. An operator may
+    // record the buyer's report while the order still says "U isporuci"; the
+    // public customer and guest flows remain delivery-only.
+    allowedOrderStatuses: ["U_ISPORUCI", "ISPORUCENO"],
     type: input.type,
     request: input.request,
   });
@@ -132,7 +139,7 @@ async function createReclamationRecord(
     expectedUserId?: string;
     guestAccessToken?: string | null;
     actorId?: string;
-    requireDelivered?: boolean;
+    allowedOrderStatuses?: readonly OrderStatus[];
     type?: ReclamationType | null;
     request?: ReclamationRequest | null;
   },
@@ -152,7 +159,10 @@ async function createReclamationRecord(
   ) {
     return { ok: false, reason: "UNAUTHORIZED" };
   }
-  if (options.requireDelivered && order.status !== "ISPORUCENO") {
+  if (
+    options.allowedOrderStatuses &&
+    !options.allowedOrderStatuses.includes(order.status)
+  ) {
     return { ok: false, reason: "ORDER_NOT_DELIVERED" };
   }
 
@@ -188,14 +198,19 @@ async function createReclamationRecord(
   let result: { id: string; number: string };
   try {
     result = await db.$transaction(async (tx) => {
-      if (options.requireDelivered) {
+      if (options.allowedOrderStatuses) {
         const [lockedOrder] = await tx.$queryRaw<Array<{ status: string }>>`
           SELECT status::text AS status
           FROM "Order"
           WHERE id = ${order.id}
           FOR UPDATE
         `;
-        if (lockedOrder?.status !== "ISPORUCENO") {
+        if (
+          !lockedOrder ||
+          !options.allowedOrderStatuses.includes(
+            lockedOrder.status as OrderStatus,
+          )
+        ) {
           throw new ReclamationOrderStatusError();
         }
       }

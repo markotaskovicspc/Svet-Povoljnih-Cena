@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   const orders = await db.order.findMany({
     where: {
-      status: "ISPORUCENO",
+      status: { in: ["U_ISPORUCI", "ISPORUCENO"] },
       OR: contains,
     },
     orderBy: { createdAt: "desc" },

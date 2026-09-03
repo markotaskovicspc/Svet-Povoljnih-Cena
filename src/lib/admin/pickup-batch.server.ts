@@ -527,8 +527,10 @@ export async function queueReclamationReplacement(
       orderId: true,
       orderItemId: true,
       quantity: true,
+      replacementQty: true,
       decision: true,
       resolution: true,
+      resolutionNote: true,
       warehouseId: true,
       warehouseStatus: true,
       orderItem: {
@@ -594,10 +596,29 @@ export async function queueReclamationReplacement(
     return { queued: false as const, reason: "Reklamacija nema vezanu stavku porudžbine." };
   }
 
+  const isPartReplacement = reclamation.resolution === "ZAMENA_DELA";
+  const replacementQty =
+    reclamation.replacementQty ??
+    (isPartReplacement ? 0 : reclamation.quantity);
+  if (isPartReplacement && !reclamation.resolutionNote?.trim()) {
+    return {
+      queued: false as const,
+      reason: "Upišite tačan naziv dela koji magacin treba da pošalje.",
+    };
+  }
+  if (!isPartReplacement && replacementQty < 1) {
+    return {
+      queued: false as const,
+      reason: "Za zamenu artikla unesite najmanje 1 ceo artikal.",
+    };
+  }
+
   const sourceItem = {
     id: reclamation.orderItem.id,
-    name: reclamation.orderItem.name,
-    qty: reclamation.quantity,
+    name: isPartReplacement
+      ? reclamation.resolutionNote!.trim()
+      : reclamation.orderItem.name,
+    qty: replacementQty,
     withAssembly: reclamation.orderItem.withAssembly,
     product: reclamation.orderItem.product,
   };
@@ -612,7 +633,19 @@ export async function queueReclamationReplacement(
     };
   }
   const provider = routing.provider;
-  const packages = derivePhysicalPackages([sourceItem]);
+  const packages = derivePhysicalPackages([sourceItem]).map((pkg) =>
+    isPartReplacement
+      ? {
+          ...pkg,
+          // A spare part must use its own measured parcel, never the dimensions
+          // of the complete catalogue article that originated the claim.
+          weightKg: null,
+          widthCm: null,
+          depthCm: null,
+          heightCm: null,
+        }
+      : pkg,
+  );
   if (
     provider === "MYGLS" &&
     packages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
@@ -651,7 +684,7 @@ export async function queueReclamationReplacement(
         reclamationId: reclamation.id,
         purpose: "RECLAMATION_REPLACEMENT",
         lineGroupKey,
-        quantity: reclamation.quantity,
+        quantity: replacementQty,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -674,7 +707,9 @@ export async function queueReclamationReplacement(
         reclamationId: reclamation.id,
         status: "U_OBRADI",
         actorId,
-        note: `Zamena je dodata u ${providerLabel(provider)} picking nalog ${batch.number}.`,
+        note: isPartReplacement
+          ? `Deo „${reclamation.resolutionNote!.trim()}” dodat je u ${providerLabel(provider)} picking nalog ${batch.number}.`
+          : `Zamena je dodata u ${providerLabel(provider)} picking nalog ${batch.number}.`,
       },
     });
     await tx.reclamation.updateMany({
@@ -1012,7 +1047,12 @@ async function postPickupBatch(batchId: string, actorId: string) {
       where: { id: batchId },
       include: {
         lines: {
-          include: { orderItem: { select: { name: true } } },
+          include: {
+            reclamation: {
+              select: { resolution: true, resolutionNote: true },
+            },
+            orderItem: { select: { name: true } },
+          },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         },
       },
@@ -1059,7 +1099,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
         packageLines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
-          content: line.orderItem?.name,
+          content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
           depthCm: Number(line.depthCm ?? 0),
@@ -1173,6 +1213,9 @@ async function createXExpressLabelsForPickupBatch(
                 shipStreet: true,
               },
             },
+            reclamation: {
+              select: { resolution: true, resolutionNote: true },
+            },
             orderItem: { select: { name: true } },
           },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
@@ -1195,7 +1238,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
-          content: line.orderItem?.name,
+          content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
           depthCm: Number(line.depthCm ?? 0),
@@ -1233,7 +1276,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
-          content: line.orderItem?.name,
+          content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
           depthCm: Number(line.depthCm ?? 0),
@@ -1383,6 +1426,9 @@ async function createMyGlsLabelsForPickupBatch(
         lines: {
           include: {
             order: { select: { number: true } },
+            reclamation: {
+              select: { resolution: true, resolutionNote: true },
+            },
             orderItem: { select: { name: true } },
           },
           orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
@@ -1412,7 +1458,7 @@ async function createMyGlsLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
-          content: line.orderItem?.name,
+          content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
           depthCm: Number(line.depthCm ?? 0),
@@ -1844,6 +1890,24 @@ function pickupWorkGroups<T extends PickupWorkLine>(lines: readonly T[]) {
     });
   }
   return [...groups.values()];
+}
+
+function pickupPackageContent(
+  line: PickupWorkLine & {
+    orderItem?: { name: string } | null;
+    reclamation?: {
+      resolution: string | null;
+      resolutionNote: string | null;
+    } | null;
+  },
+) {
+  if (
+    line.purpose === "RECLAMATION_REPLACEMENT" &&
+    line.reclamation?.resolution === "ZAMENA_DELA"
+  ) {
+    return line.reclamation.resolutionNote?.trim() || "Deo prema reklamaciji";
+  }
+  return line.orderItem?.name;
 }
 
 function orderItemIdsForGroup(group: PickupWorkGroup) {

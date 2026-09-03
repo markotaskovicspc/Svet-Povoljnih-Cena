@@ -854,6 +854,80 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         }),
       ).toBe(0);
 
+      const smallItem = await db.orderItem.findFirstOrThrow({
+        where: { orderId: mixedOrder.id, productId: smallProduct.id },
+      });
+      const partReclamation = await db.reclamation.create({
+        data: {
+          number: `R-QA-DEO-${runId}`,
+          orderId: mixedOrder.id,
+          orderItemId: smallItem.id,
+          productId: smallProduct.id,
+          sku: smallProduct.sku,
+          quantity: 1,
+          replacementQty: 0,
+          customerFirst: "QA",
+          customerLast: "Deo",
+          customerEmail: `qa.part.${runId}@example.invalid`,
+          description: "QA provera slanja samo rezervnog dela.",
+          notifyVia: "EMAIL",
+          decision: "PRIHVACENA",
+          resolution: "ZAMENA_DELA",
+          resolutionNote: "ukrasna maska",
+          warehouseId: dcWarehouseId,
+          warehouseStatus: "READY",
+        },
+      });
+      reclamationIds.push(partReclamation.id);
+
+      await page.goto(`/admin/erp/reklamacije-dnevnik/${partReclamation.id}`, {
+        waitUntil: "domcontentloaded",
+      });
+      const replacementQty = page.getByLabel("Celih artikala za slanje");
+      await expect(replacementQty).toHaveAttribute("min", "0");
+      await expect(replacementQty).toHaveValue("0");
+      await acceptConfirmation(
+        page,
+        page.getByRole("button", { name: "Dodaj u picking listu", exact: true }),
+      );
+      await expect(
+        page.getByText(/Zamena je u X Express picking nalogu/),
+      ).toBeVisible();
+      const partLine = await db.pickupBatchLine.findFirstOrThrow({
+        where: {
+          reclamationId: partReclamation.id,
+          purpose: "RECLAMATION_REPLACEMENT",
+        },
+      });
+      if (!batchIds.includes(partLine.batchId)) batchIds.push(partLine.batchId);
+      expect(partLine).toMatchObject({
+        quantity: 0,
+        weightKg: null,
+        widthCm: null,
+        depthCm: null,
+        heightCm: null,
+      });
+
+      await page.goto(`/admin/erp/preuzimanja/${partLine.batchId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      const partRow = page
+        .getByRole("row")
+        .filter({ hasText: partReclamation.number });
+      await expect(partRow).toContainText(`DEO ZA ${smallProduct.sku}`);
+      await expect(partRow).toContainText("ukrasna maska");
+      await expect(partRow).toContainText("Ne pripremati ceo artikal");
+
+      await page.goto(`/admin/erp/preuzimanja/${partLine.batchId}/stampa`, {
+        waitUntil: "domcontentloaded",
+      });
+      const printRow = page.getByRole("row").filter({
+        has: page.getByText(`DEO ZA ${smallProduct.sku}`, { exact: true }),
+      });
+      await expect(printRow).toContainText("ukrasna maska");
+      await expect(printRow).toContainText("NE SLATI CEO ARTIKAL");
+      await expect(printRow).toContainText("1");
+
       const returnWarehouse = await db.warehouse.create({
         data: {
           code: `QA-POVRAT-${runId}`.slice(0, 30),
@@ -990,6 +1064,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         packDepthCm: 20,
         packHeightCm: 20,
         packGrossWeightKg: 1.25,
+        grossWeightKg: 1.25,
         unitPackWidthCm:
           input.unitPackWidthCm ?? input.packWidthCm ?? 70,
         unitPackDepthCm: input.unitPackDepthCm ?? 20,

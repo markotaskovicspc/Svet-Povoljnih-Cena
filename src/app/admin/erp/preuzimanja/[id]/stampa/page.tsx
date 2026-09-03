@@ -30,6 +30,12 @@ export default async function PickupBatchPrintPage({
       lines: {
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         include: {
+          reclamation: {
+            select: {
+              resolution: true,
+              resolutionNote: true,
+            },
+          },
           orderItem: {
             select: {
               id: true,
