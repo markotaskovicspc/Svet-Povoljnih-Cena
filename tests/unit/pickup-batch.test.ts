@@ -158,6 +158,43 @@ describe("ERP module 13 pickup batches", () => {
     });
   });
 
+  it.each([
+    ["CREATED", "Pošiljka kreirana"],
+    ["PICKED_UP", "Preuzeto iz magacina"],
+    ["IN_TRANSIT", "U tranzitu"],
+    ["OUT_FOR_DELIVERY", "Na isporuci"],
+    ["DELIVERED", "Isporučeno"],
+    ["RETURNED", "Vraćeno"],
+    ["FAILED", "Neuspešna isporuka"],
+  ] as const)("maps shipment status %s to %s in picking", (status, label) => {
+    const occurredAt = new Date("2026-09-02T11:29:25.622Z");
+    expect(
+      pickupCourierSnapshot({
+        provider: "X_EXPRESS",
+        purpose: "ORDER_DELIVERY",
+        reclamationId: null,
+        orderItemId: "item-1",
+        courierPickedUpAt: null,
+        shipments: [
+          {
+            id: `shipment-${status}`,
+            provider: "X_EXPRESS",
+            purpose: "ORDER_DELIVERY",
+            reclamationId: null,
+            status,
+            shippedAt: status === "CREATED" ? null : occurredAt,
+            lastStatusEventAt: occurredAt,
+            rawCreateResponse: {
+              assignment: { orderItemIds: ["item-1"], codAmount: 0 },
+            },
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          },
+        ],
+      }),
+    ).toMatchObject({ status, label, statusAt: occurredAt });
+  });
+
   it("does not borrow a status from another shipment assignment", () => {
     const occurredAt = new Date("2026-09-02T11:29:25.622Z");
     expect(
