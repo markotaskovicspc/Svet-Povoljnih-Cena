@@ -118,12 +118,7 @@ export async function issueFiscalSale(input: {
       include: { lines: true },
     });
     if (existing?.receiptNumber && existing.issuedAt) {
-      await ensureIssuedFiscalSaleInventoryPosted(existing.id);
-      const posted = await db.fiscalDocument.findUniqueOrThrow({
-        where: { id: existing.id },
-        include: { lines: true },
-      });
-      return saleOutcome(posted, order, false);
+      return finishIssuedSale(existing, order, false);
     }
     return { ok: false, reason: "already_issued", error: "Sve izabrane stavke su već fiskalizovane." };
   }
@@ -147,12 +142,7 @@ export async function issueFiscalSale(input: {
     include: { lines: true },
   });
   if (existingDocument?.status === "ISSUED" && existingDocument.receiptNumber && existingDocument.issuedAt) {
-    await ensureIssuedFiscalSaleInventoryPosted(existingDocument.id);
-    const posted = await db.fiscalDocument.findUniqueOrThrow({
-      where: { id: existingDocument.id },
-      include: { lines: true },
-    });
-    return saleOutcome(posted, order, false);
+    return finishIssuedSale(existingDocument, order, false);
   }
   if (existingDocument && isUnsafeFiscalRedispatch(existingDocument)) {
     return {
@@ -275,12 +265,7 @@ export async function issueFiscalSale(input: {
     };
   }
   if (claim.state === "issued") {
-    await ensureIssuedFiscalSaleInventoryPosted(claim.document.id);
-    const posted = await db.fiscalDocument.findUniqueOrThrow({
-      where: { id: claim.document.id },
-      include: { lines: true },
-    });
-    return saleOutcome(posted, order, false);
+    return finishIssuedSale(claim.document, order, false);
   }
   const document = claim.document;
   const dispatch = await fiscalize({
@@ -322,9 +307,33 @@ export async function issueFiscalSale(input: {
     include: { lines: true },
   });
 
-  await ensureIssuedFiscalSaleInventoryPosted(issued.id);
+  return finishIssuedSale(issued, order, !existingDocument);
+}
 
-  return saleOutcome(issued, order, !existingDocument);
+async function finishIssuedSale(
+  document: PersistedFiscalDocument,
+  order: FiscalOrder,
+  created: boolean,
+): Promise<FiscalIssueOutcome> {
+  try {
+    await ensureIssuedFiscalSaleInventoryPosted(document.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[fiscal] inventory posting failed for issued receipt ${document.receiptNumber ?? document.id}: ${message}`,
+    );
+    return {
+      ok: false,
+      reason: "gateway_failure",
+      error: `Fiskalni račun ${document.receiptNumber ?? ""} je uspešno izdat, ali knjiženje lagera nije završeno. Ne izdajite novi račun; bezbedno ponovite istu akciju radi dovršetka knjiženja.`,
+    };
+  }
+
+  const posted = await db.fiscalDocument.findUniqueOrThrow({
+    where: { id: document.id },
+    include: { lines: true },
+  });
+  return saleOutcome(posted, order, created);
 }
 
 export async function issueFiscalRefund(input: {
