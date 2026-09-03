@@ -6,6 +6,10 @@ import {
   EMPTY_ADMIN_ACTION_STATE,
   type AdminActionState,
 } from "@/lib/admin/action-state";
+import {
+  nativeValidationSummary,
+  type NativeValidationIssue,
+} from "@/lib/admin/native-validation";
 import { cn } from "@/lib/utils";
 
 type AdminFormAction = (
@@ -41,17 +45,33 @@ function controlLabel(control: NativeFormControl) {
 }
 
 function nativeValidationMessage(form: HTMLFormElement) {
-  const invalidLabels = Array.from(form.elements)
+  const invalidControls = Array.from(form.elements)
     .filter(isNativeFormControl)
-    .filter((control) => control.willValidate && !control.validity.valid)
-    .map(controlLabel)
-    .filter((label, index, labels) => labels.indexOf(label) === index);
+    .filter((control) => control.willValidate && !control.validity.valid);
 
-  if (invalidLabels.length === 0) return "";
-  if (invalidLabels.length === 1) {
-    return `Popunite obavezno polje pre čuvanja: ${invalidLabels[0]}.`;
-  }
-  return `Popunite obavezna polja pre čuvanja: ${invalidLabels.join(", ")}.`;
+  return nativeValidationSummary(
+    invalidControls.map<NativeValidationIssue>((control) => ({
+      label: controlLabel(control),
+      valueMissing: control.validity.valueMissing,
+      rangeOverflow: control.validity.rangeOverflow,
+      rangeUnderflow: control.validity.rangeUnderflow,
+      stepMismatch: control.validity.stepMismatch,
+      tooLong: control.validity.tooLong,
+      tooShort: control.validity.tooShort,
+      typeMismatch: control.validity.typeMismatch,
+      patternMismatch: control.validity.patternMismatch,
+      badInput: control.validity.badInput,
+      customError: control.validity.customError,
+      min: control.getAttribute("min"),
+      max: control.getAttribute("max"),
+      step: control.getAttribute("step"),
+      minLength:
+        control instanceof HTMLSelectElement ? undefined : control.minLength,
+      maxLength:
+        control instanceof HTMLSelectElement ? undefined : control.maxLength,
+      nativeMessage: control.validationMessage,
+    })),
+  );
 }
 
 export function AdminActionForm({
