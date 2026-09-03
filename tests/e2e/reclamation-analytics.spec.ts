@@ -700,7 +700,7 @@ test.describe("Admin analitika reklamacija", () => {
         where: { sku: fixture.skuC },
       });
       const oldOrderNumber = `${prefix}-STARA-FISKAL`.slice(0, 80);
-      await db.order.create({
+      const oldOrder = await db.order.create({
         data: {
           ...orderData(oldOrderNumber, "U_ISPORUCI"),
           createdAt: new Date("2025-01-01T10:00:00.000Z"),
@@ -720,13 +720,15 @@ test.describe("Admin analitika reklamacija", () => {
       await page.getByRole("button", { name: "Ručna fiskalizacija" }).click();
       const dialog = page.getByRole("dialog", { name: "Ručna fiskalizacija" });
       await expect(dialog).toBeVisible();
-      await expect(
-        dialog
-          .getByRole("combobox", { name: "Porudžbina" })
-          .locator("option")
-          .filter({ hasText: oldOrderNumber }),
-      ).toHaveCount(1);
-      await page.keyboard.press("Escape");
+      const orderSearch = dialog.getByRole("combobox", { name: "Porudžbina" });
+      await orderSearch.fill(oldOrderNumber);
+      const oldOrderOption = page
+        .getByRole("option")
+        .filter({ hasText: oldOrderNumber });
+      await expect(oldOrderOption).toBeVisible();
+      await oldOrderOption.click();
+      await expect(dialog.locator('input[name="orderId"]')).toHaveValue(oldOrder.id);
+      await dialog.getByRole("button", { name: "Zatvori" }).click();
     });
 
     await test.step("operater ručno evidentira reklamaciju bez obzira na status porudžbine", async () => {

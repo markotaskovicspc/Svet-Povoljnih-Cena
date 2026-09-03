@@ -80,6 +80,12 @@ function manualOrderLabel(order: ManualOrder) {
   return `${order.number} · ${order.customer} · ${order.city}`;
 }
 
+function manualOrderMatches(order: ManualOrder, query: string) {
+  return manualOrderLabel(order)
+    .toLocaleLowerCase("sr-Latn-RS")
+    .includes(query.toLocaleLowerCase("sr-Latn-RS"));
+}
+
 const columns: { key: keyof FiscalizationRow; label: string; align?: "right" | "center" }[] = [
   { key: "orderNumber", label: "Broj porudžbine" },
   { key: "customerName", label: "Kupac" },
@@ -312,6 +318,18 @@ function ManualFiscalizationDialog({
   const [paymentMethod, setPaymentMethod] = useState(
     order?.paymentMethod ?? paymentMethods[0]?.value ?? "",
   );
+  const [orderSearchOpen, setOrderSearchOpen] = useState(false);
+  const [orderSearchQuery, setOrderSearchQuery] = useState(() =>
+    order ? manualOrderLabel(order) : "",
+  );
+  const [highlightedOrder, setHighlightedOrder] = useState<ManualOrder | null>(null);
+  const filteredOrders = useMemo(() => {
+    const query = orderSearchQuery.trim();
+    return query ? orders.filter((item) => manualOrderMatches(item, query)) : orders;
+  }, [orderSearchQuery, orders]);
+  const hasConfirmedOrderSelection = Boolean(
+    order && orderSearchQuery === manualOrderLabel(order),
+  );
 
   const changeOrder = (nextOrderId: string) => {
     const nextOrder = orders.find((item) => item.id === nextOrderId) ?? null;
@@ -337,6 +355,7 @@ function ManualFiscalizationDialog({
               <span className="font-medium text-ink-700">Porudžbina</span>
               <Combobox.Root
                 items={orders}
+                filteredItems={filteredOrders}
                 value={order}
                 onValueChange={(nextOrder) => {
                   if (nextOrder) changeOrder(nextOrder.id);
@@ -344,13 +363,36 @@ function ManualFiscalizationDialog({
                 itemToStringLabel={manualOrderLabel}
                 itemToStringValue={(item) => item.id}
                 isItemEqualToValue={(item, selected) => item.id === selected.id}
+                open={orderSearchOpen}
+                onOpenChange={setOrderSearchOpen}
+                onInputValueChange={(value, eventDetails) => {
+                  setOrderSearchQuery(value);
+                  if (eventDetails.reason === "input-change") setOrderSearchOpen(true);
+                }}
+                onItemHighlighted={(item) => setHighlightedOrder(item ?? null)}
                 autoHighlight
+                loopFocus={false}
                 openOnInputClick
               >
                 <Combobox.InputGroup className="flex h-9 items-center rounded-lg border border-input bg-surface transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
                   <Combobox.Input
-                    aria-label="Pretražite porudžbinu"
+                    aria-label="Porudžbina"
                     placeholder="Broj, kupac ili mesto..."
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+
+                      // Enter in this field must choose an order, never submit the
+                      // irreversible fiscalization form with the previous value.
+                      event.preventDefault();
+                      const query = event.currentTarget.value.trim();
+                      const nextOrder =
+                        (highlightedOrder && manualOrderMatches(highlightedOrder, query)
+                          ? highlightedOrder
+                          : orders.find((item) => manualOrderMatches(item, query))) ?? null;
+                      if (!nextOrder) return;
+                      changeOrder(nextOrder.id);
+                      setOrderSearchOpen(false);
+                    }}
                     className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
                   />
                   <Combobox.Trigger
@@ -438,7 +480,9 @@ function ManualFiscalizationDialog({
           <DialogFooter>
             <SubmitButton
               size="sm"
-              disabled={!order || !selectedItems.length || !paymentMethod}
+              disabled={
+                !hasConfirmedOrderSelection || !selectedItems.length || !paymentMethod
+              }
               pendingLabel="Fiskalizacija…"
               confirm="Izdati fiskalni račun za izabranu porudžbinu? Ova akcija poziva fiskalnog provajdera."
             >
