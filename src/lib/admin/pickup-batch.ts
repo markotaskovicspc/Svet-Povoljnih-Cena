@@ -1,4 +1,10 @@
-import type { PickupBatchStatus } from "@prisma/client";
+import type {
+  PickupBatchStatus,
+  ShipmentPurpose,
+  ShipmentStatus,
+} from "@prisma/client";
+import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
+import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 
 export const PICKUP_BATCH_EXTERNAL_BLOCK_REASON =
   "MyGLS produkcijski pozivi su bezbednosno zaključani dok je MYGLS_PRODUCTION_ACCEPTED=false. Nalog i paketi mogu da se pripreme bez slanja GLS-u.";
@@ -33,6 +39,89 @@ export type PickupBatchHandoverLine = {
   lineGroupKey: string;
   courierPickedUpAt: Date | null;
 };
+
+export type PickupCourierShipment = {
+  id: string;
+  provider: string | null;
+  purpose: ShipmentPurpose;
+  reclamationId: string | null;
+  status: ShipmentStatus;
+  shippedAt: Date | null;
+  lastStatusEventAt: Date | null;
+  rawCreateResponse: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PickupCourierSnapshot = {
+  shipmentId: string | null;
+  status: ShipmentStatus;
+  label: string;
+  statusAt: Date;
+  pickedUpAt: Date | null;
+};
+
+/**
+ * The shipment is the live courier-status source. `courierPickedUpAt` remains
+ * the durable warehouse-handover marker, while the shipment can continue to
+ * delivery or return. `shippedAt` repairs the read for historical batches
+ * whose provider events predated automatic picking reconciliation.
+ */
+export function pickupCourierSnapshot(args: {
+  provider: string | null;
+  purpose: ShipmentPurpose;
+  reclamationId: string | null;
+  orderItemId: string | null;
+  courierPickedUpAt: Date | null;
+  shipments: readonly PickupCourierShipment[];
+}): PickupCourierSnapshot | null {
+  const shipment = args.provider
+    ? args.shipments
+        .filter((candidate) => {
+          if (
+            candidate.provider !== args.provider ||
+            candidate.purpose !== args.purpose
+          ) {
+            return false;
+          }
+          if (args.purpose !== "ORDER_DELIVERY") {
+            return (
+              Boolean(args.reclamationId) &&
+              candidate.reclamationId === args.reclamationId
+            );
+          }
+          const assignment = readShipmentAssignment(candidate.rawCreateResponse);
+          return (
+            !assignment ||
+            !args.orderItemId ||
+            assignment.orderItemIds.includes(args.orderItemId)
+          );
+        })
+        .sort(
+          (left, right) =>
+            right.updatedAt.getTime() - left.updatedAt.getTime() ||
+            right.createdAt.getTime() - left.createdAt.getTime(),
+        )[0]
+    : null;
+
+  if (shipment) {
+    return {
+      shipmentId: shipment.id,
+      status: shipment.status,
+      label: SHIPMENT_STATUS_LABEL[shipment.status],
+      statusAt: shipment.lastStatusEventAt ?? shipment.updatedAt,
+      pickedUpAt: args.courierPickedUpAt ?? shipment.shippedAt,
+    };
+  }
+  if (!args.courierPickedUpAt) return null;
+  return {
+    shipmentId: null,
+    status: "PICKED_UP",
+    label: SHIPMENT_STATUS_LABEL.PICKED_UP,
+    statusAt: args.courierPickedUpAt,
+    pickedUpAt: args.courierPickedUpAt,
+  };
+}
 
 export type PickupBatchHandoverProgress = {
   totalGroups: number;

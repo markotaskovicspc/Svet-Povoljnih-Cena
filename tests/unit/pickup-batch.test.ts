@@ -6,6 +6,7 @@ import {
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
+  pickupCourierSnapshot,
   pickupBatchDisplayStatus,
   pickupBatchHandoverProgress,
   pickupPostingBlockReason,
@@ -107,6 +108,83 @@ describe("ERP module 13 pickup batches", () => {
       "Kompletno preuzeto",
     );
     expect(pickupBatchDisplayStatus("BOOKED", emptyProgress)).toBe("Proknjižen");
+  });
+
+  it("uses the linked shipment as the live picking courier status", () => {
+    const shippedAt = new Date("2026-08-31T14:26:44.800Z");
+    const deliveredAt = new Date("2026-09-02T11:29:25.622Z");
+    const snapshot = pickupCourierSnapshot({
+      provider: "X_EXPRESS",
+      purpose: "ORDER_DELIVERY",
+      reclamationId: null,
+      orderItemId: "item-1",
+      courierPickedUpAt: null,
+      shipments: [
+        {
+          id: "shipment-other-provider",
+          provider: "MYGLS",
+          purpose: "ORDER_DELIVERY",
+          reclamationId: null,
+          status: "IN_TRANSIT",
+          shippedAt,
+          lastStatusEventAt: shippedAt,
+          rawCreateResponse: null,
+          createdAt: shippedAt,
+          updatedAt: shippedAt,
+        },
+        {
+          id: "shipment-x-express",
+          provider: "X_EXPRESS",
+          purpose: "ORDER_DELIVERY",
+          reclamationId: null,
+          status: "DELIVERED",
+          shippedAt,
+          lastStatusEventAt: deliveredAt,
+          rawCreateResponse: {
+            assignment: { orderItemIds: ["item-1"], codAmount: 2_200 },
+          },
+          createdAt: new Date("2026-08-30T13:46:25.181Z"),
+          updatedAt: deliveredAt,
+        },
+      ],
+    });
+
+    expect(snapshot).toEqual({
+      shipmentId: "shipment-x-express",
+      status: "DELIVERED",
+      label: "Isporučeno",
+      statusAt: deliveredAt,
+      pickedUpAt: shippedAt,
+    });
+  });
+
+  it("does not borrow a status from another shipment assignment", () => {
+    const occurredAt = new Date("2026-09-02T11:29:25.622Z");
+    expect(
+      pickupCourierSnapshot({
+        provider: "X_EXPRESS",
+        purpose: "ORDER_DELIVERY",
+        reclamationId: null,
+        orderItemId: "item-1",
+        courierPickedUpAt: null,
+        shipments: [
+          {
+            id: "shipment-2",
+            provider: "X_EXPRESS",
+            purpose: "ORDER_DELIVERY",
+            reclamationId: null,
+            status: "DELIVERED",
+            shippedAt: occurredAt,
+            lastStatusEventAt: occurredAt,
+            rawCreateResponse: {
+              assignment: { orderItemIds: ["item-2"], codAmount: 0 },
+            },
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          },
+        ],
+      }),
+    ).toBeNull();
   });
 
   it("allows MyGLS label recreation only before the pickup is announced", () => {

@@ -20,6 +20,7 @@ import {
 } from "@/lib/admin/pickup-batch.server";
 import {
   isPickupBatchEditable,
+  pickupCourierSnapshot,
   pickupBatchDisplayStatus,
   pickupBatchHandoverProgress,
   pickupPostingBlockReason,
@@ -217,7 +218,7 @@ export default async function PickupBatchPage({
     include: {
       lines: {
         include: {
-          order: { select: { id: true, number: true, status: true } },
+          order: { select: { id: true, number: true } },
           reclamation: {
             select: {
               number: true,
@@ -252,7 +253,34 @@ export default async function PickupBatchPage({
   });
   if (!batch) notFound();
 
-  const posting = await getPickupPostingAvailability(batch.provider);
+  const orderIds = Array.from(new Set(batch.lines.map((line) => line.orderId)));
+  const [posting, courierShipments] = await Promise.all([
+    getPickupPostingAvailability(batch.provider),
+    batch.provider && orderIds.length
+      ? db.shipment.findMany({
+          where: { orderId: { in: orderIds }, provider: batch.provider },
+          select: {
+            id: true,
+            orderId: true,
+            provider: true,
+            purpose: true,
+            reclamationId: true,
+            status: true,
+            shippedAt: true,
+            lastStatusEventAt: true,
+            rawCreateResponse: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const courierShipmentsByOrder = new Map<string, typeof courierShipments>();
+  for (const shipment of courierShipments) {
+    const orderShipments = courierShipmentsByOrder.get(shipment.orderId) ?? [];
+    orderShipments.push(shipment);
+    courierShipmentsByOrder.set(shipment.orderId, orderShipments);
+  }
   const myGls = posting.provider === "MYGLS";
   const editable =
     isPickupBatchEditable(batch.status) && !batch.labelsCreationStartedAt;
@@ -260,7 +288,13 @@ export default async function PickupBatchPage({
     isPickupBatchEditable(batch.status);
   const editing = query.mode === "edit" && editable;
   const rows = batch.lines
-    .map((line) => pickupLineRow(line))
+    .map((line) =>
+      pickupLineRow(
+        line,
+        batch.provider,
+        courierShipmentsByOrder.get(line.orderId) ?? [],
+      ),
+    )
     .sort(
       (left, right) =>
         left.sku.localeCompare(right.sku, "sr-Latn", {
@@ -697,19 +731,22 @@ export default async function PickupBatchPage({
                         <td className="px-3 py-3 text-center">
                           <div className="inline-flex flex-col items-center gap-1">
                             <span
-                              className={
-                                group.courierPickedUp || legacyCompleteHandover
-                                  ? "rounded-full bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-success/20"
-                                  : "rounded-full bg-warning/10 px-2 py-1 text-xs font-medium text-warning ring-1 ring-warning/20"
-                              }
+                              className={courierStatusBadgeClass(
+                                group.courierStatus,
+                                group.courierStatusLabel,
+                                group.courierPickedUp || legacyCompleteHandover,
+                              )}
                             >
-                              {group.courierPickedUp || legacyCompleteHandover
-                                ? "Preuzeto"
-                                : "Čeka status kurira"}
+                              {group.courierStatusLabel ??
+                                (group.courierPickedUp || legacyCompleteHandover
+                                  ? "Preuzeto iz magacina"
+                                  : "Čeka status kurira")}
                             </span>
-                            {group.courierPickedUpAt ? (
+                            {group.courierStatusAt ?? group.courierPickedUpAt ? (
                               <span className="whitespace-nowrap text-[11px] text-ink-500">
-                                {formatDateTime(group.courierPickedUpAt)}
+                                {formatDateTime(
+                                  group.courierStatusAt ?? group.courierPickedUpAt!,
+                                )}
                               </span>
                             ) : legacyCompleteHandover ? (
                               <span className="text-[11px] text-ink-500">
@@ -815,7 +852,7 @@ function pickupLineRow(line: {
       collection: { name: string } | null;
     } | null;
   } | null;
-}) {
+}, provider: string | null, shipments: Parameters<typeof pickupCourierSnapshot>[0]["shipments"]) {
   const item = line.orderItem;
   const product = item?.product;
   const weightKg = measureNumber(line.weightKg);
@@ -825,6 +862,14 @@ function pickupLineRow(line: {
   const isPartReplacement =
     line.purpose === "RECLAMATION_REPLACEMENT" &&
     line.reclamation?.resolution === "ZAMENA_DELA";
+  const courier = pickupCourierSnapshot({
+    provider,
+    purpose: line.purpose,
+    reclamationId: line.reclamationId,
+    orderItemId: line.orderItemId,
+    courierPickedUpAt: line.courierPickedUpAt,
+    shipments,
+  });
   return {
     lineId: line.id,
     lineGroupKey: line.lineGroupKey,
@@ -856,8 +901,11 @@ function pickupLineRow(line: {
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
     packageNo: line.packageNo,
-    courierPickedUpAt: line.courierPickedUpAt,
+    courierPickedUpAt: courier?.pickedUpAt ?? line.courierPickedUpAt,
     courierPickedUpById: line.courierPickedUpById,
+    courierStatus: courier?.status ?? null,
+    courierStatusLabel: courier?.label ?? null,
+    courierStatusAt: courier?.statusAt ?? null,
     weightKg,
     widthCm,
     depthCm,
@@ -964,8 +1012,52 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
               ),
             )
           : null,
+      ...pickupGroupCourierStatus(group.rows),
     };
   });
+}
+
+function pickupGroupCourierStatus(rows: ReturnType<typeof pickupLineRow>[]) {
+  const snapshots = rows.filter(
+    (row) => row.courierStatus && row.courierStatusLabel && row.courierStatusAt,
+  );
+  if (!snapshots.length) {
+    return { courierStatus: null, courierStatusLabel: null, courierStatusAt: null };
+  }
+  const statuses = new Set(snapshots.map((row) => row.courierStatus));
+  const courierStatusAt = new Date(
+    Math.max(...snapshots.map((row) => row.courierStatusAt!.getTime())),
+  );
+  if (snapshots.length !== rows.length || statuses.size !== 1) {
+    return {
+      courierStatus: null,
+      courierStatusLabel: "Različiti statusi",
+      courierStatusAt,
+    };
+  }
+  return {
+    courierStatus: snapshots[0]!.courierStatus,
+    courierStatusLabel: snapshots[0]!.courierStatusLabel,
+    courierStatusAt,
+  };
+}
+
+function courierStatusBadgeClass(
+  status: ReturnType<typeof pickupLineRow>["courierStatus"],
+  label: string | null,
+  pickedUp: boolean,
+) {
+  const base = "rounded-full px-2 py-1 text-xs font-medium ring-1";
+  if (status === "DELIVERED") {
+    return `${base} bg-success/10 text-success ring-success/20`;
+  }
+  if (status === "FAILED" || status === "RETURNED") {
+    return `${base} bg-danger/10 text-danger ring-danger/20`;
+  }
+  if (status || label || !pickedUp) {
+    return `${base} bg-warning/10 text-warning ring-warning/20`;
+  }
+  return `${base} bg-success/10 text-success ring-success/20`;
 }
 
 function formatDate(value: Date) {
