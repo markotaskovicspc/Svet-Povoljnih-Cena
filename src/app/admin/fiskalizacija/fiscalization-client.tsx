@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ReceiptText, RotateCcw } from "lucide-react";
+import { Combobox } from "@base-ui/react/combobox";
+import { Check, ChevronsUpDown, ReceiptText, RotateCcw } from "lucide-react";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -74,6 +75,10 @@ type ManualOrder = {
 
 type WarehouseOption = { id: string; code: string; name: string; isDefault: boolean };
 type PaymentMethodOption = { value: string; label: string };
+
+function manualOrderLabel(order: ManualOrder) {
+  return `${order.number} · ${order.customer} · ${order.city}`;
+}
 
 const columns: { key: keyof FiscalizationRow; label: string; align?: "right" | "center" }[] = [
   { key: "orderNumber", label: "Broj porudžbine" },
@@ -328,20 +333,69 @@ function ManualFiscalizationDialog({
             <input key={id} type="hidden" name="orderItemIds" value={id} />
           ))}
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1 text-sm">
+            <div className="space-y-1 text-sm">
               <span className="font-medium text-ink-700">Porudžbina</span>
-              <select
-                value={order?.id ?? ""}
-                onChange={(event) => changeOrder(event.target.value)}
-                className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+              <Combobox.Root
+                items={orders}
+                value={order}
+                onValueChange={(nextOrder) => {
+                  if (nextOrder) changeOrder(nextOrder.id);
+                }}
+                itemToStringLabel={manualOrderLabel}
+                itemToStringValue={(item) => item.id}
+                isItemEqualToValue={(item, selected) => item.id === selected.id}
+                autoHighlight
+                openOnInputClick
               >
-                {orders.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.number} · {item.customer} · {item.city}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <Combobox.InputGroup className="flex h-9 items-center rounded-lg border border-input bg-surface transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                  <Combobox.Input
+                    aria-label="Pretražite porudžbinu"
+                    placeholder="Broj, kupac ili mesto..."
+                    className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                  <Combobox.Trigger
+                    aria-label="Otvori listu porudžbina"
+                    className="flex h-full shrink-0 items-center px-2 text-muted-foreground outline-none"
+                  >
+                    <ChevronsUpDown className="size-4" aria-hidden="true" />
+                  </Combobox.Trigger>
+                </Combobox.InputGroup>
+                <Combobox.Portal>
+                  <Combobox.Positioner
+                    side="bottom"
+                    sideOffset={4}
+                    align="start"
+                    className="isolate z-60"
+                  >
+                    <Combobox.Popup className="max-h-(--available-height) w-(--anchor-width) min-w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+                      <Combobox.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
+                        Nema porudžbina za unetu pretragu.
+                      </Combobox.Empty>
+                      <Combobox.List className="max-h-72 overflow-y-auto p-1 outline-none">
+                        {(item: ManualOrder, index: number) => (
+                          <Combobox.Item
+                            key={item.id}
+                            value={item}
+                            index={index}
+                            className="group flex cursor-default items-center gap-2 rounded-md px-2 py-2 text-sm outline-none select-none data-highlighted:bg-muted data-highlighted:text-foreground"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium">{item.number}</span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {item.customer} · {item.city}
+                              </span>
+                            </span>
+                            <Combobox.ItemIndicator className="shrink-0 text-foreground">
+                              <Check className="size-4" aria-hidden="true" />
+                            </Combobox.ItemIndicator>
+                          </Combobox.Item>
+                        )}
+                      </Combobox.List>
+                    </Combobox.Popup>
+                  </Combobox.Positioner>
+                </Combobox.Portal>
+              </Combobox.Root>
+            </div>
             <label className="space-y-1 text-sm">
               <span className="font-medium text-ink-700">Način plaćanja</span>
               <select
