@@ -729,7 +729,7 @@ test.describe("Admin analitika reklamacija", () => {
       await page.keyboard.press("Escape");
     });
 
-    await test.step("operater ručno evidentira reklamaciju dok je porudžbina u isporuci", async () => {
+    await test.step("operater ručno evidentira reklamaciju bez obzira na status porudžbine", async () => {
       await page.goto("/admin/erp/reklamacije-dnevnik", {
         waitUntil: "domcontentloaded",
       });
@@ -744,17 +744,11 @@ test.describe("Admin analitika reklamacija", () => {
       });
       const skuSelect = form.locator('select[name="sku"]');
       await orderSearch.fill(fixture.cancelledOrder);
-      await expect(
-        form.getByText("Nema porudžbina u isporuci ili isporučenih sa tim nizom."),
-      ).toBeVisible();
-      await expect(skuSelect).toBeDisabled();
-
-      const description = `${prefix} ručni unos reklamacije u isporuci`;
-      await orderSearch.fill(fixture.activeOrder);
       await form
-        .getByRole("option", { name: new RegExp(fixture.activeOrder) })
+        .getByRole("option", { name: new RegExp(fixture.cancelledOrder) })
         .click();
       await expect(skuSelect).toBeEnabled();
+      const description = `${prefix} ručni unos reklamacije otkazane porudžbine`;
       await skuSelect.selectOption(fixture.skuA);
       await form.locator('input[name="quantity"]').fill("1");
       await form.locator('select[name="type"]').selectOption("KVAR");
@@ -785,7 +779,7 @@ test.describe("Admin analitika reklamacija", () => {
       expect(saved.orderId).toBe(
         (
           await db.order.findUniqueOrThrow({
-            where: { number: fixture.activeOrder },
+            where: { number: fixture.cancelledOrder },
             select: { id: true },
           })
         ).id,

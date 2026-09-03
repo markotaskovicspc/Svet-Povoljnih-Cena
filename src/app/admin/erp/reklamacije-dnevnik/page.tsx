@@ -147,13 +147,6 @@ async function createManualReclamation(
 
       const order = await lookupOrderForReclamation(parsed.data.orderNumberOrFiscal);
       if (!order) return { ok: false as const, error: "Porudžbina nije pronađena." };
-      if (!["U_ISPORUCI", "ISPORUCENO"].includes(order.status)) {
-        return {
-          ok: false as const,
-          error:
-            "Ručna reklamacija je dozvoljena za porudžbinu u isporuci ili isporučenu porudžbinu.",
-        };
-      }
       const orderItem = order.items.find((item) => item.sku === parsed.data.sku);
       if (!orderItem) {
         return {
@@ -195,7 +188,7 @@ async function createManualReclamation(
         const errors: Record<typeof result.reason, string> = {
           ORDER_NOT_FOUND: "Porudžbina nije pronađena.",
           ORDER_NOT_DELIVERED:
-            "Ručna reklamacija je dozvoljena za porudžbinu u isporuci ili isporučenu porudžbinu.",
+            "Status porudžbine ne dozvoljava unos reklamacije.",
           ITEM_NOT_FOUND: "Stavka nije pronađena u porudžbini.",
           UNAUTHORIZED: "Nemate pravo da unesete ovu reklamaciju.",
           INVALID_PHOTO: "Priložena fotografija nije ispravna.",
@@ -527,7 +520,7 @@ export default async function ReclamationsPage({
             <span className="ml-2 text-sm font-normal text-ink-500">Forma je sakrivena dok je ne otvorite.</span>
           </summary>
         <Card className="rounded-t-none border-x-0 border-b-0">
-          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Dostupne su porudžbine u isporuci i isporučene porudžbine, uz preostale količine.">
+          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Možete izabrati porudžbinu bez obzira na njen status, uz preostale količine.">
             Ručni unos reklamacije
           </CardTitle>
           <AdminActionForm

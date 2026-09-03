@@ -174,7 +174,7 @@ describe("quantity-aware reclamation fulfillment", () => {
     }
   });
 
-  it("allows an audited manual reclamation while the courier delivery is still open", async () => {
+  it("allows an audited manual reclamation regardless of the order status", async () => {
     const manualOrder = await db.order.create({
       data: {
         number: `${tag}-MANUAL`,
@@ -216,14 +216,6 @@ describe("quantity-aware reclamation fulfillment", () => {
     };
 
     try {
-      await expect(
-        createAdminReclamation(input, "integration-admin"),
-      ).resolves.toEqual({ ok: false, reason: "ORDER_NOT_DELIVERED" });
-
-      await db.order.update({
-        where: { id: manualOrder.id },
-        data: { status: "U_ISPORUCI" },
-      });
       const created = await createAdminReclamation(input, "integration-admin");
       expect(created.ok).toBe(true);
       if (!created.ok) return;

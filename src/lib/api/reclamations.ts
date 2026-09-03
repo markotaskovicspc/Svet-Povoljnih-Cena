@@ -124,10 +124,9 @@ export async function createAdminReclamation(
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
     actorId,
-    // Courier tracking can lag behind the physical delivery. An operator may
-    // record the buyer's report while the order still says "U isporuci"; the
-    // public customer and guest flows remain delivery-only.
-    allowedOrderStatuses: ["U_ISPORUCI", "ISPORUCENO"],
+    // An operator must be able to record a buyer's report even when the order
+    // status is stale or exceptional. Public customer and guest flows remain
+    // delivery-only.
     type: input.type,
     request: input.request,
   });
