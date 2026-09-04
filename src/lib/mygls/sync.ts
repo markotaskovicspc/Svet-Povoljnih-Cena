@@ -276,12 +276,22 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     latestEvent &&
     latestEvent.status !== "FAILED"
   ) {
-    const corrected = await applyShipmentEvent("COURIER_SMALL", {
-      ...latestEvent,
-      providerEventId: `${latestEvent.providerEventId}:status-map-v2`,
-      trackingNo: shipment.trackingNo,
-      message: `${latestEvent.parcelNumber} · ${latestEvent.message ?? "MyGLS status"} · ispravljeno mapiranje`,
-    });
+    const corrected = await applyShipmentEvent(
+      "COURIER_SMALL",
+      {
+        ...latestEvent,
+        providerEventId: `${latestEvent.providerEventId}:status-map-v2`,
+        trackingNo: shipment.trackingNo,
+        message: `${latestEvent.parcelNumber} · ${latestEvent.message ?? "MyGLS status"} · ispravljeno mapiranje`,
+      },
+      {
+        // Old MyGLS events without a parseable timezone were persisted with the
+        // ingestion time, so their false FAILED timestamp can be newer than the
+        // real dated delivery event. The verified latest snapshot must replace
+        // that poisoned state even when the v2 audit event already exists.
+        forceStateRecovery: true,
+      },
+    );
     if (corrected) results.push(corrected);
   }
 

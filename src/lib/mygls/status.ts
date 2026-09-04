@@ -5,7 +5,24 @@ import type {
   MyGlsStatusEvent,
 } from "./types";
 
-export const MYGLS_RECOVERABLE_STATUS_CODES = ["51", "52", "86"] as const;
+// Before zero-padded provider codes were normalized, real shipment progress
+// such as 01 (pickup) and 03 (depot entry) was persisted as FAILED. Keep those
+// historical spellings eligible for status reconciliation so the normal
+// pickup/fiscalization side effects can resume without manual data repair.
+export const MYGLS_RECOVERABLE_STATUS_CODES = [
+  "01",
+  "02",
+  "03",
+  "04",
+  "05",
+  "06",
+  "07",
+  "08",
+  "09",
+  "51",
+  "52",
+  "86",
+] as const;
 
 type StoredMyGlsShipmentStatus = {
   provider?: string | null;

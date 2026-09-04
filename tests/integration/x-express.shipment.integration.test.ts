@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
 import { postPickupBatches } from "@/lib/admin/pickup-batch.server";
+import { applyShipmentEvent } from "@/lib/courier/registry";
 import {
   processXExpressWebhookNotifyIds,
   stageXExpressWebhookBatch,
@@ -123,6 +124,10 @@ beforeAll(async () => {
       packWidthCm: 50,
       packDepthCm: 40,
       packHeightCm: 30,
+      grossWeightKg: 6,
+      unitPackWidthCm: 50,
+      unitPackDepthCm: 40,
+      unitPackHeightCm: 30,
     },
     select: { id: true },
   });
@@ -391,5 +396,227 @@ describe("X Express shipment persistence", () => {
         where: { shipmentId: shipment.id, providerEventId: pickupNotifyId },
       }),
     ).resolves.toBe(1);
+
+    await db.$transaction([
+      db.pickupBatchLine.updateMany({
+        where: { batchId: batch.id },
+        data: { courierPickedUpAt: null },
+      }),
+      db.pickupBatch.update({
+        where: { id: batch.id },
+        data: { status: "BOOKED" },
+      }),
+    ]);
+    await expect(
+      applyShipmentEvent("COURIER_SMALL", {
+        trackingNo: shipment.trackingNo!,
+        status: "PICKED_UP",
+        providerStatusCode: "01",
+        providerEventId: pickupNotifyId,
+        occurredAt: new Date("2099-07-26T13:00:00Z"),
+      }),
+    ).resolves.toMatchObject({
+      eventCreated: false,
+      stateApplied: false,
+    });
+    await expect(
+      db.pickupBatch.findUniqueOrThrow({
+        where: { id: batch.id },
+        select: {
+          status: true,
+          lines: { select: { courierPickedUpAt: true } },
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "PICKED_UP",
+      lines: [
+        { courierPickedUpAt: new Date("2099-07-26T13:00:00Z") },
+        { courierPickedUpAt: new Date("2099-07-26T13:00:00Z") },
+      ],
+    });
+
+    const poisonedAt = new Date("2099-07-26T14:00:00Z");
+    await db.$transaction([
+      db.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          status: "FAILED",
+          providerStatusCode: "03",
+          lastStatusEventAt: poisonedAt,
+        },
+      }),
+      db.pickupBatchLine.updateMany({
+        where: { batchId: batch.id },
+        data: { courierPickedUpAt: null },
+      }),
+      db.pickupBatch.update({
+        where: { id: batch.id },
+        data: { status: "BOOKED" },
+      }),
+    ]);
+
+    await expect(
+      applyShipmentEvent(
+        "COURIER_SMALL",
+        {
+          trackingNo: shipment.trackingNo!,
+          status: "PICKED_UP",
+          providerStatusCode: "01",
+          providerEventId: pickupNotifyId,
+          occurredAt: new Date("2099-07-26T13:00:00Z"),
+        },
+        { forceStateRecovery: true },
+      ),
+    ).resolves.toMatchObject({
+      eventCreated: false,
+      stateApplied: true,
+      status: "PICKED_UP",
+    });
+    await expect(
+      db.shipment.findUniqueOrThrow({
+        where: { id: shipment.id },
+        select: { status: true, providerStatusCode: true, lastStatusEventAt: true },
+      }),
+    ).resolves.toEqual({
+      status: "PICKED_UP",
+      providerStatusCode: "01",
+      lastStatusEventAt: new Date("2099-07-26T13:00:00Z"),
+    });
+    await expect(
+      db.pickupBatch.findUniqueOrThrow({
+        where: { id: batch.id },
+        select: {
+          status: true,
+          lines: { select: { courierPickedUpAt: true } },
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "PICKED_UP",
+      lines: [
+        { courierPickedUpAt: new Date("2099-07-26T13:00:00Z") },
+        { courierPickedUpAt: new Date("2099-07-26T13:00:00Z") },
+      ],
+    });
+    await expect(
+      db.shipmentEvent.count({
+        where: { shipmentId: shipment.id, providerEventId: pickupNotifyId },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it("finishes a shared pickup batch when two shipment groups are picked up concurrently", async () => {
+    const concurrentOrderIds: string[] = [];
+    let concurrentBatchId = "";
+    try {
+      const orders = await Promise.all(
+        ["A", "B"].map((suffix) =>
+          db.order.create({
+            data: {
+              number: `XE-CONCURRENT-${suffix}-${runId}`,
+              status: "U_PRIPREMI",
+              channel: "WEB",
+              subtotal: 1_000,
+              total: 1_000,
+              shippingMethod: "KURIR",
+              paymentMethod: "POUZECE_GOTOVINA",
+              shipFirstName: "QA",
+              shipLastName: suffix,
+              shipPhone: "+381 64 222 33 44",
+              shipStreet: "Severna transverzala bb",
+              shipCity: "Šabac",
+              shipPostalCode: "15000",
+              termsAcceptedAt: new Date(),
+              items: {
+                create: {
+                  productId,
+                  sku: productSku,
+                  name: "Integracioni paket",
+                  qty: 1,
+                  unitPriceFull: 1_000,
+                  unitPriceSale: 1_000,
+                },
+              },
+            },
+            include: { items: { select: { id: true } } },
+          }),
+        ),
+      );
+      concurrentOrderIds.push(...orders.map((order) => order.id));
+
+      const batch = await db.pickupBatch.create({
+        data: {
+          number: `XE-CONCURRENT-${runId}`,
+          courier: "COURIER_SMALL",
+          provider: "X_EXPRESS",
+          status: "BOOKED",
+          pickupDate: new Date("2099-07-28T10:00:00Z"),
+          pickupWindowEnd: new Date("2099-07-28T12:00:00Z"),
+          lines: {
+            create: orders.map((order) => ({
+              orderId: order.id,
+              orderItemId: order.items[0]!.id,
+              lineGroupKey: `order:${order.id}:X_EXPRESS`,
+              packageNo: 1,
+              weightKg: 3,
+              widthCm: 50,
+              depthCm: 40,
+              heightCm: 30,
+            })),
+          },
+        },
+      });
+      concurrentBatchId = batch.id;
+
+      const shipments = await Promise.all(
+        orders.map((order, index) =>
+          db.shipment.create({
+            data: {
+              orderId: order.id,
+              service: "COURIER_SMALL",
+              provider: "X_EXPRESS",
+              purpose: "ORDER_DELIVERY",
+              status: "CREATED",
+              trackingNo: `XE-CONCURRENT-${index}-${runId}`,
+              packageCount: 1,
+            },
+          }),
+        ),
+      );
+      const occurredAt = new Date("2099-07-28T13:00:00Z");
+
+      await Promise.all(
+        shipments.map((shipment, index) =>
+          applyShipmentEvent("COURIER_SMALL", {
+            trackingNo: shipment.trackingNo!,
+            status: "PICKED_UP",
+            providerEventId: `xe-concurrent-${index}-${runId}`,
+            occurredAt,
+          }),
+        ),
+      );
+
+      await expect(
+        db.pickupBatch.findUniqueOrThrow({
+          where: { id: batch.id },
+          select: {
+            status: true,
+            lines: { select: { courierPickedUpAt: true } },
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: "PICKED_UP",
+        lines: [
+          { courierPickedUpAt: occurredAt },
+          { courierPickedUpAt: occurredAt },
+        ],
+      });
+    } finally {
+      if (concurrentBatchId) {
+        await db.pickupBatch.deleteMany({ where: { id: concurrentBatchId } });
+      }
+      if (concurrentOrderIds.length) {
+        await db.order.deleteMany({ where: { id: { in: concurrentOrderIds } } });
+      }
+    }
   });
 });

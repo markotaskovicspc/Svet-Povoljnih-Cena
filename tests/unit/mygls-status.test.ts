@@ -39,16 +39,33 @@ describe("MyGLS status mapping", () => {
     );
   });
 
-  it("treats a stored false failure with a real label as picked up", () => {
-    expect(
-      effectiveMyGlsShipmentStatus({
-        provider: "MYGLS",
-        status: "FAILED",
-        providerStatusCode: "86",
-        labelObjectKey: "mygls/order/shipment.pdf",
-        syncError: null,
-      }),
-    ).toBe("PICKED_UP");
+  it.each([
+    ["01", "PICKED_UP"],
+    ["02", "IN_TRANSIT"],
+    ["03", "IN_TRANSIT"],
+    ["04", "OUT_FOR_DELIVERY"],
+    ["05", "DELIVERED"],
+    ["06", "IN_TRANSIT"],
+    ["07", "IN_TRANSIT"],
+    ["08", "IN_TRANSIT"],
+    ["09", "IN_TRANSIT"],
+    ["86", "PICKED_UP"],
+  ] as const)(
+    "recovers a stored false failure for production status %s",
+    (providerStatusCode, expected) => {
+      expect(
+        effectiveMyGlsShipmentStatus({
+          provider: "MYGLS",
+          status: "FAILED",
+          providerStatusCode,
+          labelObjectKey: "mygls/order/shipment.pdf",
+          syncError: null,
+        }),
+      ).toBe(expected);
+    },
+  );
+
+  it("requires a real label before recovering a stored false failure", () => {
     expect(
       effectiveMyGlsShipmentStatus({
         provider: "MYGLS",

@@ -439,6 +439,15 @@ export interface ApplyEventResult {
   stateApplied: boolean;
 }
 
+type ApplyShipmentEventOptions = {
+  /**
+   * Re-apply a verified provider snapshot even when its audit event already
+   * exists or a legacy undated event poisoned `lastStatusEventAt` with the
+   * ingestion time. Reserved for narrowly-gated provider recovery flows.
+   */
+  forceStateRecovery?: boolean;
+};
+
 /**
  * Persist a verified webhook event. Idempotent on (trackingNo, status).
  * Side-effects:
@@ -451,6 +460,7 @@ export interface ApplyEventResult {
 export async function applyShipmentEvent(
   service: ShipmentService,
   event: CourierWebhookEvent,
+  options: ApplyShipmentEventOptions = {},
 ): Promise<ApplyEventResult | null> {
   const shipment = await db.shipment.findFirst({
     where: { trackingNo: event.trackingNo, service },
@@ -486,12 +496,13 @@ export async function applyShipmentEvent(
   let stateApplied = false;
 
   await db.$transaction(async (tx) => {
+    let duplicateEvent = false;
     if (event.providerEventId) {
       const duplicate = await tx.shipmentEvent.findUnique({
         where: { providerEventId: event.providerEventId },
         select: { id: true },
       });
-      if (duplicate) return;
+      duplicateEvent = Boolean(duplicate);
     } else {
       const duplicate = await tx.shipmentEvent.findFirst({
         where: {
@@ -501,30 +512,54 @@ export async function applyShipmentEvent(
         },
         select: { id: true },
       });
-      if (duplicate) return;
+      duplicateEvent = Boolean(duplicate);
+    }
+    if (duplicateEvent && !options.forceStateRecovery) {
+      // Audit events are immutable, but their derived pickup-batch markers may
+      // be missing after a legacy bug or interrupted transaction. Replaying a
+      // verified proof event is therefore an idempotent self-healing pass.
+      if (appliedProvider && PICKUP_PROOF_STATUSES.includes(event.status)) {
+        await reconcilePickupBatchesFromShipment(tx, {
+          orderId: shipment.orderId,
+          reclamationId: shipment.reclamationId,
+          purpose: shipment.purpose,
+          provider: appliedProvider,
+          rawCreateResponse: shipment.rawCreateResponse,
+          occurredAt,
+        });
+      }
+      return;
     }
 
-    await tx.shipmentEvent.create({
-      data: {
-        shipmentId: shipment.id,
-        status: event.status,
-        providerStatusCode: event.providerStatusCode ?? null,
-        providerEventId: event.providerEventId ?? null,
-        message,
-        raw: event.raw as Prisma.InputJsonValue | undefined,
-        occurredAt,
-      },
-    });
-    eventCreated = true;
+    if (!duplicateEvent) {
+      await tx.shipmentEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          status: event.status,
+          providerStatusCode: event.providerStatusCode ?? null,
+          providerEventId: event.providerEventId ?? null,
+          message,
+          raw: event.raw as Prisma.InputJsonValue | undefined,
+          occurredAt,
+        },
+      });
+      eventCreated = true;
+    }
 
     const stateClaim = await tx.shipment.updateMany({
-      where: {
-        id: shipment.id,
-        OR: [
-          { lastStatusEventAt: null },
-          { lastStatusEventAt: { lte: occurredAt } },
-        ],
-      },
+      where: options.forceStateRecovery
+        ? {
+            id: shipment.id,
+            status: shipment.status,
+            lastStatusEventAt: shipment.lastStatusEventAt,
+          }
+        : {
+            id: shipment.id,
+            OR: [
+              { lastStatusEventAt: null },
+              { lastStatusEventAt: { lte: occurredAt } },
+            ],
+          },
       data: {
         provider:
           appliedProvider ?? undefined,
@@ -666,7 +701,7 @@ async function reconcilePickupBatchesFromShipment(
     occurredAt: Date;
   },
 ) {
-  const batches = await tx.pickupBatch.findMany({
+  const candidateBatches = await tx.pickupBatch.findMany({
     where: {
       provider: shipment.provider,
       status: { in: ["BOOKED", "PICKED_UP"] },
@@ -686,19 +721,41 @@ async function reconcilePickupBatchesFromShipment(
     },
     select: {
       id: true,
-      lines: {
-        select: {
-          lineGroupKey: true,
-          orderId: true,
-          orderItemId: true,
-          reclamationId: true,
-          purpose: true,
-        },
-      },
     },
+    orderBy: { id: "asc" },
   });
 
-  for (const batch of batches) {
+  for (const candidate of candidateBatches) {
+    // Two provider events can complete different groups in the same batch at
+    // the same time. Lock and then re-read the batch so the second transaction
+    // observes the first committed pickup before it derives the aggregate
+    // BOOKED/PICKED_UP state.
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id"
+      FROM "PickupBatch"
+      WHERE "id" = ${candidate.id}
+      FOR UPDATE
+    `);
+    const batch = await tx.pickupBatch.findFirst({
+      where: {
+        id: candidate.id,
+        provider: shipment.provider,
+        status: { in: ["BOOKED", "PICKED_UP"] },
+      },
+      select: {
+        id: true,
+        lines: {
+          select: {
+            lineGroupKey: true,
+            orderId: true,
+            orderItemId: true,
+            reclamationId: true,
+            purpose: true,
+          },
+        },
+      },
+    });
+    if (!batch) continue;
     const matchingLines = batch.lines.filter((line) => {
       if (shipment.purpose === "RECLAMATION_REPLACEMENT") {
         return Boolean(
