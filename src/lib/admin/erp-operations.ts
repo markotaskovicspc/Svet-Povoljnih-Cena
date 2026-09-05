@@ -651,14 +651,22 @@ export const operationalErpModules: ErpModule[] = [
       },
     ],
     columns: [
-      status("status", "Status", [
-        "Novi",
-        "Slanje kuriru",
-        "Proknjižen",
-        "Delimično preuzeto",
-        "Kompletno preuzeto",
-        "Otkazan",
-      ]),
+      status(
+        "status",
+        "Status",
+        [
+          "Novi",
+          "Slanje kuriru",
+          "Proknjižen",
+          "Delimično preuzeto",
+          "Kompletno preuzeto",
+          "Otkazan",
+        ],
+        {
+          "Delimično preuzeto": "blue",
+          "Kompletno preuzeto": "green",
+        },
+      ),
       text("number", "Broj naloga"),
       text("provider", "Kurirska služba"),
       date("createdAt", "Datum naloga"),
