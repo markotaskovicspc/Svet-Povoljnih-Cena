@@ -47,6 +47,7 @@ import {
 import { MYGLS_PROVIDER } from "@/lib/mygls/config";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
+import { incompletePackageHandover, packageHandoverLabel } from "@/lib/courier/package-handover";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 import { discountedSalesOrderLineTotals } from "@/lib/admin/sales-order-overview";
@@ -1932,9 +1933,10 @@ export function salesOrderCourierDisplay(args: {
       shipment.syncError === "MyGLS etiketa obrisana." ||
       shipment.syncError?.includes("poništena zbog izmene"));
 
+  const handoverReport = incompletePackageHandover(shipment.rawCreateResponse);
   return {
     service,
-    status: locallyCancelled
+    status: handoverReport ? packageHandoverLabel(handoverReport) : locallyCancelled
       ? "Kurirski nalog otkazan"
       : SHIPMENT_STATUS_LABEL[shipment.status],
   };
@@ -1988,12 +1990,23 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
         select: {
           lineGroupKey: true,
           courierPickedUpAt: true,
+          orderId: true,
+          orderItemId: true,
         },
       },
     },
   });
+  const shipments = await db.shipment.findMany({
+    where: { orderId: { in: [...new Set(rows.flatMap(row => row.lines.map(line => line.orderId)))] }, purpose: "ORDER_DELIVERY" },
+    select: { orderId: true, provider: true, rawCreateResponse: true },
+  });
   return rows.map((row) => {
-    const handoverProgress = pickupBatchHandoverProgress(row.lines);
+    const handoverProgress = pickupBatchHandoverProgress(row.lines.map(line => {
+      const shipment = shipments.find(item => item.orderId === line.orderId && item.provider === row.provider &&
+        incompletePackageHandover(item.rawCreateResponse) &&
+        (!line.orderItemId || readShipmentAssignment(item.rawCreateResponse)?.orderItemIds.includes(line.orderItemId)));
+      return { ...line, handoverReport: incompletePackageHandover(shipment?.rawCreateResponse) };
+    }));
     return {
       id: row.id,
       values: {

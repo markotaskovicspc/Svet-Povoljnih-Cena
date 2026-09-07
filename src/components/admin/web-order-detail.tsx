@@ -26,6 +26,8 @@ import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
 import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { announceXExpressShipment } from "@/lib/x-express/shipments";
+import { incompletePackageHandover, readPackageHandoverReport, packageHandoverLabel } from "@/lib/courier/package-handover";
+import { recordPackageHandover } from "@/lib/admin/package-handover.server";
 import {
   deleteMyGlsLabelsForShipment,
   getMyGlsConfig,
@@ -88,6 +90,27 @@ export const metadata = {
   title: "Narudžbina",
   robots: { index: false, follow: false },
 };
+
+async function recordPackageHandoverAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.package-handover.record", entity: "Shipment" },
+    async (actorId, data: FormData) => {
+      const orderId = String(data.get("orderId") ?? "");
+      const shipmentId = String(data.get("shipmentId") ?? "");
+      const count = String(data.get("pickedUpPackages") ?? "").trim();
+      if (!/^\d+$/.test(count)) throw new Error("Unesite broj fizički preuzetih paketa.");
+      const report = await recordPackageHandover({
+        orderId, shipmentId, pickedUpPackages: Number(count),
+        note: String(data.get("note") ?? ""), actorId,
+      });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/prodajni-nalozi");
+      revalidatePath("/admin/erp/preuzimanja", "layout");
+      return { ok: true as const, entityId: shipmentId, message: `Sačuvano: ${packageHandoverLabel(report)}.` };
+    },
+  )(formData);
+}
 
 async function updateWebOrderItemQuantityAction(
   _state: AdminActionState,
@@ -2441,6 +2464,8 @@ export async function WebOrderDetail({ id }: { id: string }) {
                         myGlsParcelNumbers[0] ?? shipment.trackingNo;
                       const effectiveShipmentStatus =
                         effectiveMyGlsShipmentStatus(shipment);
+                      const handoverReport = readPackageHandoverReport(shipment.rawCreateResponse);
+                      const partialHandover = incompletePackageHandover(shipment.rawCreateResponse);
                       return (
                       <li key={shipment.id} className="rounded-lg border border-border p-3">
                         <dl className="space-y-1 text-ink-700">
@@ -2456,7 +2481,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           <Row
                             k="Status"
                             v={
-                              effectiveShipmentStatus === shipment.status
+                              partialHandover ? packageHandoverLabel(partialHandover) : effectiveShipmentStatus === shipment.status
                                 ? shipment.status
                                 : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`
                             }
@@ -2474,7 +2499,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                     : shipment.providerStatusCode ?? "—"
                             }
                           />
-                          <Row k="Paketa" v={shipment.packageCount} />
+                          <Row k="Prijavljeno paketa" v={shipment.packageCount} />
+                          {handoverReport ? (
+                            <Row k="Evidentirano preuzimanje" v={`${handoverReport.pickedUpPackages} od ${handoverReport.expectedPackages} paketa`} />
+                          ) : null}
                           <Row
                             k="Stavke"
                             v={
@@ -2575,6 +2603,31 @@ export async function WebOrderDetail({ id }: { id: string }) {
                             />
                           ) : null}
                         </dl>
+                        {handoverReport ? (
+                          <p className="mt-2 rounded-md bg-warning/10 px-3 py-2 text-warning">
+                            {packageHandoverLabel(handoverReport)}. {handoverReport.note}
+                          </p>
+                        ) : shipment.provider === X_EXPRESS_PROVIDER && shipment.packageCount > 1 ? (
+                          <p className="mt-2 text-xs text-ink-500">
+                            Status kurira odnosi se na ceo nalog. Broj prijavljenih paketa nije potvrda da je svaki paket preuzet.
+                          </p>
+                        ) : null}
+                        {shipment.provider === X_EXPRESS_PROVIDER && shipment.purpose === "ORDER_DELIVERY" ? (
+                          <details className="mt-3 rounded-lg border border-border p-3">
+                            <summary className="cursor-pointer font-medium">Evidentiraj stvarno preuzimanje</summary>
+                            <AdminActionForm action={recordPackageHandoverAction} className="mt-3 space-y-3">
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <input type="hidden" name="shipmentId" value={shipment.id} />
+                              <Field label={`Ukupno preuzeto paketa (od ${shipment.packageCount})`}>
+                                <input name="pickedUpPackages" type="number" min={0} max={shipment.packageCount} step={1} required defaultValue={handoverReport?.pickedUpPackages} className="h-8 w-24 rounded-lg border border-input px-2" />
+                              </Field>
+                              <Field label="Napomena" hint="Navedite koji paket je preuzet, ako je poznato. Unosi se ukupan broj do sada preuzetih paketa.">
+                                <Textarea name="note" required maxLength={1000} defaultValue={handoverReport?.note} />
+                              </Field>
+                              <SubmitButton size="sm">Sačuvaj preuzimanje</SubmitButton>
+                            </AdminActionForm>
+                          </details>
+                        ) : null}
                         {shipment.syncError ? (
                           <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">
                             {shipment.syncError}

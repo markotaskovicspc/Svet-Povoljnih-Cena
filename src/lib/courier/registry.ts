@@ -34,6 +34,7 @@ import {
   type CourierWebhookEvent,
 } from "./types";
 import { SHIPMENT_STATUS_LABEL } from "./status";
+import { incompletePackageHandover } from "./package-handover";
 import { resolveCourierProvider, routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
 import type { SmallParcelProvider } from "@/lib/mygls/config";
@@ -522,6 +523,13 @@ export async function applyShipmentEvent(
   let stateApplied = false;
 
   await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Shipment" WHERE "id" = ${shipment.id} FOR UPDATE`;
+    const current = await tx.shipment.findUniqueOrThrow({
+      where: { id: shipment.id }, select: { rawCreateResponse: true },
+    });
+    const handoverReport = incompletePackageHandover(current.rawCreateResponse);
+    // An order-level courier event cannot resolve a reported missing package.
+    if (handoverReport && newOrderStatus === "ISPORUCENO") appliedOrderStatus = "U_ISPORUCI";
     let duplicateEvent = false;
     if (event.providerEventId) {
       const duplicate = await tx.shipmentEvent.findUnique({
@@ -544,7 +552,7 @@ export async function applyShipmentEvent(
       // Audit events are immutable, but their derived pickup-batch markers may
       // be missing after a legacy bug or interrupted transaction. Replaying a
       // verified proof event is therefore an idempotent self-healing pass.
-      if (appliedProvider && PICKUP_PROOF_STATUSES.includes(event.status)) {
+      if (!handoverReport && appliedProvider && PICKUP_PROOF_STATUSES.includes(event.status)) {
         await reconcilePickupBatchesFromShipment(tx, {
           orderId: shipment.orderId,
           reclamationId: shipment.reclamationId,
@@ -631,6 +639,7 @@ export async function applyShipmentEvent(
       });
     }
     if (
+      !handoverReport &&
       shipment.purpose === "ORDER_DELIVERY" &&
       ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(
         event.status,
@@ -682,6 +691,7 @@ export async function applyShipmentEvent(
       }
     }
     if (
+      !handoverReport &&
       appliedProvider &&
       PICKUP_PROOF_STATUSES.includes(event.status)
     ) {

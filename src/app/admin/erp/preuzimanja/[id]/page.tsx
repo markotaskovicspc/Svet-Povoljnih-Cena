@@ -742,6 +742,11 @@ export default async function PickupBatchPage({
                                   ? "Preuzeto iz magacina"
                                   : "Čeka status kurira")}
                             </span>
+                            {group.rows[0]?.handoverReport ? (
+                              <span className="max-w-56 text-xs text-warning">
+                                {group.rows[0].handoverReport.note}
+                              </span>
+                            ) : null}
                             {group.courierStatusAt ?? group.courierPickedUpAt ? (
                               <span className="whitespace-nowrap text-[11px] text-ink-500">
                                 {formatDateTime(
@@ -901,7 +906,8 @@ function pickupLineRow(line: {
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
     packageNo: line.packageNo,
-    courierPickedUpAt: courier?.pickedUpAt ?? line.courierPickedUpAt,
+    courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
+    handoverReport: courier?.handoverReport,
     courierPickedUpById: line.courierPickedUpById,
     courierStatus: courier?.status ?? null,
     courierStatusLabel: courier?.label ?? null,
@@ -1048,6 +1054,7 @@ function courierStatusBadgeClass(
   pickedUp: boolean,
 ) {
   const base = "rounded-full px-2 py-1 text-xs font-medium ring-1";
+  if (label?.startsWith("Delimično preuzeto")) return `${base} bg-warning/10 text-warning ring-warning/20`;
   if (status === "DELIVERED") {
     return `${base} bg-success/10 text-success ring-success/20`;
   }

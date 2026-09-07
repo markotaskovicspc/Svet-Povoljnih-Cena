@@ -4,6 +4,7 @@ import type {
   ShipmentStatus,
 } from "@prisma/client";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
+import { incompletePackageHandover, packageHandoverLabel, type PackageHandoverReport } from "@/lib/courier/package-handover";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 
 export const PICKUP_BATCH_EXTERNAL_BLOCK_REASON =
@@ -38,6 +39,7 @@ export const PICKUP_BATCH_STATUS_LABEL: Record<PickupBatchStatus, string> = {
 export type PickupBatchHandoverLine = {
   lineGroupKey: string;
   courierPickedUpAt: Date | null;
+  handoverReport?: PackageHandoverReport | null;
 };
 
 export type PickupCourierShipment = {
@@ -59,6 +61,7 @@ export type PickupCourierSnapshot = {
   label: string;
   statusAt: Date;
   pickedUpAt: Date | null;
+  handoverReport?: PackageHandoverReport;
 };
 
 /**
@@ -105,6 +108,16 @@ export function pickupCourierSnapshot(args: {
     : null;
 
   if (shipment) {
+    const report = incompletePackageHandover(shipment.rawCreateResponse);
+    if (report) return {
+      shipmentId: shipment.id,
+      status: shipment.status,
+      label: packageHandoverLabel(report),
+      statusAt: new Date(report.recordedAt),
+      // A reported count does not identify which individual package was taken.
+      pickedUpAt: null,
+      handoverReport: report,
+    };
     return {
       shipmentId: shipment.id,
       status: shipment.status,
@@ -135,19 +148,28 @@ export function pickupBatchHandoverProgress(
 ): PickupBatchHandoverProgress {
   const groups = new Map<
     string,
-    { totalPackages: number; pickedUpPackages: number }
+    { totalPackages: number; pickedUpPackages: number; reports: PackageHandoverReport[] }
   >();
   for (const line of lines) {
     const group = groups.get(line.lineGroupKey) ?? {
       totalPackages: 0,
       pickedUpPackages: 0,
+      reports: [],
     };
     group.totalPackages += 1;
     if (line.courierPickedUpAt) group.pickedUpPackages += 1;
+    if (line.handoverReport) group.reports.push(line.handoverReport);
     groups.set(line.lineGroupKey, group);
   }
 
-  const values = [...groups.values()];
+  const values = [...groups.values()].map(group => {
+    const report = group.reports[0];
+    if (report && group.reports.length === group.totalPackages && report.expectedPackages === group.totalPackages &&
+      group.reports.every(item => item.recordedAt === report.recordedAt && item.pickedUpPackages === report.pickedUpPackages)) {
+      return { ...group, pickedUpPackages: report.pickedUpPackages };
+    }
+    return group;
+  });
   return {
     totalGroups: values.length,
     pickedUpGroups: values.filter(
@@ -156,7 +178,7 @@ export function pickupBatchHandoverProgress(
         group.pickedUpPackages === group.totalPackages,
     ).length,
     totalPackages: lines.length,
-    pickedUpPackages: lines.filter((line) => line.courierPickedUpAt).length,
+    pickedUpPackages: values.reduce((sum, group) => sum + group.pickedUpPackages, 0),
   };
 }
 
