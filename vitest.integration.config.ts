@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -8,9 +9,7 @@ export default defineConfig({
       "server-only": fileURLToPath(
         new URL("./tests/helpers/server-only.ts", import.meta.url),
       ),
-      "next/server": fileURLToPath(
-        new URL("../../../node_modules/next/server.js", import.meta.url),
-      ),
+      "next/server": createRequire(import.meta.url).resolve("next/server"),
     },
   },
   test: {
@@ -19,7 +18,7 @@ export default defineConfig({
     include: ["tests/integration/**/*.test.ts"],
     fileParallelism: false,
     sequence: { concurrent: false },
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
   },
 });

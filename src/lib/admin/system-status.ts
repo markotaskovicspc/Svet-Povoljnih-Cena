@@ -153,10 +153,6 @@ export function getIntegrationReadiness(
     normalized(env.SEF_ENV)?.toLowerCase() === "production";
   const badiProduction =
     normalized(env.BADI_ENV)?.toLowerCase() === "production";
-  const selectedSmallParcelProvider =
-    normalized(env.COURIER_SMALL_PROVIDER)?.toUpperCase() === "MYGLS"
-      ? "MYGLS"
-      : "X_EXPRESS";
   const rabaluxPickupRequirements = [
     present("RABALUX_PICKUP_NAME"),
     present("RABALUX_PICKUP_STREET"),
@@ -166,13 +162,9 @@ export function getIntegrationReadiness(
     present("RABALUX_PICKUP_CONTACT_NAME"),
     present("RABALUX_PICKUP_CONTACT_PHONE"),
     present("RABALUX_PICKUP_CONTACT_EMAIL"),
-    ...(selectedSmallParcelProvider === "X_EXPRESS"
-      ? [
-          present("RABALUX_X_EXPRESS_TOWN_ID"),
-          present("RABALUX_X_EXPRESS_LATITUDE"),
-          present("RABALUX_X_EXPRESS_LONGITUDE"),
-        ]
-      : []),
+    present("RABALUX_X_EXPRESS_TOWN_ID"),
+    present("RABALUX_X_EXPRESS_LATITUDE"),
+    present("RABALUX_X_EXPRESS_LONGITUDE"),
   ];
 
   return [
@@ -238,7 +230,9 @@ export function getIntegrationReadiness(
     integration(env, {
       id: "x-express",
       label: "X Express",
-      description: "Alternativni kurir za male pošiljke.",
+      description: xExpressProduction
+        ? "Alternativni kurir za male pošiljke u produkcionom režimu."
+        : "Povezano, ali X_EXPRESS_ENV je test; proverite API URL pre stvarnih pošiljki.",
       requirements: [
         enabled("X_EXPRESS_ENABLED"),
         ...(xExpressProduction ? [enabled("X_EXPRESS_PRODUCTION_ACCEPTED")] : []),

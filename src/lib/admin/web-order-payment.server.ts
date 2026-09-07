@@ -11,10 +11,7 @@ import { isPaymentMethodEnabled } from "@/lib/checkout/config";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { providerForPaymentMethod } from "@/lib/payments";
 import { adminPaymentMethodLabel } from "@/lib/payments/admin-display";
-import {
-  supplierOrderIdempotencyKey,
-  supplierShippingDocumentsIdempotencyKey,
-} from "@/lib/rabalux/messages";
+import { supplierShippingDocumentsIdempotencyKey } from "@/lib/rabalux/messages";
 import { planWebOrderPaymentMethodChange } from "./web-order-payment";
 
 const EDITABLE_WEB_ORDER_STATUSES = [
@@ -250,10 +247,13 @@ export async function updateWebOrderPaymentMethod(input: {
           hasRawResponse: payment.rawResponse != null,
         })),
       });
+      const shippingDocumentJobs = supplierJobs.filter(
+        (job) => job.kind === "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
+      );
 
       if (
         plan.supplierReadinessChanged &&
-        supplierJobs.some((job) => job.status === "RUNNING")
+        shippingDocumentJobs.some((job) => job.status === "RUNNING")
       ) {
         throw new Error(
           "Dobavljački nalog se upravo obrađuje. Sačekajte završetak i pokušajte ponovo.",
@@ -299,7 +299,7 @@ export async function updateWebOrderPaymentMethod(input: {
       if (plan.supplierReadinessChanged) {
         await tx.backgroundJob.updateMany({
           where: {
-            id: { in: supplierJobs.map((job) => job.id) },
+            id: { in: shippingDocumentJobs.map((job) => job.id) },
             status: { in: ["QUEUED", "RETRY"] },
           },
           data: {
@@ -310,26 +310,22 @@ export async function updateWebOrderPaymentMethod(input: {
             lastError: null,
           },
         });
-        const dispatchKey = `payment-change-${operationKey}`;
-        for (const fulfillment of activeRabaluxFulfillments) {
-          if (!plan.willBeCashOnDelivery && fulfillment.sentAt) continue;
-          const kind = plan.willBeCashOnDelivery
-            ? ("SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" as const)
-            : ("SUPPLIER_ORDER_EMAIL" as const);
-          const job = await enqueueBackgroundJob(
-            {
-              kind,
-              payload: { fulfillmentId: fulfillment.id, dispatchKey },
-              idempotencyKey: plan.willBeCashOnDelivery
-                ? supplierShippingDocumentsIdempotencyKey(
-                    fulfillment.id,
-                    dispatchKey,
-                  )
-                : supplierOrderIdempotencyKey(fulfillment.id, dispatchKey),
-            },
-            tx,
-          );
-          supplierJobIds.push(job.id);
+        if (plan.willBeCashOnDelivery) {
+          const dispatchKey = `payment-change-${operationKey}`;
+          for (const fulfillment of activeRabaluxFulfillments) {
+            const job = await enqueueBackgroundJob(
+              {
+                kind: "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
+                payload: { fulfillmentId: fulfillment.id, dispatchKey },
+                idempotencyKey: supplierShippingDocumentsIdempotencyKey(
+                  fulfillment.id,
+                  dispatchKey,
+                ),
+              },
+              tx,
+            );
+            supplierJobIds.push(job.id);
+          }
         }
       }
 

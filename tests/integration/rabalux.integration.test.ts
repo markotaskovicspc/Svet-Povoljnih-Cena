@@ -1,5 +1,14 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 vi.mock("next/cache", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/cache")>();
@@ -50,10 +59,16 @@ import { webGuestCustomerId } from "@/lib/customer-master-identity";
 const PREFIX = "RAB-IT-";
 const testStartedAt = new Date();
 let categoryId = "";
+let parentCategoryId = "";
 let groupId = "";
 let supplierId = "";
+let createdSupplier = false;
+let warehouseId = "";
+let priceListId = "";
+let createdPriceList = false;
+const xExpressTownId = 99_002_026;
 
-beforeAll(async () => {
+function resetRabaluxTestEnv() {
   process.env.EMAIL_PROVIDER = "none";
   process.env.RABALUX_ENABLED = "true";
   process.env.RABALUX_CATALOG_USER = "integration-user";
@@ -63,8 +78,40 @@ beforeAll(async () => {
   process.env.RABALUX_MIN_CATALOG_ROWS = "1";
   process.env.RABALUX_MIN_STOCK_ROWS = "1";
   // Tiny synthetic feeds must not inherit an unrelated seeded feed-volume
-  // baseline. The dedicated circuit-breaker scenario below restores 90%.
+  // baseline. The dedicated circuit-breaker scenario restores 90% itself.
   process.env.RABALUX_MIN_BASELINE_RATIO = "0.000001";
+  delete process.env.RABALUX_CATALOG_MISSING_CONFIRMATIONS;
+  delete process.env.RABALUX_CATALOG_MISSING_GRACE_HOURS;
+}
+
+async function cleanupTestProductsAndOrders() {
+  const products = await db.product.findMany({
+    where: {
+      supplierId,
+      OR: [
+        { sku: { startsWith: PREFIX } },
+        { supplierExternalId: { startsWith: "IT-" } },
+      ],
+    },
+    select: { id: true },
+  });
+  const productIds = products.map(({ id }) => id);
+  if (!productIds.length) return;
+  const orders = await db.order.findMany({
+    where: { items: { some: { productId: { in: productIds } } } },
+    select: { id: true },
+  });
+  const orderIds = orders.map(({ id }) => id);
+  if (orderIds.length) {
+    await db.reclamation.deleteMany({ where: { orderId: { in: orderIds } } });
+    await db.order.deleteMany({ where: { id: { in: orderIds } } });
+  }
+  await db.stockMovement.deleteMany({ where: { productId: { in: productIds } } });
+  await db.product.deleteMany({ where: { id: { in: productIds } } });
+}
+
+beforeAll(async () => {
+  resetRabaluxTestEnv();
   await db.analyticsEvent.deleteMany({
     where: { anonymousId: { startsWith: "rabalux-integration-" } },
   });
@@ -96,19 +143,79 @@ beforeAll(async () => {
     where: { email: "integration@example.test", userId: null },
   });
   await db.category.deleteMany({
-    where: { path: "/rabalux-integration-test" },
+    where: {
+      path: {
+        in: [
+          "/rabalux-integration-test",
+          "/rabalux-integration-qa/rabalux-integration-test",
+        ],
+      },
+    },
+  });
+  await db.category.deleteMany({
+    where: { path: "/rabalux-integration-qa" },
   });
   await db.group.deleteMany({ where: { slug: "rabalux-integration-test" } });
-  const supplier = await db.supplier.findUniqueOrThrow({
+  let supplier = await db.supplier.findUnique({
     where: { integrationKey: "RABALUX" },
   });
+  if (!supplier) {
+    supplier = await db.supplier.create({
+      data: {
+        name: "Rabalux",
+        code: "RABALUX",
+        integrationKey: "RABALUX",
+        feedUrl:
+          "https://rabalux.rs/downloadmanager/downloadha/nohtml/1/id/332",
+        catalogFallbackUrl:
+          "https://rabalux.hu/downloadmanager/downloadha/nohtml/1/id/18",
+        authUser: "env:RABALUX_CATALOG_USER",
+        authPass: "env:RABALUX_CATALOG_PASS",
+        stockFeedUrl:
+          "https://rabalux.rs/downloadmanager/downloadha/nohtml/1/id/11",
+        stockAuthUser: "env:RABALUX_STOCK_USER",
+        stockAuthPass: "env:RABALUX_STOCK_PASS",
+        fulfillmentMode: "EMAIL",
+        enabled: true,
+        email: "infosrb@rabalux.com",
+        country: "RS",
+        deliveryDays: 7,
+        transitDays: 10,
+      },
+    });
+    createdSupplier = true;
+  }
   supplierId = supplier.id;
+  let priceList = await db.priceList.findUnique({ where: { code: "MP" } });
+  if (!priceList) {
+    priceList = await db.priceList.create({
+      data: {
+        code: "MP",
+        name: "Maloprodajni cenovnik",
+        kind: "RETAIL",
+        currency: "RSD",
+        active: true,
+      },
+    });
+    createdPriceList = true;
+  }
+  priceListId = priceList.id;
+  const parentCategory = await db.category.create({
+    data: {
+      name: "Rabalux integration QA",
+      slug: "rabalux-integration-qa",
+      path: "/rabalux-integration-qa",
+      level: 0,
+    },
+  });
+  parentCategoryId = parentCategory.id;
   const category = await db.category.create({
     data: {
       name: "Rabalux integration test",
       slug: "rabalux-integration-test",
-      path: "/rabalux-integration-test",
-      level: 0,
+      path: "/rabalux-integration-qa/rabalux-integration-test",
+      level: 1,
+      parentId: parentCategory.id,
     },
   });
   categoryId = category.id;
@@ -119,6 +226,28 @@ beforeAll(async () => {
     },
   });
   groupId = group.id;
+  const warehouse = await db.warehouse.upsert({
+    where: { code: "RABALUX_IT_DC" },
+    create: {
+      code: "RABALUX_IT_DC",
+      name: "Rabalux integration DC",
+      isDefault: true,
+      active: true,
+    },
+    update: { isDefault: true, active: true },
+  });
+  warehouseId = warehouse.id;
+  await db.xExpressTown.upsert({
+    where: { id: xExpressTownId },
+    create: {
+      id: xExpressTownId,
+      name: "Beograd",
+      displayName: "Beograd - 11000",
+      postalCode: "11000",
+      active: true,
+    },
+    update: { active: true },
+  });
   await db.supplierCategoryMapping.upsert({
     where: {
       supplierId_externalCategory_externalType: {
@@ -138,6 +267,27 @@ beforeAll(async () => {
   });
 });
 
+beforeEach(async () => {
+  resetRabaluxTestEnv();
+  if (supplierId) {
+    await db.supplier.update({
+      where: { id: supplierId },
+      data: { enabled: true },
+    });
+  }
+});
+
+afterEach(async () => {
+  resetRabaluxTestEnv();
+  await cleanupTestProductsAndOrders();
+  await db.checkoutSession.deleteMany({
+    where: { id: { startsWith: "rabalux-integration-" } },
+  });
+  await db.customer.deleteMany({
+    where: { email: "integration@example.test", userId: null },
+  });
+});
+
 afterAll(async () => {
   await db.analyticsEvent.deleteMany({
     where: { anonymousId: { startsWith: "rabalux-integration-" } },
@@ -145,27 +295,10 @@ afterAll(async () => {
   await db.reclamation.deleteMany({
     where: { number: { startsWith: "R-IT-" } },
   });
-  const products = await db.product.findMany({
-    where: { sku: { startsWith: PREFIX } },
-    select: { id: true },
-  });
-  const productIds = products.map(({ id }) => id);
+  await cleanupTestProductsAndOrders();
   await db.checkoutSession.deleteMany({
     where: { id: { startsWith: "rabalux-integration-" } },
   });
-  if (productIds.length) {
-    const orders = await db.order.findMany({
-      where: { items: { some: { productId: { in: productIds } } } },
-      select: { id: true },
-    });
-    await db.order.deleteMany({
-      where: { id: { in: orders.map(({ id }) => id) } },
-    });
-    await db.stockMovement.deleteMany({
-      where: { productId: { in: productIds } },
-    });
-    await db.product.deleteMany({ where: { id: { in: productIds } } });
-  }
   await db.customer.deleteMany({
     where: { email: "integration@example.test", userId: null },
   });
@@ -207,16 +340,29 @@ afterAll(async () => {
   await db.category.deleteMany({
     where: {
       OR: [
-        { path: "/rabalux-integration-test" },
+        { id: categoryId },
         { path: { startsWith: "/rabalux-integration-feed" } },
       ],
     },
   });
+  if (parentCategoryId) {
+    await db.category.deleteMany({ where: { id: parentCategoryId } });
+  }
   await db.group.deleteMany({
     where: {
       slug: { in: ["rabalux-integration-test", "rabalux-integration-feed-tip"] },
     },
   });
+  await db.xExpressTown.deleteMany({ where: { id: xExpressTownId } });
+  if (warehouseId) {
+    await db.warehouse.deleteMany({ where: { id: warehouseId } });
+  }
+  if (createdPriceList && priceListId) {
+    await db.priceList.deleteMany({ where: { id: priceListId } });
+  }
+  if (createdSupplier && supplierId) {
+    await db.supplier.deleteMany({ where: { id: supplierId } });
+  }
   await db.$disconnect();
 });
 
@@ -280,11 +426,12 @@ function orderInput(
       street: "Test ulica 1",
       city: "Beograd",
       postalCode: "11000",
+      xExpressTownId,
       country: "RS",
     },
     billingSameAsShipping: true,
-    shippingMethod: "KAMION",
-    paymentMethod: "POUZECE_GOTOVINA",
+    shippingMethod: "KURIR",
+    paymentMethod: "UPLATA_NA_RACUN",
     consent: true,
   };
 }
@@ -519,8 +666,9 @@ describe("Rabalux checkout integration", () => {
           warehouseStock: 0,
           supplierStock: updated.supplierStock,
           supplierReservedStock: updated.supplierReservedStock,
+          supplierSafetyStock: 1,
         }),
-      ).toBe(9);
+      ).toBe(8);
       expect(
         await db.product.findUniqueOrThrow({
           where: { id: initial.id },
@@ -1044,16 +1192,22 @@ describe("Rabalux checkout integration", () => {
     });
     const refreshed = await db.product.findUniqueOrThrow({
       where: { id: mixed.id },
-      select: { stock: true, supplierStock: true, supplierReservedStock: true },
+      select: {
+        dcAvailableQty: true,
+        supplierStock: true,
+        supplierReservedStock: true,
+      },
     });
     expect(refreshed.supplierReservedStock).toBe(2);
+    expect(refreshed.dcAvailableQty).toBe(0);
     expect(
       effectiveSellableStock({
-        warehouseStock: refreshed.stock,
+        warehouseStock: refreshed.dcAvailableQty,
         supplierStock: refreshed.supplierStock,
         supplierReservedStock: refreshed.supplierReservedStock,
+        supplierSafetyStock: 1,
       }),
-    ).toBe(1);
+    ).toBe(0);
 
     const cancellationIds = await db.$transaction(async (tx) => {
       const freshOrder = await tx.order.findUniqueOrThrow({
@@ -1204,7 +1358,7 @@ describe("Rabalux checkout integration", () => {
       );
       expect(envDisabled).toMatchObject({
         ok: false,
-        error: { code: "OUT_OF_STOCK", sku: product.sku },
+        error: { code: "INACTIVE", sku: product.sku },
       });
       vi.stubGlobal("fetch", fetchSpy);
       await expect(syncRabaluxStock()).rejects.toThrow("disabled");
@@ -1224,7 +1378,7 @@ describe("Rabalux checkout integration", () => {
       );
       expect(supplierDisabled).toMatchObject({
         ok: false,
-        error: { code: "OUT_OF_STOCK", sku: product.sku },
+        error: { code: "INACTIVE", sku: product.sku },
       });
       await expect(syncRabaluxCatalog()).rejects.toThrow("disabled");
       expect(fetchSpy).not.toHaveBeenCalled();

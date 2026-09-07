@@ -296,6 +296,16 @@ export async function loadEligibleOrders(
             FROM "OrderItem" AS supplier_items
             WHERE supplier_items."orderId" = orders."id"
               AND supplier_items."supplierReservedQty" > 0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "SupplierFulfillmentItem" AS fulfillment_items
+                JOIN "SupplierFulfillment" AS fulfillments
+                  ON fulfillments."id" = fulfillment_items."fulfillmentId"
+                JOIN "Supplier" AS suppliers
+                  ON suppliers."id" = fulfillments."supplierId"
+                WHERE fulfillment_items."orderItemId" = supplier_items."id"
+                  AND suppliers."integrationKey" = 'RABALUX'
+              )
           )
         )
         AND NOT EXISTS (
@@ -2018,7 +2028,7 @@ function providerLabel(provider: SmallParcelProvider) {
   return provider === "MYGLS" ? "MyGLS" : "X Express";
 }
 
-async function pickupAssignmentCodAmount(
+export async function pickupAssignmentCodAmount(
   orderId: string,
   provider: SmallParcelProvider,
   assignedOrderItemIds: readonly string[],
@@ -2032,6 +2042,7 @@ async function pickupAssignmentCodAmount(
         select: {
           id: true,
           qty: true,
+          warehouseReservedQty: true,
           unitPriceSale: true,
           assemblyPrice: true,
           withAssembly: true,
@@ -2058,15 +2069,18 @@ async function pickupAssignmentCodAmount(
   });
   if (!order) throw new Error("Porudžbina za obračun otkupnine ne postoji.");
   if (!isCashOnDeliveryPaymentMethod(order.paymentMethod)) return 0;
+  // Rabalux's separate shipment has zero COD in a mixed order. Allocate the
+  // full customer total only among packages leaving our warehouse.
+  const dcItems = order.items.filter((item) => item.warehouseReservedQty > 0);
   const assigned = new Set(assignedOrderItemIds);
   if (
-    order.items.length > 0 &&
-    order.items.every((item) => assigned.has(item.id))
+    dcItems.length > 0 &&
+    dcItems.every((item) => assigned.has(item.id))
   ) {
     return Number(order.total);
   }
   const weights = new Map<SmallParcelProvider, number>();
-  for (const item of order.items) {
+  for (const item of dcItems) {
     const itemProvider = courierProviderForItem(item);
     if (!itemProvider) {
       throw new Error(
@@ -2074,8 +2088,8 @@ async function pickupAssignmentCodAmount(
       );
     }
     const lineValue =
-      Number(item.unitPriceSale) * item.qty +
-      (item.withAssembly ? Number(item.assemblyPrice ?? 0) * item.qty : 0);
+      Number(item.unitPriceSale) * item.warehouseReservedQty +
+      (item.withAssembly ? Number(item.assemblyPrice ?? 0) * item.warehouseReservedQty : 0);
     weights.set(itemProvider, (weights.get(itemProvider) ?? 0) + lineValue);
   }
   const ordered = (["X_EXPRESS", "MYGLS"] as const)

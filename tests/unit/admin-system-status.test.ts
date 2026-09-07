@@ -158,6 +158,7 @@ describe("admin system status", () => {
     );
     expect(testAccount?.ready).toBe(true);
     expect(testAccount?.missing).not.toContain("X_EXPRESS_PRODUCTION_ACCEPTED");
+    expect(testAccount?.description).toContain("X_EXPRESS_ENV je test");
 
     const legacyFirstCode = getIntegrationReadiness({
       ...env,
@@ -172,6 +173,7 @@ describe("admin system status", () => {
     }).find((item) => item.id === "x-express");
     expect(production?.ready).toBe(false);
     expect(production?.missing).toContain("X_EXPRESS_PRODUCTION_ACCEPTED");
+    expect(production?.description).toContain("produkcionom režimu");
   });
 
   it("requires the complete certificate trio for badi VPFR readiness", () => {

@@ -32,6 +32,8 @@ import { isXExpressAnnouncementPaymentReady } from "./payment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 import type { XExpressConfig } from "./config";
 import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
+import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
+import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 
 export async function createXExpressShipmentForOrder(
   orderId: string,
@@ -148,6 +150,8 @@ export async function createXExpressShipmentForOrder(
   const existing = order.shipments.find(
     (shipment) =>
       shipment.provider === X_EXPRESS_PROVIDER &&
+      (readShipmentAssignment(shipment.rawCreateResponse)?.supplierFulfillmentId ?? null) ===
+        (options.supplierFulfillmentId ?? null) &&
       (!requestedOrderItemIds.length ||
         sameShipmentAssignment(
           shipment.rawCreateResponse,
@@ -352,6 +356,7 @@ export async function announceXExpressShipment(shipmentId: string) {
       order: {
         select: {
           number: true,
+          createdAt: true,
           paymentMethod: true,
           payments: { select: { status: true } },
         },
@@ -363,6 +368,12 @@ export async function announceXExpressShipment(shipmentId: string) {
   }
   if (existing.providerShipmentId && existing.status !== "FAILED") {
     return existing;
+  }
+  if (readShipmentAssignment(existing.rawCreateResponse)?.supplierFulfillmentId) {
+    const availableAt = rabaluxCourierAvailableAt(existing.order.createdAt);
+    if (Date.now() < availableAt.getTime()) {
+      throw new BackgroundJobDeferredError(availableAt);
+    }
   }
   if (existing.status === "FAILED") {
     throw new XExpressConfigError(

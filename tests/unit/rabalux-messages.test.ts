@@ -10,22 +10,25 @@ import {
 
 describe("Rabalux supplier email", () => {
   const items = [
-    { externalSku: "7996", qty: 2 },
-    { externalSku: "5324", qty: 1 },
+    { externalSku: "7996", name: "Rabalux plafonjera", qty: 2 },
+    { externalSku: "5324", name: "Rabalux lampa", qty: 1 },
   ];
 
-  it("contains only the SPC number, original supplier SKUs and quantities", () => {
+  it("asks for immediate preparation with original supplier SKUs, names and quantities", () => {
     const message = supplierOrderMessage({
       orderNumber: "SPC-2026-000123",
       items,
-      waitingForPayment: true,
     });
     expect(message.text).toContain("SPC-2026-000123");
-    expect(message.text).toContain("7996 × 2");
+    expect(message.text).toContain("7996 | Rabalux plafonjera × 2");
     expect(message.text).not.toContain("RAB-7996");
     expect(message.text).not.toMatch(/telefon|adresa|kupac/i);
-    expect(message.text).toMatch(/NE SLATI/i);
-    expect(message.text).toMatch(/uplat/i);
+    expect(message.text).toMatch(/potvrdite dostupnost/i);
+    expect(message.text).toMatch(/mesto preuzimanja/i);
+    expect(message.text).not.toMatch(
+      /NE SLATI|uplata|prodajna cena|popust|trošak dostave|ukupni iznos/i,
+    );
+    expect(message.html).toContain("Naziv artikla");
   });
 
   it("sends shipping instructions without prices or non-Rabalux lines", () => {
@@ -36,6 +39,8 @@ describe("Rabalux supplier email", () => {
     });
     expect(message.text).toContain("7996 × 2");
     expect(message.text).toContain("AAA8503000010");
+    expect(message.subject).toContain("Adresnica i kurirski nalog");
+    expect(message.text).toContain("preuzimanje robe na Rabalux adresi");
     expect(message.text).not.toMatch(/cena|12[.,]999|DC-/i);
     expect(message.text).not.toMatch(/garant|predračun|predracun/i);
     expect(supplierShippingDocumentsIdempotencyKey("ful-1")).toBe(

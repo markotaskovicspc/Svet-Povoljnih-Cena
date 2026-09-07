@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const host = process.env.MYGLS_MOCK_HOST?.trim() || "127.0.0.1";
@@ -22,6 +23,17 @@ const server = createServer(async (request, response) => {
     if (request.method === "DELETE" && url.pathname === "/requests") {
       requests.length = 0;
       return json(response, 200, { ok: true });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/order/check-address") {
+      const body = await readJson(request);
+      requests.push({ method: "XExpressCheckAddress", body });
+      return json(response, 200, { area: "QA-01" });
+    }
+    if (request.method === "POST" && url.pathname === "/api/order/add") {
+      const body = await readJson(request);
+      requests.push({ method: "XExpressCreateOrder", body });
+      return json(response, 202, { requestGuid: randomUUID() });
     }
 
     const method = url.pathname.match(

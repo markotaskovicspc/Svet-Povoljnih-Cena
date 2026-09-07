@@ -169,6 +169,22 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.ServiceList).toBeUndefined();
   });
 
+  it("includes the operational contact when the pickup is at a supplier warehouse", () => {
+    const parcel = buildMyGlsParcelForOrder({
+      cfg: config,
+      order,
+      packages,
+      pickupContactOnLabel: true,
+    });
+
+    expect(parcel.PickupAddress).toMatchObject({
+      Name: "Svet povoljnih cena",
+      ContactName: "DC magacin",
+      ContactPhone: "+381641234567",
+      ContactEmail: "dc@example.invalid",
+    });
+  });
+
   it("rounds decimal dimensions upwards to the Int32 values required by MyGLS", () => {
     const parcel = buildMyGlsParcelForOrder({
       cfg: config,
@@ -251,10 +267,7 @@ describe("MyGLS reclamation payload", () => {
       labelParcels.map((parcel) =>
         parcel.ParcelPropertyList?.map((property) => property.Content),
       ),
-    ).toEqual([
-      ["Trpezarijski sto HOME STYLE"],
-      ["Trpezarijski set URBAN"],
-    ]);
+    ).toEqual([["Trpezarijski sto HOME STYLE"], ["Trpezarijski set URBAN"]]);
     expect(labelParcels.map((parcel) => parcel.CODAmount)).toEqual([12_000, 0]);
     expect(labelParcels.map((parcel) => parcel.CODReference)).toEqual([
       "SPC-2026-000001",

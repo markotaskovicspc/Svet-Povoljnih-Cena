@@ -1,6 +1,7 @@
 export type SupplierMessageItem = {
   externalSku: string;
   qty: number;
+  name?: string;
 };
 
 function html(value: string) {
@@ -15,29 +16,29 @@ function html(value: string) {
 export function supplierOrderMessage(input: {
   orderNumber: string;
   items: SupplierMessageItem[];
-  waitingForPayment?: boolean;
 }) {
   const lines = input.items
-    .map((item) => `${item.externalSku} × ${item.qty}`)
+    .map(
+      (item) =>
+        `${item.externalSku}${item.name ? ` | ${item.name}` : ""} × ${item.qty}`,
+    )
     .join("\n");
   const tableRows = input.items
     .map(
       (item) =>
         `<tr><td style="padding:6px;border:1px solid #ddd">${html(
           item.externalSku,
+        )}</td><td style="padding:6px;border:1px solid #ddd">${html(
+          item.name ?? "",
         )}</td><td style="padding:6px;border:1px solid #ddd">${item.qty}</td></tr>`,
     )
     .join("");
   return {
-    subject: `${input.waitingForPayment ? "Rezervacija" : "Porudžbina"} ${input.orderNumber}`,
-    html: `<p>Poštovani,</p>${
-      input.waitingForPayment
-        ? "<p><strong>REZERVACIJA — NE SLATI.</strong> Čeka se potvrda uplate kupca. Adresnicu i dokument za pakovanje poslaćemo tek kada uplata bude potvrđena.</p>"
-        : ""
-    }<p>molimo vas da pripremite sledeće artikle za porudžbinu <strong>${html(
+    subject: `Porudžbina ${input.orderNumber} – priprema artikala`,
+    html: `<p>Poštovani,</p><p>molimo vas da pripremite sledeće artikle za porudžbinu <strong>${html(
       input.orderNumber,
-    )}</strong>:</p><table style="border-collapse:collapse"><thead><tr><th style="padding:6px;border:1px solid #ddd">Rabalux šifra</th><th style="padding:6px;border:1px solid #ddd">Količina</th></tr></thead><tbody>${tableRows}</tbody></table>`,
-    text: `${input.waitingForPayment ? "REZERVACIJA — NE SLATI. Čeka se potvrda uplate kupca. Adresnica i dokument za pakovanje stižu nakon potvrde uplate.\n\n" : ""}Porudžbina ${input.orderNumber}\n\n${lines}`,
+    )}</strong>:</p><table style="border-collapse:collapse"><thead><tr><th style="padding:6px;border:1px solid #ddd">Rabalux šifra</th><th style="padding:6px;border:1px solid #ddd">Naziv artikla</th><th style="padding:6px;border:1px solid #ddd">Količina</th></tr></thead><tbody>${tableRows}</tbody></table><p>Molimo vas da potvrdite dostupnost svih stavki i mesto preuzimanja.</p><p>Srdačan pozdrav,<br/>Svet povoljnih cena</p>`,
+    text: `Poštovani,\n\nmolimo vas da pripremite sledeće artikle za porudžbinu ${input.orderNumber}:\n\n${lines}\n\nMolimo vas da potvrdite dostupnost svih stavki i mesto preuzimanja.\n\nSrdačan pozdrav,\nSvet povoljnih cena`,
   };
 }
 
@@ -53,9 +54,9 @@ export function supplierShippingDocumentsMessage(input: {
     ? `<p>Broj pošiljke: <strong>${html(input.trackingNo)}</strong></p>`
     : "";
   return {
-    subject: `Spremno za slanje ${input.orderNumber}`,
-    html: `<p>Poštovani,</p><p>porudžbina <strong>${html(input.orderNumber)}</strong> je spremna za slanje.</p>${tracking}<p>U prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Odštampajte adresnicu, zalepite je na paket i predajte paket kuriru.</p><pre>${html(lines)}</pre><p>Dokumenti namerno ne sadrže prodajne cene.</p>`,
-    text: `Porudžbina ${input.orderNumber} je spremna za slanje.${input.trackingNo ? `\nBroj pošiljke: ${input.trackingNo}` : ""}\n\nU prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Dokumenti ne sadrže prodajne cene.\n\n${lines}`,
+    subject: `Adresnica i kurirski nalog ${input.orderNumber}`,
+    html: `<p>Poštovani,</p><p>za porudžbinu <strong>${html(input.orderNumber)}</strong> kreirani su adresnica i nalog kurirskoj službi za preuzimanje robe na Rabalux adresi.</p>${tracking}<p>U prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Molimo odštampajte adresnicu, zalepite je na paket i predajte paket kuriru kada dođe po robu.</p><pre>${html(lines)}</pre><p>Dokumenti namerno ne sadrže prodajne cene.</p>`,
+    text: `Za porudžbinu ${input.orderNumber} kreirani su adresnica i nalog kurirskoj službi za preuzimanje robe na Rabalux adresi.${input.trackingNo ? `\nBroj pošiljke: ${input.trackingNo}` : ""}\n\nU prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Molimo odštampajte adresnicu, zalepite je na paket i predajte paket kuriru kada dođe po robu. Dokumenti ne sadrže prodajne cene.\n\n${lines}`,
   };
 }
 

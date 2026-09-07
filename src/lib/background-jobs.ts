@@ -3,6 +3,8 @@ import "server-only";
 import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
+import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 import { redactText } from "@/lib/monitoring";
 import {
   disableInvalidRabaluxWebAvailability,
@@ -165,6 +167,19 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(
 ) {
   const payload = schemas[args.kind].parse(args.payload);
   const client = tx ?? db;
+  // Centralize scheduling so checkout, payment callbacks and admin retries
+  // all honor the same supplier rule.
+  let availableAt: Date | undefined;
+  if (args.kind === "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL") {
+    const { fulfillmentId } = schemas.SUPPLIER_SHIPPING_DOCUMENTS_EMAIL.parse(payload);
+    const fulfillment = await client.supplierFulfillment.findUnique({
+      where: { id: fulfillmentId },
+      select: { order: { select: { createdAt: true } } },
+    });
+    if (fulfillment) {
+      availableAt = rabaluxCourierAvailableAt(fulfillment.order.createdAt);
+    }
+  }
   try {
     return await client.backgroundJob.create({
       data: {
@@ -172,6 +187,7 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(
         payload: payload as Prisma.InputJsonValue,
         idempotencyKey: args.idempotencyKey.slice(0, 200),
         maxAttempts: args.maxAttempts ?? 8,
+        ...(availableAt ? { availableAt } : {}),
       },
       select: { id: true, status: true },
     });
@@ -191,7 +207,7 @@ export async function enqueueBackgroundJob<K extends BackgroundJobKind>(
             payload: payload as Prisma.InputJsonValue,
             status: "QUEUED",
             attempts: 0,
-            availableAt: new Date(),
+            availableAt: availableAt ?? new Date(),
             lockedAt: null,
             completedAt: null,
             lastError: null,
@@ -252,6 +268,19 @@ export async function processBackgroundJob(id: string) {
     });
     return { claimed: true as const, ok: true as const };
   } catch (error) {
+    if (error instanceof BackgroundJobDeferredError) {
+      await db.backgroundJob.update({
+        where: { id: job.id },
+        data: {
+          status: "QUEUED",
+          attempts: { decrement: 1 },
+          availableAt: error.availableAt,
+          lockedAt: null,
+          lastError: null,
+        },
+      });
+      return { claimed: true as const, deferred: true as const };
+    }
     const permanent = error instanceof PermanentBackgroundJobError;
     const exhausted = permanent || job.attempts >= job.maxAttempts;
     const delaySeconds = Math.min(3600, 15 * 2 ** Math.min(job.attempts, 8));

@@ -1,14 +1,17 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import {
-  Prisma,
-  type ShipmentPurpose,
-} from "@prisma/client";
+import { Prisma, type ShipmentPurpose } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { PhysicalPackage } from "@/lib/courier/packages";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
-import { MYGLS_PROVIDER, MyGlsConfigError, MyGlsProviderError, requireMyGlsEnabled, type MyGlsPickupAddress } from "./config";
+import {
+  MYGLS_PROVIDER,
+  MyGlsConfigError,
+  MyGlsProviderError,
+  requireMyGlsEnabled,
+  type MyGlsPickupAddress,
+} from "./config";
 import { MyGlsClient, bytesFromMyGls } from "./client";
 import { uploadMyGlsLabelPdf } from "./labels";
 import { buildMyGlsParcelsForOrder } from "./payload";
@@ -64,13 +67,16 @@ export async function createMyGlsShipmentForOrder(
 
   try {
     const response = await new MyGlsClient(cfg).printLabels({ parcelList });
-    const printData = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
+    const printData =
+      response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
     const first = printData[0] ?? {};
     const parcelIds = printData.map((item) => item.ParcelId).filter(isNumber);
     const parcelNumbers = printData
       .map((item) => item.ParcelNumberWithCheckdigit ?? item.ParcelNumber)
       .filter(isNumber);
-    const trackingNo = String(parcelNumbers[0] ?? first.ParcelNumber ?? first.ParcelId ?? order.number);
+    const trackingNo = String(
+      parcelNumbers[0] ?? first.ParcelNumber ?? first.ParcelId ?? order.number,
+    );
     const labelBytes = bytesFromMyGls(response.Labels);
     const label = await uploadMyGlsLabelPdf({
       shipmentId,
@@ -148,7 +154,8 @@ export async function createMyGlsShipmentForOrder(
           : "MyGLS nalog nije kreiran.";
     await persistFailedShipment({
       orderId: order.id,
-      existingShipmentId: existing?.provider === MYGLS_PROVIDER ? existing.id : undefined,
+      existingShipmentId:
+        existing?.provider === MYGLS_PROVIDER ? existing.id : undefined,
       purpose,
       reclamationId: reclamation?.id,
       reclamationQty: reclamation?.quantity,
@@ -182,14 +189,19 @@ async function prepareMyGlsShipmentForOrder(
             warehouseId: true,
           },
         });
-  if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
+  if (
+    purpose !== "ORDER_DELIVERY" &&
+    (!reclamation || reclamation.orderId !== orderId)
+  ) {
     throw new MyGlsConfigError("Reklamacija za kurirski nalog nije pronađena.");
   }
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
       user: { select: { email: true } },
-      items: { select: { id: true, qty: true, name: true, withAssembly: true } },
+      items: {
+        select: { id: true, qty: true, name: true, withAssembly: true },
+      },
       payments: {
         orderBy: { createdAt: "desc" },
         select: { status: true, method: true, providerRef: true },
@@ -216,7 +228,9 @@ async function prepareMyGlsShipmentForOrder(
       ? order.items.filter((item) => requestedOrderItemIds.includes(item.id))
       : order.items;
   if (!shipmentItems.length) {
-    throw new MyGlsConfigError("Stavka reklamacije nije pronađena u porudžbini.");
+    throw new MyGlsConfigError(
+      "Stavka reklamacije nije pronađena u porudžbini.",
+    );
   }
   if (
     requestedOrderItemIds.length &&
@@ -227,7 +241,9 @@ async function prepareMyGlsShipmentForOrder(
     );
   }
   if (shipmentItems.some((item) => item.withAssembly)) {
-    throw new MyGlsConfigError("Porudžbina sa montažom/kamionskom logikom ne šalje se kroz MyGLS.");
+    throw new MyGlsConfigError(
+      "Porudžbina sa montažom/kamionskom logikom ne šalje se kroz MyGLS.",
+    );
   }
 
   const assignmentOrderItemIds = normalizeOrderItemIds(
@@ -252,17 +268,23 @@ async function prepareMyGlsShipmentForOrder(
     paymentMethod: order.paymentMethod,
     paymentStatuses: order.payments.map((payment) => payment.status),
   });
-  if (existing && existing.provider === MYGLS_PROVIDER && existing.status !== "FAILED") {
+  if (
+    existing &&
+    existing.provider === MYGLS_PROVIDER &&
+    existing.status !== "FAILED"
+  ) {
     return { completedShipment: existing } as const;
   }
 
-  const shipmentId = existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
+  const shipmentId =
+    existing?.provider === MYGLS_PROVIDER ? existing.id : randomUUID();
   const parcelList = buildMyGlsParcelsForOrder({
     cfg,
     order: { ...order, total: codAmount, items: shipmentItems },
     pickupDate: options.pickupDate,
     packages: options.packages ?? [],
     purpose,
+    pickupContactOnLabel: Boolean(options.supplierFulfillmentId),
   });
 
   return {
@@ -298,7 +320,8 @@ export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
     return { alreadyDeleted: true };
   }
   const parcelIds = parcelIdList(shipment);
-  if (!parcelIds.length) throw new MyGlsConfigError("MyGLS parcel ID nije sačuvan.");
+  if (!parcelIds.length)
+    throw new MyGlsConfigError("MyGLS parcel ID nije sačuvan.");
   const response = await new MyGlsClient().deleteLabels(parcelIds);
   await db.shipment.update({
     where: { id: shipment.id },
@@ -317,7 +340,10 @@ export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
   return response;
 }
 
-export async function modifyMyGlsCODForShipment(shipmentId: string, codAmount: number) {
+export async function modifyMyGlsCODForShipment(
+  shipmentId: string,
+  codAmount: number,
+) {
   const shipment = await db.shipment.findUnique({
     where: { id: shipmentId },
     select: {
@@ -351,11 +377,16 @@ export async function modifyMyGlsCODForShipment(shipmentId: string, codAmount: n
   return response;
 }
 
-export function parcelIdList(shipment: { providerParcelId?: string | null; providerParcelIds?: unknown }) {
+export function parcelIdList(shipment: {
+  providerParcelId?: string | null;
+  providerParcelIds?: unknown;
+}) {
   const ids = Array.isArray(shipment.providerParcelIds)
     ? shipment.providerParcelIds.map(Number).filter(Number.isFinite)
     : [];
-  const single = shipment.providerParcelId ? Number(shipment.providerParcelId) : null;
+  const single = shipment.providerParcelId
+    ? Number(shipment.providerParcelId)
+    : null;
   return [...new Set([...(single ? [single] : []), ...ids])];
 }
 
@@ -367,7 +398,12 @@ export function parcelNumberList(shipment: {
     ? shipment.providerParcelNumbers.map(Number).filter(Number.isFinite)
     : [];
   const single = shipment.trackingNo ? Number(shipment.trackingNo) : null;
-  return [...new Set([...(single && Number.isFinite(single) ? [single] : []), ...numbers])];
+  return [
+    ...new Set([
+      ...(single && Number.isFinite(single) ? [single] : []),
+      ...numbers,
+    ]),
+  ];
 }
 
 async function persistFailedShipment(args: {

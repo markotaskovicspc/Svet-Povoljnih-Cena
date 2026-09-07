@@ -519,7 +519,7 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
           total: true,
           paymentMethod: true,
           items: {
-            select: { id: true, qty: true, unitPriceSale: true },
+            select: { id: true, qty: true, unitPriceSale: true, warehouseReservedQty: true, supplierReservedQty: true },
           },
           shipments: {
             where: { purpose: "ORDER_DELIVERY", status: { not: "FAILED" } },
@@ -537,11 +537,13 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
           error: "Jedna od izabranih stavki ne pripada porudžbini.",
         };
       }
-      const allOrderItemIds = order.items.map((item) => item.id);
+      const dcItems = order.items.filter((item) => item.supplierReservedQty === 0 || item.warehouseReservedQty > 0);
+      const allOrderItemIds = dcItems.map((item) => item.id);
       const assignedIds = new Set<string>();
       let existingCodAmount = 0;
       for (const shipment of order.shipments) {
         const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+        if (assignment?.supplierFulfillmentId) continue;
         for (const itemId of assignment?.orderItemIds ?? allOrderItemIds) {
           assignedIds.add(itemId);
         }
@@ -557,7 +559,7 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
       const remainingIds = allOrderItemIds.filter((itemId) => !assignedIds.has(itemId));
       const itemValue = (items: typeof order.items) =>
         items.reduce(
-          (sum, item) => sum + num(item.unitPriceSale) * item.qty,
+          (sum, item) => sum + num(item.unitPriceSale) * (item.warehouseReservedQty || item.qty),
           0,
         );
       const cashOnDelivery =
@@ -566,7 +568,7 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
       const selectedIsRemainder =
         orderItemIds.length === remainingIds.length &&
         orderItemIds.every((itemId) => remainingIds.includes(itemId));
-      const merchandiseValue = itemValue(order.items);
+      const merchandiseValue = itemValue(dcItems);
       const proportionalCod =
         merchandiseValue > 0
           ? Math.round(
@@ -1124,24 +1126,8 @@ async function resendSupplierOrderAction(
             `Realizacija u statusu ${fulfillment.status} nije dostupna za ponovno slanje.`,
           );
         }
-        const order = await tx.order.findUniqueOrThrow({
-          where: { id: orderId },
-          select: {
-            paymentMethod: true,
-            payments: { select: { status: true } },
-          },
-        });
-        const ready = fulfillmentPaymentReadiness({
-          purpose: "ORDER_DELIVERY",
-          paymentMethod: order.paymentMethod,
-          paymentStatuses: order.payments.map((payment) => payment.status),
-        }).ready;
-        const kind = ready
-          ? "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL"
-          : "SUPPLIER_ORDER_EMAIL";
-        const idempotencyKey = `${
-          ready ? "supplier-shipping-documents" : "supplier-order"
-        }-resend:${fulfillmentId}:${requestId}`;
+        const kind = "SUPPLIER_ORDER_EMAIL";
+        const idempotencyKey = `supplier-order-resend:${fulfillmentId}:${requestId}`;
         const existingRequest = await tx.backgroundJob.findUnique({
           where: { idempotencyKey },
           select: { id: true },
@@ -1176,7 +1162,7 @@ async function resendSupplierOrderAction(
             diff: { requestId, reason, status: fulfillment.status, queued: true },
           },
         });
-        return { alreadyQueued: false, ready };
+        return { alreadyQueued: false };
       });
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       return {
@@ -1185,9 +1171,7 @@ async function resendSupplierOrderAction(
         diff: { requestId, reason, queued: true, alreadyQueued: result.alreadyQueued },
         message: result.alreadyQueued
           ? "Slanje je već u redu i nije duplirano."
-          : result.ready
-            ? "Adresnica i dokument za pakovanje stavljeni su u red za ponovno slanje."
-            : "Rezervacija bez dozvole za slanje stavljena je u red.",
+          : "Rabalux porudžbina i prateći dokumenti stavljeni su u red za ponovno slanje.",
       };
     },
   )(formData);
@@ -1402,11 +1386,12 @@ export async function WebOrderDetail({ id }: { id: string }) {
     getCheckoutPaymentMethods(),
     db.fiscalDocument.count({ where: { orderId: order.id, kind: "SALE" } }),
   ]);
+  const dcCourierItems = order.items.filter((item) => item.supplierReservedQty === 0 || item.warehouseReservedQty > 0);
   const courierPackages = derivePhysicalPackages(
-    order.items.map((item) => ({
+    dcCourierItems.map((item) => ({
       id: item.id,
       name: item.name,
-      qty: item.qty,
+      qty: item.warehouseReservedQty || item.qty,
       product: item.product,
     })),
   );
@@ -1428,18 +1413,19 @@ export async function WebOrderDetail({ id }: { id: string }) {
         ? MYGLS_PROVIDER
         : X_EXPRESS_PROVIDER
       : "";
-  const allOrderItemIds = order.items.map((item) => item.id);
+  const allOrderItemIds = dcCourierItems.map((item) => item.id);
   const assignedOrderItemIds = new Set<string>();
   for (const shipment of order.shipments) {
     if (!isActiveWebOrderShipment(shipment)) {
       continue;
     }
     const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+    if (assignment?.supplierFulfillmentId) continue;
     for (const itemId of assignment?.orderItemIds ?? allOrderItemIds) {
       assignedOrderItemIds.add(itemId);
     }
   }
-  const availableCourierItems = order.items.filter(
+  const availableCourierItems = dcCourierItems.filter(
     (item) => !assignedOrderItemIds.has(item.id),
   );
   const courierPaymentReadiness = fulfillmentPaymentReadiness({
@@ -2028,7 +2014,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   k="Mesto preuzimanja"
                   v={
                     fulfillment.supplier.integrationKey === "RABALUX"
-                      ? "Fiksni Rabalux magacin iz bezbedne RABALUX_PICKUP_* konfiguracije"
+                      ? `${process.env.RABALUX_PICKUP_STREET ?? ""} ${process.env.RABALUX_PICKUP_HOUSE_NUMBER ?? ""}, ${process.env.RABALUX_PICKUP_CITY ?? "Rabalux magacin"}`
                       : fulfillment.loadingLocation
                       ? `${fulfillment.loadingLocation.name} · ${
                           fulfillment.loadingLocation.address ?? "adresa nije uneta"
@@ -2037,6 +2023,14 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   }
                 />
               </dl>
+              {fulfillment.supplier.integrationKey === "RABALUX" ? (
+                <p className="mt-3 text-sm text-black/60">
+                  Preuzimanje: X Express. Kurirski nalog se šalje dan nakon
+                  porudžbine, po ispunjenju uslova plaćanja. Roba iz DC-a ide
+                  posebnim nalogom; kod mešovite porudžbine pouzeće se naplaćuje
+                  kroz DC pošiljku.
+                </p>
+              ) : null}
               {fulfillment.lastError ? (
                 <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">
                   {fulfillment.lastError}
@@ -2692,7 +2686,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                     <input type="hidden" name="id" value={order.id} />
                     <Field
                       label="Kurir za izabrane stavke"
-                      hint="Možete prvo napraviti nalog za X Express stavke, a zatim poseban MyGLS nalog za preostale."
+                      hint="Stavke iz DC-a šalju se ovim nalogom. Rabalux ima zaseban X Express nalog iz svog magacina."
                     >
                       <select
                         name="provider"

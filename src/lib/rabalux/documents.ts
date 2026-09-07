@@ -2,7 +2,13 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import type { EmailAttachment } from "@/lib/email";
-import { buildPdf } from "@/lib/email/pdf";
+import {
+  buildPdf,
+  buildSupplierInvoicePdf,
+  buildWithdrawalFormPdf,
+  type InvoiceAddressInput,
+  type WithdrawalOrderInput,
+} from "@/lib/email/pdf";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
@@ -22,6 +28,88 @@ export function buildRabaluxPackingPdf(input: {
     { text: "" },
     { text: "U paket staviti samo gore navedene Rabalux artikle." },
   ]);
+}
+
+export type RabaluxSupplierOrderDocumentInput = {
+  orderNumber: string;
+  createdAt: Date;
+  items: Array<{ externalSku: string; qty: number; name: string }>;
+  shippingAddress: InvoiceAddressInput;
+  billingAddress?: InvoiceAddressInput | null;
+};
+
+export async function buildRabaluxSupplierOrderPdf(
+  input: RabaluxSupplierOrderDocumentInput,
+) {
+  return buildSupplierInvoicePdf({
+    number: input.orderNumber,
+    createdAt: input.createdAt,
+    items: input.items.map((item) => ({
+      sku: item.externalSku,
+      name: item.name,
+      qty: item.qty,
+    })),
+    shipping_address: input.shippingAddress,
+    billing_address: input.billingAddress,
+  });
+}
+
+export async function buildRabaluxSupplierOrderAttachments(
+  input: RabaluxSupplierOrderDocumentInput,
+): Promise<EmailAttachment[]> {
+  const withdrawalOrder = toWithdrawalOrder(input);
+  const attachments: EmailAttachment[] = [
+    {
+      filename: `predracun-rabalux-${safe(input.orderNumber)}.pdf`,
+      content: (await buildRabaluxSupplierOrderPdf(input)).toString("base64"),
+      contentType: "application/pdf",
+    },
+    {
+      filename: `obrazac-za-odustajanje-${safe(input.orderNumber)}.pdf`,
+      content: buildWithdrawalFormPdf(withdrawalOrder).toString("base64"),
+      contentType: "application/pdf",
+    },
+  ];
+  assertRabaluxSupplierOrderAttachmentSet(attachments);
+  return attachments;
+}
+
+export function assertRabaluxSupplierOrderAttachmentSet(
+  attachments: readonly EmailAttachment[],
+) {
+  const expected = ["predracun-rabalux-", "obrazac-za-odustajanje-"];
+  if (
+    attachments.length !== expected.length ||
+    !expected.every(
+      (prefix) =>
+        attachments.filter((attachment) =>
+          attachment.filename.startsWith(prefix),
+        ).length === 1,
+    ) ||
+    attachments.some(
+      (attachment) =>
+        !expected.some((prefix) => attachment.filename.startsWith(prefix)),
+    )
+  ) {
+    throw new Error(
+      "Rabalux porudzbina sme da sadrzi samo Rabalux primerak predracuna i obrazac za odustajanje.",
+    );
+  }
+}
+
+function toWithdrawalOrder(
+  input: RabaluxSupplierOrderDocumentInput,
+): WithdrawalOrderInput {
+  return {
+    number: input.orderNumber,
+    createdAt: input.createdAt,
+    items: input.items.map((item) => ({
+      sku: item.externalSku,
+      name: item.name,
+    })),
+    shipping_address: input.shippingAddress,
+    billing_address: input.billingAddress,
+  };
 }
 
 export async function buildRabaluxShipmentAttachments(args: {

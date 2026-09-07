@@ -77,15 +77,18 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
   for (const line of sanitized) {
     const size = line.size ?? FONT_SIZE;
     const font = line.bold ? "/F2" : "/F1";
-    const advance = (line.spaceAbove ?? 0) + (line.size ? line.size + 4 : LINE_HEIGHT);
+    const advance =
+      (line.spaceAbove ?? 0) + (line.size ? line.size + 4 : LINE_HEIGHT);
     if (cursorY - advance < MARGIN_Y && pages.at(-1)!.length) {
       pages.push([]);
       cursorY = PAGE_HEIGHT - MARGIN_Y - HEADER_HEIGHT;
     }
     cursorY -= advance;
-    pages.at(-1)!.push(
-      `${font} ${size} Tf\n1 0 0 1 ${MARGIN_X} ${cursorY} Tm\n(${pdfEscape(line.text)}) Tj`,
-    );
+    pages
+      .at(-1)!
+      .push(
+        `${font} ${size} Tf\n1 0 0 1 ${MARGIN_X} ${cursorY} Tm\n(${pdfEscape(line.text)}) Tj`,
+      );
   }
 
   // Object table
@@ -95,7 +98,9 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
     return objects.length;
   };
 
-  const fontHelvetica = push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+  const fontHelvetica = push(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+  );
   const fontHelveticaBold = push(
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   );
@@ -153,7 +158,8 @@ export function buildPdf(title: string, lines: Line[]): Buffer {
 
   const xrefStart = cursor;
   let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const off of offsets) xref += `${String(off).padStart(10, "0")} 00000 n \n`;
+  for (const off of offsets)
+    xref += `${String(off).padStart(10, "0")} 00000 n \n`;
   const trailer = `trailer\n<< /Size ${objects.length + 1} /Root ${catalogObj} 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
 
   return Buffer.from(header + body + xref + trailer, "binary");
@@ -167,7 +173,10 @@ function wrapPdfText(text: string, size: number, bold: boolean) {
   if (!text) return [""];
   const usableWidth = PAGE_WIDTH - MARGIN_X * 2;
   const averageGlyphWidth = size * (bold ? 0.57 : 0.52);
-  const maxCharacters = Math.max(16, Math.floor(usableWidth / averageGlyphWidth));
+  const maxCharacters = Math.max(
+    16,
+    Math.floor(usableWidth / averageGlyphWidth),
+  );
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
@@ -175,7 +184,8 @@ function wrapPdfText(text: string, size: number, bold: boolean) {
   for (const word of words) {
     const chunks = Array.from(
       { length: Math.ceil(word.length / maxCharacters) },
-      (_, index) => word.slice(index * maxCharacters, (index + 1) * maxCharacters),
+      (_, index) =>
+        word.slice(index * maxCharacters, (index + 1) * maxCharacters),
     );
     for (const chunk of chunks) {
       const next = current ? `${current} ${chunk}` : chunk;
@@ -231,7 +241,13 @@ export interface InvoiceAddressInput {
 interface InvoiceOrderInput {
   number: string;
   createdAt: Date;
-  items: { sku: string; name: string; qty: number; unitPriceSale: number; assemblyPrice?: number | null }[];
+  items: {
+    sku: string;
+    name: string;
+    qty: number;
+    unitPriceSale: number;
+    assemblyPrice?: number | null;
+  }[];
   subtotal: number;
   shipping: number;
   assemblyTotal: number;
@@ -245,18 +261,41 @@ interface InvoiceOrderInput {
   billing_address?: InvoiceAddressInput | null;
 }
 
+interface WithdrawalOrderInput {
+  number: string;
+  createdAt: Date;
+  items: { sku: string; name: string }[];
+  shipping_address: InvoiceAddressInput;
+  billing_address?: InvoiceAddressInput | null;
+}
+
 type InvoiceLine = {
   name: string;
   sku: string;
   qty: number;
-  gross: number;
+  gross?: number;
 };
+
+type InvoiceDocumentBase = Pick<
+  InvoiceOrderInput,
+  "number" | "createdAt" | "shipping_address" | "billing_address"
+>;
+
+export type SupplierInvoiceOrderInput = InvoiceDocumentBase & {
+  items: { sku: string; name: string; qty: number }[];
+};
+
+type InvoicePageMode =
+  | { kind: "customer"; total: number; paymentMethod: string }
+  | { kind: "supplier" };
 
 const INVOICE_PIXEL_WIDTH = 1240;
 const INVOICE_PIXEL_HEIGHT = 1754;
 const INVOICE_ROWS_PER_PAGE = 10;
 
-export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer> {
+export async function buildInvoicePdf(
+  order: InvoiceOrderInput,
+): Promise<Buffer> {
   const lines: InvoiceLine[] = order.items.flatMap((item) => [
     {
       name: item.name,
@@ -265,12 +304,14 @@ export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer>
       gross: item.unitPriceSale * item.qty,
     },
     ...(item.assemblyPrice && item.assemblyPrice > 0
-      ? [{
-          name: `Montaža — ${item.name}`,
-          sku: `${item.sku}-M`,
-          qty: item.qty,
-          gross: item.assemblyPrice * item.qty,
-        }]
+      ? [
+          {
+            name: `Montaža — ${item.name}`,
+            sku: `${item.sku}-M`,
+            qty: item.qty,
+            gross: item.assemblyPrice * item.qty,
+          },
+        ]
       : []),
   ]);
   if (order.shipping > 0) {
@@ -304,7 +345,43 @@ export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer>
   const jpegPages = await Promise.all(
     pages.map((pageLines, pageIndex) =>
       renderPdfSvgToJpeg(
-        invoicePageSvg(order, pageLines, pageIndex, pages.length),
+        invoicePageSvg(order, pageLines, pageIndex, pages.length, {
+          kind: "customer",
+          total: order.total,
+          paymentMethod: order.paymentMethod,
+        }),
+      ),
+    ),
+  );
+  return rasterJpegPagesPdf({
+    pages: jpegPages,
+    pixelWidth: INVOICE_PIXEL_WIDTH,
+    pixelHeight: INVOICE_PIXEL_HEIGHT,
+    pdfWidth: PAGE_WIDTH,
+    pdfHeight: PAGE_HEIGHT,
+  });
+}
+
+/**
+ * Supplier-safe copy of the branded customer pro-forma. It intentionally
+ * accepts no commercial fields, so prices, discounts, delivery and totals
+ * cannot leak into the rendered Rabalux document.
+ */
+export async function buildSupplierInvoicePdf(
+  order: SupplierInvoiceOrderInput,
+): Promise<Buffer> {
+  const lines: InvoiceLine[] = order.items.map((item) => ({
+    name: item.name,
+    sku: item.sku,
+    qty: item.qty,
+  }));
+  const pages = chunkInvoiceLines(lines, INVOICE_ROWS_PER_PAGE);
+  const jpegPages = await Promise.all(
+    pages.map((pageLines, pageIndex) =>
+      renderPdfSvgToJpeg(
+        invoicePageSvg(order, pageLines, pageIndex, pages.length, {
+          kind: "supplier",
+        }),
       ),
     ),
   );
@@ -318,18 +395,22 @@ export async function buildInvoicePdf(order: InvoiceOrderInput): Promise<Buffer>
 }
 
 function invoicePageSvg(
-  order: InvoiceOrderInput,
+  order: InvoiceDocumentBase,
   lines: InvoiceLine[],
   pageIndex: number,
   pageCount: number,
+  mode: InvoicePageMode,
 ) {
   const blue = "#124987";
   const tableX = 70;
   const tableY = 495;
   const headerHeight = 56;
   const rowHeight = 66;
-  const widths = [440, 140, 75, 165, 165, 175];
-  const headers = ["Naziv artikla", "Šifra", "Kol.", "Osnovica", "PDV 20%", "Ukupno"];
+  const supplierCopy = mode.kind === "supplier";
+  const widths = supplierCopy ? [720, 230, 150] : [440, 140, 75, 165, 165, 175];
+  const headers = supplierCopy
+    ? ["Naziv artikla", "Rabalux šifra", "Količina"]
+    : ["Naziv artikla", "Šifra", "Kol.", "Osnovica", "PDV 20%", "Ukupno"];
   let headerX = tableX;
   const header = headers
     .map((label, index) => {
@@ -342,16 +423,21 @@ function invoicePageSvg(
   const rows = lines
     .map((line, index) => {
       const y = tableY + headerHeight + index * rowHeight;
-      const basis = line.gross / 1.2;
-      const vat = line.gross - basis;
-      const values = [
-        line.name,
-        line.sku,
-        String(line.qty),
-        formatInvoiceMoney(basis),
-        formatInvoiceMoney(vat),
-        formatInvoiceMoney(line.gross),
-      ];
+      const values = supplierCopy
+        ? [line.name, line.sku, String(line.qty)]
+        : (() => {
+            const gross = line.gross ?? 0;
+            const basis = gross / 1.2;
+            const vat = gross - basis;
+            return [
+              line.name,
+              line.sku,
+              String(line.qty),
+              formatInvoiceMoney(basis),
+              formatInvoiceMoney(vat),
+              formatInvoiceMoney(gross),
+            ];
+          })();
       let x = tableX;
       return values
         .map((value, columnIndex) => {
@@ -372,20 +458,29 @@ function invoicePageSvg(
     .join("");
   const tableBottom = tableY + headerHeight + lines.length * rowHeight;
   const isLast = pageIndex === pageCount - 1;
-  const basisTotal = order.total / 1.2;
-  const vatTotal = order.total - basisTotal;
-  const totals = isLast
-    ? `<g transform="translate(650 ${tableBottom + 55})">
+  const totals =
+    isLast && mode.kind === "customer"
+      ? (() => {
+          const basisTotal = mode.total / 1.2;
+          const vatTotal = mode.total - basisTotal;
+          return `<g transform="translate(650 ${tableBottom + 55})">
         <text x="0" y="0" class="totalLabel">Osnovica bez PDV-a</text><text x="500" y="0" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(basisTotal))}</text>
         <text x="0" y="48" class="totalLabel">PDV 20%</text><text x="500" y="48" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(vatTotal))}</text>
         <rect x="-18" y="75" width="536" height="88" fill="#eaf1fa"/>
-        <text x="0" y="130" class="grandLabel">UKUPNO ZA UPLATU</text><text x="500" y="130" text-anchor="end" class="grandValue">${xmlEscapePdf(formatInvoiceMoney(order.total))}</text>
+        <text x="0" y="130" class="grandLabel">UKUPNO ZA UPLATU</text><text x="500" y="130" text-anchor="end" class="grandValue">${xmlEscapePdf(formatInvoiceMoney(mode.total))}</text>
       </g>
       <rect x="70" y="${tableBottom + 260}" width="1100" height="74" class="infoBox"/>
       <text x="92" y="${tableBottom + 306}" class="infoLabel">NAČIN PLAĆANJA</text>
-      <text x="1148" y="${tableBottom + 306}" text-anchor="end" class="infoValue">${xmlEscapePdf(paymentMethodLabel(order.paymentMethod))}</text>
-      <text x="82" y="${tableBottom + 380}" class="note">PDV 20% je prikazan po svakoj stavci i uključen je u ukupnu cenu.</text>`
-    : "";
+      <text x="1148" y="${tableBottom + 306}" text-anchor="end" class="infoValue">${xmlEscapePdf(paymentMethodLabel(mode.paymentMethod))}</text>
+      <text x="82" y="${tableBottom + 380}" class="note">PDV 20% je prikazan po svakoj stavci i uključen je u ukupnu cenu.</text>`;
+        })()
+      : "";
+  const supplierNotice =
+    isLast && supplierCopy
+      ? `<rect x="70" y="${tableBottom + 48}" width="1100" height="104" class="supplierBox"/>
+      <text x="92" y="${tableBottom + 87}" class="infoLabel">PRIMERAK ZA RABALUX</text>
+      <text x="92" y="${tableBottom + 122}" class="supplierNote">Dokument za pripremu navedenih artikala - bez prodajnih cena, popusta, dostave i ukupnog iznosa.</text>`
+      : "";
   const logo = LOGO_JPEG
     ? `<image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="data:image/jpeg;base64,${LOGO_JPEG.toString("base64")}"/>`
     : `<text x="70" y="104" class="brand">Svet Povoljnih Cena</text>`;
@@ -412,6 +507,8 @@ function invoicePageSvg(
       .infoLabel { font-size: 17px; font-weight: 800; fill: ${blue}; }
       .infoValue { font-size: 17px; font-weight: 600; }
       .note { font-size: 14px; fill: #57616d; }
+      .supplierBox { fill: #eaf1fa; stroke: #c6d5e8; stroke-width: 1.5; }
+      .supplierNote { font-size: 16px; fill: #3f4852; }
       .footer { font-size: 13px; fill: #697380; }
     </style>
     <rect width="1240" height="1754" fill="#fff"/>
@@ -426,13 +523,13 @@ function invoicePageSvg(
     ${partyText(92, 274, [MERCHANT_LEGAL_INFO.name, `PIB: ${MERCHANT_LEGAL_INFO.pib} · Matični broj: ${MERCHANT_LEGAL_INFO.registrationNumber}`, MERCHANT_LEGAL_INFO.shortAddress, `Tekući račun: ${MERCHANT_LEGAL_INFO.bankAccount} (${MERCHANT_LEGAL_INFO.bankName})`])}
     <text x="642" y="242" class="partyLabel">KUPAC</text>
     ${partyText(642, 274, invoiceBuyerLines(order))}
-    ${header}${rows}${totals}
+    ${header}${rows}${totals}${supplierNotice}
     <text x="70" y="1690" class="footer">${xmlEscapePdf(MERCHANT_LEGAL_INFO.name)} · PIB ${xmlEscapePdf(MERCHANT_LEGAL_INFO.pib)}</text>
     <text x="1170" y="1690" text-anchor="end" class="footer">Strana ${pageIndex + 1}/${pageCount}</text>
   </svg>`;
 }
 
-export function invoiceBuyerLines(order: InvoiceOrderInput) {
+export function invoiceBuyerLines(order: InvoiceDocumentBase) {
   const buyer = resolveDocumentBuyerAddress(
     order.shipping_address,
     order.billing_address,
@@ -473,7 +570,12 @@ function partyText(x: number, y: number, values: string[]) {
     .join("")}</text>`;
 }
 
-function invoiceMultilineText(x: number, y: number, value: string, limit: number) {
+function invoiceMultilineText(
+  x: number,
+  y: number,
+  value: string,
+  limit: number,
+) {
   const words = value.trim().split(/\s+/);
   const result: string[] = [];
   let current = "";
@@ -533,7 +635,9 @@ function xmlEscapePdf(value: string) {
     .replace(/'/g, "&apos;");
 }
 
-export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
+export function buildWithdrawalFormPdf<T extends WithdrawalOrderInput>(
+  order: T,
+): Buffer {
   const buyerLines = withdrawalBuyerLines(order);
   const lines: Line[] = [
     { text: "(Zakon o zaštiti potrošača, član 28)", spaceAbove: 2 },
@@ -543,7 +647,9 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
     },
     { text: "" },
     { text: `Broj porudžbine: ${order.number}` },
-    { text: `Datum porudžbine: ${DOCUMENT_DATE_FORMATTER.format(order.createdAt)}` },
+    {
+      text: `Datum porudžbine: ${DOCUMENT_DATE_FORMATTER.format(order.createdAt)}`,
+    },
     ...buyerLines.map((text) => ({ text })),
     { text: "" },
     {
@@ -571,7 +677,7 @@ export function buildWithdrawalFormPdf(order: InvoiceOrderInput): Buffer {
   return buildPdf("Obrazac za odustanak", lines);
 }
 
-export function withdrawalBuyerLines(order: InvoiceOrderInput) {
+export function withdrawalBuyerLines<T extends WithdrawalOrderInput>(order: T) {
   const buyer = resolveDocumentBuyerAddress(
     order.shipping_address,
     order.billing_address,
@@ -593,4 +699,4 @@ export function withdrawalBuyerLines(order: InvoiceOrderInput) {
   return [`Kupac: ${contactName}`, `Adresa: ${address}`];
 }
 
-export type { InvoiceOrderInput };
+export type { InvoiceOrderInput, WithdrawalOrderInput };

@@ -49,6 +49,8 @@ import {
 } from "./shipment-assignment";
 import { assertFulfillmentPaymentReady } from "@/lib/payments/fulfillment-readiness";
 import { requireRabaluxPickupForProvider } from "@/lib/rabalux/pickup";
+import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
+import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 
 /**
  * Phase 4C — Routing + side-effects.
@@ -149,6 +151,8 @@ async function processShipmentForOrder(
           name: true,
           withAssembly: true,
           qty: true,
+          warehouseReservedQty: true,
+          supplierReservedQty: true,
           product: {
             select: {
               packQty: true,
@@ -189,13 +193,17 @@ async function processShipmentForOrder(
           supplier: { integrationKey: "RABALUX" },
           status: { notIn: ["CANCELLED", "COMPLETED"] },
         },
-        select: { id: true, items: { select: { orderItemId: true } } },
+        select: { id: true, items: { select: { orderItemId: true, qty: true } } },
       })
     : null;
   if (options.supplierFulfillmentId && !supplierFulfillment) {
     throw new CourierConfigError("Rabalux grupa za ovu porudžbinu nije pronađena.");
   }
   if (supplierFulfillment) {
+    const availableAt = rabaluxCourierAvailableAt(order.createdAt);
+    if (Date.now() < availableAt.getTime()) {
+      throw new BackgroundJobDeferredError(availableAt);
+    }
     const fulfillmentItemIds = normalizeOrderItemIds(
       supplierFulfillment.items.map((item) => item.orderItemId),
     );
@@ -221,17 +229,32 @@ async function processShipmentForOrder(
     ? null
     : order.shipments.find((shipment) => shipment.status !== "FAILED") ?? null;
   if (existing) return existing;
-  if (purpose === "ORDER_DELIVERY" && !supplierFulfillment) {
-    await assertSupplierPickupConfirmed(order.id, requestedOrderItemIds);
-  }
-
-  const shipmentItems = reclamation
+  let shipmentItems = reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)
         .map((item) => ({ ...item, qty: reclamation.quantity }))
     : requestedOrderItemIds.length
       ? order.items.filter((item) => requestedOrderItemIds.includes(item.id))
       : order.items;
+  if (purpose === "ORDER_DELIVERY" && !supplierFulfillment) {
+    if (shipmentItems.some((item) => item.supplierReservedQty > 0 && item.warehouseReservedQty === 0)) {
+      throw new CourierConfigError("Dobavljačke stavke se šalju posebnim nalogom iz dobavljačkog magacina.");
+    }
+    if (!requestedOrderItemIds.length || shipmentItems.some((item) => item.warehouseReservedQty === 0)) {
+      await assertSupplierPickupConfirmed(order.id, requestedOrderItemIds);
+    }
+  }
+  if (supplierFulfillment) {
+    shipmentItems = shipmentItems.map((item) => ({
+      ...item,
+      qty: supplierFulfillment.items.find((line) => line.orderItemId === item.id)!.qty,
+    }));
+  } else if (purpose === "ORDER_DELIVERY" && requestedOrderItemIds.length) {
+    shipmentItems = shipmentItems.map((item) => ({
+      ...item,
+      qty: item.warehouseReservedQty || item.qty,
+    }));
+  }
   if (!shipmentItems.length) {
     throw new CourierConfigError("Stavka reklamacije nije pronađena u porudžbini.");
   }
@@ -264,7 +287,10 @@ async function processShipmentForOrder(
       packGrossWeightKg: pkg.weightKg,
     })),
   } as const;
-  const routing = resolveCourierProvider(routeInput);
+  const dimensionRouting = resolveCourierProvider(routeInput);
+  const routing = supplierFulfillment && dimensionRouting.kind !== "invalid_dimensions"
+    ? { kind: "single", provider: X_EXPRESS_PROVIDER } as const
+    : dimensionRouting;
   if (routing.kind === "invalid_dimensions") {
     throw new CourierConfigError(
       "Automatski izbor kurira zahteva težinu, širinu, dužinu i visinu svakog paketa u šifarniku artikala.",
@@ -275,7 +301,7 @@ async function processShipmentForOrder(
       `Izabrani kurir ne odgovara težini i dimenzijama paketa; porudžbina pripada ${routing.provider === "MYGLS" ? "MyGLS" : "X Express"} nalogu.`,
     );
   }
-  const service = routeService(routeInput);
+  const service = supplierFulfillment ? "COURIER_SMALL" : routeService(routeInput);
   const supplierPickup = supplierFulfillment
     ? requireRabaluxPickupForProvider(routing.provider)
     : null;

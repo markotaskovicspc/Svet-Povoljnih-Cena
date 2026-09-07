@@ -44,6 +44,8 @@ type BuildMyGlsParcelArgs = {
   pickupDate?: Date;
   packages: readonly PhysicalPackage[];
   purpose?: ShipmentPurpose;
+  /** Supplier pickup needs a named/phone contact so the courier can collect there. */
+  pickupContactOnLabel?: boolean;
 };
 
 export function isMyGlsCashOnDelivery(method: PaymentMethod) {
@@ -98,7 +100,10 @@ export function buildMyGlsParcelForOrder(
     });
   }
 
-  const merchantAddress = addressFromPickup(cfg);
+  const merchantAddress = addressFromPickup(
+    cfg,
+    Boolean(args.pickupContactOnLabel),
+  );
   const customerAddress = addressFromOrder(order, recipientName, contactEmail);
   const reverse = purpose === "RECLAMATION_RETURN";
   const reference =
@@ -190,7 +195,10 @@ export function buildMyGlsParcelsForOrder(
   });
 }
 
-function addressFromPickup(cfg: MyGlsConfig): MyGlsAddress {
+function addressFromPickup(
+  cfg: MyGlsConfig,
+  includeOperationalContact: boolean,
+): MyGlsAddress {
   return {
     Name: cfg.pickup.name,
     Street: cfg.pickup.street,
@@ -199,9 +207,15 @@ function addressFromPickup(cfg: MyGlsConfig): MyGlsAddress {
     City: cfg.pickup.city,
     ZipCode: cfg.pickup.postalCode,
     CountryIsoCode: cfg.pickup.country,
-    // Keep a personal contact name and phone off the printed sender block.
-    // MyGLS marks both fields optional; the shared mailbox remains available
-    // for operational contact without exposing an employee on every label.
+    // Normal DC labels keep personal data off the printed sender block. A
+    // supplier pickup explicitly includes its operational contact so the
+    // courier can resolve collection issues at that third-party location.
+    ...(includeOperationalContact
+      ? {
+          ContactName: cfg.pickup.contactName,
+          ContactPhone: normalizePhone(cfg.pickup.contactPhone),
+        }
+      : {}),
     ContactEmail: cfg.pickup.contactEmail,
   };
 }
@@ -251,7 +265,10 @@ function normalizePhone(value: string) {
 }
 
 function buildContent(order: OrderForMyGlsPayload, fallback: string) {
-  const itemNames = order.items.map((item) => item.name).filter(Boolean).slice(0, 3);
+  const itemNames = order.items
+    .map((item) => item.name)
+    .filter(Boolean)
+    .slice(0, 3);
   return (itemNames.join(", ") || fallback).slice(0, 120);
 }
 

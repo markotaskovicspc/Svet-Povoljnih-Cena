@@ -26,14 +26,23 @@ try {
 }
 
 const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ""));
+const schemaName = url.searchParams.get("schema")?.trim() ?? "";
 const localHost = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
 const explicitlyAllowedRemote =
   Boolean(explicitTestUrl) &&
   process.env.RABALUX_ALLOW_REMOTE_TEST_DB === "true" &&
   connectionString === explicitTestUrl;
+const isolatedAcceptanceSchema =
+  /^mygls_e2e_[a-z0-9_]+$/.test(schemaName) &&
+  process.env.E2E_ALLOW_REMOTE_DATABASE === "1" &&
+  process.env.E2E_REMOTE_DATABASE_ACK ===
+    "I_UNDERSTAND_THIS_WILL_MUTATE_DATA";
 
-if (!/test/i.test(databaseName) || (!localHost && !explicitlyAllowedRemote)) {
+if (
+  (!/test/i.test(databaseName) && !isolatedAcceptanceSchema) ||
+  (!localHost && !explicitlyAllowedRemote && !isolatedAcceptanceSchema)
+) {
   throw new Error(
-    "Refusing destructive Rabalux integration tests: use a database whose name contains 'test'. Remote databases additionally require RABALUX_TEST_DATABASE_URL and RABALUX_ALLOW_REMOTE_TEST_DB=true.",
+    "Refusing destructive integration tests: use a database whose name contains 'test', or the guarded isolated acceptance schema. Remote test databases additionally require an explicit acknowledgement.",
   );
 }

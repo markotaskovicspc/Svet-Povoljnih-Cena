@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -67,6 +68,9 @@ const childEnv = {
   E2E_DATABASE_URL: databaseUrl,
   E2E_ALLOW_REMOTE_DATABASE: "1",
   E2E_REMOTE_DATABASE_ACK: "I_UNDERSTAND_THIS_WILL_MUTATE_DATA",
+  DATABASE_POOL_MAX: "5",
+  DATABASE_TRANSACTION_MAX_WAIT_MS: "30000",
+  DATABASE_TRANSACTION_TIMEOUT_MS: "60000",
   E2E_MYGLS_FLOW: "1",
   EMAIL_PROVIDER: "none",
   FISCAL_PROVIDER: "none",
@@ -115,6 +119,37 @@ const childEnv = {
   MYGLS_PICKUP_CONTACT_NAME: "QA Operater",
   MYGLS_PICKUP_CONTACT_PHONE: "+38160111222",
   MYGLS_PICKUP_CONTACT_EMAIL: "qa@example.invalid",
+  RABALUX_ENABLED: "true",
+  RABALUX_CATALOG_USER: "isolated-user",
+  RABALUX_CATALOG_PASS: "isolated-password",
+  RABALUX_STOCK_USER: "isolated-user",
+  RABALUX_STOCK_PASS: "isolated-password",
+  RABALUX_PICKUP_NAME: "Rabalux QA magacin",
+  RABALUX_PICKUP_STREET: "Industrijska",
+  RABALUX_PICKUP_HOUSE_NUMBER: "12",
+  RABALUX_PICKUP_HOUSE_NUMBER_INFO: "QA ulaz",
+  RABALUX_PICKUP_CITY: "Beograd",
+  RABALUX_PICKUP_POSTAL_CODE: "11000",
+  RABALUX_PICKUP_COUNTRY: "RS",
+  RABALUX_PICKUP_CONTACT_NAME: "Rabalux QA",
+  RABALUX_PICKUP_CONTACT_PHONE: "+38160111223",
+  RABALUX_PICKUP_CONTACT_EMAIL: "rabalux-qa@example.invalid",
+  RABALUX_X_EXPRESS_TOWN_ID: "9902026",
+  RABALUX_X_EXPRESS_LATITUDE: "44.8125",
+  RABALUX_X_EXPRESS_LONGITUDE: "20.4612",
+  X_EXPRESS_ENABLED: "true",
+  X_EXPRESS_ENV: "test",
+  X_EXPRESS_BASE_URL: providerBaseUrl,
+  X_EXPRESS_API_USER: "isolated-user",
+  X_EXPRESS_API_KEY: "isolated-key",
+  X_EXPRESS_CONTRACT_CODE: "U000328",
+  X_EXPRESS_CODE_PREFIX: "QAX",
+  X_EXPRESS_CODE_RANGE_START: "850300001",
+  X_EXPRESS_CODE_RANGE_END: "850599999",
+  X_EXPRESS_CHECK_ADDRESS_PATH: "/api/order/check-address",
+  X_EXPRESS_CREATE_ORDER_PATH: "/api/order/add",
+  BACKGROUND_JOBS_CRON_SECRET: "isolated-background-jobs-secret",
+  ENFORCE_WEB_AUTO_AVAILABILITY: "false",
 };
 // A parent shell may point Playwright at a real site. This suite must always
 // start its own local Next server against the temporary schema.
@@ -140,7 +175,9 @@ try {
     cpSync(resolvedPrismaCliDir, localPrismaCliDir, { recursive: true });
   }
 
-  rmSync(resolve(process.cwd(), e2eDistDir), { recursive: true, force: true });
+  if (process.env.MYGLS_E2E_RUNNER !== "vitest") {
+    rmSync(resolve(process.cwd(), e2eDistDir), { recursive: true, force: true });
+  }
   servers.push(
     startServer("Supabase storage mock", "tests/support/supabase-storage-mock.mjs"),
     startServer("MyGLS mock", "tests/support/mygls-mock.mjs"),
@@ -151,25 +188,70 @@ try {
   ]);
 
   runPrisma(["generate", "--schema", "prisma/schema.prisma"], childEnv);
-  runPrisma(
-    process.env.MYGLS_E2E_SCHEMA_MODE === "push"
-      ? ["db", "push", "--schema", "prisma/schema.prisma"]
-      : ["migrate", "deploy", "--schema", "prisma/schema.prisma"],
-    childEnv,
-  );
-  run(
-    "npm",
-    [
+  if (process.env.MYGLS_E2E_SCHEMA_MODE === "sql") {
+    // Generate offline, then initialize only the fresh guarded test schema.
+    // This avoids slow schema-engine TLS sessions through the hosted pooler.
+    const temporaryDirectory = mkdtempSync(resolve(tmpdir(), "spc-test-schema-"));
+    const sqlPath = resolve(temporaryDirectory, "schema.sql");
+    const setupClient = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 15_000 });
+    try {
+      runPrisma(["migrate", "diff", "--from-empty", "--to-schema", "prisma/schema.prisma", "--script", "--output", sqlPath], childEnv);
+      if (!/^mygls_e2e_[a-z0-9_]+$/.test(schema)) throw new Error("Unsafe temporary schema name.");
+      const sql = readFileSync(sqlPath, "utf8")
+        .replace('CREATE SCHEMA IF NOT EXISTS "public";', "")
+        .replaceAll('"public".', `"${schema}".`);
+      await setupClient.connect();
+      await setupClient.query("BEGIN");
+      await setupClient.query(`CREATE SCHEMA "${schema}"`);
+      await setupClient.query(`SET LOCAL search_path TO "${schema}"`);
+      await setupClient.query(sql);
+      await setupClient.query("COMMIT");
+    } finally {
+      await setupClient.end().catch(() => undefined);
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  } else {
+    runPrisma(
+      process.env.MYGLS_E2E_SCHEMA_MODE === "push"
+        ? ["db", "push", "--schema", "prisma/schema.prisma"]
+        : ["migrate", "deploy", "--schema", "prisma/schema.prisma"],
+      childEnv,
+    );
+  }
+  const specs = process.env.MYGLS_E2E_SPECS || "tests/e2e/mygls-flow.spec.ts";
+  if (process.env.MYGLS_E2E_RUNNER === "vitest") {
+    const vitestArgs = [
       "exec",
-      "playwright",
+      "vitest",
       "--",
-      "test",
-      "tests/e2e/mygls-flow.spec.ts",
-      "--project=desktop",
-      "--workers=1",
-    ],
-    childEnv,
-  );
+      "run",
+      "--config",
+      "vitest.integration.config.ts",
+      specs,
+    ];
+    if (process.env.MYGLS_E2E_TEST_NAME_PATTERN) {
+      vitestArgs.push("--testNamePattern", process.env.MYGLS_E2E_TEST_NAME_PATTERN);
+    }
+    run(
+      "npm",
+      vitestArgs,
+      childEnv,
+    );
+  } else {
+    run(
+      "npm",
+      [
+        "exec",
+        "playwright",
+        "--",
+        "test",
+        specs,
+        "--project=desktop",
+        "--workers=1",
+      ],
+      childEnv,
+    );
+  }
   exitCode = 0;
 } finally {
   for (const server of servers) {
@@ -196,10 +278,12 @@ try {
     console.log(`MyGLS acceptance: removed temporary schema ${schema}`);
   } finally {
     await client.end().catch(() => undefined);
-    rmSync(resolve(process.cwd(), e2eDistDir), {
-      recursive: true,
-      force: true,
-    });
+    if (process.env.MYGLS_E2E_RUNNER !== "vitest") {
+      rmSync(resolve(process.cwd(), e2eDistDir), {
+        recursive: true,
+        force: true,
+      });
+    }
     if (isolatedPrismaPrepared) {
       rmSync(localPrismaClientDir, { recursive: true, force: true });
       rmSync(localPrismaCliDir, { recursive: true, force: true });

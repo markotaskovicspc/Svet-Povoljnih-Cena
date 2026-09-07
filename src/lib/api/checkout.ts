@@ -1,14 +1,22 @@
 import "server-only";
-import { Prisma, type PaymentMethod, type ShippingMethod } from "@prisma/client";
+import {
+  Prisma,
+  type PaymentMethod,
+  type ShippingMethod,
+} from "@prisma/client";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
-import { validateVoucher, validateVoucherForCheckout } from "@/lib/api/vouchers";
+import {
+  validateVoucher,
+  validateVoucherForCheckout,
+} from "@/lib/api/vouchers";
 import { clearServerCart } from "@/lib/api/cart";
 import {
   enqueueBackgroundJob,
   processBackgroundJob,
 } from "@/lib/background-jobs";
 import { providerForPaymentMethod } from "@/lib/payments";
+import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
 import {
   createCheckoutOrderAccessToken,
   createOrderAccessToken,
@@ -28,9 +36,7 @@ import {
   isPaymentMethodEnabled,
   resolveDeliveryQuote,
 } from "@/lib/checkout/config";
-import {
-  allocateStock,
-} from "@/lib/rabalux/allocation";
+import { allocateStock } from "@/lib/rabalux/allocation";
 import {
   RABALUX_SUPPLIER_SAFETY_STOCK,
   resolveRabaluxAvailability,
@@ -43,10 +49,7 @@ import {
 } from "@/lib/pricing/rules";
 import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
 import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
-import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
-import {
-  checkoutBusinessIdentityMatchesOrder,
-} from "@/lib/checkout/business-policy";
+import { checkoutBusinessIdentityMatchesOrder } from "@/lib/checkout/business-policy";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
@@ -135,20 +138,17 @@ async function enqueueCheckoutPostCommit(args: {
   orderId: string;
   orderNumber: string;
   accessToken: string;
-  paymentMethod: PaymentMethod;
   supplierFulfillmentIds: string[];
   genericSupplierLines: GenericSupplierJobLine[];
+  paymentMethod: PaymentMethod;
+  shippingMethod: ShippingMethod;
 }) {
   const supplierEmailJobs = await Promise.all(
     args.supplierFulfillmentIds.map((fulfillmentId) =>
       enqueueBackgroundJob({
-        kind: isCashOnDeliveryPaymentMethod(args.paymentMethod)
-          ? ("SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" as const)
-          : ("SUPPLIER_ORDER_EMAIL" as const),
+        kind: "SUPPLIER_ORDER_EMAIL" as const,
         payload: { fulfillmentId, dispatchKey: "checkout" },
-        idempotencyKey: isCashOnDeliveryPaymentMethod(args.paymentMethod)
-          ? `supplier-shipping-documents:${fulfillmentId}:checkout`
-          : `supplier-order:${fulfillmentId}:checkout`,
+        idempotencyKey: `supplier-order:${fulfillmentId}:checkout`,
       }),
     ),
   );
@@ -178,6 +178,28 @@ async function enqueueCheckoutPostCommit(args: {
       processBackgroundJob(job.id),
     ),
   );
+
+  // COD is fulfillment-ready at checkout. Keep the provider write strictly
+  // after the supplier-order send, so Rabalux never receives a label without
+  // first receiving the order it belongs to. Prepaid methods enter this same
+  // phase only from their successful payment callback/admin confirmation.
+  if (
+    args.shippingMethod === "KURIR" &&
+    isCashOnDeliveryPaymentMethod(args.paymentMethod)
+  ) {
+    const shippingDocumentJobs = await Promise.all(
+      args.supplierFulfillmentIds.map((fulfillmentId) =>
+        enqueueBackgroundJob({
+          kind: "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" as const,
+          payload: { fulfillmentId, dispatchKey: "checkout" },
+          idempotencyKey: `supplier-shipping-documents:${fulfillmentId}:checkout`,
+        }),
+      ),
+    );
+    await Promise.allSettled(
+      shippingDocumentJobs.map((job) => processBackgroundJob(job.id)),
+    );
+  }
 }
 
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -218,7 +240,7 @@ async function ensureCheckoutSessionForOrder(args: {
     create: {
       id: input.checkoutSessionId,
       userId,
-      guestEmail: userId ? null : input.guestEmail ?? null,
+      guestEmail: userId ? null : (input.guestEmail ?? null),
       identity: userId ? "login" : "guest",
       step: "review",
       status: "ACTIVE",
@@ -231,7 +253,7 @@ async function ensureCheckoutSessionForOrder(args: {
     },
     update: {
       userId,
-      guestEmail: userId ? null : input.guestEmail ?? null,
+      guestEmail: userId ? null : (input.guestEmail ?? null),
       identity: userId ? "login" : "guest",
     },
   });
@@ -314,31 +336,35 @@ async function findLockedCheckoutSessionOrder(
   const orderId = rows[0]?.orderId;
   if (!orderId) return null;
 
-  return tx.order.findUnique({
-    where: { id: orderId },
-    select: {
-      id: true,
-      number: true,
-      total: true,
-      subtotal: true,
-      savings: true,
-      shipping: true,
-      assemblyTotal: true,
-      paymentMethod: true,
-      shippingMethod: true,
-      voucherDiscount: true,
-      firstPurchaseDiscount: true,
-      savedCardDiscount: true,
-      supplierFulfillments: { select: { id: true } },
-    },
-  }).then((order) =>
-    order
-      ? {
-          ...order,
-          supplierFulfillmentIds: order.supplierFulfillments.map(({ id }) => id),
-        }
-      : null,
-  );
+  return tx.order
+    .findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        number: true,
+        total: true,
+        subtotal: true,
+        savings: true,
+        shipping: true,
+        assemblyTotal: true,
+        paymentMethod: true,
+        shippingMethod: true,
+        voucherDiscount: true,
+        firstPurchaseDiscount: true,
+        savedCardDiscount: true,
+        supplierFulfillments: { select: { id: true } },
+      },
+    })
+    .then((order) =>
+      order
+        ? {
+            ...order,
+            supplierFulfillmentIds: order.supplierFulfillments.map(
+              ({ id }) => id,
+            ),
+          }
+        : null,
+    );
 }
 
 function isOnlinePayment(method: PaymentMethod) {
@@ -362,7 +388,9 @@ function paymentExpiresAt(method: PaymentMethod) {
 export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
-): Promise<{ ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }> {
+): Promise<
+  { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
+> {
   if (!userId && !input.guestEmail) {
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
@@ -417,14 +445,16 @@ export async function createOrder(
         orderId: existing.id,
         orderNumber: existing.number,
         accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
-        paymentMethod: existing.paymentMethod,
-        supplierFulfillmentIds: existing.supplierFulfillments.map(({ id }) => id),
+        supplierFulfillmentIds: existing.supplierFulfillments.map(
+          ({ id }) => id,
+        ),
         genericSupplierLines: existing.items.flatMap((item) =>
-          item.productId &&
-          item.product?.supplier?.integrationKey !== "RABALUX"
+          item.productId && item.product?.supplier?.integrationKey !== "RABALUX"
             ? [{ productId: item.productId, qty: item.qty }]
             : [],
         ),
+        paymentMethod: existing.paymentMethod,
+        shippingMethod: existing.shippingMethod,
       });
       return {
         ok: true,
@@ -521,10 +551,7 @@ export async function createOrder(
   // Pre-validate against fresh stock + activity.
   for (const line of input.lines) {
     const p = bySku.get(line.sku);
-    if (
-      !p ||
-      !isProductAvailableOnWeb(p)
-    ) {
+    if (!p || !isProductAvailableOnWeb(p)) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }
     const rabaluxAvailability = resolveRabaluxAvailability({
@@ -606,7 +633,8 @@ export async function createOrder(
     const p = bySku.get(line.sku)!;
     const wants = !!line.withAssembly && p.allowsAssembly;
     const quotedAssembly =
-      deliveryQuote.assemblyPricesBySku[line.sku] ?? deliveryQuote.assemblyPrice;
+      deliveryQuote.assemblyPricesBySku[line.sku] ??
+      deliveryQuote.assemblyPrice;
     const price = wants && quotedAssembly > 0 ? quotedAssembly : null;
     assemblyBySku.set(line.sku, price);
     if (price) assemblyTotal += price * line.qty;
@@ -620,8 +648,16 @@ export async function createOrder(
     return n + effectiveUnitPrice(l.product).effective * l.qty;
   }, 0);
   if (input.voucherCode) {
-    const v = await validateVoucher(input.voucherCode, preDiscountSubtotal, userId);
-    if (!v.ok) return { ok: false, error: { code: "VOUCHER_INVALID", reason: v.reason } };
+    const v = await validateVoucher(
+      input.voucherCode,
+      preDiscountSubtotal,
+      userId,
+    );
+    if (!v.ok)
+      return {
+        ok: false,
+        error: { code: "VOUCHER_INVALID", reason: v.reason },
+      };
     voucherInput = { code: v.code, discountRsd: v.discountRsd };
   }
 
@@ -638,40 +674,41 @@ export async function createOrder(
     eligibility: { firstPurchase, savedCard: useSavedCard },
   });
 
-  const itemsForCreate: Prisma.OrderItemCreateManyOrderInput[] = pricing.lines.map((r) => {
-    const p = bySku.get(r.sku)!;
-    const assemblyPrice = assemblyBySku.get(r.sku) ?? null;
-    const primaryCategory = p.categories.at(-1)?.category ?? null;
-    return {
-      productId: p.id,
-      sku: p.sku,
-      name: p.name,
-      qty: r.qty,
-      unitPriceFull: new Prisma.Decimal(r.unitPriceFull),
-      unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
-      withAssembly: assemblyPrice != null,
-      assemblyPrice: assemblyPrice ? new Prisma.Decimal(assemblyPrice) : null,
-      thumbnailUrl:
-        resolveSupabaseStorageUrl(getMediaVariantUrl(p.media[0], "thumb")) ||
-        null,
-      supplierName: p.supplier?.name ?? null,
-      supplierIntegrationKey: p.supplier?.integrationKey ?? null,
-      categoryName: primaryCategory?.name ?? null,
-      categoryPath: primaryCategory?.path ?? null,
-      groupName: p.group?.name ?? null,
-      subgroupName: primaryCategory?.path ?? null,
-      collectionName: p.collection?.name ?? null,
-      shortDescriptionSnapshot: p.shortDescription ?? null,
-      shortNameSnapshot: p.name,
-      attribute1: p.sizeLabel ?? null,
-      attribute2: normalizeProductColorLabel(p.colorPrimary),
-      attribute3: normalizeProductColorLabel(p.colorSecondary),
-      attribute4: null,
-      color1: normalizeProductColorLabel(p.colorPrimary),
-      color2: normalizeProductColorLabel(p.colorSecondary),
-      supplierExternalSku: p.supplierExternalId ?? null,
-    };
-  });
+  const itemsForCreate: Prisma.OrderItemCreateManyOrderInput[] =
+    pricing.lines.map((r) => {
+      const p = bySku.get(r.sku)!;
+      const assemblyPrice = assemblyBySku.get(r.sku) ?? null;
+      const primaryCategory = p.categories.at(-1)?.category ?? null;
+      return {
+        productId: p.id,
+        sku: p.sku,
+        name: p.name,
+        qty: r.qty,
+        unitPriceFull: new Prisma.Decimal(r.unitPriceFull),
+        unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
+        withAssembly: assemblyPrice != null,
+        assemblyPrice: assemblyPrice ? new Prisma.Decimal(assemblyPrice) : null,
+        thumbnailUrl:
+          resolveSupabaseStorageUrl(getMediaVariantUrl(p.media[0], "thumb")) ||
+          null,
+        supplierName: p.supplier?.name ?? null,
+        supplierIntegrationKey: p.supplier?.integrationKey ?? null,
+        categoryName: primaryCategory?.name ?? null,
+        categoryPath: primaryCategory?.path ?? null,
+        groupName: p.group?.name ?? null,
+        subgroupName: primaryCategory?.path ?? null,
+        collectionName: p.collection?.name ?? null,
+        shortDescriptionSnapshot: p.shortDescription ?? null,
+        shortNameSnapshot: p.name,
+        attribute1: p.sizeLabel ?? null,
+        attribute2: normalizeProductColorLabel(p.colorPrimary),
+        attribute3: normalizeProductColorLabel(p.colorSecondary),
+        attribute4: null,
+        color1: normalizeProductColorLabel(p.colorPrimary),
+        color2: normalizeProductColorLabel(p.colorSecondary),
+        supplierExternalSku: p.supplierExternalId ?? null,
+      };
+    });
 
   const subtotal = pricing.subtotal;
   const savings = pricing.savings;
@@ -684,7 +721,7 @@ export async function createOrder(
   );
 
   const ship = input.shipping;
-  const bill = input.billingSameAsShipping ? null : input.billing ?? null;
+  const bill = input.billingSameAsShipping ? null : (input.billing ?? null);
   const shipIsBusiness =
     ship.liceType === "pravno" ||
     (!ship.liceType && Boolean(ship.companyName || ship.pib));
@@ -701,7 +738,11 @@ export async function createOrder(
           select: { id: true, name: true, postalCode: true },
         })
       : null;
-  if (input.shippingMethod === "KURIR" && xExpressProviderActive && !xExpressTown) {
+  if (
+    input.shippingMethod === "KURIR" &&
+    xExpressProviderActive &&
+    !xExpressTown
+  ) {
     return { ok: false, error: { code: "DELIVERY_ADDRESS_INVALID" } };
   }
   const xExpressStreet =
@@ -727,7 +768,9 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_ADDRESS_INVALID" } };
   }
   const glsDeliveryPoint =
-    input.shippingMethod === "KURIR" && glsProviderActive && input.glsDeliveryPoint?.code
+    input.shippingMethod === "KURIR" &&
+    glsProviderActive &&
+    input.glsDeliveryPoint?.code
       ? await db.courierDeliveryPoint.findFirst({
           where: {
             provider: MYGLS_PROVIDER,
@@ -760,8 +803,8 @@ export async function createOrder(
     city: xExpressTown?.name ?? ship.city,
     postalCode: xExpressTown?.postalCode ?? ship.postalCode,
     country: ship.country,
-    companyName: shipIsBusiness ? ship.companyName ?? null : null,
-    pib: shipIsBusiness ? ship.pib ?? null : null,
+    companyName: shipIsBusiness ? (ship.companyName ?? null) : null,
+    pib: shipIsBusiness ? (ship.pib ?? null) : null,
   };
   const billingBuyerAddress = bill
     ? {
@@ -772,8 +815,8 @@ export async function createOrder(
         city: bill.city,
         postalCode: bill.postalCode,
         country: bill.country,
-        companyName: billIsBusiness ? bill.companyName ?? null : null,
-        pib: billIsBusiness ? bill.pib ?? null : null,
+        companyName: billIsBusiness ? (bill.companyName ?? null) : null,
+        pib: billIsBusiness ? (bill.pib ?? null) : null,
       }
     : null;
   const customerBuyerAddress = resolveDocumentBuyerAddress(
@@ -811,8 +854,8 @@ export async function createOrder(
             xExpressTownId: xExpressTown?.id ?? null,
             xExpressStreetId: xExpressStreet?.id ?? null,
             country: ship.country,
-            companyName: shipIsBusiness ? ship.companyName ?? null : null,
-            pib: shipIsBusiness ? ship.pib ?? null : null,
+            companyName: shipIsBusiness ? (ship.companyName ?? null) : null,
+            pib: shipIsBusiness ? (ship.pib ?? null) : null,
           });
           await tx.order.update({
             where: { id: existingOrder.id },
@@ -852,14 +895,16 @@ export async function createOrder(
           publicAccessTokenHash: hashOrderAccessToken(accessToken),
           publicAccessTokenCreatedAt: new Date(),
           userId,
-          guestEmail: userId ? null : input.guestEmail ?? null,
+          guestEmail: userId ? null : (input.guestEmail ?? null),
           customerId: customer.id,
           subtotal: new Prisma.Decimal(subtotal),
           savings: new Prisma.Decimal(savings),
           shipping: new Prisma.Decimal(shippingPrice),
           assemblyTotal: new Prisma.Decimal(assemblyTotal),
           voucherCode,
-          voucherDiscount: voucherDiscount ? new Prisma.Decimal(voucherDiscount) : null,
+          voucherDiscount: voucherDiscount
+            ? new Prisma.Decimal(voucherDiscount)
+            : null,
           firstPurchaseDiscount: pricing.firstPurchaseDiscount
             ? new Prisma.Decimal(pricing.firstPurchaseDiscount)
             : null,
@@ -878,8 +923,8 @@ export async function createOrder(
           shipXExpressTownId: xExpressTown?.id ?? null,
           shipXExpressStreetId: xExpressStreet?.id ?? null,
           shipCountry: ship.country,
-          shipCompanyName: shipIsBusiness ? ship.companyName ?? null : null,
-          shipPib: shipIsBusiness ? ship.pib ?? null : null,
+          shipCompanyName: shipIsBusiness ? (ship.companyName ?? null) : null,
+          shipPib: shipIsBusiness ? (ship.pib ?? null) : null,
           glsDeliveryPointId: glsDeliveryPoint?.code ?? null,
           glsDeliveryPointName: glsDeliveryPoint?.name ?? null,
           glsDeliveryPointAddress: glsDeliveryPoint?.street ?? null,
@@ -893,13 +938,15 @@ export async function createOrder(
           billPostalCode: bill?.postalCode ?? null,
           billXExpressTownId: bill?.xExpressTownId ?? null,
           billXExpressStreetId: bill?.xExpressStreetId ?? null,
-          billCompanyName: billIsBusiness ? bill?.companyName ?? null : null,
-          billPib: billIsBusiness ? bill?.pib ?? null : null,
+          billCompanyName: billIsBusiness ? (bill?.companyName ?? null) : null,
+          billPib: billIsBusiness ? (bill?.pib ?? null) : null,
           notes: input.notes ?? null,
           termsAcceptedAt: new Date(),
           expiresAt,
           items: { createMany: { data: itemsForCreate } },
-          events: { create: { status: "KREIRANO", note: "Porudžbina kreirana" } },
+          events: {
+            create: { status: "KREIRANO", note: "Porudžbina kreirana" },
+          },
           payments: {
             create: {
               method: input.paymentMethod,
@@ -935,8 +982,8 @@ export async function createOrder(
         xExpressTownId: xExpressTown?.id ?? null,
         xExpressStreetId: xExpressStreet?.id ?? null,
         country: ship.country,
-        companyName: shipIsBusiness ? ship.companyName ?? null : null,
-        pib: shipIsBusiness ? ship.pib ?? null : null,
+        companyName: shipIsBusiness ? (ship.companyName ?? null) : null,
+        pib: shipIsBusiness ? (ship.pib ?? null) : null,
       });
       await recordCheckoutCompleted(tx, input, order);
 
@@ -971,7 +1018,9 @@ export async function createOrder(
         where: { orderId: order.id },
         select: { id: true, sku: true },
       });
-      const orderItemBySku = new Map(orderItems.map((item) => [item.sku, item]));
+      const orderItemBySku = new Map(
+        orderItems.map((item) => [item.sku, item]),
+      );
       const supplierLines = new Map<
         string,
         Array<{
@@ -1090,7 +1139,7 @@ export async function createOrder(
           create: {
             id: input.checkoutSessionId,
             userId,
-            guestEmail: userId ? null : input.guestEmail ?? null,
+            guestEmail: userId ? null : (input.guestEmail ?? null),
             identity: userId ? "login" : "guest",
             step: "review",
             status: "CONVERTED",
@@ -1107,7 +1156,7 @@ export async function createOrder(
           },
           update: {
             userId,
-            guestEmail: userId ? null : input.guestEmail ?? null,
+            guestEmail: userId ? null : (input.guestEmail ?? null),
             identity: userId ? "login" : "guest",
             step: "review",
             status: "CONVERTED",
@@ -1136,7 +1185,10 @@ export async function createOrder(
       return { ok: false, error: { code: "OUT_OF_STOCK", sku: err.sku } };
     }
     if (err instanceof VoucherReservationError) {
-      return { ok: false, error: { code: "VOUCHER_INVALID", reason: err.reason } };
+      return {
+        ok: false,
+        error: { code: "VOUCHER_INVALID", reason: err.reason },
+      };
     }
     throw err;
   }
@@ -1183,9 +1235,10 @@ export async function createOrder(
     orderId: created.id,
     orderNumber: created.number,
     accessToken,
-    paymentMethod: created.paymentMethod,
     supplierFulfillmentIds: created.supplierFulfillmentIds,
     genericSupplierLines,
+    paymentMethod: created.paymentMethod,
+    shippingMethod: created.shippingMethod,
   });
 
   return {
