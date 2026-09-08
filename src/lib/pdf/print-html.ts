@@ -1,11 +1,15 @@
 import "server-only";
 
-import chromium from "@sparticuz/chromium";
-import { chromium as playwright } from "playwright-core";
 import { envValue } from "@/lib/env";
 
 /** Print the same self-contained HTML/CSS used by the ERP's label view. */
 export async function renderPrintHtmlPdf(html: string): Promise<Buffer> {
+  // Load the PDF runtime only when printing. Checkout and admin routes import
+  // the email worker too, and must not fail while loading an optional renderer.
+  const [{ default: chromium }, { chromium: playwright }] = await Promise.all([
+    import("@sparticuz/chromium"),
+    import("playwright-core"),
+  ]);
   const localExecutable = envValue("PDF_CHROMIUM_EXECUTABLE_PATH");
   const serverless = process.platform === "linux" && !localExecutable;
   const browser = await playwright.launch({
