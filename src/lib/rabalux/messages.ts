@@ -48,15 +48,20 @@ export function supplierShippingDocumentsMessage(input: {
   items: SupplierMessageItem[];
 }) {
   const lines = input.items
-    .map((item) => `${item.externalSku} × ${item.qty}`)
+    .map((item) => `${item.externalSku}${item.name ? ` – ${item.name}` : ""}, ${item.qty} kom.`)
     .join("\n");
-  const tracking = input.trackingNo?.trim()
-    ? `<p>Broj pošiljke: <strong>${html(input.trackingNo)}</strong></p>`
-    : "";
+  const paragraphs = [
+    "Poštovani,",
+    `U prilogu šaljemo svu dokumentaciju za porudžbinu ${input.orderNumber} na jednom mestu: adresnicu za štampu, pak-listu, Rabalux primerak predračuna i obrazac za odustajanje.`,
+    `Artikli za porudžbinu:\n${lines}`,
+    ...(input.trackingNo?.trim() ? [`Broj pošiljke: ${input.trackingNo.trim()}.`] : []),
+    "Molimo vas da odštampate adresnicu, zalepite je na paket i predate paket kuriru.",
+    "Srdačan pozdrav,\nSvet povoljnih cena",
+  ];
   return {
-    subject: `Adresnica i kurirski nalog ${input.orderNumber}`,
-    html: `<p>Poštovani,</p><p>za porudžbinu <strong>${html(input.orderNumber)}</strong> kreirani su adresnica i nalog kurirskoj službi za preuzimanje robe na Rabalux adresi.</p>${tracking}<p>U prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Molimo odštampajte adresnicu, zalepite je na paket i predajte paket kuriru kada dođe po robu.</p><pre>${html(lines)}</pre><p>Dokumenti namerno ne sadrže prodajne cene.</p>`,
-    text: `Za porudžbinu ${input.orderNumber} kreirani su adresnica i nalog kurirskoj službi za preuzimanje robe na Rabalux adresi.${input.trackingNo ? `\nBroj pošiljke: ${input.trackingNo}` : ""}\n\nU prilogu su adresnica i dokument za pakovanje samo za Rabalux artikle. Molimo odštampajte adresnicu, zalepite je na paket i predajte paket kuriru kada dođe po robu. Dokumenti ne sadrže prodajne cene.\n\n${lines}`,
+    subject: `Porudžbina ${input.orderNumber} – kompletna dokumentacija i adresnica`,
+    html: paragraphs.map((paragraph) => `<p>${html(paragraph).replace(/\n/g, "<br/>")}</p>`).join(""),
+    text: paragraphs.join("\n\n"),
   };
 }
 

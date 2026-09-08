@@ -75,6 +75,41 @@ export async function buildRabaluxSupplierOrderAttachments(
   return attachments;
 }
 
+/** The shipping email is self-contained, including documents from order preparation. */
+export async function buildRabaluxCompleteAttachments(
+  input: RabaluxSupplierOrderDocumentInput & { shipmentId: string },
+): Promise<EmailAttachment[]> {
+  const attachments = [
+    ...await buildRabaluxShipmentAttachments({
+      shipmentId: input.shipmentId,
+      orderNumber: input.orderNumber,
+      packingPdf: buildRabaluxPackingPdf(input),
+    }),
+    ...await buildRabaluxSupplierOrderAttachments(input),
+  ];
+  assertRabaluxCompleteAttachmentSet(attachments);
+  return attachments;
+}
+
+export function assertRabaluxCompleteAttachmentSet(
+  attachments: readonly EmailAttachment[],
+) {
+  const prefixes = [
+    "adresnica-", "pak-lista-", "predracun-rabalux-", "obrazac-za-odustajanje-",
+  ];
+  if (
+    attachments.length !== prefixes.length ||
+    !prefixes.every((prefix) =>
+      attachments.filter((attachment) => attachment.filename.startsWith(prefix)).length === 1,
+    ) ||
+    !attachments.every(isPdfAttachment)
+  ) {
+    throw new Error(
+      "Rabalux mejl mora da sadrži tačno četiri PDF priloga: adresnicu, pak-listu, Rabalux primerak predračuna i obrazac za odustajanje.",
+    );
+  }
+}
+
 export function assertRabaluxSupplierOrderAttachmentSet(
   attachments: readonly EmailAttachment[],
 ) {
@@ -186,12 +221,7 @@ export function assertRabaluxSupplierAttachmentSet(
       attachment.filename.startsWith("adresnica-") ||
       attachment.filename.startsWith("pak-lista-"),
   );
-  const everyAttachmentPdf = attachments.every(
-    (attachment) =>
-      attachment.filename.endsWith(".pdf") &&
-      attachment.contentType === "application/pdf" &&
-      Buffer.from(attachment.content, "base64").subarray(0, 5).toString("ascii") === "%PDF-",
-  );
+  const everyAttachmentPdf = attachments.every(isPdfAttachment);
   if (
     attachments.length !== 2 ||
     labelCount !== 1 ||
@@ -203,6 +233,12 @@ export function assertRabaluxSupplierAttachmentSet(
       "Rabalux dobavljaču se smeju poslati samo adresnica i packing lista u PDF formatu.",
     );
   }
+}
+
+function isPdfAttachment(attachment: EmailAttachment) {
+  return attachment.filename.endsWith(".pdf") &&
+    attachment.contentType === "application/pdf" &&
+    Buffer.from(attachment.content, "base64").subarray(0, 5).toString("ascii") === "%PDF-";
 }
 
 function safe(value: string) {

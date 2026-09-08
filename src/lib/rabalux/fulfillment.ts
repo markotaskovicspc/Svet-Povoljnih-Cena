@@ -13,9 +13,8 @@ import {
   isCashOnDeliveryPaymentMethod,
 } from "@/lib/payments/fulfillment-readiness";
 import {
-  assertRabaluxSupplierAttachmentSet,
-  buildRabaluxPackingPdf,
-  buildRabaluxShipmentAttachments,
+  buildRabaluxCompleteAttachments,
+  type RabaluxSupplierOrderDocumentInput,
   buildRabaluxSupplierOrderAttachments,
 } from "./documents";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
@@ -29,6 +28,74 @@ import {
   supplierShippingDocumentsIdempotencyKey,
   supplierShippingDocumentsMessage,
 } from "./messages";
+
+const supplierDocumentOrderSelect = {
+  number: true,
+  createdAt: true,
+  guestEmail: true,
+  user: { select: { email: true } },
+  billingSameAsShipping: true,
+  shipFirstName: true,
+  shipLastName: true,
+  shipPhone: true,
+  shipStreet: true,
+  shipCity: true,
+  shipPostalCode: true,
+  shipCompanyName: true,
+  shipPib: true,
+  billFirstName: true,
+  billLastName: true,
+  billStreet: true,
+  billCity: true,
+  billPostalCode: true,
+  billCompanyName: true,
+  billPib: true,
+} satisfies Prisma.OrderSelect;
+
+type SupplierDocumentOrder = Prisma.OrderGetPayload<{
+  select: typeof supplierDocumentOrderSelect;
+}>;
+
+function supplierDocumentInput(
+  order: SupplierDocumentOrder,
+  items: RabaluxSupplierOrderDocumentInput["items"],
+): RabaluxSupplierOrderDocumentInput {
+  return {
+    orderNumber: order.number,
+    createdAt: order.createdAt,
+    items,
+    shippingAddress: {
+      firstName: order.shipFirstName,
+      lastName: order.shipLastName,
+      street: order.shipStreet,
+      postalCode: order.shipPostalCode,
+      city: order.shipCity,
+      phone: order.shipPhone,
+      email: order.user?.email ?? order.guestEmail ?? null,
+      companyName: order.shipCompanyName,
+      pib: order.shipPib,
+    },
+    billingAddress:
+      !order.billingSameAsShipping &&
+      order.billFirstName &&
+      order.billLastName &&
+      order.billStreet &&
+      order.billCity &&
+      order.billPostalCode
+        ? {
+            firstName: order.billFirstName,
+            lastName: order.billLastName,
+            street: order.billStreet,
+            postalCode: order.billPostalCode,
+            city: order.billCity,
+            phone: order.shipPhone,
+            email: order.user?.email ?? order.guestEmail ?? null,
+            companyName: order.billCompanyName,
+            pib: order.billPib,
+          }
+        : null,
+  };
+}
 
 function html(value: string) {
   return value
@@ -56,29 +123,10 @@ export async function sendSupplierOrderEmail(args: {
       },
       order: {
         select: {
-          number: true,
-          createdAt: true,
+          ...supplierDocumentOrderSelect,
           paymentMethod: true,
           shippingMethod: true,
           payments: { select: { status: true } },
-          guestEmail: true,
-          user: { select: { email: true } },
-          billingSameAsShipping: true,
-          shipFirstName: true,
-          shipLastName: true,
-          shipPhone: true,
-          shipStreet: true,
-          shipCity: true,
-          shipPostalCode: true,
-          shipCompanyName: true,
-          shipPib: true,
-          billFirstName: true,
-          billLastName: true,
-          billStreet: true,
-          billCity: true,
-          billPostalCode: true,
-          billCompanyName: true,
-          billPib: true,
         },
       },
       items: {
@@ -111,45 +159,9 @@ export async function sendSupplierOrderEmail(args: {
     orderNumber: fulfillment.order.number,
     items: supplierItems,
   });
-  const attachments = await buildRabaluxSupplierOrderAttachments({
-    orderNumber: fulfillment.order.number,
-    createdAt: fulfillment.order.createdAt,
-    items: supplierItems,
-    shippingAddress: {
-      firstName: fulfillment.order.shipFirstName,
-      lastName: fulfillment.order.shipLastName,
-      street: fulfillment.order.shipStreet,
-      postalCode: fulfillment.order.shipPostalCode,
-      city: fulfillment.order.shipCity,
-      phone: fulfillment.order.shipPhone,
-      email:
-        fulfillment.order.user?.email ?? fulfillment.order.guestEmail ?? null,
-      companyName: fulfillment.order.shipCompanyName,
-      pib: fulfillment.order.shipPib,
-    },
-    billingAddress:
-      !fulfillment.order.billingSameAsShipping &&
-      fulfillment.order.billFirstName &&
-      fulfillment.order.billLastName &&
-      fulfillment.order.billStreet &&
-      fulfillment.order.billCity &&
-      fulfillment.order.billPostalCode
-        ? {
-            firstName: fulfillment.order.billFirstName,
-            lastName: fulfillment.order.billLastName,
-            street: fulfillment.order.billStreet,
-            postalCode: fulfillment.order.billPostalCode,
-            city: fulfillment.order.billCity,
-            phone: fulfillment.order.shipPhone,
-            email:
-              fulfillment.order.user?.email ??
-              fulfillment.order.guestEmail ??
-              null,
-            companyName: fulfillment.order.billCompanyName,
-            pib: fulfillment.order.billPib,
-          }
-        : null,
-  });
+  const attachments = await buildRabaluxSupplierOrderAttachments(
+    supplierDocumentInput(fulfillment.order, supplierItems),
+  );
   const result = await trackedDispatch({
     kind: "supplier_order",
     to: fulfillment.supplier.email,
@@ -264,8 +276,7 @@ export async function sendSupplierShippingDocumentsEmail(args: {
       order: {
         select: {
           id: true,
-          number: true,
-          createdAt: true,
+          ...supplierDocumentOrderSelect,
           total: true,
           paymentMethod: true,
           shippingMethod: true,
@@ -354,24 +365,19 @@ export async function sendSupplierShippingDocumentsEmail(args: {
     ) {
       shipment = await announceXExpressShipment(shipment.id);
     }
-    const packingPdf = buildRabaluxPackingPdf({
-      orderNumber: fulfillment.order.number,
-      items: fulfillment.items.map((item) => ({
-        externalSku: item.externalSku,
-        qty: item.qty,
-        name: item.orderItem.name,
-      })),
-    });
-    const attachments = await buildRabaluxShipmentAttachments({
+    const supplierItems = fulfillment.items.map((item) => ({
+      externalSku: item.externalSku,
+      qty: item.qty,
+      name: item.orderItem.name,
+    }));
+    const attachments = await buildRabaluxCompleteAttachments({
+      ...supplierDocumentInput(fulfillment.order, supplierItems),
       shipmentId: shipment.id,
-      orderNumber: fulfillment.order.number,
-      packingPdf,
     });
-    assertRabaluxSupplierAttachmentSet(attachments);
     const message = supplierShippingDocumentsMessage({
       orderNumber: fulfillment.order.number,
       trackingNo: shipment.trackingNo,
-      items: fulfillment.items,
+      items: supplierItems,
     });
     const result = await trackedDispatch({
       kind: "supplier_shipping_documents",

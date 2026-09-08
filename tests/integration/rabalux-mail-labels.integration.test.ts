@@ -142,7 +142,7 @@ describe.sequential("Mixed Rabalux order: SES emails and both courier labels", (
     expect(await db.shipment.count({ where: { orderId } })).toBe(1);
   });
 
-  it("creates the separate X Express waybill next day, emails it with the packing PDF, and prevents duplicates", async () => {
+  it("creates the separate X Express waybill next day, emails all four PDFs together, and prevents duplicates", async () => {
     await db.order.update({ where: { id: orderId }, data: { createdAt: new Date(Date.now() - 2 * 86400000) } });
     const job = await db.backgroundJob.findFirstOrThrow({ where: { kind: "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" } });
     await db.backgroundJob.update({ where: { id: job.id }, data: { availableAt: new Date(0) } });
@@ -157,16 +157,28 @@ describe.sequential("Mixed Rabalux order: SES emails and both courier labels", (
     expect(email).toMatchObject({ status: "SENT", provider: "ses", recipient: "infosrb@rabalux.com", error: null });
     expect(emails).toHaveLength(2);
     const body = emails[1].Content!.Simple!;
-    expect(body.Subject?.Data).toContain("Adresnica i kurirski nalog");
+    expect(body.Subject?.Data).toContain("kompletna dokumentacija i adresnica");
+    expect(body.Body?.Text?.Data).toContain("U prilogu šaljemo svu dokumentaciju");
+    expect(body.Body?.Text?.Data).not.toMatch(/izvin|FLEX SEAT|3554|3999/);
     expect(body.Attachments?.map((attachment) => attachment.FileName)).toEqual([
       `adresnica-${prefix}.pdf`, `pak-lista-${prefix}.pdf`,
+      `predracun-rabalux-${prefix}.pdf`, `obrazac-za-odustajanje-${prefix}.pdf`,
     ]);
     expect(body.Attachments![0].ContentType).toBe("application/pdf");
     const label = await PDFDocument.load(body.Attachments![0].RawContent!);
     expect(label.getPageCount()).toBe(1);
     expect(label.getPage(0).getWidth()).toBeCloseTo(595.28, 0);
     expect(label.getPage(0).getHeight()).toBeCloseTo(841.89, 0);
-    expect((await PDFDocument.load(body.Attachments![1].RawContent!)).getPageCount()).toBeGreaterThan(0);
+    for (const attachment of body.Attachments!) {
+      expect(attachment.ContentType).toBe("application/pdf");
+      expect(attachment.ContentTransferEncoding).toBe("BASE64");
+      expect((await PDFDocument.load(attachment.RawContent!)).getPageCount()).toBeGreaterThan(0);
+    }
+    const withdrawal = Buffer.from(body.Attachments![3].RawContent!).toString("latin1");
+    // Inspect printed text, excluding the embedded logo's hexadecimal image bytes.
+    const withdrawalText = [...withdrawal.matchAll(/^\((.*)\) Tj$/gm)].map((match) => match[1]).join("\n");
+    expect(withdrawalText).toContain("71232");
+    expect(withdrawalText).not.toMatch(/FLEX SEAT|\b(?:3554|3999)\b/);
     const log = await courierRequests();
     const supplierCalls = log.filter((entry) => entry.method === "XExpressCreateOrder");
     expect(supplierCalls).toHaveLength(1);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertRabaluxCompleteAttachmentSet,
   assertRabaluxSupplierAttachmentSet,
   assertRabaluxSupplierOrderAttachmentSet,
   buildRabaluxPackingPdf,
@@ -21,6 +22,27 @@ const supplierDocumentInput = {
 };
 
 describe("Rabalux packing document", () => {
+  it("blocks incomplete or non-PDF document bundles and customer invoice attachments", () => {
+    const attachments = ["adresnica", "pak-lista", "predracun-rabalux", "obrazac-za-odustajanje"].map((prefix) => ({
+      filename: `${prefix}-SPC-2026-000123.pdf`,
+      content: Buffer.from("%PDF-test").toString("base64"),
+      contentType: "application/pdf",
+    }));
+    expect(() => assertRabaluxCompleteAttachmentSet(attachments)).not.toThrow();
+    for (let index = 0; index < attachments.length; index += 1) {
+      expect(() => assertRabaluxCompleteAttachmentSet(attachments.filter((_, i) => i !== index))).toThrow(/četiri PDF/);
+      expect(() => assertRabaluxCompleteAttachmentSet(attachments.map((attachment, i) => i === index
+        ? { ...attachment, content: Buffer.from("<html>document</html>").toString("base64") }
+        : attachment,
+      ))).toThrow(/četiri PDF/);
+    }
+    expect(() => assertRabaluxCompleteAttachmentSet([
+      ...attachments.slice(0, 2),
+      { ...attachments[2]!, filename: "predracun-kupac-SPC-2026-000123.pdf" },
+      attachments[3]!,
+    ])).toThrow(/četiri PDF/);
+  });
+
   it("contains only supplier lines and no commercial prices", () => {
     const pdf = buildRabaluxPackingPdf({
       orderNumber: "SPC-2026-000123",

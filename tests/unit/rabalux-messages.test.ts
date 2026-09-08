@@ -37,12 +37,13 @@ describe("Rabalux supplier email", () => {
       trackingNo: "AAA8503000010",
       items,
     });
-    expect(message.text).toContain("7996 × 2");
+    expect(message.text).toContain("7996 – Rabalux plafonjera, 2 kom.");
     expect(message.text).toContain("AAA8503000010");
-    expect(message.subject).toContain("Adresnica i kurirski nalog");
-    expect(message.text).toContain("preuzimanje robe na Rabalux adresi");
-    expect(message.text).not.toMatch(/cena|12[.,]999|DC-/i);
-    expect(message.text).not.toMatch(/garant|predračun|predracun/i);
+    expect(message.subject).toContain("kompletna dokumentacija i adresnica");
+    expect(message.text).toContain("U prilogu šaljemo svu dokumentaciju");
+    expect(message.text).toContain("adresnicu za štampu, pak-listu, Rabalux primerak predračuna i obrazac za odustajanje");
+    expect(message.text).not.toMatch(/prodajne cene|12[.,]999|DC-/i);
+    expect(message.text).not.toMatch(/garant|izvin|dopuna/i);
     expect(supplierShippingDocumentsIdempotencyKey("ful-1")).toBe(
       "supplier-shipping-documents:ful-1:initial",
     );

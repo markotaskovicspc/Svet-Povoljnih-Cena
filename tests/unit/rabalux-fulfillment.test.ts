@@ -65,6 +65,13 @@ const fulfillment = {
     createdAt: new Date("2026-09-04T10:00:00.000Z"),
     number: "SPC-2026-000123",
     total: 12_999,
+    billingSameAsShipping: true,
+    shipFirstName: "Test",
+    shipLastName: "Kupac",
+    shipPhone: "0601234567",
+    shipStreet: "Test ulica 1",
+    shipCity: "Beograd",
+    shipPostalCode: "11000",
     paymentMethod: "POUZECE_GOTOVINA",
     shippingMethod: "KURIR",
     payments: [],
@@ -208,7 +215,7 @@ describe("Rabalux COD courier fulfillment", () => {
     });
   });
 
-  it("creates one assigned shipment and sends only its waybill and packing list", async () => {
+  it("creates one assigned shipment and sends all four supplier-safe PDFs together", async () => {
     await expect(
       sendSupplierShippingDocumentsEmail({
         fulfillmentId: fulfillment.id,
@@ -232,22 +239,25 @@ describe("Rabalux COD courier fulfillment", () => {
     expect(dispatch.idempotencyKey).toBe(
       "supplier-shipping-documents:fulfillment-1:checkout",
     );
-    expect(dispatch.subject).toContain("Adresnica i kurirski nalog");
-    expect(dispatch.text).toContain("preuzimanje robe na Rabalux adresi");
+    expect(dispatch.subject).toContain("kompletna dokumentacija i adresnica");
+    expect(dispatch.text).toContain("U prilogu šaljemo svu dokumentaciju");
+    expect(dispatch.text).not.toMatch(/izvin|dopuna/i);
     expect(
       dispatch.attachments.map((item: { filename: string }) => item.filename),
     ).toEqual([
       "adresnica-SPC-2026-000123.pdf",
       "pak-lista-SPC-2026-000123.pdf",
+      "predracun-rabalux-SPC-2026-000123.pdf",
+      "obrazac-za-odustajanje-SPC-2026-000123.pdf",
     ]);
     expect(mocks.renderPrintHtmlPdf).toHaveBeenCalledWith("<html>Test label</html>");
     expect(dispatch.attachments[0].contentType).toBe("application/pdf");
     expect(Buffer.from(dispatch.attachments[0].content, "base64").toString()).toBe("%PDF-x-express-label");
     expect(JSON.stringify(dispatch)).not.toMatch(
-      /predračun|predracun|garantni-list|12[.,]?999/i,
+      /garantni-list|12[.,]?999/i,
     );
     expect(dispatch.metadata).toMatchObject({
-      attachmentCount: 2,
+      attachmentCount: 4,
       supplierItemCount: 1,
       shipmentId: "shipment-1",
       provider: "X_EXPRESS",

@@ -317,9 +317,9 @@ test.describe("Rabalux COD fulfillment — isolated acceptance", () => {
       status: "SENT",
       recipient: "infosrb@rabalux.com",
     });
-    expect(shippingEmail?.subject).toContain("Adresnica i kurirski nalog");
+    expect(shippingEmail?.subject).toContain("kompletna dokumentacija i adresnica");
     expect(shippingEmail?.metadata).toMatchObject({
-      attachmentCount: 2,
+      attachmentCount: 4,
       supplierItemCount: 1,
       provider: "X_EXPRESS",
       courierRequestAccepted: true,
@@ -327,10 +327,12 @@ test.describe("Rabalux COD fulfillment — isolated acceptance", () => {
       attachmentNames: [
         `adresnica-${order.number}.pdf`,
         `pak-lista-${order.number}.pdf`,
+        `predracun-rabalux-${order.number}.pdf`,
+        `obrazac-za-odustajanje-${order.number}.pdf`,
       ],
     });
     expect(JSON.stringify(shippingEmail)).not.toMatch(
-      /1[.,]?500|2[.,]?490|garantni-list|predračun|predracun/i,
+      /1[.,]?500|2[.,]?490|garantni-list/i,
     );
     expect(supplierOrderJobs).toHaveLength(1);
     expect(documentJobs).toHaveLength(1);
