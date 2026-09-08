@@ -47,6 +47,24 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function pageDestination(path: string) {
+  // Analytics paths are visitor input; only make local paths navigable.
+  if (!path.startsWith("/") || path.startsWith("//") || /[\\\s]/.test(path)) {
+    return null;
+  }
+  try {
+    const url = new URL(path, "https://analytics.invalid");
+    if (url.origin !== "https://analytics.invalid") return null;
+    const match = url.pathname.match(/^\/p\/([^/]+)\/?$/);
+    return {
+      href: `${url.pathname}${url.search}${url.hash}`,
+      productSlug: match ? decodeURIComponent(match[1]) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default async function AnalyticsConversionPage({
   searchParams,
 }: {
@@ -177,6 +195,22 @@ export default async function AnalyticsConversionPage({
       getErpModule("posete-konverzije", { take: 100 }),
     ]);
 
+  const destinations = new Map(
+    pageConversions.map((row) => [row.path, pageDestination(row.path)]),
+  );
+  const productSlugs = [...new Set(
+    [...destinations.values()].flatMap((destination) =>
+      destination?.productSlug ? [destination.productSlug] : [],
+    ),
+  )];
+  const pageProducts = productSlugs.length
+    ? await db.product.findMany({
+        where: { slug: { in: productSlugs } },
+        select: { slug: true, name: true },
+      })
+    : [];
+  const productNames = new Map(pageProducts.map((product) => [product.slug, product.name]));
+
   const conversion = funnel.visitors ? (funnel.purchasers / funnel.visitors) * 100 : 0;
   const valuePerVisit = funnel.visitors ? funnel.purchaseValue / funnel.visitors : 0;
   const cartConversion = funnel.cartBuyers
@@ -242,25 +276,42 @@ export default async function AnalyticsConversionPage({
           <DataTable
             columns={[
               { key: "period", label: granularity === "day" ? "Dan" : granularity === "week" ? "Nedelja od" : "Mesec" },
-              { key: "path", label: "Stranica" },
+              { key: "path", label: "Proizvod / stranica" },
               { key: "pageViews", label: "Pregledi", align: "right" },
               { key: "visits", label: "Jedinstvene posete", align: "right" },
               { key: "purchases", label: "Kupovine", align: "right" },
               { key: "conversion", label: "Konverzija", align: "right" },
               { key: "value", label: "Vrednost", align: "right" },
             ]}
-            rows={pageConversions.map((row) => ({
-              id: `${row.bucket}:${row.path}`,
-              cells: {
-                period: row.bucket,
-                path: <span className="font-mono text-xs">{row.path}</span>,
-                pageViews: row.pageViews,
-                visits: row.visits,
-                purchases: row.purchases,
-                conversion: `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`,
-                value: formatRsd(row.purchaseValue),
-              },
-            }))}
+            rows={pageConversions.map((row) => {
+              const destination = destinations.get(row.path);
+              const productName = destination?.productSlug
+                ? productNames.get(destination.productSlug)
+                : null;
+              return {
+                id: `${row.bucket}:${row.path}`,
+                cells: {
+                  period: row.bucket,
+                  path: destination ? (
+                    <Link
+                      href={destination.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      prefetch={false}
+                      className="inline-flex max-w-md flex-col gap-1 break-words text-brand-blue underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-4"
+                    >
+                      {productName ? <span className="font-medium">{productName}</span> : null}
+                      <span className={`font-mono text-xs ${productName ? "text-ink-500" : ""}`}>{row.path}</span>
+                    </Link>
+                  ) : <span className="break-all font-mono text-xs">{row.path}</span>,
+                  pageViews: row.pageViews,
+                  visits: row.visits,
+                  purchases: row.purchases,
+                  conversion: `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`,
+                  value: formatRsd(row.purchaseValue),
+                },
+              };
+            })}
             empty="Nema consented poseta u izabranom periodu."
           />
         </Card>
