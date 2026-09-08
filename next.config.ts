@@ -140,6 +140,9 @@ const nextConfig: NextConfig = {
       // The email worker prints the ERP label HTML locally, without a hosted
       // PDF service. Keep Chromium's compressed Linux runtime in the function.
       "node_modules/@sparticuz/chromium/bin/**/*",
+      // Playwright resolves browsers.json and other runtime assets dynamically;
+      // tracing its JS entry alone leaves serverless functions unable to load it.
+      "node_modules/playwright-core/**/*",
     ],
   },
   experimental: {
