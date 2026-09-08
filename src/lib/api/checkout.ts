@@ -10,13 +10,8 @@ import {
   validateVoucher,
   validateVoucherForCheckout,
 } from "@/lib/api/vouchers";
-import { clearServerCart } from "@/lib/api/cart";
-import {
-  enqueueBackgroundJob,
-  processBackgroundJob,
-} from "@/lib/background-jobs";
-import { providerForPaymentMethod } from "@/lib/payments";
-import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
+import { queueCheckoutFollowUp } from "@/lib/checkout/outbox";
+import { providerForPaymentMethod } from "@/lib/payments/types";
 import {
   createCheckoutOrderAccessToken,
   createOrderAccessToken,
@@ -31,7 +26,7 @@ import {
 import { normalizeProductColorLabel } from "@/lib/product-colors";
 import { getMediaVariantUrl } from "@/lib/media";
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
-import { MYGLS_PROVIDER } from "@/lib/mygls";
+import { MYGLS_PROVIDER } from "@/lib/mygls/config";
 import {
   isPaymentMethodEnabled,
   resolveDeliveryQuote,
@@ -128,79 +123,6 @@ type CreatedOrder = {
   savedCardDiscount: Prisma.Decimal | null;
   supplierFulfillmentIds: string[];
 };
-
-type GenericSupplierJobLine = {
-  productId: string;
-  qty: number;
-};
-
-async function enqueueCheckoutPostCommit(args: {
-  orderId: string;
-  orderNumber: string;
-  accessToken: string;
-  supplierFulfillmentIds: string[];
-  genericSupplierLines: GenericSupplierJobLine[];
-  paymentMethod: PaymentMethod;
-  shippingMethod: ShippingMethod;
-}) {
-  const supplierEmailJobs = await Promise.all(
-    args.supplierFulfillmentIds.map((fulfillmentId) =>
-      enqueueBackgroundJob({
-        kind: "SUPPLIER_ORDER_EMAIL" as const,
-        payload: { fulfillmentId, dispatchKey: "checkout" },
-        idempotencyKey: `supplier-order:${fulfillmentId}:checkout`,
-      }),
-    ),
-  );
-  const buyerReceiptJob = await enqueueBackgroundJob({
-    kind: "BUYER_RECEIPT",
-    payload: { orderId: args.orderId, accessToken: args.accessToken },
-    idempotencyKey: `buyer-receipt:${args.orderId}`,
-  });
-  const jobs: Array<Promise<unknown>> = [];
-  if (args.genericSupplierLines.length) {
-    jobs.push(
-      enqueueBackgroundJob({
-        kind: "SUPPLIER_RESERVATION",
-        payload: {
-          orderNumber: args.orderNumber,
-          lines: args.genericSupplierLines,
-        },
-        idempotencyKey: `supplier-reservation:${args.orderId}`,
-      }),
-    );
-  }
-  await Promise.all(jobs);
-  // The durable job already exists before this best-effort immediate attempt.
-  // A provider outage cannot roll back checkout; the background cron retries it.
-  await Promise.allSettled(
-    [buyerReceiptJob, ...supplierEmailJobs].map((job) =>
-      processBackgroundJob(job.id),
-    ),
-  );
-
-  // COD is fulfillment-ready at checkout. Keep the provider write strictly
-  // after the supplier-order send, so Rabalux never receives a label without
-  // first receiving the order it belongs to. Prepaid methods enter this same
-  // phase only from their successful payment callback/admin confirmation.
-  if (
-    args.shippingMethod === "KURIR" &&
-    isCashOnDeliveryPaymentMethod(args.paymentMethod)
-  ) {
-    const shippingDocumentJobs = await Promise.all(
-      args.supplierFulfillmentIds.map((fulfillmentId) =>
-        enqueueBackgroundJob({
-          kind: "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL" as const,
-          payload: { fulfillmentId, dispatchKey: "checkout" },
-          idempotencyKey: `supplier-shipping-documents:${fulfillmentId}:checkout`,
-        }),
-      ),
-    );
-    await Promise.allSettled(
-      shippingDocumentJobs.map((job) => processBackgroundJob(job.id)),
-    );
-  }
-}
 
 async function nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
@@ -441,20 +363,10 @@ export async function createOrder(
           error: { code: "CHECKOUT_SESSION_MISMATCH" },
         };
       }
-      await enqueueCheckoutPostCommit({
-        orderId: existing.id,
-        orderNumber: existing.number,
-        accessToken: createCheckoutOrderAccessToken(input.checkoutSessionId),
-        supplierFulfillmentIds: existing.supplierFulfillments.map(
-          ({ id }) => id,
-        ),
-        genericSupplierLines: existing.items.flatMap((item) =>
-          item.productId && item.product?.supplier?.integrationKey !== "RABALUX"
-            ? [{ productId: item.productId, qty: item.qty }]
-            : [],
-        ),
-        paymentMethod: existing.paymentMethod,
-        shippingMethod: existing.shippingMethod,
+      // A replay must still return the saved order if optional queue repair fails.
+      await queueCheckoutFollowUp(db, existing.id,
+        createCheckoutOrderAccessToken(input.checkoutSessionId)).catch(error => {
+        logOperationalError("checkout.follow_up.repair_failed", error, { orderId: existing.id });
       });
       return {
         ok: true,
@@ -866,6 +778,7 @@ export async function createOrder(
             },
           });
           await recordCheckoutCompleted(tx, input, existingOrder);
+          await queueCheckoutFollowUp(tx, existingOrder.id, accessToken);
           return { ...existingOrder, reusedExisting: true };
         }
       }
@@ -1174,6 +1087,10 @@ export async function createOrder(
         });
       }
 
+      // Durable outbox: only database writes run here, never provider/PDF code.
+      // Commit the order and the obligation to notify together.
+      await queueCheckoutFollowUp(tx, order.id, accessToken);
+
       return {
         ...order,
         supplierFulfillmentIds,
@@ -1192,54 +1109,6 @@ export async function createOrder(
     }
     throw err;
   }
-
-  if (userId) {
-    await clearServerCart(userId).catch((err) => {
-      logOperationalError("checkout.cart.clear_failed", err, {
-        orderId: created.id,
-        orderNumber: created.number,
-        userId,
-      });
-    });
-  }
-
-  // Upserts are intentional even when an idempotent checkout request reuses
-  // the order: if the first response lost one queue write, the retry repairs it.
-  const genericSupplierLines = created.reusedExisting
-    ? await db.orderItem
-        .findMany({
-          where: { orderId: created.id },
-          select: {
-            qty: true,
-            productId: true,
-            product: {
-              select: { supplier: { select: { integrationKey: true } } },
-            },
-          },
-        })
-        .then((items) =>
-          items.flatMap((item) =>
-            item.productId &&
-            item.product?.supplier?.integrationKey !== "RABALUX"
-              ? [{ productId: item.productId, qty: item.qty }]
-              : [],
-          ),
-        )
-    : input.lines.flatMap((line) => {
-        const product = bySku.get(line.sku)!;
-        return product.supplier?.integrationKey !== "RABALUX"
-          ? [{ productId: product.id, qty: line.qty }]
-          : [];
-      });
-  await enqueueCheckoutPostCommit({
-    orderId: created.id,
-    orderNumber: created.number,
-    accessToken,
-    supplierFulfillmentIds: created.supplierFulfillmentIds,
-    genericSupplierLines,
-    paymentMethod: created.paymentMethod,
-    shippingMethod: created.shippingMethod,
-  });
 
   return {
     ok: true,
