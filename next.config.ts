@@ -121,7 +121,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   // resvg selects a platform-specific native binding at runtime. Keep it out
   // of the Server Components/Turbopack bundle so Node can resolve that binding.
-  serverExternalPackages: ["@resvg/resvg-js"],
+  serverExternalPackages: ["@resvg/resvg-js", "@sparticuz/chromium", "playwright-core"],
   turbopack: {
     // Worktrees may share dependencies from a parent checkout. Next 16 only
     // resolves files inside this root, so use the smallest ancestor that
@@ -137,6 +137,9 @@ const nextConfig: NextConfig = {
       "node_modules/@img/sharp-libvips-linux-x64/**/*",
       "node_modules/@resvg/resvg-js/**/*",
       "node_modules/@resvg/resvg-js-linux-x64-gnu/**/*",
+      // The email worker prints the ERP label HTML locally, without a hosted
+      // PDF service. Keep Chromium's compressed Linux runtime in the function.
+      "node_modules/@sparticuz/chromium/bin/**/*",
     ],
   },
   experimental: {

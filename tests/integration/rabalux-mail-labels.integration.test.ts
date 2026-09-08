@@ -159,14 +159,13 @@ describe.sequential("Mixed Rabalux order: SES emails and both courier labels", (
     const body = emails[1].Content!.Simple!;
     expect(body.Subject?.Data).toContain("Adresnica i kurirski nalog");
     expect(body.Attachments?.map((attachment) => attachment.FileName)).toEqual([
-      `adresnica-${prefix}.html`, `pak-lista-${prefix}.pdf`,
+      `adresnica-${prefix}.pdf`, `pak-lista-${prefix}.pdf`,
     ]);
-    const label = Buffer.from(body.Attachments![0].RawContent!).toString("utf8");
-    expect(label).toContain("<!doctype html>");
-    expect(label).toContain("Rabalux QA magacin");
-    expect(label).toContain("Industrijska");
-    expect(label).toContain("Shaun2 QA");
-    expect(label).not.toContain("FLEX SEAT");
+    expect(body.Attachments![0].ContentType).toBe("application/pdf");
+    const label = await PDFDocument.load(body.Attachments![0].RawContent!);
+    expect(label.getPageCount()).toBe(1);
+    expect(label.getPage(0).getWidth()).toBeCloseTo(595.28, 0);
+    expect(label.getPage(0).getHeight()).toBeCloseTo(841.89, 0);
     expect((await PDFDocument.load(body.Attachments![1].RawContent!)).getPageCount()).toBeGreaterThan(0);
     const log = await courierRequests();
     const supplierCalls = log.filter((entry) => entry.method === "XExpressCreateOrder");

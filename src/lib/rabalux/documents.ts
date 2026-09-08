@@ -12,6 +12,7 @@ import {
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
+import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 
 export function buildRabaluxPackingPdf(input: {
   orderNumber: string;
@@ -157,12 +158,12 @@ export async function buildRabaluxShipmentAttachments(args: {
     ];
   }
   if (shipment.provider === X_EXPRESS_PROVIDER) {
-    const label = renderXExpressLabelsHtml(shipment);
+    const label = await renderPrintHtmlPdf(renderXExpressLabelsHtml(shipment));
     return [
       {
-        filename: `adresnica-${safe(args.orderNumber)}.html`,
-        content: Buffer.from(label, "utf8").toString("base64"),
-        contentType: "text/html; charset=utf-8",
+        filename: `adresnica-${safe(args.orderNumber)}.pdf`,
+        content: label.toString("base64"),
+        contentType: "application/pdf",
       },
       packing,
     ];
@@ -185,14 +186,21 @@ export function assertRabaluxSupplierAttachmentSet(
       attachment.filename.startsWith("adresnica-") ||
       attachment.filename.startsWith("pak-lista-"),
   );
+  const everyAttachmentPdf = attachments.every(
+    (attachment) =>
+      attachment.filename.endsWith(".pdf") &&
+      attachment.contentType === "application/pdf" &&
+      Buffer.from(attachment.content, "base64").subarray(0, 5).toString("ascii") === "%PDF-",
+  );
   if (
     attachments.length !== 2 ||
     labelCount !== 1 ||
     packingCount !== 1 ||
-    !everyAttachmentAllowed
+    !everyAttachmentAllowed ||
+    !everyAttachmentPdf
   ) {
     throw new Error(
-      "Rabalux dobavljaču se smeju poslati samo adresnica i packing lista.",
+      "Rabalux dobavljaču se smeju poslati samo adresnica i packing lista u PDF formatu.",
     );
   }
 }

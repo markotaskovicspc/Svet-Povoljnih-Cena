@@ -325,7 +325,7 @@ test.describe("Rabalux COD fulfillment — isolated acceptance", () => {
       courierRequestAccepted: true,
       codCollectionPlan: "DC_FULL_ORDER",
       attachmentNames: [
-        `adresnica-${order.number}.html`,
+        `adresnica-${order.number}.pdf`,
         `pak-lista-${order.number}.pdf`,
       ],
     });

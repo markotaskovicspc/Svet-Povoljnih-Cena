@@ -39,12 +39,12 @@ describe("Rabalux packing document", () => {
     const attachments = [
       {
         filename: "adresnica-SPC-2026-000123.pdf",
-        content: "label",
+        content: Buffer.from("%PDF-label").toString("base64"),
         contentType: "application/pdf",
       },
       {
         filename: "pak-lista-SPC-2026-000123.pdf",
-        content: "packing",
+        content: Buffer.from("%PDF-packing").toString("base64"),
         contentType: "application/pdf",
       },
     ];
@@ -59,6 +59,27 @@ describe("Rabalux packing document", () => {
         },
       ]),
     ).toThrow(/samo adresnica i packing lista/i);
+  });
+
+  it("rejects HTML labels, including HTML renamed to a PDF", () => {
+    const packing = {
+      filename: "pak-lista-SPC-2026-000123.pdf",
+      content: Buffer.from("%PDF-packing").toString("base64"),
+      contentType: "application/pdf",
+    };
+    for (const [extension, contentType] of [
+      ["html", "text/html; charset=utf-8"],
+      ["pdf", "application/pdf"],
+    ]) {
+      expect(() => assertRabaluxSupplierAttachmentSet([
+        {
+          filename: `adresnica-SPC-2026-000123.${extension}`,
+          content: Buffer.from("<!doctype html><html>label</html>").toString("base64"),
+          contentType,
+        },
+        packing,
+      ])).toThrow(/PDF formatu/);
+    }
   });
 
   it("builds the Rabalux-only proforma in the customer design and without commercial data", async () => {

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   trackedDispatch: vi.fn(),
   downloadMyGlsLabelPdf: vi.fn(),
   enqueueBackgroundJob: vi.fn(),
+  renderPrintHtmlPdf: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -39,6 +40,9 @@ vi.mock("@/lib/mygls", () => ({
 vi.mock("@/lib/x-express/config", () => ({ X_EXPRESS_PROVIDER: "X_EXPRESS" }));
 vi.mock("@/lib/x-express/labels", () => ({
   renderXExpressLabelsHtml: vi.fn().mockReturnValue("<html>Test label</html>"),
+}));
+vi.mock("@/lib/pdf/print-html", () => ({
+  renderPrintHtmlPdf: mocks.renderPrintHtmlPdf,
 }));
 
 import {
@@ -196,6 +200,7 @@ describe("Rabalux COD courier fulfillment", () => {
       },
     });
     mocks.downloadMyGlsLabelPdf.mockResolvedValue(Buffer.from("%PDF-label"));
+    mocks.renderPrintHtmlPdf.mockResolvedValue(Buffer.from("%PDF-x-express-label"));
     mocks.trackedDispatch.mockResolvedValue({
       ok: true,
       id: "email-1",
@@ -232,9 +237,12 @@ describe("Rabalux COD courier fulfillment", () => {
     expect(
       dispatch.attachments.map((item: { filename: string }) => item.filename),
     ).toEqual([
-      "adresnica-SPC-2026-000123.html",
+      "adresnica-SPC-2026-000123.pdf",
       "pak-lista-SPC-2026-000123.pdf",
     ]);
+    expect(mocks.renderPrintHtmlPdf).toHaveBeenCalledWith("<html>Test label</html>");
+    expect(dispatch.attachments[0].contentType).toBe("application/pdf");
+    expect(Buffer.from(dispatch.attachments[0].content, "base64").toString()).toBe("%PDF-x-express-label");
     expect(JSON.stringify(dispatch)).not.toMatch(
       /predračun|predracun|garantni-list|12[.,]?999/i,
     );
@@ -254,6 +262,18 @@ describe("Rabalux COD courier fulfillment", () => {
         }),
       }),
     );
+  });
+
+  it("records a PDF failure for retry without sending an HTML fallback", async () => {
+    mocks.renderPrintHtmlPdf.mockRejectedValue(new Error("PDF rendering failed"));
+    await expect(sendSupplierShippingDocumentsEmail({
+      fulfillmentId: fulfillment.id,
+      dispatchKey: "checkout",
+    })).rejects.toThrow("PDF rendering failed");
+    expect(mocks.trackedDispatch).not.toHaveBeenCalled();
+    expect(mocks.fulfillmentUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { status: "FAILED", lastError: "PDF rendering failed" },
+    }));
   });
 
   it("keeps the full COD on the DC parcel for a mixed order and hides it from Rabalux", async () => {
