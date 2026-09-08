@@ -12,6 +12,9 @@ import {
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  CHECKOUT_POST_COMMIT: z.object({
+    orderId: z.string().min(1), accessToken: z.string().min(20),
+  }),
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
   ABANDONED_CART_RECOVERY: z.object({
     sessionId: z.string().min(12).max(80),
@@ -122,6 +125,7 @@ const schemas = {
 export type BackgroundJobKind = keyof typeof schemas;
 
 const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
+  "CHECKOUT_POST_COMMIT",
   "PASSWORD_RESET_EMAIL",
   "GUEST_RECLAMATION_LINK_EMAIL",
   "BUYER_RECEIPT",
@@ -484,6 +488,12 @@ async function dispatchJob(job: JobRow) {
   const payload = schemas[kind].parse(job.payload);
 
   switch (kind) {
+    case "CHECKOUT_POST_COMMIT": {
+      const { prepareCheckoutFollowUp } = await import("@/lib/checkout/follow-up");
+      const args = payload as z.infer<typeof schemas.CHECKOUT_POST_COMMIT>;
+      await prepareCheckoutFollowUp(args.orderId, args.accessToken);
+      return;
+    }
     case "ABANDONED_CART_RECOVERY": {
       const { deliverCartRecoveryStep } = await import(
         "@/lib/checkout/cart-recovery.server"

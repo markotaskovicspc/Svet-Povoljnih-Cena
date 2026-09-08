@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-dev} next dev",
-    "build": "npm run db:generate && npm run db:deploy:production && next build",
+    "build": "npm run db:generate && npm run check:checkout-isolation && npm run db:deploy:production && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "npm run test:unit",
@@ -62,7 +62,8 @@
     "media:variants": "node \"svet akcija/outputs/build-product-media-variants.mjs\"",
     "media:backfill-variants": "node scripts/backfill-product-media-variants.mjs",
     "admin:create": "node scripts/create-admin.mjs",
-    "postinstall": "prisma generate && node scripts/patch-brace-expansion-compat.mjs"
+    "postinstall": "prisma generate && node scripts/patch-brace-expansion-compat.mjs",
+    "check:checkout-isolation": "vitest run tests/unit/checkout-failure-isolation.test.ts tests/unit/checkout-follow-up.test.ts tests/unit/checkout-import-boundary.test.ts tests/unit/print-html-isolation.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
