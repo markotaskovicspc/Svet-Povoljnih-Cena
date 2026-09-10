@@ -16,7 +16,6 @@ import {
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
-import { isCartRecoveryEnabled } from "@/lib/checkout/cart-recovery-policy";
 
 export const metadata: Metadata = {
   title: "Završetak porudžbine",
@@ -62,7 +61,6 @@ export default async function CheckoutPodaciPage({
   // route would otherwise be blocked by missing provider town/street IDs.
   const xExpressAddressEnabled = true;
   const checkoutConfig = await getCheckoutConfig();
-  const cartRecoveryEnabled = isCartRecoveryEnabled();
   const socialProviders = getConfiguredSocialAuthProviders(
     {
       google: googleAction,
@@ -108,8 +106,6 @@ export default async function CheckoutPodaciPage({
           initialAuthIntent={initialAuthIntent}
           loginError={loginError}
           registrationError={registrationError}
-          cartRecoveryEnabled={cartRecoveryEnabled}
-          initialRecoveryConsent={false}
           initialCustomer={
             user?.userType === "customer"
               ? {

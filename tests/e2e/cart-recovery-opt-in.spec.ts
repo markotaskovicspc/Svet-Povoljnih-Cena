@@ -1,19 +1,26 @@
 import { expect, test } from "@playwright/test";
+import { TRACKING_CONSENT_VERSION, TRACKING_CONSENT_VERSION_COOKIE } from "@/lib/analytics/tracking-consent";
 
 test.skip(
   process.env.E2E_CART_RECOVERY_UI !== "1",
   "Cart recovery UI smoke runs only in its isolated local flow.",
 );
 
-test("checkout captures explicit cart-recovery consent and can revoke it", async ({
+test("checkout does not offer or grant cart-recovery consent", async ({
   context,
   page,
+  baseURL,
 }) => {
   await context.addCookies([
     {
       name: "spc_cookie_consent",
       value: "essential",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3021",
+      url: baseURL!,
+    },
+    {
+      name: TRACKING_CONSENT_VERSION_COOKIE,
+      value: TRACKING_CONSENT_VERSION,
+      url: baseURL!,
     },
   ]);
   await page.addInitScript(() => {
@@ -87,28 +94,22 @@ test("checkout captures explicit cart-recovery consent and can revoke it", async
   const recoveryConsent = page.getByRole("checkbox", {
     name: /najviše tri podsetnika ako ne završim kupovinu/i,
   });
-  await expect(recoveryConsent).toBeVisible();
-  await expect(recoveryConsent).not.toBeChecked();
+  await expect(recoveryConsent).toHaveCount(0);
 
   await page
     .getByRole("textbox", { name: "E-pošta*", exact: true })
     .fill("kupac@example.com");
-  await recoveryConsent.check();
 
   await expect
     .poll(() =>
       captured.some(
         (payload) =>
-          payload.recoveryConsent === true &&
+          payload.recoveryConsent === false &&
           payload.guestEmail === "kupac@example.com" &&
           Array.isArray(payload.lines) &&
           payload.lines.length === 1,
       ),
     )
     .toBe(true);
-
-  await recoveryConsent.uncheck();
-  await expect
-    .poll(() => captured.some((payload) => payload.recoveryConsent === false))
-    .toBe(true);
+  expect(captured.every((payload) => payload.recoveryConsent === false)).toBe(true);
 });

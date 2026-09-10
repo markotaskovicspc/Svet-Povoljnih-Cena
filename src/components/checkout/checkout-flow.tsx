@@ -96,7 +96,6 @@ export interface CheckoutFormData {
   voucherCode?: string;
   notes?: string;
   consent: boolean;
-  recoveryConsent: boolean;
 }
 
 export interface CheckoutInitialCustomer {
@@ -157,8 +156,6 @@ export function CheckoutFlow({
   initialAuthIntent,
   loginError,
   registrationError,
-  cartRecoveryEnabled = false,
-  initialRecoveryConsent = false,
 }: {
   checkoutConfig: CheckoutConfig;
   initialCustomer?: CheckoutInitialCustomer;
@@ -171,8 +168,6 @@ export function CheckoutFlow({
   initialAuthIntent?: "login" | "register";
   loginError?: LoginErrorCode;
   registrationError?: RegistrationErrorCode;
-  cartRecoveryEnabled?: boolean;
-  initialRecoveryConsent?: boolean;
 }) {
   const router = useRouter();
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -229,7 +224,6 @@ export function CheckoutFlow({
       voucherCode: "",
       notes: "",
       consent: false,
-      recoveryConsent: initialRecoveryConsent,
     },
   });
 
@@ -249,10 +243,6 @@ export function CheckoutFlow({
   const shippingEmail = useWatch({
     control: methods.control,
     name: "shipping.email",
-  });
-  const recoveryConsent = useWatch({
-    control: methods.control,
-    name: "recoveryConsent",
   });
   const perItemAssembly = useWatch({
     control: methods.control,
@@ -285,7 +275,8 @@ export function CheckoutFlow({
           identity === "guest" && isCompleteEmail(shippingEmail)
             ? shippingEmail
             : null,
-        recoveryConsent: cartRecoveryEnabled && Boolean(recoveryConsent),
+        // Checkout does not collect consent for abandoned-cart reminders.
+        recoveryConsent: false,
         shippingCity,
         shippingMethod,
         paymentMethod,
@@ -295,12 +286,10 @@ export function CheckoutFlow({
     return () => window.clearTimeout(timeout);
   }, [
     checkoutSessionId,
-    cartRecoveryEnabled,
     hydrated,
     identity,
     lines,
     paymentMethod,
-    recoveryConsent,
     shippingCity,
     shippingEmail,
     shippingMethod,
@@ -847,7 +836,6 @@ export function CheckoutFlow({
                     <div className="flex flex-col gap-4 sm:gap-5">
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
-                        cartRecoveryEnabled={cartRecoveryEnabled}
                       />
                       <AutomaticDeliverySection
                         deliveryQuote={deliveryQuote}
