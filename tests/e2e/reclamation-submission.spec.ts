@@ -29,6 +29,8 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
   const recoveryEmail = `${prefix.toLowerCase()}.recovery@example.invalid`;
   let db: PrismaClient;
   let userId = "";
+  let adminId = "";
+  const adminEmail = `${prefix.toLowerCase()}.admin@example.invalid`;
   const productIds: string[] = [];
   const orderIds: string[] = [];
 
@@ -56,6 +58,12 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
       select: { id: true },
     });
     userId = user.id;
+    const admin = await db.adminUser.create({ data: {
+      email: adminEmail,
+      passwordHash: await bcrypt.hash(customerPassword, 10),
+      role: "SUPER", enabled: true, firstName: "QA", lastName: "Reklamacije",
+    } });
+    adminId = admin.id;
 
     for (const [index, sku] of [
       registeredSku,
@@ -149,6 +157,10 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
         ],
       },
     });
+    if (adminId) {
+      await db.auditLog.deleteMany({ where: { actorId: adminId } });
+      await db.adminUser.delete({ where: { id: adminId } });
+    }
     if (userId) await db.user.deleteMany({ where: { id: userId } });
     await db.$disconnect();
   });
@@ -186,6 +198,7 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
     expect(saved.events).toEqual([
       expect.objectContaining({ status: "PRIMLJENO", actorId: null }),
     ]);
+    await repeatThroughForm(page, registeredOrderNumber, saved.number);
   });
 
   test("gost koristi token samo za svoju porudžbinu i šalje zahtev", async ({
@@ -292,6 +305,7 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
         }),
       )
       .toBe(1);
+    await repeatThroughForm(page, guestOrderNumber, saved.number);
   });
 
   test("gost može bez otkrivanja podataka da zatraži novi bezbedan link", async ({
@@ -380,6 +394,60 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
     );
     expect(attempts[5]?.status()).toBe(429);
   });
+
+  test("operater unosi različite artikle i ponovnu prijavu uz osveženu istoriju", async ({ page }) => {
+    const order = await db.order.findUniqueOrThrow({ where: { number: pendingOrderNumber } });
+    await db.orderItem.create({ data: {
+      orderId: order.id, sku: registeredSku, name: "Drugi artikal", qty: 1,
+      unitPriceFull: 1000, unitPriceSale: 1000,
+    } });
+    await page.goto("/admin/erp/reklamacije-dnevnik", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("E-pošta").fill(adminEmail);
+    await page.getByLabel("Lozinka").fill(customerPassword);
+    await page.getByRole("button", { name: "Prijavi se", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-dnevnik$/, { timeout: 90_000 });
+    await page.locator("summary").filter({ hasText: "Ručno evidentiraj reklamaciju" }).click();
+    const form = page.getByTestId("manual-reclamation-form");
+    await form.locator('[name="orderNumberOrFiscal"]').fill(pendingOrderNumber);
+    await form.getByRole("option", { name: new RegExp(pendingOrderNumber) }).click();
+    for (const [index, sku] of [pendingSku, registeredSku, pendingSku].entries()) {
+      await form.locator('[name="sku"]').selectOption(sku);
+      await expect(form.locator('[name="quantity"]')).toHaveAttribute("max", "1");
+      if (index === 2) {
+        await expect(form.getByTestId("reclamation-history")).toBeVisible();
+        await form.locator("summary").filter({ hasText: "Prethodne reklamacije (1)" }).click();
+        await expect(form.getByTestId("reclamation-history")).toContainText(`R-1-${pendingOrderNumber}`);
+      }
+      await form.locator('[name="description"]').fill(`Operater prijavljuje problem broj ${index + 1}.`);
+      await form.getByRole("button", { name: "Evidentiraj reklamaciju", exact: true }).click();
+      await expect(form).toContainText(`Reklamacija R-${index + 1}-${pendingOrderNumber} je ručno evidentirana.`, { timeout: 30_000 });
+    }
+    await expect(form.locator("summary").filter({ hasText: "Prethodne reklamacije (2)" })).toBeVisible();
+    const rows = await db.reclamation.findMany({ where: { orderId: order.id } });
+    expect(rows).toHaveLength(3);
+    expect(new Set(rows.map((row) => row.number)).size).toBe(3);
+  });
+
+  async function repeatThroughForm(page: Page, orderNumber: string, previousNumber: string) {
+    await page.getByRole("button", { name: "Prijavi još jednu reklamaciju" }).click();
+    await expect(page.getByLabel("Količina za reklamaciju")).toHaveAttribute("max", "1");
+    const history = page.getByTestId("reclamation-history");
+    await expect(history).toBeVisible();
+    await history.locator("summary").click();
+    await expect(history).toContainText(previousNumber);
+    await page.getByLabel("Količina za reklamaciju").fill("2");
+    await page.getByLabel("Komentar / opis problema").fill("Ponovni problem sa istim kupljenim komadom.");
+    await page.getByRole("button", { name: "Pošalji reklamaciju" }).click();
+    await expect(page.getByText("Količina mora biti od 1 do kupljene količine (najviše 999).", { exact: true })).toBeVisible();
+    await page.getByLabel("Količina za reklamaciju").fill("1");
+    await page.getByRole("button", { name: "Pošalji reklamaciju" }).click();
+    await expect(page.getByRole("heading", { name: "Reklamacija je prijavljena" })).toBeVisible({ timeout: 30_000 });
+    const rows = await db.reclamation.findMany({ where: { order: { number: orderNumber } } });
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.number)).size).toBe(2);
+    await page.getByRole("button", { name: "Prijavi još jednu reklamaciju" }).click();
+    await expect(page.getByTestId("reclamation-history").locator("summary")).toHaveText("Prethodne reklamacije (2)");
+  }
 
   async function createOrder(input: {
     number: string;

@@ -7,6 +7,11 @@ import type {
 import { z } from "zod";
 import { db } from "@/lib/db";
 import {
+  nextReclamationNumber,
+  reclamationHistorySelect,
+  serializeReclamationHistory,
+} from "@/lib/reclamation-options";
+import {
   isAllowedReclamationPhotoUrl,
   verifyReclamationUploads,
 } from "@/lib/api/uploads";
@@ -18,9 +23,9 @@ import { verifyOrderAccessToken } from "@/lib/api/order-access";
 /**
  * Reclamation flow (Phase 3C — item 5; spec §4.1).
  *
- * Public number is generated as `R-{n}-{orderNo}` where `n` is the number of
- * times that exact line item has already been reclaimed. The counter lives on
- * `OrderItem.reclamationCount` and is incremented in the same transaction.
+ * Public number is generated as `R-{n}-{orderNo}` where `n` is the next
+ * sequence across the order, allocated under an order row lock. The item
+ * counter remains a statistic, incremented in the same transaction.
  *
  * Photos are uploaded out-of-band via the presigned URL endpoint (`uploads.ts`)
  * and the resulting URLs are passed in `photos[]` on creation.
@@ -64,7 +69,7 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
   const byNumber = await db.order.findUnique({
     where: { number: orderNumberOrFiscal },
     include: {
-      items: { include: { reclamations: { select: { quantity: true } } } },
+      items: { include: { reclamations: { select: reclamationHistorySelect } } },
       fiscal: true,
     },
   });
@@ -74,7 +79,7 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
     include: {
       order: {
         include: {
-          items: { include: { reclamations: { select: { quantity: true } } } },
+          items: { include: { reclamations: { select: reclamationHistorySelect } } },
           fiscal: true,
         },
       },
@@ -86,7 +91,7 @@ export async function lookupOrderForReclamation(orderNumberOrFiscal: string) {
     include: {
       order: {
         include: {
-          items: { include: { reclamations: { select: { quantity: true } } } },
+          items: { include: { reclamations: { select: reclamationHistorySelect } } },
           fiscal: true,
         },
       },
@@ -197,26 +202,22 @@ async function createReclamationRecord(
   let result: { id: string; number: string };
   try {
     result = await db.$transaction(async (tx) => {
-      if (options.allowedOrderStatuses) {
-        const [lockedOrder] = await tx.$queryRaw<Array<{ status: string }>>`
-          SELECT status::text AS status
-          FROM "Order"
-          WHERE id = ${order.id}
-          FOR UPDATE
-        `;
-        if (
-          !lockedOrder ||
-          !options.allowedOrderStatuses.includes(
-            lockedOrder.status as OrderStatus,
-          )
-        ) {
-          throw new ReclamationOrderStatusError();
-        }
+      // Serialize every creation for this order, including different SKUs and
+      // admin submissions. Always lock the order before its item.
+      const [lockedOrder] = await tx.$queryRaw<Array<{ status: string; number: string }>>`
+        SELECT status::text AS status, number
+        FROM "Order"
+        WHERE id = ${order.id}
+        FOR UPDATE
+      `;
+      if (!lockedOrder) throw new Error("Porudžbina više ne postoji.");
+      if (
+        options.allowedOrderStatuses &&
+        !options.allowedOrderStatuses.includes(lockedOrder.status as OrderStatus)
+      ) {
+        throw new ReclamationOrderStatusError();
       }
 
-      // The counter update serializes concurrent requests for the same purchased
-      // line. The following SUM therefore sees every earlier committed quantity
-      // before deciding whether this request still fits in the purchased amount.
       const [updated] = await tx.$queryRaw<
         Array<{ reclamationCount: number; productId: string | null; qty: number }>
       >`
@@ -227,16 +228,23 @@ async function createReclamationRecord(
       `;
       if (!updated) throw new Error("Stavka porudžbine više ne postoji.");
 
-      const aggregate = await tx.reclamation.aggregate({
-        where: { orderItemId: item.id },
-        _sum: { quantity: true },
-      });
-      const alreadyReclaimed = aggregate._sum.quantity ?? 0;
-      if (alreadyReclaimed + input.quantity > updated.qty) {
+      // A new report may concern an already reported unit. Only this report's
+      // quantity is bounded by the purchased quantity; history is never deducted.
+      if (
+        !Number.isInteger(input.quantity) || input.quantity < 1 ||
+        input.quantity > Math.min(updated.qty, 999)
+      ) {
         throw new ReclamationQuantityError();
       }
 
-      const number = `R-${updated.reclamationCount}-${order.number}`;
+      const existing = await tx.reclamation.findMany({
+        where: { orderId: order.id },
+        select: { number: true },
+      });
+      const number = nextReclamationNumber(
+        lockedOrder.number,
+        existing.map((row) => row.number),
+      );
 
       return tx.reclamation.create({
         data: {
@@ -344,19 +352,13 @@ export async function getGuestOrderForReclamation(
   }
 
   const items = order.items
-    .map((item) => {
-      const reclaimed = item.reclamations.reduce(
-        (sum, reclamation) => sum + reclamation.quantity,
-        0,
-      );
-      return {
-        sku: item.sku,
-        name: formatProductDisplayName(item.name, item.attribute1),
-        purchasedQty: item.qty,
-        remainingQty: item.qty - reclaimed,
-      };
-    })
-    .filter((item) => item.remainingQty > 0);
+    .filter((item) => item.qty > 0)
+    .map((item) => ({
+      sku: item.sku,
+      name: formatProductDisplayName(item.name, item.attribute1),
+      purchasedQty: item.qty,
+      reclamations: serializeReclamationHistory(item.reclamations),
+    }));
 
   return items.length
     ? { number: order.number, createdAt: order.createdAt, items }
@@ -389,7 +391,7 @@ export async function listOrdersForReclamation(userId: string) {
           name: true,
           attribute1: true,
           qty: true,
-          reclamations: { select: { quantity: true } },
+          reclamations: { select: reclamationHistorySelect },
         },
       },
     },
@@ -399,14 +401,13 @@ export async function listOrdersForReclamation(userId: string) {
     .map((order) => ({
       ...order,
       items: order.items
+        .filter((item) => item.qty > 0)
         .map((item) => ({
           sku: item.sku,
           name: formatProductDisplayName(item.name, item.attribute1),
           purchasedQty: item.qty,
-          remainingQty:
-            item.qty - item.reclamations.reduce((sum, row) => sum + row.quantity, 0),
-        }))
-        .filter((item) => item.remainingQty > 0),
+          reclamations: serializeReclamationHistory(item.reclamations),
+        })),
     }))
     .filter((order) => order.items.length > 0);
 }

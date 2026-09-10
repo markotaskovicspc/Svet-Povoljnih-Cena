@@ -7,17 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ReclamationHistory } from "@/components/reclamation-history";
+import type { ReclamationItemOption } from "@/lib/reclamation-options";
 import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
 type OrderOption = {
   number: string;
   createdAt: string;
-  items: {
-    sku: string;
-    name: string;
-    purchasedQty: number;
-    remainingQty: number;
-  }[];
+  items: ReclamationItemOption[];
 };
 
 type PendingPhoto = {
@@ -40,7 +37,7 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const FIELD_ERROR_MESSAGES: Record<string, string> = {
   orderNumberOrFiscal: "Izaberite porudžbinu.",
   sku: "Izaberite artikal iz porudžbine.",
-  quantity: "Količina mora biti u okviru preostale kupljene količine.",
+  quantity: "Količina mora biti od 1 do kupljene količine (najviše 999).",
   description: "Opis mora imati bar 5, a najviše 250 karaktera.",
   photos: "Proverite priložene fotografije.",
 };
@@ -214,6 +211,10 @@ export function ReclamationForm({
       setFormError("Izaberite porudžbinu i artikal.");
       return;
     }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > Math.min(selectedItem?.purchasedQty ?? 0, 999)) {
+      setFieldErrors({ quantity: FIELD_ERROR_MESSAGES.quantity });
+      return;
+    }
     if (photos.some((p) => p.status === "uploading")) {
       setFormError("Sačekajte da se fotografije završe sa slanjem.");
       return;
@@ -275,7 +276,7 @@ export function ReclamationForm({
           );
         } else if (data?.reason === "QUANTITY_EXCEEDED") {
           setFormError(
-            "Izabrana količina prelazi preostalu kupljenu količinu. Osvežite stranicu i pokušajte ponovo.",
+            "Količina prijave mora biti od 1 do kupljene količine artikla (najviše 999).",
           );
         } else if (res.status === 429) {
           setFormError(
@@ -376,7 +377,7 @@ export function ReclamationForm({
         >
           {selectedOrder?.items.map((item) => (
             <option key={item.sku} value={item.sku}>
-              {item.name} ({item.remainingQty} od {item.purchasedQty} kom dostupno)
+              {item.name} (kupljeno {item.purchasedQty} kom)
             </option>
           ))}
         </select>
@@ -385,20 +386,22 @@ export function ReclamationForm({
         ) : null}
       </div>
 
+      <ReclamationHistory entries={selectedItem?.reclamations ?? []} />
+
       <div className="grid gap-2">
         <Label htmlFor="quantity">Količina za reklamaciju</Label>
         <Input
           id="quantity"
           type="number"
           min={1}
-          max={selectedItem?.remainingQty ?? 1}
+          max={Math.min(selectedItem?.purchasedQty ?? 1, 999)}
           value={quantity}
           onChange={(event) => setQuantity(Number(event.target.value))}
           required
           className="h-11 bg-white"
         />
         <p className="text-xs text-ink-500">
-          Preostalo za ovaj artikal: {selectedItem?.remainingQty ?? 0} kom.
+          Kupljeno ovog artikla: {selectedItem?.purchasedQty ?? 0} kom. Svaka prijava može obuhvatiti najviše tu količinu (do 999 kom).
         </p>
         {fieldErrors.quantity ? (
           <p className="text-xs text-destructive">{fieldErrors.quantity}</p>

@@ -1451,7 +1451,7 @@ model OrderItem {
   attribute4               String?
   color1                   String?
   color2                   String?
-  /// Tracks how many times this exact line was reclaimed (for R-{n}-{orderNo})
+  /// Tracks how many times this exact line was reclaimed; public numbering is per order.
   reclamationCount         Int      @default(0)
   warehouseId              String?
   warehouseReservedQty     Int      @default(0)

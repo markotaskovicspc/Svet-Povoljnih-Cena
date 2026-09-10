@@ -60,17 +60,7 @@ export default async function AccountReclamationsPage() {
   const orderOptions = orders.map((order) => ({
     number: order.number,
     createdAt: order.createdAt.toISOString(),
-    items: order.items.map((item: {
-      sku: string;
-      name: string;
-      purchasedQty: number;
-      remainingQty: number;
-    }) => ({
-      sku: item.sku,
-      name: item.name,
-      purchasedQty: item.purchasedQty,
-      remainingQty: item.remainingQty,
-    })),
+    items: order.items,
   }));
 
   return (

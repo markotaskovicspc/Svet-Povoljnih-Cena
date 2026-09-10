@@ -22,6 +22,7 @@ import {
   uploadAdminReclamationPhoto,
 } from "@/lib/api/uploads";
 import { db } from "@/lib/db";
+import { logOperationalError } from "@/lib/monitoring";
 import { Card, CardTitle } from "@/components/admin/card";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { Field } from "@/components/admin/field";
@@ -180,8 +181,9 @@ async function createManualReclamation(
           actorId,
         );
       } catch (error) {
+        logOperationalError("reclamation.manual_create_failed", error, { orderId: order.id });
         await removeReclamationUploads(uploaded.map((photo) => photo.url));
-        throw error;
+        return { ok: false as const, error: "Unos reklamacije trenutno nije uspeo. Pokušajte ponovo." };
       }
       if (!result.ok) {
         await removeReclamationUploads(uploaded.map((photo) => photo.url));
@@ -193,7 +195,7 @@ async function createManualReclamation(
           UNAUTHORIZED: "Nemate pravo da unesete ovu reklamaciju.",
           INVALID_PHOTO: "Priložena fotografija nije ispravna.",
           QUANTITY_EXCEEDED:
-            "Količina prelazi preostalu reklamabilnu količinu.",
+            "Količina prijave mora biti od 1 do kupljene količine artikla (najviše 999).",
         };
         return { ok: false as const, error: errors[result.reason] };
       }
@@ -520,7 +522,7 @@ export default async function ReclamationsPage({
             <span className="ml-2 text-sm font-normal text-ink-500">Forma je sakrivena dok je ne otvorite.</span>
           </summary>
         <Card className="rounded-t-none border-x-0 border-b-0">
-          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Možete izabrati porudžbinu bez obzira na njen status, uz preostale količine.">
+          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Možete izabrati porudžbinu bez obzira na njen status, uključujući ponovne prijave već reklamiranih artikala.">
             Ručni unos reklamacije
           </CardTitle>
           <AdminActionForm
@@ -530,17 +532,6 @@ export default async function ReclamationsPage({
             testId="manual-reclamation-form"
           >
             <ReclamationOrderFields />
-            <Field label="Količina">
-              <input
-                name="quantity"
-                type="number"
-                min={1}
-                max={999}
-                defaultValue={1}
-                required
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              />
-            </Field>
             <Field label="Tip reklamacije">
               <select
                 name="type"

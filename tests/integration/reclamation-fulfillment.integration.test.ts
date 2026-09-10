@@ -243,7 +243,7 @@ describe("quantity-aware reclamation fulfillment", () => {
     }
   });
 
-  it("serializes concurrent quantities and never exceeds the purchased amount", async () => {
+  it("serializes numbers while allowing repeated reports within each purchased quantity", async () => {
     const input = {
       orderNumberOrFiscal: `${tag}-ORDER`,
       sku: `${tag}-SKU`,
@@ -261,10 +261,8 @@ describe("quantity-aware reclamation fulfillment", () => {
       createReclamation(input, userId),
       createReclamation(input, userId),
     ]);
-    expect(concurrent.filter((result) => result.ok)).toHaveLength(1);
-    expect(concurrent.filter((result) => !result.ok)).toEqual([
-      { ok: false, reason: "QUANTITY_EXCEEDED" },
-    ]);
+    expect(concurrent.every((result) => result.ok)).toBe(true);
+    expect(new Set(concurrent.map((result) => result.ok && result.number)).size).toBe(2);
 
     const finalUnit = await createReclamation(
       { ...input, quantity: 1, description: "Poslednji raspoloživ komad." },
@@ -273,7 +271,7 @@ describe("quantity-aware reclamation fulfillment", () => {
     expect(finalUnit.ok).toBe(true);
     await expect(
       createReclamation(
-        { ...input, quantity: 1, description: "Preko kupljene količine." },
+        { ...input, quantity: 4, description: "Preko kupljene količine." },
         userId,
       ),
     ).resolves.toEqual({ ok: false, reason: "QUANTITY_EXCEEDED" });
@@ -283,8 +281,10 @@ describe("quantity-aware reclamation fulfillment", () => {
       _sum: { quantity: true },
       _count: true,
     });
-    expect(aggregate).toMatchObject({ _sum: { quantity: 3 }, _count: 2 });
-    expect(await listOrdersForReclamation(userId)).toEqual([]);
+    expect(aggregate).toMatchObject({ _sum: { quantity: 5 }, _count: 3 });
+    const orders = await listOrdersForReclamation(userId);
+    expect(orders[0].items[0]).toMatchObject({ purchasedQty: 3 });
+    expect(orders[0].items[0].reclamations).toHaveLength(3);
   });
 
   it("does not close on a return, but closes idempotently on delivered replacement", async () => {

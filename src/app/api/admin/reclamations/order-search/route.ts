@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { reclamationHistorySelect, serializeReclamationHistory } from "@/lib/reclamation-options";
 
 export async function GET(request: Request) {
   await requireAdminAction(["OPS"]);
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
           sku: true,
           name: true,
           qty: true,
-          reclamations: { select: { quantity: true } },
+          reclamations: { select: reclamationHistorySelect },
         },
       },
     },
@@ -67,16 +68,12 @@ export async function GET(request: Request) {
         order.fiscal?.receiptNumber ??
         null,
       createdAt: order.createdAt.toISOString(),
-      items: order.items.flatMap((item) => {
-        const claimedQty = item.reclamations.reduce(
-          (sum, reclamation) => sum + reclamation.quantity,
-          0,
-        );
-        const availableQty = Math.max(0, item.qty - claimedQty);
-        return availableQty > 0
-          ? [{ sku: item.sku, name: item.name, availableQty }]
-          : [];
-      }),
+      items: order.items.filter((item) => item.qty > 0).map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        purchasedQty: item.qty,
+        reclamations: serializeReclamationHistory(item.reclamations),
+      })),
     })),
   });
 }

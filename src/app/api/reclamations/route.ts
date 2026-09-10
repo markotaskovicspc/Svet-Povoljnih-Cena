@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logOperationalError } from "@/lib/monitoring";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   createReclamation,
@@ -43,10 +44,18 @@ export async function POST(req: Request) {
   if (!limited.ok) {
     return rateLimitJson(limited);
   }
-  const result =
-    user?.userType === "customer"
+  let result: Awaited<ReturnType<typeof createReclamation>>;
+  try {
+    result = user?.userType === "customer"
       ? await createReclamation(parsed.data, user.id)
       : await createGuestReclamation(parsed.data, readOrderAccessToken(req));
+  } catch (error) {
+    logOperationalError("reclamation.create_failed", error);
+    return NextResponse.json(
+      { ok: false, error: "creation_failed", message: "Slanje reklamacije trenutno nije uspelo. Pokušajte ponovo." },
+      { status: 500 },
+    );
+  }
   if (!result.ok) {
     return NextResponse.json(result, {
       status:
