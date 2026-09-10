@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { nextReclamationNumber, serializeReclamationHistory } from "@/lib/reclamation-options";
+import { formatReclamationDate, nextReclamationNumber, serializeReclamationHistory } from "@/lib/reclamation-options";
 import { ReclamationHistory } from "@/components/reclamation-history";
 
 describe("reclamation numbering and history", () => {
@@ -12,6 +12,20 @@ describe("reclamation numbering and history", () => {
       .toBe(`R-13-${order}`);
     expect(nextReclamationNumber(order, [`R-9007199254740993-${order}`]))
       .toBe(`R-9007199254740994-${order}`);
+  });
+
+  it("uses the Belgrade date around midnight regardless of the runtime time zone", () => {
+    const original = process.env.TZ;
+    try {
+      for (const zone of ["UTC", "Europe/Belgrade", "America/Los_Angeles"]) {
+        process.env.TZ = zone;
+        expect(formatReclamationDate("2026-09-10T22:05:00Z")).toBe("11. 9. 2026.");
+        expect(formatReclamationDate("2026-01-10T23:05:00Z")).toBe("11. 1. 2026.");
+      }
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
   });
 
   it("shows only the safe history summary in newest-first order and never blocks another submission", () => {

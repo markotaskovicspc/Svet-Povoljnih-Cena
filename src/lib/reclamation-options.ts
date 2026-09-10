@@ -40,3 +40,16 @@ export function nextReclamationNumber(orderNumber: string, numbers: string[]) {
   }
   return `R-${maximum + BigInt(1)}-${orderNumber}`;
 }
+
+/** Stable across the UTC server and the customer's browser time zone. */
+export function formatReclamationDate(value: string) {
+  const parts = new Intl.DateTimeFormat("sr-Latn-RS", {
+    timeZone: "Europe/Belgrade",
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value;
+  return `${part("day")}. ${part("month")}. ${part("year")}.`;
+}

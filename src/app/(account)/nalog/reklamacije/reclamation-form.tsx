@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ReclamationHistory } from "@/components/reclamation-history";
-import type { ReclamationItemOption } from "@/lib/reclamation-options";
+import { formatReclamationDate, type ReclamationItemOption } from "@/lib/reclamation-options";
 import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
 type OrderOption = {
@@ -357,7 +357,7 @@ export function ReclamationForm({
           {orders.map((order) => (
             <option key={order.number} value={order.number}>
               {order.number} ·{" "}
-              {new Date(order.createdAt).toLocaleDateString("sr-Latn-RS")}
+              {formatReclamationDate(order.createdAt)}
             </option>
           ))}
         </select>

@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { Field } from "@/components/admin/field";
 import { ReclamationHistory } from "@/components/reclamation-history";
-import type { ReclamationItemOption } from "@/lib/reclamation-options";
+import { formatReclamationDate, type ReclamationItemOption } from "@/lib/reclamation-options";
 
 type OrderSuggestion = {
   number: string;
@@ -138,9 +138,7 @@ export function ReclamationOrderFields() {
                     <span className="truncate text-xs text-ink-500">
                       {order.receiptNumber
                         ? `Račun ${order.receiptNumber}`
-                        : new Date(order.createdAt).toLocaleDateString(
-                            "sr-Latn-RS",
-                          )}
+                        : formatReclamationDate(order.createdAt)}
                     </span>
                   </button>
                 ))

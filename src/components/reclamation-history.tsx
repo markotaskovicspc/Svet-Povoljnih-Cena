@@ -1,4 +1,4 @@
-import type { ReclamationHistoryEntry } from "@/lib/reclamation-options";
+import { formatReclamationDate, type ReclamationHistoryEntry } from "@/lib/reclamation-options";
 
 const STATUS_LABELS = {
   PRIMLJENO: "Primljeno",
@@ -23,7 +23,7 @@ export function ReclamationHistory({ entries }: { entries: ReclamationHistoryEnt
           {entries.map((entry) => (
             <li key={entry.number}>
               <span className="font-mono">{entry.number}</span>
-              {" · "}{new Date(entry.createdAt).toLocaleDateString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })}
+              {" · "}{formatReclamationDate(entry.createdAt)}
               {" · "}{entry.quantity} kom · {STATUS_LABELS[entry.status]}
             </li>
           ))}
