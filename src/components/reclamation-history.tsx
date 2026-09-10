@@ -10,7 +10,7 @@ const STATUS_LABELS = {
 export function ReclamationHistory({ entries }: { entries: ReclamationHistoryEntry[] }) {
   if (!entries.length) return null;
   return (
-    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm" data-testid="reclamation-history">
+    <div className="min-w-0 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm" data-testid="reclamation-history">
       <p role="status">
         Za ovaj artikal već postoje reklamacije. Možete podneti novu prijavu,
         uključujući prijavu za isti komad.
@@ -22,7 +22,7 @@ export function ReclamationHistory({ entries }: { entries: ReclamationHistoryEnt
         <ul className="mt-2 space-y-2">
           {entries.map((entry) => (
             <li key={entry.number}>
-              <span className="font-mono">{entry.number}</span>
+              <span className="break-all font-mono">{entry.number}</span>
               {" · "}{formatReclamationDate(entry.createdAt)}
               {" · "}{entry.quantity} kom · {STATUS_LABELS[entry.status]}
             </li>

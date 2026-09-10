@@ -305,7 +305,7 @@ export function ReclamationForm({
           Reklamacija je prijavljena
         </h3>
         <p className="mt-1 text-sm text-ink-700">
-          Broj reklamacije: <span className="font-mono">{success}</span>
+          Broj reklamacije: <span className="break-all font-mono">{success}</span>
         </p>
         <p className="mt-2 text-sm text-ink-600">
           {guest
@@ -339,8 +339,8 @@ export function ReclamationForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-5 grid gap-4" noValidate>
-      <div className="grid gap-2">
+    <form onSubmit={handleSubmit} className="mt-5 grid min-w-0 grid-cols-1 gap-4" noValidate>
+      <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label htmlFor="orderNumber">Porudžbina</Label>
         <select
           id="orderNumber"
@@ -352,7 +352,7 @@ export function ReclamationForm({
             setSku(next?.items[0]?.sku ?? "");
             setQuantity(1);
           }}
-          className="h-11 rounded-lg border border-input bg-white px-2.5 text-sm"
+          className="h-11 w-full min-w-0 rounded-lg border border-input bg-white px-2.5 text-sm"
         >
           {orders.map((order) => (
             <option key={order.number} value={order.number}>
@@ -363,7 +363,7 @@ export function ReclamationForm({
         </select>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label htmlFor="sku">Artikal</Label>
         <select
           id="sku"
@@ -373,7 +373,7 @@ export function ReclamationForm({
             setSku(e.target.value);
             setQuantity(1);
           }}
-          className="h-11 rounded-lg border border-input bg-white px-2.5 text-sm"
+          className="h-11 w-full min-w-0 rounded-lg border border-input bg-white px-2.5 text-sm"
         >
           {selectedOrder?.items.map((item) => (
             <option key={item.sku} value={item.sku}>
@@ -388,7 +388,7 @@ export function ReclamationForm({
 
       <ReclamationHistory entries={selectedItem?.reclamations ?? []} />
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label htmlFor="quantity">Količina za reklamaciju</Label>
         <Input
           id="quantity"
@@ -408,7 +408,7 @@ export function ReclamationForm({
         ) : null}
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label htmlFor="description">Komentar / opis problema</Label>
         <Textarea
           id="description"
@@ -427,7 +427,7 @@ export function ReclamationForm({
         </div>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label>
           Fotografije (do {MAX_PHOTOS}, automatski optimizovane na 1600 px i do 2 MB)
         </Label>
