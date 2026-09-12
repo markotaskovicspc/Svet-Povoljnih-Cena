@@ -1,0 +1,72 @@
+[
+  {
+    "name": "cube-v6/v6-blendkit-fiber-normal",
+    "originalBytes": 353817,
+    "bytes": 156533,
+    "psnrDb": 45.44163858705113,
+    "meanAbsoluteRgbDifferenceOf255": 0.9420013427734375
+  },
+  {
+    "name": "cube-v6/v6-blendkit-fabric-roughness",
+    "originalBytes": 250438,
+    "bytes": 150730,
+    "psnrDb": 43.877434985767735,
+    "meanAbsoluteRgbDifferenceOf255": 1.0203183492024739
+  },
+  {
+    "name": "cube-v6/USDZ/v6-blendkit-fabric-roughness.png",
+    "originalBytes": 250985,
+    "bytes": 110976,
+    "psnrDb": 46.54918514112076,
+    "meanAbsoluteRgbDifferenceOf255": 0.8928794860839844
+  },
+  {
+    "name": "cube-v6/USDZ/v6-blendkit-fiber-normal.png",
+    "originalBytes": 353817,
+    "bytes": 156533,
+    "psnrDb": 45.44163858705113,
+    "meanAbsoluteRgbDifferenceOf255": 0.9420013427734375
+  },
+  {
+    "name": "x-desk-v2/v2-blendkit-metal-normal",
+    "originalBytes": 67485,
+    "bytes": 41752,
+    "psnrDb": 45.519477480506595,
+    "meanAbsoluteRgbDifferenceOf255": 0.878387451171875
+  },
+  {
+    "name": "x-desk-v2/v2-blendkit-metal-roughness",
+    "originalBytes": 68778,
+    "bytes": 42926,
+    "psnrDb": 42.87792836527472,
+    "meanAbsoluteRgbDifferenceOf255": 1.1517079671223958
+  },
+  {
+    "name": "x-desk-v2/v2-blendkit-oak-roughness",
+    "originalBytes": 195303,
+    "bytes": 79809,
+    "psnrDb": 47.454019256046806,
+    "meanAbsoluteRgbDifferenceOf255": 0.6692975362141927
+  },
+  {
+    "name": "x-desk-v2/USDZ/v2-blendkit-metal-normal.png",
+    "originalBytes": 67485,
+    "bytes": 41752,
+    "psnrDb": 45.519477480506595,
+    "meanAbsoluteRgbDifferenceOf255": 0.878387451171875
+  },
+  {
+    "name": "x-desk-v2/USDZ/v2-blendkit-metal-roughness.png",
+    "originalBytes": 67988,
+    "bytes": 30026,
+    "psnrDb": 46.50071101409878,
+    "meanAbsoluteRgbDifferenceOf255": 0.8956756591796875
+  },
+  {
+    "name": "x-desk-v2/USDZ/v2-blendkit-oak-roughness.png",
+    "originalBytes": 198398,
+    "bytes": 66576,
+    "psnrDb": 48.91491592188964,
+    "meanAbsoluteRgbDifferenceOf255": 0.6388282775878906
+  }
+]

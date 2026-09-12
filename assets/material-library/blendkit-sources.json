@@ -1,0 +1,41 @@
+[
+  {
+    "id": "f1ac6572-e60a-40cf-8617-1db25657bfa0",
+    "assetBaseId": "e4e4c225-8dbd-4bd2-a5da-8bcacae67249",
+    "displayName": "Ribbed Corduroy",
+    "license": "cc_zero",
+    "resolution": "resolution_1K",
+    "page": "https://www.blendkit.com/asset-gallery-detail/e4e4c225-8dbd-4bd2-a5da-8bcacae67249/",
+    "local_file": "corduroy.blend",
+    "bytes": 10568548,
+    "sha256": "fecf3c207cabd1f2aba2d61d027fdc36d89820b107107e4913b44f58c941aebf",
+    "author": "Poly Haven",
+    "use": "CUBE: residual microfiber normal and roughness only; source color and wale profile excluded."
+  },
+  {
+    "id": "1111327e-e56d-49ef-837d-525f1211b70d",
+    "assetBaseId": "d484a9ce-2084-4884-a6d0-41b11a8e29c2",
+    "displayName": "Oak Wood Natural Clean",
+    "license": "cc_zero",
+    "resolution": "resolution_1K",
+    "page": "https://www.blendkit.com/asset-gallery-detail/d484a9ce-2084-4884-a6d0-41b11a8e29c2/",
+    "local_file": "oak-cc0.blend",
+    "bytes": 707943,
+    "sha256": "3178e12fdcec26e7b963f96e4eb2cf1ae0cda1d168f640441683c1c1c502d0f4",
+    "author": "Tomasz Bartkowiak-Ketzler",
+    "use": "X DESK: restrained roughness only; original photographed oak color retained."
+  },
+  {
+    "id": "beca0bbf-e8a6-4f4d-9221-ce1622371545",
+    "assetBaseId": "c823c2e8-ae50-43bf-aa4a-77f1ee446e70",
+    "displayName": "Powder Coated Metal",
+    "license": "cc_zero",
+    "resolution": "blend",
+    "page": "https://www.blendkit.com/asset-gallery-detail/c823c2e8-ae50-43bf-aa4a-77f1ee446e70/",
+    "local_file": "metal.blend",
+    "bytes": 82546,
+    "sha256": "71e0b94e0fa73f80b5ddbeb828f104d25f1d142ff52322a5ac41c888f7625bee",
+    "author": "Julix",
+    "use": "X DESK: baked powder-coat normal and roughness; original black color retained."
+  }
+]

@@ -10,7 +10,11 @@ The 1024² JPEG atlas is perspective-rectified from the original desktop in 01 a
 
 Only the outer dimensions are published measurements. Member sections, panel thickness, fasteners and obscured joints are estimated from photos. Unphotographed underside / reverse panel reuse the original oak decor. Paint and laminate roughness are estimates, not measured material scans. No normal map is fabricated from photographic illumination.
 
-## Repeatable local build
+## Current material revision
+
+Version v2 adds CC0 Blendkit surface maps while preserving the original photographed color and geometry. Use `x-desk-blendkit.blend` for the current source. See [material refinement](../material-library/README.md) for delivery sizes, provenance and the current export/publish workflow. The commands below describe the original v1 reconstruction; the publish script now expects v2.
+
+## Original local build
 
 From the application root:
 
@@ -20,7 +24,6 @@ node scripts/blender/validate-x-desk.mjs
 /tmp/cube-usd-venv/bin/python scripts/blender/validate_x_desk_usdz.py
 /Applications/Blender.app/Contents/MacOS/Blender -b --python scripts/blender/render_x_desk_roundtrip.py
 node scripts/blender/prepare-x-desk.mjs
-node scripts/blender/publish-x-desk-storage.mjs
 ```
 
 USD validation uses usd-core 25.11 with the official shader resources restored by `scripts/blender/bootstrap_cube_usd.py` when needed. Render outputs stay local. The compact packed `.blend`, repeatable script, original references, atlas and validation reports are kept in Git.

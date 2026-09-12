@@ -1,0 +1,43 @@
+[
+  {
+    "folder": "cube-210030",
+    "size_m": [
+      0.800000011920929,
+      0.7100000381469729,
+      0.8000000119209291
+    ],
+    "floor_y": -8.88178432935015e-17,
+    "bytes": 1967117,
+    "sha256": "68564c936536bc6db76a3612a43684830796e0d3e9abd508d8a24af84166fadb",
+    "errors": [],
+    "failed_checks": [],
+    "warnings": [],
+    "textures": [
+      "textures/v6-blendkit-fiber-normal.jpg",
+      "textures/v6-blendkit-fabric-roughness.jpg",
+      "textures/v5-original-panel-atlas.jpg"
+    ],
+    "original_basecolor_unchanged": true
+  },
+  {
+    "folder": "x-desk-210027",
+    "size_m": [
+      0.699999988079071,
+      0.7400000095367432,
+      0.47999998927116394
+    ],
+    "floor_y": -4.773959085297512e-17,
+    "bytes": 397764,
+    "sha256": "0536c98d910d3e56a9a0ebe0fc64345fae7345c8f0e979a2dc4ac5c2ce44a6aa",
+    "errors": [],
+    "failed_checks": [],
+    "warnings": [],
+    "textures": [
+      "textures/v2-blendkit-oak-roughness.jpg",
+      "textures/oak-photo-atlas-v1.jpg",
+      "textures/v2-blendkit-metal-normal.jpg",
+      "textures/v2-blendkit-metal-roughness.jpg"
+    ],
+    "original_basecolor_unchanged": true
+  }
+]

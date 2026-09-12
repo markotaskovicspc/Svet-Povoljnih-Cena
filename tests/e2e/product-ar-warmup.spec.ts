@@ -20,7 +20,7 @@ test("photo finishes first; prepared model opens without another model transfer"
   const gate = new Promise<void>(resolve => { releasePhoto = resolve; });
   await page.route("**/models/cube-210030/original.webp", async route => { await gate; await route.continue(); });
   let requests = 0;
-  page.on("request", req => { if (req.url().endsWith("cube-v5.glb")) requests++; });
+  page.on("request", req => { if (req.url().endsWith("cube-v6.glb")) requests++; });
   await visit(page);
   try {
     await page.waitForTimeout(1400); // Longer than the warmup delay, with the hero still blocked.
@@ -68,7 +68,7 @@ for (const policy of ["save-data", "slow-connection"]) {
     await page.waitForTimeout(1500);
     await expect(page.locator("model-viewer")).toHaveCount(0);
     expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);
-    expect(await page.evaluate(() => performance.getEntriesByType("resource").some(x => x.name.endsWith("cube-v5.glb")))).toBe(false);
+    expect(await page.evaluate(() => performance.getEntriesByType("resource").some(x => x.name.endsWith("cube-v6.glb")))).toBe(false);
   });
 }
 

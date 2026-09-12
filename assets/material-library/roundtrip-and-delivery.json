@@ -1,0 +1,49 @@
+{
+  "ranges": [
+    {
+      "slug": "100010-6b45ec",
+      "field": "glbUrl",
+      "status": 206,
+      "range": "bytes 0-63/1648864",
+      "mime": "model/gltf-binary",
+      "cors": "*"
+    },
+    {
+      "slug": "100010-6b45ec",
+      "field": "usdzUrl",
+      "status": 206,
+      "range": "bytes 0-63/1967117",
+      "mime": "model/vnd.usdz+zip",
+      "cors": "*"
+    },
+    {
+      "slug": "100010-9ce68e",
+      "field": "glbUrl",
+      "status": 206,
+      "range": "bytes 0-63/475856",
+      "mime": "model/gltf-binary",
+      "cors": "*"
+    },
+    {
+      "slug": "100010-9ce68e",
+      "field": "usdzUrl",
+      "status": 206,
+      "range": "bytes 0-63/397764",
+      "mime": "model/vnd.usdz+zip",
+      "cors": "*"
+    }
+  ],
+  "renders": [
+    {
+      "folder": "cube-210030",
+      "meanRgbDifferenceOf255": 3.6468868055555554,
+      "visuallyReviewed": true
+    },
+    {
+      "folder": "x-desk-210027",
+      "meanRgbDifferenceOf255": 1.5889576666666667,
+      "visuallyReviewed": true
+    }
+  ],
+  "physicalDeviceAr": "unverified"
+}

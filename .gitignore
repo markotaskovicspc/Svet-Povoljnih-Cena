@@ -68,3 +68,10 @@ next-env.d.ts
 /public/models/x-desk-210027/*.glb
 /public/models/x-desk-210027/*.usdz
 /public/models/x-desk-210027/poster-*.webp
+
+# Downloaded source material libraries and local material review renders
+/assets/material-library/blendkit/
+/assets/material-library/*.png
+/assets/material-library/*.webp
+/assets/cube-210030/poster-*.webp
+/public/models/cube-210030/poster-*.webp

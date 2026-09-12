@@ -1,0 +1,37 @@
+{
+  "bucket": "product-models",
+  "public": true,
+  "project": "vyebjbcfhgujlvjnoxpl.supabase.co",
+  "verified": [
+    {
+      "object": "cube-210030/cube-v6.glb",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v6.glb",
+      "action": "uploaded",
+      "bytes": 1648864,
+      "sha256": "533043546437ae5188f495fac19a34f8298b2648a03da24625a9b1b7dc33087d",
+      "mime": "model/gltf-binary",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    },
+    {
+      "object": "cube-210030/cube-v6.usdz",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v6.usdz",
+      "action": "uploaded",
+      "bytes": 1967117,
+      "sha256": "68564c936536bc6db76a3612a43684830796e0d3e9abd508d8a24af84166fadb",
+      "mime": "model/vnd.usdz+zip",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    },
+    {
+      "object": "cube-210030/poster-v6.webp",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/poster-v6.webp",
+      "action": "uploaded",
+      "bytes": 45462,
+      "sha256": "8d4695281a29aba236b363fe8496711b3ba6da4fb805f8da4386f73b8e0b4038",
+      "mime": "image/webp",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    }
+  ]
+}

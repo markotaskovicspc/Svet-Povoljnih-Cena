@@ -22,9 +22,9 @@ if (!existing) {
   assert.equal(existing.public, true, 'Refusing to change an existing private bucket');
 }
 const assets = [
-  ['glbUrl', 'cube-v5.glb', types[0]],
-  ['usdzUrl', 'cube-v5.usdz', types[1]],
-  ['posterUrl', 'poster-v4.webp', types[2]],
+  ['glbUrl', 'cube-v6.glb', types[0]],
+  ['usdzUrl', 'cube-v6.usdz', types[1]],
+  ['posterUrl', 'poster-v6.webp', types[2]],
 ];
 const manifest = {}, verified = [];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -50,6 +50,6 @@ for (const [field, filename, contentType] of assets) {
   verified.push({ object, publicUrl, action, bytes: bytes.length, sha256: sha(bytes), mime: response.headers.get('content-type'), cache: response.headers.get('cache-control'), cors: response.headers.get('access-control-allow-origin') });
 }
 await writeFile('src/lib/product-ar-storage.json', JSON.stringify({ ...JSON.parse(await readFile('src/lib/product-ar-storage.json', 'utf8')), '100010-6b45ec': manifest }, null, 2) + '\n');
-await mkdir('assets/cube-210030/qa/storage', { recursive: true });
-await writeFile('assets/cube-210030/qa/storage/upload.json', JSON.stringify({ bucket, public: true, project: new URL(url).hostname, verified }, null, 2) + '\n');
+await mkdir('assets/cube-210030/qa/blendkit-storage', { recursive: true });
+await writeFile('assets/cube-210030/qa/blendkit-storage/upload.json', JSON.stringify({ bucket, public: true, project: new URL(url).hostname, verified }, null, 2) + '\n');
 console.log(JSON.stringify({ bucket, verified }, null, 2));

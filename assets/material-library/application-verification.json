@@ -1,0 +1,21 @@
+{
+  "build": "VERCEL_ENV=development npm run build: passed in isolated worktree",
+  "lint": "changed JS/TS files: passed",
+  "unit": "product-ar: 6 passed",
+  "browser": "38 passed, 2 expected desktop-only skips; desktop Chromium and Pixel 7 emulation",
+  "browser_scope": [
+    "photo first",
+    "model loading and embedded materials",
+    "rotation and zoom",
+    "full screen and no underside view",
+    "photo fallback and retry",
+    "idle warmup and save-data/slow-connection opt-out",
+    "QR target and native AR links",
+    "product without model"
+  ],
+  "physicalDeviceAr": "unverified",
+  "logs": [
+    "/tmp/blendkit-build.log",
+    "/tmp/blendkit-e2e.log"
+  ]
+}
