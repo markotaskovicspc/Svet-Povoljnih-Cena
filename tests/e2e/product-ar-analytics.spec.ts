@@ -128,8 +128,13 @@ test("room CTA explanation fits one line on narrow phones and desktop", async ({
   if (isMobile) await page.setViewportSize({width:320,height:740});
   await page.goto(`/p/${slug}`);
   const caption = page.locator("[data-ar-caption]").filter({visible:true});
-  await expect(caption).toHaveText("Uz kameru telefona, vidi ga u sobi.");
-  const box = await caption.evaluate(el => ({width:el.clientWidth, scroll:el.scrollWidth, height:el.getBoundingClientRect().height, line:parseFloat(getComputedStyle(el).lineHeight)}));
+  await expect(caption).toHaveText("Pogledaj kako izgleda u tvojoj sobi — kroz kameru.");
+  const box = await caption.evaluate(el => {
+    const parent = el.parentElement!;
+    const style = getComputedStyle(parent);
+    return {width:el.clientWidth, scroll:el.scrollWidth, height:el.getBoundingClientRect().height, line:parseFloat(getComputedStyle(el).lineHeight), available:parent.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)};
+  });
   expect(box.scroll).toBeLessThanOrEqual(box.width);
+  expect(box.width).toBeLessThanOrEqual(box.available);
   expect(box.height).toBeLessThanOrEqual(box.line + 1);
 });

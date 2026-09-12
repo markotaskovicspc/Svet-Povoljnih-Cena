@@ -18,7 +18,7 @@ Admin → Analitika → **3D i AR**, ili `/admin/erp/3d-ar`. Dostupno ulozi ADS 
 - Korpa i poručivanje: isti proizvod/pregledač, do 30 dana nakon prikaza AR dugmeta. Poručivanje je završen checkout, ne potvrđena naplata; može obuhvatiti kasnije otkazanu porudžbinu.
 - Kartica „Poručili posle korišćenja” koristi početak prve 3D interakcije ili AR pokušaja. Korelacija korišćenja i kupovine ne dokazuje uzročnost.
 
-A/B eksperiment `ar-copy-v2`: A „Pogledaj u svojoj sobi”, B „Isprobaj u svojoj sobi”. Ispod: „Uz kameru telefona, vidi ga u sobi.” Stari v1 rezultati ostaju dostupni kroz izbor verzije poruka; ne mešaju se sa v2. Nasumična 50/50 dodela ostaje u pregledaču uz analitičku saglasnost. Bez saglasnosti prikazuje se A bez detaljne analitike i čuvanja eksperimenta. QR prenosi varijantu i UTM kontekst bez identifikatora posetioca. Izveštaj grupiše prvi kontekst proizvoda/pregledača u izabranom periodu. U poređenje konverzije ulaze i posetioci koji su videli dugme, a nisu ga koristili.
+A/B eksperiment `ar-copy-v2`: A „Pogledaj u svojoj sobi”, B „Isprobaj u svojoj sobi”. Ispod: „Pogledaj kako izgleda u tvojoj sobi — kroz kameru.” Stari v1 rezultati ostaju dostupni kroz izbor verzije poruka; ne mešaju se sa v2. Nasumična 50/50 dodela ostaje u pregledaču uz analitičku saglasnost. Bez saglasnosti prikazuje se A bez detaljne analitike i čuvanja eksperimenta. QR prenosi varijantu i UTM kontekst bez identifikatora posetioca. Izveštaj grupiše prvi kontekst proizvoda/pregledača u izabranom periodu. U poređenje konverzije ulaze i posetioci koji su videli dugme, a nisu ga koristili.
 
 ## Linkovi za oglase
 
