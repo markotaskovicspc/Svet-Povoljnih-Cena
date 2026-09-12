@@ -284,7 +284,7 @@ async function updateReclamationDetails(formData: FormData) {
           replacementQty: true,
           pickupBatchLines: {
             where: { purpose: "RECLAMATION_REPLACEMENT" },
-            select: { id: true },
+            select: { id: true, batch: { select: { number: true } } },
             take: 1,
           },
         },
@@ -312,7 +312,7 @@ async function updateReclamationDetails(formData: FormData) {
         return {
           ok: false as const,
           error:
-            "Zamena je već u picking nalogu. Prvo je uklonite iz naloga, pa promenite vrstu zamene.",
+            `Zamena je u picking nalogu ${current.pickupBatchLines[0].batch.number}. Otvorite detalj reklamacije i kliknite „Ukloni zamenu iz picking naloga“, pa promenite vrstu zamene.`,
         };
       }
       await db.reclamation.update({
@@ -326,7 +326,6 @@ async function updateReclamationDetails(formData: FormData) {
           resolutionNote,
         },
       });
-      await queueReclamationReplacement(id, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
       revalidatePath("/admin/erp/preuzimanja");
       return {
@@ -368,7 +367,6 @@ async function updateWarehouse(formData: FormData) {
         return { ok: false as const, error: "Izaberite magacin i status pripreme." };
       }
       await saveReclamationWarehouse({ reclamationId, warehouseId, status });
-      await queueReclamationReplacement(reclamationId, actorId);
       revalidatePath("/admin/erp/reklamacije-dnevnik");
       revalidatePath("/admin/erp/preuzimanja");
       return {

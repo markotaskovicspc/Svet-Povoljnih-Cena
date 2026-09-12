@@ -9,6 +9,10 @@ import {
   listOrdersForReclamation,
 } from "@/lib/api/reclamations";
 import { applyShipmentEvent } from "@/lib/courier/registry";
+import {
+  queueReclamationReplacement,
+  removeReclamationReplacementFromPicking,
+} from "@/lib/admin/pickup-batch.server";
 
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: async () => null,
@@ -91,6 +95,64 @@ afterAll(async () => {
 });
 
 describe("quantity-aware reclamation fulfillment", () => {
+  it("removes only the selected replacement, allows requeue, and protects courier work", async () => {
+    await db.product.update({
+      where: { id: productId },
+      data: { unitPackWidthCm: 30, unitPackDepthCm: 20, unitPackHeightCm: 10, grossWeightKg: 2 },
+    });
+    const claim = await db.reclamation.create({
+      data: {
+        number: `${tag}-PICKING`, orderId, orderItemId, productId,
+        sku: `${tag}-SKU`, quantity: 2, replacementQty: 2,
+        customerFirst: "QA", customerLast: "Picking", description: "Picking removal regression",
+        notifyVia: "EMAIL", decision: "PRIHVACENA", resolution: "ZAMENA_ARTIKLA",
+        warehouseId, warehouseStatus: "READY",
+      },
+    });
+    const queued = await queueReclamationReplacement(claim.id, userId);
+    if (!queued.queued) throw new Error(queued.reason);
+    const batchId = queued.batchId;
+    let shipmentId: string | undefined;
+    try {
+      const otherLine = await db.pickupBatchLine.create({
+        data: { batchId, orderId, orderItemId, lineGroupKey: `order:${orderId}:X_EXPRESS` },
+      });
+      const removed = await removeReclamationReplacementFromPicking(claim.id, userId);
+      expect(removed).toMatchObject({ removedLineCount: 2, reclamationIds: [claim.id], lineGroupKey: `reclamation:${claim.id}` });
+      expect(await db.pickupBatchLine.count({ where: { reclamationId: claim.id } })).toBe(0);
+      expect(await db.pickupBatchLine.findUnique({ where: { id: otherLine.id } })).not.toBeNull();
+      expect(await db.reclamationStatusEvent.count({
+        where: { reclamationId: claim.id, note: `Zamena je uklonjena iz picking naloga ${removed.batchNumber}.` },
+      })).toBe(1);
+      await expect(removeReclamationReplacementFromPicking(claim.id, userId)).rejects.toThrow("više nije u picking");
+
+      await db.reclamation.update({
+        where: { id: claim.id },
+        data: { resolution: "ZAMENA_DELA", replacementQty: 0, resolutionNote: "Naslon" },
+      });
+      expect((await queueReclamationReplacement(claim.id, userId)).queued).toBe(true);
+      expect(await db.pickupBatchLine.findMany({ where: { reclamationId: claim.id } })).toMatchObject([{ quantity: 0 }]);
+
+      await db.pickupBatch.update({ where: { id: batchId }, data: { labelsCreationStartedAt: new Date() } });
+      await expect(removeReclamationReplacementFromPicking(claim.id, userId)).rejects.toThrow("zaključan");
+      await db.pickupBatch.update({ where: { id: batchId }, data: { labelsCreationStartedAt: null, status: "BOOKED" } });
+      await expect(removeReclamationReplacementFromPicking(claim.id, userId)).rejects.toThrow("Samo novi nalog");
+      await db.pickupBatch.update({ where: { id: batchId }, data: { status: "DRAFT" } });
+      const shipment = await db.shipment.create({
+        data: { orderId, reclamationId: claim.id, purpose: "RECLAMATION_REPLACEMENT", service: "COURIER_SMALL", provider: "X_EXPRESS", status: "CREATED" },
+      });
+      shipmentId = shipment.id;
+      await expect(removeReclamationReplacementFromPicking(claim.id, userId)).rejects.toThrow("Kurirski nalog za zamenu već postoji");
+      expect(await db.pickupBatchLine.count({ where: { reclamationId: claim.id } })).toBe(1);
+      await db.shipment.update({ where: { id: shipmentId }, data: { status: "FAILED" } });
+      await expect(removeReclamationReplacementFromPicking(claim.id, userId)).resolves.toMatchObject({ removedLineCount: 1 });
+    } finally {
+      if (shipmentId) await db.shipment.delete({ where: { id: shipmentId } });
+      await db.pickupBatch.delete({ where: { id: batchId } });
+      await db.reclamation.delete({ where: { id: claim.id } });
+    }
+  });
+
   it("does not expose or accept customer and guest claims before delivery", async () => {
     const input = {
       orderNumberOrFiscal: `${tag}-ORDER`,

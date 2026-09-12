@@ -15,10 +15,11 @@ import {
   createReclamationShipment,
   saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
-import { queueReclamationReplacement } from "@/lib/admin/pickup-batch.server";
+import { queueReclamationReplacement, removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batch.server";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
+import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -75,7 +76,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.detailsUpdate", entity: "Reclamation" },
-    async (actorId, formData: FormData) => {
+    async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
       const resolutionRaw = String(formData.get("resolution") ?? "");
@@ -101,7 +102,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           resolution: true,
           pickupBatchLines: {
             where: { purpose: "RECLAMATION_REPLACEMENT" },
-            select: { id: true },
+            select: { id: true, batch: { select: { number: true } } },
             take: 1,
           },
         },
@@ -151,7 +152,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
         return {
           ok: false as const,
           error:
-            "Zamena je već u picking nalogu. Prvo je uklonite iz naloga, pa promenite vrstu ili količinu zamene.",
+            `Zamena je u picking nalogu ${reclamation.pickupBatchLines[0].batch.number}. Kliknite „Ukloni zamenu iz picking naloga“ iznad odluke, pa promenite vrstu ili količinu zamene.`,
         };
       }
       await db.reclamation.update({
@@ -165,14 +166,31 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           resolutionNote,
         },
       });
-      const queue = await queueReclamationReplacement(id, actorId);
       refresh(id);
       return {
         ok: true as const,
         entityId: id,
-        message: queue.queued
-          ? "Odluka je sačuvana, a zamena je dodata u odgovarajući picking nalog."
-          : "Odluka i način rešavanja su sačuvani.",
+        message: "Odluka i način rešavanja su sačuvani. Dodavanje u picking je zaseban korak.",
+      };
+    },
+  )(formData);
+}
+
+async function removeReplacementAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "reclamation.pickingRemove", entity: "Reclamation" },
+    async (actorId, data: FormData) => {
+      const id = String(data.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
+      const result = await removeReclamationReplacementFromPicking(id, actorId);
+      refresh(id);
+      revalidatePath(`/admin/erp/preuzimanja/${result.batchId}`);
+      return {
+        ok: true as const,
+        entityId: id,
+        diff: result,
+        message: `Zamena je uklonjena iz ${result.batchNumber}. Sada promenite i sačuvajte odluku.`,
       };
     },
   )(formData);
@@ -182,7 +200,7 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
-    async (actorId, formData: FormData) => {
+    async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");
       const status = String(formData.get("warehouseStatus") ?? "") as ReclamationWarehouseStatus;
@@ -190,14 +208,11 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
         return { ok: false as const, error: "Izaberite magacin i status pripreme." };
       }
       await saveReclamationWarehouse({ reclamationId: id, warehouseId, status });
-      const queue = await queueReclamationReplacement(id, actorId);
       refresh(id);
       return {
         ok: true as const,
         entityId: id,
-        message: queue.queued
-          ? "Magacinski zadatak je sačuvan, a zamena je u picking nalogu."
-          : "Magacinski zadatak je sačuvan.",
+        message: "Magacinski zadatak je sačuvan. Dodavanje u picking je zaseban korak.",
       };
     },
   )(formData);
@@ -219,6 +234,7 @@ async function queueReplacementAction(_state: AdminActionState, formData: FormDa
         message: result.alreadyQueued
           ? "Zamena je već u picking nalogu."
           : "Zamena je dodata u odgovarajući picking nalog.",
+        diff: { batchId: result.batchId, alreadyQueued: result.alreadyQueued },
       };
     },
   )(formData);
@@ -302,7 +318,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           where: { purpose: "RECLAMATION_REPLACEMENT" },
           take: 1,
           include: {
-            batch: { select: { id: true, number: true, provider: true, status: true } },
+            batch: { select: { id: true, number: true, provider: true, status: true, labelsCreationStartedAt: true, labelsCreatedAt: true } },
           },
         },
       },
@@ -316,6 +332,9 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
   if (!reclamation) notFound();
   const signedPhotos = await signReclamationPhotoUrls(reclamation.photos.map((photo) => photo.url));
   const replacementPicking = reclamation.pickupBatchLines[0]?.batch ?? null;
+  const replacementShipment = reclamation.shipments.find(
+    (shipment) => shipment.purpose === "RECLAMATION_REPLACEMENT" && shipment.status !== "FAILED",
+  );
 
   return (
     <>
@@ -348,6 +367,32 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
         <div className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardTitle description="Količina reklamiranih proizvoda ostaje pravni podatak, a količina celih artikala za slanje govori magacinu šta zaista priprema. Za deo unesite 0 i napišite tačan naziv dela.">Odluka i rešenje</CardTitle>
+            {replacementShipment ? (
+              <p className="mb-4 rounded-lg bg-muted-bg p-3 text-sm" data-testid="reclamation-picking-state">
+                Zamena · Kurirski nalog: {SHIPMENT_STATUS_LABEL[replacementShipment.status]}
+              </p>
+            ) : replacementPicking ? (
+              <div className="mb-4 rounded-lg border border-border bg-muted-bg p-3 text-sm">
+                <p data-testid="reclamation-picking-state">
+                  Ova zamena je u nalogu{" "}
+                  <Link href={`/admin/erp/preuzimanja/${replacementPicking.id}`} className="font-semibold text-walnut hover:underline">{replacementPicking.number}</Link>.
+                  {" "}Za promenu vrste ili količine uklonite zamenu iz tog naloga.
+                </p>
+                {replacementPicking.status === "DRAFT" && !replacementPicking.labelsCreationStartedAt && !replacementPicking.labelsCreatedAt ? (
+                  <AdminActionForm action={removeReplacementAction} className="mt-3">
+                    <input type="hidden" name="id" value={reclamation.id} />
+                    <SubmitButton size="sm" variant="outline" pendingLabel="Uklanjam…" confirm={`Ukloniti samo zamenu za ${reclamation.number} iz naloga ${replacementPicking.number}?`}>
+                      Ukloni zamenu iz picking naloga
+                    </SubmitButton>
+                    <p className="mt-2 text-xs text-ink-500">Posle uklanjanja sačuvajte izmene, pa kliknite „Dodaj u picking listu“ kada je zamena spremna za pripremu.</p>
+                  </AdminActionForm>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mb-4 rounded-lg bg-muted-bg p-3 text-sm" data-testid="reclamation-picking-state">
+                Zamena nije u picking nalogu. Sačuvajte odluku i magacinski zadatak, pa kliknite „Dodaj u picking listu“.
+              </p>
+            )}
             <AdminActionForm action={saveDetailsAction} preserveValues className="space-y-4">
               <input type="hidden" name="id" value={reclamation.id} />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -376,7 +421,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           <CardTitle description="Kod zamene kreirajte oba naloga: povrat starog artikla i isporuku novog. Kod običnog povrata kreira se samo preuzimanje od kupca.">Kurirski tok</CardTitle>
           <div className="grid gap-4 lg:grid-cols-2">
             {(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const).map((purpose) => {
-              const shipment = reclamation.shipments.find((row) => row.purpose === purpose);
+              const shipment = reclamation.shipments.find((row) => row.purpose === purpose && row.status !== "FAILED");
               return (
                 <div key={purpose} className="rounded-lg border border-border p-4">
                   <h3 className="font-semibold">{PURPOSE_LABELS[purpose]}</h3>

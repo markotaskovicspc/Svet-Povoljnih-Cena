@@ -137,6 +137,10 @@ async function removeGroupAction(
         actorId,
       );
       revalidatePickupPaths(parsed.data.batchId);
+      for (const id of result.reclamationIds) {
+        revalidatePath(`/admin/erp/reklamacije-dnevnik/${id}`);
+      }
+      revalidatePath("/admin/erp/reklamacije-dnevnik");
       return {
         ok: true as const,
         entityId: parsed.data.batchId,

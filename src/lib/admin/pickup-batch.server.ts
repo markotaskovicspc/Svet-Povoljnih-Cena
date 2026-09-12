@@ -766,6 +766,18 @@ export async function removeOrderFromPickupBatch(
   }, TRANSACTION_OPTIONS);
 }
 
+export async function removeReclamationReplacementFromPicking(
+  reclamationId: string,
+  actorId: string,
+) {
+  const line = await db.pickupBatchLine.findFirst({
+    where: { reclamationId, purpose: "RECLAMATION_REPLACEMENT" },
+    select: { batchId: true, lineGroupKey: true },
+  });
+  if (!line) throw new Error("Zamena više nije u picking nalogu. Osvežite stranicu.");
+  return removePickupGroupFromBatch(line.batchId, line.lineGroupKey, actorId);
+}
+
 export async function removePickupGroupFromBatch(
   batchId: string,
   lineGroupKey: string,
@@ -786,10 +798,30 @@ export async function removePickupGroupFromBatch(
     assertEditableBatch(batch);
     const lines = await tx.pickupBatchLine.findMany({
       where: { batchId, lineGroupKey },
-      select: { id: true, orderId: true, purpose: true, reclamationId: true },
+      select: {
+        id: true, orderId: true, purpose: true, reclamationId: true,
+        reclamation: { select: { id: true, status: true } },
+      },
     });
     if (!lines.length) throw new Error("Picking grupa nije pronađena u ovom nalogu.");
     await lockOrders(tx, Array.from(new Set(lines.map((line) => line.orderId))));
+    const reclamations = Array.from(new Map(
+      lines.flatMap((line) =>
+        line.purpose === "RECLAMATION_REPLACEMENT" && line.reclamation
+          ? [[line.reclamation.id, line.reclamation] as const]
+          : [],
+      ),
+    ).values());
+    if (reclamations.length && await tx.shipment.findFirst({
+      where: {
+        reclamationId: { in: reclamations.map((reclamation) => reclamation.id) },
+        purpose: "RECLAMATION_REPLACEMENT",
+        status: { not: "FAILED" },
+      },
+      select: { id: true },
+    })) {
+      throw new Error("Kurirski nalog za zamenu već postoji. Prvo otkažite kurirski nalog.");
+    }
     const removed = await tx.pickupBatchLine.deleteMany({
       where: { batchId, lineGroupKey },
     });
@@ -803,7 +835,23 @@ export async function removePickupGroupFromBatch(
     for (const orderId of orderIds) {
       await restoreOrderIfNoLongerLoaded(tx, orderId, actorId, batch.number);
     }
-    return { removedLineCount: removed.count };
+    for (const reclamation of reclamations) {
+      await tx.reclamationStatusEvent.create({
+        data: {
+          reclamationId: reclamation.id,
+          status: reclamation.status,
+          actorId,
+          note: `Zamena je uklonjena iz picking naloga ${batch.number}.`,
+        },
+      });
+    }
+    return {
+      removedLineCount: removed.count,
+      batchId,
+      batchNumber: batch.number,
+      lineGroupKey,
+      reclamationIds: reclamations.map((reclamation) => reclamation.id),
+    };
   }, TRANSACTION_OPTIONS);
 }
 
