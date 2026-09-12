@@ -9,13 +9,6 @@ const assets: Record<string, ProductArAsset> = {
     alt: "Kompjuter sto X DESK — svetli hrast i crna X konstrukcija, 3D prikaz",
     dimensionsCm: { w: 70, d: 48, h: 74 },
   },
-  "100010-6b45ec": {
-    cameraOrbit: "35deg 75deg auto",
-    photoUrl: "/models/cube-210030/original.webp",
-    ...storedModels["100010-6b45ec"],
-    alt: "Braon CUBE fotelja sa rebrastom tkaninom — 3D prikaz",
-    dimensionsCm: { w: 80, d: 80, h: 71 },
-  },
 };
 
 export function getProductArAsset(slug: string): ProductArAsset | undefined {

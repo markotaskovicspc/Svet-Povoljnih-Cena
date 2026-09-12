@@ -21,14 +21,14 @@ test("QR destination launches native AR once, with a manual fallback that does n
     });
     const page = await context.newPage();
     try {
-      await page.goto("/ar/100010-6b45ec", { waitUntil: "domcontentloaded" });
+      await page.goto("/ar/100010-9ce68e", { waitUntil: "domcontentloaded" });
       await expect(page.locator("html")).toHaveAttribute("data-native-ar-count", "1", { timeout: 30000 });
       const link = page.getByRole("link", { name: "Pokreni AR" });
       const href = (await link.getAttribute("href"))!;
-      expect(href).toContain(platform === "ios" ? "cube-v9.usdz#allowsContentScaling=0" : "mode=ar_only");
+      expect(href).toContain(platform === "ios" ? "x-desk-v3.usdz#allowsContentScaling=0" : "mode=ar_only");
       await expect(page.locator("model-viewer")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Dodaj u korpu" })).toHaveCount(0);
-      await page.goto("/ar/100010-6b45ec?manual=1", { waitUntil: "domcontentloaded" });
+      await page.goto("/ar/100010-9ce68e?manual=1", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("link", { name: "Pokreni AR" })).toBeVisible();
       await expect(page.locator("html")).not.toHaveAttribute("data-native-ar-count");
     } finally { await context.close(); }
@@ -55,7 +55,7 @@ test("Android AR failure shows recovery guidance without relaunching or substitu
   });
   try {
     const page = await context.newPage();
-    await page.goto("/ar/100010-6b45ec?manual=1&arFallback=1");
+    await page.goto("/ar/100010-9ce68e?manual=1&arFallback=1");
     await expect(page.getByRole("status")).toContainText("AR kamera nije pokrenuta.");
     await expect(page.locator("html")).not.toHaveAttribute("data-ar-retry");
     await expect(page.locator("model-viewer")).toHaveCount(0);

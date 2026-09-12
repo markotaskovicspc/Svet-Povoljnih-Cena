@@ -4,15 +4,15 @@ import { getProductArAsset } from "@/lib/product-ar";
 
 describe("current AR manifest", () => {
   it("returns the current immutable files without caching the manifest", async () => {
-    const response = await GET(new Request("https://example.test/api/product-ar/100010-6b45ec"), {
-      params: Promise.resolve({ slug: "100010-6b45ec" }),
+    const response = await GET(new Request("https://example.test/api/product-ar/100010-9ce68e"), {
+      params: Promise.resolve({ slug: "100010-9ce68e" }),
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(await response.json()).toEqual(getProductArAsset("100010-6b45ec"));
+    expect(await response.json()).toEqual(getProductArAsset("100010-9ce68e"));
   });
   it("does not enable unregistered products or inherited object keys", async () => {
-    for (const slug of ["missing", "constructor", "toString"]) {
+    for (const slug of ["100010-6b45ec", "missing", "constructor", "toString"]) {
       const response = await GET(new Request("https://example.test"), { params: Promise.resolve({ slug }) });
       expect(response.status).toBe(404);
       expect(await response.json()).toBeNull();

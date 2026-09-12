@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test.setTimeout(90000);
 test.skip(process.env.E2E_LIVE_CATALOG !== "1", "Read-only catalog opt-in required");
-const path = "/p/100010-6b45ec";
+const path = "/p/100010-9ce68e";
 async function visit(page: import("@playwright/test").Page) {
   await page.goto(path, { waitUntil: "domcontentloaded" });
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
@@ -18,9 +18,9 @@ test.beforeEach(async ({ page }) => {
 test("photo finishes first; prepared model opens without another model transfer", async ({ page }) => {
   let releasePhoto!: () => void;
   const gate = new Promise<void>(resolve => { releasePhoto = resolve; });
-  await page.route("**/models/cube-210030/original.webp", async route => { await gate; await route.continue(); });
+  await page.route("**/models/x-desk-210027/original.webp", async route => { await gate; await route.continue(); });
   let requests = 0;
-  page.on("request", req => { if (req.url().endsWith("cube-v9.glb")) requests++; });
+  page.on("request", req => { if (req.url().endsWith("x-desk-v3.glb")) requests++; });
   await visit(page);
   try {
     await page.waitForTimeout(1400); // Longer than the warmup delay, with the hero still blocked.
@@ -51,11 +51,11 @@ test("click during preparation never leaves two viewers", async ({ page }) => {
 
 test("background failure does not poison the user's later attempt", async ({ page }) => {
   let failed = false;
-  await page.route("**/cube-210030/*.glb", route => { failed = true; return route.abort(); });
+  await page.route("**/x-desk-210027/*.glb", route => { failed = true; return route.abort(); });
   await visit(page);
   await expect.poll(() => failed, { timeout: 30000 }).toBe(true);
   await expect(page.locator("[data-ar-warmup]")).toHaveCount(0);
-  await page.unroute("**/cube-210030/*.glb");
+  await page.unroute("**/x-desk-210027/*.glb");
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
 });
@@ -68,7 +68,7 @@ for (const policy of ["save-data", "slow-connection"]) {
     await page.waitForTimeout(1500);
     await expect(page.locator("model-viewer")).toHaveCount(0);
     expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);
-    expect(await page.evaluate(() => performance.getEntriesByType("resource").some(x => x.name.endsWith("cube-v9.glb")))).toBe(false);
+    expect(await page.evaluate(() => performance.getEntriesByType("resource").some(x => x.name.endsWith("x-desk-v3.glb")))).toBe(false);
   });
 }
 

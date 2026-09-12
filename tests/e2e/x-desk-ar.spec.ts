@@ -6,6 +6,23 @@ test.skip(process.env.E2E_LIVE_CATALOG !== "1", "Read-only catalog opt-in requir
 const slug = "100010-9ce68e";
 const asset = getProductArAsset(slug)!;
 
+test("CUBE chair has only photos and its old AR links are disabled", async ({ page, request }) => {
+  const mediaRequests: string[] = [];
+  page.on("request", req => {
+    if (/\.(glb|usdz)([?#]|$)|vendor\/model-viewer/.test(req.url())) mediaRequests.push(req.url());
+  });
+  await page.goto("/p/100010-6b45ec?ar=1", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("CUBE");
+  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
+  await expect(page.locator("model-viewer")).toHaveCount(0);
+  expect(mediaRequests).toEqual([]);
+  const manifest = await request.get("/api/product-ar/100010-6b45ec");
+  expect(manifest.status()).toBe(404);
+  expect(await manifest.json()).toBeNull();
+  expect((await request.get("/ar/100010-6b45ec")).status()).toBe(404);
+});
+
 test("X DESK retains its photo first, loads the small textured model, and supports full screen", async ({ page, isMobile }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, "connection", { configurable: true, value: { saveData: true, effectiveType: "4g" } }));
   await page.goto(`/p/${slug}`, { waitUntil: "domcontentloaded" });

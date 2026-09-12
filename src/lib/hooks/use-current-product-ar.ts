@@ -12,6 +12,10 @@ export function useCurrentProductAr(slug: string, initial?: ProductArAsset) {
     lastChecked.current = Date.now();
     try {
       const response = await fetch(`/api/product-ar/${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (response.status === 404) {
+        setCurrent({ slug, asset: undefined });
+        return;
+      }
       if (!response.ok) return;
       const asset: ProductArAsset = await response.json();
       if (!asset?.glbUrl || !asset.usdzUrl || !asset.posterUrl || !asset.dimensionsCm) return;

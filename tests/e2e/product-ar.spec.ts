@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { getProductArAsset } from "../../src/lib/product-ar";
 
 test.setTimeout(90000);
-const productPath = "/p/100010-6b45ec";
+const productPath = "/p/100010-9ce68e";
 test.skip(process.env.E2E_LIVE_CATALOG !== "1", "Read-only catalog opt-in required");
 
 test.beforeEach(async ({ page }) => {
@@ -28,11 +28,11 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await loaded(page);
   const viewer = page.locator("model-viewer");
-  await expect(viewer).toHaveAttribute("ios-src", /cube-v9\.usdz$/);
+  await expect(viewer).toHaveAttribute("ios-src", /x-desk-v3\.usdz$/);
   await expect(viewer).toHaveAttribute("ar-scale", "fixed");
   await expect.poll(() => viewer.evaluate((el) => {
     const model = (el as unknown as { model: { materials: Array<{ pbrMetallicRoughness: { baseColorTexture: { texture: unknown } } }> } }).model;
-    return !!model.materials[0].pbrMetallicRoughness.baseColorTexture.texture;
+    return model.materials.some(material => !!material.pbrMetallicRoughness.baseColorTexture?.texture);
   })).toBe(true);
   if (!isMobile) {
     const orbit = () => viewer.evaluate(el => (el as unknown as { getCameraOrbit(): { theta: number } }).getCameraOrbit().theta);
@@ -49,7 +49,7 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.locator("svg[role=img]")).toBeVisible();
-    await expect(dialog.locator("a")).toHaveAttribute("href", new URL("/ar/100010-6b45ec", /localhost|127\.0\.0\.1/.test(new URL(page.url()).hostname) ? process.env.NEXT_PUBLIC_AR_PREVIEW_ORIGIN || page.url() : page.url()).toString());
+    await expect(dialog.locator("a")).toHaveAttribute("href", new URL("/ar/100010-9ce68e", /localhost|127\.0\.0\.1/.test(new URL(page.url()).hostname) ? process.env.NEXT_PUBLIC_AR_PREVIEW_ORIGIN || page.url() : page.url()).toString());
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toBeFocused();
@@ -64,11 +64,11 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
 
 test("failed model offers photo fallback and retry", async ({ page }) => {
   test.setTimeout(120000);
-  await page.route("**/cube-210030/*.glb", route => route.abort());
+  await page.route("**/x-desk-210027/*.glb", route => route.abort());
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await expect(page.getByRole("button", { name: "Pokušaj ponovo", exact: true })).toBeVisible({ timeout: 45000 });
   await expect(page.locator("[data-product-ar-viewer] > img")).toBeVisible();
-  await page.unroute("**/cube-210030/*.glb");
+  await page.unroute("**/x-desk-210027/*.glb");
   await page.getByRole("button", { name: "Pokušaj ponovo", exact: true }).click();
   await loaded(page);
 });
@@ -81,7 +81,7 @@ test("3D activation downloads the model while the runtime loads, with one model 
     await route.continue();
   });
   const modelRequests: string[] = [];
-  page.on("request", request => { if (request.url().endsWith("cube-v9.glb")) modelRequests.push(request.url()); });
+  page.on("request", request => { if (request.url().endsWith("x-desk-v3.glb")) modelRequests.push(request.url()); });
   try {
     await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
     await expect.poll(() => modelRequests.length).toBe(1);
@@ -127,7 +127,7 @@ test("Android viewer launches AR-only without the library's native 3D fallback",
   const href = await page.locator("html").getAttribute("data-viewer-ar-href");
   expect(href).toContain("mode=ar_only");
   expect(href).toContain("package=com.google.ar.core;");
-  expect(href).toContain(encodeURIComponent(new URL("/ar/100010-6b45ec?manual=1&arFallback=1", page.url()).href));
+  expect(href).toContain(encodeURIComponent(new URL("/ar/100010-9ce68e?manual=1&arFallback=1", page.url()).href));
   expect(href).not.toContain("googlequicksearchbox");
 });
 
@@ -153,7 +153,7 @@ test("iPhone launch keeps the dedicated USDZ asset", async ({ browser, isMobile,
       };
     });
     await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
-    await expect(page.locator("model-viewer")).toHaveAttribute("data-test-ios-launch", getProductArAsset("100010-6b45ec")!.usdzUrl);
+    await expect(page.locator("model-viewer")).toHaveAttribute("data-test-ios-launch", getProductArAsset("100010-9ce68e")!.usdzUrl);
     await expect(page.getByRole("dialog")).toHaveCount(0);
   } finally { await context.close(); }
 });
@@ -195,7 +195,7 @@ test("photo AR button opens QR or native AR without downloading the web model", 
   } else {
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("svg[role=img]")).toBeVisible();
-    await expect(dialog.locator("a")).toHaveAttribute("href", /\/ar\/100010-6b45ec$/);
+    await expect(dialog.locator("a")).toHaveAttribute("href", /\/ar\/100010-9ce68e$/);
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toBeFocused();

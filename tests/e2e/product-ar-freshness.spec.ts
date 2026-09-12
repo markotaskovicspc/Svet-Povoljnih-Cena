@@ -9,14 +9,18 @@ test("an open gallery refreshes its model after returning to the tab", async ({ 
   });
   let revision = 0;
   let checks = 0;
-  await page.route("**/api/product-ar/100010-6b45ec", async route => {
+  await page.route("**/api/product-ar/100010-9ce68e", async route => {
     const response = await route.fetch();
     const asset = await response.json();
     checks++;
+    if (revision === 2) {
+      await route.fulfill({ status: 404, json: null });
+      return;
+    }
     if (revision) asset.glbUrl += "#freshness-test";
     await route.fulfill({ response, json: asset });
   });
-  await page.goto("/p/100010-6b45ec", { waitUntil: "domcontentloaded" });
+  await page.goto("/p/100010-9ce68e", { waitUntil: "domcontentloaded" });
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
   await expect.poll(() => checks).toBe(1);
@@ -34,4 +38,13 @@ test("an open gallery refreshes its model after returning to the tab", async ({ 
   await expect(page.locator("model-viewer")).toHaveCount(1);
   await expect.poll(() => viewer.evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45_000 }).toBe(true);
   expect(checks).toBe(2);
+  revision = 2;
+  await page.evaluate(() => {
+    const now = Date.now;
+    Date.now = () => now() + 31_000;
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect(viewer).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
 });
