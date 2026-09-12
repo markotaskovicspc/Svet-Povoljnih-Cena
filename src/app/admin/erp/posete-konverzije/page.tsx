@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { REPORT_PERIOD_PRESETS, resolveReportPeriod } from "@/lib/admin/report-period";
 import {
   getAnalyticsFunnelSummary,
+  getDailyVisitsReport,
   getPageConversionReport,
   normalizeAnalyticsGranularity,
 } from "@/lib/admin/analytics-report.server";
@@ -88,8 +89,9 @@ export default async function AnalyticsConversionPage({
   );
   const granularity = normalizeAnalyticsGranularity(params.group);
   const activeStart = new Date(now.getTime() - 5 * 60_000);
-  const [activeSessions, funnel, pageConversions, products, cartConversions, rawModule] =
+  const [dailyVisits, activeSessions, funnel, pageConversions, products, cartConversions, rawModule] =
     await Promise.all([
+      getDailyVisitsReport(period),
       db.analyticsEvent.findMany({
         where: { type: "PAGE_VIEW", occurredAt: { gte: activeStart } },
         distinct: ["sessionId", "anonymousId"],
@@ -222,7 +224,7 @@ export default async function AnalyticsConversionPage({
     <>
       <PageHeader
         title="Posete i konverzije"
-        description="Posete po stranici i konverzije; kupovina se pripisuje poslednjoj posećenoj stranici pre checkout-a."
+        description="Dnevni pregled poseta celom sajtu, detalji po stranicama i Excel izvoz za izabrani period."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -249,7 +251,7 @@ export default async function AnalyticsConversionPage({
             <Input name="to" type="date" defaultValue={period.toInput} className="mt-1 h-9" />
           </label>
           <label className="text-xs font-medium text-ink-600">
-            Grupisanje
+            Grupisanje stranica
             <select name="group" defaultValue={granularity} className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm">
               <option value="day">Dnevno</option>
               <option value="week">Nedeljno</option>
@@ -261,6 +263,28 @@ export default async function AnalyticsConversionPage({
             <Link href={exportHref} className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-ink-700">Excel</Link>
           </div>
         </form>
+
+        <Card>
+          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku; današnji podaci još nisu konačni.`}>
+            Posete po danu
+          </CardTitle>
+          <DataTable
+            columns={[
+              { key: "day", label: "Dan" },
+              { key: "visits", label: "Ukupno poseta", align: "right" },
+              { key: "pageViews", label: "Pregledi stranica", align: "right" },
+            ]}
+            rows={dailyVisits.map((row) => ({
+              id: row.day,
+              cells: {
+                day: row.day.split("-").reverse().join(".") + ".",
+                visits: row.visits.toLocaleString("sr-Latn-RS"),
+                pageViews: row.pageViews.toLocaleString("sr-Latn-RS"),
+              },
+            }))}
+            empty="Nema dana u izabranom periodu."
+          />
+        </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Trenutne posete" value={String(activeSessions.length)} hint="Jedinstvene aktivne sesije u poslednjih 5 minuta" />

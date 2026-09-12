@@ -2,7 +2,41 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import type { ReportPeriod } from "@/lib/admin/report-period";
+import { REPORT_TIME_ZONE, type ReportPeriod } from "@/lib/admin/report-period";
+
+export type DailyVisitsReportRow = {
+  day: string;
+  visits: number;
+  pageViews: number;
+};
+
+/** Count each session once across the entire site for each Belgrade day. */
+export async function getDailyVisitsReport(
+  period: ReportPeriod,
+): Promise<DailyVisitsReportRow[]> {
+  // Prisma stores occurredAt as a UTC timestamp without time zone. Convert
+  // local midnight boundaries to UTC explicitly, including DST transitions.
+  return db.$queryRaw<DailyVisitsReportRow[]>(Prisma.sql`
+    WITH days AS (
+      SELECT generate_series(
+        ${period.fromInput}::date::timestamp,
+        ${period.toInput}::date::timestamp,
+        interval '1 day'
+      ) AS day
+    )
+    SELECT
+      to_char(d.day, 'YYYY-MM-DD') AS day,
+      COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::int AS visits,
+      COUNT(a.id)::int AS "pageViews"
+    FROM days d
+    LEFT JOIN "AnalyticsEvent" a
+      ON a.type = 'PAGE_VIEW'
+      AND a."occurredAt" >= (d.day AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
+      AND a."occurredAt" < ((d.day + interval '1 day') AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
+    GROUP BY d.day
+    ORDER BY d.day DESC
+  `);
+}
 
 export const ANALYTICS_GRANULARITIES = ["day", "week", "month"] as const;
 export type AnalyticsGranularity =

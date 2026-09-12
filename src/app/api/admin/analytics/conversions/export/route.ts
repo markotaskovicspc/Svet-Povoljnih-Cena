@@ -3,6 +3,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 import {
   getAnalyticsFunnelSummary,
+  getDailyVisitsReport,
   getPageConversionReport,
   normalizeAnalyticsGranularity,
 } from "@/lib/admin/analytics-report.server";
@@ -32,14 +33,34 @@ export async function GET(request: Request) {
   const granularity = normalizeAnalyticsGranularity(
     search.get("group") ?? undefined,
   );
-  const [summary, rows] = await Promise.all([
+  const [summary, rows, dailyRows] = await Promise.all([
     getAnalyticsFunnelSummary(period),
     getPageConversionReport(period, granularity),
+    getDailyVisitsReport(period),
   ]);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Svet povoljnih cena ERP";
   workbook.created = new Date();
+
+  const daily = workbook.addWorksheet("Posete po danu", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  daily.columns = [
+    { header: "Dan", key: "day", width: 16 },
+    { header: "Ukupno poseta", key: "visits", width: 20 },
+    { header: "Pregledi stranica", key: "pageViews", width: 22 },
+  ];
+  daily.addRows(dailyRows);
+  styleHeader(daily.getRow(1));
+  daily.getCell("A1").note = "Kalendarski dan po vremenu u Srbiji. Današnji podaci još nisu konačni.";
+  daily.getCell("B1").note = "Ista sesija računa se jednom dnevno na celom sajtu. Samo posete uz saglasnost za analitiku.";
+  daily.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, dailyRows.length + 1), column: 3 },
+  };
+  daily.getColumn("visits").numFmt = "#,##0";
+  daily.getColumn("pageViews").numFmt = "#,##0";
 
   const overview = workbook.addWorksheet("Sažetak");
   overview.columns = [
