@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     "**/.worktrees/**",
     ".codex-worktrees/**",
     "next-env.d.ts",
+    // Published, versioned third-party runtime; lint the application source.
+    "public/vendor/model-viewer/**",
   ]),
 ]);
 
