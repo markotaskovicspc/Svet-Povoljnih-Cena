@@ -45,15 +45,15 @@ export function ProductArEntryControls({ asset, onView3d }: { asset: ProductArAs
     anchor.click();
     anchor.remove();
   }
-  return <div data-product-ar-entry className="absolute inset-x-3 bottom-10 z-20 flex flex-col items-center gap-2">
+  return <div data-product-ar-entry className="pointer-events-none absolute inset-x-3 bottom-10 z-20 flex flex-col items-center gap-2">
     <span className="rounded-full bg-white/95 px-3 py-1 text-[11px] font-medium text-ink-600">Proverite kako se uklapa u vaš prostor</span>
     <div className="flex max-w-full items-center gap-2 rounded-full bg-white/95 p-1.5 shadow-lg ring-1 ring-border/70">
       <button ref={trigger} type="button" onClick={launch} disabled={!hydrated} aria-haspopup="dialog"
-        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink-900 px-3 text-[13px] font-semibold text-white transition hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2">
+        className="pointer-events-auto inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink-900 px-3 text-[13px] font-semibold text-white transition hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2">
         <Smartphone className="size-4 shrink-0" aria-hidden />Pogledaj u svojoj sobi
       </button>
       <button type="button" onClick={onView3d} disabled={!hydrated} aria-label="Otvori 3D pregled"
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-ink-800 transition hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2">
+        className="pointer-events-auto inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-ink-800 transition hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2">
         <Box className="size-4" aria-hidden />3D
       </button>
     </div>

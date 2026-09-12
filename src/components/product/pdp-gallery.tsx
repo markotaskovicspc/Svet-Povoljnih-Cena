@@ -340,7 +340,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
             className="absolute right-3 bottom-3 z-10"
           />
           {slides.length > 1 ? (
-            <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
               {slides.map((_, index) => (
                 <button
                   key={index}
@@ -349,7 +349,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                   aria-label={slides[index].kind === "model" ? "Prikaži 3D model" : `Prikaži sliku ${index + 1}`}
                   aria-current={index === activeIndex ? "true" : undefined}
                   className={cn(
-                    "h-1.5 rounded-full shadow-sm transition-all",
+                    "pointer-events-auto h-1.5 rounded-full shadow-sm transition-all",
                     index === activeIndex
                       ? "w-8 bg-ink-900"
                       : "w-2 bg-white/90 ring-1 ring-ink-900/20",
@@ -359,7 +359,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
             </div>
           ) : null}
           {slides.length > 1 ? (
-            <span className="absolute right-[4.25rem] bottom-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+            <span className="pointer-events-none absolute right-[4.25rem] bottom-3 z-10 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
               {activeIndex + 1}/{slides.length}
             </span>
           ) : null}
@@ -478,7 +478,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
               >
                 <ChevronRight className="size-5" aria-hidden />
               </button>
-              <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center gap-1.5">
                 {slides.map((_, index) => (
                   <button
                     key={index}
@@ -487,7 +487,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                     aria-label={slides[index].kind === "model" ? "Prikaži 3D model" : `Prikaži sliku ${index + 1}`}
                     aria-current={index === activeIndex ? "true" : undefined}
                     className={cn(
-                      "h-1.5 rounded-full transition-all",
+                      "pointer-events-auto h-1.5 rounded-full transition-all",
                       index === activeIndex
                         ? "w-8 bg-ink-900"
                         : "w-3 bg-white/80 ring-1 ring-border/60",
@@ -495,7 +495,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                   />
                 ))}
               </div>
-              <span className="absolute right-[4.75rem] bottom-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
+              <span className="pointer-events-none absolute right-[4.75rem] bottom-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink-800 shadow-soft-1 ring-1 ring-border/60">
                 {activeIndex + 1}/{slides.length}
               </span>
             </>

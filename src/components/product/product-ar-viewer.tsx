@@ -10,7 +10,7 @@ import type { ProductArAsset } from "@/types";
 import { loadProductArRuntime, productArModelUrl } from "@/lib/product-ar-loader";
 
 interface Props { asset: ProductArAsset; fallbackUrl?: string }
-const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut disabled:opacity-50";
+const buttonClass = "pointer-events-auto inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-walnut disabled:opacity-50";
 
 export default function ProductArViewer(props: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -130,18 +130,20 @@ function ViewerSurface({ asset, fallbackUrl, onExpand }: Props & { onExpand?: ()
           touch-action="pan-y"
           interaction-prompt="none"
           camera-orbit={asset.cameraOrbit ?? "35deg 65deg auto"}
-          field-of-view="30deg"
+          camera-target={onExpand ? "auto 65% auto" : "auto auto auto"}
+          field-of-view={onExpand ? "40deg" : "30deg"}
+          max-field-of-view="45deg"
           shadow-intensity="1"
           shadow-softness="1"
           exposure="1"
           tone-mapping="neutral"
           loading="eager"
           reveal="auto"
-          style={{ width: "100%", height: "calc(100% - 88px)" }}
+          style={{ width: "100%", height: "100%" }}
         ><span slot="ar-button" hidden /></model-viewer>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element -- local poster and original photo fallback
-        <img src={failed ? fallbackUrl || asset.posterUrl : asset.posterUrl} alt={asset.alt} className="w-full object-contain p-4" style={{ height: "calc(100% - 88px)" }} />
+        <img src={failed ? fallbackUrl || asset.posterUrl : asset.posterUrl} alt={asset.alt} className="w-full object-contain p-4" style={{ height: "100%" }} />
       )}
       {onExpand && <button type="button" data-ar-expand onClick={onExpand}
         className="absolute top-3 right-14 z-10 flex size-11 items-center justify-center rounded-full bg-white/95 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -149,7 +151,7 @@ function ViewerSurface({ asset, fallbackUrl, onExpand }: Props & { onExpand?: ()
       <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs text-ink-700 ring-1 ring-border/60">
         <Box className="size-3.5" /> 3D · {asset.dimensionsCm.w} × {asset.dimensionsCm.d} × {asset.dimensionsCm.h} cm
       </div>
-      <div className="absolute inset-x-3 bottom-10 z-10 flex flex-col items-center gap-2 text-center md:bottom-12" data-ar-controls>
+      <div className="pointer-events-none absolute inset-x-3 bottom-10 z-10 flex flex-col items-center gap-2 text-center md:bottom-12" data-ar-controls>
         {!loaded && !failed && <span role="status" className="rounded bg-white/90 px-3 py-1 text-xs">Učitavanje 3D modela… {progress}%</span>}
         {failed ? (
           <div className="rounded-xl bg-white/95 p-3 shadow-sm">
