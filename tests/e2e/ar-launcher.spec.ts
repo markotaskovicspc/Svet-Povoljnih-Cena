@@ -40,3 +40,27 @@ test("AR route rejects products without a registered model", async ({ page }) =>
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("link", { name: "Pokreni AR" })).toHaveCount(0);
 });
+
+
+test("Android AR failure shows recovery guidance without relaunching or substituting 3D", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36" });
+  await context.addInitScript(() => {
+    document.addEventListener("click", event => {
+      const anchor = (event.target as Element).closest("a");
+      if (anchor?.href.startsWith("intent:")) {
+        event.preventDefault();
+        document.documentElement.dataset.arRetry = anchor.href;
+      }
+    }, true);
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/ar/100010-6b45ec?manual=1&arFallback=1");
+    await expect(page.getByRole("status")).toContainText("AR kamera nije pokrenuta.");
+    await expect(page.locator("html")).not.toHaveAttribute("data-ar-retry");
+    await expect(page.locator("model-viewer")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Otvori u Chrome-u" })).toHaveAttribute("href", /manual=1#Intent;.*package=com.android.chrome;/);
+    await page.getByRole("link", { name: "Pokreni AR", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-ar-retry", /mode=ar_only.*package=com.google.ar.core;/);
+  } finally { await context.close(); }
+});

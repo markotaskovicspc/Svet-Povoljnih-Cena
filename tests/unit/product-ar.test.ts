@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { androidArIntent, arPlatform, getProductArAsset, productArShareUrl } from "@/lib/product-ar";
+import { androidChromeArIntent, androidArIntent, arPlatform, getProductArAsset, productArShareUrl } from "@/lib/product-ar";
 
 describe("product AR", () => {
   it("only enables the original brown CUBE", () => {
@@ -20,10 +20,18 @@ describe("product AR", () => {
   it("builds Android AR-only links with a manual fallback on the reachable origin", () => {
     const intent = androidArIntent(getProductArAsset("100010-6b45ec")!, "https://preview.trycloudflare.com/ar/100010-6b45ec");
     expect(intent).toContain("mode=ar_only");
+    expect(intent).toContain("package=com.google.ar.core;");
+    expect(intent).not.toContain("googlequicksearchbox");
     expect(intent).toContain("resizable=false");
     expect(intent).toContain(encodeURIComponent(getProductArAsset("100010-6b45ec")!.glbUrl));
     expect(intent).not.toContain("preview.trycloudflare.com%2Fmodels");
-    expect(intent).toContain(encodeURIComponent("https://preview.trycloudflare.com/ar/100010-6b45ec?manual=1"));
+    expect(intent).toContain(encodeURIComponent("https://preview.trycloudflare.com/ar/100010-6b45ec?manual=1&arFallback=1"));
+  });
+  it("opens the AR entry in Chrome without automatically relaunching another intent", () => {
+    const intent = androidChromeArIntent("https://www.svetpovoljnihcena.rs/ar/100010-6b45ec?arFallback=1#viewer");
+    expect(intent).toContain("intent://www.svetpovoljnihcena.rs/ar/100010-6b45ec?manual=1#Intent;");
+    expect(intent).toContain("package=com.android.chrome;");
+    expect(intent).toContain(encodeURIComponent("https://www.svetpovoljnihcena.rs/ar/100010-6b45ec?manual=1"));
   });
   it("distinguishes desktop, Android, and iPad desktop-mode Safari", () => {
     expect(arPlatform("Mozilla Macintosh", 0)).toBe("desktop");

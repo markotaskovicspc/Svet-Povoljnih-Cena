@@ -5,7 +5,7 @@ import type { ModelViewerElement } from "@google/model-viewer";
 import { Box, Maximize2, RotateCw, Smartphone } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { QrCode } from "./ar-qr-code";
-import { arPlatform, productArShareUrl } from "@/lib/product-ar";
+import { androidArIntent, arPlatform, productArShareUrl } from "@/lib/product-ar";
 import type { ProductArAsset } from "@/types";
 import { loadProductArRuntime, productArModelUrl } from "@/lib/product-ar-loader";
 
@@ -79,6 +79,18 @@ function ViewerSurface({ asset, fallbackUrl, onExpand }: Props & { onExpand?: ()
   function launchAr() {
     setMessage("");
     if (platform === "desktop") { setCopied(false); setQrOpen(true); return; }
+    if (platform === "android") {
+      // The library uses ar_preferred and can silently fall back to native 3D.
+      // Match the QR/photo entry: ARCore-only, with an explicit help page on failure.
+      const anchor = document.createElement("a");
+      anchor.href = androidArIntent(asset, shareUrl);
+      anchor.hidden = true;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setArPrompt(false);
+      return;
+    }
     const el = viewer.current;
     if (!loaded || !el) return;
     if (!el.canActivateAR) {

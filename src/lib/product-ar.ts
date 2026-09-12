@@ -38,10 +38,17 @@ export function productArShareUrl(pageUrl: string, previewOrigin?: string): stri
 export function androidArIntent(asset: ProductArAsset, launchUrl: string): string {
   const origin = new URL(launchUrl).origin;
   const fallback = new URL(launchUrl);
-  fallback.search = "?manual=1";
+  fallback.search = "?manual=1&arFallback=1";
   const query = new URLSearchParams({
     file: new URL(asset.glbUrl, origin).href,
     mode: "ar_only", resizable: "false",
   });
   return `intent://arvr.google.com/scene-viewer/1.0?${query}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(fallback.href)};end;`;
+}
+
+/** Escape an in-app QR browser, then require a fresh tap for the camera launch. */
+export function androidChromeArIntent(launchUrl: string): string {
+  const url = new URL(productArShareUrl(launchUrl));
+  url.search = "?manual=1";
+  return `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=${url.protocol.slice(0, -1)};package=com.android.chrome;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(url.href)};end;`;
 }

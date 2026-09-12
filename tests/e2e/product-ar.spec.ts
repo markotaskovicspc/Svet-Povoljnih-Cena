@@ -107,22 +107,28 @@ test("gray variant has no local AR model", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
 });
 
-test("mobile QR arrival calls AR from the user click, and unsupported AR explains fallback", async ({ page, isMobile }) => {
-  test.skip(!isMobile, "Mobile launch contract");
+test("Android viewer launches AR-only without the library's native 3D fallback", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Android launch contract");
   await page.goto(productPath + "?ar=1", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await loaded(page);
   await expect(page.getByText("Dodirnite dugme da postavite fotelju u sobu.")).toBeVisible();
-  // Stub only the device's native AR API; desktop emulation cannot start a real AR session.
+  await page.evaluate(() => {
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function() {
+      if (this.href.startsWith("intent:")) { document.documentElement.dataset.viewerArHref = this.href; return; }
+      click.call(this);
+    };
+  });
   await page.locator("model-viewer").evaluate(el => {
-    Object.defineProperty(el, "canActivateAR", { configurable: true, get: () => true });
-    (el as unknown as { activateAR: () => Promise<void> }).activateAR = () => { el.setAttribute("data-test-ar-clicked", "yes"); return Promise.resolve(); };
+    (el as unknown as { activateAR: () => Promise<void> }).activateAR = () => { throw new Error("Must not use ar_preferred"); };
   });
   await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
-  await expect(page.locator("model-viewer")).toHaveAttribute("data-test-ar-clicked", "yes");
-  await page.locator("model-viewer").evaluate(el => Object.defineProperty(el, "canActivateAR", { configurable: true, get: () => false }));
-  await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
-  await expect(page.getByText(/Ovaj pregledač ne podržava AR/)).toBeVisible();
+  const href = await page.locator("html").getAttribute("data-viewer-ar-href");
+  expect(href).toContain("mode=ar_only");
+  expect(href).toContain("package=com.google.ar.core;");
+  expect(href).toContain(encodeURIComponent(new URL("/ar/100010-6b45ec?manual=1&arFallback=1", page.url()).href));
+  expect(href).not.toContain("googlequicksearchbox");
 });
 
 test("iPhone launch keeps the dedicated USDZ asset", async ({ browser, isMobile, baseURL }) => {
