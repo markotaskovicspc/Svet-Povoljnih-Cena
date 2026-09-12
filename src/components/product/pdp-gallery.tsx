@@ -36,6 +36,7 @@ import { ProductArEntryControls } from "./product-ar-entry-controls";
 import { prepareProductAr, scheduleProductArWarmup } from "@/lib/product-ar-loader";
 import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
+import { useCurrentProductAr } from "@/lib/hooks/use-current-product-ar";
 
 const ProductArViewer = dynamic(() => import("./product-ar-viewer"), { ssr: false });
 const desktopQuery = "(min-width: 768px)";
@@ -63,7 +64,8 @@ interface PdpGalleryProps {
   badges?: React.ReactNode;
 }
 
-export function PdpGallery({ product, badges, arAsset }: PdpGalleryProps) {
+export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGalleryProps) {
+  const { asset: arAsset, refresh: refreshArAsset } = useCurrentProductAr(product.slug, initialArAsset);
   const galleryRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (arAsset && galleryRef.current) return scheduleProductArWarmup(galleryRef.current, arAsset.glbUrl);
@@ -129,7 +131,10 @@ export function PdpGallery({ product, badges, arAsset }: PdpGalleryProps) {
       if (!slides.length) return;
       const nextIndex = ((index % slides.length) + slides.length) % slides.length;
       const nextSlide = slides[nextIndex];
-      if (nextSlide?.kind === "model") prepareProductAr(nextSlide.arAsset.glbUrl);
+      if (nextSlide?.kind === "model") {
+        void refreshArAsset();
+        prepareProductAr(nextSlide.arAsset.glbUrl);
+      }
       setActive(nextIndex);
       [mobileTrackRef.current, desktopTrackRef.current].forEach((track) => {
         track?.scrollTo({
@@ -140,7 +145,7 @@ export function PdpGallery({ product, badges, arAsset }: PdpGalleryProps) {
         });
       });
     },
-    [slides, active],
+    [slides, active, refreshArAsset],
   );
 
   const updateThumbOverflow = useCallback(() => {

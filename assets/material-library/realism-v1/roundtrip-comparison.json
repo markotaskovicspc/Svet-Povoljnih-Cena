@@ -1,0 +1,22 @@
+[
+  {
+    "folder": "cube-210030",
+    "format": "glb",
+    "meanAbsoluteRgbDifferenceOf255": 0.04597824074074074
+  },
+  {
+    "folder": "cube-210030",
+    "format": "usdz",
+    "meanAbsoluteRgbDifferenceOf255": 2.2429386574074073
+  },
+  {
+    "folder": "x-desk-210027",
+    "format": "glb",
+    "meanAbsoluteRgbDifferenceOf255": 0.035605333333333336
+  },
+  {
+    "folder": "x-desk-210027",
+    "format": "usdz",
+    "meanAbsoluteRgbDifferenceOf255": 1.5798923333333332
+  }
+]

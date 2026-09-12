@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-12",
+  "build": "passed; VERCEL_ENV=development npm run build in isolated /tmp/product-realism-verify",
+  "lint": "passed",
+  "unit": {
+    "passed": 8
+  },
+  "browser": {
+    "unique_passed": 40,
+    "platform_skipped": 2,
+    "initial_run": "39 passed, 2 skipped, 1 failure: test expected reflected src attribute, but React assigns the custom element property",
+    "correction": "assert the model-viewer src property; corrected freshness tests passed on desktop and mobile"
+  },
+  "glb": "zero errors/warnings; geometry under 60000 triangles; embedded textures; dimensions within 1 mm",
+  "usdz": "ARKit compliance passed, zero errors/warnings; 64-byte package alignment; embedded textures; metres Y-up and floor Y=0",
+  "physical_android": "not tested",
+  "physical_iphone": "not tested",
+  "generated_assets": "built-in imagegen; four reference files and prompts preserved",
+  "production": "pending deployment verification"
+}

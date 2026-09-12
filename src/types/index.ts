@@ -36,6 +36,8 @@ export interface ProductMedia {
 }
 
 export interface ProductArAsset {
+  /** Initial orbit chosen to match the product's reference photograph. */
+  cameraOrbit?: string;
   /** Locally cached original product photo for the initial gallery image. */
   photoUrl?: string;
   glbUrl: string;

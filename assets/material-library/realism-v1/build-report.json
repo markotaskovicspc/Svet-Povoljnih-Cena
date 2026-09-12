@@ -1,0 +1,30 @@
+{
+  "cloth": {
+    "detected_ribs": 19,
+    "source_crop_rows": [
+      60,
+      1205
+    ],
+    "rib_pitch_m": 0.01,
+    "tile_m": 0.19,
+    "relief_m": 0.0008
+  },
+  "models": [
+    {
+      "product": "cube-210030",
+      "version": "v7",
+      "triangles": 38304,
+      "source": "/Users/luka/svet povoljnih cena/assets/cube-210030/cube-realism.blend",
+      "generated_microdetail": true,
+      "hardware_socket_and_relief_depth": "inferred, not measured"
+    },
+    {
+      "product": "x-desk-210027",
+      "version": "v3",
+      "triangles": 5464,
+      "source": "/Users/luka/svet povoljnih cena/assets/x-desk-210027/x-desk-realism.blend",
+      "generated_microdetail": true,
+      "hardware_socket_and_relief_depth": "inferred, not measured"
+    }
+  ]
+}

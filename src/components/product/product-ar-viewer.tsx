@@ -15,7 +15,7 @@ const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 roun
 export default function ProductArViewer(props: Props) {
   const [expanded, setExpanded] = useState(false);
   return <>
-    {!expanded && <ViewerSurface {...props} onExpand={() => setExpanded(true)} />}
+    {!expanded && <ViewerSurface key={props.asset.glbUrl} {...props} onExpand={() => setExpanded(true)} />}
     <Dialog open={expanded} onOpenChange={setExpanded}>
       <DialogContent
         className="inset-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none p-0 sm:max-w-none"
@@ -25,7 +25,7 @@ export default function ProductArViewer(props: Props) {
       >
         <DialogTitle className="sr-only">3D prikaz preko celog ekrana</DialogTitle>
         <DialogDescription className="sr-only">Rotirajte i približite model. Zatvorite prikaz dugmetom ili tasterom Escape.</DialogDescription>
-        {expanded && <ViewerSurface {...props} />}
+        {expanded && <ViewerSurface key={props.asset.glbUrl} {...props} />}
       </DialogContent>
     </Dialog>
   </>;
@@ -129,7 +129,7 @@ function ViewerSurface({ asset, fallbackUrl, onExpand }: Props & { onExpand?: ()
           disable-pan
           touch-action="pan-y"
           interaction-prompt="none"
-          camera-orbit="35deg 65deg auto"
+          camera-orbit={asset.cameraOrbit ?? "35deg 65deg auto"}
           field-of-view="30deg"
           shadow-intensity="1"
           shadow-softness="1"

@@ -3,12 +3,14 @@ import storedModels from "./product-ar-storage.json";
 
 const assets: Record<string, ProductArAsset> = {
   "100010-9ce68e": {
+    cameraOrbit: "-35deg 75deg auto",
     photoUrl: "/models/x-desk-210027/original.webp",
     ...storedModels["100010-9ce68e"],
     alt: "Kompjuter sto X DESK — svetli hrast i crna X konstrukcija, 3D prikaz",
     dimensionsCm: { w: 70, d: 48, h: 74 },
   },
   "100010-6b45ec": {
+    cameraOrbit: "35deg 75deg auto",
     photoUrl: "/models/cube-210030/original.webp",
     ...storedModels["100010-6b45ec"],
     alt: "Braon CUBE fotelja sa rebrastom tkaninom — 3D prikaz",

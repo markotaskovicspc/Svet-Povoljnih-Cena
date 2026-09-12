@@ -1,0 +1,37 @@
+{
+  "bucket": "product-models",
+  "public": true,
+  "project": "vyebjbcfhgujlvjnoxpl.supabase.co",
+  "verified": [
+    {
+      "object": "x-desk-210027/x-desk-v3.glb",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v3.glb",
+      "action": "uploaded",
+      "bytes": 1229988,
+      "sha256": "8b598cb3ad52fc4fbf05069c663cdc87b9a336612836c620f11856ad92e475a8",
+      "mime": "model/gltf-binary",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    },
+    {
+      "object": "x-desk-210027/x-desk-v3.usdz",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v3.usdz",
+      "action": "uploaded",
+      "bytes": 1163488,
+      "sha256": "ed2f2a6195b6d83dc0af914283ecc93c69b5f3f8d564d86db78e5aecb114d838",
+      "mime": "model/vnd.usdz+zip",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    },
+    {
+      "object": "x-desk-210027/poster-v3.webp",
+      "publicUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/poster-v3.webp",
+      "action": "uploaded",
+      "bytes": 27114,
+      "sha256": "e411655e7cfd4303ade704c9c136fb0df6c49c052a199bdf4dc8db4eda1b2ea7",
+      "mime": "image/webp",
+      "cache": "public, max-age=31536000",
+      "cors": "*"
+    }
+  ]
+}

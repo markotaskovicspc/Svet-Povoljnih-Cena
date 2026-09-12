@@ -1,0 +1,86 @@
+[
+  {
+    "name": "cube-v7/v7-generated-cloth-normal",
+    "originalBytes": 1750972,
+    "bytes": 986944,
+    "psnrDb": 44.9101222047075,
+    "meanAbsoluteRgbDifferenceOf255": 1.0636456807454426
+  },
+  {
+    "name": "cube-v7/v7-generated-cloth-roughness",
+    "originalBytes": 979422,
+    "bytes": 382214,
+    "psnrDb": 43.06032116968048,
+    "meanAbsoluteRgbDifferenceOf255": 1.1264499028523762
+  },
+  {
+    "name": "cube-v7/USDZ/v7-generated-cloth-normal.png",
+    "originalBytes": 1750972,
+    "bytes": 986944,
+    "psnrDb": 44.9101222047075,
+    "meanAbsoluteRgbDifferenceOf255": 1.0636456807454426
+  },
+  {
+    "name": "cube-v7/USDZ/v7-generated-cloth-roughness.png",
+    "originalBytes": 992739,
+    "bytes": 306936,
+    "psnrDb": 44.392438289191716,
+    "meanAbsoluteRgbDifferenceOf255": 1.176133155822754
+  },
+  {
+    "name": "x-desk-v3/v2-blendkit-metal-normal",
+    "originalBytes": 67485,
+    "bytes": 41752,
+    "psnrDb": 45.519477480506595,
+    "meanAbsoluteRgbDifferenceOf255": 0.878387451171875
+  },
+  {
+    "name": "x-desk-v3/v2-blendkit-metal-roughness",
+    "originalBytes": 68778,
+    "bytes": 21034,
+    "psnrDb": 40.18357599309436,
+    "meanAbsoluteRgbDifferenceOf255": 1.6112467447916667
+  },
+  {
+    "name": "x-desk-v3/v3-generated-oak-normal",
+    "originalBytes": 1306743,
+    "bytes": 208671,
+    "psnrDb": 53.176199239431725,
+    "meanAbsoluteRgbDifferenceOf255": 0.3093751977991175
+  },
+  {
+    "name": "x-desk-v3/v3-generated-oak-roughness",
+    "originalBytes": 715207,
+    "bytes": 213834,
+    "psnrDb": 47.09288441356165,
+    "meanAbsoluteRgbDifferenceOf255": 0.69989013671875
+  },
+  {
+    "name": "x-desk-v3/USDZ/v2-blendkit-metal-normal.png",
+    "originalBytes": 67485,
+    "bytes": 41752,
+    "psnrDb": 45.519477480506595,
+    "meanAbsoluteRgbDifferenceOf255": 0.878387451171875
+  },
+  {
+    "name": "x-desk-v3/USDZ/v2-blendkit-metal-roughness.png",
+    "originalBytes": 67988,
+    "bytes": 21399,
+    "psnrDb": 41.328921286729035,
+    "meanAbsoluteRgbDifferenceOf255": 1.7046966552734375
+  },
+  {
+    "name": "x-desk-v3/USDZ/v3-generated-oak-normal.png",
+    "originalBytes": 1306743,
+    "bytes": 208671,
+    "psnrDb": 53.176199239431725,
+    "meanAbsoluteRgbDifferenceOf255": 0.3093751977991175
+  },
+  {
+    "name": "x-desk-v3/USDZ/v3-generated-oak-roughness.png",
+    "originalBytes": 732478,
+    "bytes": 183045,
+    "psnrDb": 48.97508975140287,
+    "meanAbsoluteRgbDifferenceOf255": 0.6361398696899414
+  }
+]

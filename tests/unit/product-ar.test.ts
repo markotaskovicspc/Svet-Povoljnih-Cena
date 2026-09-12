@@ -5,8 +5,8 @@ describe("product AR", () => {
   it("only enables registered products with their own dimensions and files", () => {
     expect(getProductArAsset("100010-6b45ec")?.dimensionsCm).toEqual({ w: 80, d: 80, h: 71 });
     expect(getProductArAsset("100010-9ce68e")?.dimensionsCm).toEqual({ w: 70, d: 48, h: 74 });
-    expect(getProductArAsset("100010-9ce68e")?.glbUrl).toContain("x-desk-210027/x-desk-v2.glb");
-    expect(getProductArAsset("100010-9ce68e")?.usdzUrl).toContain("x-desk-210027/x-desk-v2.usdz");
+    expect(getProductArAsset("100010-9ce68e")?.glbUrl).toContain("x-desk-210027/x-desk-v3.glb");
+    expect(getProductArAsset("100010-9ce68e")?.usdzUrl).toContain("x-desk-210027/x-desk-v3.usdz");
     expect(getProductArAsset("100010-ec1aa0")).toBeUndefined();
     expect(getProductArAsset("toString")).toBeUndefined();
   });
