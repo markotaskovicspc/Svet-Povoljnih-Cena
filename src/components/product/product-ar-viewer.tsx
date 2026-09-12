@@ -158,7 +158,7 @@ function ViewerSurface({ asset, fallbackUrl, onExpand }: Props & { onExpand?: ()
           </div>
         ) : <>
           {loaded && <span className="pointer-events-none rounded bg-white/85 px-2 py-1 text-[11px] text-ink-600">Prevucite za rotaciju · približite za detalje</span>}
-          {arPrompt && <span className="rounded bg-white/95 px-3 py-1 text-xs font-medium">Dodirnite dugme da postavite fotelju u sobu.</span>}
+          {arPrompt && <span className="rounded bg-white/95 px-3 py-1 text-xs font-medium">Dodirnite dugme da postavite proizvod u sobu.</span>}
           <button ref={trigger} type="button" className={buttonClass} onClick={launchAr} disabled={!loaded && platform !== "desktop"}>
             <Smartphone className="size-4" /> Pogledaj u svojoj sobi
           </button>

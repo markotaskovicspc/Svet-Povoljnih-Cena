@@ -1,0 +1,86 @@
+{
+  "blender": "5.2.0 LTS",
+  "triangles": 2584,
+  "dimensions_m": [
+    0.7,
+    0.48,
+    0.74
+  ],
+  "floor_z_m": 0.0,
+  "texture": "Perspective-rectified original photo pixels; no generated wood grain or relief",
+  "patches": [
+    {
+      "part": "desktop",
+      "source": "01.webp",
+      "quad_pixels": [
+        [
+          94,
+          129
+        ],
+        [
+          782,
+          71
+        ],
+        [
+          435,
+          194
+        ],
+        [
+          1190,
+          125
+        ]
+      ]
+    },
+    {
+      "part": "middle_panel",
+      "source": "04.webp",
+      "quad_pixels": [
+        [
+          201,
+          399
+        ],
+        [
+          1087,
+          399
+        ],
+        [
+          195,
+          590
+        ],
+        [
+          1090,
+          590
+        ]
+      ]
+    },
+    {
+      "part": "edge_band",
+      "source": "04.webp",
+      "quad_pixels": [
+        [
+          106,
+          185
+        ],
+        [
+          1180,
+          185
+        ],
+        [
+          106,
+          199
+        ],
+        [
+          1180,
+          199
+        ]
+      ]
+    }
+  ],
+  "estimates": [
+    "Member sections, panel thickness and screw dimensions estimated from photos",
+    "Unseen underside and reverse panel reuse photographed oak decor",
+    "Finish roughness estimated; no measured material scan"
+  ],
+  "physical_android_ar": "not tested",
+  "physical_iphone_ar": "not tested"
+}

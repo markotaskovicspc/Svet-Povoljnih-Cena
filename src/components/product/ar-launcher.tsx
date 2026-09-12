@@ -22,7 +22,7 @@ export default function ArLauncher({ asset, productPath }: { asset: ProductArAss
   }, [device]);
   return <section className="mx-auto w-full max-w-sm text-center" aria-label="Pokretanje AR prikaza">
     <p className="mb-3 text-xs font-semibold tracking-widest text-ink-600">SVET POVOLJNIH CENA</p>
-    <h1 className="text-2xl font-semibold">Fotelja u vašoj sobi</h1>
+    <h1 className="text-2xl font-semibold">Proizvod u vašoj sobi</h1>
     {/* eslint-disable-next-line @next/next/no-img-element -- native Quick Look also requires an image in its anchor */}
     <img src={asset.posterUrl} alt={asset.alt} className="my-5 aspect-square w-full object-contain" />
     {device.supported ? <>

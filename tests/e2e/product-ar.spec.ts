@@ -112,7 +112,7 @@ test("Android viewer launches AR-only without the library's native 3D fallback",
   await page.goto(productPath + "?ar=1", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await loaded(page);
-  await expect(page.getByText("Dodirnite dugme da postavite fotelju u sobu.")).toBeVisible();
+  await expect(page.getByText("Dodirnite dugme da postavite proizvod u sobu.")).toBeVisible();
   await page.evaluate(() => {
     const click = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function() {

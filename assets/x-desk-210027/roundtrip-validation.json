@@ -1,0 +1,12 @@
+{
+  "glb": {
+    "meanAbsoluteRgbDifferenceOf255": 0.00012366666666666667,
+    "psnrDb": 87.20827705972526,
+    "visualReview": "Original oak pattern, orientation, complete structure and feet retained after reimport"
+  },
+  "usdz": {
+    "meanAbsoluteRgbDifferenceOf255": 1.4271183333333333,
+    "psnrDb": 37.09488241880708,
+    "visualReview": "Original oak pattern, orientation, complete structure and feet retained after reimport"
+  }
+}

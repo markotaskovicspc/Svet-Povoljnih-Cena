@@ -1,0 +1,22 @@
+{
+  "errors": [],
+  "failed_checks": [],
+  "warnings": [],
+  "up_axis": "Y",
+  "meters_per_unit": 1.0,
+  "size_m": [
+    0.699999988079071,
+    0.7400000095367432,
+    0.47999998927116394
+  ],
+  "min_m": [
+    -0.3499999940395355,
+    -4.773959085297512e-17,
+    -0.2399999946355818
+  ],
+  "textures": [
+    "textures/oak-photo-atlas-v1.jpg"
+  ],
+  "bytes": 242698,
+  "sha256": "2e648e83f5979dafdda6e451fcd501d2f32fefb62766517b2ac0b0f019828904"
+}

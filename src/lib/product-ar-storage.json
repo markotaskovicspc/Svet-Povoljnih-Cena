@@ -3,5 +3,10 @@
     "glbUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v5.glb",
     "usdzUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v5.usdz",
     "posterUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/poster-v4.webp"
+  },
+  "100010-9ce68e": {
+    "glbUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v1.glb",
+    "usdzUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v1.usdz",
+    "posterUrl": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/poster-v1.webp"
   }
 }

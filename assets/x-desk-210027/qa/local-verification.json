@@ -1,0 +1,21 @@
+{
+  "build": "passed; VERCEL_ENV=development; clean worktree without unrelated changes",
+  "lint": "passed",
+  "unit_tests": {
+    "passed": 6
+  },
+  "browser_tests": {
+    "unique_passed": 26,
+    "skipped": 2,
+    "projects": [
+      "desktop Chrome",
+      "mobile Android emulation"
+    ],
+    "initial_run": "24 passed, 2 skipped, 2 failed because test checked a DOM attribute instead of the custom-element src property",
+    "corrected_desk_rerun": "4 passed; no application changes were needed"
+  },
+  "visual_review": "Original photographs, six Blender renders, GLB/USDZ reimports and browser fullscreen reviewed",
+  "physical_android": "unverified",
+  "physical_iphone": "unverified",
+  "existing_xiaomi_lens_issue": "Not resolved by adding this product"
+}

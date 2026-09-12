@@ -61,3 +61,10 @@ next-env.d.ts
 # AR delivery files live in the product-models Storage bucket; local working copies remain.
 /public/models/cube-210030/*.glb
 /public/models/cube-210030/*.usdz
+
+# X DESK generated previews/backups stay local; AR delivery lives in Storage.
+/assets/x-desk-210027/*.blend1
+/assets/x-desk-210027/renders/
+/public/models/x-desk-210027/*.glb
+/public/models/x-desk-210027/*.usdz
+/public/models/x-desk-210027/poster-*.webp

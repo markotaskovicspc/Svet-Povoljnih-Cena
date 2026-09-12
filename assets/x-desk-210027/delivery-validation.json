@@ -1,0 +1,18 @@
+{
+  "embedded_texture_sha256": "9d1676fcaa5ee6f9755339f3e0f90b444e394754c9e121786110e381780c9a92",
+  "identical_texture_in_both_formats": true,
+  "http": {
+    "glbUrl": {
+      "status": 206,
+      "content_range": "bytes 0-63/267596",
+      "content_type": "model/gltf-binary",
+      "cache_control": "max-age=31536000"
+    },
+    "usdzUrl": {
+      "status": 206,
+      "content_range": "bytes 0-63/242698",
+      "content_type": "model/vnd.usdz+zip",
+      "cache_control": "max-age=31536000"
+    }
+  }
+}

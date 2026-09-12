@@ -54,7 +54,7 @@ export function QrCode({
       height={size}
       viewBox={`0 0 ${dimension} ${dimension}`}
       role="img"
-      aria-label="QR kod za prikaz fotelje u vašoj sobi"
+      aria-label="QR kod za prikaz proizvoda u vašoj sobi"
       shapeRendering="crispEdges"
     >
       <rect width={dimension} height={dimension} fill={light} />
