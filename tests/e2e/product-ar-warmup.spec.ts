@@ -71,3 +71,24 @@ for (const policy of ["save-data", "slow-connection"]) {
     expect(await page.evaluate(() => performance.getEntriesByType("resource").some(x => x.name.endsWith("cube-v5.glb")))).toBe(false);
   });
 }
+
+
+test("AR and 3D buttons wait until their click handlers are ready", async ({ page }) => {
+  let releaseScripts!: () => void;
+  const gate = new Promise<void>(resolve => { releaseScripts = resolve; });
+  await page.route("**/_next/static/**/*.js*", async route => { await gate; await route.continue(); });
+  await page.goto(path, { waitUntil: "commit" });
+  const view3d = page.getByRole("button", { name: "Otvori 3D pregled" });
+  const ar = page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true });
+  try {
+    await expect(view3d).toBeVisible();
+    await expect(view3d).toBeDisabled();
+    await expect(ar).toBeDisabled();
+  } finally { releaseScripts(); }
+  await expect(view3d).toBeEnabled();
+  await expect(ar).toBeEnabled();
+  const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
+  if (await consent.isVisible()) await consent.click();
+  await view3d.click();
+  await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
+});
