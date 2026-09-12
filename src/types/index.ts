@@ -35,6 +35,16 @@ export interface ProductMedia {
   video3d?: MediaAsset;
 }
 
+export interface ProductArAsset {
+  /** Locally cached original product photo for the initial gallery image. */
+  photoUrl?: string;
+  glbUrl: string;
+  usdzUrl: string;
+  posterUrl: string;
+  alt: string;
+  dimensionsCm: Dimensions;
+}
+
 export interface ProductAttachment {
   kind: "manual" | "energy_label" | "document";
   section:

@@ -3,13 +3,15 @@
 /**
  * PDP gallery — main image with magnify-on-hover + click-to-lightbox,
  * vertical thumb strip on the right, plus virtual "video" and "3D" thumbs
- * that swap the main view to a video player or a 3D viewer placeholder.
+ * that swap the main view to a video player or an embedded 3D viewer.
+ * Original photos are shown first; eligible connections prepare 3D after the photo.
  *
  * Media is sourced from the product catalog import; the cloud service can
  * supply images / video / 3D bundles by SKU pattern.
  */
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Box,
@@ -22,7 +24,7 @@ import {
   Play,
   X,
 } from "lucide-react";
-import type { MediaAsset, Product } from "@/types";
+import type { MediaAsset, Product, ProductArAsset } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   getMediaVariantUrl,
@@ -30,8 +32,20 @@ import {
   isRenderableMediaUrl,
 } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
+import { ProductArEntryControls } from "./product-ar-entry-controls";
+import { prepareProductAr, scheduleProductArWarmup } from "@/lib/product-ar-loader";
 import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
+
+const ProductArViewer = dynamic(() => import("./product-ar-viewer"), { ssr: false });
+const desktopQuery = "(min-width: 768px)";
+function subscribeLayout(callback: () => void) {
+  const query = window.matchMedia(desktopQuery);
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
+}
+function getDesktopSnapshot() { return window.matchMedia(desktopQuery).matches; }
+function getServerSnapshot() { return false; }
 
 const FALLBACK_BLUR =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDEwIj48cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSIxMCIgZmlsbD0iI2ZmZmZmZiIvPjwvc3ZnPg==";
@@ -39,23 +53,30 @@ const FALLBACK_BLUR =
 type Slide =
   | { kind: "image"; asset: MediaAsset }
   | { kind: "video"; asset: MediaAsset }
-  | { kind: "3d"; asset: MediaAsset };
+  | { kind: "3d"; asset: MediaAsset }
+  | { kind: "model"; asset: MediaAsset; arAsset: ProductArAsset };
 
 interface PdpGalleryProps {
   product: Product;
+  arAsset?: ProductArAsset;
   /** Slot for stacked badges rendered above the main media. */
   badges?: React.ReactNode;
 }
 
-export function PdpGallery({ product, badges }: PdpGalleryProps) {
+export function PdpGallery({ product, badges, arAsset }: PdpGalleryProps) {
+  const galleryRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (arAsset && galleryRef.current) return scheduleProductArWarmup(galleryRef.current, arAsset.glbUrl);
+  }, [arAsset]);
+  const isDesktop = useSyncExternalStore(subscribeLayout, getDesktopSnapshot, getServerSnapshot);
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const slides = useMemo<Slide[]>(() => {
     const out: Slide[] = product.media.images
-      .map((asset) => ({
+      .map((asset, index) => ({
         ...asset,
-        url: getMediaVariantUrl(asset, "pdp"),
+        url: index === 0 && arAsset?.photoUrl ? arAsset.photoUrl : getMediaVariantUrl(asset, "pdp"),
       }))
       .filter(
         (asset) =>
@@ -71,8 +92,9 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     if (product.media.video3d && isRenderableMediaUrl(product.media.video3d.url)) {
       out.push({ kind: "3d", asset: product.media.video3d });
     }
+    if (arAsset) out.push({ kind: "model", asset: { url: arAsset.posterUrl, alt: arAsset.alt }, arAsset });
     return out;
-  }, [failedImageUrls, product.media]);
+  }, [failedImageUrls, product.media, arAsset]);
 
   const [active, setActive] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -106,18 +128,19 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
     (index: number) => {
       if (!slides.length) return;
       const nextIndex = ((index % slides.length) + slides.length) % slides.length;
+      const nextSlide = slides[nextIndex];
+      if (nextSlide?.kind === "model") prepareProductAr(nextSlide.arAsset.glbUrl);
       setActive(nextIndex);
       [mobileTrackRef.current, desktopTrackRef.current].forEach((track) => {
-        track
-          ?.querySelector<HTMLElement>(`[data-slide-index="${nextIndex}"]`)
-          ?.scrollIntoView({
-            behavior: "smooth",
-            inline: "center",
-            block: "nearest",
-          });
+        track?.scrollTo({
+          left: nextIndex * track.clientWidth,
+          // Removing a live viewer must not leave a smooth scroll traversing
+          // intermediate slides that can override the next explicit selection.
+          behavior: nextSlide?.kind === "model" || slides[active]?.kind === "model" ? "instant" : "smooth",
+        });
       });
     },
-    [slides.length],
+    [slides, active],
   );
 
   const updateThumbOverflow = useCallback(() => {
@@ -152,7 +175,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" || event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest("button, a, input, textarea, select, video, iframe")) return;
+    if (target.closest("button, a, input, textarea, select, video, iframe, model-viewer, [data-product-ar-viewer]")) return;
 
     dragRef.current = {
       pointerId: event.pointerId,
@@ -224,9 +247,9 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
+    <div ref={galleryRef} data-product-gallery className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
       {/* Main stage */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 md:self-start">
         <button
           type="button"
           aria-pressed={wished}
@@ -258,7 +281,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               <div
                 key={`${s.kind}-mobile-${index}`}
                 data-slide-index={index}
-                className="relative aspect-[4/3] min-w-full snap-center snap-always"
+                className={cn("relative min-w-full snap-center snap-always", arAsset ? "aspect-square" : "aspect-[4/3]")}
               >
                 {s.kind === "image" ? (
                   <Image
@@ -267,12 +290,18 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     fill
                     preload={index === 0}
                     draggable={false}
-                    sizes="100vw"
+                    sizes="(min-width: 1024px) 50vw, 100vw"
                     placeholder="blur"
                     blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
                     onError={() => markImageFailed(s.asset.url)}
-                    className="object-contain p-3"
+                    className={cn("object-contain p-3", arAsset && "pb-28")}
                   />
+                ) : s.kind === "model" ? (
+                  !isDesktop && activeIndex === index ? <div className="relative h-full w-full">
+                    <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="eager" sizes="100vw" className="object-contain pb-22" />
+                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} fallbackUrl={posterUrl} /></div>
+                  </div> :
+                    <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="lazy" sizes="100vw" className="object-contain" />
                 ) : s.kind === "video" ? (
                   <video
                     src={s.asset.url}
@@ -292,7 +321,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
               </div>
             ))}
           </div>
-          {badges || featurePictograms.length ? (
+          {slide.kind !== "model" && (badges || featurePictograms.length) ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
               {slide.kind === "image" ? (
@@ -312,7 +341,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   key={index}
                   type="button"
                   onClick={() => goTo(index)}
-                  aria-label={`Prikaži sliku ${index + 1}`}
+                  aria-label={slides[index].kind === "model" ? "Prikaži 3D model" : `Prikaži sliku ${index + 1}`}
                   aria-current={index === activeIndex ? "true" : undefined}
                   className={cn(
                     "h-1.5 rounded-full shadow-sm transition-all",
@@ -379,10 +408,16 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                         placeholder="blur"
                         blurDataURL={s.asset.blurDataUrl ?? FALLBACK_BLUR}
                         onError={() => markImageFailed(s.asset.url)}
-                        className="object-contain p-4"
+                        className={cn("object-contain p-4", arAsset && "pb-28")}
                       />
                     </motion.div>
                   </>
+                ) : s.kind === "model" ? (
+                  isDesktop && activeIndex === index ? <div className="relative h-full w-full">
+                    <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="eager" sizes="50vw" className="object-contain pb-22" />
+                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} fallbackUrl={posterUrl} /></div>
+                  </div> :
+                    <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="lazy" sizes="50vw" className="object-contain" />
                 ) : s.kind === "video" ? (
                   <div className="grid h-full w-full place-items-center">
                     <video
@@ -407,7 +442,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             ))}
           </div>
 
-          {badges || featurePictograms.length ? (
+          {slide.kind !== "model" && (badges || featurePictograms.length) ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
               {slide.kind === "image" ? (
@@ -444,7 +479,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                     key={index}
                     type="button"
                     onClick={() => goTo(index)}
-                    aria-label={`Prikaži sliku ${index + 1}`}
+                    aria-label={slides[index].kind === "model" ? "Prikaži 3D model" : `Prikaži sliku ${index + 1}`}
                     aria-current={index === activeIndex ? "true" : undefined}
                     className={cn(
                       "h-1.5 rounded-full transition-all",
@@ -461,6 +496,7 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
             </>
           ) : null}
         </div>
+        {arAsset && slide.kind === "image" && <ProductArEntryControls asset={arAsset} onView3d={() => goTo(slides.findIndex((item) => item.kind === "model"))} />}
       </div>
 
       {/* Thumb strip */}
@@ -497,8 +533,8 @@ export function PdpGallery({ product, badges }: PdpGalleryProps) {
                   role="tab"
                   aria-selected={isActive}
                   aria-label={label}
-                  onMouseEnter={() => goTo(i)}
-                  onFocus={() => goTo(i)}
+                  onMouseEnter={() => { if (s.kind !== "model") goTo(i); }}
+                  onFocus={() => { if (s.kind !== "model") goTo(i); }}
                   onClick={() => goTo(i)}
                   className={cn(
                     "bg-white ring-border/60 focus-visible:ring-walnut/40 relative grid size-20 place-items-center overflow-hidden rounded-xl ring-1 transition focus-visible:ring-2 focus-visible:outline-none lg:size-24",

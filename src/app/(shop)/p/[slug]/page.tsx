@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Leaf } from "lucide-react";
 import type { Product } from "@/types";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
+import { getProductArAsset } from "@/lib/product-ar";
 import { PdpGallery } from "@/components/product/pdp-gallery";
 import { PdpAddToCart } from "@/components/product/pdp-add-to-cart";
 import { PdpBenefits } from "@/components/product/pdp-benefits";
@@ -220,6 +221,7 @@ export default async function ProductPage({ params }: RouteProps) {
         {/* Gallery (Row III + IV combined into one stage) */}
         <PdpGallery
           product={product}
+          arAsset={getProductArAsset(product.slug)}
           badges={
             <>
               {overlayBadges.topLeft.map((b) => (

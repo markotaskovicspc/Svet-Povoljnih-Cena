@@ -1,0 +1,22 @@
+{
+  "blender": "5.2.0 LTS",
+  "triangles": 20736,
+  "dimensions_m": [
+    0.8,
+    0.8,
+    0.71
+  ],
+  "texture_source": "Original 01.webp / 03.webp panels with constant per-panel lighting correction; no synthesized ribs, added relief or piping",
+  "sample_mean_srgb": [
+    0.347868226139137,
+    0.2811363904726858,
+    0.24022470594391065
+  ],
+  "physical_android_ar": "not tested",
+  "physical_iphone_ar": "not tested",
+  "hidden_geometry": "Unphotographed rear/left reuse original panel cloth; construction remains unverified",
+  "formats": [
+    "GLB",
+    "USDZ"
+  ]
+}

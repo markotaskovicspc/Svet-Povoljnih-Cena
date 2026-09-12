@@ -97,7 +97,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   `img-src 'self' data: blob: https://www.svetpovoljnihcena.rs https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com https://www.facebook.com`,
-  `connect-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com`,
+  `connect-src 'self' blob: https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com`,
   `media-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "worker-src 'self' blob:",
   ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
@@ -118,7 +118,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   distDir,
   poweredByHeader: false,
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", ...(process.env.AR_PREVIEW_HOST ? [process.env.AR_PREVIEW_HOST] : [])],
   // resvg selects a platform-specific native binding at runtime. Keep it out
   // of the Server Components/Turbopack bundle so Node can resolve that binding.
   serverExternalPackages: ["@resvg/resvg-js", "@sparticuz/chromium", "playwright-core"],
@@ -185,7 +185,15 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/models/:path*.glb", headers: [{ key: "Content-Type", value: "model/gltf-binary" }] },
+      { source: "/models/:path*.usdz", headers: [{ key: "Content-Type", value: "model/vnd.usdz+zip" }] },
+      // Only immutable, explicitly versioned delivery files get long-lived caching.
+      { source: "/models/cube-210030/cube-v5.glb", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+      { source: "/models/cube-210030/cube-v5.usdz", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+      { source: "/vendor/model-viewer/4.2.0/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+    ];
   },
 };
 

@@ -1,0 +1,15 @@
+{
+  "originalBytes": 4116932,
+  "optimizedBytes": 1342088,
+  "reductionPercent": 67.40077319712834,
+  "texture": {
+    "originalBytes": 3489508,
+    "optimizedBytes": 714665,
+    "psnrDb": 49.474078320991,
+    "meanAbsoluteRgbDifferenceOf255": 0.5442515214284261,
+    "resolution": "2048x2048",
+    "quality": 94,
+    "chroma": "4:4:4"
+  },
+  "geometry": "Every non-image buffer copied byte-for-byte; UVs and triangles unchanged"
+}

@@ -1,0 +1,53 @@
+{
+  "environment": "Local Next dev, headless Chromium; 4 Mbps and 150 ms after navigation. Cold browser contexts. Device profiles simulate viewport/touch, not physical phone CPU. Warm cases explicitly wait for background preparation.",
+  "results": [
+    {
+      "device": "Desktop Chrome",
+      "warm": false,
+      "waitBeforeClickMs": 776,
+      "clickToRenderMs": 5727,
+      "resources": [
+        {
+          "transferSize": 898924,
+          "duration": 3048.5
+        }
+      ]
+    },
+    {
+      "device": "Desktop Chrome",
+      "warm": true,
+      "waitBeforeClickMs": 5852,
+      "clickToRenderMs": 714,
+      "resources": [
+        {
+          "transferSize": 898924,
+          "duration": 1971.0999999940395
+        }
+      ]
+    },
+    {
+      "device": "Pixel 7",
+      "warm": true,
+      "waitBeforeClickMs": 8805,
+      "clickToRenderMs": 737,
+      "resources": [
+        {
+          "transferSize": 898924,
+          "duration": 1966.7999999970198
+        }
+      ]
+    },
+    {
+      "device": "Desktop Chrome",
+      "warm": true,
+      "waitBeforeClickMs": 7798,
+      "clickToRenderMs": 779,
+      "resources": [
+        {
+          "transferSize": 898924,
+          "duration": 1972.7999999970198
+        }
+      ]
+    }
+  ]
+}

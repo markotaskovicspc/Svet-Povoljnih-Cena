@@ -1,0 +1,98 @@
+{
+  "bytes": 1342088,
+  "triangles": 20736,
+  "size_m": [
+    0.800000011920929,
+    0.7100000381469727,
+    0.800000011920929
+  ],
+  "min_m": [
+    -0.4000000059604645,
+    0,
+    -0.4000000059604645
+  ],
+  "textures": [
+    "v4-neutral-normal",
+    "v4-original-panel-atlas",
+    "v4-matte-roughness"
+  ],
+  "sha256": "42b010af40aee7e507d044bbb01d1ad3a92dd37fd5304db836ee6447560de6c9",
+  "validation": {
+    "uri": "public/models/cube-210030/cube-v5.glb",
+    "mimeType": "model/gltf-binary",
+    "validatorVersion": "2.0.0-dev.3.10",
+    "validatedAt": "2026-09-10T23:51:07.755Z",
+    "issues": {
+      "numErrors": 0,
+      "numWarnings": 0,
+      "numInfos": 0,
+      "numHints": 0,
+      "messages": [],
+      "truncated": false
+    },
+    "info": {
+      "version": "2.0",
+      "generator": "Khronos glTF Blender I/O v5.2.39",
+      "extensionsUsed": [
+        "KHR_materials_specular"
+      ],
+      "resources": [
+        {
+          "pointer": "/buffers/0",
+          "mimeType": "application/gltf-buffer",
+          "storage": "glb",
+          "byteLength": 1338132
+        },
+        {
+          "pointer": "/images/0",
+          "mimeType": "image/png",
+          "storage": "buffer-view",
+          "image": {
+            "width": 4,
+            "height": 4,
+            "format": "rgb",
+            "primaries": "srgb",
+            "transfer": "srgb",
+            "bits": 8
+          }
+        },
+        {
+          "pointer": "/images/1",
+          "mimeType": "image/jpeg",
+          "storage": "buffer-view",
+          "image": {
+            "width": 2048,
+            "height": 2048,
+            "format": "rgb",
+            "bits": 8
+          }
+        },
+        {
+          "pointer": "/images/2",
+          "mimeType": "image/png",
+          "storage": "buffer-view",
+          "image": {
+            "width": 4,
+            "height": 4,
+            "format": "rgb",
+            "primaries": "srgb",
+            "transfer": "srgb",
+            "bits": 8
+          }
+        }
+      ],
+      "animationCount": 0,
+      "materialCount": 1,
+      "hasMorphTargets": false,
+      "hasSkins": false,
+      "hasTextures": true,
+      "hasDefaultScene": true,
+      "drawCallCount": 3,
+      "totalVertexCount": 11250,
+      "totalTriangleCount": 20736,
+      "maxUVs": 1,
+      "maxInfluences": 0,
+      "maxAttributes": 4
+    }
+  }
+}

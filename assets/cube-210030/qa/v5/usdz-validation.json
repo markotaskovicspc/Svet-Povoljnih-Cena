@@ -1,0 +1,24 @@
+{
+  "errors": [],
+  "failed_checks": [],
+  "warnings": [],
+  "up_axis": "Y",
+  "meters_per_unit": 1.0,
+  "size_m": [
+    0.800000011920929,
+    0.7100000381469729,
+    0.8000000119209291
+  ],
+  "min_m": [
+    -0.4000000059604645,
+    -8.88178432935015e-17,
+    -0.4000000059604645
+  ],
+  "textures": [
+    "textures/v4-neutral-normal.png",
+    "textures/v4-matte-roughness.png",
+    "textures/v5-original-panel-atlas.jpg"
+  ],
+  "bytes": 1700100,
+  "sha256": "13587005cb053ad76ef4aaa9375bc60e38a5dde158b9e016ded983490a39e285"
+}

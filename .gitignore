@@ -53,3 +53,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local AR tooling and Blender automatic backups
+/.tools/
+/assets/cube-210030/*.blend1
+
+# AR delivery files live in the product-models Storage bucket; local working copies remain.
+/public/models/cube-210030/*.glb
+/public/models/cube-210030/*.usdz
