@@ -46,5 +46,8 @@ test("an open gallery refreshes its model after returning to the tab", async ({ 
   });
   await expect(viewer).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ })).toHaveCount(0);
 });
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });

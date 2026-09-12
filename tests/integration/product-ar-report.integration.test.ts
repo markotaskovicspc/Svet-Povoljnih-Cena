@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { getProductArReport } from "@/lib/admin/product-ar-report.server";
+import { getProductArReport, getProductArCounts } from "@/lib/admin/product-ar-report.server";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 import { AR_EXPERIMENT } from "@/lib/analytics/product-ar-events";
 const period = resolveReportPeriod({ range: "custom", from: "2026-08-01", to: "2026-08-02" });
@@ -42,4 +42,34 @@ it("filters product, campaign, creative, source, device and variant; empty repor
   const filtered = await getProductArReport(period, { product: productId, campaign: "desk", content: "video1", source: "facebook", device: "android", variant: "B" });
   expect(filtered.find(r => r.total)).toMatchObject({ visitors: 3, opened: 1, buyers: 0 });
   expect((await getProductArReport(period, { content: "other-ad" })).find(r => r.total)).toMatchObject({ visitors: 0, attempts: 0 });
+});
+
+it("keeps historical A/B results separate", async () => {
+  await db.analyticsEvent.create({data:{type:"PRODUCT_AR", anonymousId:"old-version", productId, consentVersion:"test", occurredAt:at(1), expiresAt:at(90), metadata:{event:"model_opened",experiment:"ar-copy-v1",variant:"B"}}});
+  expect((await getProductArReport(period)).find(r=>r.total)?.visitors).toBe(5);
+  expect((await getProductArReport(period,{experiment:"ar-copy-v1"})).find(r=>r.total)?.opened).toBe(1);
+});
+it("sums daily actions across consent states with inclusive date and product filters", async () => {
+  await db.productArDailyCount.createMany({data:[
+    {day:new Date("2026-08-01"),slug:"ar-test",event:"model_opened",count:7},
+    {day:new Date("2026-08-02"),slug:"ar-test",event:"ar_clicked",count:4},
+    {day:new Date("2026-08-03"),slug:"ar-test",event:"ar_clicked",count:99},
+    {day:new Date("2026-08-01"),slug:"ar-other",event:"ar_qr_landed",count:2},
+  ]});
+  expect(await getProductArCounts(period)).toEqual({opened:7,clicked:4,qrLanded:2});
+  expect(await getProductArCounts(period,productId)).toEqual({opened:7,clicked:4,qrLanded:0});
+  expect(await getProductArCounts(period,"missing")).toEqual({opened:0,clicked:0,qrLanded:0});
+});
+it("atomically increments simultaneous anonymous requests without creating analytics events", async () => {
+  const { POST } = await import("@/app/api/product-ar/count/route");
+  const before = await db.analyticsEvent.count();
+  const responses = await Promise.all(Array.from({length:8}, () => POST(new Request("https://shop.test/api/product-ar/count", {
+    method:"POST", headers:{origin:"https://shop.test","content-type":"application/json"},
+    body:JSON.stringify({slug:"100010-9ce68e",event:"model_opened"}),
+  }))));
+  expect(responses.every(r=>r.status===204)).toBe(true);
+  const rows = await db.productArDailyCount.findMany({where:{slug:"100010-9ce68e"}});
+  expect(rows).toHaveLength(1); expect(rows[0].count).toBe(8);
+  expect(Object.keys(rows[0]).sort()).toEqual(["count","day","event","slug"]);
+  expect(await db.analyticsEvent.count()).toBe(before);
 });

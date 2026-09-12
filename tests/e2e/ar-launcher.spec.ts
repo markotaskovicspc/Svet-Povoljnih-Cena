@@ -20,6 +20,7 @@ test("QR destination launches native AR once, with a manual fallback that does n
       };
     });
     const page = await context.newPage();
+    await page.route("**/api/product-ar/count", route => route.fulfill({status:204}));
     try {
       await page.goto("/ar/100010-9ce68e", { waitUntil: "domcontentloaded" });
       await expect(page.locator("html")).toHaveAttribute("data-native-ar-count", "1", { timeout: 30000 });
@@ -55,6 +56,7 @@ test("Android AR failure shows recovery guidance without relaunching or substitu
   });
   try {
     const page = await context.newPage();
+    await page.route("**/api/product-ar/count", route => route.fulfill({status:204}));
     await page.goto("/ar/100010-9ce68e?manual=1&arFallback=1");
     await expect(page.getByRole("status")).toContainText("AR kamera nije pokrenuta.");
     await expect(page.locator("html")).not.toHaveAttribute("data-ar-retry");
@@ -64,3 +66,6 @@ test("Android AR failure shows recovery guidance without relaunching or substitu
     await expect(page.locator("html")).toHaveAttribute("data-ar-retry", /mode=ar_only.*package=com.google.ar.core;/);
   } finally { await context.close(); }
 });
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });

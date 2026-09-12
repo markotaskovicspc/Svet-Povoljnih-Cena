@@ -11,6 +11,8 @@ const assets: Record<string, ProductArAsset> = {
   },
 };
 
+export function getProductArSlugs(): string[] { return Object.keys(assets); }
+
 export function getProductArAsset(slug: string): ProductArAsset | undefined {
   return Object.hasOwn(assets, slug) ? assets[slug] : undefined;
 }

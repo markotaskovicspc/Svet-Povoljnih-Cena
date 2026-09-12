@@ -72,3 +72,6 @@ test("vertical phone scroll works when starting over the badge and beside the AR
     await expect(page.locator("model-viewer")).toHaveCount(1);
   }
 });
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });

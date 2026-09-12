@@ -3758,3 +3758,13 @@ model PaymentMethodConfig {
   note      String?
   updatedAt DateTime      @updatedAt
 }
+
+/// Aggregate counters only: no request, visitor, session, or campaign records.
+model ProductArDailyCount {
+  day   DateTime @db.Date
+  slug  String
+  event String
+  count Int      @default(0)
+
+  @@id([day, slug, event])
+}

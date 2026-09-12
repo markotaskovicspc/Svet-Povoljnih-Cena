@@ -2,9 +2,9 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ReportPeriod } from "./report-period";
-import { AR_EXPERIMENT } from "@/lib/analytics/product-ar-events";
+import { AR_EXPERIMENT, AR_EXPERIMENTS } from "@/lib/analytics/product-ar-events";
 
-export type ArReportFilters = { product?: string; campaign?: string; content?: string; source?: string; device?: string; variant?: string };
+export type ArReportFilters = { experiment?: keyof typeof AR_EXPERIMENTS; product?: string; campaign?: string; content?: string; source?: string; device?: string; variant?: string };
 export type ArReportRow = {
   total: number; productId: string | null; name: string | null; sku: string | null; variant: string | null; device: string | null; campaign: string | null; content: string | null; source: string | null;
   visitors: number; photoExposed: number; arExposed: number; opened: number; used: number; clicked: number; attempted: number; attempts: number; qrShown: number; qrLanded: number; failures: number;
@@ -17,7 +17,7 @@ export async function getProductArReport(period: ReportPeriod, filters: ArReport
     WITH events AS MATERIALIZED (
       SELECT a.*, a.metadata->>'event' AS stage, a.metadata->>'surface' AS surface
       FROM "AnalyticsEvent" a
-      WHERE a.type = 'PRODUCT_AR' AND a.metadata->>'experiment' = ${AR_EXPERIMENT}
+      WHERE a.type = 'PRODUCT_AR' AND a.metadata->>'experiment' = ${filters.experiment ?? AR_EXPERIMENT}
         AND a."occurredAt" >= ${period.start} AND a."occurredAt" < ${period.endExclusive}
         AND a."productId" IS NOT NULL
     ), context AS (
@@ -75,4 +75,19 @@ export async function getProductArReport(period: ReportPeriod, filters: ArReport
     GROUP BY GROUPING SETS (("productId", name, sku, variant, device, campaign, content, source), ())
     ORDER BY total DESC, visitors DESC, name, variant
   `);
+}
+
+/** Daily action totals include all consent states, without visitor-level records. */
+export async function getProductArCounts(period: ReportPeriod, product = "") {
+  const [totals] = await db.$queryRaw<Array<{ opened: number; clicked: number; qrLanded: number }>>(Prisma.sql`
+    SELECT coalesce(sum(c.count) FILTER (WHERE c.event = 'model_opened'), 0)::int AS opened,
+      coalesce(sum(c.count) FILTER (WHERE c.event = 'ar_clicked'), 0)::int AS clicked,
+      coalesce(sum(c.count) FILTER (WHERE c.event = 'ar_qr_landed'), 0)::int AS "qrLanded"
+    FROM "ProductArDailyCount" c
+    LEFT JOIN "Product" p ON p.slug = c.slug
+    WHERE c.day >= ${new Date(period.fromInput + "T00:00:00Z")}::date
+      AND c.day <= ${new Date(period.toInput + "T00:00:00Z")}::date
+      AND (${product} = '' OR p.id = ${product})
+  `);
+  return totals;
 }

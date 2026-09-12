@@ -79,7 +79,7 @@ test("AR and 3D buttons wait until their click handlers are ready", async ({ pag
   await page.route("**/_next/static/**/*.js*", async route => { await gate; await route.continue(); });
   await page.goto(path, { waitUntil: "commit" });
   const view3d = page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" });
-  const ar = page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ });
+  const ar = page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ });
   try {
     await expect(view3d).toBeVisible();
     await expect(view3d).toBeDisabled();
@@ -92,3 +92,6 @@ test("AR and 3D buttons wait until their click handlers are ready", async ({ pag
   await view3d.click();
   await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
 });
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });

@@ -57,7 +57,7 @@ export function ProductArEntryControls({ asset, slug }: { asset: ProductArAsset;
       className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-offset-2">
       <Smartphone className="size-5 shrink-0" aria-hidden />{AR_COPY[variant]}
     </button>
-    <p className="text-xs text-ink-600">Pomoću kamere telefona · na računaru skenirajte QR kod</p>
+    <p data-ar-caption className="whitespace-nowrap text-[11px] text-ink-600 sm:text-xs">Uz kameru telefona, vidi ga u sobi.</p>
     {message && <p role="status" className="max-w-sm text-xs">{message}</p>}
     {qrUrl && <ArQrDialog url={qrUrl} onClose={() => setQrUrl("")} trigger={trigger} />}
   </div>;

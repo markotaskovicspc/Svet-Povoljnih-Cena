@@ -14,7 +14,7 @@ test("CUBE chair has only photos and its old AR links are disabled", async ({ pa
   await page.goto("/p/100010-6b45ec?ar=1", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("CUBE");
   await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ })).toHaveCount(0);
   await expect(page.locator("model-viewer")).toHaveCount(0);
   expect(mediaRequests).toEqual([]);
   const manifest = await request.get("/api/product-ar/100010-6b45ec");
@@ -51,7 +51,7 @@ test("X DESK retains its photo first, loads the small textured model, and suppor
   await expect(viewer).toHaveCount(1);
   await page.getByRole("button", { name: "Zatvori prikaz preko celog ekrana" }).click();
   if (!isMobile) {
-    await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
+    await page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ }).click();
     await expect(page.getByRole("dialog").locator("a")).toHaveAttribute("href", new RegExp(`/ar/${slug}\\?ar_entry=qr$`));
   }
 });
@@ -73,6 +73,7 @@ test("X DESK QR uses its own Android and iPhone assets and dimensions", async ({
     });
     try {
       const page = await context.newPage();
+    await page.route("**/api/product-ar/count", route => route.fulfill({status:204}));
       await page.goto(`/ar/${slug}`, { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Proizvod u vašoj sobi");
       await expect(page.getByText("Stvarna veličina · 70 × 48 × 74 cm")).toBeVisible();
@@ -85,3 +86,6 @@ test("X DESK QR uses its own Android and iPhone assets and dimensions", async ({
     } finally { await context.close(); }
   }
 });
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });

@@ -1,6 +1,7 @@
+import { ProductArCountNotice } from "@/components/privacy/product-ar-count-notice";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CmsContentPage } from "@/components/content/cms-content-page";
+import { CmsFunctionalPage } from "@/components/content/cms-content-page";
 import { getPublishedContentPage } from "@/lib/cms/pages";
 
 const SLUG = "politika-privatnosti";
@@ -17,5 +18,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PrivatnostPage() {
   const page = await getPublishedContentPage(SLUG);
   if (!page) notFound();
-  return <CmsContentPage page={page} />;
+  return <CmsFunctionalPage page={page}><ProductArCountNotice /></CmsFunctionalPage>;
 }

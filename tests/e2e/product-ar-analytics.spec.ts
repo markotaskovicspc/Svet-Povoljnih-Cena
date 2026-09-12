@@ -11,7 +11,7 @@ async function setup(page: Page, consent: boolean, variant = "B") {
     document.cookie = `spc_cookie_consent=${consent ? "analytics" : "essential"}; path=/`;
     document.cookie = "spc_cookie_consent_version=2026-08-meta; path=/";
     localStorage.setItem("svet-akcija:first-purchase-cta-closed-until", String(Date.now() + 86_400_000));
-    if (consent) localStorage.setItem("spc:ar-copy-v1", variant);
+    if (consent) localStorage.setItem("spc:ar-copy-v2", variant);
     Object.defineProperty(navigator, "connection", { configurable: true, value: { saveData: true, effectiveType: "4g" } });
   }, { consent, variant });
   return events;
@@ -24,8 +24,8 @@ async function model(page: Page) {
 test("separate 3D and AR funnels keep campaign and variant; repeated rotation counts one user event", async ({ page, isMobile }) => {
   const events = await setup(page, true);
   await page.goto(`/p/${slug}?utm_source=facebook&utm_medium=paid_social&utm_campaign=desk&utm_content=video1`);
-  const ar = page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ });
-  await expect(ar).toHaveText("Proveri kako se uklapa");
+  const ar = page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ });
+  await expect(ar).toHaveText("Isprobaj u svojoj sobi");
   await ar.scrollIntoViewIfNeeded();
   await expect.poll(() => stage(events, "controls_viewed").some(e => e.metadata?.surface === "ar_cta")).toBe(true);
   expect(stage(events, "model_opened")).toHaveLength(0);
@@ -60,13 +60,23 @@ test("separate 3D and AR funnels keep campaign and variant; repeated rotation co
 });
 test("essential-only visitors can use 3D and AR with no analytics or experiment storage", async ({ page, isMobile }) => {
   const events = await setup(page, false);
+  const counts: Array<{slug: string; event: string}> = [];
+  await page.route("**/api/product-ar/count", async route => {
+    const request = route.request();
+    expect(request.headers()["cookie"]).toBeUndefined();
+    expect(request.headers()["referer"]).toBeUndefined();
+    const body = request.postDataJSON();
+    expect(Object.keys(body).sort()).toEqual(["event", "slug"]);
+    counts.push(body); await route.fulfill({status:204});
+  });
   await page.goto(`/p/${slug}`);
   await model(page);
   await page.getByRole("button", { name: "Nazad na fotografije" }).click();
   if (isMobile) await page.evaluate(() => { HTMLAnchorElement.prototype.click = function() {}; });
-  await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
+  await page.getByRole("button", { name: /^(Pogledaj u svojoj sobi|Isprobaj u svojoj sobi)$/ }).click();
+  await expect.poll(() => counts.map(c => c.event)).toEqual(["model_opened", "ar_clicked"]);
   expect(events).toHaveLength(0);
-  expect(await page.evaluate(() => localStorage.getItem("spc:ar-copy-v1"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("spc:ar-copy-v2"))).toBeNull();
   expect(await page.evaluate(() => sessionStorage.getItem("spc:ar-traffic-v1"))).toBeNull();
 });
 test("QR phone landing is distinct from its native AR launch attempt", async ({ page, isMobile }) => {
@@ -104,8 +114,22 @@ test("background preparation is not a 3D view; campaign survives a later visit w
   expect(stage(events, "model_opened")).toHaveLength(0);
   expect(stage(events, "model_used")).toHaveLength(0);
   await page.goto(`/p/${slug}`);
-  await expect(page.getByRole("button", { name: "Vidi u svojoj sobi", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toBeVisible();
   await model(page);
   await expect.poll(() => stage(events, "model_opened").length).toBe(1);
   expect(stage(events, "model_opened")[0].metadata).toMatchObject({ variant: "A", campaign: "desk", content: "video1" });
+});
+
+// Prevent browser checks from writing aggregate counts to the catalog database.
+test.beforeEach(async ({ page }) => { await page.route("**/api/product-ar/count", route => route.fulfill({ status: 204 })); });
+
+test("room CTA explanation fits one line on narrow phones and desktop", async ({ page, isMobile }) => {
+  await setup(page, false);
+  if (isMobile) await page.setViewportSize({width:320,height:740});
+  await page.goto(`/p/${slug}`);
+  const caption = page.locator("[data-ar-caption]").filter({visible:true});
+  await expect(caption).toHaveText("Uz kameru telefona, vidi ga u sobi.");
+  const box = await caption.evaluate(el => ({width:el.clientWidth, scroll:el.scrollWidth, height:el.getBoundingClientRect().height, line:parseFloat(getComputedStyle(el).lineHeight)}));
+  expect(box.scroll).toBeLessThanOrEqual(box.width);
+  expect(box.height).toBeLessThanOrEqual(box.line + 1);
 });

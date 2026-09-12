@@ -4,10 +4,11 @@ import { getConsentedAnalyticsContext, recordFirstPartyEvent } from "@/component
 import { arPlatform, productArShareUrl } from "@/lib/product-ar";
 import { AR_EXPERIMENT, type ProductArEvent, type ProductArMetadata } from "./product-ar-events";
 
+import { countProductAr } from "./product-ar-counter-client";
 import { captureCampaign } from "./campaign-attribution";
 
 const sent = new Set<string>();
-const COPY_KEY = "spc:ar-copy-v1";
+const COPY_KEY = `spc:${AR_EXPERIMENT}`;
 const singleton = new Set<ProductArEvent>(["controls_viewed", "model_opened", "model_used", "ar_qr_landed"]);
 
 export function arVariant(): "A" | "B" {
@@ -26,6 +27,7 @@ export function arVariant(): "A" | "B" {
 
 export function trackProductAr(slug: string, event: ProductArEvent, surface: ProductArMetadata["surface"]) {
   try {
+    countProductAr(slug, event);
     const context = getConsentedAnalyticsContext();
     if (!context) return false;
     const variant = arVariant();
