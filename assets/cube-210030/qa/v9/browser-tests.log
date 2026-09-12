@@ -1,0 +1,83 @@
+Running 40 tests using 1 worker
+
+(node:40175) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › tests/e2e/ar-launcher.spec.ts:3:5 › QR destination launches native AR once, with a manual fallback that does not loop (1.0s)
+  ✓   2 [desktop] › tests/e2e/ar-launcher.spec.ts:38:5 › AR route rejects products without a registered model (91ms)
+  ✓   3 [desktop] › tests/e2e/ar-launcher.spec.ts:45:5 › Android AR failure shows recovery guidance without relaunching or substituting 3D (469ms)
+  ✘   4 [desktop] › tests/e2e/product-ar-warmup.spec.ts:18:5 › photo finishes first; prepared model opens without another model transfer (1.5m)
+(node:40401) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [desktop] › tests/e2e/product-ar-warmup.spec.ts:39:5 › click during preparation never leaves two viewers (4.6s)
+  ✓   6 [desktop] › tests/e2e/product-ar-warmup.spec.ts:52:5 › background failure does not poison the user's later attempt (4.0s)
+  ✓   7 [desktop] › tests/e2e/product-ar-warmup.spec.ts:64:7 › save-data keeps loading on demand (2.4s)
+  ✓   8 [desktop] › tests/e2e/product-ar-warmup.spec.ts:64:7 › slow-connection keeps loading on demand (2.4s)
+  ✓   9 [desktop] › tests/e2e/product-ar-warmup.spec.ts:76:5 › AR and 3D buttons wait until their click handlers are ready (2.8s)
+  ✓  10 [desktop] › tests/e2e/product-ar.spec.ts:22:5 › photo loads first; 3D loads only on request and keeps textures, rotation, and accessible QR (6.3s)
+  ✓  11 [desktop] › tests/e2e/product-ar.spec.ts:65:5 › failed model offers photo fallback and retry (2.9s)
+  ✓  12 [desktop] › tests/e2e/product-ar.spec.ts:76:5 › 3D activation downloads the model while the runtime loads, with one model transfer (3.3s)
+  ✓  13 [desktop] › tests/e2e/product-ar.spec.ts:94:5 › runtime download failure can be retried (2.7s)
+  ✓  14 [desktop] › tests/e2e/product-ar.spec.ts:103:5 › gray variant has no local AR model (505ms)
+  -  15 [desktop] › tests/e2e/product-ar.spec.ts:110:5 › Android viewer launches AR-only without the library's native 3D fallback
+  -  16 [desktop] › tests/e2e/product-ar.spec.ts:134:5 › iPhone launch keeps the dedicated USDZ asset
+  ✓  17 [desktop] › tests/e2e/product-ar.spec.ts:162:5 › full screen contains one viewer and prevents rotation underneath the model (4.4s)
+  ✓  18 [desktop] › tests/e2e/product-ar.spec.ts:187:5 › photo AR button opens QR or native AR without downloading the web model (740ms)
+  ✓  19 [desktop] › tests/e2e/x-desk-ar.spec.ts:9:5 › X DESK retains its photo first, loads the small textured model, and supports full screen (4.0s)
+  ✓  20 [desktop] › tests/e2e/x-desk-ar.spec.ts:42:5 › X DESK QR uses its own Android and iPhone assets and dimensions (319ms)
+(node:40498) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [mobile] › tests/e2e/ar-launcher.spec.ts:3:5 › QR destination launches native AR once, with a manual fallback that does not loop (390ms)
+  ✓  22 [mobile] › tests/e2e/ar-launcher.spec.ts:38:5 › AR route rejects products without a registered model (93ms)
+  ✓  23 [mobile] › tests/e2e/ar-launcher.spec.ts:45:5 › Android AR failure shows recovery guidance without relaunching or substituting 3D (163ms)
+  ✓  24 [mobile] › tests/e2e/product-ar-warmup.spec.ts:18:5 › photo finishes first; prepared model opens without another model transfer (6.1s)
+  ✓  25 [mobile] › tests/e2e/product-ar-warmup.spec.ts:39:5 › click during preparation never leaves two viewers (3.9s)
+  ✓  26 [mobile] › tests/e2e/product-ar-warmup.spec.ts:52:5 › background failure does not poison the user's later attempt (4.0s)
+  ✓  27 [mobile] › tests/e2e/product-ar-warmup.spec.ts:64:7 › save-data keeps loading on demand (2.4s)
+  ✓  28 [mobile] › tests/e2e/product-ar-warmup.spec.ts:64:7 › slow-connection keeps loading on demand (2.2s)
+  ✓  29 [mobile] › tests/e2e/product-ar-warmup.spec.ts:76:5 › AR and 3D buttons wait until their click handlers are ready (2.8s)
+  ✓  30 [mobile] › tests/e2e/product-ar.spec.ts:22:5 › photo loads first; 3D loads only on request and keeps textures, rotation, and accessible QR (4.2s)
+  ✓  31 [mobile] › tests/e2e/product-ar.spec.ts:65:5 › failed model offers photo fallback and retry (2.8s)
+  ✓  32 [mobile] › tests/e2e/product-ar.spec.ts:76:5 › 3D activation downloads the model while the runtime loads, with one model transfer (2.8s)
+  ✓  33 [mobile] › tests/e2e/product-ar.spec.ts:94:5 › runtime download failure can be retried (2.9s)
+  ✓  34 [mobile] › tests/e2e/product-ar.spec.ts:103:5 › gray variant has no local AR model (428ms)
+  ✓  35 [mobile] › tests/e2e/product-ar.spec.ts:110:5 › Android viewer launches AR-only without the library's native 3D fallback (2.9s)
+  ✓  36 [mobile] › tests/e2e/product-ar.spec.ts:134:5 › iPhone launch keeps the dedicated USDZ asset (4.1s)
+  ✓  37 [mobile] › tests/e2e/product-ar.spec.ts:162:5 › full screen contains one viewer and prevents rotation underneath the model (4.0s)
+  ✓  38 [mobile] › tests/e2e/product-ar.spec.ts:187:5 › photo AR button opens QR or native AR without downloading the web model (336ms)
+  ✓  39 [mobile] › tests/e2e/x-desk-ar.spec.ts:9:5 › X DESK retains its photo first, loads the small textured model, and supports full screen (3.2s)
+  ✓  40 [mobile] › tests/e2e/x-desk-ar.spec.ts:42:5 › X DESK QR uses its own Android and iPhone assets and dimensions (297ms)
+
+
+  1) [desktop] › tests/e2e/product-ar-warmup.spec.ts:18:5 › photo finishes first; prepared model opens without another model transfer
+
+    Test timeout of 90000ms exceeded.
+
+    Error: locator.click: Test timeout of 90000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Samo nužni', exact: true })
+
+
+       7 |   await page.goto(path, { waitUntil: "domcontentloaded" });
+       8 |   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
+    >  9 |   if (await consent.isVisible()) await consent.click();
+         |                                                ^
+      10 | }
+      11 | test.beforeEach(async ({ page }) => {
+      12 |   await page.addInitScript(() => {
+        at visit (/private/tmp/cube-photo-verify/tests/e2e/product-ar-warmup.spec.ts:9:48)
+        at /private/tmp/cube-photo-verify/tests/e2e/product-ar-warmup.spec.ts:24:3
+
+    Error Context: ../../../tmp/cube-v9-test-results/product-ar-warmup-photo-fi-20ad6-hout-another-model-transfer-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../tmp/cube-v9-test-results/product-ar-warmup-photo-fi-20ad6-hout-another-model-transfer-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../tmp/cube-v9-test-results/product-ar-warmup-photo-fi-20ad6-hout-another-model-transfer-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [desktop] › tests/e2e/product-ar-warmup.spec.ts:18:5 › photo finishes first; prepared model opens without another model transfer
+  2 skipped
+  37 passed (3.1m)

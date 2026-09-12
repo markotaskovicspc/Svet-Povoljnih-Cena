@@ -28,7 +28,7 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
   await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
   await loaded(page);
   const viewer = page.locator("model-viewer");
-  await expect(viewer).toHaveAttribute("ios-src", /cube-v7\.usdz$/);
+  await expect(viewer).toHaveAttribute("ios-src", /cube-v9\.usdz$/);
   await expect(viewer).toHaveAttribute("ar-scale", "fixed");
   await expect.poll(() => viewer.evaluate((el) => {
     const model = (el as unknown as { model: { materials: Array<{ pbrMetallicRoughness: { baseColorTexture: { texture: unknown } } }> } }).model;
@@ -81,7 +81,7 @@ test("3D activation downloads the model while the runtime loads, with one model 
     await route.continue();
   });
   const modelRequests: string[] = [];
-  page.on("request", request => { if (request.url().endsWith("cube-v7.glb")) modelRequests.push(request.url()); });
+  page.on("request", request => { if (request.url().endsWith("cube-v9.glb")) modelRequests.push(request.url()); });
   try {
     await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
     await expect.poll(() => modelRequests.length).toBe(1);

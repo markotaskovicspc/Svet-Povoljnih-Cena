@@ -25,7 +25,7 @@ test("QR destination launches native AR once, with a manual fallback that does n
       await expect(page.locator("html")).toHaveAttribute("data-native-ar-count", "1", { timeout: 30000 });
       const link = page.getByRole("link", { name: "Pokreni AR" });
       const href = (await link.getAttribute("href"))!;
-      expect(href).toContain(platform === "ios" ? "cube-v7.usdz#allowsContentScaling=0" : "mode=ar_only");
+      expect(href).toContain(platform === "ios" ? "cube-v9.usdz#allowsContentScaling=0" : "mode=ar_only");
       await expect(page.locator("model-viewer")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Dodaj u korpu" })).toHaveCount(0);
       await page.goto("/ar/100010-6b45ec?manual=1", { waitUntil: "domcontentloaded" });

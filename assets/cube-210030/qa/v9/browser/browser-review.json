@@ -1,0 +1,39 @@
+{
+  "origin": "http://127.0.0.1:3034",
+  "models": [
+    {
+      "src": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v9.glb",
+      "ios": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/cube-210030/cube-v9.usdz",
+      "orbit": "35deg 75deg auto",
+      "loaded": true,
+      "dimensions": {
+        "x": 0.800000011920929,
+        "y": 0.7100000381469727,
+        "z": 0.800000011920929
+      },
+      "materialCount": 2,
+      "actualOrbit": {
+        "theta": 0.6108652381980153,
+        "phi": 1.3089969389957472,
+        "radius": 2.64579565671804
+      }
+    },
+    {
+      "src": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v3.glb",
+      "ios": "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-models/x-desk-210027/x-desk-v3.usdz",
+      "orbit": "-35deg 75deg auto",
+      "loaded": true,
+      "dimensions": {
+        "x": 0.699999988079071,
+        "y": 0.7400000095367432,
+        "z": 0.47999998927116394
+      },
+      "materialCount": 5,
+      "actualOrbit": {
+        "theta": -0.6108652381980153,
+        "phi": 1.3089969389957472,
+        "radius": 2.282677980268076
+      }
+    }
+  ]
+}

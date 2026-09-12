@@ -1,0 +1,20 @@
+[
+  {
+    "folder": "cube-210030",
+    "size_m": [
+      0.800000011920929,
+      0.7100000381469729,
+      0.8000000119209291
+    ],
+    "floor_y": -8.88178432935015e-17,
+    "bytes": 1869304,
+    "sha256": "b31a2450f06b70c51e0ad4d03501612e1005b0d2e48971bff256b4f49d156c6f",
+    "errors": [],
+    "failed_checks": [],
+    "warnings": [],
+    "textures": [
+      "textures/v9-original-photo-atlas.jpg"
+    ],
+    "reconstructed_basecolor_preserved": true
+  }
+]
