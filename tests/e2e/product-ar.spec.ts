@@ -9,6 +9,7 @@ test.beforeEach(async ({ page }) => {
   // These exercise explicit, on-demand loading. Eligible idle warmup has its own suite.
   await page.addInitScript(() => Object.defineProperty(navigator, "connection", { configurable: true, value: { saveData: true, effectiveType: "4g" } }));
   await page.goto(productPath, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeEnabled();
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
 });
@@ -36,6 +37,7 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
   if (!isMobile) {
     const orbit = () => viewer.evaluate(el => (el as unknown as { getCameraOrbit(): { theta: number } }).getCameraOrbit().theta);
     const before = await orbit();
+    await viewer.scrollIntoViewIfNeeded();
     const box = (await viewer.boundingBox())!;
     await page.mouse.move(box.x + box.width * .45, box.y + box.height * .4);
     await page.mouse.down();
